@@ -1,9 +1,13 @@
 """Refusal/preservation proofs using invented bytes; no installed state access."""
-from contextlib import nullcontext, redirect_stdout
+from contextlib import ExitStack, contextmanager, nullcontext, redirect_stdout
 from copy import deepcopy
 from io import StringIO
 import json
 import errno
+import os
+import hashlib
+import gzip
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -43,6 +47,34 @@ def qualification():
     evidence = {name: b'{"fictional":true}\n' for name in act.EVIDENCE_ROLES}
     evidence.update(request=act.encode(request), response=act.encode(response))
     return value, evidence, request, response
+
+
+def public_write(path, raw):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    for parent in (path.parent, *path.parents):
+        if parent.name in ('source', 'stage', 'staticfiles', 'fonts', 'django_otp', 'otp_totp', 'css', 'js'):
+            parent.chmod(0o755)
+    path.write_bytes(raw);path.chmod(0o644)
+
+
+def static_fixture(root):
+    source, stage = root / 'source', root / 'stage'
+    stage.mkdir(mode=0o755)
+    inputs, manifest = {}, {'version': '1.1', 'paths': {}}
+    values = {name: ('fictional ' + name).encode() for name in act.STATIC_INPUTS}
+    values['app.css'] = b'@font-face{src:url("fonts/dm-sans.ttf")}body{color:#123}'
+    font_name = 'fonts/dm-sans.' + hashlib.md5(values['fonts/dm-sans.ttf']).hexdigest()[:12] + '.ttf'
+    for name, raw in values.items():
+        inputs[name] = source / name;public_write(inputs[name], raw)
+        compiled_bytes = raw.replace(b'fonts/dm-sans.ttf', font_name.encode()) if name == 'app.css' else raw
+        path = act.PurePosixPath(name)
+        compiled = str(path.with_suffix('')) + '.' + hashlib.md5(compiled_bytes).hexdigest()[:12] + path.suffix
+        manifest['paths'][name] = compiled
+        public_write(stage / name, raw);public_write(stage / compiled, compiled_bytes)
+        public_write(stage / (compiled + '.gz'), gzip.compress(compiled_bytes, mtime=0))
+    manifest['hash'] = hashlib.md5(json.dumps(sorted(manifest['paths'].items())).encode()).hexdigest()[:12]
+    public_write(stage / 'staticfiles.json', act.encode(manifest))
+    return inputs, stage, manifest
 
 
 class EnvironmentPreservation(unittest.TestCase):
@@ -109,7 +141,661 @@ class QualificationRefusals(unittest.TestCase):
             act.read_qualification(act.RUNTIME / 'fictional.json', '0' * 64)
 
 
+class StaticPreservation(unittest.TestCase):
+    def test_font_rewrite_and_compressed_payloads_are_exact_not_only_manifest_names(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            inputs, stage, manifest = static_fixture(Path(temporary))
+            primitives = act.static_primitives()
+            self.assertIn(manifest['paths']['app.css'], act.validate_static_stage(stage, inputs, primitives))
+            compiled = stage / manifest['paths']['app.css'];original = compiled.read_bytes()
+            compiled.write_bytes(original + b'foreign bytes')
+            with self.assertRaisesRegex(act.Refusal, 'static_compiled_source_identity'):
+                act.validate_static_stage(stage, inputs, primitives)
+            compiled.write_bytes(original)
+            public_write(stage / 'unexpected.js', b'extra')
+            with self.assertRaisesRegex(act.Refusal, 'static_undeclared_output'):
+                act.validate_static_stage(stage, inputs, primitives)
+
+    def test_full_and_partial_static_rollback_retain_every_old_hash(self):
+        for partial in (False, True):
+            with self.subTest(partial=partial), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                inputs, stage, manifest = static_fixture(root)
+                app = root / 'app';static = app / 'staticfiles';static.mkdir(parents=True, mode=0o755)
+                old_manifest = {'version': '1.1', 'paths': {}}
+                for name in sorted(act.STATIC_INPUTS - {'fonts/dm-sans.ttf', 'fonts/OFL-DM-Sans.txt'}):
+                    raw = b'old public source ' + name.encode() if name in ('app.css', 'app.js') else inputs[name].read_bytes()
+                    p = act.PurePosixPath(name)
+                    compiled = str(p.with_suffix('')) + '.' + hashlib.md5(raw).hexdigest()[:12] + p.suffix
+                    old_manifest['paths'][name] = compiled
+                    public_write(static / name, raw);public_write(static / compiled, raw)
+                    public_write(static / (compiled + '.gz'), gzip.compress(raw, mtime=0))
+                old_manifest['hash'] = hashlib.md5(json.dumps(sorted(old_manifest['paths'].items())).encode()).hexdigest()[:12]
+                public_write(static / 'staticfiles.json', act.encode(old_manifest))
+                primitives = act.static_primitives();before = primitives.static_inventory(static)
+                runtime = root / 'runtime';runtime.mkdir(mode=0o700)
+                primitives.retain_static(static, runtime / 'public-assets-before.tar', before)
+                preparation = {'before': before, 'stage': str(stage),
+                               'staged': act.validate_static_stage(stage, inputs, primitives),
+                               'prior_assets_archive_sha256': act.sha((runtime / 'public-assets-before.tar').read_bytes())}
+                with patch.object(act, 'APP', app), patch.object(act, 'static_sources', return_value=inputs):
+                    if partial:
+                        primitives.create_static_stage(static / 'fonts')
+                        name = manifest['paths']['app.css'];public_write(static / name, (stage / name).read_bytes())
+                    else:
+                        result = act.install_static(preparation)
+                        self.assertTrue(result['old_immutable_assets_retained'])
+                    recovered = act.restore_static(preparation, runtime)
+                    self.assertTrue(recovered['previous_manifest_aliases_restored'])
+                    self.assertEqual((static / 'staticfiles.json').read_bytes(), act.encode(old_manifest))
+                    self.assertEqual((static / 'app.css').read_bytes(), b'old public source app.css')
+                    for name, row in before.items():
+                        if name not in {'staticfiles.json', 'app.css', 'app.js'}:
+                            self.assertEqual(recovered['after'][name], row)
+                    old_hash = static / old_manifest['paths']['app.css']
+                    old_hash.write_bytes(b'corrupt immutable old CSS')
+                    with self.assertRaisesRegex(act.Refusal, 'rollback_static_immutable_drift'):
+                        act.restore_static(preparation, runtime)
+
+    def test_storage_exception_keeps_red_and_refuses_reserve_erosion(self):
+        raw = b'fictional explicit owner exception'
+        contract = {'storage_authority_path': act.STORAGE_AUTHORITY, 'storage_authority_sha256': act.sha(raw),
+                    'storage_allowances': act.STORAGE_ALLOWANCES, 'storage_minimum_reserve_bytes': act.STORAGE_RESERVE}
+        measured = SimpleNamespace(f_bavail=42 * 1024 ** 3, f_frsize=1, f_favail=100000, f_blocks=591 * 1024 ** 3,
+                                   f_bfree=42 * 1024 ** 3)
+        with patch.object(Path, 'read_bytes', return_value=raw), patch.object(act.os, 'statvfs', return_value=measured):
+            report = act.storage_admission(contract, 'fictional checkpoint')
+            self.assertEqual(report['original_preflight_percentage_verdict'], 'RED')
+            self.assertEqual(report['projected_available_bytes'], 32 * 1024 ** 3)
+            measured.f_bavail = 29 * 1024 ** 3
+            with self.assertRaisesRegex(act.Refusal, 'task_storage_reserve'):
+                act.storage_admission(contract, 'fictional later checkpoint')
+
+
+class FreshCapturePreservation(unittest.TestCase):
+    @contextmanager
+    def fixture(self, variant='valid'):
+        from ops import backup_restore as primitive
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary);source = root / 'source';app = root / 'app'
+            (source / 'rebuild/ops').mkdir(parents=True);app.mkdir()
+            module = b'# fictional immutable capture primitive\n'
+            (source / 'rebuild/ops/backup_restore.py').write_bytes(module)
+            captures = root / 'backups';captures.mkdir(mode=0o700)
+            old = captures / '20261006T192011Z-c6f27e26';old.mkdir(mode=0o700)
+            (old / 'old-ciphertext').write_bytes(b'preserve');(old / 'old-ciphertext').chmod(0o600)
+            runtime = root / 'runtime';runtime.mkdir(mode=0o700)
+            destination = runtime / 'activation';destination.mkdir(mode=0o700)
+            marker = runtime / 'one-capture-attempt.json'
+            key = runtime / 'fictional.key';key.write_bytes(primitive.Fernet.generate_key());key.chmod(0o600)
+            roles = runtime / 'fictional-roles.json';roles.write_bytes(b'{}');roles.chmod(0o600)
+            snapshot = {'database': {'tables': {name: {'rows': 1, 'sha256': act.sha(name.encode())} for name in act.TABLES},
+                                    'invariants': {}, 'referenced_files': {'receipt/fiction.json': None}},
+                        'files': {'receipt/fiction.json': {'sha256': act.sha(b'fiction'), 'size': 7}}}
+            policy = {'source': str(app), 'output': str(captures), 'source_commit': act.BASELINE,
+                      'key_file': str(key), 'database_credentials': str(roles), 'maximum_attempts': 1,
+                      'exclusive_attempt_marker': str(marker),
+                      'timing': 'inside_exclusion_after_private_drain_before_publication',
+                      'primitive_sha256': act.sha(module), 'offsite_upload': False, 'provider_calls': 0}
+            container = {'Id': 'fictional', 'Image': 'sha256:' + 'a' * 64,
+                         'State': {'Running': True}, 'HostConfig': {'PortBindings': {
+                             '5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '55438'}]}}}
+            run = captures / '20261006T235959Z-aaaaaaaa'
+            def capture(args):
+                self.assertEqual(vars(args), {'source': app, 'output': captures, 'key_file': key, 'database_credentials': roles})
+                run.mkdir(mode=0o700);(run / 'objects').mkdir(mode=0o700)
+                cipher = primitive.key_at(key)
+                manifest = {'format': 1, 'complete': True, 'run_id': run.name, 'source_commit': act.BASELINE,
+                            'database': 'quillmd_fresh', 'container_id': container['Id'], 'image_id': container['Image'],
+                            'tables': deepcopy(snapshot['database']['tables']), 'invariants': {}, 'files': []}
+                for label, plain in (('receipt/fiction.json', b'fiction'), ('database.dump', b'fictional database')):
+                    name = ('objects/' + act.sha(label.encode()) + '.fernet') if label.startswith('receipt') else 'database.dump.fernet'
+                    encrypted = cipher.encrypt(plain);primitive.write_private(run / name, encrypted)
+                    entry = {'sha256': act.sha(plain), 'size': len(plain), 'cipher_sha256': act.sha(encrypted)}
+                    if label.startswith('receipt'):
+                        manifest['files'].append(dict(entry, path=label, object=name))
+                    else:
+                        manifest['dump'] = entry
+                if variant == 'stale_table':
+                    manifest['tables']['core_servicehealth']['rows'] = 2
+                primitive.write_private(run / 'manifest.json.fernet', cipher.encrypt(act.encode(manifest)))
+                if variant == 'corrupt_ciphertext':
+                    (run / manifest['files'][0]['object']).write_bytes(b'corrupted encrypted object')
+                if variant == 'previous_capture_changed':
+                    (old / 'old-ciphertext').write_bytes(b'intervening corruption')
+                if variant == 'primitive_failure':
+                    raise OSError(errno.ENOSPC, 'fictional capture failed after beginning')
+                print(json.dumps({'complete': True, 'run_id': run.name,
+                                  'backup_directory': str(root / 'foreign' / run.name) if variant == 'foreign_path' else str(run),
+                                  'manifest_cipher_sha256': act.sha((run / 'manifest.json.fernet').read_bytes())}))
+            backup = SimpleNamespace(private_dir=primitive.private_dir, key_at=primitive.key_at,
+                                     load_backup=primitive.load_backup, decrypt_checked=primitive.decrypt_checked,
+                                     inspect_container=Mock(return_value=container), backup=Mock(side_effect=capture))
+            restore = act.encode({'complete': True, 'independent_key_restore_verified': True,
+                                  'isolated_restore': {'complete': True, 'all_table_hashes_match': True,
+                                                       'all_file_hashes_match': True, 'workers_started': 0}})
+            original_protected = act.protected
+            def protected(path, *args):
+                return restore if path == act.RESTORE else original_protected(path, *args)
+            with patch.object(act, 'SOURCE', source), patch.object(act, 'APP', app), \
+                    patch.object(act, 'BACKUPS', captures), patch.object(act, 'CAPTURE_ATTEMPT', marker), \
+                    patch.object(act, 'KEY', key), patch.object(act, 'ROLES', roles), \
+                    patch.object(act, 'git', return_value=module), patch.object(act, 'protected', side_effect=protected), \
+                    patch.object(act, 'RESTORE_SHA', act.sha(restore)):
+                yield backup, snapshot, destination, {'fresh_capture_policy': policy}, marker
+
+    def test_one_current_capture_authenticates_all_tables_and_cannot_be_replayed_in_another_directory(self):
+        with self.fixture() as (backup, baseline, destination, contract, marker):
+            result = act.capture_current_backup(backup, baseline, destination, contract)
+            self.assertTrue(result['all_current_tables_covered'])
+            self.assertTrue(result['authenticated_dump_and_objects'])
+            self.assertTrue(result['previous_captures_preserved'])
+            self.assertEqual(result['stopped_before_fingerprint_sha256'], act.sha(act.encode(baseline)))
+            self.assertEqual(marker.read_bytes(), (destination / 'fresh-backup-attempt.json').read_bytes())
+            another = destination.parent / 'another-activation';another.mkdir(mode=0o700)
+            with self.assertRaises(FileExistsError):
+                act.capture_current_backup(backup, baseline, another, contract)
+            self.assertEqual(backup.backup.call_count, 1)
+
+    def test_stale_servicehealth_foreign_destination_corruption_and_previous_capture_delta_refuse(self):
+        for variant, message in (('stale_table', 'backup_current_row_coverage'),
+                                 ('foreign_path', 'fresh_capture_output_identity'),
+                                 ('corrupt_ciphertext', 'Ciphertext integrity check failed'),
+                                 ('previous_capture_changed', 'previous_capture_preservation')):
+            with self.subTest(variant=variant), self.fixture(variant) as (backup, baseline, destination, contract, marker):
+                with self.assertRaisesRegex(RuntimeError, message):
+                    act.capture_current_backup(backup, baseline, destination, contract)
+                self.assertEqual(backup.backup.call_count, 1)
+                self.assertTrue(marker.exists())
+
+    def test_primitive_failure_consumes_one_attempt_and_unqualified_scope_never_captures(self):
+        with self.fixture('primitive_failure') as (backup, baseline, destination, contract, marker):
+            with self.assertRaises(OSError):
+                act.capture_current_backup(backup, baseline, destination, contract)
+            with self.assertRaises(FileExistsError):
+                act.capture_current_backup(backup, baseline, destination, contract)
+            self.assertEqual(backup.backup.call_count, 1)
+        with self.fixture() as (backup, baseline, destination, contract, marker):
+            contract['fresh_capture_policy']['maximum_attempts'] = 2
+            with self.assertRaisesRegex(act.Refusal, 'prospective_fresh_capture_scope'):
+                act.capture_current_backup(backup, baseline, destination, contract)
+            backup.backup.assert_not_called();self.assertFalse(marker.exists())
+
+
+class InExclusionRecovery(unittest.TestCase):
+    @contextmanager
+    def fixture(self, failure='static', diagnostic_enospc=False, population_drift=None, stop_failure=False, recovery_health_failure=False):
+        with tempfile.TemporaryDirectory() as temporary, ExitStack() as patches:
+            runtime = Path(temporary);target = '4' * 40;original = environment()
+            updated, _ = act.render(original, target)
+            current = [original];head = [act.BASELINE];held = [False];trace = []
+            static = {'alias': 'old', 'immutable-old': 'old-hash'}
+            population = {'database': {'tables': {'core_servicehealth': {'sha256': 'same-cadence'},
+                                                'core_encounter': {'sha256': 'existing-history'}}},
+                          'files': {'existing': {'sha256': 'existing'}}, 'mail': {}, 'configuration': {'policy': 'original'}}
+            states = {unit: {'ActiveState': 'active', 'MainPID': str(index + 1),
+                             'ExecMainStartTimestampMonotonic': '1'} for index, unit in enumerate(act.UNITS)}
+            old_units = deepcopy(states)
+            host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+            backup.key_at.return_value.encrypt.side_effect = lambda value: b'fictional encrypted ' + value
+            storage.inventory.return_value = {}
+            def state(unit):
+                return deepcopy(states[unit]) if unit in states else {'ActiveState': 'inactive', 'MainPID': '0'}
+            def service(action, unit):
+                trace.append((action, unit, held[0]))
+                if stop_failure and action == 'stop' and unit == act.UNITS[0]:
+                    raise OSError('fictional first-unit stop refusal')
+                states[unit] = {'ActiveState': 'inactive' if action == 'stop' else 'active',
+                                'MainPID': '0' if action == 'stop' else str(11 + act.UNITS.index(unit)),
+                                'ExecMainStartTimestampMonotonic': '2'}
+                if failure == 'startup' and head[0] == target and action == 'start':
+                    raise OSError(errno.ENOSPC, 'fictional partial startup')
+            host.state.side_effect, host.service.side_effect = state, service
+            def worker_proof(raw, release, boundary):
+                self.assertEqual(raw, current[0]);self.assertEqual(release, head[0]);self.assertTrue(held[0])
+                return {'values': act.dotenv_values(stream=StringIO(raw.decode()), interpolate=False)}
+            host.worker_configuration.side_effect = worker_proof
+            @contextmanager
+            def hold(*args):
+                held[0] = True;trace.append(('exclusion-enter',))
+                try: yield
+                finally:
+                    trace.append(('exclusion-exit',));held[0] = False
+                    # Publication becomes possible only after coherent guarded recovery is finished.
+                    if head[0] == act.BASELINE and all(row['ActiveState'] == 'active' for row in states.values()):
+                        population['database']['tables']['core_servicehealth']['sha256'] = 'next-normal-cadence'
+            exclusion.hold.side_effect = hold
+            def snapshot(*args):
+                self.assertTrue(held[0]);return dict(deepcopy(population), static=deepcopy(static))
+            def git(tree, *args):
+                if args[:2] == ('merge', '--ff-only'):
+                    self.assertTrue(held[0]);head[0] = target;trace.append(('source-target',))
+                return head[0].encode()
+            def environment_write(path, before, after):
+                self.assertTrue(held[0]);self.assertEqual(before, current[0]);current[0] = after
+                trace.append(('environment', 'baseline' if after == original else 'target'))
+                if failure == 'configuration' and after == updated:
+                    raise OSError(errno.ENOSPC, 'fictional partial configuration publication')
+            writer.replace_environment.side_effect = environment_write
+            def install_static(prepared):
+                self.assertTrue(held[0]);static.update(alias='new', **{'immutable-new': 'new-hash'})
+                trace.append(('static-target',))
+                if population_drift == 'database': population['database']['tables']['core_encounter']['sha256'] = 'changed-history'
+                elif population_drift == 'servicehealth': population['database']['tables']['core_servicehealth']['sha256'] = 'unexpected-writer'
+                elif population_drift == 'files': population['files']['existing']['sha256'] = 'changed-file'
+                elif population_drift == 'mail': population['mail']['unknown'] = {'sha256': 'changed-mail'}
+                elif population_drift == 'configuration': population['configuration']['policy'] = 'changed-security'
+                if failure == 'static': raise OSError(errno.ENOSPC, 'fictional partial static publication')
+                return {}
+            def restore_static(prepared, directory):
+                self.assertTrue(held[0]);static['alias'] = 'old';trace.append(('static-baseline',));return {}
+            def restore_source(commit):
+                self.assertTrue(held[0]);self.assertEqual(commit, target)
+                head[0] = act.BASELINE;trace.append(('source-baseline',));return {}
+            def boundary(*args):
+                self.assertTrue(held[0]);return deepcopy(states)
+            def health(release):
+                self.assertEqual(release, head[0]);self.assertTrue(all(row['ActiveState'] == 'active' for row in states.values()))
+                if recovery_health_failure and ('source-baseline',) in trace:
+                    raise act.Refusal('fictional_recovery_http_failure')
+            original_write = act.write_new
+            def write(path, raw):
+                if recovery_health_failure and path.name in ('failed.json', 'recovery.json'):
+                    self.assertTrue(all(row['ActiveState'] == 'inactive' for row in states.values()),
+                                    'Failed recovery must stop inside exclusion before diagnostics')
+                if diagnostic_enospc and path.name in ('failed.json', 'recovery.json'):
+                    raise OSError(errno.ENOSPC, 'fictional unavailable diagnostics')
+                if failure == 'complete_checkpoint' and path.name == 'complete.json':
+                    raise OSError(errno.ENOSPC, 'fictional complete evidence failure')
+                original_write(path, raw)
+            replacements = {'RUNTIME': runtime, 'CAPTURE_ATTEMPT': runtime / 'attempt.json',
+                            'protected': Mock(side_effect=lambda *args: current[0]),
+                            'storage_admission': Mock(return_value={}), 'prepare_static': Mock(return_value={'before': {}}),
+                            'install_static': Mock(side_effect=install_static), 'inventory': Mock(side_effect=lambda *args: deepcopy(static)),
+                            'write_new': Mock(side_effect=write), 'health': Mock(side_effect=health),
+                            'await_health': Mock(side_effect=health), 'service_boundary': Mock(return_value=old_units),
+                            'await_service_boundary': Mock(side_effect=boundary), 'database': Mock(return_value={}),
+                            'snapshot': Mock(side_effect=snapshot), 'capture_current_backup': Mock(return_value={'capture_attempts': 1}),
+                            'operation_locks': Mock(return_value=nullcontext()), 'git': Mock(side_effect=git),
+                            'restore_static': Mock(side_effect=restore_static), 'restore_source': Mock(side_effect=restore_source)}
+            patches.enter_context(patch.multiple(act, **replacements));patches.enter_context(patch('sys.stdout', new=StringIO()))
+            yield SimpleNamespace(runtime=runtime, target=target, original=original, updated=updated, current=current,
+                                  head=head, held=held, trace=trace, population=population, states=states,
+                                  host=host, backup=backup, storage=storage, exclusion=exclusion, writer=writer,
+                                  replacements=replacements)
+
+    def invoke(self, fixture):
+        with self.assertRaisesRegex(act.Refusal, 'activation_failed_recovery_required'):
+            act.execute(SimpleNamespace(operator_commit=fixture.target, fresh_backup=True),
+                        {'rollback_qualified': True, 'environment_before_sha256': act.sha(fixture.original)}, {},
+                        {'operator_commit': fixture.target, 'shared_head': act.BASELINE}, host=fixture.host,
+                        backup=fixture.backup, storage=fixture.storage, exclusion=fixture.exclusion, env_writer=fixture.writer)
+
+    def test_configuration_static_startup_and_completion_failures_recover_under_original_exclusion_but_never_pass(self):
+        for failure in ('configuration', 'static', 'startup', 'complete_checkpoint'):
+            with self.subTest(failure=failure), self.fixture(failure) as fixture:
+                self.invoke(fixture)
+                self.assertEqual(fixture.head[0], act.BASELINE);self.assertEqual(fixture.current[0], fixture.original)
+                self.assertTrue(all(row['ActiveState'] == 'active' for row in fixture.states.values()))
+                self.assertEqual(fixture.population['database']['tables']['core_servicehealth']['sha256'], 'next-normal-cadence')
+                receipt = json.loads(next(fixture.runtime.glob('legacy-model-demo-*/failed.json')).read_bytes())
+                self.assertFalse(receipt['complete']);self.assertEqual(receipt['failure_kind'], 'OSError')
+                self.assertTrue(receipt['recovery']['complete']);self.assertEqual(receipt['provider_calls'], 0)
+                self.assertLess(fixture.trace.index(('source-baseline',)), fixture.trace.index(('exclusion-exit',)))
+                fixture.backup.backup.assert_not_called()
+                self.assertEqual(fixture.replacements['capture_current_backup'].call_count, 1)
+
+    def test_enospc_diagnostics_do_not_prevent_coherent_guarded_recovery(self):
+        with self.fixture(diagnostic_enospc=True) as fixture:
+            self.invoke(fixture)
+            self.assertEqual(fixture.current[0], fixture.original);self.assertEqual(fixture.head[0], act.BASELINE)
+            self.assertTrue(all(row['ActiveState'] == 'active' for row in fixture.states.values()))
+            self.assertEqual(fixture.replacements['restore_source'].call_count, 1)
+            self.assertFalse(list(fixture.runtime.glob('legacy-model-demo-*/complete.json')))
+
+    def test_every_clinical_servicehealth_file_mail_and_security_delta_refuses_recovery_without_erasing_it(self):
+        for drift in ('database', 'servicehealth', 'files', 'mail', 'configuration'):
+            with self.subTest(drift=drift), self.fixture(population_drift=drift) as fixture:
+                self.invoke(fixture)
+                fixture.replacements['restore_static'].assert_not_called();fixture.replacements['restore_source'].assert_not_called()
+                self.assertEqual(fixture.head[0], fixture.target);self.assertEqual(fixture.current[0], fixture.updated)
+                self.assertTrue(all(row['ActiveState'] == 'inactive' for row in fixture.states.values()))
+                receipt = json.loads(next(fixture.runtime.glob('legacy-model-demo-*/failed.json')).read_bytes())
+                self.assertFalse(receipt['complete']);self.assertNotIn('recovery', receipt)
+                self.assertEqual(receipt['recovery_capture_failure'], 'Refusal')
+
+    def test_first_unit_stop_failure_never_skips_other_units_or_claims_recovery(self):
+        with self.fixture(stop_failure=True) as fixture:
+            self.invoke(fixture)
+            self.assertTrue(all(fixture.states[unit]['ActiveState'] == 'inactive' for unit in act.UNITS[1:]))
+            self.assertEqual(fixture.states[act.UNITS[0]]['ActiveState'], 'active')
+            fixture.replacements['restore_source'].assert_not_called()
+            for unit in act.UNITS:
+                self.assertTrue(any(row[:2] == ('stop', unit) for row in fixture.trace))
+
+    def test_recovery_health_failure_failstops_inside_exclusion_before_diagnostics_or_publisher_entry(self):
+        with self.fixture(recovery_health_failure=True) as fixture:
+            self.invoke(fixture)
+            self.assertTrue(all(row['ActiveState'] == 'inactive' for row in fixture.states.values()))
+            self.assertEqual(fixture.population['database']['tables']['core_servicehealth']['sha256'], 'same-cadence')
+            receipt = json.loads(next(fixture.runtime.glob('legacy-model-demo-*/failed.json')).read_bytes())
+            self.assertFalse(receipt['complete']);self.assertEqual(receipt['recovery_capture_failure'], 'Refusal')
+            self.assertTrue(all(row['stopped_verified'] for row in receipt['recovery_fail_stop'].values()))
+
+    def test_standalone_rollback_health_refusal_stops_inside_hold_even_when_diagnostics_fail(self):
+        for diagnostic_enospc in (False, True):
+            with self.subTest(diagnostic_enospc=diagnostic_enospc), \
+                    self.fixture(recovery_health_failure=True, diagnostic_enospc=diagnostic_enospc) as fixture:
+                directory = fixture.runtime / 'legacy-model-demo-fictional';directory.mkdir(mode=0o700)
+                fixture.current[0] = fixture.updated;fixture.head[0] = fixture.target
+                baseline = dict(deepcopy(fixture.population), static=fixture.replacements['inventory']())
+                prepared = {'source': {'operator_commit': fixture.target},
+                            'configuration': {'before_sha256': act.sha(fixture.original)},
+                            'before': baseline, 'static_preparation': {}}
+                def read(path, *args):
+                    if path.name == 'prepared.json': return act.encode(prepared)
+                    if path.name == 'environment-before.fernet': return fixture.original
+                    if path.name == 'environment-after.fernet': return fixture.updated
+                    return fixture.current[0]
+                fixture.replacements['protected'].side_effect = read
+                fixture.backup.key_at.return_value.decrypt.side_effect = lambda raw: raw
+                with self.assertRaisesRegex(act.Refusal, 'rollback_failed_recovery_required'):
+                    act.rollback(SimpleNamespace(operator_commit=fixture.target, activation_directory=directory), {},
+                                 contract={'rollback_qualified': True}, host=fixture.host, backup=fixture.backup,
+                                 storage=fixture.storage, exclusion=fixture.exclusion, env_writer=fixture.writer)
+                self.assertTrue(all(row['ActiveState'] == 'inactive' for row in fixture.states.values()))
+                self.assertEqual(fixture.population['database']['tables']['core_servicehealth']['sha256'], 'same-cadence')
+                self.assertTrue(all(row[2] for row in fixture.trace if row[0] == 'stop'))
+                self.assertFalse(list(fixture.runtime.glob('legacy-model-rollback-*/complete.json')))
+
+    def test_standalone_rollback_partial_stop_failure_attempts_all_units_before_exclusion_exit(self):
+        with self.fixture(stop_failure=True) as fixture:
+            directory = fixture.runtime / 'legacy-model-demo-fictional';directory.mkdir(mode=0o700)
+            fixture.current[0] = fixture.updated;fixture.head[0] = fixture.target
+            prepared = {'source': {'operator_commit': fixture.target},
+                        'configuration': {'before_sha256': act.sha(fixture.original)},
+                        'before': dict(deepcopy(fixture.population), static=fixture.replacements['inventory']()),
+                        'static_preparation': {}}
+            def read(path, *args):
+                if path.name == 'prepared.json': return act.encode(prepared)
+                if path.name == 'environment-before.fernet': return fixture.original
+                if path.name == 'environment-after.fernet': return fixture.updated
+                return fixture.current[0]
+            fixture.replacements['protected'].side_effect = read
+            fixture.backup.key_at.return_value.decrypt.side_effect = lambda raw: raw
+            with self.assertRaisesRegex(act.Refusal, 'rollback_failed_recovery_required'):
+                act.rollback(SimpleNamespace(operator_commit=fixture.target, activation_directory=directory), {},
+                             contract={'rollback_qualified': True}, host=fixture.host, backup=fixture.backup,
+                             storage=fixture.storage, exclusion=fixture.exclusion, env_writer=fixture.writer)
+            self.assertTrue(all(fixture.states[unit]['ActiveState'] == 'inactive' for unit in act.UNITS[1:]))
+            self.assertEqual(fixture.states[act.UNITS[0]]['ActiveState'], 'active')
+            for unit in act.UNITS:
+                self.assertTrue(any(row[:2] == ('stop', unit) and row[2] for row in fixture.trace))
+            fixture.replacements['restore_source'].assert_not_called()
+            receipt = json.loads(next(fixture.runtime.glob('legacy-model-rollback-*/failed.json')).read_bytes())
+            self.assertFalse(receipt['complete']);self.assertFalse(receipt['fail_stop'][act.UNITS[0]]['stopped_verified'])
+
+
+class AcceptanceBoundary(unittest.TestCase):
+    fixture = InExclusionRecovery.fixture
+    def test_accepted_children_use_completed_installer_under_same_exclusion_and_campaign_failure_preserves_new_rows(self):
+        for failed in (False, True):
+            with self.subTest(failed=failed), self.fixture(failure='none') as fixture:
+                preparation = {'scope': {'maximum_generations': 5, 'maximum_transcriptions': 1, 'provider_usd_limit': '0.70'}}
+                def campaign(target, directory, prepared):
+                    self.assertTrue(fixture.held[0]);self.assertEqual(target, fixture.target)
+                    self.assertTrue(all(row['ActiveState'] == 'active' for row in fixture.states.values()))
+                    self.assertEqual(fixture.head[0], fixture.target);self.assertEqual(fixture.current[0], fixture.updated)
+                    self.assertTrue(json.loads((directory / 'complete.json').read_bytes())['complete'])
+                    fixture.population['database']['tables']['new-synthetic-job'] = {'sha256': 'accepted-new-job'}
+                    fixture.population['files']['new-provider-result'] = {'sha256': 'retained-unknown-or-known-response'}
+                    fixture.trace.append(('acceptance-children',))
+                    if failed: raise act.Refusal('fictional_unknown_acceptance_outcome')
+                    return {'complete': True, 'delegated_maximum_generations': 5, 'delegated_maximum_transcriptions': 1}
+                with patch.object(act, 'acceptance_preparation', return_value=preparation), \
+                        patch.object(act, 'installed_acceptance', side_effect=campaign) as child:
+                    args = SimpleNamespace(operator_commit=fixture.target, fresh_backup=True, acceptance_v2=True)
+                    kwargs = dict(host=fixture.host, backup=fixture.backup, storage=fixture.storage,
+                                  exclusion=fixture.exclusion, env_writer=fixture.writer)
+                    contract = {'rollback_qualified': True, 'environment_before_sha256': act.sha(fixture.original)}
+                    if failed:
+                        with self.assertRaises(act.Refusal):
+                            act.execute(args, contract, {}, {'shared_head': act.BASELINE}, **kwargs)
+                        receipt = json.loads(next(fixture.runtime.glob('legacy-model-demo-*/failed.json')).read_bytes())
+                        self.assertFalse(receipt['complete']);self.assertTrue(receipt['acceptance_started'])
+                    else:
+                        receipt = act.execute(args, contract, {}, {'shared_head': act.BASELINE}, **kwargs)
+                        self.assertTrue(receipt['complete']);self.assertTrue(receipt['acceptance']['complete'])
+                    self.assertEqual(child.call_count, 1)
+                    self.assertTrue(all(row['ActiveState'] == 'active' for row in fixture.states.values()))
+                    self.assertEqual(fixture.head[0], fixture.target);self.assertEqual(fixture.current[0], fixture.updated)
+                    self.assertIn('new-synthetic-job', fixture.population['database']['tables'])
+                    self.assertIn('new-provider-result', fixture.population['files'])
+                    fixture.replacements['restore_static'].assert_not_called();fixture.replacements['restore_source'].assert_not_called()
+                    self.assertLess(fixture.trace.index(('acceptance-children',)), fixture.trace.index(('exclusion-exit',)))
+                    self.assertEqual(sum(row[0] == 'stop' for row in fixture.trace), 3)
+
+    def test_bad_acceptance_admission_refuses_before_environment_or_private_mutation(self):
+        with self.fixture(failure='none') as fixture, patch.object(act, 'acceptance_preparation', side_effect=act.Refusal('bad-pin')):
+            with self.assertRaisesRegex(act.Refusal, 'bad-pin'):
+                act.execute(SimpleNamespace(operator_commit=fixture.target, fresh_backup=True, acceptance_v2=True),
+                            {'rollback_qualified': True}, {}, {}, host=fixture.host, backup=fixture.backup,
+                            storage=fixture.storage, exclusion=fixture.exclusion, env_writer=fixture.writer)
+            fixture.host.service.assert_not_called();fixture.replacements['protected'].assert_not_called()
+
+    def test_fixed_nested_ruled_browser_then_readonly_verifier_share_one_separate_deadline_and_never_retry(self):
+        for failed_child in (None, 'browser', 'verifier'):
+            with self.subTest(failed_child=failed_child), tempfile.TemporaryDirectory() as temporary:
+                directory = Path(temporary);prepared = {'fictional': 'protected scoped artifacts'}
+                def child(argv, destination, label, deadline, *, ruled):
+                    self.assertEqual(destination, directory)
+                    self.assertEqual(ruled, label == 'acceptance-browser')
+                    self.assertGreater(deadline, act.time.monotonic())
+                    if failed_child == label.split('-')[1]: raise act.Refusal('fictional child failure')
+                    return {'exit_code': 0, 'automatic_retries': 0}
+                with patch.object(act, 'declaration', return_value=(b'fictional declaration', {})), \
+                        patch.object(act, 'acceptance_preparation', return_value=prepared), \
+                        patch.object(act, 'acceptance_child', side_effect=child) as children, \
+                        patch.object(act, 'protected', return_value=act.encode({'complete': True})):
+                    if failed_child:
+                        with self.assertRaises(act.Refusal):act.installed_acceptance('4' * 40, directory, prepared)
+                        self.assertFalse((directory / 'acceptance-complete.json').exists())
+                    else:
+                        self.assertTrue(act.installed_acceptance('4' * 40, directory, prepared)['complete'])
+                    self.assertEqual(children.call_count, 1 if failed_child == 'browser' else 2)
+                    browser = children.call_args_list[0]
+                    self.assertEqual(browser.args[0], ['bash', str(act.SOURCE / 'scripts/run-ruled-mutation.sh'),
+                                                       '--declaration', act.DECL, '--', '/usr/bin/node',
+                                                       str(act.ACCEPTANCE_BROWSER), '--execute', '4' * 40, str(directory)])
+                    if children.call_count == 2:
+                        verifier = children.call_args_list[1]
+                        self.assertEqual(verifier.args[0], [str(act.APP / '.venv/bin/python'), '-B', str(act.ACCEPTANCE_VERIFIER), '--verify'])
+                        self.assertEqual(browser.args[3], verifier.args[3])
+
+    def test_child_timeout_terminates_only_its_process_group_and_never_restarts_or_repeats(self):
+        process = Mock();process.pid = 12345;process.__enter__ = Mock(return_value=process);process.__exit__ = Mock(return_value=False)
+        process.communicate.side_effect = [subprocess.TimeoutExpired('fictional child', 1), (b'', b'')]
+        with tempfile.TemporaryDirectory() as temporary, patch.object(act.subprocess, 'Popen', return_value=process) as launch, \
+                patch.object(act.os, 'killpg') as terminate, self.assertRaisesRegex(act.Refusal, 'acceptance_child_stopped_unknown_outcome'):
+            act.acceptance_child(['bash', 'fixed-reviewed-child'], Path(temporary), 'browser', act.time.monotonic() + 1200, ruled=True)
+        self.assertEqual(launch.call_count, 1);terminate.assert_called_once_with(12345, act.signal.SIGTERM)
+        self.assertTrue(launch.call_args.kwargs['start_new_session'])
+        self.assertLessEqual(int(launch.call_args.kwargs['env']['RULED_ACT_MAX_SECS']), act.ACCEPTANCE_SECONDS)
+
+    def test_hash_scope_private_artifacts_normal_mfa_and_exclusive_campaign_admission(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary);browser = root / 'browser.mjs';verifier = root / 'verifier.py';output = root / 'campaign'
+            paths = {'acceptance_browser_sha256': browser, 'acceptance_verifier_sha256': verifier,
+                     'acceptance_options_sha256': root / 'prepared-options.json',
+                     'acceptance_allergy_manifest_sha256': root / 'acceptance-v2-inputs/manifest.json',
+                     'acceptance_allergy_form_sha256': root / 'acceptance-v2-inputs/allergy-review.docx'}
+            for label, path in paths.items():
+                path.parent.mkdir(parents=True, exist_ok=True);path.write_bytes(label.encode());path.chmod(0o600)
+            admin = root / 'installed-admin-before-activation';admin.mkdir(mode=0o700)
+            session = admin / 'browser-session.json';session.write_bytes(b'fictional private browser session');session.chmod(0o600)
+            auth = {'format': 1, 'complete': True, 'release': '4' * 40, 'csrf403_no_OTP_noauththrottle': True,
+                    'normal_mfa_login': True, 'auth_reset': False,
+                    'origin': 'https://app.quillmd.com:9443', 'session_cookie_name': 'quillmd_doctor_session',
+                    'actor_id': '11111111-1111-1111-1111-111111111111',
+                    'authenticated_at': act.datetime.now(act.timezone.utc).isoformat(),
+                    'session_file': str(session), 'session_sha256': act.sha(session.read_bytes())}
+            auth_file = admin / 'normal-authentication.json';auth_file.write_bytes(act.encode(auth));auth_file.chmod(0o600)
+            scope = {'browser_path': str(browser), 'verifier_path': str(verifier), 'output_path': str(output),
+                     'origin': 'https://app.quillmd.com:9443', 'maximum_generations': 5, 'maximum_transcriptions': 1,
+                     'provider_usd_limit': '0.70', 'concurrency': 1, 'automatic_retries': False, 'maximum_seconds': 1200,
+                     'retains_original_publication_exclusion': True, 'baseline_recovery_after_acceptance_start': False}
+            contract = {'acceptance_phase': scope}
+            raw = ''.join(label + ': ' + act.sha(path.read_bytes()) + '\n' for label, path in paths.items()).encode()
+            with patch.multiple(act, ACCEPTANCE_ROOT=root, ACCEPTANCE_BROWSER=browser, ACCEPTANCE_VERIFIER=verifier, ACCEPTANCE_OUTPUT=output), \
+                    patch.object(act, 'declaration', side_effect=lambda: (raw, contract)):
+                self.assertEqual(act.acceptance_preparation(contract, '4' * 40)['scope'], scope)
+                browser.write_bytes(b'unreviewed changed child')
+                with self.assertRaisesRegex(act.Refusal, 'acceptance_reviewed_artifact_identity'):act.acceptance_preparation(contract, '4' * 40)
+                browser.write_bytes(b'acceptance_browser_sha256')
+                for field, value in (('complete', False), ('release', '5' * 40), ('csrf403_no_OTP_noauththrottle', False),
+                                     ('normal_mfa_login', False), ('auth_reset', True), ('authenticated_at', '2999-01-01T00:00:00Z'),
+                                     ('authenticated_at', '2020-01-01T00:00:00Z'),
+                                     ('session_file', str(root / 'other-session.json')), ('origin', 'https://different.example'),
+                                     ('session_cookie_name', 'quillmd_admin_session')):
+                    changed = dict(auth);changed[field] = value;auth_file.write_bytes(act.encode(changed))
+                    with self.subTest(field=field), self.assertRaises((act.Refusal, ValueError)):
+                        act.acceptance_preparation(contract, '4' * 40)
+                auth_file.write_bytes(act.encode(auth));output.mkdir()
+                with self.assertRaisesRegex(act.Refusal, 'acceptance_campaign_replay'):act.acceptance_preparation(contract, '4' * 40)
+                output.rmdir();scope['maximum_generations'] = 6
+                with self.assertRaisesRegex(act.Refusal, 'prospective_acceptance_scope'):act.acceptance_preparation(contract, '4' * 40)
+
+
 class OperatorBoundary(unittest.TestCase):
+    def test_reaper_owned_unreferenced_clips_refuse_at_every_age_across_acceptance_horizon(self):
+        for extension in ('wav', 'webm', 'mp3', 'm4a'):
+            for age_seconds in (1, 2099, 2400, 86400, 8 * 86400):
+                with self.subTest(extension=extension, age_seconds=age_seconds):
+                    path = 'audio/' + 'a' * 48 + '.' + extension
+                    def query(statement):
+                        self.assertNotIn('created_at', statement)
+                        self.assertIn("action='voice.over_limit_quoted'", statement)
+                        self.assertIn("j.input_path=a.details->>'path'", statement)
+                        # Model the old cutoff's false-green rather than returning the same canned answer.
+                        return [] if '35 minutes' in statement and age_seconds <= 2100 else [(path,)]
+                    with self.assertRaisesRegex(act.Refusal, 'worker_reaper_targets'):
+                        act.reaper_admission(query, {path: {'sha256': 'existing-original'}})
+        for returned, files in (([], {'audio/' + 'b' * 48 + '.wav': {}}),
+                                ([('audio/' + 'c' * 48 + '.wav',)], {}),
+                                ([('audio/non-reaper-owned.wav',)], {'audio/non-reaper-owned.wav': {}}),
+                                ([(None,)], {'existing-custom-form.docx': {}})):
+            # A job-referenced clip is absent from the SQL's NOT EXISTS result; missing/non-owned files are safe.
+            act.reaper_admission(lambda statement: returned, files)
+        with self.assertRaisesRegex(act.Refusal, 'worker_reaper_targets'):
+            act.reaper_admission(lambda statement: [], {'submissions/old-normalized-artifact.wav': {}})
+
+    def test_worker_provenance_never_reads_environment_and_refuses_stale_start(self):
+        state = {'ActiveState': 'active', 'MainPID': '123', 'ExecMainStartTimestampMonotonic': '5000000'}
+        raw = environment()
+        unit = b'EnvironmentFile=/opt/meddoc-pro/rebuild/.env\n'
+        values = {'/proc/123/cmdline': b'/opt/meddoc-pro/rebuild/.venv/bin/python\0/opt/meddoc-pro/rebuild/manage.py\0worker\0',
+                  '/proc/123/cgroup': b'0::/system.slice/quillmd-fresh-worker.service\n',
+                  '/proc/123/stat': '123 (python) ' + ' '.join(['0'] * 19 + ['500']),
+                  str(act.APP / 'deploy' / act.UNITS[2]): unit}
+        def path(value):
+            return FakePath(str(value))
+        class FakePath:
+            def __init__(self, name): self.name = name
+            def __truediv__(self, other): return FakePath(self.name + '/' + str(other))
+            def joinpath(self, other): return self / other
+            def read_bytes(self):
+                self.assert_safe(); return values[self.name]
+            def read_text(self):
+                self.assert_safe(); value = values[self.name]
+                return value.decode() if isinstance(value, bytes) else value
+            def assert_safe(self):
+                if self.name.endswith('/environ'): raise AssertionError('foreign environment read forbidden')
+            def __str__(self): return self.name
+        host = act.Host(Mock());host.state = Mock(return_value=state);host.helper = Mock(side_effect=AssertionError('no helper needed'))
+        with patch.object(act, 'Path', side_effect=path), patch.object(act, 'APP', FakePath(str(act.APP))), \
+                patch.object(act, 'protected', return_value=raw), \
+                patch.object(act.os, 'sysconf', return_value=100), patch.object(act, 'git', return_value=unit):
+            report = host.worker_configuration(raw, act.BASELINE, {act.UNITS[2]: state})
+            self.assertFalse(report['direct_environment_readback'])
+            self.assertFalse(report['actual_provider_model_verified'])
+            self.assertEqual(report['values']['QUILLMD_AI_MODEL'], 'claude-sonnet-4-6')
+            for cgroup in (b'0::/system.slice/quillmd-fresh-worker.service-unrelated\n',
+                           b'0::/system.slice/quillmd-fresh-worker.service/child\n',
+                           b'1:name=systemd:/system.slice/quillmd-fresh-worker.service\n',
+                           b'0::/../quillmd-fresh-worker.service\n',
+                           b'0::/system.slice/../system.slice/quillmd-fresh-worker.service\n',
+                           b'0::/system.slice/quillmd-fresh-worker.service \n',
+                           b'0::/system.slice/quillmd-fresh-worker.service\t\n',
+                           b'0::/system.slice/quillmd-fresh-worker.service\r\n',
+                           b' 0::/system.slice/quillmd-fresh-worker.service\n',
+                           b'0::/system.slice/quillmd-fresh-worker.service\n\n',
+                           b'0::/system.slice/quillmd-fresh-worker.service'):
+                values['/proc/123/cgroup'] = cgroup
+                with self.subTest(cgroup=cgroup), self.assertRaisesRegex(act.Refusal, 'worker_cgroup_identity'):
+                    host.worker_configuration(raw, act.BASELINE, {act.UNITS[2]: state})
+            values['/proc/123/cgroup'] = b'0::/system.slice/quillmd-fresh-worker.service\n'
+            state['ExecMainStartTimestampMonotonic'] = '9000000'
+            with self.assertRaisesRegex(act.Refusal, 'worker_kernel_systemd_start_identity'):
+                host.worker_configuration(raw, act.BASELINE, {act.UNITS[2]: state})
+        host.helper.assert_not_called()
+
+    def test_backup_permanent_root_source_and_reference_population(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / 'backups';root.mkdir(mode=0o700)
+            capture = root / '20261006T192011Z-c6f27e26';capture.mkdir(mode=0o700)
+            raw = b'fictional encrypted manifest'
+            manifest = {'run_id': capture.name, 'source_commit': act.BASELINE, 'database': 'quillmd_fresh',
+                        'container_id': 'fictional', 'image_id': 'sha256:' + 'a' * 64,
+                        'tables': {'fictional': {'rows': 1}}, 'invariants': {},
+                        'files': [{'path': 'receipt/fake.json', 'sha256': 'a' * 64, 'size': 1, 'object': 'objects/fake.fernet'}], 'dump': {}}
+            snapshot = {'database': {'tables': manifest['tables'], 'invariants': {},
+                                    'referenced_files': {'receipt/fake.json': 'a' * 64}},
+                        'files': {'receipt/fake.json': {'sha256': 'a' * 64, 'size': 1}}}
+            backup = Mock();backup.load_backup.return_value = (capture, manifest)
+            backup.inspect_container.return_value = {'Id': manifest['container_id'], 'Image': manifest['image_id'],
+                                                      'State': {'Running': True}, 'HostConfig': {'PortBindings': {
+                                                          '5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '55438'}]}}}
+            proof = act.encode({'complete': True, 'independent_key_restore_verified': True,
+                                'isolated_restore': {'complete': True, 'all_table_hashes_match': True,
+                                                     'all_file_hashes_match': True, 'workers_started': 0}})
+            def read(path, *args): return proof if path == act.RESTORE else raw
+            with patch.object(act, 'BACKUPS', root), patch.object(act, 'protected', side_effect=read), \
+                    patch.object(act, 'RESTORE_SHA', act.sha(proof)):
+                self.assertTrue(act.verify_backup(capture, act.sha(raw), snapshot, backup)['all_current_tables_covered'])
+                manifest['source_commit'] = 'e' * 40
+                with self.assertRaisesRegex(act.Refusal, 'backup_source_identity'):
+                    act.verify_backup(capture, act.sha(raw), snapshot, backup)
+                manifest['source_commit'] = act.BASELINE;manifest['files'] = []
+                with self.assertRaisesRegex(act.Refusal, 'backup_current_reference_coverage'):
+                    act.verify_backup(capture, act.sha(raw), snapshot, backup)
+                alias = root / '20261006T192011Z-aaaaaaaa';alias.symlink_to(capture, target_is_directory=True)
+                with self.assertRaisesRegex(act.Refusal, 'backup_destination'):
+                    act.verify_backup(alias, act.sha(raw), snapshot, backup)
+
+    def test_scoped_source_reverse_recovers_interrupted_index_and_refuses_foreign_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], stderr=subprocess.DEVNULL).strip().decode()
+            git('init', '-q', '-b', 'main');git('config', 'user.name', 'Fictional');git('config', 'user.email', 'fixture@example.invalid')
+            message = root / '.git/fixture-message'
+            message.write_text('fictional baseline\n')
+            root.joinpath('old').write_text('old\n');git('add', 'old');git('commit', '-q', '-F', str(message))
+            baseline = git('rev-parse', 'HEAD')
+            root.joinpath('old').write_text('new\n');root.joinpath('added').write_text('added\n')
+            message.write_text('fictional target\n')
+            git('add', 'old', 'added');git('commit', '-q', '-F', str(message));target = git('rev-parse', 'HEAD')
+            with patch.object(act, 'ROOT', root), patch.object(act, 'BASELINE', baseline), patch.object(act, 'ALLOWED', {'old', 'added'}):
+                root.joinpath('old').write_text('unrelated authored work\n')
+                with self.assertRaisesRegex(act.Refusal, 'recovery_unqualified_source_bytes'):act.restore_source(target)
+                root.joinpath('old').write_text('new\n')
+                git('restore', '--source=' + baseline, '--staged', '--worktree', '--', 'old', 'added')
+                root.joinpath('old').write_text('new\n')
+                self.assertEqual(git('rev-parse', 'HEAD'), target)
+                self.assertEqual(act.restore_source(target)['source'], baseline)
+                self.assertEqual(git('status', '--porcelain'), '')
+                self.assertFalse(root.joinpath('added').exists())
+
     def test_default_plan_does_not_read_installed_state(self):
         with patch.object(act, 'protected') as secret, patch.object(act, 'command') as command, \
                 patch.object(act, 'modules') as modules, patch('sys.stdout', new=StringIO()):
@@ -150,6 +836,7 @@ class OperatorBoundary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / 'static'
             root.mkdir(mode=0o755)
+            root.chmod(0o755)
             root.joinpath('app.css').write_bytes(b'fictional css')
             before = act.inventory(root)
             root.chmod(0o777)
@@ -167,6 +854,7 @@ class OperatorBoundary(unittest.TestCase):
             roots = [Path(prefix) / relative for relative in ('etc/systemd/system', 'etc/nginx', 'etc/ssh')]
             for root in roots:
                 root.mkdir(parents=True, mode=0o755)
+                root.chmod(0o755)
             caddy = Path(prefix) / 'opt/meddoc-pro/Caddyfile'
             caddy.parent.mkdir(parents=True)
             caddy.write_bytes(b'fictional caddy')
@@ -228,6 +916,122 @@ class OperatorBoundary(unittest.TestCase):
                 patch.object(act, 'git', side_effect=fake_git), self.assertRaises(act.Refusal):
             act.source_gate(commit, {}, executing=True)
 
+    def test_baseline_and_one_capture_are_inside_exclusion_after_cadence_and_private_drain(self):
+        for post_capture_drift in (False, True):
+            with self.subTest(post_capture_drift=post_capture_drift), tempfile.TemporaryDirectory() as temporary:
+                runtime = Path(temporary);target = '4' * 40;original = environment()
+                updated, configuration = act.render(original, target)
+                current_env = [original];held = [False];captured = [False];calls = []
+                population = {'database': {'tables': {'core_servicehealth': {'sha256': 'previous-cadence'}}},
+                              'files': {}, 'mail': {}, 'static': {}, 'configuration': {}}
+                states = {unit: {'ActiveState': 'active', 'MainPID': str(index + 1),
+                                 'ExecMainStartTimestampMonotonic': '1'} for index, unit in enumerate(act.UNITS)}
+                old_units = deepcopy(states)
+                host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+                backup.key_at.return_value.encrypt.side_effect = lambda value: b'fictional encrypted ' + value
+                storage.inventory.return_value = {}
+                host.state.side_effect = lambda unit: deepcopy(states[unit]) if unit in states else {'ActiveState': 'inactive', 'MainPID': '0'}
+                def service(action, unit):
+                    self.assertTrue(held[0]);calls.append((action, unit))
+                    states[unit] = {'ActiveState': 'inactive' if action == 'stop' else 'active',
+                                    'MainPID': '0' if action == 'stop' else str(11 + act.UNITS.index(unit)),
+                                    'ExecMainStartTimestampMonotonic': '2'}
+                host.service.side_effect = service
+                host.worker_configuration.return_value = {'values': configuration['values']}
+                @contextmanager
+                def hold(*args):
+                    # A normal publisher cadence finishes before this operation obtains exclusion.
+                    population['database']['tables']['core_servicehealth']['sha256'] = 'current-cadence'
+                    held[0] = True
+                    try: yield
+                    finally: held[0] = False
+                exclusion.hold.side_effect = hold
+                def snapshot(*args):
+                    self.assertTrue(held[0], 'Authoritative baseline must not race the publisher before exclusion')
+                    value = deepcopy(population)
+                    if captured[0] and post_capture_drift:
+                        value['database']['tables']['core_servicehealth']['sha256'] = 'unexpected-writer'
+                    return value
+                def capture(primitive, baseline, destination, contract):
+                    self.assertTrue(held[0]);self.assertTrue(all(row['MainPID'] == '0' for row in states.values()))
+                    self.assertEqual(baseline['database']['tables']['core_servicehealth']['sha256'], 'current-cadence')
+                    captured[0] = True;calls.append(('capture',))
+                    return {'run_id': '20261006T235959Z-aaaaaaaa', 'manifest_cipher_sha256': 'f' * 64,
+                            'stopped_before_fingerprint_sha256': act.sha(act.encode(baseline)), 'capture_attempts': 1}
+                def git(tree, *args):
+                    if args[:2] == ('merge', '--ff-only'):
+                        receipts = list(runtime.glob('legacy-model-demo-*/fresh_backup_verified.json'))
+                        self.assertEqual(len(receipts), 1)
+                        evidence = json.loads(receipts[0].read_bytes())
+                        self.assertEqual(evidence['backup']['manifest_cipher_sha256'], 'f' * 64)
+                        self.assertEqual(evidence['backup']['stopped_before_fingerprint_sha256'], act.sha(act.encode(population)))
+                        self.assertTrue(held[0]);self.assertTrue(all(row['MainPID'] == '0' for row in states.values()))
+                        calls.append(('source',))
+                    return target.encode()
+                writer.replace_environment.side_effect = lambda path, before, after: current_env.__setitem__(0, after)
+                args = SimpleNamespace(operator_commit=target, fresh_backup=True)
+                with patch.multiple(act, RUNTIME=runtime, CAPTURE_ATTEMPT=runtime / 'fresh-attempt.json'), patch.object(act, 'protected', side_effect=lambda *args: current_env[0]), \
+                        patch.object(act, 'storage_admission', return_value={}), patch.object(act, 'prepare_static', return_value={}), \
+                        patch.object(act, 'install_static', return_value={}), patch.object(act, 'inventory', return_value={}), \
+                        patch.object(act, 'health'), patch.object(act, 'await_health'), \
+                        patch.object(act, 'service_boundary', return_value=old_units), \
+                        patch.object(act, 'await_service_boundary', side_effect=lambda *args: deepcopy(states)), \
+                        patch.object(act, 'database', return_value={}), patch.object(act, 'snapshot', side_effect=snapshot), \
+                        patch.object(act, 'capture_current_backup', side_effect=capture) as capture_call, \
+                        patch.object(act, 'operation_locks', return_value=nullcontext()), patch.object(act, 'git', side_effect=git), \
+                        patch('sys.stdout', new=StringIO()):
+                    if post_capture_drift:
+                        with self.assertRaisesRegex(act.Refusal, 'activation_failed_recovery_required'):
+                            act.execute(args, {'rollback_qualified': True, 'environment_before_sha256': act.sha(original)}, {}, {'shared_head': act.BASELINE},
+                                        host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
+                        writer.replace_environment.assert_not_called();self.assertNotIn(('source',), calls)
+                        self.assertTrue(all(row['MainPID'] == '0' for row in states.values()))
+                    else:
+                        outcome = act.execute(args, {'rollback_qualified': True, 'environment_before_sha256': act.sha(original)}, {}, {'shared_head': act.BASELINE},
+                                              host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
+                        self.assertTrue(outcome['complete']);self.assertEqual(outcome['provider_calls'], 0)
+                        self.assertEqual(current_env[0], updated)
+                        self.assertEqual(calls[:5], [('stop', unit) for unit in act.UNITS] + [('capture',), ('source',)])
+                    self.assertEqual(capture_call.call_count, 1);backup.backup.assert_not_called()
+
+    def test_failure_before_private_drain_leaves_previous_services_running(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            runtime = Path(temporary);raw = environment()
+            host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+            backup.key_at.return_value.encrypt.side_effect = lambda value: b'fictional ' + value
+            exclusion.hold.return_value = nullcontext()
+            host.state.return_value = {'ActiveState': 'active', 'MainPID': '123'}
+            args = SimpleNamespace(operator_commit='4' * 40, fresh_backup=True)
+            with patch.multiple(act, RUNTIME=runtime, CAPTURE_ATTEMPT=runtime / 'fresh-attempt.json'), patch.object(act, 'protected', return_value=raw), \
+                    patch.object(act, 'storage_admission', return_value={}), patch.object(act, 'prepare_static', return_value={}), \
+                    patch.object(act, 'health'), patch.object(act, 'service_boundary', return_value={}), \
+                    patch.object(act, 'operation_locks', return_value=nullcontext()), \
+                    patch.object(act, 'snapshot') as snapshot, patch.object(act, 'capture_current_backup') as capture, \
+                    patch.object(act, 'git', return_value=act.BASELINE.encode()), patch('sys.stdout', new=StringIO()), \
+                    self.assertRaises(act.Refusal):
+                act.execute(args, {'rollback_qualified': True, 'environment_before_sha256': act.sha(raw)}, {}, {'shared_head': act.BASELINE},
+                            host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
+            host.service.assert_not_called();snapshot.assert_not_called();capture.assert_not_called()
+            writer.replace_environment.assert_not_called()
+
+    def test_spent_or_symlink_capture_attempt_refuses_before_environment_reads_and_private_stop(self):
+        from ops import backup_restore as primitive
+        for symlink in (False, True):
+            with self.subTest(symlink=symlink), tempfile.TemporaryDirectory() as temporary:
+                runtime = Path(temporary);runtime.chmod(0o700)
+                marker = runtime / 'attempt.json'
+                if symlink: marker.symlink_to(runtime / 'missing')
+                else: marker.write_bytes(b'one consumed attempt');marker.chmod(0o600)
+                host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+                backup.private_dir.side_effect = primitive.private_dir
+                with patch.object(act, 'CAPTURE_ATTEMPT', marker), patch.object(act, 'storage_admission', return_value={}), \
+                        patch.object(act, 'protected') as protected, patch.object(act, 'capture_current_backup') as capture, \
+                        self.assertRaisesRegex(act.Refusal, 'fresh_capture_attempt_already_consumed'):
+                    act.execute(SimpleNamespace(fresh_backup=True), {'rollback_qualified': True}, {}, {}, host=host, backup=backup,
+                                storage=storage, exclusion=exclusion, env_writer=writer)
+                protected.assert_not_called();host.service.assert_not_called();capture.assert_not_called()
+                writer.replace_environment.assert_not_called()
+
     def test_population_drift_during_drain_never_writes_environment_or_advances_main(self):
         with tempfile.TemporaryDirectory() as temporary:
             runtime = Path(temporary)
@@ -243,11 +1047,13 @@ class OperatorBoundary(unittest.TestCase):
             writer = Mock()
             units = {unit: {'MainPID': str(index + 1), 'ExecMainStartTimestampMonotonic': '1'}
                      for index, unit in enumerate(act.UNITS)}
-            args = SimpleNamespace(operator_commit='4' * 40, backup_directory=runtime / 'fictional-backup')
-            contract = {'environment_before_sha256': act.sha(raw), 'backup_manifest_sha256': '0' * 64}
-            with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', return_value=raw), \
+            args = SimpleNamespace(operator_commit='4' * 40, fresh_backup=True)
+            contract = {'rollback_qualified': True, 'environment_before_sha256': act.sha(raw), 'backup_manifest_sha256': '0' * 64}
+            with patch.multiple(act, RUNTIME=runtime, CAPTURE_ATTEMPT=runtime / 'fresh-attempt.json'), patch.object(act, 'protected', return_value=raw), \
+                    patch.object(act, 'storage_admission', return_value={}), \
+                    patch.object(act, 'prepare_static', return_value={}), \
                     patch.object(act, 'health'), patch.object(act, 'service_boundary', return_value=units), \
-                    patch.object(act, 'verify_backup', return_value={}), patch.object(act, 'database', return_value={}), \
+                    patch.object(act, 'capture_current_backup', return_value={}) as capture, patch.object(act, 'database', return_value={}), \
                     patch.object(act, 'snapshot', side_effect=[{'population': 'before'}, {'population': 'drifted'}]), \
                     patch.object(act, 'operation_locks', return_value=nullcontext()), \
                     patch.object(act, 'git', return_value=act.BASELINE.encode()) as git, \
@@ -255,6 +1061,7 @@ class OperatorBoundary(unittest.TestCase):
                 act.execute(args, contract, {}, {'shared_head': act.BASELINE}, host=host, backup=backup,
                             storage=storage, exclusion=exclusion, env_writer=writer)
             writer.replace_environment.assert_not_called()
+            capture.assert_not_called()
             self.assertEqual(host.service.call_args_list, [unittest.mock.call('stop', unit) for unit in act.UNITS])
             self.assertFalse(any(call.args[1:2] == ('merge',) for call in git.call_args_list))
             failure = list(runtime.glob('legacy-model-demo-*/failed.json'))
@@ -279,7 +1086,7 @@ class OperatorBoundary(unittest.TestCase):
                                 'MainPID': '0' if action == 'stop' else str(11 + act.UNITS.index(unit)),
                                 'ExecMainStartTimestampMonotonic': '2'}
             host.state.side_effect, host.service.side_effect = state, service
-            host.effective_worker.return_value = {'values': report['values']}
+            host.worker_configuration.return_value = {'values': report['values']}
             backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock()
             backup.key_at.return_value.encrypt.side_effect = lambda value: b'FICTIONAL_CIPHER:' + value
             storage.inventory.return_value = {}
@@ -290,14 +1097,17 @@ class OperatorBoundary(unittest.TestCase):
                 if path.name.startswith('failed'):
                     raise OSError(errno.ENOSPC, 'fictional full evidence volume')
                 original_write(path, raw)
-            args = SimpleNamespace(operator_commit=target, backup_directory=runtime / 'fictional-backup')
-            contract = {'environment_before_sha256': act.sha(original), 'backup_manifest_sha256': '0' * 64}
-            with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', side_effect=lambda *args: current[0]), \
+            args = SimpleNamespace(operator_commit=target, fresh_backup=True)
+            contract = {'rollback_qualified': True, 'environment_before_sha256': act.sha(original), 'backup_manifest_sha256': '0' * 64}
+            with patch.multiple(act, RUNTIME=runtime, CAPTURE_ATTEMPT=runtime / 'fresh-attempt.json'), patch.object(act, 'protected', side_effect=lambda *args: current[0]), \
+                    patch.object(act, 'storage_admission', return_value={}), \
+                    patch.object(act, 'prepare_static', return_value={}), patch.object(act, 'install_static', return_value={}), \
+                    patch.object(act, 'inventory', return_value={}), \
                     patch.object(act, 'write_new', side_effect=write), patch.object(act, 'health'), patch.object(act, 'await_health'), \
                     patch.object(act, 'service_boundary', return_value=old_units), \
                     patch.object(act, 'await_service_boundary', side_effect=lambda *args: deepcopy(states)), \
-                    patch.object(act, 'verify_backup', return_value={}), patch.object(act, 'database', return_value={}), \
-                    patch.object(act, 'snapshot', side_effect=[{'population': 1}, {'population': 1}, {'population': 1}, {'population': 2}]), \
+                    patch.object(act, 'capture_current_backup', return_value={}), patch.object(act, 'database', return_value={}), \
+                    patch.object(act, 'snapshot', side_effect=[{'population': 1}, {'population': 1}, {'population': 1}, {'population': 1}, {'population': 1, 'static': {}}, {'population': 2}]), \
                     patch.object(act, 'operation_locks', return_value=nullcontext()), \
                     patch.object(act, 'git', return_value=target.encode()), patch('sys.stdout', new=StringIO()), \
                     self.assertRaises(act.Refusal):
@@ -326,16 +1136,48 @@ class OperatorBoundary(unittest.TestCase):
                     raise OSError(errno.ENOSPC, 'fictional full evidence volume')
                 original_write(path, raw)
             def read(path, *args):
+                if path.name == 'prepared.json':
+                    return act.encode({'source': {'operator_commit': target}, 'configuration': {'before_sha256': act.sha(original)},
+                                       'before': {}, 'static_preparation': {}})
                 return original if path.name == 'environment-before.fernet' else updated
             args = SimpleNamespace(operator_commit=target, activation_directory=directory)
-            with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', side_effect=read), \
+            with patch.multiple(act, RUNTIME=runtime, CAPTURE_ATTEMPT=runtime / 'fresh-attempt.json'), patch.object(act, 'protected', side_effect=read), \
+                    patch.object(act, 'storage_admission', return_value={}), \
                     patch.object(act, 'write_new', side_effect=write), patch.object(act, 'snapshot', return_value={}), \
+                    patch.object(act, 'restore_static', return_value={}), patch.object(act, 'restore_source', return_value={}), \
                     patch.object(act, 'operation_locks', return_value=nullcontext()), \
                     patch.object(act, 'git', return_value=target.encode()), \
                     patch.object(act, 'best_effort_private_stop', return_value={}) as stop, \
                     self.assertRaises(act.Refusal):
-                act.rollback(args, {}, host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
+                act.rollback(args, {}, contract={'rollback_qualified': True}, host=host, backup=backup, storage=storage, exclusion=exclusion, env_writer=writer)
             stop.assert_called_once_with(host)
+
+    def test_standalone_rollback_cadence_or_clinical_drift_refuses_before_stopping_coherent_services(self):
+        for drift in ('core_servicehealth', 'core_encounter'):
+            with self.subTest(drift=drift), tempfile.TemporaryDirectory() as temporary:
+                runtime = Path(temporary);directory = runtime / 'legacy-model-demo-fictional';directory.mkdir(mode=0o700)
+                target = '4' * 40;original = environment();updated, _ = act.render(original, target)
+                before = {'database': {'tables': {name: {'sha256': 'before'} for name in ('core_servicehealth', 'core_encounter')}},
+                          'files': {}, 'mail': {}, 'configuration': {}, 'static': {}}
+                current = deepcopy(before);current['database']['tables'][drift]['sha256'] = 'new-real-row'
+                host, backup, storage, exclusion, writer = Mock(), Mock(), Mock(), Mock(), Mock()
+                backup.key_at.return_value.decrypt.side_effect = lambda raw: raw
+                exclusion.hold.return_value = nullcontext()
+                def read(path, *args):
+                    if path.name == 'prepared.json':
+                        return act.encode({'source': {'operator_commit': target}, 'configuration': {'before_sha256': act.sha(original)},
+                                           'before': before, 'static_preparation': {}})
+                    return original if path.name == 'environment-before.fernet' else updated
+                with patch.object(act, 'RUNTIME', runtime), patch.object(act, 'protected', side_effect=read), \
+                        patch.object(act, 'storage_admission', return_value={}), patch.object(act, 'snapshot', return_value=current), \
+                        patch.object(act, 'operation_locks', return_value=nullcontext()), \
+                        patch.object(act, 'restore_static') as restore_static, patch.object(act, 'restore_source') as restore_source, \
+                        patch.object(act, 'git', return_value=target.encode()), self.assertRaises(act.Refusal):
+                    act.rollback(SimpleNamespace(operator_commit=target, activation_directory=directory), {},
+                                 contract={'rollback_qualified': True}, host=host, backup=backup, storage=storage,
+                                 exclusion=exclusion, env_writer=writer)
+                host.service.assert_not_called();writer.replace_environment.assert_not_called()
+                restore_static.assert_not_called();restore_source.assert_not_called()
 
 
 if __name__ == '__main__':

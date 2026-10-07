@@ -1,24 +1,37 @@
-"""Preserving private legacy-model configuration act; no provider calls or migrations.
+"""Preserving private legacy-model configuration act; no direct provider calls or migrations.
 
 The default only reports the qualification contract. Execution requires a separately
 completed, committed declaration, exact CI, protected exact-source QA evidence and a
-current authenticated backup. The prospective declaration deliberately admits no act.
+current authenticated backup. Exact merged-source CI remains an execution prerequisite.
+Optional separately capped browser acceptance delegates synthetic worker requests while
+retaining the original exclusion; installer/provider and acceptance outcomes stay separate.
 """
 import argparse
+import ast
 from collections import Counter
 from contextlib import ExitStack, contextmanager
+from contextlib import redirect_stdout
 from datetime import datetime, timezone
 import fcntl
 import hashlib
+import gzip
+import importlib.util
+import io
 from io import StringIO
 import json
+import math
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
+import signal
 import stat
 import subprocess
 import sys
+import tarfile
 import time
+import types
+import uuid
+from types import SimpleNamespace
 
 from dotenv import dotenv_values
 
@@ -35,12 +48,22 @@ ALLOWED = frozenset({SELF, DECL, 'rebuild/ops/test_legacy_model_activation.py',
                      'scripts/setup-worktree.sh',
                      'docs/foundation/mutations/20261006-quillmd-owner-legacy-sonnet55-qa.md',
                      'docs/foundation/mutations/20261006-quillmd-owner-voice-duration-adjudication.md',
-                     'docs/rebuild/owner-doctor-test-guide-20261006.html'})
+                     'docs/rebuild/owner-doctor-test-guide-20261006.html',
+                     'docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md',
+                     'package-lock.json', 'rebuild/browser-tests.mjs', 'rebuild/ops/automatic_offsite.py',
+                     'rebuild/ops/test_automatic_offsite.py', 'rebuild/static/app.css', 'rebuild/static/app.js',
+                     'rebuild/static/fonts/dm-sans.ttf', 'rebuild/static/fonts/OFL-DM-Sans.txt',
+                     'rebuild/templates/admin_dashboard.html', 'rebuild/templates/admin_services.html',
+                     'rebuild/templates/base.html', 'rebuild/templates/dashboard.html',
+                     'rebuild/templates/encounter_detail.html', 'rebuild/templates/encounter_input.html',
+                     'rebuild/templates/template_detail.html', 'rebuild/templates/template_upload.html'})
 DEPENDENCIES = ('rebuild/ops/managed_helper.py', 'rebuild/ops/private_storage.py',
                 'rebuild/ops/backup_restore.py', 'rebuild/ops/email_activation.py',
                 'rebuild/ops/activation_exclusion.py', 'scripts/check-citation.sh',
                 'scripts/run-ruled-mutation.sh', 'scripts/lib/declaration.sh',
-                'scripts/lib/run-watched.sh')
+                'scripts/lib/run-watched.sh', 'scripts/activate-typed-voice.py',
+                'rebuild/ops/service_launcher.py', 'rebuild/quillmd/settings.py',
+                'rebuild/quillmd/static_storage.py', 'rebuild/requirements.txt', 'package.json')
 UNITS = tuple('quillmd-fresh-' + surface + '.service' for surface in ('doctor', 'admin', 'worker'))
 OPERATIONS = tuple('quillmd-fresh-' + operation + '.service' for operation in
                    ('backup', 'offsite', 'backup-alerts', 'operations-publisher'))
@@ -65,6 +88,21 @@ RESTORE_SHA = 'f2df7c56486b5d09de254ee7ab69c30697ca2b6487b84b700fe06c7fa7f49d0f'
 KEY = RUNTIME / 'backup-secrets/fresh-backup-current-20260917.key'
 ROLES = RUNTIME / 'db-role-secrets/fresh-db-roles.json'
 COMPLETION_SECONDS = 240
+RECOVERY_SECONDS = 180
+ACCEPTANCE_SECONDS = 1200
+BACKUPS = ROOT / 'backups/owner-demo-20261006'
+CAPTURE_ATTEMPT = RUNTIME / 'owner-demo-20261006/legacy-ui-fresh-capture-attempt.json'
+ACCEPTANCE_ROOT = RUNTIME / 'owner-demo-20261006'
+ACCEPTANCE_BROWSER = ACCEPTANCE_ROOT / 'installed-browser-acceptance-v2.mjs'
+ACCEPTANCE_VERIFIER = ACCEPTANCE_ROOT / 'verify_installed_acceptance_v2.py'
+ACCEPTANCE_OUTPUT = ACCEPTANCE_ROOT / 'installed-acceptance-v2-20261006'
+STATIC_PRIMITIVES = 'scripts/activate-typed-voice.py'
+STATIC_PRIMITIVES_SHA = '4e2efda2357fa2c33262eb2f747ac7201eadbc94875528cde2b7fe9040ebba18'
+STATIC_INPUTS = frozenset({'app.css', 'app.js', 'fonts/dm-sans.ttf', 'fonts/OFL-DM-Sans.txt',
+                           'django_otp/css/login.css', 'otp_totp/css/qrcode.css', 'otp_totp/js/qrcode.js'})
+STORAGE_AUTHORITY = 'docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md'
+STORAGE_RESERVE = 20 * 1024 ** 3
+STORAGE_ALLOWANCES = {'peak_bytes': 5 * 1024 ** 3, 'rollback_bytes': 1024 ** 3, 'background_bytes': 4 * 1024 ** 3}
 
 
 class Refusal(RuntimeError):
@@ -157,6 +195,26 @@ def command(argv, *, cwd=None, timeout=180):
     return done.stdout
 
 
+def storage_admission(contract, phase):
+    """A scoped owner exception; never turns the original percentage verdict green."""
+    require(contract.get('storage_authority_path') == STORAGE_AUTHORITY
+            and sha((SOURCE / STORAGE_AUTHORITY).read_bytes()) == contract.get('storage_authority_sha256'),
+            'committed_storage_exception_identity')
+    require(contract.get('storage_allowances') == STORAGE_ALLOWANCES
+            and contract.get('storage_minimum_reserve_bytes') == STORAGE_RESERVE, 'storage_exception_scope')
+    measured = os.statvfs(ROOT)
+    available = measured.f_bavail * measured.f_frsize
+    used = (measured.f_blocks - measured.f_bfree) * measured.f_frsize
+    require(available - sum(STORAGE_ALLOWANCES.values()) >= STORAGE_RESERVE, 'task_storage_reserve')
+    return {'phase': phase, 'original_preflight_percentage_verdict': 'RED',
+            'task_disposition': 'explicit owner exception', 'available_bytes': available,
+            'available_inodes': measured.f_favail,
+            'current_used_percentage': math.ceil(100 * used / (used + available)),
+            'conservative_remaining_allowances': STORAGE_ALLOWANCES,
+            'projected_available_bytes': available - sum(STORAGE_ALLOWANCES.values()),
+            'minimum_reserve_bytes': STORAGE_RESERVE, 'authority_sha256': contract['storage_authority_sha256']}
+
+
 def git(tree, *args):
     return command(['git', '-C', str(tree), *args])
 
@@ -222,7 +280,54 @@ def read_qualification(path, expected):
     return result
 
 
-def source_gate(commit, contract, *, executing):
+def source_recovery_state(target):
+    """Admit only exact old/new committed bytes during a guarded, interrupted reverse."""
+    head = git(ROOT, 'rev-parse', 'HEAD').strip().decode()
+    require(head in (BASELINE, target) and git(ROOT, 'branch', '--show-current').strip() == b'main',
+            'recovery_source_head')
+    trees = {git(ROOT, 'rev-parse', revision + '^{tree}').strip() for revision in (BASELINE, target)}
+    require(git(ROOT, 'write-tree').strip() in trees, 'recovery_source_index')
+    changed = set(git(ROOT, 'diff', '--name-only', BASELINE, target).decode().splitlines())
+    require(changed <= ALLOWED, 'recovery_source_scope')
+    require(set(git(ROOT, 'diff', '--name-only', BASELINE).decode().splitlines()) <= changed,
+            'recovery_unrelated_worktree_drift')
+    populations = {revision: set(git(ROOT, 'ls-tree', '-r', '--name-only', revision).decode().splitlines())
+                   for revision in (BASELINE, target)}
+    for name in changed:
+        path = ROOT / name
+        candidates = [git(ROOT, 'show', revision + ':' + name)
+                      for revision in (BASELINE, target) if name in populations[revision]]
+        if path.exists():
+            require(path.is_file() and not path.is_symlink() and path.read_bytes() in candidates,
+                    'recovery_unqualified_source_bytes')
+        else:
+            require(not path.is_symlink() and any(name not in populations[r] for r in populations),
+                    'recovery_missing_source_bytes')
+    return {'head': head, 'changed_paths': sorted(changed),
+            'baseline_tree': git(ROOT, 'rev-parse', BASELINE + '^{tree}').strip()}
+
+
+def restore_source(target):
+    state = source_recovery_state(target)
+    index_is_baseline = git(ROOT, 'write-tree').strip() == state['baseline_tree']
+    if not index_is_baseline or git(ROOT, 'diff', '--name-only').strip():
+        # Restore only individually authenticated old/new bytes in the exact shipped diff.
+        # No reset, force/discard flag, untracked cleanup or unrelated file is reachable.
+        paths = state['changed_paths']
+        if index_is_baseline:
+            baseline_paths = set(git(ROOT, 'ls-tree', '-r', '--name-only', BASELINE).decode().splitlines())
+            paths = sorted(set(paths) & baseline_paths)
+        git(ROOT, 'restore', '--source=' + BASELINE, '--staged', '--worktree', '--', *paths)
+    require(git(ROOT, 'write-tree').strip() == state['baseline_tree']
+            and not git(ROOT, 'diff', '--name-only').strip(), 'source_reverse_tree_identity')
+    if state['head'] != BASELINE:
+        git(ROOT, 'update-ref', 'refs/heads/main', BASELINE, target)
+    require(git(ROOT, 'rev-parse', 'HEAD').strip().decode() == BASELINE
+            and not git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'source_reverse_complete')
+    return {'source': BASELINE, 'scoped_old_new_bytes_only': True, 'untracked_files_removed': False}
+
+
+def source_gate(commit, contract, *, executing, recovering=False):
     require(re.fullmatch('[a-f0-9]{40}', commit or '') and SOURCE.is_relative_to(ROOT / '.worktrees')
             and SOURCE.resolve() == SOURCE, 'retained_operator_source')
     require(git(SOURCE, 'rev-parse', 'HEAD').strip().decode() == commit
@@ -234,11 +339,16 @@ def source_gate(commit, contract, *, executing):
         require((SOURCE / relative).read_bytes() == git(SOURCE, 'show', BASELINE + ':' + relative),
                 'dependency_byte_identity')
     head = git(ROOT, 'rev-parse', 'HEAD').strip().decode()
-    require(head in (BASELINE, commit) and git(ROOT, 'branch', '--show-current').strip() == b'main'
-            and not git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'shared_deploy_surface_drift')
-    # All serving Python/Word/settings/prompt bytes stay identical; only the doctor copy may change.
+    require(head in (BASELINE, commit) and git(ROOT, 'branch', '--show-current').strip() == b'main', 'shared_deploy_surface_drift')
+    if recovering:
+        source_recovery_state(commit)
+    else:
+        require(not git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'shared_deploy_surface_drift')
+    # Core generation, Word, settings and requirements stay byte-identical. Only exact
+    # named templates/static and the separately reviewed operator clock/tooling may differ.
     for relative in git(ROOT, 'ls-files', 'rebuild').decode().splitlines():
-        require((ROOT / relative).read_bytes() == git(ROOT, 'show', head + ':' + relative), 'installed_source_byte_drift')
+        if not (recovering and relative in changed):
+            require((ROOT / relative).read_bytes() == git(ROOT, 'show', head + ':' + relative), 'installed_source_byte_drift')
     if executing:
         require(git(ROOT, 'rev-parse', 'origin/main').strip().decode() == commit,
                 'normally_merged_main_target_required')
@@ -304,26 +414,49 @@ except Exception: raise SystemExit(1)
 '''
         return json.loads(self.helper(code, 30))
 
-    def effective_worker(self):
+    def worker_configuration(self, expected_environment, release, boundary):
+        """Configuration provenance; deliberately never reads another process's environment.
+
+        Docker AppArmor refuses that read even at the application UID. The reviewed
+        unit loads the protected EnvironmentFile before its same-PID launcher execs
+        this exact worker. Actual requested/returned models require subsequent job
+        configuration and provider-response evidence, not this provenance record.
+        """
         state = self.state(UNITS[2])
-        require(state.get('ActiveState') == 'active' and int(state.get('MainPID', '0')) > 0, 'worker_not_active')
+        require(state.get('ActiveState') == 'active' and int(state.get('MainPID', '0')) > 0
+                and boundary.get(UNITS[2]) == state, 'worker_startup_identity')
         pid = int(state['MainPID'])
-        code = '''import json,pathlib
-try:
- pid=PID
- root=pathlib.Path('/host/proc')/str(pid)
- command=root.joinpath('cmdline').read_bytes().replace(b'\\0',b' ').decode().strip()
- assert command.endswith('manage.py worker') and command.startswith('/opt/meddoc-pro/rebuild/.venv/bin/python ')
- assert '/quillmd-fresh-worker.service' in root.joinpath('cgroup').read_text()
- keys=('QUILLMD_AI_MODE','QUILLMD_AI_PROVIDER','QUILLMD_AI_MODEL','QUILLMD_AI_INPUT_RATE','QUILLMD_AI_OUTPUT_RATE','QUILLMD_AI_CACHED_RATE','QUILLMD_RELEASE_SHA','QUILLMD_DATA_MODE','QUILLMD_PREVIEW_AUTH_ENABLED')
- values={}
- for item in root.joinpath('environ').read_bytes().split(b'\\0'):
-  key,sep,value=item.partition(b'=')
-  if sep and key.decode() in keys: values[key.decode()]=value.decode()
- print(json.dumps({'pid':pid,'values':values},sort_keys=True))
-except Exception: raise SystemExit(1)
-'''.replace('PID', str(pid))
-        result = json.loads(self.helper(code, 30))
+        root = Path('/proc') / str(pid)
+        argv = root.joinpath('cmdline').read_bytes().split(b'\0')
+        require(argv == [str(APP / '.venv/bin/python').encode(), str(APP / 'manage.py').encode(),
+                         b'worker', b''], 'worker_command_identity')
+        cgroup_raw = root.joinpath('cgroup').read_bytes()
+        # Native host v2 procfs, not a helper's relative cgroup namespace.
+        require(cgroup_raw == ('0::/system.slice/' + UNITS[2] + '\n').encode(), 'worker_cgroup_identity')
+        cgroup = cgroup_raw[:-1].decode()
+        fields = root.joinpath('stat').read_text().rsplit(') ', 1)[1].split()
+        ticks = int(fields[19])
+        ticks_per_second = os.sysconf('SC_CLK_TCK')
+        systemd_start = int(state.get('ExecMainStartTimestampMonotonic', '0'))
+        require(ticks > 0 and systemd_start > 0
+                and abs(ticks * 1000000 / ticks_per_second - systemd_start) < 1000000,
+                'worker_kernel_systemd_start_identity')
+        actual = protected(APP / '.env', 65536)
+        require(actual == expected_environment, 'worker_configuration_file_drift')
+        parsed = dotenv_values(stream=StringIO(actual.decode()), interpolate=False)
+        require(parsed.get('QUILLMD_RELEASE_SHA') == release, 'worker_configuration_release')
+        unit = APP / 'deploy' / UNITS[2]
+        require(unit.read_bytes() == git(SOURCE, 'show', BASELINE + ':rebuild/deploy/' + UNITS[2])
+                and unit.read_bytes().count(b'EnvironmentFile=/opt/meddoc-pro/rebuild/.env\n') == 1,
+                'worker_environment_loading_source')
+        keys = ('QUILLMD_AI_MODE', 'QUILLMD_AI_PROVIDER', *MODEL_VALUES, 'QUILLMD_RELEASE_SHA',
+                'QUILLMD_DATA_MODE', 'QUILLMD_PREVIEW_AUTH_ENABLED')
+        result = {'pid': pid, 'unit': UNITS[2], 'cgroup': cgroup,
+                  'kernel_start_ticks': ticks, 'systemd_start_monotonic_usec': systemd_start,
+                  'configuration_file_sha256': sha(actual), 'unit_source_sha256': sha(unit.read_bytes()),
+                  'values': {key: parsed.get(key) for key in keys},
+                  'evidence_scope': 'reviewed EnvironmentFile plus fresh same-PID startup and exact protected configuration',
+                  'direct_environment_readback': False, 'actual_provider_model_verified': False}
         require(self.state(UNITS[2]) == state, 'worker_identity_race')
         return result
 
@@ -341,6 +474,16 @@ def operation_locks():
                     and stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1, 'operation_lock_identity')
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
+
+
+def reaper_admission(query, files):
+    """No old unapproved clip may age into cleanup during the bounded acceptance phase."""
+    candidates = query("""SELECT DISTINCT details->>'path' FROM core_auditevent a
+        WHERE action='voice.over_limit_quoted'
+        AND NOT EXISTS(SELECT 1 FROM core_job j WHERE j.input_path=a.details->>'path')""")
+    require(not any(path in files and re.fullmatch(r'audio/[a-f0-9]{48}\.(wav|webm|mp3|m4a)', path or '')
+                    for path, in candidates)
+            and not any(path.startswith('submissions/') for path in files), 'worker_reaper_targets')
 
 
 def database(backup, files):
@@ -365,11 +508,14 @@ def database(backup, files):
         held = query("SELECT count(*) FROM core_reservation WHERE state='held'")[0][0]
         require(pending == held == 0, 'pending_or_unknown_provider_work')
         invariants = backup.invariant_counts(query)
-        reaper = query("""SELECT details->>'path' FROM core_auditevent a WHERE action='voice.over_limit_quoted'
-            AND created_at<now()-interval '35 minutes' AND created_at>=now()-interval '7 days 40 minutes'
-            AND NOT EXISTS(SELECT 1 FROM core_job j WHERE j.input_path=a.details->>'path')""")
-        require(not any(path in files for path, in reaper)
-                and not any(path.startswith('submissions/') for path in files), 'worker_reaper_targets')
+        referenced = {}
+        for _, statement in backup.FILE_QUERIES:
+            for path, expected_hash in query(statement):
+                if path:
+                    require(path in files and (not expected_hash or files[path]['sha256'] == expected_hash),
+                            'referenced_file_identity')
+                    referenced[path] = files[path]['sha256']
+        reaper_admission(query, files)
         catalog = {}
         statements = {
             'columns': "SELECT row_to_json(c)::text FROM (SELECT * FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position)c",
@@ -387,7 +533,8 @@ def database(backup, files):
             statement = sql.SQL('SELECT last_value,is_called FROM public.{}').format(sql.Identifier(name)).as_string()
             catalog['sequence:' + name] = sha(encode(query(statement)))
         conn.execute('COMMIT')
-    return {'tables': rows, 'catalog': catalog, 'invariants': invariants, 'pending_jobs': pending, 'held': held}
+    return {'tables': rows, 'catalog': catalog, 'invariants': invariants, 'pending_jobs': pending,
+            'held': held, 'referenced_files': referenced}
 
 
 def inventory(root):
@@ -412,13 +559,28 @@ def snapshot(host, backup, storage):
 
 
 def verify_backup(path, expected_hash, snapshot_value, backup):
-    require(Path(path).is_relative_to(RUNTIME / 'new-system-backups'), 'backup_destination')
+    directory = Path(path)
+    require(directory.is_absolute() and directory.parent == BACKUPS
+            and directory.resolve(strict=True) == directory
+            and re.fullmatch(r'[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}', directory.name), 'backup_destination')
+    backup.private_dir(BACKUPS)
+    backup.private_dir(directory)
     cipher = backup.key_at(KEY)
-    directory, manifest = backup.load_backup(path, cipher)
+    loaded, manifest = backup.load_backup(directory, cipher)
+    require(loaded == directory and manifest.get('run_id') == directory.name
+            and manifest.get('source_commit') == BASELINE
+            and manifest.get('database') == 'quillmd_fresh', 'backup_source_identity')
+    container = backup.inspect_container('quillmd-fresh-postgres')
+    require(container.get('Id') == manifest.get('container_id')
+            and container.get('Image') == manifest.get('image_id') and container.get('State', {}).get('Running') is True
+            and container.get('HostConfig', {}).get('PortBindings')
+            == {'5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '55438'}]}, 'backup_live_database_identity')
     require(sha(protected(directory / 'manifest.json.fernet', 8 * 1024 * 1024)) == expected_hash,
             'backup_manifest_identity')
     require(manifest['tables'] == snapshot_value['database']['tables']
             and manifest['invariants'] == snapshot_value['database']['invariants'], 'backup_current_row_coverage')
+    require({entry['path'] for entry in manifest['files']}
+            == set(snapshot_value['database']['referenced_files']), 'backup_current_reference_coverage')
     for entry in manifest['files']:
         current = snapshot_value['files'].get(entry['path'])
         require(current and current['sha256'] == entry['sha256'] and current['size'] == entry['size'],
@@ -436,6 +598,231 @@ def verify_backup(path, expected_hash, snapshot_value, backup):
     return {'run_id': manifest['run_id'], 'manifest_cipher_sha256': expected_hash,
             'all_current_tables_covered': True, 'authenticated_dump_and_objects': True,
             'independent_restore_result_sha256': RESTORE_SHA, 'new_restore_performed': False}
+
+
+def capture_current_backup(backup, baseline, destination, contract):
+    """Exactly one local encrypted capture after drain, still under publication exclusion."""
+    policy = {'source': str(APP), 'output': str(BACKUPS), 'source_commit': BASELINE,
+              'key_file': str(KEY), 'database_credentials': str(ROLES), 'maximum_attempts': 1,
+              'exclusive_attempt_marker': str(CAPTURE_ATTEMPT),
+              'timing': 'inside_exclusion_after_private_drain_before_publication',
+              'primitive_sha256': sha(git(SOURCE, 'show', BASELINE + ':rebuild/ops/backup_restore.py')),
+              'offsite_upload': False, 'provider_calls': 0}
+    require(contract.get('fresh_capture_policy') == policy, 'prospective_fresh_capture_scope')
+    require(sha((SOURCE / 'rebuild/ops/backup_restore.py').read_bytes()) == policy['primitive_sha256'],
+            'qualified_fresh_capture_primitive')
+    backup.private_dir(BACKUPS)
+    retained = inventory(BACKUPS)
+    before_fingerprint = sha(encode(baseline))
+    attempt = encode({'attempt': 1, 'activation_directory': str(destination), 'policy': policy,
+                      'stopped_before_fingerprint_sha256': before_fingerprint, 'automatic_retries': False})
+    backup.private_dir(CAPTURE_ATTEMPT.parent)
+    # A new invocation cannot spend another capture attempt after this prospective act failed.
+    write_new(CAPTURE_ATTEMPT, attempt)
+    write_new(destination / 'fresh-backup-attempt.json', attempt)
+    output = io.StringIO()
+    # Normal qualified primitive exports a READ ONLY snapshot and pg_dump uses the
+    # same snapshot. Its key/role remain private and plaintext never reaches disk.
+    with redirect_stdout(output):
+        backup.backup(SimpleNamespace(source=APP, output=BACKUPS, key_file=KEY, database_credentials=ROLES))
+    summary = json.loads(output.getvalue())
+    run_id = summary.get('run_id', '')
+    require(summary.get('complete') is True and re.fullmatch(r'[0-9]{8}T[0-9]{6}Z-[a-f0-9]{8}', run_id)
+            and summary.get('backup_directory') == str(BACKUPS / run_id), 'fresh_capture_output_identity')
+    actual = inventory(BACKUPS)
+    require(all(actual.get(name) == row for name, row in retained.items())
+            and all(name in retained or name == run_id or name.startswith(run_id + '/') for name in actual),
+            'previous_capture_preservation')
+    verified = verify_backup(BACKUPS / run_id, summary.get('manifest_cipher_sha256'), baseline, backup)
+    verified.update(capture_attempts=1, stopped_before_fingerprint_sha256=before_fingerprint,
+                    backup_directory=str(BACKUPS / run_id), previous_captures_preserved=True,
+                    local_encrypted_capture=True, offsite_upload=False, provider_calls=0)
+    return verified
+
+
+def static_primitives():
+    """Load only five pure, hash-pinned public-asset functions, not their old activation driver."""
+    raw = (SOURCE / STATIC_PRIMITIVES).read_bytes()
+    require(sha(raw) == STATIC_PRIMITIVES_SHA, 'qualified_static_primitives_identity')
+    names = {'static_inventory', 'create_static_stage', 'static_delta', 'retain_static', 'install_static'}
+    nodes = [node for node in ast.parse(raw).body if isinstance(node, ast.FunctionDef) and node.name in names]
+    require({node.name for node in nodes} == names and len(nodes) == len(names), 'qualified_static_primitives_population')
+    module = types.ModuleType('_legacy_demo_static_primitives')
+    module.__dict__.update(Path=Path, PurePosixPath=PurePosixPath, os=os, stat=stat,
+                           hashlib=hashlib, io=io, tarfile=tarfile, uuid=uuid, require=require, sha=sha)
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(SOURCE / STATIC_PRIMITIVES), 'exec'), module.__dict__)
+    return module
+
+
+def static_sources():
+    otp = Path(importlib.util.find_spec('django_otp').origin).parent
+    return {'app.css': SOURCE / 'rebuild/static/app.css', 'app.js': SOURCE / 'rebuild/static/app.js',
+            'fonts/dm-sans.ttf': SOURCE / 'rebuild/static/fonts/dm-sans.ttf',
+            'fonts/OFL-DM-Sans.txt': SOURCE / 'rebuild/static/fonts/OFL-DM-Sans.txt',
+            'django_otp/css/login.css': otp / 'static/django_otp/css/login.css',
+            'otp_totp/css/qrcode.css': otp / 'plugins/otp_totp/static/otp_totp/css/qrcode.css',
+            'otp_totp/js/qrcode.js': otp / 'plugins/otp_totp/static/otp_totp/js/qrcode.js'}
+
+
+def public_source(path):
+    require(path.is_absolute() and path.resolve(strict=True) == path, 'public_source_canonical')
+    with path.open('rb') as stream:
+        info = os.fstat(stream.fileno())
+        # Checkouts and the qualified installed venv use operator-group 0664.
+        # Their bytes are separately source/hash pinned; application UID996/GID988 cannot write them.
+        require(stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid() and info.st_gid == os.getgid()
+                and info.st_nlink == 1 and not info.st_mode & 0o002
+                and info.st_size <= 16 * 1024 * 1024, 'public_source_identity')
+        raw = stream.read(info.st_size + 1)
+        current = path.stat()
+        require(len(raw) == info.st_size and all(getattr(info, key) == getattr(current, key)
+                for key in ('st_dev', 'st_ino', 'st_size', 'st_mtime_ns', 'st_ctime_ns')), 'public_source_read_race')
+        return raw
+
+
+def validate_static_stage(root, inputs, primitives):
+    """Exactly seven public sources; only the declared CSS font URL may be rewritten."""
+    rows = primitives.static_inventory(root)
+    manifest = json.loads((root / 'staticfiles.json').read_bytes())
+    require(set(manifest) == {'paths', 'version', 'hash'} and manifest['version'] == '1.1'
+            and isinstance(manifest['paths'], dict) and set(manifest['paths']) == set(inputs) == STATIC_INPUTS,
+            'static_manifest_source_population')
+    require(manifest['hash'] == hashlib.md5(json.dumps(sorted(manifest['paths'].items())).encode()).hexdigest()[:12],
+            'static_manifest_content_identity')
+    font = public_source(inputs['fonts/dm-sans.ttf'])
+    font_name = 'fonts/dm-sans.' + hashlib.md5(font).hexdigest()[:12] + '.ttf'
+    require(manifest['paths']['fonts/dm-sans.ttf'] == font_name, 'static_font_content_identity')
+    allowed, directories = {'staticfiles.json'}, {'.'}
+    for name, source in inputs.items():
+        raw = public_source(source)
+        compiled_bytes = raw
+        if name == 'app.css':
+            text = raw.decode()
+            urls = re.findall(r'url\(\s*[\"\']?([^\)\"\']+)[\"\']?\s*\)', text)
+            require(urls and all(value.strip() == 'fonts/dm-sans.ttf' for value in urls), 'static_css_url_scope')
+            compiled_bytes = text.replace('fonts/dm-sans.ttf', font_name).encode()
+        original = PurePosixPath(name)
+        compiled = str(original.with_suffix('')) + '.' + hashlib.md5(compiled_bytes).hexdigest()[:12] + original.suffix
+        require(manifest['paths'][name] == compiled and (root / name).read_bytes() == raw
+                and (root / compiled).read_bytes() == compiled_bytes, 'static_compiled_source_identity')
+        for output, expected in ((name, raw), (compiled, compiled_bytes)):
+            require(rows.get(output, {}).get('kind') == 'file', 'static_compiled_file_identity')
+            allowed.update((output, output + '.gz', output + '.br'))
+            directories.update(str(parent) for parent in PurePosixPath(output).parents)
+            if output + '.gz' in rows:
+                require(gzip.decompress((root / (output + '.gz')).read_bytes()) == expected, 'static_gzip_identity')
+            if output + '.br' in rows:
+                import brotli
+                require(brotli.decompress((root / (output + '.br')).read_bytes()) == expected, 'static_brotli_identity')
+    require(all(name in (directories if row['kind'] == 'directory' else allowed) for name, row in rows.items()),
+            'static_undeclared_output')
+    return rows
+
+
+def prepare_static(destination, contract):
+    inputs = static_sources()
+    expected = contract.get('static_source_sha256')
+    require(isinstance(expected, dict) and set(expected) == STATIC_INPUTS
+            and all(re.fullmatch('[a-f0-9]{64}', value or '') for value in expected.values()), 'static_source_pins_required')
+    require({name: sha(public_source(path)) for name, path in inputs.items()} == expected, 'static_source_pin_drift')
+    primitives = static_primitives()
+    before = primitives.static_inventory(APP / 'staticfiles')
+    require(sha(encode(before)) == contract.get('static_before_inventory_sha256'), 'declared_static_baseline')
+    stage = destination / 'static-stage'
+    primitives.create_static_stage(stage)
+    code = ('from django.conf import settings; settings.configure(SECRET_KEY="public-static-only", '
+            'INSTALLED_APPS=["django.contrib.staticfiles","django_otp","django_otp.plugins.otp_totp"], '
+            'STATIC_URL="/static/", STATIC_ROOT=' + repr(str(stage)) + ', STATICFILES_DIRS=['
+            + repr(str(SOURCE / 'rebuild/static')) + '], STORAGES={"staticfiles":{'
+            '"BACKEND":"quillmd.static_storage.PublicCompressedManifestStaticFilesStorage",'
+            '"OPTIONS":{"file_permissions_mode":420,"directory_permissions_mode":493}}}); '
+            'import django; django.setup(); from django.core.management import call_command; '
+            'call_command("collectstatic", interactive=False, verbosity=0)')
+    done = subprocess.run([str(APP / '.venv/bin/python'), '-B', '-c', code], cwd=SOURCE / 'rebuild',
+                          env={'PATH': '/usr/bin:/bin', 'LANG': 'C.UTF-8', 'PYTHONDONTWRITEBYTECODE': '1'},
+                          stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=90)
+    require(done.returncode == 0, 'isolated_static_collection_failed')
+    staged = validate_static_stage(stage, inputs, primitives)
+    require({name: sha(public_source(path)) for name, path in inputs.items()} == expected, 'static_source_collection_race')
+    primitives.retain_static(APP / 'staticfiles', destination / 'public-assets-before.tar', before)
+    return {'sources': expected, 'before': before, 'staged': staged, 'stage': str(stage),
+            'prior_assets_archive_sha256': sha(protected(destination / 'public-assets-before.tar', 64 * 1024 * 1024)),
+            'provider_calls': 0, 'database_connections': 0}
+
+
+def install_static(preparation):
+    primitives = static_primitives()
+    root, stage = APP / 'staticfiles', Path(preparation['stage'])
+    require(primitives.static_inventory(root) == preparation['before'], 'static_before_install_drift')
+    require(validate_static_stage(stage, static_sources(), primitives) == preparation['staged'], 'static_stage_install_drift')
+    old_dirs = {name for name, row in preparation['before'].items() if row['kind'] == 'directory'}
+    new_dirs = {name for name, row in preparation['staged'].items() if row['kind'] == 'directory'}
+    require(new_dirs - old_dirs <= {'fonts'} and old_dirs <= new_dirs, 'static_directory_delta_scope')
+    if 'fonts' not in old_dirs:
+        primitives.create_static_stage(root / 'fonts')
+    before = primitives.static_inventory(root)
+    after = primitives.install_static(root, stage, before, preparation['staged'])
+    return {'before': preparation['before'], 'after': after,
+            'old_immutable_assets_retained': True, 'source_bound': True,
+            'new_directories': sorted(new_dirs - old_dirs)}
+
+
+def restore_static(preparation, activation_directory):
+    """Restore old manifest/aliases; retain all previously published immutable hashes."""
+    primitives = static_primitives()
+    root = APP / 'staticfiles'
+    before, staged = preparation['before'], preparation['staged']
+    current = primitives.static_inventory(root)
+    replaceable = {'staticfiles.json'} | {name + suffix for name in ('app.css', 'app.js')
+                                           for suffix in ('', '.gz', '.br')}
+    require(set(before) <= set(current) and set(current) - set(before) <= set(staged), 'rollback_static_population')
+    for name, row in current.items():
+        original = before.get(name)
+        if original is not None and name not in replaceable:
+            require(row == original, 'rollback_static_immutable_drift')
+        elif original is not None:
+            candidates = [candidate for candidate in (original, staged.get(name)) if candidate is not None]
+            require(any(all(row.get(key) == candidate.get(key) for key in ('kind', 'mode', 'size', 'sha256'))
+                        for candidate in candidates), 'rollback_static_alias_drift')
+        else:
+            require(all(row.get(key) == staged[name].get(key) for key in ('kind', 'mode', 'size', 'sha256')),
+                    'rollback_static_added_drift')
+    archive = protected(activation_directory / 'public-assets-before.tar', 64 * 1024 * 1024)
+    require(sha(archive) == preparation['prior_assets_archive_sha256'], 'rollback_static_archive_identity')
+    payload = {}
+    with tarfile.open(fileobj=io.BytesIO(archive), mode='r:') as source:
+        for member in source:
+            require(member.name in before and member.name not in payload and member.isfile()
+                    and member.mode == 0o644 and member.size == before[member.name]['size'], 'rollback_static_archive_member')
+            data = source.extractfile(member).read(member.size + 1)
+            require(len(data) == member.size and sha(data) == before[member.name]['sha256'], 'rollback_static_archive_content')
+            payload[member.name] = data
+    require(set(payload) == {name for name, row in before.items() if row['kind'] == 'file'}, 'rollback_static_archive_population')
+    for name in sorted(replaceable & set(payload), key=lambda value: (value == 'staticfiles.json', value)):
+        if current[name]['sha256'] == before[name]['sha256']:
+            continue
+        path = root / name
+        require(path.parent.resolve(strict=True) == path.parent and primitives.static_inventory(root)[name] == current[name],
+                'rollback_static_write_race')
+        temporary = path.with_name('.legacy-model-rollback-' + uuid.uuid4().hex)
+        fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o644)
+        try:
+            with os.fdopen(fd, 'wb') as output:
+                os.fchmod(output.fileno(), 0o644)
+                output.write(payload[name]); output.flush(); os.fsync(output.fileno())
+            os.replace(temporary, path)
+        finally:
+            if temporary.exists():
+                temporary.unlink()
+    after = primitives.static_inventory(root)
+    require(set(after) == set(current), 'rollback_static_retained_population')
+    for name, row in before.items():
+        if name in replaceable:
+            require(all(after[name][key] == row[key] for key in ('kind', 'mode', 'size', 'sha256')),
+                    'rollback_static_alias_identity')
+        else:
+            require(after[name] == row, 'rollback_static_retained_identity')
+    return {'previous_manifest_aliases_restored': True, 'immutable_assets_retained': True, 'after': after}
 
 
 def health(release):
@@ -548,7 +935,106 @@ def best_effort_capture(outcome, label, operation):
         outcome[label + '_capture_failure'] = type(error).__name__
 
 
+def acceptance_preparation(contract, target):
+    """Fixed prospective synthetic campaign; hash admission performs no login or request."""
+    require(re.fullmatch('[a-f0-9]{40}', target or '') is not None, 'acceptance_target_identity')
+    scope = {'browser_path': str(ACCEPTANCE_BROWSER), 'verifier_path': str(ACCEPTANCE_VERIFIER),
+             'output_path': str(ACCEPTANCE_OUTPUT), 'origin': 'https://app.quillmd.com:9443',
+             'maximum_generations': 5, 'maximum_transcriptions': 1, 'provider_usd_limit': '0.70',
+             'concurrency': 1, 'automatic_retries': False, 'maximum_seconds': ACCEPTANCE_SECONDS,
+             'retains_original_publication_exclusion': True, 'baseline_recovery_after_acceptance_start': False}
+    require(contract.get('acceptance_phase') == scope, 'prospective_acceptance_scope')
+    require(not os.path.lexists(ACCEPTANCE_OUTPUT), 'acceptance_campaign_replay')
+    raw, actual_contract = declaration()
+    require(actual_contract == contract, 'acceptance_declaration_identity')
+    def pin(name):
+        matches = re.findall('^' + name + r': ([a-f0-9]{64})$', raw.decode(), re.M)
+        require(len(matches) == 1, 'acceptance_committed_pin')
+        return matches[0]
+    paths = {'acceptance_browser_sha256': ACCEPTANCE_BROWSER, 'acceptance_verifier_sha256': ACCEPTANCE_VERIFIER,
+             'acceptance_options_sha256': ACCEPTANCE_ROOT / 'prepared-options.json',
+             'acceptance_allergy_manifest_sha256': ACCEPTANCE_ROOT / 'acceptance-v2-inputs/manifest.json',
+             'acceptance_allergy_form_sha256': ACCEPTANCE_ROOT / 'acceptance-v2-inputs/allergy-review.docx'}
+    hashes = {}
+    for label, path in paths.items():
+        hashes[label] = sha(protected(path, 2 * 1024 * 1024))
+        require(hashes[label] == pin(label), 'acceptance_reviewed_artifact_identity')
+    # The ordinary admin login/MFA is performed before capture; only its protected proof is read here.
+    auth_raw = protected(ACCEPTANCE_ROOT / 'installed-admin-before-activation/normal-authentication.json')
+    auth = json.loads(auth_raw)
+    session = ACCEPTANCE_ROOT / 'installed-admin-before-activation/browser-session.json'
+    require(auth.get('format') == 1 and auth.get('complete') is True and auth.get('release') == target
+            and auth.get('csrf403_no_OTP_noauththrottle') is True
+            and auth.get('normal_mfa_login') is True and auth.get('auth_reset') is False
+            and auth.get('origin') == scope['origin'] and auth.get('session_cookie_name') == 'quillmd_doctor_session'
+            and re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}', auth.get('actor_id', ''))
+            and auth.get('session_file') == str(session)
+            and sha(protected(session)) == auth.get('session_sha256'), 'normal_admin_mfa_prerequisite')
+    authenticated = datetime.fromisoformat(auth.get('authenticated_at', '').replace('Z', '+00:00'))
+    require(authenticated.tzinfo is not None
+            and 0 <= (datetime.now(timezone.utc) - authenticated).total_seconds() < 1800,
+            'normal_admin_auth_timestamp')
+    return {'scope': scope, 'artifact_sha256': hashes, 'normal_admin_authentication_sha256': sha(auth_raw),
+            'installer_provider_calls': 0, 'delegated_requests_are_separate': True}
+
+
+def acceptance_child(argv, destination, label, deadline, *, ruled):
+    """Bound the fixed child process group; retain unknown jobs and never repeat a child."""
+    remaining = deadline - time.monotonic()
+    require(remaining > 0, 'acceptance_phase_deadline')
+    env = dict(os.environ)
+    if ruled:
+        # Existing nested ruled watchdog survives the operator and retains its normal kill/cleanup policy.
+        env['RULED_ACT_MAX_SECS'] = str(max(1, int(remaining)))
+    with subprocess.Popen(argv, cwd=SOURCE, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                          start_new_session=True) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=remaining)
+        except BaseException:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+                process.communicate(timeout=5)
+            except BaseException:
+                try: os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                process.communicate(timeout=10)
+            raise Refusal('acceptance_child_stopped_unknown_outcome') from None
+        write_new(destination / (label + '-stdout.log'), stdout)
+        write_new(destination / (label + '-stderr.log'), stderr)
+        require(process.returncode == 0 and len(stdout) <= 2 * 1024 * 1024
+                and len(stderr) <= 2 * 1024 * 1024 and time.monotonic() < deadline, 'acceptance_child_failed')
+    return {'exit_code': 0, 'stdout_sha256': sha(stdout), 'stderr_sha256': sha(stderr), 'automatic_retries': 0}
+
+
+def installed_acceptance(target, directory, prepared):
+    """Caller retains the installation exclusion through both exact reviewed children."""
+    require(prepared == acceptance_preparation(declaration()[1], target), 'acceptance_preparation_drift')
+    deadline = time.monotonic() + ACCEPTANCE_SECONDS
+    child_scope = {'complete': False, 'installer_provider_calls': 0,
+                   'delegated_maximum_generations': 5, 'delegated_maximum_transcriptions': 1,
+                   'delegated_provider_usd_limit': '0.70', 'automatic_retries': 0,
+                   'maximum_seconds': ACCEPTANCE_SECONDS}
+    write_new(directory / 'acceptance-started.json', encode(child_scope))
+    browser = ['bash', str(SOURCE / 'scripts/run-ruled-mutation.sh'), '--declaration', DECL, '--',
+               '/usr/bin/node', str(ACCEPTANCE_BROWSER), '--execute', target, str(directory)]
+    child_scope['browser'] = acceptance_child(browser, directory, 'acceptance-browser', deadline, ruled=True)
+    verifier = [str(APP / '.venv/bin/python'), '-B', str(ACCEPTANCE_VERIFIER), '--verify']
+    child_scope['verifier'] = acceptance_child(verifier, directory, 'acceptance-verifier', deadline, ruled=False)
+    verification_raw = protected(ACCEPTANCE_OUTPUT / 'independent-verification.json', 16 * 1024 * 1024)
+    verification = json.loads(verification_raw)
+    require(verification.get('complete') is True and time.monotonic() < deadline, 'independent_acceptance_incomplete')
+    child_scope.update(complete=True, independent_verification_sha256=sha(verification_raw))
+    write_new(directory / 'acceptance-complete.json', encode(child_scope))
+    return child_scope
+
+
 def execute(args, contract, evidence, source_info, *, host, backup, storage, exclusion, env_writer):
+    require(getattr(args, 'fresh_backup', False) is True, 'explicit_one_fresh_capture_required')
+    require(contract.get('rollback_qualified') is True, 'prospectively_qualified_recovery_required')
+    storage_before = storage_admission(contract, 'preparation')
+    backup.private_dir(CAPTURE_ATTEMPT.parent)
+    require(not os.path.lexists(CAPTURE_ATTEMPT), 'fresh_capture_attempt_already_consumed')
+    acceptance = acceptance_preparation(contract, args.operator_commit) if getattr(args, 'acceptance_v2', False) else None
     original = protected(APP / '.env', 65536)
     require(sha(original) == contract.get('environment_before_sha256'), 'declared_environment_baseline')
     before_values = dotenv_values(stream=StringIO(original.decode()), interpolate=False)
@@ -556,77 +1042,128 @@ def execute(args, contract, evidence, source_info, *, host, backup, storage, exc
     updated, configuration = render(original, args.operator_commit)
     health(BASELINE)
     units_before = service_boundary(host, storage, BASELINE)
-    for unit in OPERATIONS:
-        state = host.state(unit)
-        require(state.get('ActiveState') in ('inactive', 'failed') and state.get('MainPID') == '0',
-                'active_operator_operation')
-    before = snapshot(host, backup, storage)
-    verified_backup = verify_backup(args.backup_directory, contract.get('backup_manifest_sha256'), before, backup)
     destination = RUNTIME / ('legacy-model-demo-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
     destination.mkdir(mode=0o700)
     cipher = backup.key_at(KEY)
     write_new(destination / 'environment-before.fernet', cipher.encrypt(original))
     write_new(destination / 'environment-after.fernet', cipher.encrypt(updated))
+    static_preparation = prepare_static(destination, contract)
     outcome = {'format': 1, 'complete': False, 'stage': 'prepared', 'provider_calls': 0,
                'source': source_info, 'configuration': configuration, 'qualification': evidence,
-               'backup': verified_backup, 'units_before': units_before, 'before': before,
-               'directory': str(destination), 'installed_engine_baseline': BASELINE}
+               'units_before': units_before,
+               'directory': str(destination), 'installed_engine_baseline': BASELINE,
+               'acceptance_preparation': acceptance, 'acceptance_started': False,
+               'static_preparation': static_preparation, 'storage_admission': [storage_before]}
     def checkpoint(stage):
         outcome['stage'] = stage
+        outcome['storage_admission'].append(storage_admission(contract, stage))
         write_new(destination / (stage + '.json'), encode(outcome))
         print(json.dumps({'stage': stage, 'complete': outcome['complete'], 'provider_calls': 0,
                           'evidence_directory': str(destination)}, sort_keys=True), flush=True)
-    checkpoint('prepared')
+    checkpoint('compilation_ready')
     deadline = time.monotonic() + COMPLETION_SECONDS
+    private_stop_started = False
     try:
         exclusion.bind_runtime(RUNTIME)
         with operation_locks(), exclusion.hold('legacy-model-demo:' + args.operator_commit[:12]):
-            # Freeze new admission before draining. Refuse unknowns; never cancel/replay jobs.
-            host.service('stop', UNITS[0])
-            host.service('stop', UNITS[1])
-            # Admission was empty at preflight; any intervening work fails closed and is retained.
-            database(backup, storage.inventory(Path('/var/lib/quillmd/files')))
-            host.service('stop', UNITS[2])
-            require(all(host.state(unit).get('ActiveState') == 'inactive'
-                        and host.state(unit).get('MainPID') == '0' for unit in UNITS), 'private_drain_failed')
-            stopped = snapshot(host, backup, storage)
-            require(stopped == before, 'population_changed_during_drain')
-            require(protected(APP / '.env', 65536) == original, 'environment_changed_during_drain')
-            outcome['stopped_baseline'] = stopped
-            checkpoint('stopped')
-            require(time.monotonic() < deadline, 'activation_bound')
-            if source_info['shared_head'] != args.operator_commit:
-                git(ROOT, 'merge', '--ff-only', args.operator_commit)
-            # No migration/static collection/package installation or unit write is reachable.
-            env_writer.replace_environment(APP / '.env', original, updated)
-            checkpoint('configuration_written')
-            require(snapshot(host, backup, storage) == stopped, 'stopped_preservation_failure')
-            for unit in (UNITS[2], UNITS[0], UNITS[1]):
-                host.service('start', unit)
-            outcome['units_after'] = await_service_boundary(host, storage, args.operator_commit)
-            require(all(outcome['units_after'][unit]['MainPID'] != units_before[unit]['MainPID']
-                        and outcome['units_after'][unit]['ExecMainStartTimestampMonotonic']
-                        != units_before[unit]['ExecMainStartTimestampMonotonic'] for unit in UNITS),
-                    'service_restart_identity')
-            outcome['effective_worker'] = host.effective_worker()
-            require(all(outcome['effective_worker']['values'].get(key) == value
-                        for key, value in configuration['values'].items()), 'actual_worker_configuration')
-            outcome['health'] = await_health(args.operator_commit)
-            require(snapshot(host, backup, storage) == stopped, 'post_start_preservation_failure')
-            require(time.monotonic() < deadline, 'activation_bound')
-            outcome['complete'] = True
-            checkpoint('complete')
+            try:
+                for unit in OPERATIONS:
+                    state = host.state(unit)
+                    require(state.get('ActiveState') in ('inactive', 'failed') and state.get('MainPID') == '0',
+                            'active_operator_operation')
+                require(not os.path.lexists(CAPTURE_ATTEMPT), 'fresh_capture_attempt_already_consumed')
+                # Publication is already excluded before the authoritative baseline exists.
+                before = snapshot(host, backup, storage)
+                outcome['before'] = before
+                require(service_boundary(host, storage, BASELINE) == units_before, 'pre_drain_unit_identity')
+                checkpoint('prepared')
+                # Freeze new admission before draining. Refuse unknowns; never cancel/replay jobs.
+                private_stop_started = True
+                host.service('stop', UNITS[0])
+                host.service('stop', UNITS[1])
+                # Admission was empty at preflight; any intervening work fails closed and is retained.
+                database(backup, storage.inventory(Path('/var/lib/quillmd/files')))
+                host.service('stop', UNITS[2])
+                require(all(host.state(unit).get('ActiveState') == 'inactive'
+                            and host.state(unit).get('MainPID') == '0' for unit in UNITS), 'private_drain_failed')
+                stopped = snapshot(host, backup, storage)
+                require(stopped == before, 'population_changed_during_drain')
+                require(protected(APP / '.env', 65536) == original, 'environment_changed_during_drain')
+                outcome['stopped_baseline'] = stopped
+                checkpoint('stopped')
+                outcome['backup'] = capture_current_backup(backup, stopped, destination, contract)
+                require(snapshot(host, backup, storage) == stopped, 'fresh_capture_population_preservation')
+                checkpoint('fresh_backup_verified')
+                require(time.monotonic() < deadline, 'activation_bound')
+                if source_info['shared_head'] != args.operator_commit:
+                    git(ROOT, 'merge', '--ff-only', args.operator_commit)
+                # Compilation was isolated before the stop; no DB, packages or unit policy changes.
+                env_writer.replace_environment(APP / '.env', original, updated)
+                checkpoint('configuration_written')
+                require(snapshot(host, backup, storage) == stopped, 'stopped_preservation_failure')
+                outcome['static_transition'] = install_static(static_preparation)
+                expected_population = dict(stopped, static=inventory(APP / 'staticfiles'))
+                require(snapshot(host, backup, storage) == expected_population, 'static_only_population_delta')
+                outcome['expected_population'] = expected_population
+                checkpoint('static_installed')
+                for unit in (UNITS[2], UNITS[0], UNITS[1]):
+                    host.service('start', unit)
+                outcome['units_after'] = await_service_boundary(host, storage, args.operator_commit)
+                require(all(outcome['units_after'][unit]['MainPID'] != units_before[unit]['MainPID']
+                            and outcome['units_after'][unit]['ExecMainStartTimestampMonotonic']
+                            != units_before[unit]['ExecMainStartTimestampMonotonic'] for unit in UNITS),
+                        'service_restart_identity')
+                outcome['worker_configuration_provenance'] = host.worker_configuration(
+                    updated, args.operator_commit, outcome['units_after'])
+                require(all(outcome['worker_configuration_provenance']['values'].get(key) == value
+                            for key, value in configuration['values'].items()), 'actual_worker_configuration')
+                outcome['health'] = await_health(args.operator_commit)
+                require(snapshot(host, backup, storage) == expected_population, 'post_start_preservation_failure')
+                require(time.monotonic() < deadline, 'activation_bound')
+                outcome['complete'] = True
+                checkpoint('complete')
+                if acceptance is not None:
+                    # This boundary is conservative: no baseline rollback or private fail-stop after it.
+                    outcome['acceptance_started'] = True
+                    outcome['acceptance'] = installed_acceptance(args.operator_commit, destination, acceptance)
+            except BaseException as error:
+                outcome['complete'] = False
+                outcome['failure_kind'] = type(error).__name__
+                outcome['private_stop_started'] = private_stop_started
+                if getattr(error, 'reason', None):
+                    outcome['managed_helper_reason'] = error.reason
+                    outcome['managed_helper_cleanup_complete'] = error.cleanup_complete
+                if private_stop_started and not outcome['acceptance_started']:
+                    outcome['fail_stop'] = best_effort_private_stop(host)
+                    # Retain the original exclusion: the publisher cannot invalidate recovery's baseline.
+                    best_effort_capture(outcome, 'recovery', lambda: recover_baseline(
+                        args.operator_commit, destination, outcome, original, updated, contract=contract,
+                        host=host, backup=backup, storage=storage, env_writer=env_writer))
+                    if not outcome.get('recovery', {}).get('complete'):
+                        outcome['recovery_fail_stop'] = best_effort_private_stop(host)
+                    best_effort_capture(outcome, 'recovery_checkpoint', lambda: write_new(
+                        destination / 'recovery.json', encode({'activation_complete': False,
+                        'original_failure_kind': outcome['failure_kind'],
+                        'recovery': outcome.get('recovery'),
+                        'recovery_capture_failure': outcome.get('recovery_capture_failure')})))
+                best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
+                raise Refusal('activation_failed_recovery_required') from None
     except BaseException as error:
         # Fail-stop is independent of disk availability and every diagnostic operation.
         outcome['complete'] = False
-        outcome['failure_kind'] = type(error).__name__
-        outcome['fail_stop'] = best_effort_private_stop(host)
+        outcome.setdefault('failure_kind', type(error).__name__)
+        outcome['private_stop_started'] = private_stop_started
+        if private_stop_started and not outcome['acceptance_started'] and not outcome.get('recovery', {}).get('complete'):
+            outcome['fail_stop'] = best_effort_private_stop(host)
+        elif not private_stop_started:
+            outcome['fail_stop'] = {}
         if getattr(error, 'reason', None):
             outcome['managed_helper_reason'] = error.reason
             outcome['managed_helper_cleanup_complete'] = error.cleanup_complete
         best_effort_capture(outcome, 'actual_environment_sha256_on_failure', lambda: sha(protected(APP / '.env', 65536)))
         best_effort_capture(outcome, 'actual_shared_head_on_failure', lambda: git(ROOT, 'rev-parse', 'HEAD').strip().decode())
-        best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
+        if 'failure_checkpoint' not in outcome and 'failure_checkpoint_capture_failure' not in outcome:
+            best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
         raise Refusal('activation_failed_recovery_required') from None
     return outcome
 
@@ -658,7 +1195,57 @@ def restore_environment(original, current, release):
     return restored
 
 
-def rollback(args, source_info, *, host, backup, storage, exclusion, env_writer):
+def admit_recovery_population(prepared, host, backup, storage):
+    """Strict all-table admission; no publisher/acceptance/unknown-row exception."""
+    before = snapshot(host, backup, storage)
+    require({key: value for key, value in before.items() if key != 'static'}
+            == {key: value for key, value in prepared['before'].items() if key != 'static'},
+            'rollback_acceptance_or_population_changed')
+    return before
+
+
+def recover_baseline(target, directory, prepared, original, expected, *, contract, host, backup, storage, env_writer):
+    """Only inside an existing exclusion after private drain; never restores database history."""
+    require(contract.get('rollback_qualified') is True, 'prospectively_qualified_recovery_required')
+    started = time.monotonic();deadline = started + RECOVERY_SECONDS
+    admission = [storage_admission(contract, 'recovery_preparation')]
+    require(all(host.state(unit).get('ActiveState') == 'inactive'
+                and host.state(unit).get('MainPID') == '0' for unit in UNITS), 'recovery_private_drain')
+    current = protected(APP / '.env', 65536)
+    require(current in (original, expected), 'rollback_exact_expected_environment')
+    require(git(ROOT, 'rev-parse', 'HEAD').strip().decode() in (BASELINE, target), 'rollback_source_identity')
+    restored = restore_environment(original, current, BASELINE)
+    before = admit_recovery_population(prepared, host, backup, storage)
+    result = {'complete': False, 'provider_calls': 0, 'restored_source': BASELINE,
+              'current_sha256': sha(current), 'restored_sha256': sha(restored),
+              'database_restore_performed': False, 'storage_admission': admission}
+    result['static_recovery'] = restore_static(prepared['static_preparation'], directory)
+    admission.append(storage_admission(contract, 'recovery_static_restored'))
+    require(time.monotonic() < deadline, 'recovery_completion_bound')
+    result['source_recovery'] = restore_source(target)
+    require(time.monotonic() < deadline, 'recovery_completion_bound')
+    env_writer.replace_environment(APP / '.env', current, restored)
+    expected_population = dict(before, static=inventory(APP / 'staticfiles'))
+    require(snapshot(host, backup, storage) == expected_population, 'rollback_stopped_preservation')
+    for unit in (UNITS[2], UNITS[0], UNITS[1]):
+        require(time.monotonic() < deadline, 'recovery_completion_bound')
+        host.service('start', unit)
+    result['units_after'] = await_service_boundary(host, storage, BASELINE)
+    result['worker_configuration_provenance'] = host.worker_configuration(restored, BASELINE, result['units_after'])
+    parsed = dotenv_values(stream=StringIO(restored.decode()), interpolate=False)
+    require(all(result['worker_configuration_provenance']['values'].get(key) == parsed.get(key)
+                for key in (*MODEL_VALUES, 'QUILLMD_RELEASE_SHA')), 'rollback_worker_configuration_provenance')
+    await_health(BASELINE)
+    require(snapshot(host, backup, storage) == expected_population, 'rollback_post_start_preservation')
+    require(time.monotonic() < deadline, 'recovery_completion_bound')
+    admission.append(storage_admission(contract, 'recovery_complete'))
+    result.update(complete=True, preserved=expected_population, elapsed_seconds=time.monotonic() - started,
+                  completion_limit_seconds=RECOVERY_SECONDS)
+    return result
+
+
+def rollback(args, source_info, *, contract, host, backup, storage, exclusion, env_writer):
+    storage_before = storage_admission(contract, 'rollback_preparation')
     directory = args.activation_directory
     require(directory and directory.is_relative_to(RUNTIME) and directory.resolve(strict=True) == directory
             and directory.name.startswith('legacy-model-demo-'), 'rollback_protected_directory')
@@ -666,44 +1253,48 @@ def rollback(args, source_info, *, host, backup, storage, exclusion, env_writer)
     cipher = backup.key_at(KEY)
     original = cipher.decrypt(protected(directory / 'environment-before.fernet', 65536))
     expected = cipher.decrypt(protected(directory / 'environment-after.fernet', 65536))
+    prepared = json.loads(protected(directory / 'prepared.json', 16 * 1024 * 1024))
+    require(prepared.get('source', {}).get('operator_commit') == args.operator_commit
+            and prepared.get('configuration', {}).get('before_sha256') == sha(original), 'rollback_preparation_identity')
     current = protected(APP / '.env', 65536)
     require(current in (original, expected), 'rollback_exact_expected_environment')
     actual_source = git(ROOT, 'rev-parse', 'HEAD').strip().decode()
     require(actual_source in (BASELINE, args.operator_commit), 'rollback_source_identity')
-    restored = restore_environment(original, current, actual_source)
+    restored = restore_environment(original, current, BASELINE)
     receipt = {'format': 1, 'complete': False, 'provider_calls': 0, 'stage': 'rollback_prepared',
                'source': source_info, 'activation_directory': str(directory),
                'current_sha256': sha(current), 'restored_sha256': sha(restored),
-               'preserved_source': actual_source, 'database_restore_performed': False}
+               'restored_source': BASELINE, 'database_restore_performed': False,
+               'storage_admission': [storage_before]}
     destination = RUNTIME / ('legacy-model-rollback-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
     destination.mkdir(mode=0o700)
     write_new(destination / 'prepared.json', encode(receipt))
+    private_stop_started = False
     try:
         exclusion.bind_runtime(RUNTIME)
         with operation_locks(), exclusion.hold('legacy-model-rollback:' + args.operator_commit[:12]):
-            for unit in UNITS:
-                host.service('stop', unit)
-            require(all(host.state(unit).get('ActiveState') == 'inactive'
-                        and host.state(unit).get('MainPID') == '0' for unit in UNITS), 'rollback_private_drain')
-            before = snapshot(host, backup, storage)
-            env_writer.replace_environment(APP / '.env', current, restored)
-            require(snapshot(host, backup, storage) == before, 'rollback_stopped_preservation')
-            for unit in (UNITS[2], UNITS[0], UNITS[1]):
-                host.service('start', unit)
-            receipt['units_after'] = await_service_boundary(host, storage, actual_source)
-            receipt['worker_after'] = host.effective_worker()
-            parsed = dotenv_values(stream=StringIO(restored.decode()), interpolate=False)
-            require(all(receipt['worker_after']['values'].get(key) == parsed.get(key)
-                        for key in (*MODEL_VALUES, 'QUILLMD_RELEASE_SHA')), 'rollback_effective_worker')
-            await_health(actual_source)
-            require(snapshot(host, backup, storage) == before, 'rollback_post_start_preservation')
-            receipt.update(complete=True, stage='rollback_complete', preserved=before)
-            write_new(destination / 'complete.json', encode(receipt))
+            try:
+                # Refuse any prior cadence or acceptance delta before interrupting coherent services.
+                admit_recovery_population(prepared, host, backup, storage)
+                private_stop_started = True
+                for unit in UNITS:
+                    host.service('stop', unit)
+                recovered = recover_baseline(args.operator_commit, directory, prepared, original, expected,
+                                             contract=contract, host=host, backup=backup, storage=storage,
+                                             env_writer=env_writer)
+                receipt.update(recovered, stage='rollback_complete')
+                write_new(destination / 'complete.json', encode(receipt))
+            except BaseException:
+                # A partially restarted recovery must stop before diagnostics or publication resumes.
+                receipt['fail_stop'] = best_effort_private_stop(host) if private_stop_started else {}
+                raise
     except BaseException as error:
         receipt['stage'] = 'rollback_failed'
         receipt['complete'] = False
         receipt['failure_kind'] = type(error).__name__
-        receipt['fail_stop'] = best_effort_private_stop(host)
+        receipt['private_stop_started'] = private_stop_started
+        if 'fail_stop' not in receipt:
+            receipt['fail_stop'] = best_effort_private_stop(host) if private_stop_started else {}
         best_effort_capture(receipt, 'actual_environment_sha256', lambda: sha(protected(APP / '.env', 65536)))
         best_effort_capture(receipt, 'failure_checkpoint', lambda: write_new(destination / 'failed.json', encode(receipt)))
         raise Refusal('rollback_failed_recovery_required') from None
@@ -715,7 +1306,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--operator-commit')
     parser.add_argument('--qualification', type=Path)
-    parser.add_argument('--backup-directory', type=Path)
+    parser.add_argument('--fresh-backup', action='store_true', help='One encrypted local capture under exclusion after private drain.')
+    parser.add_argument('--acceptance-v2', action='store_true', help='Retain exclusion for the exact separately bounded synthetic campaign.')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--rollback', action='store_true')
     parser.add_argument('--activation-directory', type=Path)
@@ -727,14 +1319,14 @@ def main(argv=None):
                           'note': 'No environment, provider, service or database is accessed by this plan.'}, sort_keys=True))
         return 0
     raw, contract = declaration()
-    info = source_gate(args.operator_commit, contract, executing=True)
+    info = source_gate(args.operator_commit, contract, executing=True, recovering=args.rollback)
     exclusion, backup, env_writer, managed, storage = modules()
     if args.rollback:
         require(contract.get('rollback_qualified') is True, 'separately_committed_rollback_required')
-        rollback(args, info, host=Host(managed), backup=backup, storage=storage,
+        rollback(args, info, contract=contract, host=Host(managed), backup=backup, storage=storage,
                  exclusion=exclusion, env_writer=env_writer)
         return 0
-    require(args.qualification and args.backup_directory, 'qualification_and_backup_required')
+    require(args.qualification and args.fresh_backup, 'qualification_and_explicit_fresh_capture_required')
     evidence = read_qualification(args.qualification, contract.get('qualification_sha256'))
     execute(args, contract, evidence, info, host=Host(managed), backup=backup, storage=storage,
             exclusion=exclusion, env_writer=env_writer)
