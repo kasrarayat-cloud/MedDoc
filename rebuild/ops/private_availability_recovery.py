@@ -16,6 +16,7 @@ import math
 import os
 from pathlib import Path
 import re
+import socket
 import stat
 import subprocess
 import sys
@@ -61,6 +62,36 @@ SECONDS = 240
 # Genuine native owner authorization has not been exported or source-qualified.
 # A future declaration or self-asserted evidence JSON cannot turn this gate on.
 NATIVE_APPROVAL_PROTOCOL_QUALIFIED = False
+# Distinct prospective owner decision; it never certifies historical deployment approval.
+CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED = False
+INSTALLATION_QUALIFIED = False
+CURRENT_OWNER_PROTOCOL = 'current-owner-preservation-boundary-v1'
+OWNER_EVIDENCE_ROOT = RUNTIME / 'owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1'
+CURRENT_OWNER_PINS = {
+    'native_evidence': {'path': str(OWNER_EVIDENCE_ROOT / 'native-admin-deployment-evidence-export-v15.json'),
+        'sha256': 'b23c70d6811a9a1e14e24a6a495e5d4f0aeca2c4d9c7fc68cf2c2f7d5b77568b'},
+    'independent_review': {'path': str(OWNER_EVIDENCE_ROOT / 'native-admin-v15-independent-lineage-adjudication-v1.json'),
+        'sha256': '423390761a5de0b994ffe972e1f52f630c97cbf8dc6d8795cd8cda9f67da53ff'},
+    'original_metadata': {'uid': 0, 'gid': 0, 'mode': 0o644, 'device': 2050, 'inode': 920060,
+        'sha256': '1cea35330b619802a3e785158ae6c452553e55776cd5ef8b2eee27b37de4c543'},
+    'current_unit_sha256': 'c80609f72457a8ce056cec3fd19b2bab9c9c1edde5a35098b7071a6989c57e72',
+    'old_working_directory': '/opt/voiceassistmain-product/releases/ae8516691733d6a8ee105561',
+    'new_working_directory': '/opt/voiceassistmain-product/releases/eeae88c6d13c779d53d7ec7b',
+    'source_sha256': 'eeae88c6d13c779d53d7ec7b51f42a9806d21dfa9e4ba6d1f80d40b3204adef1',
+    'installation_id': '030f73df-e981-4307-a877-df153aab68f9',
+    'manifest': {'path': '/etc/voiceassistmain-product.json',
+        'sha256': 'b8271787d7a549efb5ca912fd1367a3983387e9931e04ae87331555543c5fdc8'},
+    'installation': {'path': '/var/lib/voiceassistmain-product-installation/030f73df-e981-4307-a877-df153aab68f9.json',
+        'sha256': 'd25b84d737287387f66b96e11b092a7144a32d45ba01eed7ed03a5b09c008e9c'},
+    'added_files': {
+        '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007@.service': '4941c488522385711731689233920e2e967ac7cf0913fdfe1e991ae16a1843a8',
+        '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.service': 'bca8c9da6a0a699d36cd5519517ab09381b5b7ccf4e4e91c01881c22a96706d4',
+        '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.timer': '7981a1d4d0daaaa8466df93430808cd25abd697ef218f354191d9df2973ff27e',
+        '/etc/systemd/system/voiceassistmain-restaurant-voice.service': 'e056ccfdda0c571b0069fcb7c18c0ef1d685bc8aeab0a07644de8152a95b5d51'},
+    'added_links': {
+        '/etc/systemd/system/timers.target.wants/voiceassist-restaurant-tajrish-20261007-retention.timer': '/etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.timer',
+        '/etc/systemd/system/multi-user.target.wants/voiceassistmain-restaurant-voice.service': '/etc/systemd/system/voiceassistmain-restaurant-voice.service'}}
+OWNER_DECISION_PATH = OWNER_EVIDENCE_ROOT / 'owner-current-configuration-preservation-decision-v1.json'
 PUBLISHER = 'quillmd-fresh-operations-publisher.service'
 PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
 PUBLISHER_UNIT_PINS = {
@@ -149,7 +180,7 @@ def contract_from_bytes(raw):
     require(len(chunks) == 2, 'availability_declaration_close')
     contract = json.loads(chunks[0])
     require(contract.get('format') == 1 and contract.get('readonly_qualified') is True
-            and contract.get('installation_qualified') is False
+            and contract.get('installation_qualified') is INSTALLATION_QUALIFIED
             and contract.get('baseline_release') == INSTALLED and contract.get('prepared_release') == PREPARED
             and contract.get('frozen_operator_sha256') == FROZEN_OPERATOR
             and contract.get('frozen_verifier_sha256') == FROZEN_VERIFIER
@@ -613,8 +644,131 @@ def working_directory_transition(before, after):
     return {'old_working_directory': old_directory, 'new_working_directory': new_directory}
 
 
+def approval_protocol_qualified(acknowledgement):
+    protocol = acknowledgement.get('approval_protocol')
+    if protocol == CURRENT_OWNER_PROTOCOL:
+        return CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED
+    return protocol in (None, 'existing-approved-root-deployment-v1') and NATIVE_APPROVAL_PROTOCOL_QUALIFIED
+
+
+def export_configuration_metadata(item, *, link=False):
+    values = item.get('metadata')
+    require(isinstance(values, list) and len(values) == 8
+            and all(type(value) is int for value in values)
+            and values[0] > 0 and values[1] > 0 and values[2:4] == [0, 0]
+            and values[4] == (0o777 if link else 0o644) and all(value > 0 for value in values[5:]),
+            'availability_owner_boundary_export_metadata')
+    result = dict(zip(('device', 'inode', 'uid', 'gid', 'mode'), values[:5]))
+    result['link' if link else 'sha256'] = item['target' if link else 'sha256']
+    return result
+
+
+def owner_boundary_inputs(acknowledgement):
+    """Authenticate retained installation identity, without inferring past approval."""
+    require(acknowledgement.get('approval_protocol') == CURRENT_OWNER_PROTOCOL
+            and acknowledgement.get('unit_path') == EXTERNAL_UNIT,
+            'availability_owner_boundary_protocol')
+    retained = {}
+    for name in ('native_evidence', 'independent_review'):
+        require(acknowledgement.get(name) == CURRENT_OWNER_PINS[name], 'availability_owner_boundary_evidence_binding')
+        raw = protected(Path(CURRENT_OWNER_PINS[name]['path']))
+        require(sha(raw) == CURRENT_OWNER_PINS[name]['sha256'], 'availability_owner_boundary_evidence_hash')
+        retained[name] = json.loads(raw)
+    export, review = retained['native_evidence'], retained['independent_review']
+    require(export.get('bounded_collection_complete') is True and export.get('measured_native_checks_complete') is True
+            and export.get('native_administrator') is True and export.get('missing') == []
+            and export.get('original_baseline_immutable') is True
+            and export.get('approval_lineage_assessment') == 'unassessed'
+            and export.get('service_actions') == export.get('provider_calls') == 0
+            and review['exports']['v15'] == {**CURRENT_OWNER_PINS['native_evidence'],
+                'collected_at_utc': export['collected_at_utc'], 'record_count': len(export['records'])}
+            and review['adjudication']['current_authorization_verified'] is False
+            and review['adjudication']['current_source_installation_and_unit_identity_established'] is True,
+            'availability_owner_boundary_retained_identity')
+    transition = export['original_and_observed_unit_evidence']
+    product = transition['observed_current_unit']
+    require(transition['original_immutable_unit']['sha256'] == CURRENT_OWNER_PINS['original_metadata']['sha256']
+            and product['path'] == EXTERNAL_UNIT and product['sha256'] == CURRENT_OWNER_PINS['current_unit_sha256']
+            and transition['no_bytes_change_outside_original_working_directory_line'] is True
+            and transition['original_baseline_replaced'] is False
+            and export['original_release'] == CURRENT_OWNER_PINS['old_working_directory']
+            and transition['observed_current_release'] == CURRENT_OWNER_PINS['new_working_directory']
+            and export['expected_current_source_sha256'] == CURRENT_OWNER_PINS['source_sha256'],
+            'availability_owner_boundary_transition')
+    additional = export['additional_configuration_evidence']
+    files = {item['path']: item for item in additional['exact_added_files']}
+    links = {item['path']: item for item in additional['exact_added_enablement_links']}
+    require(len(files) == len(additional['exact_added_files']) == 4
+            and len(links) == len(additional['exact_added_enablement_links']) == 2
+            and {path: item['sha256'] for path, item in files.items()} == CURRENT_OWNER_PINS['added_files']
+            and {path: item['target'] for path, item in links.items()} == CURRENT_OWNER_PINS['added_links']
+            and additional['template_loaded_state_not_claimed'] is True,
+            'availability_owner_boundary_seven_paths')
+    current = {EXTERNAL_UNIT: export_configuration_metadata(product),
+               **{path: export_configuration_metadata(item) for path, item in files.items()},
+               **{path: export_configuration_metadata(item, link=True) for path, item in links.items()}}
+    boundary = {'before': {EXTERNAL_UNIT: CURRENT_OWNER_PINS['original_metadata']}, 'after': current}
+    require(acknowledgement.get('boundary_sha256') == sha(encode(boundary)), 'availability_owner_boundary_scope_hash')
+    for name in ('manifest', 'installation'):
+        item = export['installation_binding'][name]
+        require({key: item[key] for key in ('path', 'sha256')} == CURRENT_OWNER_PINS[name]
+                and item['uid'] == item['gid'] == 0 and item['mode'] == '0o644',
+                'availability_owner_boundary_installation_binding')
+    require(export['installation_binding']['observed_current_source_sha256'] == CURRENT_OWNER_PINS['source_sha256']
+            and export['installation_binding']['receipt_matches_same_loaded_pid'] is True,
+            'availability_owner_boundary_source_binding')
+    return export, boundary
+
+
+def owner_boundary_configuration(before, current, acknowledgement):
+    export, boundary = owner_boundary_inputs(acknowledgement)
+    changed = {key for key in set(before) | set(current) if before.get(key) != current.get(key)}
+    require(changed == set(boundary['after']) and before.get(EXTERNAL_UNIT) == boundary['before'][EXTERNAL_UNIT]
+            and all(path not in before for path in set(boundary['after']) - {EXTERNAL_UNIT})
+            and all(current.get(path) == value for path, value in boundary['after'].items()),
+            'availability_owner_boundary_exact_seven_deltas')
+    return export, boundary
+
+
+def acknowledge_current_owner_configuration(before, current, acknowledgement):
+    require(CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED and acknowledgement.get('qualified') is True,
+            'availability_current_owner_protocol_unqualified')
+    _, boundary = owner_boundary_configuration(before, current, acknowledgement)
+    item = acknowledgement.get('owner_decision_evidence')
+    require(isinstance(item, dict) and set(item) == {'path', 'sha256'}
+            and item['path'] == str(OWNER_DECISION_PATH) and re.fullmatch('[a-f0-9]{64}', item['sha256'] or ''),
+            'availability_current_owner_decision_missing')
+    raw = protected(OWNER_DECISION_PATH, 65536)
+    require(sha(raw) == item['sha256'], 'availability_current_owner_decision_hash')
+    decision = json.loads(raw)
+    expected = {'format': 1, 'protocol': CURRENT_OWNER_PROTOCOL,
+        'decision': 'authorize_exact_current_preservation_boundary', 'boundary_sha256': sha(encode(boundary)),
+        'native_evidence': CURRENT_OWNER_PINS['native_evidence'], 'independent_review': CURRENT_OWNER_PINS['independent_review'],
+        'historical_deployment_authorization_verified': False, 'current_owner_preservation_authorized': True,
+        'original_baseline_replaced': False, 'voiceassistmain_changes_authorized': False}
+    require(set(decision) == set(expected) | {'owner_reply_evidence'}
+            and all(type(decision[key]) is type(value) and decision[key] == value for key, value in expected.items()),
+            'availability_current_owner_decision_scope')
+    reply = decision['owner_reply_evidence']
+    require(isinstance(reply, dict) and set(reply) == {'path', 'sha256'}
+            and reply['path'] == str(OWNER_EVIDENCE_ROOT / 'owner-current-configuration-preservation-message-v1.txt')
+            and re.fullmatch('[a-f0-9]{64}', reply['sha256'] or ''), 'availability_current_owner_reply_binding')
+    reply_raw = protected(Path(reply['path']), 65536)
+    require(reply_raw.strip() and sha(reply_raw) == reply['sha256'], 'availability_current_owner_reply_hash')
+    return {'qualified': True, 'approval_protocol': CURRENT_OWNER_PROTOCOL, 'unit_path': EXTERNAL_UNIT,
+        'old_metadata': boundary['before'][EXTERNAL_UNIT], 'new_metadata': boundary['after'][EXTERNAL_UNIT],
+        'configuration_deltas': boundary, 'boundary_sha256': sha(encode(boundary)),
+        'old_working_directory': CURRENT_OWNER_PINS['old_working_directory'],
+        'new_working_directory': CURRENT_OWNER_PINS['new_working_directory'],
+        'native_evidence': CURRENT_OWNER_PINS['native_evidence'], 'independent_review': CURRENT_OWNER_PINS['independent_review'],
+        'owner_decision_evidence': item, 'historical_deployment_authorization_verified': False,
+        'current_owner_preservation_authorized': True, 'unit_mutated_by_this_act': False}
+
+
 def acknowledge_configuration(before, current, acknowledgement):
     """Authentic approval evidence must be pinned prospectively; no current-as-old substitution."""
+    if acknowledgement.get('approval_protocol') == CURRENT_OWNER_PROTOCOL:
+        return acknowledge_current_owner_configuration(before, current, acknowledgement)
     require(NATIVE_APPROVAL_PROTOCOL_QUALIFIED, 'availability_native_authorization_protocol_unqualified')
     require(acknowledgement.get('qualified') is True and acknowledgement.get('unit_path') == EXTERNAL_UNIT,
             'availability_external_approval_missing')
@@ -651,13 +805,151 @@ def acknowledge_configuration(before, current, acknowledgement):
         item = acknowledgement[role]
         require(isinstance(item, dict) and re.fullmatch('[a-f0-9]{64}', item.get('sha256', ''))
                 and sha(protected(Path(item['path']))) == item['sha256'], 'availability_external_provenance_artifact')
-    return {'unit_path': EXTERNAL_UNIT, 'old_metadata': old_meta, 'new_metadata': new_meta,
+    return {'qualified': True, 'unit_path': EXTERNAL_UNIT, 'old_metadata': old_meta, 'new_metadata': new_meta,
             **transition, 'approval_sha256': sha(proof_raw), 'authorization_evidence': acknowledgement['authorization_evidence'],
             'installation_evidence': acknowledgement['installation_evidence'], 'unit_mutated_by_this_act': False}
 
 
+def native_boundary_identity():
+    require(os.getuid() == os.geteuid() == os.getgid() == os.getegid() == 1000
+            and not Path('/.dockerenv').exists(), 'availability_owner_boundary_native_observer')
+    return {'hostname': socket.gethostname(), 'machine_id_sha256': sha(Path('/etc/machine-id').read_bytes()),
+        'pid1_comm': Path('/proc/1/comm').read_text().strip(),
+        'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+        'mount_namespace': os.readlink('/proc/self/ns/mnt'), 'pid_namespace': os.readlink('/proc/self/ns/pid')}
+
+
+def full_native_metadata(info):
+    return [info.st_dev, info.st_ino, info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode),
+            info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+
+
+def owner_public_record(root_fd, path, digest, expected_metadata):
+    allowed = {EXTERNAL_UNIT: CURRENT_OWNER_PINS['current_unit_sha256'], **CURRENT_OWNER_PINS['added_files'],
+        CURRENT_OWNER_PINS['manifest']['path']: CURRENT_OWNER_PINS['manifest']['sha256'],
+        CURRENT_OWNER_PINS['installation']['path']: CURRENT_OWNER_PINS['installation']['sha256']}
+    require(allowed.get(path) == digest, 'availability_owner_boundary_public_read_scope')
+    fd = source_files.open_relative(root_fd, path[1:])
+    try:
+        before = os.fstat(fd)
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 0
+                and stat.S_IMODE(before.st_mode) == 0o644 and before.st_nlink == 1
+                and not os.listxattr(fd) and full_native_metadata(before) == expected_metadata,
+                'availability_owner_boundary_public_metadata')
+        raw = source_files.bytes_at(fd, 2 * 1024 * 1024)
+        require(sha(raw) == digest, 'availability_owner_boundary_public_bytes')
+        reopened = source_files.open_relative(root_fd, path[1:])
+        try:
+            require(source_files.stable(before) == source_files.stable(os.fstat(fd))
+                    == source_files.stable(os.fstat(reopened)), 'availability_owner_boundary_public_path_race')
+        finally:
+            os.close(reopened)
+        return raw
+    finally:
+        os.close(fd)
+
+
+def owner_unit_state(name, properties):
+    allowed = {EXTERNAL_UNIT.rsplit('/', 1)[1], 'voiceassist-restaurant-tajrish-20261007-retention.service',
+        'voiceassist-restaurant-tajrish-20261007-retention.timer', 'voiceassistmain-restaurant-voice.service'}
+    require(name in allowed, 'availability_owner_boundary_unit_scope')
+    lines = old.command(['systemctl', 'show', name, '--property=' + ','.join(properties)], timeout=10).decode().splitlines()
+    require(len(lines) == len(properties) and all('=' in line for line in lines), 'availability_owner_boundary_unit_population')
+    values = dict(line.split('=', 1) for line in lines)
+    require(set(values) == set(properties), 'availability_owner_boundary_unit_population')
+    return values
+
+
+def loaded_current_owner_boundary(acknowledgement):
+    """Native read-only exact paths; no foreign source traversal or service action."""
+    require(CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED and acknowledgement.get('qualified') is True,
+            'availability_current_owner_protocol_unqualified')
+    export, boundary = owner_boundary_inputs(acknowledgement)
+    # Reauthenticate the exact owner decision on every native boundary reread.
+    acknowledge_current_owner_configuration(boundary['before'], boundary['after'], acknowledgement)
+    native = native_boundary_identity()
+    require(native == export['native_host_proof'], 'availability_owner_boundary_native_identity')
+    expected_product = export['same_loaded_state']
+    product_name = EXTERNAL_UNIT.rsplit('/', 1)[1]
+    product = owner_unit_state(product_name, tuple(expected_product))
+    require(product == expected_product and product['WorkingDirectory'] == CURRENT_OWNER_PINS['new_working_directory']
+            and product['UnitFileState'] == 'enabled' and product['NeedDaemonReload'] == 'no'
+            and product['LoadState'] == 'loaded' and product['ActiveState'] == 'active' and product['SubState'] == 'running'
+            and product['DropInPaths'] == '' and product['User'] == product['Group'] == 'voiceassistmain'
+            and re.fullmatch('[a-f0-9]{32}', product['InvocationID'])
+            and re.fullmatch('[1-9][0-9]*', product['MainPID']), 'availability_owner_boundary_product_identity')
+    additional = export['additional_configuration_evidence']
+    units = {row['Id']: row for row in additional['loaded_states']}
+    names = {'voiceassist-restaurant-tajrish-20261007-retention.service',
+        'voiceassist-restaurant-tajrish-20261007-retention.timer', 'voiceassistmain-restaurant-voice.service'}
+    require(set(units) == names and len(additional['loaded_states']) == 3, 'availability_owner_boundary_loaded_unit_scope')
+    stable_units = {}
+    for name, expected in units.items():
+        # Natural retention/voice lifecycle transitions are observed, not pinned
+        # as restaurant process identities. Preserve every configuration field.
+        actual = owner_unit_state(name, tuple(expected))
+        stable = {key: value for key, value in expected.items() if key not in ('ActiveState', 'SubState')}
+        require({key: actual[key] for key in stable} == stable
+                and actual['LoadState'] == 'loaded' and actual['DropInPaths'] == '' and actual['NeedDaemonReload'] == 'no'
+                and actual['UnitFileState'] == ('static' if name.endswith('retention.service') else 'enabled')
+                and actual['ActiveState'] in ('active', 'inactive', 'activating', 'deactivating', 'failed', 'reloading', 'maintenance')
+                and actual['SubState'] in ('dead', 'running', 'waiting', 'elapsed', 'exited', 'failed', 'start',
+                    'start-pre', 'start-post', 'stop', 'stop-sigterm', 'stop-sigkill', 'stop-post',
+                    'final-sigterm', 'final-sigkill', 'auto-restart', 'cleaning', 'reload'),
+                'availability_owner_boundary_additional_loaded_identity')
+        repeated = owner_unit_state(name, tuple(expected))
+        require({key: repeated[key] for key in stable} == stable, 'availability_owner_boundary_added_unit_race')
+        stable_units[name] = stable
+    records = [export['original_and_observed_unit_evidence']['observed_current_unit'], *additional['exact_added_files']]
+    with source_files.open_root(Path('/')) as root_fd:
+        for item in records:
+            raw = owner_public_record(root_fd, item['path'], item['sha256'], item['metadata'])
+            if item['path'] == EXTERNAL_UNIT:
+                lines = raw.splitlines()
+                assignments = [line for line in lines if line.strip().startswith(b'WorkingDirectory=')]
+                require(assignments == [b'WorkingDirectory=' + CURRENT_OWNER_PINS['new_working_directory'].encode()],
+                        'availability_owner_boundary_current_working_directory')
+        for item in additional['exact_added_enablement_links']:
+            path = Path(item['path'])
+            fd = source_files.open_relative(root_fd, str(path.parent)[1:], directory=True)
+            try:
+                before = os.stat(path.name, dir_fd=fd, follow_symlinks=False)
+                require(stat.S_ISLNK(before.st_mode) and before.st_uid == before.st_gid == 0 and before.st_nlink == 1
+                        and full_native_metadata(before) == item['metadata']
+                        and os.readlink(path.name, dir_fd=fd) == CURRENT_OWNER_PINS['added_links'][str(path)],
+                        'availability_owner_boundary_enablement_link')
+                require(source_files.stable(before) == source_files.stable(os.stat(path.name, dir_fd=fd, follow_symlinks=False)),
+                        'availability_owner_boundary_link_race')
+            finally:
+                os.close(fd)
+        parsed = {}
+        for name in ('manifest', 'installation'):
+            item = export['installation_binding'][name]
+            metadata = [item[key] for key in ('device', 'inode', 'uid', 'gid')] + [0o644] + [
+                item[key] for key in ('size', 'mtime_ns', 'ctime_ns')]
+            parsed[name] = json.loads(owner_public_record(root_fd, item['path'], item['sha256'], metadata))
+            require(parsed[name]['installation_id'] == CURRENT_OWNER_PINS['installation_id']
+                    and parsed[name]['source_sha256'] == CURRENT_OWNER_PINS['source_sha256']
+                    and parsed[name]['release_root'] == CURRENT_OWNER_PINS['new_working_directory'],
+                    'availability_owner_boundary_current_installation')
+        receipt = parsed['installation']
+        require(receipt['manifest_sha256'] == CURRENT_OWNER_PINS['manifest']['sha256']
+                and receipt['main_pid'] == int(product['MainPID']) and receipt['installed'] is True
+                and receipt['calls_started'] == receipt['provider_writes'] == 0 and receipt['nginx_changed'] is False,
+                'availability_owner_boundary_current_installation_receipt')
+    require(owner_unit_state(product_name, tuple(expected_product)) == product
+            and native_boundary_identity() == native, 'availability_owner_boundary_native_final_race')
+    return {'approval_protocol': CURRENT_OWNER_PROTOCOL, 'native_host_proof': native,
+        'configuration': boundary['after'], 'product_loaded_state': product,
+        'additional_unit_configuration': stable_units,
+        'manifest': CURRENT_OWNER_PINS['manifest'], 'installation': CURRENT_OWNER_PINS['installation'],
+        'owner_decision_evidence': acknowledgement['owner_decision_evidence']}
+
+
 def loaded_external_state(host, acknowledgement):
     """Read only the explicitly approved foreign unit, never change or reload it."""
+    if acknowledgement.get('approval_protocol') == CURRENT_OWNER_PROTOCOL:
+        return loaded_current_owner_boundary(acknowledgement)
     require(acknowledgement.get('qualified') is True, 'availability_external_approval_missing')
     names = ('WorkingDirectory', 'FragmentPath', 'DropInPaths', 'LoadState', 'ActiveState', 'SubState',
              'UnitFileState', 'NeedDaemonReload', 'User', 'Group', 'InvocationID', 'MainPID',
@@ -692,10 +984,16 @@ def compare_population(original, current, admission, acknowledgement, *, allow_p
     require(set(current) == set(original['expected_population']), 'availability_snapshot_population')
     for name in ('files', 'mail', 'static'):
         require(current[name] == original['expected_population'][name], 'availability_' + name + '_delta')
-    if allow_pending and (acknowledgement.get('qualified') is not True or not NATIVE_APPROVAL_PROTOCOL_QUALIFIED):
+    if allow_pending and (acknowledgement.get('qualified') is not True or not approval_protocol_qualified(acknowledgement)):
         previous = original['expected_population']['configuration']
         following = current['configuration']
         changes = {key for key in set(previous) | set(following) if previous.get(key) != following.get(key)}
+        if acknowledgement.get('approval_protocol') == CURRENT_OWNER_PROTOCOL:
+            _, boundary = owner_boundary_configuration(previous, following, acknowledgement)
+            return {'status': 'RED', 'qualified': False, 'approval_protocol': CURRENT_OWNER_PROTOCOL,
+                'reason': 'availability_current_owner_decision_pending', 'unit_path': EXTERNAL_UNIT,
+                'observed_configuration_deltas': boundary, 'historical_deployment_authorization_verified': False,
+                'current_owner_preservation_authorized': False, 'current_metadata_is_not_approval': True}
         require(changes == {EXTERNAL_UNIT}, 'availability_unadjudicated_other_configuration_delta')
         return {'status': 'RED', 'qualified': False, 'reason': 'availability_native_authorization_protocol_unqualified',
                 'unit_path': EXTERNAL_UNIT, 'observed_old_metadata': previous[EXTERNAL_UNIT],
@@ -799,7 +1097,8 @@ def await_direct_health(target, timeout=30):
 def complete_recovery(target, contract, source, *, host, backup, storage, exclusion, env_writer,
                       preflight=False, budget=None):
     if not preflight:
-        require(NATIVE_APPROVAL_PROTOCOL_QUALIFIED and contract.get('installation_qualified') is True,
+        require(INSTALLATION_QUALIFIED and approval_protocol_qualified(contract.get('external_configuration_ack', {}))
+                and contract.get('installation_qualified') is True,
                 'availability_native_authorization_protocol_unqualified')
     budget = budget or RuledBudget(contract)
     exclusion.bind_runtime(RUNTIME)
@@ -913,12 +1212,15 @@ def main(argv=None):
         print(json.dumps({'execution_performed': False, 'installed_state_accessed': False,
               'provider_calls': 0, 'authentication_submissions': 0, 'database_writes': 0,
               'declaration': DECL, 'baseline_release': INSTALLED, 'prepared_release': PREPARED,
-              'installation_qualified': False, 'native_authorization_protocol_qualified': False,
+              'installation_qualified': INSTALLATION_QUALIFIED,
+              'native_authorization_protocol_qualified': NATIVE_APPROVAL_PROTOCOL_QUALIFIED,
+              'current_owner_boundary_protocol_qualified': CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED,
               'output': str(OUTPUT), 'maximum_attempts': 1, 'automatic_retries': False,
               'scope': 'Preserving forward source/release-only recovery and private structural health; no clinical campaign.'}, sort_keys=True))
         return 0
     if args.execute:
-        require(NATIVE_APPROVAL_PROTOCOL_QUALIFIED, 'availability_native_authorization_protocol_unqualified')
+        require(INSTALLATION_QUALIFIED and (NATIVE_APPROVAL_PROTOCOL_QUALIFIED or CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED),
+                'availability_native_authorization_protocol_unqualified')
     started = time.monotonic()
     contract = load_contract()
     budget = RuledBudget(contract)
