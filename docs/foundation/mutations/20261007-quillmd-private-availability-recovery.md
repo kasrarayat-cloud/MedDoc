@@ -123,9 +123,13 @@ and reviewed. No current unit hash is inserted as an approved expected value.
   "approved_source_paths": [
     "docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md",
     "docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md",
+    "docs/foundation/mutations/20261007-quillmd-source-permissions-repair.md",
     "rebuild/ops/private_availability_recovery.py",
+    "rebuild/ops/repair_source_permissions.py",
     "rebuild/ops/test_private_availability_recovery.py",
-    "scripts/recover-private-availability.py"
+    "rebuild/ops/test_repair_source_permissions.py",
+    "scripts/recover-private-availability.py",
+    "scripts/repair-quillmd-source-permissions.py"
   ],
   "attempt": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/private-availability-recovery-attempt-20261007.json",
   "authentication_submissions": 0,

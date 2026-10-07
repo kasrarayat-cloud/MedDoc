@@ -33,7 +33,10 @@ SELF = 'rebuild/ops/private_availability_recovery.py'
 TEST = 'rebuild/ops/test_private_availability_recovery.py'
 ENTRY = 'scripts/recover-private-availability.py'
 STORAGE = 'docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md'
-ALLOWED = frozenset({SELF, TEST, ENTRY, DECL, STORAGE})
+ALLOWED = frozenset({SELF, TEST, ENTRY, DECL, STORAGE,
+    'rebuild/ops/repair_source_permissions.py', 'rebuild/ops/test_repair_source_permissions.py',
+    'scripts/repair-quillmd-source-permissions.py',
+    'docs/foundation/mutations/20261007-quillmd-source-permissions-repair.md'})
 INSTALLED = '4d46a71520275d76a36aa83ddff1a85939711a04'
 PREPARED = 'fa331c8e33ccf4ed82c7b0a6c36283f463092f62'
 FROZEN_OPERATOR = '89b79c18d6cdbeb2c78595d314df76dd8aa0185e14efa3d4f8b7550a117634f3'
