@@ -136,8 +136,8 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "preparation_only": true,
   "protocol_qualified": false,
   "provider_retries": 0,
-  "served_revision": "ce8213cd494f44828440caf20468ec6477cf718b",
-  "source_base": "ce8213cd494f44828440caf20468ec6477cf718b"
+  "served_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
+  "source_base": "4194f58cb37b13e179810db486b54bf2fe7a42a8"
 }
 ```
 
@@ -429,3 +429,10 @@ Original drafts including `3b6cf06bc8fa7787fdc01c541b5363a53420c0de` and
 local archive branch. All acceptance source and declaration qualification flags
 remain false, and `availability_receipt_sha256` remains null until genuine
 completion. A prospective revision is not evidence of a running release.
+
+
+The prospective preparation base is now the guarded recovery merge4194f58c,
+which includes the narrow public Git blob bound repair. Earlier ce821/709469
+preparations remain archived. This update inherits the already merged publisher
+repair without reapplying it. All execution gates remain false and the actual
+availability receipt remains null until genuine reviewed restoration completes.
