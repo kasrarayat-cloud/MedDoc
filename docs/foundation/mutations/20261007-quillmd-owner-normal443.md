@@ -36,7 +36,7 @@ static assets, schemas and original captures remain byte-identical.
   "automatic_retries": false,
   "availability": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/private-availability-recovery-20261007/complete.json",
-    "sha256": null
+    "sha256": "17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd"
   },
   "caddy_sha256": "bf0c14729a4ae86ecf2e8ff34d9b5e68aeba55a0bb0c06879580bc73e3a23c87",
   "database_writes": 0,
@@ -53,7 +53,7 @@ static assets, schemas and original captures remain byte-identical.
   },
   "private_acceptance_protocol_qualified": false,
   "private_acceptance_completed": false,
-  "private_accepted_revision": null,
+  "private_accepted_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
   "private_authority": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/parent-phase-verify.json",
     "binding": "private-acceptance-completion-cross-hashes-v1"
@@ -188,9 +188,13 @@ single attempt is never reused. The 2400-second ruled ceiling includes source
 checks/natural selection/admission/transition and a reserved bounded rollback;
 its checks refuse insufficient time and do not promise eventual completion.
 
-Exact protocol prerequisites still pending are the actual cited private-acceptance base,
-served release and genuine literal availability receipt hash, current original nginx
-metadata, finished independent refutation, and exact PR/merge citation. These
+The genuine availability completion is now bound to SHA-256
+`17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd`
+and actual served release `4194f58cb37b13e179810db486b54bf2fe7a42a8`.
+This recovery binding does not qualify a prospective campaign or transition.
+All source gates remain false while the actual cited private-acceptance base,
+current original nginx metadata, finished qualification review and exact normal
+PR/merge citation remain pending. These
 are specific execution inputs, not a request for further historical VoiceAssist
 approval. Existing V8/V15 exports and recorded preservation decision remain
 untouched, and historical deployment approval remains unverified. Runtime execution

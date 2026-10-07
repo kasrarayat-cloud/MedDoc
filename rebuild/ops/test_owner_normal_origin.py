@@ -84,6 +84,8 @@ class NormalOriginOperatorTests(unittest.TestCase):
         with patch.object(act,'OUTPUT',root/'output'),patch.object(act,'ATTEMPT',root/'attempt'), \
              patch.object(act,'OLD_INGRESS_SHA',act.sha(ORIGINAL)):
             return act.transition(host,policy,TARGET,{act.TEMPLATE:TEMPLATE},execute=execute)
+    @patch.multiple(act,ACTIVE_PROTOCOL_QUALIFIED=False,PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED=False,
+                    INGRESS_PUBLICATION_QUALIFIED=False)
     def test_default_and_unqualified_execute_never_read_or_act(self):
         with patch.object(act.source_files,'protected',side_effect=AssertionError('installed read')), \
              patch.object(act.old,'git',side_effect=AssertionError('Git read')),patch('sys.stdout',new=io.StringIO()):
@@ -93,6 +95,32 @@ class NormalOriginOperatorTests(unittest.TestCase):
                     act.main([mode,'--operations-revision',TARGET])
         self.assertFalse(act.ACTIVE_PROTOCOL_QUALIFIED);self.assertFalse(act.PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED)
         self.assertFalse(act.INGRESS_PUBLICATION_QUALIFIED)
+    @patch.multiple(act,ACTIVE_PROTOCOL_QUALIFIED=True,PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED=True,
+                    INGRESS_PUBLICATION_QUALIFIED=True)
+    def test_qualified_default_is_read_only_and_does_not_claim_campaign_completion(self):
+        with patch.object(act.source_files,'protected',side_effect=AssertionError('installed read')), \
+             patch.object(act.old,'git',side_effect=AssertionError('Git read')), \
+             patch.object(act,'NativeHost',side_effect=AssertionError('native adapter')), \
+             patch('sys.stdout',new=io.StringIO()) as stream:
+            self.assertEqual(act.main([]),0)
+        result=json.loads(stream.getvalue())
+        self.assertTrue(all(result[name] for name in ('active_protocol_qualified',
+            'private_acceptance_protocol_qualified','ingress_publication_qualified')))
+        self.assertFalse(result['private_acceptance_completed']);self.assertFalse(result['installed_state_accessed'])
+        self.assertFalse(result['execution_performed'])
+        self.assertEqual((result['provider_calls'],result['authentication_submissions'],result['database_writes']),(0,0,0))
+    def test_each_source_qualification_is_required_independently_of_policy_or_environment(self):
+        names=('ACTIVE_PROTOCOL_QUALIFIED','PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED','INGRESS_PUBLICATION_QUALIFIED')
+        for name in names:
+            values=dict.fromkeys(names,True);values[name]=False
+            with self.subTest(name=name),patch.multiple(act,**values),patch.dict(os.environ,{name:'1'}), \
+                 patch.object(act.source_files,'protected',side_effect=AssertionError('installed read')), \
+                 patch.object(act.old,'git',side_effect=AssertionError('Git read')):
+                self.assertFalse(act.qualified())
+                with self.assertRaisesRegex(act.Refusal,'source_protocol_unqualified'):act.source_gate(TARGET)
+                with self.assertRaisesRegex(act.Refusal,'source_protocol_unqualified'):
+                    act.NativeHost({'active_protocol_qualified':True,'private_acceptance_protocol_qualified':True,
+                                    'ingress_publication_qualified':True},TARGET,{},0)
     def test_main_passes_the_checked_buffers_not_a_template_tuple(self):
         host=object();buffers={act.TEMPLATE:TEMPLATE};policy={}
         with patch.object(act,'source_gate',return_value=(policy,buffers)), \
@@ -247,6 +275,8 @@ class NormalOriginOperatorTests(unittest.TestCase):
         with patch.object(act.source_files,'protected',side_effect=AssertionError('private read')):
             for item in (None,{'path':'/tmp/elsewhere','sha256':'f'*64},{'path':str(act.PRIVATE_PATHS['private_acceptance']),'sha256':None}):
                 with self.assertRaises(act.Refusal):act.pinned_receipt(item,'pin',act.PRIVATE_PATHS['private_acceptance'])
+    @patch.multiple(act,ACTIVE_PROTOCOL_QUALIFIED=False,PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED=False,
+                    INGRESS_PUBLICATION_QUALIFIED=False)
     def test_native_constructor_cannot_be_opened_by_a_policy_flag(self):
         with patch.object(act,'private_receipts',side_effect=AssertionError('private input')):
             with self.assertRaisesRegex(act.Refusal,'source_protocol_unqualified'):
