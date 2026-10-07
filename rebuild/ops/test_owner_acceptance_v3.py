@@ -1,0 +1,968 @@
+"""Fictional offline controls. No installed/auth/provider/DB/service access."""
+from contextlib import contextmanager
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from pathlib import Path
+from unittest.mock import patch
+import copy
+import io
+import json
+import os
+import socket
+import subprocess
+import sys
+import stat
+import tempfile
+import types
+import unittest
+import zipfile
+
+from ops import owner_acceptance_v3 as v3
+
+OPS = '1' * 40
+SERVED = '2' * 40
+COMMIT = '3' * 40
+START = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc)
+
+
+def contract():
+    return {'format': 3, 'origin': v3.ORIGIN, 'approved_source_paths': sorted(v3.ALLOWED),
+            'source_base': v3.M6, 'dependency_sha256': v3.DEPENDENCIES,
+            'maximum_generations': 5, 'maximum_transcriptions': 1, 'maximum_provider_exposure': '0.70',
+            'concurrency': 1, 'provider_retries': 0, 'authentication_seconds': 180,
+            'browser_verifier_seconds': 1200, 'operations_revision': None,
+            'operations_revision_policy': v3.OPERATIONS_REVISION_POLICY, 'served_revision': SERVED,
+            'protocol_qualified': True}
+
+
+def declaration(value=None):
+    return b'<!-- owner-acceptance-v3-contract -->\n```json\n' + v3.encode(value or contract()) + b'\n```\n'
+
+
+class FakeHost:
+    """Invented source/phase instrument, never native lock or installation proof."""
+    source = v3.ROOT / '.worktrees/fictional-v3'
+    environment = {'RULED_MUTATION_DECLARATION': v3.DECL, 'RULED_MUTATION_DECL_COMMIT': COMMIT}
+
+    def __init__(self):
+        self.events = []; self.inside = False; self.now = 0; self.fail_phase = None
+        self.changed = sorted(v3.ALLOWED); self.served = SERVED; self.ops = OPS
+        self.contract = contract()
+
+    def canonical(self, path): return path
+    def read_source(self, path): return declaration(self.contract) if str(path).endswith(v3.DECL) else b'fictional tracked bytes'
+    def readability(self, path): self.events.append(('readability', str(path)))
+    def git(self, tree, *args):
+        if args == ('rev-parse', 'HEAD'): return (self.ops if tree == self.source else self.served).encode() + b'\n'
+        if args == ('rev-parse', 'origin/main'): return self.ops.encode() + b'\n'
+        if args == ('branch', '--show-current'): return b'main\n'
+        if args[:1] == ('status',): return b''
+        if args[:1] == ('merge-base',): return b''
+        if args[:1] == ('diff',): return '\n'.join(self.changed).encode()
+        if args[:1] == ('log',): return COMMIT.encode() + b'\n'
+        if args[:1] == ('ls-files',): return b'rebuild/core/generation.py\n'
+        if args[:1] == ('show',): return declaration(self.contract) if args[1].endswith(':' + v3.DECL) else b'fictional tracked bytes'
+        raise AssertionError(args)
+    def citation(self, revision): self.events.append(('citation', revision))
+    def authenticate_dependencies(self): self.events.append('dependencies')
+    def authenticate_availability(self, *args): self.events.append('availability'); return {'complete': True}
+    def fresh_paths_absent(self): return True
+    def clock(self): self.now += .01; return self.now
+    @contextmanager
+    def exclusions(self, *args):
+        self.inside = True; self.events.append('locks-enter')
+        try: yield
+        finally: self.events.append('locks-exit'); self.inside = False
+    def recheck_source_and_idle(self, *args):
+        assert self.inside; self.events.append('inside-source-idle')
+    def admit(self, phase, *args):
+        assert self.inside; self.events.append(phase); return {'complete': True}
+    def create_exclusive_preparation(self, *args): assert self.inside; self.events.append('exclusive-preparation')
+    def child(self, phase, operations, served, deadline):
+        assert self.inside; self.events.append((phase, deadline))
+        if phase == self.fail_phase: raise v3.Refusal('fictional failed child')
+    def normal_auth_evidence(self): return {'fictional': True}
+    def write_attempt(self, *args): assert self.inside; self.events.append('attempt')
+    def independent_report(self): return {'complete': True, 'operations_revision': OPS, 'served_revision': SERVED}
+    def write_complete(self, *args): assert self.inside; self.events.append('complete')
+    def write_stop(self, *args): assert self.inside; self.events.append('STOP')
+
+
+def docx(values):
+    from lxml import etree
+    ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+    root = etree.Element('{%s}document' % ns, nsmap={'w': ns}); body = etree.SubElement(root, '{%s}body' % ns)
+    table = etree.SubElement(body, '{%s}tbl' % ns)
+    for label, answer in values.items():
+        row = etree.SubElement(table, '{%s}tr' % ns)
+        for text in (label, answer):
+            cell = etree.SubElement(row, '{%s}tc' % ns); para = etree.SubElement(cell, '{%s}p' % ns)
+            run = etree.SubElement(para, '{%s}r' % ns); etree.SubElement(run, '{%s}t' % ns).text = text
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, 'w') as archive:
+        archive.writestr('word/document.xml', etree.tostring(root))
+        archive.writestr('word/header1.xml', b'unchanged fictional letterhead')
+    return stream.getvalue()
+
+
+class InertAndSourceTests(unittest.TestCase):
+    def test_default_and_every_real_entry_refuse_before_io(self):
+        with (patch.object(v3, 'protected', side_effect=AssertionError('installed read')),
+              patch.object(socket, 'create_connection', side_effect=AssertionError('network')),
+              patch.object(subprocess, 'Popen', side_effect=AssertionError('child'))):
+            with patch('sys.stdout', new=io.StringIO()) as stream:
+                self.assertEqual(v3.main([]), 0)
+                self.assertFalse(json.loads(stream.getvalue())['installed_state_accessed'])
+            for mode in ('execute', 'preflight', 'admit-before-auth', 'admit-after-auth', 'verify',
+                         'dispatch-normal-auth', 'dispatch-browser', 'child-check-normal-auth', 'child-check-browser'):
+                with self.subTest(mode=mode), self.assertRaisesRegex(v3.Refusal, 'source_protocol_unqualified'):
+                    v3.main(['--' + mode, '--operations-revision', OPS, '--served-revision', SERVED])
+            with self.assertRaises(v3.Refusal): v3.InstalledHost()
+
+    def test_declaration_flags_cannot_enable_source_gate(self):
+        with patch.dict(os.environ, {'V3_EXECUTION_QUALIFIED': '1'}):
+            for _ in (False, True):
+                with self.assertRaises(v3.Refusal): v3.execution_gate()
+        self.assertFalse(v3.EXECUTION_QUALIFIED)
+        self.assertFalse(v3.NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED)
+        self.assertFalse(v3.FIXED_CHILD_PROTOCOL_QUALIFIED)
+
+    def test_installed_collectors_refuse_before_roles_key_socket_or_db(self):
+        with patch.object(v3, 'frozen_modules', side_effect=AssertionError('source read')), \
+             patch.object(socket, 'create_connection', side_effect=AssertionError('socket')) as sock:
+            for call in (lambda: v3.installed_database_admission({}), v3.installed_auth_packet):
+                with self.assertRaises(v3.Refusal): call()
+            self.assertEqual(sock.call_count, 0)
+
+    def test_default_native_locks_and_child_refuse_before_os_calls(self):
+        with (patch.object(os, 'open', side_effect=AssertionError('installed lock')),
+              patch.object(subprocess, 'Popen', side_effect=AssertionError('native child'))):
+            with self.assertRaises(v3.Refusal):
+                with v3.existing_operation_locks(): pass
+            with self.assertRaises(v3.Refusal):
+                v3.child_process(['arbitrary'], FakeHost.source, Path('/fictional'), 'child', 20, ruled=True)
+
+    def test_exact_contract_bounds_and_duplicate_refuse(self):
+        self.assertEqual(v3.declaration_contract(declaration()), contract())
+        for key, value in [('maximum_generations', 6), ('maximum_provider_exposure', '1'),
+                           ('provider_retries', 1), ('concurrency', 2), ('browser_verifier_seconds', 2400),
+                           ('approved_source_paths', sorted(v3.ALLOWED) + ['rebuild/core/generation.py'])]:
+            bad = contract(); bad[key] = value
+            with self.subTest(key=key), self.assertRaises(v3.Refusal): v3.declaration_contract(declaration(bad))
+        with self.assertRaises(v3.Refusal): v3.declaration_contract(declaration() * 2)
+
+    def test_separate_source_revisions_and_exact_citations(self):
+        host = FakeHost(); result = v3.source_gate(host, contract(), OPS, SERVED, host.environment)
+        self.assertEqual(result['operations_revision'], OPS); self.assertEqual(result['served_revision'], SERVED)
+        self.assertEqual([row[1] for row in host.events if isinstance(row, tuple) and row[0] == 'citation'], [v3.M6, OPS, SERVED])
+        for mutate in (lambda host: setattr(host, 'served', OPS), lambda host: setattr(host, 'changed', list(v3.ALLOWED) + ['rebuild/core/generation.py'])):
+            host = FakeHost(); mutate(host)
+            with self.assertRaises(v3.Refusal): v3.source_gate(host, contract(), OPS, SERVED, host.environment)
+        for value in ('1' * 8, '1' * 40 + ' ', 'f' * 39):
+            with self.assertRaises(v3.Refusal): v3.full_revision(value)
+        with self.assertRaises(v3.Refusal): v3.source_gate(FakeHost(), contract(), OPS, SERVED, {})
+
+    def test_cgroup_whitespace_and_foreign_unit_refuse(self):
+        unit = v3.UNITS[2]
+        v3.exact_cgroup('0::/system.slice/' + unit + '\n', unit)
+        for raw in ('0::/system.slice/' + unit + ' \n', '0::/system.slice/' + unit + '\t\n',
+                    '0::/system.slice/foreign.service\n', '0::/system.slice/' + unit):
+            with self.assertRaises(v3.Refusal): v3.exact_cgroup(raw, unit)
+
+    def test_operations_revision_derives_from_qualified_head_without_self_pin(self):
+        host = FakeHost()
+        result = v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+        self.assertIsNone(host.contract['operations_revision'])
+        self.assertEqual(result['operations_revision'], host.ops)
+        self.assertEqual(result['operations_revision_policy'], v3.OPERATIONS_REVISION_POLICY)
+        self.assertIn(('citation', OPS), host.events)
+        with self.assertRaisesRegex(v3.Refusal, 'caller_operations_revision_matches_derived_head'):
+            v3.source_gate(FakeHost(), contract(), '4' * 40, SERVED, FakeHost.environment)
+
+    def test_operations_derivation_policy_missing_tampered_or_literal_self_pin_refuses(self):
+        for mutate in (lambda value: value.pop('operations_revision_policy'),
+                       lambda value: value.pop('operations_revision'),
+                       lambda value: value.update(operations_revision_policy='trust_caller_head'),
+                       lambda value: value.update(operations_revision=OPS)):
+            host = FakeHost(); mutate(host.contract)
+            with self.assertRaisesRegex(v3.Refusal, 'exact_operations_revision_derivation_policy'):
+                v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+        host = FakeHost(); host.contract['served_revision'] = None
+        with self.assertRaisesRegex(v3.Refusal, 'separate_declared_served_revision'):
+            v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+
+    def test_pipeline_same_hold_fixed_sequence_shared_deadline(self):
+        host = FakeHost(); v3.protocol_pipeline(host, contract(), OPS, SERVED)
+        phases = [row for row in host.events if isinstance(row, str)]
+        self.assertEqual(phases, ['dependencies', 'availability', 'locks-enter', 'inside-source-idle',
+            'before-auth', 'exclusive-preparation', 'after-auth', 'inside-source-idle', 'attempt', 'complete', 'locks-exit'])
+        child = {row[0]: row[1] for row in host.events if isinstance(row, tuple) and row[0] in ('normal-auth', 'browser', 'verify')}
+        self.assertEqual(child['browser'], child['verify']); self.assertLess(child['normal-auth'], child['browser'])
+
+    def test_campaign_failure_stops_without_rollback_or_second_send(self):
+        host = FakeHost(); host.fail_phase = 'browser'
+        with self.assertRaises(v3.Refusal): v3.protocol_pipeline(host, contract(), OPS, SERVED)
+        self.assertIn('STOP', host.events); self.assertEqual(host.events[-1], 'locks-exit')
+        self.assertEqual(sum(isinstance(row, tuple) and row[0] == 'browser' for row in host.events), 1)
+        self.assertFalse(any(isinstance(row, tuple) and row[0] == 'verify' for row in host.events))
+
+    def test_postauth_recheck_deadline_expiry_precedes_attempt_marker(self):
+        class LateHost(FakeHost):
+            checks = 0
+            def recheck_source_and_idle(self, *args):
+                super().recheck_source_and_idle(*args); self.checks += 1
+                if self.checks == 2: self.now = 1700
+        host = LateHost()
+        with self.assertRaisesRegex(v3.Refusal, 'phase_deadline'):
+            v3.protocol_pipeline(host, contract(), OPS, SERVED)
+        self.assertNotIn('attempt', host.events); self.assertNotIn('STOP', host.events)
+        self.assertFalse(any(isinstance(row, tuple) and row[0] == 'browser' for row in host.events))
+        self.assertEqual(host.events[-1], 'locks-exit')
+
+    def test_arbitrary_child_or_swapped_revision_refuse(self):
+        command = v3.fixed_child_argv(FakeHost.source, 'browser', OPS, SERVED)
+        self.assertEqual(command[-4:], ['--operations-revision', OPS, '--served-revision', SERVED])
+        self.assertIn('--dispatch-browser', command)
+        with self.assertRaises(v3.Refusal): v3.fixed_child_argv(FakeHost.source, 'shell', OPS, SERVED)
+        with self.assertRaises(v3.Refusal): v3.fixed_child_argv(FakeHost.source, 'browser', 'abc', SERVED)
+
+    def test_unknown_authentication_stops_before_clinical_marker(self):
+        host = FakeHost(); host.fail_phase = 'normal-auth'
+        with self.assertRaises(v3.Refusal): v3.protocol_pipeline(host, contract(), OPS, SERVED)
+        self.assertIn('STOP', host.events)
+        self.assertNotIn('attempt', host.events)
+        self.assertFalse(any(isinstance(row, tuple) and row[0] in ('browser', 'verify') for row in host.events))
+
+
+class FixtureOwnerOS:
+    """Private fixture view; real modes/inodes/bytes are never altered by this shim."""
+    def __init__(self):
+        self.creator_uid, self.creator_gid = os.getuid(), os.getgid()
+    def __getattr__(self, name): return getattr(os, name)
+    def getuid(self): return 1000
+    def getgid(self): return 1000
+    def fstat(self, fd):
+        info = os.fstat(fd)
+        values = {name: getattr(info, name) for name in dir(info) if name.startswith('st_')}
+        if info.st_uid == self.creator_uid: values['st_uid'] = 1000
+        if info.st_gid == self.creator_gid: values['st_gid'] = 1000
+        return types.SimpleNamespace(**values)
+
+
+class ChildAndPrivateFileTests(unittest.TestCase):
+    def setUp(self):
+        self.owner_patch = patch.object(v3, 'os', FixtureOwnerOS())
+        self.owner_patch.start(); self.addCleanup(self.owner_patch.stop)
+
+    def test_private_parent_symlink_refuses_without_canary_read(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); secret = root / 'private'; secret.mkdir()
+            (secret / 'canary').write_bytes(b'fictional unread private canary')
+            (secret / 'canary').chmod(0o600)
+            (root / 'replacement').symlink_to(secret, target_is_directory=True)
+            with patch.object(v3.os, 'fdopen', side_effect=AssertionError('canary read')):
+                with self.assertRaises(OSError): v3.protected(root / 'replacement/canary')
+
+    def test_sealed_child_source_keeps_checked_bytes_after_path_replacement(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'source.py'; path.write_bytes(b'fictional checked source')
+            with v3.sealed_buffer(path.read_bytes()) as fd:
+                path.write_bytes(b'fictional replacement source')
+                self.assertEqual(os.pread(fd, 4096, 0), b'fictional checked source')
+                with self.assertRaises(OSError): os.write(fd, b'changed')
+
+    def test_fixture_owner_representation_preserves_all_nonowner_fields(self):
+        shim = FixtureOwnerOS()
+        with tempfile.TemporaryFile() as stream:
+            original = os.fstat(stream.fileno()); represented = shim.fstat(stream.fileno())
+            self.assertEqual((represented.st_uid, represented.st_gid), (1000, 1000))
+            for name in dir(original):
+                if name.startswith('st_') and name not in ('st_uid', 'st_gid'):
+                    self.assertEqual(getattr(original, name), getattr(represented, name))
+            # An explicit represented hosted-runner creator does not relax the
+            # production gate; a foreign owner remains foreign in the view.
+            shim.creator_uid = 1001; shim.creator_gid = 1001
+            fixture = types.SimpleNamespace(st_uid=1001, st_gid=1001, st_mode=stat.S_IFREG|0o600,
+                st_ino=7, st_dev=3, st_nlink=1, st_size=9, st_mtime_ns=13, st_ctime_ns=17)
+            with patch.object(os, 'fstat', return_value=fixture):
+                represented = shim.fstat(9)
+            self.assertEqual((represented.st_uid, represented.st_gid), (1000, 1000))
+            fixture.st_uid = 1002
+            with patch.object(os, 'fstat', return_value=fixture):
+                self.assertEqual(shim.fstat(9).st_uid, 1002)
+
+    def test_owned_temp_locks_single_holder_and_release(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for relative in v3.LOCKS:
+                path = root / relative; path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(b''); path.chmod(0o600)
+            with v3.existing_operation_locks(root):
+                with self.assertRaises(BlockingIOError):
+                    with v3.existing_operation_locks(root): pass
+            with v3.existing_operation_locks(root): pass
+            (root / v3.LOCKS[0]).chmod(0o644)
+            with self.assertRaises(v3.Refusal):
+                with v3.existing_operation_locks(root): pass
+
+    def test_no_lock_creation_or_symlink_adoption(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            with self.assertRaises(FileNotFoundError):
+                with v3.existing_operation_locks(root): pass
+            self.assertFalse((root / v3.LOCKS[0]).exists())
+            target = root / 'target'; target.write_bytes(b''); target.chmod(0o600)
+            (root / v3.LOCKS[0]).symlink_to(target)
+            with self.assertRaises(OSError):
+                with v3.existing_operation_locks(root): pass
+
+    def test_protected_bytes_mode_links_bound_and_exclusive_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'proof.json'; v3.write_new(path, {'fictional': True})
+            self.assertEqual(json.loads(v3.protected(path)), {'fictional': True})
+            with self.assertRaises(FileExistsError): v3.write_new(path, {})
+            with self.assertRaises(v3.Refusal): v3.protected(path, 1)
+            os.link(path, Path(temp) / 'second')
+            with self.assertRaises(v3.Refusal): v3.protected(path)
+
+    def test_timeout_group_reaped_before_diagnostic_failure(self):
+        events = []; alive = {'value': True}
+        class Process:
+            pid = 42; returncode = None
+            def communicate(self, timeout):
+                events.append(('communicate', timeout))
+                if timeout != 10: raise subprocess.TimeoutExpired('fictional', timeout)
+                self.returncode = -9; return b'raw retained stdout', b'raw retained stderr'
+            def poll(self): return self.returncode
+        def popen(*args, **kwargs):
+            self.assertTrue(kwargs['start_new_session']); self.assertEqual(kwargs['cwd'], FakeHost.source)
+            return Process()
+        def kill(pid, value):
+            events.append(('kill', pid, value))
+            if value == v3.signal.SIGKILL: alive['value'] = False
+        def writer(*args):
+            self.assertEqual(events[-1], ('communicate', 10)); raise OSError('fictional ENOSPC')
+        with self.assertRaises(OSError):
+            v3.child_process(['fixed fictional argv'], FakeHost.source, Path('/fictional'), 'browser', 20,
+                             ruled=True, clock=lambda: 0, popen=popen, killpg=kill,
+                             group_identity=lambda pid: (pid, pid), group_alive=lambda pid: alive['value'], writer=writer)
+        self.assertEqual([row[2] for row in events if row[0] == 'kill'], [v3.signal.SIGTERM, v3.signal.SIGKILL])
+
+    def test_failed_and_expired_child_no_second_invocation(self):
+        calls = []
+        class Process:
+            pid = 42; returncode = 2
+            def communicate(self, timeout): return b'failure', b'bounded'
+            def poll(self): return self.returncode
+        def popen(*args, **kwargs): calls.append(args); return Process()
+        with self.assertRaises(v3.Refusal):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                             clock=lambda: 0, popen=popen, killpg=lambda *args: None,
+                             group_identity=lambda pid: (pid, pid), group_alive=lambda pid: False, writer=lambda *args: None)
+        self.assertEqual(len(calls), 1)
+        with self.assertRaises(v3.Refusal):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 0, ruled=True,
+                             clock=lambda: 0, popen=popen, killpg=lambda *args: None,
+                             group_identity=lambda pid: (pid, pid), group_alive=lambda pid: False, writer=lambda *args: None)
+        self.assertEqual(len(calls), 1)
+
+    def test_exited_leader_residual_owned_descendant_drained_before_logs(self):
+        events = []; alive = {'value': True}
+        class Process:
+            pid = 42; returncode = None; communications = 0
+            def communicate(self, timeout):
+                self.communications += 1
+                if self.communications == 1: raise subprocess.TimeoutExpired('fictional', timeout)
+                self.returncode = 0; return b'leader closed stdout', b'leader closed stderr'
+            def poll(self): return self.returncode
+        def popen(*args, **kwargs):
+            self.assertTrue(kwargs['start_new_session']); return Process()
+        def kill(group, value):
+            self.assertEqual(group, 42); events.append(('signal', value))
+            if value == v3.signal.SIGKILL: alive['value'] = False
+        def writer(path, raw):
+            self.assertFalse(alive['value']); events.append(('diagnostic', path.name))
+        with self.assertRaisesRegex(v3.Refusal, 'unknown_outcome_no_retry'):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                clock=lambda: 0, popen=popen, killpg=kill, group_identity=lambda pid: (pid, pid),
+                group_alive=lambda pid: alive['value'], writer=writer)
+        self.assertEqual(events[:2], [('signal', v3.signal.SIGTERM), ('signal', v3.signal.SIGKILL)])
+        self.assertEqual(len([row for row in events if row[0] == 'diagnostic']), 2)
+
+    def test_wrong_spawned_group_never_receives_group_signal(self):
+        signals = []
+        class Process:
+            pid = 42; returncode = 0
+            def communicate(self, timeout): raise AssertionError('unverified group should not communicate')
+            def poll(self): return self.returncode
+        with self.assertRaisesRegex(v3.Refusal, 'spawned_session_group_identity'):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                clock=lambda: 0, popen=lambda *args, **kwargs: Process(), killpg=lambda *args: signals.append(args),
+                group_identity=lambda pid: (999, 999), group_alive=lambda pid: True, writer=lambda *args: None)
+        self.assertFalse(signals)
+
+    def test_ordinary_leader_success_with_descendant_is_drained_and_refused(self):
+        events = []; alive = {'value': True}
+        class Process:
+            pid = 42; returncode = 0
+            def communicate(self, timeout): return b'leader returned success', b''
+            def poll(self): return self.returncode
+        def kill(group, value):
+            self.assertEqual(group, 42); events.append(('signal', value))
+            if value == v3.signal.SIGKILL: alive['value'] = False
+        def writer(path, raw):
+            self.assertFalse(alive['value']); events.append(('diagnostic', path.name))
+        with self.assertRaisesRegex(v3.Refusal, 'unknown_outcome_no_retry'):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                clock=lambda: 0, popen=lambda *args, **kwargs: Process(), killpg=kill,
+                group_identity=lambda pid: (pid, pid), group_alive=lambda pid: alive['value'], writer=writer)
+        self.assertEqual(events[:2], [('signal', v3.signal.SIGTERM), ('signal', v3.signal.SIGKILL)])
+        self.assertEqual(len([row for row in events if row[0] == 'diagnostic']), 2)
+
+    def test_genuinely_empty_group_ordinary_success_remains_success(self):
+        signals = []; diagnostics = []
+        class Process:
+            pid = 42; returncode = 0
+            def communicate(self, timeout): return b'complete', b''
+            def poll(self): return self.returncode
+        result = v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+            clock=lambda: 0, popen=lambda *args, **kwargs: Process(), killpg=lambda *args: signals.append(args),
+            group_identity=lambda pid: (pid, pid), group_alive=lambda pid: False,
+            writer=lambda path, raw: diagnostics.append((path.name, raw)))
+        self.assertEqual(result['exit_code'], 0); self.assertFalse(signals)
+        self.assertEqual(len(diagnostics), 2)
+
+    def test_undrained_owned_group_deadline_refuses_without_diagnostics(self):
+        now = {'value': 0}; diagnostics = []; signals = []
+        class Process:
+            pid = 42; returncode = 0
+            def communicate(self, timeout): return b'incomplete', b''
+            def poll(self): return self.returncode
+        with self.assertRaisesRegex(v3.Refusal, 'owned_group_drain_unknown_outcome'):
+            v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                clock=lambda: now['value'], popen=lambda *args, **kwargs: Process(),
+                killpg=lambda *args: signals.append(args), group_identity=lambda pid: (pid, pid),
+                group_alive=lambda pid: True, sleep=lambda elapsed: now.update(value=now['value'] + elapsed),
+                writer=lambda *args: diagnostics.append(args))
+        self.assertEqual([row[1] for row in signals], [v3.signal.SIGTERM, v3.signal.SIGKILL])
+        self.assertFalse(diagnostics); self.assertGreaterEqual(now['value'], 10)
+
+    def test_injected_transport_cannot_fall_back_to_native_group_io(self):
+        with (patch.object(os, 'killpg', side_effect=AssertionError('native signal')),
+              patch.object(os, 'getpgid', side_effect=AssertionError('native group read'))):
+            with self.assertRaisesRegex(v3.Refusal, 'injected_transport_requires'):
+                v3.child_process(['fixed'], FakeHost.source, Path('/fictional'), 'browser', 20, ruled=True,
+                                 popen=lambda *args, **kwargs: None, writer=lambda *args: None)
+
+
+class NativeAdapterTests(unittest.TestCase):
+    def test_actual_checked_native_namespace_has_closed_transitive_imports(self):
+        names = ('managed_helper','private_storage','backup_restore','email_activation','activation_exclusion',
+                 'legacy_model_activation','repair_source_permissions','publisher_verification','private_availability_recovery')
+        blobs = {name:(v3.SOURCE/'rebuild/ops'/f'{name}.py').read_bytes() for name in names}
+        class SourceHost:
+            source = v3.SOURCE
+            operations = OPS
+            def read_source(self,path):return blobs[Path(path).stem]
+            def git(self,tree,*args):return blobs[Path(args[1].split(':',1)[1]).stem]
+        with (patch.object(subprocess,'run',side_effect=AssertionError('native helper')),
+              patch.object(socket,'create_connection',side_effect=AssertionError('network'))):
+            package = v3.checked_native_modules(SourceHost())
+        self.assertEqual(package.__path__,[])
+        scope={'__package__':package.__name__}
+        exec('from . import repair_source_permissions as source_files\nfrom . import publisher_verification as publisher_judge',scope)
+        self.assertIs(scope['source_files'],package.repair_source_permissions)
+        self.assertIs(scope['publisher_judge'],package.publisher_verification)
+        self.assertIs(package.private_availability_recovery.old,package.legacy_model_activation)
+        self.assertIs(package.legacy_model_activation.modules()[1],package.backup_restore)
+        self.assertEqual(v3.DEPENDENCIES['verify_installed_acceptance_v3.py'],
+                         '34d4d3bf0b9641a2f642717b33833beb7a7f49a0c043bc095e592c41a78b0023')
+
+    def test_derived_authority_does_not_adopt_current_baseline_or_modify_declaration(self):
+        value = contract(); before = copy.deepcopy(value)
+        common = types.SimpleNamespace(ORIGINAL_RECEIPTS={'failed.json': 'old'}, FAILED_CONTINUATION={'failed.json': 'old-continuation'})
+        raw = b'fictional independently admitted original population'
+        result = v3.derive_authority(value, common, OPS, SERVED, {'before-auth': raw})
+        self.assertEqual(value, before)
+        self.assertEqual(result['operations_revision'], OPS)
+        self.assertEqual(result['original_activation'], str(v3.ORIGINAL))
+        self.assertEqual(result['original_receipts'], common.ORIGINAL_RECEIPTS)
+        self.assertEqual(result['admissions']['before-auth']['sha256'], v3.sha(raw))
+        self.assertNotIn('current_baseline', result)
+        with self.assertRaises(v3.Refusal): v3.derive_authority(value, common, OPS, SERVED, {'fresh-baseline': raw})
+        with self.assertRaises(v3.Refusal): v3.derive_authority(value, common, OPS, OPS, {})
+
+    def test_parent_observation_requires_exact_kernel_five_lock_holder(self):
+        device = os.makedev(8, 3); pid = 12345
+        rows = [{'path': str(v3.RUNTIME / relative), 'fd': index + 10, 'device': device, 'inode': index + 200}
+                for index, relative in enumerate((*v3.LOCKS, v3.PUBLICATION_LOCK))]
+        context = {'format': 3, 'phase': 'browser', 'operations_revision': OPS, 'served_revision': SERVED,
+            'parent_pid': pid, 'parent_uid': 1000, 'parent_start_ticks': 42, 'deadline_monotonic': 1000, 'locks': rows}
+        infos = {row['fd']: types.SimpleNamespace(st_mode=stat.S_IFREG|0o600, st_uid=1000, st_gid=1000,
+            st_nlink=1, st_dev=device, st_ino=row['inode']) for row in rows}
+        lock_text = '\n'.join(f'{i}: FLOCK ADVISORY WRITE {pid} 08:03:{row["inode"]} 0 EOF' for i, row in enumerate(rows))
+        command = [str(v3.PYTHON), '-B', str(FakeHost.source / v3.ENTRY), '--execute',
+                   '--operations-revision', OPS, '--served-revision', SERVED]
+        def read_text(path): return lock_text if str(path) == '/proc/locks' else '123 (fictional worker) ' + ' '.join(['0']*19+['42'])
+        def fd_stat(path): return infos[int(Path(path).name)]
+        @contextmanager
+        def attached(path): yield next(row['fd'] for row in rows if row['path'] == str(path))
+        def admit(value=context, **kw):
+            return v3.parent_phase_admission(value, 'browser', OPS, SERVED, monotonic=lambda: 900,
+                stat_fd=fd_stat, read_text=read_text, read_bytes=lambda p: b'\0'.join(s.encode() for s in command)+b'\0',
+                source=FakeHost.source, **kw)
+        with patch.object(v3, 'nofollow_file', attached), patch.object(v3.os, 'fstat', side_effect=lambda fd: infos[fd]):
+            self.assertIs(admit(), context)
+            for key, value in (('parent_start_ticks', 43), ('deadline_monotonic', 800), ('phase', 'verify'),
+                               ('operations_revision', SERVED), ('served_revision', OPS), ('parent_uid', 1001)):
+                with self.subTest(key=key), self.assertRaises(v3.Refusal): admit({**context,key:value})
+            with self.assertRaises(v3.Refusal): admit({**context,'locks':rows[:-1]})
+            old = lock_text; lock_text = '\n'.join(old.splitlines()[:-1])
+            with self.assertRaises(v3.Refusal): admit()
+            lock_text = old
+            infos[10].st_uid = 1001
+            with self.assertRaises(v3.Refusal): admit()
+            infos[10].st_uid = 1000
+            command[2] = '/fictional/unreviewed-parent.py'
+            with self.assertRaisesRegex(v3.Refusal, 'parent_fixed_command'): admit()
+
+    def test_child_auth_environment_excludes_application_provider_credentials(self):
+        env = v3.child_environment({'HOME':'/fictional/native-home','GH_TOKEN':'fictional-gh',
+            'RULED_MUTATION_DECL_COMMIT':COMMIT,'ANTHROPIC_API_KEY':'fictional-never-copied',
+            'QUILLMD_SECRET_KEY':'fictional-never-copied','STRIPE_SECRET_KEY':'fictional-never-copied',
+            'PATH':'/fictional/unsafe'})
+        self.assertEqual(env['HOME'], '/fictional/native-home')
+        self.assertEqual(env['GH_TOKEN'], 'fictional-gh')
+        self.assertNotIn('fictional-never-copied', env.values())
+        self.assertEqual(env['PATH'], '/usr/sbin:/usr/bin:/sbin:/bin')
+
+    def test_cli_installed_modes_reach_fixed_adapter_only_after_source_gate(self):
+        host = FakeHost(); calls = []
+        host.bind = lambda c,o,s: calls.append(('bind',o,s))
+        with patch.object(v3, 'execution_gate'), patch.object(v3, 'InstalledHost', return_value=host), \
+                patch.object(v3, 'installed_contract', return_value=(declaration(), contract())), \
+                patch.object(v3, 'protocol_pipeline', return_value={'complete':True}) as pipeline, \
+                patch('sys.stdout', new=io.StringIO()):
+            self.assertEqual(v3.main(['--execute','--operations-revision',OPS,'--served-revision',SERVED]), 0)
+        pipeline.assert_called_once_with(host, contract(), OPS, SERVED)
+        self.assertEqual(calls, [('bind',OPS,SERVED)])
+        self.assertIn('dependencies', host.events)
+
+    def test_unqualified_declaration_cannot_enable_even_present_native_adapter(self):
+        with self.assertRaisesRegex(v3.Refusal, 'declaration_source_qualification'):
+            v3.installed_contract(FakeHost())
+
+    def test_refusal_reports_known_early_zero_and_unknown_entered_phase(self):
+        clean = {'installed_state_accessed':False,'authentication_possible':False,'provider_possible':False}
+        with patch.dict(v3.ENTRY_OBSERVATIONS, clean, clear=True):
+            with self.assertRaises(v3.Refusal) as caught: v3.execution_gate()
+            early = v3.failure_summary(caught.exception)
+            self.assertFalse(early['installed_state_accessed'])
+            self.assertEqual((early['provider_calls'],early['authentication_submissions'],early['database_writes']),(0,0,0))
+            v3.ENTRY_OBSERVATIONS.update(installed_state_accessed=True, authentication_possible=True, provider_possible=True)
+            entered = v3.failure_summary(v3.Refusal('v3_child_unknown_outcome_no_retry'))
+            self.assertTrue(entered['installed_state_accessed'])
+            self.assertTrue(entered['phase_outcomes_require_protected_receipts'])
+            self.assertEqual((entered['provider_calls'],entered['authentication_submissions'],entered['database_writes']),(None,None,None))
+            for error in (v3.Refusal('v3_fictional_private_patient_name'),RuntimeError('fictional private record')):
+                self.assertEqual(v3.failure_summary(error)['reason'],'v3_fixed_protocol_failure')
+
+    def test_measured_service_invocations_are_separate_from_legacy_unit_map(self):
+        legacy = {unit:{'ActiveState':'active','SubState':'running','MainPID':str(index+10),
+            'FragmentPath':'/etc/systemd/system/'+unit,'DropInPaths':'','UnitFileState':'enabled',
+            'ExecMainStartTimestampMonotonic':'100'} for index,unit in enumerate(v3.UNITS)}
+        measured = {unit:{**row,'InvocationID':'a'*32,'NeedDaemonReload':'no'} for unit,row in legacy.items()}
+        proof = {'values':{'QUILLMD_RELEASE_SHA':SERVED,'QUILLMD_AI_MODEL':v3.MODEL},'actual_provider_model_verified':False}
+        receipt = {'units_after':legacy,'completion_unit_provenance':measured,'worker_configuration_provenance':proof}
+        current = {'units':{unit:{**row,'release':SERVED} for unit,row in measured.items()},
+            'cgroups':{unit:'0::/system.slice/'+unit+'\n' for unit in v3.UNITS},
+            'kernel_start_ticks':{unit:1 for unit in v3.UNITS},'worker_configuration_provenance':proof,
+            'pending_jobs':0,'held':0,'unresolved_reaper_paths':0,'old_job_receipt_usage_unchanged':True,
+            'private_origin':v3.ORIGIN,'public_status':503,'ingress_sha256':'a'*64,'expected_ingress_sha256':'a'*64}
+        self.assertTrue(v3.live_identity(receipt,current,SERVED)['same_pid_start_source_and_configuration'])
+        self.assertEqual(set(legacy[v3.UNITS[0]]),{'ActiveState','SubState','MainPID','FragmentPath','DropInPaths','UnitFileState','ExecMainStartTimestampMonotonic'})
+        with self.assertRaises(v3.Refusal):v3.live_identity({**receipt,'completion_unit_provenance':None},current,SERVED)
+        for key,value in (('InvocationID','b'*32),('NeedDaemonReload','yes'),('UnitFileState','disabled')):
+            bad = copy.deepcopy(current);bad['units'][v3.UNITS[0]][key] = value
+            with self.subTest(key=key),self.assertRaises(v3.Refusal):v3.live_identity(receipt,bad,SERVED)
+
+
+class FinancialAndExportTests:
+    """Explicit manual suite; actual pinned host inputs are not remote fixtures.
+
+    This mixin is deliberately outside ordinary unittest TestCase discovery.
+    --local-qualification creates its TestCase and fails on unavailable inputs;
+    it never skips or replaces the actual frozen evidence with an invented copy.
+    """
+    @classmethod
+    def setUpClass(cls):
+        from django.conf import settings
+        if not settings.configured:
+            settings.configure(SECRET_KEY='fictional test-only key', SECRET_KEY_FALLBACKS=[])
+        cls.common, cls.verifier, cls.policy = v3.frozen_modules()
+
+    def test_actual_frozen_javascript_adapters_parse_without_execution(self):
+        blobs = {name: v3.protected(v3.FROZEN / name) for name in v3.DEPENDENCIES}
+        authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {'before-auth': b'fictional report'})
+        declaration_raw = declaration() + b'\n'.join((key+': '+value).encode() for key,value in v3.FIXTURE_PINS.items())
+        check = {'argv':['-B','-c','fictional checked native admission'], 'source_fd':9}
+        for phase in ('normal-auth','browser'):
+            with self.subTest(phase=phase):
+                adapted = v3.javascript_adapter(blobs,phase,declaration_raw,authority,check)
+                result = subprocess.run(['/usr/bin/node','--check','--input-type=module'], input=adapted,
+                                        capture_output=True, timeout=15)
+                self.assertEqual(result.returncode,0,result.stderr.decode())
+                self.assertNotIn(b"from './acceptance-v3-contract.mjs'",adapted)
+                self.assertNotIn(b'privateRead(new URL(import.meta.url).pathname)',adapted)
+                self.assertNotIn(b'fs.readFileSync(path.join(process.cwd(),DECLARATION))',adapted)
+                self.assertNotIn(b"execFileSync('bash',[path.join(process.cwd(),'scripts/check-citation.sh')",adapted)
+        wrong = dict(blobs);wrong['acceptance_v3_contract.py'] += b'\n# unreviewed change'
+        with self.assertRaisesRegex(v3.Refusal,'dependency_drift'):
+            v3.javascript_adapter(wrong,'browser',declaration_raw,authority,check)
+        self.assertEqual({name:v3.sha(v3.protected(v3.FROZEN/name)) for name in v3.DEPENDENCIES},v3.DEPENDENCIES)
+
+    def test_actual_frozen_verifier_adapter_retains_gate_and_full_verifier(self):
+        raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
+        authority = v3.derive_authority(contract(),self.common,OPS,SERVED,{})
+        adapted = v3.verifier_adapter(raw,self.common,authority,self.verifier)
+        with patch.object(v3,'protected',side_effect=AssertionError('installed read')):
+            with self.assertRaisesRegex(v3.Refusal,'source_protocol_unqualified'):
+                adapted.verify(types.SimpleNamespace(progress=str(v3.CAMPAIGN/'progress.json'),output=str(v3.REPORT)))
+        self.assertEqual(adapted.load_v3_authority(OPS,SERVED),authority)
+        self.assertIs(adapted.publisher_source_admission,self.verifier.publisher_source_admission)
+        with self.assertRaises(v3.Refusal):adapted.load_v3_authority(SERVED,OPS)
+        with self.assertRaisesRegex(v3.Refusal,'dependency_hash'):
+            v3.verifier_adapter(raw+b'\n# foreign change',self.common,authority,self.verifier)
+
+    def test_javascript_descriptor_io_refuses_symlink_and_replaced_output(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); canary = root/'private-canary';canary.write_bytes(b'fictional private bytes');canary.chmod(0o600)
+            script = ("import fs from 'node:fs';import path from 'node:path';"
+                "const must=(value,label)=>{if(!value)throw new Error(label)};"
+                + 'const ADMIN='+json.dumps(str(root/'admin'))+',CAMPAIGN='+json.dumps(str(root/'campaign'))+';\n'
+                + v3.JS_OWNED_IO.decode()
+                + '\nconst canary='+json.dumps(str(canary))+';\n'
+                + "let refused=0;function deny(fn){try{fn();}catch{refused++;return;}throw new Error('control admitted');}"
+                "checkedNewDir(ADMIN,{mode:0o700});checkedNewDir(CAMPAIGN,{mode:0o700});"
+                "durable(ADMIN+'/normal.json',{complete:true});deny(()=>durable(ADMIN+'/normal.json',{complete:false}));"
+                "durable(CAMPAIGN+'/progress.json',{stage:1});durable(CAMPAIGN+'/progress.json',{stage:2});"
+                "must(JSON.parse(privateRead(CAMPAIGN+'/progress.json')).stage===2,'own repeated progress');"
+                "const progressFD=ownedOutputs.get(CAMPAIGN+'/progress.json'),priorSize=fs.fstatSync(progressFD).size;"
+                "fs.unlinkSync(CAMPAIGN+'/progress.json');fs.symlinkSync(canary,CAMPAIGN+'/progress.json');"
+                "deny(()=>durable(CAMPAIGN+'/progress.json',{stage:3}));must(fs.fstatSync(progressFD).size===priorSize,'no truncate before path check');"
+                "const link=ADMIN+'/parent-link';fs.symlinkSync(path.dirname(canary),link);deny(()=>privateRead(link+'/private-canary'));"
+                "const originalRead=fs.readFileSync;fs.readFileSync=()=>{throw new Error('private payload read');};"
+                "deny(()=>reviewedRead(canary));fs.readFileSync=originalRead;"
+                "fs.symlinkSync(canary,ADMIN+'/new-output');deny(()=>checkedNewRaw(ADMIN+'/new-output',Buffer.from('changed'),{mode:0o600,flag:'wx'}));"
+                "deny(()=>checkedNewDir(ADMIN+'/unknown-child',{mode:0o700}));"
+                "must(refused===6,'all fixed controls refused');console.log(JSON.stringify({refused,own_progress_passed:true}));")
+            result = subprocess.run(['/usr/bin/node','--input-type=module','-'],input=script.encode(),capture_output=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr.decode())
+            self.assertEqual(json.loads(result.stdout)['refused'],6)
+            self.assertEqual(canary.read_bytes(),b'fictional private bytes')
+            self.assertEqual(canary.stat().st_mode&0o777,0o600)
+
+    def financial(self):
+        message = {'model': v3.MODEL, 'id': 'msg_Fictional', 'stop_reason': 'end_turn',
+                   'usage': {'input_tokens': 100, 'output_tokens': 50, 'cache_read_input_tokens': 10,
+                             'cache_creation_input_tokens': 4}}
+        cost = Decimal('.000712')
+        record = {'provider': 'anthropic:' + v3.MODEL, 'provider_request_id': 'req_Fictional',
+                  'provider_resource_id': message['id'], 'actual_cost': cost, 'simulated': False,
+                  'units': {'input_tokens': 100, 'output_tokens': 50, 'cached_input_tokens': 10, 'cache_creation_tokens': 4},
+                  'rates': {'input_per_million': '2', 'output_per_million': '10', 'cached_per_million': '.20',
+                            'discount_rate': '0', 'list_cost_usd': str(cost)}}
+        usage = dict(record, charged_cost=cost * Decimal('1.5'))
+        metadata = {key: record[key] for key in ('provider_request_id', 'provider_resource_id')}
+        return message, metadata, record, usage, -usage['charged_cost'], 0
+
+    def test_real_financial_helper_positive_and_substantive_faults(self):
+        args = self.financial(); self.assertEqual(self.verifier.check_generation_financial(*args), Decimal('.000712'))
+        for mutate in (lambda a: a[0].update(model='claude-sonnet-4-6'),
+                       lambda a: a[0].update(stop_reason='max_tokens'), lambda a: a[0]['usage'].update(output_tokens=6001),
+                       lambda a: a[2].update(provider_resource_id='msg_Other'), lambda a: a[3].update(charged_cost=Decimal('99')),
+                       lambda a: a.__setitem__(4, Decimal('0')), lambda a: a.__setitem__(5, 1)):
+            bad = list(copy.deepcopy(args)); mutate(bad)
+            with self.subTest(fault=mutate), self.assertRaises(RuntimeError): self.verifier.check_generation_financial(*bad)
+
+    def generation_packet(self):
+        message, metadata, receipt, usage, ledger, holds = self.financial()
+        values = {'History': 'Complete fictional fact.', 'Plan': 'Follow-up documented.'}
+        original = docx({key: '' for key in values}); exported = docx(values)
+        fields = [{'key': 'cell_' + str(index), 'label': label} for index, label in enumerate(values)]
+        notes = '\n'.join(label + ': ' + value for label, value in values.items())
+        selected = [{'key': field['key'], 'quotes': [values[field['label']]], 'conflict': False} for field in fields]
+        message['content'] = [{'type': 'text', 'text': json.dumps({'fields': selected})}]
+        raw = v3.encode({'provider_output': message})
+        config = {'provider': 'anthropic', 'model': v3.MODEL, 'mode': 'live', 'pricing_version': v3.PRICING,
+                  'input_rate': '2', 'output_rate': '10', 'cached_rate': '0.20',
+                  'voice_rate_minute': '0.0043', 'discount_rate': '0'}
+        expected = {'name': 'custom-word-typed', 'job_id': 'job', 'encounter': 'encounter', 'actor': 'doctor',
+                    'department_id': 'department', 'patient_id': 'patient', 'mapping_id': 'mapping',
+                    'template_id': 'template', 'sha256': v3.sha(original), 'notes_sha256': v3.sha(notes.encode()),
+                    'notes': notes, 'fields': fields, 'expected': values, 'served_revision': SERVED}
+        metadata.update(form_sha256=expected['sha256'], template_version_id='mapping', template_id='template',
+                        department_id='department', patient_id='patient', mapping_version=1,
+                        export_sha256=v3.sha(exported), fields=fields, id='job', encounter_id='encounter',
+                        user_id='doctor', config=copy.deepcopy(config), result_sha256=v3.sha(raw))
+        receipt['job_id'] = usage['job_id'] = 'job'
+        answers = {field['key']: {'text': values[field['label']], 'status': 'supported',
+                   'reviewed': True, 'reviewed_by': 'doctor'} for field in fields}
+        packet = {'job': {'kind': 'generation', 'state': 'succeeded', 'id': 'job', 'encounter_id': 'encounter',
+                         'user_id': 'doctor', 'config': config, 'result_sha256': v3.sha(raw)},
+                  'metadata': metadata, 'receipt': receipt, 'usage': usage, 'ledger': ledger, 'holds': holds,
+                  'content': {'notes': notes, 'answers': answers, 'status': 'finalized', 'finalized_by_id': 'doctor'},
+                  'signed_quote_configuration': copy.deepcopy(config), 'attempt_count': 1,
+                  'served_client_profile': v3.PROFILE, 'served_source_revision': SERVED, 'provider_raw': raw,
+                  'selections': selected, 'accepted_values': values, 'original_docx': original, 'exported_docx': exported,
+                  'normal_review_decisions_recorded': True, 'empty_finalize_refused': True, 'premature_export_refused': True}
+        return packet, expected
+
+    def test_complete_generation_admission_actual_schema_and_faults(self):
+        packet, expected = self.generation_packet()
+        proof = v3.generation_admission(self.verifier, packet, expected)
+        self.assertEqual(proof['returned_model'], v3.MODEL)
+        self.assertFalse(proof['on_wire_capture_available'])
+        for mutate in (lambda p: p['job']['config'].update(model='claude-sonnet-4-6'),
+                       lambda p: p['job']['config'].update(input_rate='3'),
+                       lambda p: p['content']['answers']['cell_0'].update(reviewed=False),
+                       lambda p: p['content']['answers']['cell_0'].update(reviewed_by='foreign'),
+                       lambda p: p['content'].update(notes='changed source'),
+                       lambda p: p['metadata'].update(patient_id='foreign'),
+                       lambda p: p['receipt'].update(job_id='foreign-job'),
+                       lambda p: p.__setitem__('attempt_count', 2),
+                       lambda p: p.__setitem__('premature_export_refused', False),
+                       lambda p: p.__setitem__('served_source_revision', OPS)):
+            bad = copy.deepcopy(packet); mutate(bad)
+            with self.subTest(fault=mutate), self.assertRaises(RuntimeError): v3.generation_admission(self.verifier, bad, expected)
+
+    def test_original_policy_is_exact_historical_git_contract_value(self):
+        raw = b'<!-- legacy-model-contract -->\n```json\n' + v3.encode({'continuation_contract': self.policy}) + b'\n```'
+        self.assertEqual(v3.original_policy_admission(self.common, self.policy, {'original_policy': self.policy}, raw), self.policy)
+        bad = copy.deepcopy(self.policy); bad['health_session']['expiry_seconds'] = 3600
+        with self.assertRaises(v3.Refusal): v3.original_policy_admission(self.common, bad, {'original_policy': bad}, raw)
+
+    def normal_admin_packet(self, audit_at='2026-10-07T12:00:10+00:00', last_login=None):
+        before = {'read_only': True, 'database': 'quillmd_fresh', 'actor': {'id': 'fictional-staff',
+            'session_version': 1, 'is_staff': True, 'is_active': True, 'last_login': '2026-10-07T11:00:00+00:00',
+            'verified_at': '2026-01-01T00:00:00+00:00'}, 'device': {'id': 1, 'user_id': 'fictional-staff',
+            'confirmed': True, 'step': 30, 't0': 0, 'digits': 6, 'tolerance': 1, 'drift': 0, 'last_t': 100,
+            'throttling_failure_count': 0, 'throttling_failure_timestamp': None,
+            'created_at': '2026-01-01T00:00:00+00:00', 'last_used_at': '2026-10-07T11:00:00+00:00'}, 'auth_audits': []}
+        original = {'core_user': [{key: str(value).encode() for key, value in before['actor'].items()
+                                  if key not in ('is_staff', 'is_active')}],
+                    'otp_totp_totpdevice': [{key: (b'\\N' if value is None else b't' if value is True else str(value).encode())
+                                           for key, value in before['device'].items()}]}
+        original['core_user'][0].update(is_staff=b't', is_active=b't')
+        cookies = [{'name': name, 'secure': True, 'httpOnly': True, 'sameSite': site,
+                    'domain': 'app.quillmd.com', 'path': '/', 'value': 'fictional-' + name}
+                   for name, site in [('__Host-quillmd_preview', 'Lax'), ('quillmd_doctor_session', 'Strict'), ('quillmd_doctor_csrf', 'Strict')]]
+        session = v3.encode({'cookies': cookies}); after = copy.deepcopy(before)
+        after['actor']['last_login'] = audit_at if last_login is None else last_login
+        after['device'].update(last_t=101, last_used_at='2026-10-07T12:00:10+00:00')
+        audit = {'actor_id': 'fictional-staff', 'action': 'auth.login', 'created_at': audit_at}
+        after['auth_audits'] = [audit]; raws = [v3.encode(value) for value in (before, before, after)]
+        admin = {'format': 1, 'complete': True, 'availability_first': True, 'operations_revision': OPS,
+            'served_revision': SERVED, 'release': SERVED, 'origin': v3.ORIGIN, 'normal_mfa_login': True,
+            'auth_reset': False, 'csrf403_no_OTP_noauththrottle': True, 'availability_receipt_sha256': '4' * 64,
+            'session_cookie_name': 'quillmd_doctor_session', 'session_file': str(v3.ADMIN / 'browser-session.json'),
+            'session_sha256': v3.sha(session), 'cookie_contract': {'installed_ingress_identity_verified': True,
+                'HTTPS_ingress_CSRF_httpOnly': True, 'source_sha256': {'rebuild/deploy/email-private-https.conf':
+                    'cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a'}},
+            'authentication_metadata': dict(zip(('before_sha256', 'invalid_csrf_sha256', 'normal_mfa_sha256'), map(v3.sha, raws))),
+            'normal_login_audit': audit, 'actor_id': 'fictional-staff', 'started': '2026-10-07T12:00:00+00:00',
+            'finished_at': '2026-10-07T12:00:20+00:00', 'authenticated_at': '2026-10-07T12:00:10+00:00'}
+        return {'normal_raw': v3.encode(admin), 'session_raw': session,
+                **dict(zip(('before_raw', 'invalid_raw', 'after_raw'), raws))}, original
+
+    def test_auth_actual_packet_in_window_and_before_after_window_refusal(self):
+        packet, original = self.normal_admin_packet()
+        auth = v3.authenticated_admin(self.verifier, packet, original, OPS, SERVED, '4' * 64)
+        self.assertEqual(auth['admin']['normal_login_audit']['created_at'], '2026-10-07T12:00:10+00:00')
+        for date in ('1900-01-01T00:00:00+00:00', '2026-10-07T11:59:59.999999+00:00',
+                     '2026-10-07T12:00:20.000001+00:00', '2126-01-01T00:00:00+00:00'):
+            bad, original = self.normal_admin_packet(date)
+            with self.subTest(date=date), self.assertRaisesRegex(v3.Refusal, 'measured_normal_mfa_interval'):
+                v3.authenticated_admin(self.verifier, bad, original, OPS, SERVED, '4' * 64)
+
+    def test_last_login_must_be_inside_same_window_even_when_close_to_audit(self):
+        for audit_at, login_at in [('2026-10-07T12:00:00+00:00', '2026-10-07T11:59:59.5+00:00'),
+                                   ('2026-10-07T12:00:20+00:00', '2026-10-07T12:00:20.5+00:00')]:
+            packet, original = self.normal_admin_packet(audit_at, login_at)
+            with self.assertRaisesRegex(v3.Refusal, 'measured_normal_mfa_interval'):
+                v3.authenticated_admin(self.verifier, packet, original, OPS, SERVED, '4' * 64)
+
+    def no_auth_fixture(self):
+        from django.core import signing
+        secret = 'fictional historical key'; health_key = b'h' * 32
+        payload = {'kind': 'quillmd-preview-v1', 'flows': {'f' * 32: {'created': START.timestamp(), 'destination': '/health/'}},
+                   '_session_expiry': 1800}
+        with patch('django.core.signing.time.time', return_value=START.timestamp() + .25):
+            data = signing.dumps(payload, key=secret, salt='django.contrib.sessions.SessionStore').encode()
+        expiry = (START + timedelta(seconds=1800.5)).isoformat().encode()
+        old = {'django_session': {'columns': ['session_key', 'session_data', 'expire_date'], 'rows': []},
+               'core_encounter': {'columns': ['id', 'notes'], 'rows': [b'old\tunaltered original clinical fact\n']}}
+        current = copy.deepcopy(old); current['django_session']['rows'] = [health_key + b'\t' + data + b'\t' + expiry + b'\n']
+        keys = {'django_session': ['session_key'], 'core_encounter': ['id']}
+        policy = {'original_tables': {name: {'rows': len(table['rows']), 'sha256': v3.sha(b''.join(table['rows']))} for name, table in old.items()},
+                  'health_session': {'key_sha256': v3.sha(health_key), 'session_data_sha256': v3.sha(data),
+                    'expire_date': expiry.decode(), 'kind': 'quillmd-preview-v1', 'expiry_seconds': 1800,
+                    'no_grant_no_account_auth': True, 'destination': '/health/', 'created_at': START.isoformat(),
+                    'signed_at': START.isoformat()}}
+        return old, current, keys, policy, secret
+
+    def test_actual_noauth_copy_admission_historical_signature_and_original_bytes(self):
+        args = self.no_auth_fixture()
+        with patch.object(socket, 'create_connection', side_effect=AssertionError('socket')) as sock:
+            result = v3.authenticated_rows_admission(self.verifier, *args, 'fictional fingerprint', None, {})
+            self.assertIsNone(result['normal_mfa']); self.assertEqual(sock.call_count, 0)
+            self.assertEqual(result['health_session']['destination'], '/health/')
+        for fault in ('changed', 'deleted', 'extra-clinical', 'second-health', 'wrong-expiry'):
+            old, current, keys, policy, secret = self.no_auth_fixture()
+            if fault == 'changed': current['core_encounter']['rows'] = [b'old\tchanged clinical fact\n']
+            if fault == 'deleted': current['core_encounter']['rows'] = []
+            if fault == 'extra-clinical': current['core_encounter']['rows'].append(b'new\tunlisted encounter\n')
+            if fault == 'second-health': current['django_session']['rows'].append(b'i' * 32 + b'\tx\t' + START.isoformat().encode() + b'\n')
+            if fault == 'wrong-expiry':
+                parts = current['django_session']['rows'][0].split(b'\t'); parts[2] = b'2126-10-07T12:00:00+00:00\n'
+                current['django_session']['rows'][0] = b'\t'.join(parts)
+            with self.subTest(fault=fault), self.assertRaises(RuntimeError):
+                v3.authenticated_rows_admission(self.verifier, old, current, keys, policy, secret, 'fictional fingerprint', None, {})
+
+    def test_readonly_connection_real_statements_and_privilege_refusals(self):
+        class Result:
+            def __init__(self, value): self.value = value
+            def fetchone(self): return self.value
+        class Connection:
+            def __init__(self): self.statements = []; self.read_only = 'on'; self.superuser = False
+            def execute(self, statement):
+                self.statements.append(statement)
+                if 'current_user,current_database' in statement:
+                    return Result({'current_user': 'quillmd_backup', 'current_database': 'quillmd_fresh', 'read_only': self.read_only})
+                return Result({'rolsuper': self.superuser, 'rolcreatedb': False, 'rolcreaterole': False, 'rolreplication': False})
+        connection = Connection(); v3.readonly_connection_flags(connection)
+        self.assertEqual(connection.statements[0], 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+        self.assertIn("SET LOCAL statement_timeout='90s'", connection.statements)
+        for name, value in (('read_only', 'off'), ('superuser', True)):
+            bad = Connection(); setattr(bad, name, value)
+            with self.assertRaises(v3.Refusal): v3.readonly_connection_flags(bad)
+
+    def test_speech_duration_submission_and_cost_faults(self):
+        duration = Decimal('25.636'); cost = (duration * Decimal('.0043') / 60).quantize(Decimal('.0000000001'))
+        metadata = {'provider_request_id': '00000000-0000-4000-8000-000000000001', 'provider_resource_id': 'fictional-resource'}
+        record = dict(metadata, provider='deepgram:nova-3-medical', actual_cost=cost, simulated=False,
+            units={'duration_seconds': str(duration), 'submitted_seconds': str(duration), 'decoded_seconds': str(duration),
+                   'submission_sha256': '4' * 64}, rates={'usd_per_minute': '.0043', 'discount_rate': '0', 'list_cost_usd': str(cost)})
+        usage = dict(record, charged_cost=cost * Decimal('1.5'))
+        args = (metadata, record, usage, -usage['charged_cost'], 0)
+        self.assertEqual(self.verifier.check_speech_financial(*args), cost)
+        for field, value in [('submitted_seconds', '500'), ('duration_seconds', 'NaN'), ('submission_sha256', 'short')]:
+            bad = list(copy.deepcopy(args)); bad[1]['units'][field] = bad[2]['units'][field] = value
+            with self.assertRaises(RuntimeError):
+                self.verifier.check_speech_financial(*bad)
+
+    def test_original_questions_and_nonanswer_parts_unchanged(self):
+        values = {'History': 'Complete fictional fact.', 'Allergies': ''}
+        original = docx({key: '' for key in values}); exported = docx(values)
+        self.assertTrue(self.verifier.verify_export(original, exported, values)['complete_answer_values_match'])
+        with self.assertRaises(RuntimeError): self.verifier.verify_export(original, docx({'Wrong question': 'Complete fictional fact.', 'Allergies': ''}), values)
+        with self.assertRaises(RuntimeError): self.verifier.verify_export(original, docx({'History': 'Complete', 'Allergies': ''}), values)
+        parts = self.verifier.docx_parts(exported); parts['word/header1.xml'] = b'altered letterhead'
+        stream = io.BytesIO()
+        with zipfile.ZipFile(stream, 'w') as archive:
+            for name, raw in parts.items(): archive.writestr(name, raw)
+        with self.assertRaises(RuntimeError): self.verifier.verify_export(original, stream.getvalue(), values)
+
+    def test_full_quotes_bare_or_labelled_and_missing_hold(self):
+        case = {'notes': 'History: Complete fictional fact.\nAllergies: No known drug allergies.',
+                'fields': [{'key': 'cell_0', 'label': 'History'}, {'key': 'cell_1', 'label': 'Allergies'}],
+                'expected': {'History': 'Complete fictional fact.', 'Allergies': 'No known drug allergies.'}}
+        bare = [{'key': field['key'], 'quotes': [case['expected'][field['label']]], 'conflict': False} for field in case['fields']]
+        full = copy.deepcopy(bare)
+        for row, field in zip(full, case['fields']): row['quotes'] = [field['label'] + ': ' + case['expected'][field['label']]]
+        for selected in (bare, full): self.verifier.validate_first_quotes(case, selected)
+        shortened = copy.deepcopy(bare); shortened[0]['quotes'] = ['fictional fact']
+        with self.assertRaises(RuntimeError): self.verifier.validate_first_quotes(case, shortened)
+        missing = copy.deepcopy(case); missing['notes'] = case['notes'].splitlines()[0]; missing['expected']['Allergies'] = ''
+        selections = copy.deepcopy(bare); selections[1]['quotes'] = []
+        self.verifier.validate_first_quotes(missing, selections)
+        with self.assertRaises(RuntimeError): self.verifier.validate_first_quotes(missing, bare)
+
+    def test_source_auth_route_adapter_no_socket_even_auth_branch(self):
+        import types
+        # Actual qualified function reaches its auth branch with a valid COPY
+        # user row; a missing table later refuses. No substituted fake function.
+        old = {'core_user': {'columns': ['id', 'email'], 'rows': [b'actor\tfictional@example.invalid\n']}}
+        policy = {'original_tables': {'core_user': {'rows': 1, 'sha256': v3.sha(old['core_user']['rows'][0])}}}
+        auth = {'admin': {'actor_id': 'actor', 'normal_login_audit': {'created_at': START.isoformat()}},
+                'interval': (START, START + timedelta(seconds=1))}
+        with patch.object(socket, 'create_connection', side_effect=AssertionError('network')) as sock:
+            with self.assertRaisesRegex(RuntimeError, 'Exactly one diagnosed health'):
+                v3.authenticated_rows_admission(self.verifier, old, copy.deepcopy(old), {'core_user': ['id']}, policy,
+                                               'fictional secret', 'fictional fingerprint', auth, {}, '192.0.2.10')
+            self.assertEqual(sock.call_count, 0)
+            with self.assertRaises(v3.Refusal):
+                v3.authenticated_rows_admission(self.verifier, old, copy.deepcopy(old), {'core_user': ['id']}, policy,
+                                               'fictional secret', 'fictional fingerprint', auth, {}, 'invalid-ip')
+            self.assertEqual(sock.call_count, 0)
+
+    def test_final_join_refuses_missing_case_before_any_collection(self):
+        with patch.object(v3, 'generation_admission', side_effect=AssertionError('should not reach cases')):
+            with self.assertRaises(v3.Refusal): v3.final_admission(self.verifier, {'generation': {}}, {}, {}, OPS, SERVED)
+
+    def test_original_session_renewal_century_and_out_of_block_refuse(self):
+        from django.core import signing
+        secret = 'fictional secret'; begin = datetime.now(timezone.utc) - timedelta(seconds=1)
+        payload = {'_auth_user_id': 'fictional', 'otp_device_id': 'otp_totp.totpdevice/1'}
+        signed = signing.dumps(payload, key=secret, salt='django.contrib.sessions.SessionStore', compress=True)
+        end = datetime.now(timezone.utc) + timedelta(seconds=1)
+        row = {'session_data': signed.encode(), 'expire_date': (begin + timedelta(seconds=1800.5)).isoformat().encode()}
+        decoded = self.verifier.normal_session(row['session_data'], secret)
+        # Use an actual timestamp from this fictional signed value; the measured
+        # interval admits normal precision without a scheduler-delay assumption.
+        saved = datetime.now(timezone.utc); row['expire_date'] = (saved + timedelta(seconds=1800)).isoformat().encode()
+        self.verifier.validate_admin_renewal(row, decoded, (begin, end))
+        for seconds in (100 * 365 * 86400, 1790, 1810, -1):
+            bad = dict(row, expire_date=(saved + timedelta(seconds=seconds)).isoformat().encode())
+            with self.assertRaises(RuntimeError): self.verifier.validate_admin_renewal(bad, decoded, (begin, end))
+
+
+class ExposureAndFilesTests(unittest.TestCase):
+    def attempts(self):
+        return [{'job_id': str(index), 'kind': 'transcription' if index == 2 else 'generation',
+                 'send_sequence': index + 1, 'retries': 0, 'passed': True,
+                 'actual_cost': '.01', 'quote_maximum': '.20' if index == 2 else '.10'} for index in range(6)]
+    def test_exact_six_attempts_and_every_unknown_stops(self):
+        self.assertEqual(v3.exposure_admission(self.attempts(), complete=True)['generations'], 5)
+        for key, value in [('passed', False), ('actual_cost', None), ('actual_cost', 'NaN'), ('retries', 1),
+                           ('quote_maximum', '.11'), ('quote_maximum', '-1'), ('quote_maximum', '.001'),
+                           ('quote_maximum', 'NaN'), ('actual_cost', '.11'), ('send_sequence', 3)]:
+            rows = self.attempts(); rows[0][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
+        rows = self.attempts(); rows[-1]['job_id'] = rows[0]['job_id']
+        with self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
+        with self.assertRaises(v3.Refusal): v3.exposure_admission(self.attempts()[:-1], complete=True)
+    def test_no_current_state_baseline_replacement_and_foreign_file_refuse(self):
+        before = {'files': {'old': {'sha256': 'a'}}, 'mail': {}, 'static': {'x': 'old'}, 'configuration': {'cfg': 'old'},
+                  'database': {'catalog': {'columns': 'original'}, 'invariants': {'held': 0}}}
+        current = copy.deepcopy(before); current['files']['new'] = {'sha256': 'b'}
+        result = v3.file_catalog_admission(before, current, before['database']['catalog'], {'new': 'b'}, {'held': 0})
+        self.assertTrue(result['all_old_file_metadata_bytes_preserved'])
+        for label in ('configuration', 'static', 'mail', 'files'):
+            bad = copy.deepcopy(current); bad[label]['unexpected'] = {'sha256': 'foreign'}
+            with self.subTest(label=label), self.assertRaises(v3.Refusal):
+                v3.file_catalog_admission(before, bad, before['database']['catalog'], {'new': 'b'}, {'held': 0})
+        with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
+
+
+def local_qualification_suite():
+    """Manual host suite adds the real pinned closure to portable controls."""
+    portable = unittest.defaultTestLoader.loadTestsFromModule(sys.modules[__name__])
+    local = type('PinnedLocalQualificationTests', (FinancialAndExportTests, unittest.TestCase), {})
+    return unittest.TestSuite((portable, unittest.defaultTestLoader.loadTestsFromTestCase(local)))
+
+
+if __name__ == '__main__':
+    if sys.argv[1:] == ['--local-qualification']:
+        result = unittest.TextTestRunner(verbosity=2).run(local_qualification_suite())
+        raise SystemExit(0 if result.wasSuccessful() else 1)
+    unittest.main()
