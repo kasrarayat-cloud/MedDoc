@@ -506,6 +506,10 @@ class DescriptorSourceGateTests(unittest.TestCase):
             for name, raw in population.items():
                 path = tree / name
                 path.parent.mkdir(parents=True, exist_ok=True)
+                for parent in (path.parent, *path.parent.parents):
+                    parent.chmod(0o755)
+                    if parent == root:
+                        break
                 path.write_bytes(raw)
                 path.chmod(0o644)
         canary = root / 'private.env'
@@ -546,6 +550,27 @@ class DescriptorSourceGateTests(unittest.TestCase):
         stack.enter_context(patch.dict(os.environ, RULED_MUTATION_DECLARATION=act.DECL,
                                       RULED_MUTATION_DECL_COMMIT=declaration_commit))
         return stack, operator, files, installed, canary, contract
+
+    def test_fixture_public_parents_are_explicit_under_private_process_umask(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            previous = os.umask(0o077)
+            try:
+                stack, operator, files, installed, canary, contract = self.fixture(Path(temporary))
+            finally:
+                os.umask(previous)
+            for tree, population in ((operator, files), (Path(temporary), installed)):
+                for relative in population:
+                    path = tree / relative
+                    self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
+                    for parent in (path.parent, *path.parent.parents):
+                        self.assertEqual(stat.S_IMODE(parent.stat().st_mode), 0o755)
+                        if parent == Path(temporary):
+                            break
+            self.assertEqual(stat.S_IMODE(canary.stat().st_mode), 0o600)
+            with stack, patch.object(act.source_files, 'sealed_citation') as citation, \
+                 patch.object(act, 'protected', return_value=b'fictional frozen verifier'):
+                act.source_gate(TARGET, contract)
+                self.assertEqual(citation.call_count, 3)
 
     def test_all_operator_and_public_installed_bytes_are_admitted_before_sealed_citations_and_private_read(self):
         with tempfile.TemporaryDirectory() as temporary:
