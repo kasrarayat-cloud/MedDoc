@@ -281,6 +281,8 @@ class NormalOriginOperatorTests(unittest.TestCase):
         with patch.object(act,'private_receipts',side_effect=AssertionError('private input')):
             with self.assertRaisesRegex(act.Refusal,'source_protocol_unqualified'):
                 act.NativeHost({'active_protocol_qualified':True},TARGET,{},0)
+    @patch.object(act,'SOURCE',Path('/opt/meddoc-pro/.worktrees/fictional-normal443'))
+    @patch.multiple(act.os,getuid=lambda:1000,geteuid=lambda:1000,getgid=lambda:1000,getegid=lambda:1000)
     def test_source_gate_authenticates_each_dependency_and_exact_intermediate_operations_scope(self):
         policy={'private_accepted_revision':PRIOR,**{key:True for key in (
             'active_protocol_qualified','private_acceptance_protocol_qualified','ingress_publication_qualified')}}
@@ -317,6 +319,19 @@ class NormalOriginOperatorTests(unittest.TestCase):
         run()
         for bad,label in (('dependency','unchanged_operational_dependency'),('intermediate','intermediate_four_operational_paths')):
             with self.subTest(bad=bad),self.assertRaisesRegex(act.Refusal,label):run(bad)
+    def test_source_gate_requires_exact_native_identity_before_git_access(self):
+        with patch.object(act,'qualified',return_value=True), \
+             patch.object(act,'SOURCE',Path('/opt/meddoc-pro/.worktrees/fictional-normal443')), \
+             patch.multiple(act.os,getuid=lambda:1000,geteuid=lambda:1000,getgid=lambda:1000,getegid=lambda:1000), \
+             patch.object(act.old,'git',side_effect=AssertionError('Git access before identity admission')) as git:
+            for name in ('getuid','geteuid','getgid','getegid'):
+                with self.subTest(identity=name),patch.object(act.os,name,return_value=1001), \
+                     self.assertRaisesRegex(act.Refusal,'operations_identity'):
+                    act.source_gate(TARGET)
+            with patch.object(act,'SOURCE',Path('/home/runner/work/quillmd/quillmd')), \
+                 self.assertRaisesRegex(act.Refusal,'operations_identity'):
+                act.source_gate(TARGET)
+            git.assert_not_called()
     def test_qualified_source_requires_the_app_gate_and_exact_default_disabled_setting(self):
         preview=b'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED=True\n'
         setting=b"QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED','0')=='1'\n"
@@ -762,6 +777,7 @@ class GeneratedSingleFileHelperTests(unittest.TestCase):
             self.assertEqual(path.read_bytes(),ORIGINAL);self.assertEqual(len(commands),2)
 
 
+@patch.multiple(act.os,getuid=lambda:1000,geteuid=lambda:1000)
 class NormalControllerHolderTests(unittest.TestCase):
     def process_start(self,raw):return int(raw.rsplit(') ',1)[1].split()[19])
     def lock_population(self,raw,pid):
@@ -783,6 +799,10 @@ class NormalControllerHolderTests(unittest.TestCase):
                         read_bytes=lambda _:self.argv() if command is None else command)
             values.update(changes);return act.normal_controller_command(**values)
         witness=admit();self.assertEqual(witness['controller'],'normal443');self.assertEqual(witness['parent_pid'],pid)
+        for name in ('getuid','geteuid'):
+            with self.subTest(identity=name),patch.object(act.os,name,return_value=1001), \
+                 self.assertRaisesRegex(act.Refusal,'own_controller_interval'):
+                admit()
         for changes,label in (({'pid':pid+1},'own_controller_interval'),({'started':start+1},'own_process_reused'),
                               ({'acquired':now+20},'own_controller_interval'),({'deadline':float('nan')},'own_controller_interval')):
             with self.subTest(changes=changes),self.assertRaisesRegex(act.Refusal,label):admit(**changes)
@@ -797,7 +817,7 @@ class NormalControllerHolderTests(unittest.TestCase):
             host.inside=True;host.source=act.SOURCE;host.operations=TARGET;host.mode='--execute';host.parent_pid=os.getpid()
             host.parent_start=self.process_start(Path('/proc/self/stat').read_text());host.lock_rows=[]
             host.deadline=time.monotonic()+10;host.alignment={'hold':{'acquired_monotonic':time.monotonic()-.01}}
-            real_read=Path.read_bytes
+            real_read=Path.read_bytes;real_fstat=os.fstat
             try:
                 for name in names:
                     fd=os.open(root/name,os.O_RDWR|os.O_CREAT|os.O_EXCL,0o600);fds.append(fd)
@@ -805,8 +825,22 @@ class NormalControllerHolderTests(unittest.TestCase):
                     host.lock_rows.append({'path':str(root/name),'fd':fd,'device':info.st_dev,'inode':info.st_ino})
                 def observed(path):
                     return self.argv() if str(path)==f'/proc/{os.getpid()}/cmdline' else real_read(path)
-                with patch.object(act,'RUNTIME',root),patch.object(Path,'read_bytes',observed):
+                def lock_metadata(fd,uid=1000,gid=1000):
+                    info=real_fstat(fd)
+                    if fd not in fds:return info
+                    values=list(info);values[4]=uid;values[5]=gid
+                    return os.stat_result(values)
+                with patch.object(act,'RUNTIME',root),patch.object(Path,'read_bytes',observed), \
+                     patch.object(act.os,'fstat',side_effect=lock_metadata):
                     self.assertTrue(host.check_hold()['same_five_kernel_locks_verified'])
+                    directory=os.open(root,os.O_RDONLY|os.O_DIRECTORY)
+                    try:self.assertEqual(os.fstat(directory),real_fstat(directory))
+                    finally:os.close(directory)
+                    for owner in ({'uid':1001},{'gid':1001}):
+                        with self.subTest(owner=owner), \
+                             patch.object(act.os,'fstat',side_effect=lambda fd:lock_metadata(fd,**owner)), \
+                             self.assertRaisesRegex(act.Refusal,'kernel_five_locks'):
+                            host.check_hold()
                     fcntl.flock(fds[-1],fcntl.LOCK_UN)
                     with self.assertRaisesRegex(act.Refusal,'kernel_five_locks'):host.check_hold()
                     fcntl.flock(fds[-1],fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -1278,12 +1312,17 @@ class ServedVerificationControllerTests(unittest.TestCase):
         self.assertFalse(default['installed_state_accessed'])
         self.assertEqual((default['provider_calls'],default['authentication_submissions'],default['database_writes']),(0,0,0))
 
+    @patch.multiple(act.os,getuid=lambda:1000,geteuid=lambda:1000)
     def test_new_mode_uses_own_fixed_argv_witness_and_rejects_execute_substitution(self):
         witness=NormalControllerHolderTests();pid=os.getpid();started=witness.process_start(Path('/proc/self/stat').read_text())
         now=time.monotonic();options={'operations':TARGET,'source':act.SOURCE,'mode':'--verify-served',
             'pid':pid,'started':started,'acquired':now-1,'deadline':now+10,'parse_start':witness.process_start}
         result=act.normal_controller_command(**options,read_bytes=lambda _:witness.argv('--verify-served'))
         self.assertEqual(result['own_mode'],'--verify-served')
+        for name in ('getuid','geteuid'):
+            with self.subTest(identity=name),patch.object(act.os,name,return_value=1001), \
+                 self.assertRaisesRegex(act.Refusal,'own_controller_interval'):
+                act.normal_controller_command(**options,read_bytes=lambda _:witness.argv('--verify-served'))
         with self.assertRaisesRegex(act.Refusal,'own_fixed_command'):
             act.normal_controller_command(**options,read_bytes=lambda _:witness.argv('--execute'))
 
