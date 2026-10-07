@@ -597,6 +597,47 @@ class SourcePermissionRepairTests(unittest.TestCase):
                 finally:
                     os.close(fd)
 
+    def test_operator_source_paths_cannot_replace_native_repair_result_or_receipt_paths(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = Path(temporary)
+            operator = tree / '.worktrees/operator'
+            operator.mkdir(parents=True)
+            stack, manifest, _, _ = self.fixture(tree)
+            operator_paths = sorted(act.ALLOWED)
+            native_paths = sorted(row['path'] for row in manifest['candidates'])
+            self.assertNotEqual(native_paths, operator_paths)
+            canonical = b'fictional checked operator bytes'
+            def source_git(root, *args):
+                if args == ('rev-parse', 'HEAD'):
+                    return (TARGET if root == operator else act.INSTALLED).encode()
+                if args[0] in ('status', 'merge-base'):
+                    return b''
+                if args[0] == 'diff':
+                    return ('\n'.join(operator_paths) + '\n').encode()
+                if args[0] == 'branch':
+                    return b'main'
+                if args == ('rev-parse', 'origin/main'):
+                    return TARGET.encode()
+                if args[0] == 'ls-files':
+                    return b''.join((('100644 ' + 'a' * 40 + ' 0\t' + name + '\0').encode())
+                                    for name in ('scripts/check-citation.sh', 'scripts/lib/runs-api.sh'))
+                if args[0] == 'show':
+                    return canonical
+                raise AssertionError(args)
+            with stack:
+                with patch.object(act, 'SOURCE', operator), patch.object(act, 'git', side_effect=source_git), \
+                     patch.object(act, 'operator_bytes', return_value=canonical), patch.object(act, 'sealed_citation'):
+                    source = act.source_gate(TARGET)
+                readonly = act.repair(manifest, act.encode(manifest), source, execute=False)
+                self.assertNotIn('changed_paths', readonly)
+                self.assertEqual(readonly['operator_changed_paths'], operator_paths)
+                self.assertFalse(act.ATTEMPT.exists())
+                result = act.repair(manifest, act.encode(manifest), source, execute=True)
+                receipt = json.loads((act.OUTPUT / 'complete.json').read_bytes())
+                for value in (result, receipt):
+                    self.assertEqual(value['changed_paths'], native_paths)
+                    self.assertEqual(value['operator_changed_paths'], operator_paths)
+
 
 if __name__ == '__main__':
     unittest.main()

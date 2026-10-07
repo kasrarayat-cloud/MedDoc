@@ -38,6 +38,16 @@ size and attributes without reading or restoring them during rollback.
 Failed receipts explicitly leave preservation and external drift unadjudicated
 and label rollback as only the original admitted inode modes.
 
+Retain the original merged b44e75846f603d817153a959404ed8795fb70e74 read-only
+preflight receipt at
+rebuild/.runtime/owner-demo-20261006/recovery-20261007/repair-preflight-20261007T074920Z.json,
+SHA256 80f4449252f79f547c3955e1f71f7f3e3431110698bbbad00edcd34af9e225f9.
+It performed zero native permission changes. Its six changed_paths described
+operator source changes; inspection identified that metadata would overwrite
+the completion's 254 native candidate paths. The corrected receipt keeps
+operator_changed_paths separate from native changed_paths. Read-only preflight
+reports operator paths and candidate count, without native changed_paths.
+
 Only those exact file modes may become their Git-index canonical 0644 or 0755.
 Only the pinned fonts parent may become 0755. Existing parent modes, including
 0775, remain intact. The complete pinned source inventory must pass before the
@@ -113,7 +123,7 @@ Use --preflight for the same read-only gates. No operation has been executed by
 the implementation agent. Storage uses the existing task-specific owner
 exception and 20 GiB reserve; this repair adds only bounded metadata receipts.
 
-Finished qualification, before any installed permission action:
+First qualification, superseded by the later receipt-accounting correction:
 
 - Repair module SHA256:
   0aad1f7c7228afd1f512da48266cbe00e37db0428aacc3c46983ee0026d7379e.
@@ -160,3 +170,39 @@ report: rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permission
 SHA256 1671a529b0eb09c68c12eebce78c8d9e37e311a744f642e8814b690ccf92ac83.
 Reviewed test module SHA256:
 b2f2347a11d00416b75c69ef0e9207194533c4741d33ae8da72bdaa279016497.
+
+Current requalification after the receipt-accounting correction, still before
+any installed permission action:
+
+- Module SHA256:
+  56fdb2981ea74c4eb7195070a9fde6b3c2946fcc39b6607611bd0a928b35d406.
+  Its only production change is the operator source-path metadata key rename;
+  descriptor admission, mode changes, rollback and citation predicates are intact.
+- Test module SHA256:
+  c54249a6c04e1ee9bead1a5daf69b3b974df48bb1104916ba60ab718c2c81182.
+  Exact discovery passes 32 repair tests; combined focused checks pass 49 tests.
+  The new source-gate-to-repair test checks both returned and persisted path
+  scopes and fails when the original collision is reintroduced in memory.
+- Independent accounting and race refutation passes the corrected result and
+  receipt scopes plus all five prior race controls. Protected report:
+  rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permissions-independent-accounting-races-v1.json;
+  SHA256 f5cd18d27074430c2407f165cc5701fe09b8d2d77a23858d189ca6dcc5095df3.
+- Independent source comparison confirms the entire module equals the prior
+  privacy/provenance-qualified source after exactly one result-key rename, with
+  no changed descriptor or sealed citation semantics. Separate scratch receipt
+  checks preserve native and operator paths and private canary modes. Report:
+  rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permissions-receipt-key-independent-review-20261007T075748Z.json;
+  SHA256 82742640c21f59783fee78af8ae1c66b39baee0d7714f8faacadb4adbc5e84df.
+- Qualification still requires complete CI on the corrected commit and its
+  eventual exact merge. No installed permission action or repair attempt marker
+  has occurred; the earlier native read-only receipt remains immutable.
+
+The native administrator export subsequently arrived, SHA256
+c151013cc5e19ee8220fe102695715313e3b37a5545d5e65d0675962a437300d.
+Its qualification booleans are intentionally false; collection success does not
+adjudicate authorization. It establishes a coherent installation and process,
+and the sole unit-byte delta is the literal WorkingDirectory release path.
+Its guard-record roots cover batches 7/9/12, while the actual current deployment
+has a specific uncollected batch-15 guard directory. That is an evidence coverage
+gap, not proof of an unauthorized or incompatible service change. No co-tenant
+action or approval qualification is part of this permission repair.
