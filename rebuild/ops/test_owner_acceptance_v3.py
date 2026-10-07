@@ -464,7 +464,8 @@ class NativeAdapterTests(unittest.TestCase):
             path.chmod(0o600)
         host = v3.InstalledHost.__new__(v3.InstalledHost)
         host.inside = False; host.lock_rows = []; host.publication_alignment = None
-        host.operations = OPS; host.source = Path('/fictional/source'); host.backup = object()
+        host.operations = OPS; host.served = SERVED; host.source = Path('/fictional/source'); host.backup = object()
+        host.own_hold_mode = '--execute'
         clock = [100.0]; host.clock = lambda: clock[0]
         host.read_source = lambda path: b'fictional reviewed declaration'
         selected = {'row': {'key': 'backup', 'computed_at': '2026-10-07T16:00:00+00:00'},
@@ -597,12 +598,43 @@ class NativeAdapterTests(unittest.TestCase):
         def fd_stat(path): return infos[int(Path(path).name)]
         @contextmanager
         def attached(path): yield next(row['fd'] for row in rows if row['path'] == str(path))
+        original_observer = v3.parent_phase_admission
         def admit(value=context, **kw):
-            return v3.parent_phase_admission(value, 'browser', OPS, SERVED, monotonic=lambda: 900,
+            return original_observer(value, 'browser', OPS, SERVED, monotonic=lambda: 900,
                 stat_fd=fd_stat, read_text=read_text, read_bytes=lambda p: b'\0'.join(s.encode() for s in command)+b'\0',
                 source=FakeHost.source, **kw)
         with patch.object(v3, 'nofollow_file', attached), patch.object(v3.os, 'fstat', side_effect=lambda fd: infos[fd]):
             self.assertIs(admit(), context)
+            own_context={**context,'parent_pid':os.getpid()}
+            own_locks=lock_text.replace(str(pid),str(os.getpid()))
+            def own_admit(mode,actual_mode):
+                actual=list(command);actual[3]=actual_mode
+                return original_observer(own_context,'browser',OPS,SERVED,monotonic=lambda:900,
+                    stat_fd=fd_stat,read_text=lambda path:own_locks if str(path)=='/proc/locks' else read_text(path),
+                    read_bytes=lambda path:b'\0'.join(value.encode() for value in actual)+b'\0',
+                    source=FakeHost.source,self_mode=mode)
+            for mode in ('--execute','--preflight','--admit-before-auth'):
+                self.assertIs(own_admit(mode,mode),own_context)
+                with self.assertRaisesRegex(v3.Refusal,'parent_fixed_command'):own_admit(mode,'--verify')
+            with self.assertRaisesRegex(v3.Refusal,'exact_own_holder_mode'):own_admit('--verify','--verify')
+            with self.assertRaisesRegex(v3.Refusal,'exact_own_holder_mode'):
+                original_observer(context,'browser',OPS,SERVED,monotonic=lambda:900,self_mode='--preflight')
+            host=v3.InstalledHost.__new__(v3.InstalledHost);host.inside=True
+            host.parent_lock_context=context;host.operations=OPS;host.served=SERVED;host.source=FakeHost.source
+            host.clock=lambda:900.0
+            host.publication_alignment={'hold':{'acquired_monotonic':500.0,'deadline_monotonic':1100.0,
+                'parent_pid':pid,'parent_start_ticks':42,'locks':copy.deepcopy(rows),'own_mode':'--execute'}}
+            with patch.object(v3,'parent_phase_admission',side_effect=lambda value,*args,**kw:admit(value)):
+                host.check_publication_hold()
+                hold=host.publication_alignment['hold']
+                for key,value in [('parent_pid',pid+1),('parent_start_ticks',43),('acquired_monotonic',901.0),
+                                  ('deadline_monotonic',800.0),('locks',rows[:-1])]:
+                    before=hold[key];hold[key]=value
+                    with self.subTest(hold=key),self.assertRaises(v3.Refusal):host.check_publication_hold()
+                    hold[key]=before
+                context['deadline_monotonic']=1101.0
+                with self.assertRaisesRegex(v3.Refusal,'hash_bound_parent_hold_identity'):host.check_publication_hold()
+                context['deadline_monotonic']=1000
             for key, value in (('parent_start_ticks', 43), ('deadline_monotonic', 800), ('phase', 'verify'),
                                ('operations_revision', SERVED), ('served_revision', OPS), ('parent_uid', 1001)):
                 with self.subTest(key=key), self.assertRaises(v3.Refusal): admit({**context,key:value})
@@ -714,15 +746,213 @@ class FinancialAndExportTests:
     def test_actual_frozen_verifier_adapter_retains_gate_and_full_verifier(self):
         raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
         authority = v3.derive_authority(contract(),self.common,OPS,SERVED,{})
-        adapted = v3.verifier_adapter(raw,self.common,authority,self.verifier)
+        publisher = lambda *args: None
+        adapted = v3.verifier_adapter(raw,self.common,authority,self.verifier,publisher_admission=publisher)
         with patch.object(v3,'protected',side_effect=AssertionError('installed read')):
             with self.assertRaisesRegex(v3.Refusal,'source_protocol_unqualified'):
                 adapted.verify(types.SimpleNamespace(progress=str(v3.CAMPAIGN/'progress.json'),output=str(v3.REPORT)))
         self.assertEqual(adapted.load_v3_authority(OPS,SERVED),authority)
-        self.assertIs(adapted.publisher_source_admission,self.verifier.publisher_source_admission)
+        self.assertIs(adapted.publisher_source_admission,publisher)
         with self.assertRaises(v3.Refusal):adapted.load_v3_authority(SERVED,OPS)
         with self.assertRaisesRegex(v3.Refusal,'dependency_hash'):
-            v3.verifier_adapter(raw+b'\n# foreign change',self.common,authority,self.verifier)
+            v3.verifier_adapter(raw+b'\n# foreign change',self.common,authority,self.verifier,publisher_admission=publisher)
+
+    def publication_proof_fixture(self, workspace, deferred=False):
+        from ops import publisher_verification
+        root = workspace/'source'
+        for relative in self.verifier.PUBLISHER_SOURCE_GRAPH:
+            path = root/relative; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes((v3.SOURCE/relative).read_bytes())
+        pins = {str(root/name):v3.sha((root/name).read_bytes()) for name in self.verifier.PUBLISHER_SOURCE_GRAPH}
+        inputs = [workspace/name for name in ('monitor.json','offsite.json')]
+        for path in inputs: path.write_bytes(b'fictional retained operational input')
+        backup = types.SimpleNamespace(__file__=str(root/'rebuild/ops/backup_restore.py'),
+                                       read_private=lambda path:Path(path).read_bytes())
+        offsite = types.SimpleNamespace(__file__=str(root/'rebuild/ops/offsite_backup.py'),
+                                        read_private=lambda path:Path(path).read_bytes())
+        status = {'condition':'fictional_backup_warning','severity':'failure','healthy':False,
+            'action':'Fictional source action.','clinical_content_included':False,'monitor_age_seconds':5,
+            'local_capture':{'age_seconds':100,'last_success_at':(START-timedelta(seconds=100)).isoformat()},'offsite':{}}
+        def read_state():
+            backup.read_private(inputs[0]); return {'last_check_at':(START-timedelta(seconds=5)).isoformat()}
+        def source_status(*,at):
+            backup.read_private(inputs[0]); offsite.read_private(inputs[1]); value = copy.deepcopy(status)
+            value['monitor_age_seconds'] = int((at-START+timedelta(seconds=5)).total_seconds())
+            value['local_capture']['age_seconds'] = int((at-START+timedelta(seconds=100)).total_seconds())
+            return value,1
+        alerts = types.SimpleNamespace(__file__=str(root/'rebuild/ops/backup_alerts.py'),
+                                      read_state=read_state,status=source_status)
+        row = {'id':'01111111-2222-4333-8444-555555555555','created_at':(START-timedelta(days=1)).isoformat(),
+            'key':'backup','condition':status['condition'],'severity':'failure','healthy':False,
+            'action':status['action'],'payload':{name:copy.deepcopy(status[name]) for name in
+                ('clinical_content_included','monitor_age_seconds','local_capture','offsite')},
+            'computed_at':'2026-10-07T12:00:00.123450+00:00','published_at':'2026-10-07T12:00:00.234560+00:00',
+            'expected_interval_seconds':300}
+        original = {**row,'computed_at':(START-timedelta(seconds=300)).isoformat(),
+                    'published_at':(START-timedelta(seconds=299)).isoformat()}
+        unit = {'InvocationID':'a'*32,'Result':'exit-code','ExecMainStatus':'1','MainPID':'0',
+            'ActiveState':'failed','SubState':'failed','LoadState':'loaded',
+            'FragmentPath':'/etc/systemd/system/'+v3.PUBLISHER,'DropInPaths':'','NeedDaemonReload':'no',
+            'ExecMainStartTimestamp':START.strftime('%a %Y-%m-%d %H:%M:%S UTC'),
+            'ExecMainExitTimestamp':(START+timedelta(seconds=1)).strftime('%a %Y-%m-%d %H:%M:%S UTC')}
+        journal = [('a'*32,'Published backup status: fictional_backup_warning (failure).')]
+        selected = {'row':row,'unit':unit,'journal':journal,'coherent_unit':True,
+            'timer':{'ActiveState':'active','SubState':'waiting','LoadState':'loaded','UnitFileState':'enabled',
+                     'FragmentPath':'/etc/systemd/system/'+v3.PUBLISHER_TIMER,'DropInPaths':'','NeedDaemonReload':'no'}}
+        current = copy.deepcopy(selected)
+        current.update(unit_sources={'pinned':'fictional'},selected_journal=copy.deepcopy(journal),
+            unit_monotonic={'ExecMainStartTimestampMonotonic':'101000000','ExecMainExitTimestampMonotonic':'102000000'})
+        current['row']['computed_at'] = '2026-10-07T12:00:00.12345+00:00'
+        if deferred:
+            current['unit'].update(InvocationID='b'*32,Result='success',ExecMainStatus='0',ActiveState='inactive',SubState='dead',
+                ExecMainStartTimestamp=(START+timedelta(seconds=300)).strftime('%a %Y-%m-%d %H:%M:%S UTC'),
+                ExecMainExitTimestamp=(START+timedelta(seconds=301)).strftime('%a %Y-%m-%d %H:%M:%S UTC'))
+            current['journal'] = [('b'*32,v3.DEFERRAL_STDOUT)]
+        host = v3.InstalledHost.__new__(v3.InstalledHost); host.clock = lambda:103.0
+        host.publication_alignment = {'selected':selected,'unit_sources':copy.deepcopy(current['unit_sources']),
+            'hold':{'acquired_monotonic':100.0,'deadline_monotonic':1000.0,'parent_pid':12345,
+                    'parent_start_ticks':42,'locks':[{'path':name} for name in (*v3.LOCKS,v3.PUBLICATION_LOCK)]}}
+        host.check_publication_hold = lambda:None
+        host.observe_held_publication = lambda:copy.deepcopy(current)
+        host.availability_verifier = self.verifier
+        bridges = []; host.recovery = types.SimpleNamespace(publisher_observation_connection=lambda conn:bridges.append(conn) or conn)
+        args = (original,current['row'],{key:current['unit'][key] for key in v3.PUBLISHER_JUDGE_FIELDS},current['journal'])
+        def real_recheck():
+            return {'row':copy.deepcopy(current['row']),
+                    'unit':{key:current['unit'][key] for key in v3.PUBLISHER_JUDGE_FIELDS},'journal':copy.deepcopy(current['journal'])}
+        kwargs = {'alerts':alerts,'backup':backup,'offsite':offsite,'judge':publisher_verification.judge,
+            'publisher_path':root/'rebuild/core/management/commands/publish_operations_status.py',
+            'expected_source_pins':pins,'recheck':real_recheck}
+        return host,current,args,kwargs,bridges
+
+    def test_full_publisher_reproduction_keeps_UUID_and_three_timestamp_representations(self):
+        with tempfile.TemporaryDirectory() as temp:
+            host,current,args,kwargs,bridges = self.publication_proof_fixture(Path(temp))
+            unit = {key:current['unit'][key] for key in v3.PUBLISHER_JUDGE_FIELDS}
+            proof = self.verifier.adjudicate_publisher(args[0],args[1],unit,current['journal'],**kwargs)
+            self.assertEqual(proof['current_full_row']['id'],'01111111-2222-4333-8444-555555555555')
+            self.assertTrue(proof['all_eleven_columns_accounted_for'])
+            self.assertEqual(len(proof['consumed_private_inputs']),2)
+            self.assertFalse(proof['publication']['backup_healthy'])
+            for name,value in [('computed_at','2026-10-07T12:00:00.123451+00:00'),
+                               ('action','changed'),('id','02222222-2222-4333-8444-555555555555'),
+                               ('published_at','malformed'),('created_at','2026-10-06T12:00:00')]:
+                def changed_recheck(name=name,value=value):
+                    result = kwargs['recheck'](); result['row'][name] = value; return result
+                with self.subTest(name=name),self.assertRaises((AssertionError,v3.Refusal)):
+                    self.verifier.adjudicate_publisher(args[0],args[1],unit,current['journal'],
+                                                       **{**kwargs,'recheck':changed_recheck})
+
+    def test_central_wrapper_reproduces_full_previous_publication_and_actual_deferral(self):
+        for deferred in (False,True):
+            with self.subTest(deferred=deferred),tempfile.TemporaryDirectory() as temp:
+                host,current,args,kwargs,bridges = self.publication_proof_fixture(Path(temp),deferred)
+                with patch.object(v3,'captured_publisher_factory',return_value=(args,kwargs)):
+                    conn = object(); proof = host.publisher_admission(conn,{}, {})
+                self.assertEqual(bridges,[conn]);self.assertTrue(proof['all_eleven_columns_accounted_for'])
+                self.assertEqual(len(proof['consumed_private_inputs']),2)
+                self.assertEqual(proof['publication']['invocation'],'a'*32)
+                self.assertEqual(proof['latest_invocation_assessment']['latest_kind'],
+                    'completed_deferred_tick' if deferred else 'selected_genuine_publication')
+                self.assertEqual(proof['latest_invocation_assessment']['intermediate_invocation_exit_history'],'not_assessed')
+                self.assertFalse(proof['publication']['backup_healthy'])
+
+    def test_counterfeit_deferral_current_or_selected_journal_source_and_hold_drift_refuse(self):
+        changes = [('row',lambda h,c:c['row'].__setitem__('action','changed')),
+            ('uuid',lambda h,c:c['row'].__setitem__('id','02222222-2222-4333-8444-555555555555')),
+            ('selected_journal',lambda h,c:c['selected_journal'].clear()),
+            ('latest_journal',lambda h,c:c['journal'].append(('b'*32,'Traceback (most recent call last)'))),
+            ('counterfeit',lambda h,c:c.__setitem__('journal',[('c'*32,v3.DEFERRAL_STDOUT)])),
+            ('result',lambda h,c:c['unit'].__setitem__('Result','exit-code')),
+            ('source',lambda h,c:c['unit_sources'].__setitem__('changed',True)),
+            ('timer',lambda h,c:c['timer'].__setitem__('SubState','running')),
+            ('before_hold',lambda h,c:c['unit_monotonic'].__setitem__('ExecMainStartTimestampMonotonic','99000000')),
+            ('after_now',lambda h,c:c['unit_monotonic'].__setitem__('ExecMainExitTimestampMonotonic','104000000'))]
+        for label,change in changes:
+            with self.subTest(label=label),tempfile.TemporaryDirectory() as temp:
+                host,current,args,kwargs,_ = self.publication_proof_fixture(Path(temp),True);change(host,current)
+                with patch.object(v3,'captured_publisher_factory',return_value=(args,kwargs)),self.assertRaises(v3.Refusal):
+                    host.publisher_admission(object(),{}, {})
+
+    def test_final_actual_callback_drift_refuses_after_full_source_reproduction(self):
+        with tempfile.TemporaryDirectory() as temp:
+            host,current,args,kwargs,_ = self.publication_proof_fixture(Path(temp),True)
+            original = kwargs['recheck']
+            def changed():
+                value = original();value['unit']['InvocationID']='c'*32;return value
+            with patch.object(v3,'captured_publisher_factory',return_value=(args,{**kwargs,'recheck':changed})),\
+                 self.assertRaisesRegex(v3.Refusal,'actual_final_observer_binding'):
+                host.publisher_admission(object(),{}, {})
+
+    def test_full_selected_source_graph_drift_still_refuses_under_a_real_deferral(self):
+        with tempfile.TemporaryDirectory() as temp:
+            host,current,args,kwargs,_=self.publication_proof_fixture(Path(temp),True)
+            wrong=dict(kwargs['expected_source_pins']);wrong[next(iter(wrong))]='0'*64
+            with patch.object(v3,'captured_publisher_factory',return_value=(args,{**kwargs,'expected_source_pins':wrong})),\
+                 self.assertRaisesRegex(AssertionError,'publisher_immutable_source'):
+                host.publisher_admission(object(),{}, {})
+
+    def test_actual_native_dependency_path_sets_unmangled_authenticated_frozen_source(self):
+        host = v3.InstalledHost.__new__(v3.InstalledHost)
+        host.source = v3.SOURCE; host.operations = OPS
+        host.read_source = lambda path:Path(path).read_bytes()
+        host.git = lambda tree,*args:Path(tree/args[1].split(':',1)[1]).read_bytes()
+        host.authenticate_dependencies()
+        self.assertEqual(getattr(host.availability_verifier,'__authenticated_source'),
+                         v3.protected(v3.BASE/'verify_installed_acceptance_v2.py'))
+        fixture = self.no_auth_fixture()
+        with patch.object(socket,'create_connection',side_effect=AssertionError('socket')):
+            result = v3.authenticated_rows_admission(host.availability_verifier,*fixture,'fictional fingerprint',None,{})
+        self.assertIsNone(result['normal_mfa'])
+        mangled = types.SimpleNamespace(_InstalledHost__authenticated_source=getattr(host.availability_verifier,'__authenticated_source'))
+        with self.assertRaisesRegex(v3.Refusal,'authenticated_copy_source_required'):
+            v3.authenticated_rows_admission(mangled,*fixture,'fictional fingerprint',None,{})
+
+    def test_every_installed_admission_caller_binds_the_same_checked_publisher_wrapper(self):
+        host = v3.InstalledHost.__new__(v3.InstalledHost);host.inside=True
+        host.contract=contract();host.availability_raw=b'fictional availability';host.availability_verifier=self.verifier
+        host.admission_raws={};host.old=types.SimpleNamespace(service_boundary=lambda *args,**kw:
+            {unit:{'MainPID':str(os.getpid())} for unit in v3.UNITS})
+        host.backup=object();host.storage=object();host.native=types.SimpleNamespace(worker_configuration=lambda *args:{})
+        host.bind=lambda *args:None;host.command=lambda *args:b'InvocationID=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nNeedDaemonReload=no\n'
+        host.clock=lambda:100.0;host.source=v3.SOURCE;host.operations=OPS;host.served=SERVED
+        host.blobs={'verify_installed_acceptance_v3.py':v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')}
+        host.common=self.common;host.authority=lambda:v3.derive_authority(contract(),self.common,OPS,SERVED,{})
+        class Reached(RuntimeError):pass
+        def admission(*args,**kwargs):
+            self.assertEqual(kwargs['publisher_admission'],host.publisher_admission)
+            self.assertIs(kwargs['verifier_override'],host.availability_verifier)
+            raise Reached()
+        with patch.object(v3,'installed_database_admission',side_effect=admission),\
+             patch.object(v3,'installed_auth_packet',return_value={}),patch.object(v3,'protected',return_value=b'fictional env'):
+            for phase in ('before-auth','after-auth'):
+                with self.subTest(phase=phase),self.assertRaises(Reached):host.admit(phase,contract(),{},OPS,SERVED)
+            with self.assertRaises(Reached):host.recheck_source_and_idle({},OPS,SERVED)
+        def adapter(raw,common,authority,verifier,completion,publisher):
+            self.assertEqual(publisher,host.publisher_admission)
+            return types.SimpleNamespace(verify=lambda args:(_ for _ in ()).throw(Reached()))
+        with patch.object(v3,'execution_gate'),patch.object(v3,'admit_parent_child',return_value={}),\
+             patch.object(v3,'verifier_adapter',side_effect=adapter),self.assertRaises(Reached):
+            v3.dispatch_verification(host,'a'*64)
+
+    def test_raw_connection_remains_for_all_copy_catalog_work_and_checked_publisher_is_required(self):
+        conn=types.SimpleNamespace(rollback=lambda:None)
+        row={'id':b'01111111-2222-4333-8444-555555555555','key':b'backup'}
+        original={'core_servicehealth':{'columns':list(row),'rows':[b'\t'.join(row.values())+b'\n']}}
+        verifier=types.SimpleNamespace(row_mapping=self.verifier.row_mapping,
+            current_copy_tables=lambda actual,*args:(self.assertIs(actual,conn) or (original,{'core_servicehealth':['id']},{})),
+            continuation_database_fingerprint=lambda actual,*args:(self.assertIs(actual,conn) or {'catalog':'same'}))
+        calls=[];proof={'full':'source proof'}
+        def publisher(actual,old,policy):
+            self.assertIs(actual,conn);self.assertEqual(old['id'],row['id']);calls.append('checked');return proof
+        def semantic(*args):
+            self.assertIs(args[-2],proof);return {'publisher':proof}
+        with patch.object(v3,'readonly_connection_flags'),patch.object(v3,'authenticated_rows_admission',side_effect=semantic):
+            result=v3.readonly_copy_admission(conn,verifier,{},original,{}, {'tables':{}},{},'fictional key','fingerprint',
+                                               publisher_admission=publisher)
+            self.assertTrue(result['complete']);self.assertEqual(calls,['checked'])
+            with self.assertRaisesRegex(v3.Refusal,'checked_publisher_admission_required'):
+                v3.readonly_copy_admission(conn,verifier,{},original,{}, {'tables':{}},{},'fictional key','fingerprint')
 
     def test_javascript_descriptor_io_refuses_symlink_and_replaced_output(self):
         with tempfile.TemporaryDirectory() as temp:

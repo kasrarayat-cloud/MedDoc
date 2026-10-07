@@ -76,6 +76,12 @@ ENTRY_OBSERVATIONS = {'installed_state_accessed': False, 'authentication_possibl
                       'provider_possible': False}
 PARENT_PHASES = ('normal-auth', 'browser', 'verify')
 PUBLICATION_LOCK = 'publication/.activation-publication.lock'
+PUBLISHER = 'quillmd-fresh-operations-publisher.service'
+PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
+PUBLISHER_JUDGE_FIELDS = ('Result', 'ExecMainStartTimestamp', 'ExecMainExitTimestamp',
+                          'ExecMainStatus', 'InvocationID')
+DEFERRAL_STDOUT = ('Publication deferred: an activation holds exclusion. '
+                   'Nothing written; the existing row keeps its own freshness.')
 REPORT = CAMPAIGN / 'independent-verification.json'
 FIXTURE_PINS = {
     'acceptance_admin_preparation_sha256': DEPENDENCIES['prepare-installed-admin-auth-v3.mjs'],
@@ -217,7 +223,125 @@ def frozen_modules(reader=protected):
                                DEPENDENCIES['acceptance_v3_contract.py'])
     original = reader(BASE / 'verify_installed_acceptance_v2.py')
     verifier = module_from_bytes(original, BASE / 'verify_installed_acceptance_v2.py', FROZEN_B77)
+    adapt_publisher_adjudicator(verifier)
     return common, verifier, json.loads(blobs['historical-qualified-policy.json'])
+
+
+def canonical_publisher_comparison(row):
+    """Canonicalize exactly three aware timestamps; retain every other value."""
+    require(isinstance(row, dict) and isinstance(row.get('id'), str),
+            'v3_publisher_comparison_row')
+    result = dict(row)
+    for name in ('created_at', 'computed_at', 'published_at'):
+        value = row.get(name)
+        require(isinstance(value, (str, datetime)), 'v3_publisher_comparison_timestamp')
+        try:
+            stamp = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+        except ValueError:
+            raise Refusal('v3_publisher_comparison_timestamp') from None
+        require(stamp.tzinfo is not None, 'v3_publisher_comparison_timestamp')
+        result[name] = stamp.astimezone(timezone.utc).isoformat()
+    return result
+
+
+def adapt_publisher_adjudicator(module):
+    """Adapt only b77's final reread comparison, preserving its complete proof."""
+    raw = module.__authenticated_source
+    require(sha(raw) == FROZEN_B77, 'v3_frozen_dependency_hash')
+    tree = ast.parse(raw)
+    nodes = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+             and node.name == 'adjudicate_publisher']
+    require(len(nodes) == 1, 'v3_publisher_adjudicator_population')
+    function = copy.deepcopy(nodes[0])
+    comparisons = [node for node in ast.walk(function) if isinstance(node, ast.Compare)
+                  and ast.dump(node, include_attributes=False) == ast.dump(ast.parse(
+                      "normalize(after.get('row'))==current_row", mode='eval').body,
+                      include_attributes=False)]
+    require(len(comparisons) == 1, 'v3_publisher_exact_final_comparison')
+    call = comparisons[0].left
+    call.args[0] = ast.Call(func=ast.Name(id='canonical_publisher_comparison', ctx=ast.Load()),
+                            args=[call.args[0]], keywords=[])
+    module.__dict__['canonical_publisher_comparison'] = canonical_publisher_comparison
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+                 module.__file__, 'exec'), module.__dict__)
+    return module
+
+
+def publisher_final_adapter(module, final_check):
+    """Keep the entire authenticated proof; adapt only its last observer guard."""
+    raw = module.__authenticated_source
+    require(sha(raw) == FROZEN_B77 and callable(final_check), 'v3_frozen_dependency_hash')
+    function = copy.deepcopy(next(node for node in ast.parse(raw).body
+        if isinstance(node, ast.FunctionDef) and node.name == 'adjudicate_publisher'))
+    calls = [node for node in ast.walk(function) if isinstance(node, ast.Call)
+             and isinstance(node.func, ast.Name) and node.func.id == 'require'
+             and len(node.args) == 2 and isinstance(node.args[1], ast.Constant)
+             and node.args[1].value == 'publisher_record_changed_during_adjudication']
+    expected = ast.parse("normalize(after.get('row'))==current_row and after.get('unit')==unit "
+                         "and normalize(after.get('journal'))==normalize(journal)", mode='eval').body
+    require(len(calls) == 1 and ast.dump(calls[0].args[0], include_attributes=False)
+            == ast.dump(expected, include_attributes=False), 'v3_publisher_exact_final_comparison')
+    calls[0].args[0] = ast.Call(func=ast.Name(id='publisher_final_check', ctx=ast.Load()),
+        args=[ast.Name(id=name, ctx=ast.Load()) for name in ('after', 'current_row', 'unit', 'journal')], keywords=[])
+    namespace = {**module.__dict__, 'publisher_final_check': final_check}
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+                 module.__file__, 'exec'), namespace)
+    return namespace['adjudicate_publisher']
+
+
+def held_publication_admission(alignment, current, now):
+    """The prior genuine publication and latest actual invocation are distinct facts."""
+    selected = alignment['selected']; hold = alignment['hold']
+    require(current.get('coherent_unit') is True and current['timer'] == selected['timer']
+            and current['timer']['SubState'] == 'waiting', 'v3_held_publisher_timer_boundary')
+    require(canonical_publisher_comparison(current['row']) == canonical_publisher_comparison(selected['row'])
+            and current['unit_sources'] == alignment['unit_sources']
+            and encode(current['selected_journal']) == encode(selected['journal']), 'v3_held_publication_preserved')
+    unit, previous = current['unit'], selected['unit']
+    boundary = ('LoadState', 'FragmentPath', 'DropInPaths', 'NeedDaemonReload')
+    require(all(unit[name] == previous[name] for name in boundary)
+            and unit['LoadState'] == 'loaded' and unit['FragmentPath'] == '/etc/systemd/system/' + PUBLISHER
+            and unit['DropInPaths'] == '' and unit['NeedDaemonReload'] == 'no'
+            and unit['MainPID'] == '0' and unit['ActiveState'] in ('inactive', 'failed'),
+            'v3_held_publisher_loaded_boundary')
+    if unit['InvocationID'] == previous['InvocationID']:
+        require(unit == previous and encode(current['journal']) == encode(selected['journal']),
+                'v3_held_genuine_invocation_drift')
+        return {'latest_kind': 'selected_genuine_publication', 'latest_observation': current,
+                'intermediate_invocation_exit_history': 'not_assessed'}
+    require(re.fullmatch('[a-f0-9]{32}', unit['InvocationID'])
+            and unit['ActiveState'] == 'inactive' and unit['SubState'] == 'dead'
+            and unit['Result'] == 'success' and unit['ExecMainStatus'] == '0',
+            'v3_held_deferred_invocation_result')
+    monotonic = current['unit_monotonic']
+    require(set(monotonic) == {'ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic'}
+            and all(isinstance(value, str) and value.isdigit() for value in monotonic.values()),
+            'v3_held_deferred_monotonic_population')
+    begin, end = [int(monotonic[name]) / 1000000 for name in
+                  ('ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic')]
+    require(type(hold['acquired_monotonic']) in (int, float) and math.isfinite(hold['acquired_monotonic'])
+            and 0 < hold['acquired_monotonic'] <= begin <= end <= now < hold['deadline_monotonic'],
+            'v3_held_deferred_inside_parent_hold')
+    messages = [message for invocation, message in current['journal'] if invocation == unit['InvocationID']]
+    require(messages == [DEFERRAL_STDOUT], 'v3_held_deferred_exact_stdout')
+    return {'latest_kind': 'completed_deferred_tick', 'latest_observation': current,
+            'no_new_publication': True, 'backup_health_claimed_by_deferral': False,
+            'intermediate_invocation_exit_history': 'not_assessed'}
+
+
+def captured_publisher_factory(verifier, conn, original, policy):
+    """Capture actual native inputs/callback, with no substitute current observation."""
+    captured = []
+    def capture(*args, **kwargs):
+        captured.append((args, kwargs))
+    function = verifier.publisher_source_admission
+    namespace = {**function.__globals__, 'adjudicate_publisher': capture}
+    private = types.FunctionType(function.__code__, namespace, function.__name__, function.__defaults__, function.__closure__)
+    private(conn, original, policy)
+    require(len(captured) == 1 and len(captured[0][0]) == 4
+            and set(captured[0][1]) == {'alerts', 'backup', 'offsite', 'judge', 'publisher_path',
+                                     'expected_source_pins', 'recheck'}, 'v3_publisher_native_factory_population')
+    return captured[0]
 
 
 def declaration_contract(raw):
@@ -641,7 +765,7 @@ def readonly_connection_flags(conn):
 
 
 def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest, policy, secret, fingerprint,
-                            auth=None, edge_ip=None):
+                            auth=None, edge_ip=None, publisher_admission=None):
     """Source-faithful admission on an explicitly supplied read-only connection.
 
     The caller owns all five exclusions. No auth/migrations/writes occur here;
@@ -654,7 +778,8 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
                                  original['core_servicehealth']['columns'], keys['core_servicehealth'])
     health = [row for row in rows.values() if row['key'] == b'backup']
     require(len(health) == 1, 'v3_one_original_publisher_row')
-    publisher = verifier.publisher_source_admission(conn, health[0], policy)
+    require(callable(publisher_admission), 'v3_checked_publisher_admission_required')
+    publisher = publisher_admission(conn, health[0], policy)
     semantics = authenticated_rows_admission(verifier, original, current, keys,
         dict(policy, original_tables=manifest['tables']), secret, fingerprint, auth, publisher, edge_ip)
     database = verifier.continuation_database_fingerprint(conn, tables, baseline, backup)
@@ -665,7 +790,8 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
 
 
 def installed_database_admission(contract, *, auth_packet=None, operations=None, served=None,
-                                 availability_sha=None, verifier_override=None, native_modules=None):
+                                 availability_sha=None, verifier_override=None, native_modules=None,
+                                 publisher_admission=None):
     """Future fixed collection path; gate precedes key/role/socket/DB access."""
     execution_gate()
     import psycopg
@@ -707,7 +833,7 @@ def installed_database_admission(contract, *, auth_packet=None, operations=None,
     options = backup.source_options(APP, legacy.ROLES)
     with psycopg.connect(**options, row_factory=dict_row) as conn:
         return readonly_copy_admission(conn, verifier, backup, original, baseline, manifest,
-                                       policy, secret, fingerprint, auth, edge_ip)
+                                       policy, secret, fingerprint, auth, edge_ip, publisher_admission)
 
 
 def installed_auth_packet():
@@ -1016,8 +1142,9 @@ def lock_population(raw, pid):
 
 def parent_phase_admission(context, phase, operations, served, *, monotonic=time.monotonic,
                            stat_fd=os.stat, read_text=lambda path: Path(path).read_text(),
-                           read_bytes=lambda path: Path(path).read_bytes(), source=SOURCE):
-    """The child observes the existing native holder; it never takes its locks."""
+                           read_bytes=lambda path: Path(path).read_bytes(), source=SOURCE,
+                           self_mode=None):
+    """Observe the native holder; child calls retain the exact execute contract."""
     require(phase in PARENT_PHASES and context.get('format') == 3
             and context.get('phase') == phase and context.get('operations_revision') == operations
             and context.get('served_revision') == served, 'v3_parent_phase_binding')
@@ -1027,7 +1154,12 @@ def parent_phase_admission(context, phase, operations, served, *, monotonic=time
             and math.isfinite(context['deadline_monotonic']) and context['deadline_monotonic'] > monotonic(),
             'v3_parent_phase_live_deadline')
     proc = Path('/proc') / str(pid)
-    expected_argv = [str(PYTHON), '-B', str(source / ENTRY), '--execute',
+    mode = '--execute'
+    if self_mode is not None:
+        require(pid == os.getpid() and self_mode in ('--execute', '--preflight', '--admit-before-auth'),
+                'v3_exact_own_holder_mode')
+        mode = self_mode
+    expected_argv = [str(PYTHON), '-B', str(source / ENTRY), mode,
                      '--operations-revision', operations, '--served-revision', served]
     require(read_bytes(proc / 'cmdline') == b'\0'.join(value.encode() for value in expected_argv) + b'\0',
             'v3_parent_fixed_command')
@@ -1216,7 +1348,8 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     return result
 
 
-def verifier_adapter(raw, common, authority, availability_verifier, completion_check=None):
+def verifier_adapter(raw, common, authority, availability_verifier, completion_check=None,
+                     publisher_admission=None):
     """Use the full frozen independent DB/files/SDK/Word verifier, not browser flags."""
     require(sha(raw) == DEPENDENCIES['verify_installed_acceptance_v3.py'], 'v3_frozen_dependency_hash')
     tree = ast.parse(raw)
@@ -1241,7 +1374,8 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
         operations == authority['operations_revision'] and served == authority['served_revision']) else require(False, 'v3_verifier_authority_revision')
     # The operational descendant's reviewed publisher closure handles native
     # clock representations. It retains the frozen semantics and old captures.
-    module.publisher_source_admission = availability_verifier.publisher_source_admission
+    require(callable(publisher_admission), 'v3_checked_publisher_admission_required')
+    module.publisher_source_admission = publisher_admission
     module.protected = protected
     original_service_verification = module.verify_service_identity
     def checked_services(release, activation, storage):
@@ -1293,6 +1427,8 @@ class InstalledHost:
         self.admission_raws = {}
         self.contract = None
         self.publication_alignment = None
+        self.parent_lock_context = None
+        self.own_hold_mode = None
 
     def canonical(self, path):
         return Path(path).resolve(strict=True)
@@ -1358,7 +1494,8 @@ class InstalledHost:
         self.availability_verifier = recovery.frozen_verifier()
         original_verifier = protected(BASE / 'verify_installed_acceptance_v2.py', 2 * 1024 * 1024)
         require(sha(original_verifier) == FROZEN_B77, 'v3_frozen_dependency_hash')
-        self.availability_verifier.__authenticated_source = original_verifier
+        setattr(self.availability_verifier, '__authenticated_source', original_verifier)
+        adapt_publisher_adjudicator(self.availability_verifier)
 
     def authority(self):
         return derive_authority(self.contract, self.common, self.operations, self.served, self.admission_raws)
@@ -1408,6 +1545,7 @@ class InstalledHost:
                 selected = self.recovery.await_natural_publication(contract, observe)
                 deadline_remaining(deadline, self.clock)
                 acquire(PUBLICATION_LOCK, min(deadline, self.clock() + 120))
+                acquired_monotonic = self.clock()
                 current = observe()
                 require(current['coherent_unit'] and all(current[name] == selected[name]
                         for name in ('row', 'unit', 'timer', 'journal')),
@@ -1417,13 +1555,82 @@ class InstalledHost:
                 deadline_remaining(deadline, self.clock)
                 self.publication_alignment = {'format': 3, 'selected': selected,
                     'unit_sources': sources, 'maximum_natural_wait_seconds': 360,
-                    'manual_publications': 0, 'timer_or_service_actions': 0, 'provider_calls': 0}
+                    'manual_publications': 0, 'timer_or_service_actions': 0, 'provider_calls': 0,
+                    'hold': {'acquired_monotonic': acquired_monotonic, 'deadline_monotonic': deadline,
+                             'parent_pid': os.getpid(), 'parent_start_ticks': process_start(Path('/proc/self/stat').read_text()),
+                             'locks': copy.deepcopy(self.lock_rows), 'own_mode': self.own_hold_mode}}
+                self.parent_lock_context = {'format': 3, 'phase': 'verify', 'operations_revision': self.operations,
+                    'served_revision': self.served, 'parent_pid': os.getpid(), 'parent_uid': os.getuid(),
+                    'parent_start_ticks': self.publication_alignment['hold']['parent_start_ticks'],
+                    'deadline_monotonic': deadline, 'locks': copy.deepcopy(self.lock_rows)}
                 self.inside = True
                 yield
             finally:
                 self.inside = False
                 self.lock_rows = []
                 self.publication_alignment = None
+                self.parent_lock_context = None
+
+    def check_publication_hold(self):
+        require(self.inside and isinstance(self.publication_alignment, dict)
+                and isinstance(self.parent_lock_context, dict), 'v3_existing_parent_publication_hold_required')
+        hold, context = self.publication_alignment['hold'], self.parent_lock_context
+        require(all(hold[name] == context[name] for name in ('parent_pid', 'parent_start_ticks', 'locks'))
+                and 0 < hold['acquired_monotonic'] <= self.clock() < hold['deadline_monotonic']
+                and context['deadline_monotonic'] <= hold['deadline_monotonic'], 'v3_hash_bound_parent_hold_identity')
+        parent_phase_admission(context, context['phase'], self.operations, self.served,
+                               monotonic=self.clock, source=self.source,
+                               self_mode=hold['own_mode'] if context['parent_pid'] == os.getpid() else None)
+
+    def observe_held_publication(self):
+        self.check_publication_hold()
+        monotonic_fields = ('InvocationID', 'ExecMainStartTimestampMonotonic', 'ExecMainExitTimestampMonotonic')
+        before = self.recovery.own_unit_properties(PUBLISHER, monotonic_fields)
+        current = self.recovery.publisher_observer(self.backup)()
+        after = self.recovery.own_unit_properties(PUBLISHER, monotonic_fields)
+        require(before == after and after['InvocationID'] == current['unit']['InvocationID'],
+                'v3_latest_publisher_monotonic_race')
+        unit = self.publication_alignment['selected']['unit']
+        end = (datetime.strptime(unit['ExecMainExitTimestamp'], '%a %Y-%m-%d %H:%M:%S UTC')
+               + timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S UTC')
+        journal = self.command(['/usr/bin/journalctl', '-u', PUBLISHER, '--since', unit['ExecMainStartTimestamp'],
+                                '--until', end, '-o', 'json', '--no-pager'])
+        current.update(unit_monotonic={key: after[key] for key in monotonic_fields if key != 'InvocationID'},
+            selected_journal=[(row.get('_SYSTEMD_INVOCATION_ID'), row.get('MESSAGE'))
+                              for row in map(json.loads, journal.splitlines())],
+            unit_sources=self.recovery.publisher_unit_sources())
+        self.check_publication_hold()
+        return current
+
+    def publisher_admission(self, conn, original, policy):
+        """Reproduce the genuine prior row; separately authenticate latest deferral."""
+        self.check_publication_hold()
+        args, kwargs = captured_publisher_factory(self.availability_verifier,
+            self.recovery.publisher_observation_connection(conn), original, policy)
+        current = self.observe_held_publication()
+        witness = held_publication_admission(self.publication_alignment, current, self.clock())
+        selected = self.publication_alignment['selected']
+        require(canonical_publisher_comparison(args[1]) == canonical_publisher_comparison(current['row'])
+                and args[2] == {key: current['unit'][key] for key in PUBLISHER_JUDGE_FIELDS}
+                and args[3] == current['journal'], 'v3_actual_factory_observation_race')
+        selected_unit = {key: selected['unit'][key] for key in PUBLISHER_JUDGE_FIELDS}
+        def final_check(actual, reproduced, genuine_unit, genuine_journal):
+            # actual is the factory's real fresh callback result, never replaced.
+            latest = self.observe_held_publication()
+            require(latest == current, 'v3_latest_publisher_changed_during_reproduction')
+            held_publication_admission(self.publication_alignment, latest, self.clock())
+            require(canonical_publisher_comparison(actual.get('row')) == canonical_publisher_comparison(latest['row'])
+                    == reproduced and actual.get('unit') == {key: latest['unit'][key] for key in PUBLISHER_JUDGE_FIELDS}
+                    and actual.get('journal') == latest['journal']
+                    and genuine_unit == selected_unit and genuine_journal == selected['journal'],
+                    'v3_actual_final_observer_binding')
+            return True
+        adjudicator = publisher_final_adapter(self.availability_verifier, final_check)
+        proof = adjudicator(args[0], current['row'], selected_unit, selected['journal'], **kwargs)
+        proof['selected_previous_genuine_publication'] = selected
+        proof['latest_invocation_assessment'] = witness
+        proof['parent_hold'] = copy.deepcopy(self.publication_alignment['hold'])
+        return proof
 
     def snapshot(self):
         return self.old.snapshot(self.native, self.backup, self.storage)
@@ -1451,7 +1658,7 @@ class InstalledHost:
         packet = installed_auth_packet() if 'after-auth' in self.admission_raws else None
         admitted = installed_database_admission(self.contract, auth_packet=packet, operations=operations, served=served,
             availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
-            native_modules=(self.old, self.backup))
+            native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission)
         snapshot = self.snapshot()
         require(snapshot['database'] == admitted['current_database_fingerprint'], 'v3_idle_database_race')
         self.old.reaper_admission(lambda sql: self._readonly_query(sql), snapshot['files'])
@@ -1518,7 +1725,7 @@ class InstalledHost:
         packet = installed_auth_packet() if phase == 'after-auth' else None
         admission = installed_database_admission(contract, auth_packet=packet, operations=operations, served=served,
             availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
-            native_modules=(self.old, self.backup))
+            native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission)
         require(isinstance(self.publication_alignment, dict)
                 and admission['allowed_deltas']['publisher']['current_full_row']
                     == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
@@ -1633,6 +1840,7 @@ def admit_parent_child(host, phase, context_sha):
     require(sha(alignment_raw) == context.get('publisher_alignment_sha256'),
             'v3_parent_publication_alignment_hash')
     host.publication_alignment = json.loads(alignment_raw)
+    host.parent_lock_context = context
     require(0 < context['deadline_monotonic'] - host.clock() <= (180 if phase == 'normal-auth' else 1200),
             'v3_exact_phase_ceiling')
     phases = ('before-auth',) if phase == 'normal-auth' else ('before-auth', 'after-auth')
@@ -1689,7 +1897,8 @@ def dispatch_verification(host, context_sha):
     execution_gate()
     context = admit_parent_child(host, 'verify', context_sha)
     verifier = verifier_adapter(host.blobs['verify_installed_acceptance_v3.py'], host.common,
-                                host.authority(), host.availability_verifier, host.measured_completion)
+                                host.authority(), host.availability_verifier, host.measured_completion,
+                                host.publisher_admission)
     verifier.verify(types.SimpleNamespace(progress=str(CAMPAIGN / 'progress.json'), output=str(REPORT)))
     report = json.loads(protected(REPORT))
     require(report.get('complete') is True and report.get('operations_revision') == host.operations
@@ -1737,6 +1946,8 @@ def main(argv=None):
         ENTRY_OBSERVATIONS['installed_state_accessed'] = True
         operations, served = full_revision(args.operations_revision), full_revision(args.served_revision)
         host = InstalledHost()
+        host.own_hold_mode = ('--execute' if args.execute else '--preflight' if args.preflight
+                             else '--admit-before-auth' if args.admit_before_auth else None)
         declaration, contract = installed_contract(host)
         host.bind(contract, operations, served)
         host.authenticate_dependencies()
@@ -1757,7 +1968,7 @@ def main(argv=None):
             require(not args.admit_after_auth, 'v3_after_auth_only_inside_fixed_parent_pipeline')
             receipt = host.authenticate_availability(contract, operations, served)
             require(host.fresh_paths_absent(), 'v3_exclusive_new_paths_required')
-            with host.exclusions(operations, host.clock() + 120):
+            with host.exclusions(operations, host.clock() + 600):
                 host.recheck_source_and_idle(receipt, operations, served)
                 report = host.admit('before-auth', contract, receipt, operations, served)
             report = {'complete': True, 'read_only_preflight': True,

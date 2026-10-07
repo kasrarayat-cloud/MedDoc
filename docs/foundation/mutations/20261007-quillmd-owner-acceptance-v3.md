@@ -361,3 +361,58 @@ current frozen observer rejects that row/unit mismatch. No deferred invocation
 is silently treated as a publication, and no installed campaign has run. A
 finished, evidence-backed protocol for this case remains required before the
 source qualification flags can become true.
+
+### Completed deferral adapter, 7 October 2026
+
+The finished adapter keeps the selected previous genuine publication and the
+latest actual invocation as separate observations. It reuses the merged recovery
+operator's exact three-timestamp SQL proxy only for publisher reads; COPY and
+catalog work retain their original read-only connection. ServiceHealth IDs remain
+their native JSON UUID strings. No ID cast or integer-only fixture is admitted.
+
+An authenticated AST copy of frozen b77 changes only its final observer guard.
+All original source reconstruction, input clocks, eleven-field reproduction,
+genuine publication exit and journal checks run against the selected publication.
+The factory's recheck callback still observes actual current state. That result
+must agree with a fresh complete native observation taken after reproduction.
+
+An unchanged invocation remains subject to exact unit and journal comparison.
+A distinct latest invocation must be completed, inactive/dead, success/zero,
+with exactly the source-pinned deferral stdout for its measured InvocationID.
+Its native start and exit monotonic timestamps must fall inside the same parent's
+five-lock hold. Loaded unit, timer, source pins, selected journal and complete row
+must remain unchanged. The timer must be waiting. A running or unknown invocation
+refuses; there is no retry or invented completion guarantee.
+
+The fifth-lock acquisition time, parent PID/start and descriptor identities are
+hash-bound into the alignment packet and every child phase packet. Main and child
+admissions independently recheck the exact parent command, process start and five
+kernel flock identities. The central adapter is used by both authentication
+admissions, source/idle rechecks and the final independent verifier. Its result
+reports the actual latest deferral separately, claims no health for that deferral,
+and explicitly leaves intermediate invocation exit history unassessed.
+
+Focused offline controls execute the full unchanged publisher reconstruction
+with a fictional UUID row and two tracked operational readers, including an
+honestly unhealthy publication. They admit unchanged timestamp representations
+and an actual distinct completed-deferral fixture. They reject microsecond and
+UUID drift, malformed/naive timestamps, changed rows, selected/current journal,
+source pins, timer state, counterfeit/error deferrals, failed exits, invocation
+times outside the hold, missing/recycled parent identity and excess child deadlines.
+The actual checked dependency construction also proves the unmangled frozen source
+attribute required by COPY admission. No installed authentication, provider call,
+database write or service action has been performed by these controls.
+
+All source qualification flags remain false. The wrapper ceiling remains 1680
+seconds and does not guarantee completion. Actual availability completion, its
+protected receipt, the resulting operational M6 descendant, finished review and
+exact merged citation remain prerequisites for installed execution.
+
+The final pass found that a read-only preflight's own command was incorrectly
+compared with the execute-only parent command. Parent self-observation now admits
+only its exact same-PID `--execute`, `--preflight` or `--admit-before-auth` argv.
+Child observation still requires an execute parent. All identity, deadline and
+five-lock checks remain. Preflight's internal bound is 600 seconds, covering the
+natural wait, drain and complete admission within the unchanged wrapper ceiling.
+The final focused local suite passes 65 tests, including genuine prior-publication
+reproduction and substantive refusal controls; this remains an offline result.
