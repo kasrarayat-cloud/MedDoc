@@ -23,6 +23,7 @@ import time
 
 from dotenv import dotenv_values
 from . import legacy_model_activation as old
+from . import repair_source_permissions as source_files
 
 ROOT = Path('/opt/meddoc-pro')
 APP = ROOT / 'rebuild'
@@ -86,8 +87,18 @@ def write_new(path, value):
     old.write_new(path, value if isinstance(value, bytes) else encode(value))
 
 
-def load_contract():
-    raw = (SOURCE / DECL).read_bytes()
+def operator_source_bytes(relative, mode=0o644, *, tree=None, root_fd=None):
+    """Use the reviewed public-source reader with an explicit tree descriptor."""
+    try:
+        if root_fd is None:
+            with source_files.open_root(SOURCE if tree is None else tree) as opened:
+                return source_files.operator_bytes(relative, mode, opened)
+        return source_files.operator_bytes(relative, mode, root_fd)
+    except source_files.Refusal:
+        raise Refusal('availability_public_source_descriptor_refused') from None
+
+
+def contract_from_bytes(raw):
     marker = b'<!-- private-availability-contract -->\n```json\n'
     require(raw.count(marker) == 1, 'availability_declaration_contract')
     chunks = raw.split(marker, 1)[1].split(b'\n```', 1)
@@ -107,6 +118,10 @@ def load_contract():
     return contract
 
 
+def load_contract():
+    return contract_from_bytes(operator_source_bytes(DECL))
+
+
 def original_qualified_policy():
     raw = old.git(SOURCE, 'show', PREPARED + ':' + old.DECL)
     marker = b'<!-- legacy-model-contract -->\n```json\n'
@@ -122,6 +137,9 @@ def original_qualified_policy():
 def source_gate(target, contract):
     require(re.fullmatch('[a-f0-9]{40}', target or '') and SOURCE.is_relative_to(ROOT / '.worktrees')
             and SOURCE.resolve() == SOURCE, 'availability_operator_source')
+    require(os.getuid() == os.geteuid() == os.getgid() == os.getegid() == 1000
+            and source_files.SOURCE == SOURCE and source_files.ROOT == ROOT,
+            'availability_operator_native_source_binding')
     require(old.git(SOURCE, 'rev-parse', 'HEAD').strip().decode() == target
             and not old.git(SOURCE, 'status', '--porcelain', '--untracked-files=no').strip(),
             'availability_operator_clean')
@@ -133,28 +151,52 @@ def source_gate(target, contract):
             and old.git(ROOT, 'rev-parse', 'HEAD').strip().decode() == INSTALLED
             and not old.git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(),
             'availability_installed_clean_source')
-    # Every clinical/UI/settings/dependency byte is the already-qualified payload.
-    for relative in old.git(SOURCE, 'ls-files', 'rebuild').decode().splitlines():
-        if relative not in ALLOWED:
-            require((SOURCE / relative).read_bytes() == old.git(SOURCE, 'show', PREPARED + ':' + relative),
-                    'availability_payload_byte_identity')
-    for relative in old.git(ROOT, 'ls-files', 'rebuild').decode().splitlines():
-        require((ROOT / relative).read_bytes() == old.git(ROOT, 'show', INSTALLED + ':' + relative),
-                'availability_installed_byte_identity')
+    # Admit the complete operator's metadata and Git bytes before citation or
+    # private evidence. Keep checked declaration/citation bytes; never reopen
+    # their path to execute or compare them later.
+    retained_paths = {DECL, 'rebuild/ops/legacy_model_activation.py',
+                      'scripts/check-citation.sh', 'scripts/lib/runs-api.sh'}
+    buffers = {}
+    with source_files.open_root(SOURCE) as root_fd:
+        for line in old.git(SOURCE, 'ls-files', '--stage', '-z').decode().split('\0')[:-1]:
+            identity, relative = line.split('\t', 1)
+            mode, _, stage = identity.split()
+            require(stage == '0' and mode in ('100644', '100755'), 'availability_operator_index_type')
+            raw = operator_source_bytes(relative, 0o644 if mode == '100644' else 0o755, root_fd=root_fd)
+            require(raw == old.git(SOURCE, 'show', target + ':' + relative), 'availability_operator_byte_identity')
+            if relative.startswith('rebuild/') and relative not in ALLOWED:
+                require(raw == old.git(SOURCE, 'show', PREPARED + ':' + relative),
+                        'availability_payload_byte_identity')
+            if relative in retained_paths:
+                buffers[relative] = raw
+    require(set(buffers) == retained_paths, 'availability_operator_retained_source_population')
+    require(contract_from_bytes(buffers[DECL]) == contract, 'availability_loaded_declaration_identity')
+    # The installed tree contributes only public rebuild source, never an
+    # untracked environment, private runtime or symlink destination.
+    with source_files.open_root(ROOT) as root_fd:
+        for line in old.git(ROOT, 'ls-files', '--stage', '-z', 'rebuild').decode().split('\0')[:-1]:
+            identity, relative = line.split('\t', 1)
+            mode, _, stage = identity.split()
+            source_files.source_path(relative)
+            require(stage == '0' and mode in ('100644', '100755'), 'availability_installed_index_type')
+            raw = operator_source_bytes(relative, 0o644 if mode == '100644' else 0o755, root_fd=root_fd)
+            require(raw == old.git(ROOT, 'show', INSTALLED + ':' + relative),
+                    'availability_installed_byte_identity')
     source_readability(ROOT)
-    require(sha((SOURCE / 'rebuild/ops/legacy_model_activation.py').read_bytes()) == FROZEN_OPERATOR
-            and sha(protected(VERIFIER, 2 * 1024 * 1024)) == FROZEN_VERIFIER,
+    require(sha(buffers['rebuild/ops/legacy_model_activation.py']) == FROZEN_OPERATOR,
             'availability_frozen_primitive_drift')
     require(os.environ.get('RULED_MUTATION_DECLARATION') == DECL, 'availability_normal_ruled_door')
     commit = os.environ.get('RULED_MUTATION_DECL_COMMIT', '')
     require(re.fullmatch('[a-f0-9]{40}', commit)
             and old.git(SOURCE, 'log', '-1', '--format=%H', '--', DECL).strip().decode() == commit
-            and old.git(SOURCE, 'show', commit + ':' + DECL) == (SOURCE / DECL).read_bytes(),
+            and old.git(SOURCE, 'show', commit + ':' + DECL) == buffers[DECL],
             'availability_committed_declaration')
     require(old.git(ROOT, 'rev-parse', 'origin/main').strip().decode() == target,
             'availability_merged_main_target')
     for revision in (target, PREPARED, INSTALLED):
-        old.command(['bash', str(SOURCE / 'scripts/check-citation.sh'), revision], cwd=SOURCE)
+        source_files.sealed_citation(buffers['scripts/check-citation.sh'], buffers['scripts/lib/runs-api.sh'], revision)
+    require(sha(protected(VERIFIER, 2 * 1024 * 1024)) == FROZEN_VERIFIER,
+            'availability_frozen_primitive_drift')
     return {'operator_commit': target, 'installed_before': INSTALLED, 'qualified_payload': PREPARED,
             'changed_paths': sorted(changes)}
 
@@ -217,7 +259,7 @@ def release_only_environment(current, target):
 
 def storage_admission(contract, phase):
     require(contract.get('storage_authority_path') == STORAGE
-            and sha((SOURCE / STORAGE).read_bytes()) == contract.get('storage_authority_sha256')
+            and sha(operator_source_bytes(STORAGE)) == contract.get('storage_authority_sha256')
             and contract.get('storage_allowances') == ALLOWANCES
             and contract.get('storage_minimum_reserve_bytes') == RESERVE,
             'availability_storage_authority')

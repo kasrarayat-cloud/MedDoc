@@ -7,12 +7,15 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
 from ops import private_availability_recovery as act
+from ops.test_repair_source_permissions import FictionalOS
 
 
 TARGET = '8' * 40
@@ -481,6 +484,192 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         with patch.object(act.old, 'git', return_value=raw.replace(b'"execution_qualified":true', b'"execution_qualified":false')):
             with self.assertRaisesRegex(act.Refusal, 'original_qualification'):
                 act.original_qualified_policy()
+
+
+class DescriptorSourceGateTests(unittest.TestCase):
+    def setUp(self):
+        native_os = FictionalOS(os.getuid(), os.getgid())
+        self.enterContext(patch.object(act, 'os', native_os))
+        self.enterContext(patch.object(act.source_files, 'os', native_os))
+
+    def fixture(self, root):
+        root.chmod(0o755)
+        operator = root / '.worktrees/operator'
+        operator.mkdir(parents=True)
+        files = {name: b'Fictional checked operator bytes.\n' for name in act.ALLOWED}
+        files.update({'rebuild/ops/legacy_model_activation.py': b'Fictional unchanged primitive.\n',
+                      'rebuild/public.py': b'Fictional compatible application.\n',
+                      'scripts/check-citation.sh': b'_RA_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/runs-api.sh"\n. "$_RA_LIB"\n[ "$FIXTURE" = "checked" ] || exit 41\n',
+                      'scripts/lib/runs-api.sh': b'FIXTURE=checked\n'})
+        installed = {'rebuild/public.py': files['rebuild/public.py']}
+        for tree, population in ((operator, files), (root, installed)):
+            for name, raw in population.items():
+                path = tree / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+                path.chmod(0o644)
+        canary = root / 'private.env'
+        canary.write_bytes(b'PRIVATE-FICTIONAL-CANARY-MUST-NOT-BE-READ')
+        canary.chmod(0o600)
+        contract = {'approved_source_paths': sorted(act.ALLOWED)}
+        declaration_commit = '9' * 40
+        def git(tree, *args):
+            population = files if tree == operator else installed
+            if args == ('rev-parse', 'HEAD'):
+                return (TARGET if tree == operator else act.INSTALLED).encode()
+            if args[0] in ('status', 'merge-base'):
+                return b''
+            if args[0] == 'diff':
+                return ('\n'.join(sorted(act.ALLOWED)) + '\n').encode()
+            if args[0] == 'branch':
+                return b'main'
+            if args == ('rev-parse', 'origin/main'):
+                return TARGET.encode()
+            if args[0] == 'ls-files':
+                if '--stage' in args:
+                    separator = '\0' if '-z' in args else '\n'
+                    return ''.join('100644 ' + 'a' * 40 + ' 0\t' + name + separator for name in population).encode()
+                return ('\n'.join(population) + '\n').encode()
+            if args[0] == 'log':
+                return declaration_commit.encode()
+            if args[0] == 'show':
+                return population[args[-1].split(':', 1)[1]]
+            raise AssertionError(args)
+        stack = ExitStack()
+        for module in (act, act.source_files):
+            stack.enter_context(patch.object(module, 'ROOT', root))
+            stack.enter_context(patch.object(module, 'SOURCE', operator))
+        stack.enter_context(patch.object(act.old, 'git', side_effect=git))
+        stack.enter_context(patch.object(act, 'FROZEN_OPERATOR', act.sha(files['rebuild/ops/legacy_model_activation.py'])))
+        stack.enter_context(patch.object(act, 'FROZEN_VERIFIER', act.sha(b'fictional frozen verifier')))
+        stack.enter_context(patch.object(act, 'contract_from_bytes', return_value=contract))
+        stack.enter_context(patch.dict(os.environ, RULED_MUTATION_DECLARATION=act.DECL,
+                                      RULED_MUTATION_DECL_COMMIT=declaration_commit))
+        return stack, operator, files, installed, canary, contract
+
+    def test_all_operator_and_public_installed_bytes_are_admitted_before_sealed_citations_and_private_read(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stack, operator, files, installed, _, contract = self.fixture(Path(temporary))
+            calls = []
+            native_reader = act.operator_source_bytes
+            def read(relative, *args, **kwargs):
+                calls.append(('source', relative))
+                return native_reader(relative, *args, **kwargs)
+            def cite(top, library, target):
+                self.assertEqual(top, files['scripts/check-citation.sh'])
+                self.assertEqual(library, files['scripts/lib/runs-api.sh'])
+                self.assertEqual(len([entry for entry in calls if entry[0] == 'source']), len(files) + len(installed))
+                self.assertNotIn(('private', None), calls)
+                calls.append(('citation', target))
+            def private(*args):
+                self.assertEqual([entry[1] for entry in calls if entry[0] == 'citation'], [TARGET, act.PREPARED, act.INSTALLED])
+                calls.append(('private', None))
+                return b'fictional frozen verifier'
+            with stack, patch.object(act, 'operator_source_bytes', side_effect=read), \
+                 patch.object(act.source_files, 'sealed_citation', side_effect=cite), \
+                 patch.object(act, 'protected', side_effect=private):
+                self.assertEqual(act.source_gate(TARGET, contract)['changed_paths'], sorted(act.ALLOWED))
+            self.assertEqual(calls[-1], ('private', None))
+
+    def test_leaf_symlink_private_leaf_swap_and_parent_link_never_read_canary_or_reach_citation(self):
+        for kind in ('leaf-link', 'private-leaf', 'parent-link'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                stack, operator, _, _, canary, contract = self.fixture(Path(temporary))
+                public = operator / act.SELF
+                if kind == 'parent-link':
+                    parent = public.parent
+                    parent.rename(parent.with_name('old-ops'))
+                    parent.symlink_to(canary.parent, target_is_directory=True)
+                else:
+                    public.unlink()
+                    if kind == 'leaf-link':
+                        public.symlink_to(canary)
+                    else:
+                        canary.replace(public)
+                protected_inode = (public if kind == 'private-leaf' else canary).stat().st_ino
+                native_read = os.read
+                def guard(fd, count):
+                    self.assertNotEqual(os.fstat(fd).st_ino, protected_inode, 'private canary bytes read')
+                    return native_read(fd, count)
+                with stack, patch.object(act.source_files.os, 'read', side_effect=guard), \
+                     patch.object(act.source_files, 'sealed_citation') as citation, \
+                     patch.object(act, 'protected') as private:
+                    with self.assertRaises((OSError, act.Refusal)):
+                        act.source_gate(TARGET, contract)
+                    citation.assert_not_called()
+                    private.assert_not_called()
+
+    def test_source_byte_or_declaration_mismatch_refuses_before_private_evidence_or_citation(self):
+        for kind in ('public-bytes', 'declaration'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                stack, operator, _, _, _, contract = self.fixture(Path(temporary))
+                if kind == 'public-bytes':
+                    (operator / 'rebuild/public.py').write_bytes(b'unreviewed bytes')
+                with stack, patch.object(act.source_files, 'sealed_citation') as citation, \
+                     patch.object(act, 'protected') as private:
+                    if kind == 'declaration':
+                        act.contract_from_bytes.return_value = {'different': True}
+                    with self.assertRaises(act.Refusal):
+                        act.source_gate(TARGET, contract)
+                    citation.assert_not_called()
+                    private.assert_not_called()
+
+    def test_helper_source_binding_or_native_identity_mismatch_refuses_before_git_or_private_read(self):
+        for kind in ('source', 'identity'):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as temporary:
+                stack, operator, _, _, _, contract = self.fixture(Path(temporary))
+                with stack, patch.object(act.source_files, 'sealed_citation') as citation, \
+                     patch.object(act, 'protected') as private:
+                    if kind == 'source':
+                        act.source_files.SOURCE = operator.parent / 'other'
+                    else:
+                        self.enterContext(patch.object(act.os, 'getuid', return_value=0))
+                    with self.assertRaisesRegex(act.Refusal, 'native_source_binding'):
+                        act.source_gate(TARGET, contract)
+                    act.old.git.assert_not_called()
+                    citation.assert_not_called()
+                    private.assert_not_called()
+
+    def test_citation_executes_sealed_checked_buffers_after_path_replacement(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            stack, operator, files, _, _, contract = self.fixture(Path(temporary))
+            revisions = []
+            def checked_command(argv, cwd=None, pass_fds=()):
+                (operator / 'scripts/check-citation.sh').write_bytes(b'exit 77\n')
+                (operator / 'scripts/lib/runs-api.sh').write_bytes(b'exit 88\n')
+                self.assertEqual(cwd, operator)
+                self.assertEqual(len(pass_fds), 2)
+                for fd in pass_fds:
+                    with self.assertRaises(OSError):
+                        os.write(fd, b'unchecked bytes')
+                self.assertEqual(os.pread(pass_fds[1], 65536, 0), files['scripts/lib/runs-api.sh'])
+                result = subprocess.run(argv, cwd=cwd, pass_fds=pass_fds, capture_output=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                revisions.append(argv[-1])
+                return result.stdout
+            with stack, patch.object(act.source_files, 'command', side_effect=checked_command), \
+                 patch.object(act, 'protected', return_value=b'fictional frozen verifier'):
+                act.source_gate(TARGET, contract)
+            self.assertEqual(revisions, [TARGET, act.PREPARED, act.INSTALLED])
+
+    def test_descriptor_reader_uses_explicit_source_not_helpers_default_and_refuses_leaf_read_race(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'public.py'
+            source.write_bytes(b'checked public bytes')
+            source.chmod(0o644)
+            with patch.object(act.source_files, 'SOURCE', root / 'wrong-default'):
+                self.assertEqual(act.operator_source_bytes('public.py', tree=root), b'checked public bytes')
+            native_read = act.source_files.bytes_at
+            def race(fd, maximum=32 * 1024 ** 2):
+                raw = native_read(fd, maximum)
+                source.unlink()
+                source.write_bytes(b'changed same-length!')
+                source.chmod(0o644)
+                return raw
+            with patch.object(act.source_files, 'bytes_at', side_effect=race):
+                with self.assertRaisesRegex(act.Refusal, 'public_source_descriptor_refused'):
+                    act.operator_source_bytes('public.py', tree=root)
 
 
 if __name__ == '__main__':

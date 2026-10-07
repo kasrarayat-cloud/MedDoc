@@ -61,6 +61,22 @@ The frozen verifier and its original qualification remain byte-identical. This
 comparison repair does not acknowledge co-tenant deployment authorization, pause
 timers, suppress concurrent metadata changes or enable installation execution.
 
+### Public source and citation admission hardening,7October2026
+
+Before citation or private verification, admit every Git-tracked operator file's
+native UID/GID1000, canonical public mode, single regular inode, absent extended
+attributes and exact target Git bytes. Reuse the reviewed permission-repair
+reader with explicit held directory descriptors and no symlink traversal. Admit
+only public Git-tracked rebuild source in the installed tree; private environment
+and runtime paths are excluded. Keep all nine approved source paths unchanged.
+
+Bind the loaded contract and committed declaration to the retained authenticated
+declaration bytes. Execute all three exact-revision citation checks and their
+library from sealed buffers, without reopening mutable script paths. Require the
+helper's source tree to equal this operator's tree; do not rebind module globals.
+The frozen verifier, approval protocol and installation qualification remain
+unchanged. These source checks make no service, file-content or database change.
+
 Timeline evidence is
 rebuild/.runtime/owner-demo-20261006/recovery-20261007/timeline-20261007T052127Z.json,
 SHA2564203bc23a31572fdb2b36afa7286748e3be7d6e7d2bb5725fabf0f2a0d7b666d.
