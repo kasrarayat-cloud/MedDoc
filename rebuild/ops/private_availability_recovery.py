@@ -6,7 +6,7 @@ the original encrypted capture covers its original population, never newer rows.
 """
 import argparse
 from contextlib import ExitStack, contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import importlib.util
@@ -24,6 +24,7 @@ import time
 from dotenv import dotenv_values
 from . import legacy_model_activation as old
 from . import repair_source_permissions as source_files
+from . import publisher_verification as publisher_judge
 
 ROOT = Path('/opt/meddoc-pro')
 APP = ROOT / 'rebuild'
@@ -60,6 +61,21 @@ SECONDS = 240
 # Genuine native owner authorization has not been exported or source-qualified.
 # A future declaration or self-asserted evidence JSON cannot turn this gate on.
 NATIVE_APPROVAL_PROTOCOL_QUALIFIED = False
+PUBLISHER = 'quillmd-fresh-operations-publisher.service'
+PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
+PUBLISHER_UNIT_PINS = {
+    PUBLISHER: '62bdacb5d40862e11c8321cedaadf2a6e6b3c1e583a3557abdde900be8dfd2c9',
+    PUBLISHER_TIMER: '4327daca96a0cd4299487060b05a0e48afee762f3dd65f6170a40ebbad6ec12d'}
+PUBLISHER_ALIGNMENT = {'protocol': 'one-natural-publication-under-input-exclusions-v1',
+    'maximum_wait_seconds': 360, 'poll_interval_seconds': 1,
+    'timer_cadence_seconds': 300, 'timer_accuracy_seconds': 15, 'service_timeout_seconds': 60,
+    'unit_source_sha256': PUBLISHER_UNIT_PINS, 'manual_publications': 0,
+    'timer_or_service_actions': 0, 'provider_calls': 0, 'automatic_retries': False}
+PUBLISHER_ROW_FIELDS = frozenset({'id', 'created_at', 'key', 'condition', 'severity', 'healthy',
+    'action', 'payload', 'computed_at', 'published_at', 'expected_interval_seconds'})
+RULED_BUDGET = {'environment_variable': 'RULED_ACT_MAX_SECS', 'maximum_seconds': 1200,
+    'source_checks_seconds': 300, 'natural_wait_seconds': 360, 'publication_drain_seconds': 120,
+    'full_readiness_seconds': 90, 'preparation_seconds': 30, 'completion_seconds': SECONDS}
 
 
 class Refusal(RuntimeError):
@@ -77,6 +93,34 @@ def sha(raw):
 
 def encode(value):
     return old.encode(value)
+
+
+class RuledBudget:
+    """Reserve every stage inside the explicitly declared outer watchdog ceiling."""
+    def __init__(self, contract):
+        require(contract.get('ruled_time_budget') == RULED_BUDGET
+                and os.environ.get('RULED_ACT_MAX_SECS') == str(RULED_BUDGET['maximum_seconds'])
+                and sum(value for key, value in RULED_BUDGET.items() if key.endswith('_seconds')
+                        and key != 'maximum_seconds') <= RULED_BUDGET['maximum_seconds'],
+                'availability_explicit_ruled_time_budget')
+        self.started = time.monotonic()
+        self.deadline = self.started + RULED_BUDGET['maximum_seconds']
+
+    def remaining(self, seconds):
+        require(time.monotonic() + seconds < self.deadline, 'availability_ruled_time_budget_remaining')
+
+    @contextmanager
+    def stage(self, name, remaining):
+        allowance = RULED_BUDGET[name + '_seconds']
+        self.remaining(allowance + remaining)
+        started = time.monotonic()
+        yield
+        require(time.monotonic() - started <= allowance, 'availability_ruled_stage_time_budget')
+        self.remaining(remaining)
+
+    def proof(self):
+        return {**RULED_BUDGET, 'elapsed_seconds': time.monotonic() - self.started,
+                'post_admission_completion_deadline_seconds': SECONDS}
 
 
 def protected(path, maximum=32 * 1024 * 1024):
@@ -115,6 +159,9 @@ def contract_from_bytes(raw):
             and contract.get('automatic_retries') is False,
             'availability_prospective_scope')
     require(contract.get('original_policy') == original_qualified_policy(), 'availability_original_policy_identity')
+    require(contract.get('publisher_alignment') == PUBLISHER_ALIGNMENT,
+            'availability_publisher_alignment_contract')
+    require(contract.get('ruled_time_budget') == RULED_BUDGET, 'availability_ruled_time_budget_contract')
     return contract
 
 
@@ -356,6 +403,150 @@ def publisher_observation_connection(conn):
     return Connection()
 
 
+def own_unit_properties(unit, properties):
+    require(unit in old.UNITS + (PUBLISHER, PUBLISHER_TIMER), 'availability_own_unit_observation_scope')
+    raw = old.command(['systemctl', 'show', unit, '--property=' + ','.join(properties)]).decode()
+    lines = raw.splitlines()
+    require(len(lines) == len(properties) and all('=' in line for line in lines),
+            'availability_own_unit_observation_population')
+    values = dict(line.split('=', 1) for line in lines)
+    require(set(values) == set(properties), 'availability_own_unit_observation_population')
+    return values
+
+
+def publisher_unit_sources():
+    """Read only the two owned public unit files through held descriptors."""
+    result = {}
+    with source_files.open_root(Path('/etc/systemd/system')) as root_fd:
+        for name, expected in PUBLISHER_UNIT_PINS.items():
+            fd = source_files.open_relative(root_fd, name)
+            try:
+                before = os.fstat(fd)
+                require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 0
+                        and before.st_nlink == 1 and stat.S_IMODE(before.st_mode) == 0o644
+                        and not os.listxattr(fd), 'availability_publisher_unit_file_identity')
+                raw = source_files.bytes_at(fd, 65536)
+                require(sha(raw) == expected, 'availability_publisher_unit_file_source')
+                reopened = source_files.open_relative(root_fd, name)
+                try:
+                    require(source_files.stable(before) == source_files.stable(os.fstat(fd))
+                            == source_files.stable(os.fstat(reopened)), 'availability_publisher_unit_file_race')
+                finally:
+                    os.close(reopened)
+                result[name] = {**source_files.metadata(before), 'sha256': expected}
+            finally:
+                os.close(fd)
+    return result
+
+
+def publisher_observer(backup):
+    """Every poll gets a new read-only snapshot, so a natural commit is visible."""
+    import psycopg
+    from psycopg.rows import dict_row
+    options = {**backup.source_options(APP, old.ROLES), 'connect_timeout': 10}
+    unit_properties = ('ActiveState', 'SubState', 'MainPID', 'LoadState', 'FragmentPath', 'DropInPaths',
+        'NeedDaemonReload', 'InvocationID', 'Result', 'ExecMainStatus', 'ExecMainStartTimestamp', 'ExecMainExitTimestamp')
+    timer_properties = ('ActiveState', 'SubState', 'LoadState', 'UnitFileState', 'FragmentPath', 'DropInPaths', 'NeedDaemonReload')
+    def observe():
+        timer = own_unit_properties(PUBLISHER_TIMER, timer_properties)
+        require(timer['SubState'] in ('waiting', 'running')
+                and {key: value for key, value in timer.items() if key != 'SubState'}
+                    == {'ActiveState': 'active', 'LoadState': 'loaded',
+                'UnitFileState': 'enabled', 'FragmentPath': '/etc/systemd/system/' + PUBLISHER_TIMER,
+                'DropInPaths': '', 'NeedDaemonReload': 'no'}, 'availability_publisher_timer_boundary')
+        unit = own_unit_properties(PUBLISHER, unit_properties)
+        require(unit['LoadState'] == 'loaded' and unit['FragmentPath'] == '/etc/systemd/system/' + PUBLISHER
+                and unit['DropInPaths'] == '' and unit['NeedDaemonReload'] == 'no',
+                'availability_publisher_loaded_boundary')
+        with psycopg.connect(**options, row_factory=dict_row) as conn:
+            conn.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
+            conn.execute("SET LOCAL timezone='UTC'")
+            conn.execute("SET LOCAL statement_timeout='10s'")
+            flags = conn.execute("SELECT current_user,current_database(),current_setting('transaction_read_only') AS read_only").fetchone()
+            require(flags == {'current_user': 'quillmd_backup', 'current_database': 'quillmd_fresh', 'read_only': 'on'},
+                    'availability_publisher_readonly_database_identity')
+            rows = publisher_observation_connection(conn).execute(
+                "SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='backup'").fetchall()
+            require(len(rows) == 1 and set(rows[0]['row']) == PUBLISHER_ROW_FIELDS,
+                    'availability_publisher_observation_population')
+        row = rows[0]['row']
+        journal = []
+        if unit['MainPID'] == '0' and unit['ActiveState'] in ('inactive', 'failed'):
+            try:
+                end = (datetime.strptime(unit['ExecMainExitTimestamp'], '%a %Y-%m-%d %H:%M:%S UTC')
+                       + timedelta(seconds=1)).strftime('%Y-%m-%d %H:%M:%S UTC')
+            except ValueError:
+                raise Refusal('availability_publisher_completed_time') from None
+            raw = old.command(['journalctl', '-u', PUBLISHER, '--since', unit['ExecMainStartTimestamp'],
+                '--until', end, '-o', 'json', '--no-pager'])
+            journal = [(value.get('_SYSTEMD_INVOCATION_ID'), value.get('MESSAGE'))
+                       for value in map(json.loads, raw.splitlines())]
+        after = own_unit_properties(PUBLISHER, unit_properties)
+        timer_after = own_unit_properties(PUBLISHER_TIMER, timer_properties)
+        return {'row': row, 'unit': unit, 'timer': timer, 'journal': journal,
+                'coherent_unit': after == unit and timer_after == timer}
+    return observe
+
+
+def await_natural_publication(contract, observe):
+    """Select one advancing natural publication; never call publish or retry admission."""
+    require(contract.get('publisher_alignment') == PUBLISHER_ALIGNMENT, 'availability_publisher_alignment_contract')
+    deadline = time.monotonic() + PUBLISHER_ALIGNMENT['maximum_wait_seconds']
+    baseline = observe()
+    require(time.monotonic() < deadline, 'availability_natural_publication_timeout')
+    require(baseline['coherent_unit'] and set(baseline['row']) == PUBLISHER_ROW_FIELDS
+            and baseline['row']['key'] == 'backup' and baseline['row']['expected_interval_seconds'] == 300,
+            'availability_publisher_alignment_original_row')
+    previous_time = datetime.fromisoformat(baseline['row']['computed_at'])
+    while time.monotonic() < deadline:
+        current = observe()
+        require(time.monotonic() < deadline, 'availability_natural_publication_timeout')
+        require(set(current['row']) == PUBLISHER_ROW_FIELDS
+                and current['row']['expected_interval_seconds'] == 300
+                and all(current['row'][key] == baseline['row'][key] for key in ('id', 'created_at', 'key')),
+                'availability_publisher_alignment_immutable_identity')
+        unit, row = current['unit'], current['row']
+        if current['coherent_unit'] and current['timer']['SubState'] == 'waiting' \
+                and unit['MainPID'] == '0' and unit['ActiveState'] in ('inactive', 'failed') \
+                and unit['InvocationID'] != baseline['unit']['InvocationID'] \
+                and datetime.fromisoformat(row['computed_at']) > previous_time:
+            judge_unit = {key: unit[key] for key in ('Result', 'ExecMainStartTimestamp', 'ExecMainExitTimestamp', 'ExecMainStatus', 'InvocationID')}
+            # The real unchanged judge accepts verified unhealthy exit1, while
+            # rejecting deferred invocations, foreign writes and missing logs.
+            publication = publisher_judge.judge(baseline['row'], baseline['unit']['InvocationID'],
+                                               judge_unit, row, current['journal'])
+            require(time.monotonic() < deadline, 'availability_natural_publication_timeout')
+            return {**current, 'publication': publication}
+        time.sleep(PUBLISHER_ALIGNMENT['poll_interval_seconds'])
+    raise Refusal('availability_natural_publication_timeout')
+
+
+@contextmanager
+def aligned_publication_exclusion(target, contract, backup, exclusion, budget):
+    with existing_operation_locks():
+        budget.remaining(360 + 120 + 90 + 30 + SECONDS)
+        storage_proof = storage_admission(contract, 'before_natural_publication_wait')
+        sources = publisher_unit_sources()
+        observe = publisher_observer(backup)
+        selected = await_natural_publication(contract, observe)
+        budget.remaining(120 + 90 + 30 + SECONDS)
+        draining_started = time.monotonic()
+        with exclusion.hold('private-availability:' + target[:12]):
+            current = observe()
+            require(current['coherent_unit'] and all(current[name] == selected[name]
+                    for name in ('row', 'unit', 'timer', 'journal')), 'availability_selected_publication_drift')
+            require(publisher_unit_sources() == sources, 'availability_publisher_unit_file_drift')
+            require(time.monotonic() - draining_started <= RULED_BUDGET['publication_drain_seconds'],
+                    'availability_ruled_stage_time_budget')
+            proof = {'protocol': PUBLISHER_ALIGNMENT['protocol'], 'selected_invocation': selected['unit']['InvocationID'],
+                'selected_row_sha256': sha(encode(selected['row'])), 'selected_unit_sha256': sha(encode(selected['unit'])),
+                'selected_journal_sha256': sha(encode(selected['journal'])), 'publication': selected['publication'],
+                'maximum_wait_seconds': 360, 'storage_admission': storage_proof, 'unit_sources': sources,
+                'manual_publications': 0, 'timer_or_service_actions': 0, 'provider_calls': 0}
+            budget.remaining(90 + 30 + SECONDS)
+            yield proof
+
+
 def database_admission(contract, original, verifier, backup):
     """Adapt qualified read-only functions; no frozen main/auth/progress function runs."""
     import psycopg
@@ -563,6 +754,24 @@ def boundary(host, storage, target, worker_required):
     return units
 
 
+def completion_unit_provenance(host, units):
+    """Measure invocation UUIDs without changing the frozen legacy state map."""
+    require(set(units) == set(old.UNITS), 'availability_completion_unit_population')
+    result = {}
+    for unit, legacy in units.items():
+        require(set(legacy) == {'ActiveState', 'SubState', 'MainPID', 'FragmentPath', 'DropInPaths',
+                'UnitFileState', 'ExecMainStartTimestampMonotonic'}, 'availability_completion_legacy_population')
+        measured = own_unit_properties(unit, tuple(legacy) + ('InvocationID', 'NeedDaemonReload'))
+        require({key: measured[key] for key in legacy} == legacy
+                and re.fullmatch('[a-f0-9]{32}', measured['InvocationID'])
+                and measured['NeedDaemonReload'] == 'no'
+                and host.state(unit) == legacy, 'availability_completion_unit_identity')
+        require(own_unit_properties(unit, tuple(measured)) == measured,
+                'availability_completion_unit_observation_race')
+        result[unit] = measured
+    return result
+
+
 def direct_health(target):
     import httpx
     values = []
@@ -587,13 +796,20 @@ def await_direct_health(target, timeout=30):
             time.sleep(0.2)
 
 
-def complete_recovery(target, contract, source, *, host, backup, storage, exclusion, env_writer, preflight=False):
+def complete_recovery(target, contract, source, *, host, backup, storage, exclusion, env_writer,
+                      preflight=False, budget=None):
     if not preflight:
         require(NATIVE_APPROVAL_PROTOCOL_QUALIFIED and contract.get('installation_qualified') is True,
                 'availability_native_authorization_protocol_unqualified')
+    budget = budget or RuledBudget(contract)
     exclusion.bind_runtime(RUNTIME)
-    with existing_operation_locks(), exclusion.hold('private-availability:' + target[:12]):
-        prepared = readiness(contract, host, backup, storage, preflight=preflight)
+    with aligned_publication_exclusion(target, contract, backup, exclusion, budget) as alignment:
+        with budget.stage('full_readiness', 30 + SECONDS):
+            prepared = readiness(contract, host, backup, storage, preflight=preflight)
+        publisher = prepared['admission']['allowed_deltas']['publisher']
+        require(sha(encode(publisher['current_full_row'])) == alignment['selected_row_sha256']
+                and publisher['publication']['invocation'] == alignment['selected_invocation'],
+                'availability_admitted_selected_publication_identity')
         if preflight:
             accepted = prepared['external_acknowledgement'].get('status') != 'RED'
             return {'complete': accepted, 'independent_checks_complete': True, 'read_only_preflight': True, 'source': source,
@@ -601,7 +817,10 @@ def complete_recovery(target, contract, source, *, host, backup, storage, exclus
                     'original_records_adjudicated': True, 'current_snapshot_sha256': sha(encode(prepared['before'])),
                     'external_acknowledgement': prepared['external_acknowledgement'],
                     'publisher': prepared['admission']['allowed_deltas']['publisher'],
+                    'publisher_alignment': alignment,
+                    'ruled_time_budget': budget.proof(),
                     'storage_admission': prepared['storage_admission']}
+        budget.remaining(30 + SECONDS)
         updated = release_only_environment(prepared['environment'], target)
         outcome = {'format': 1, 'complete': False, 'stage': 'admitted', 'source': source,
                    'provider_calls': 0, 'authentication_submissions': 0, 'database_restore_performed': False,
@@ -613,6 +832,8 @@ def complete_recovery(target, contract, source, *, host, backup, storage, exclus
                    'original_receipts': contract['original_policy']['original_receipts'],
                    'failed_continuation_receipts': CONTINUATION_RECEIPTS, 'before': prepared['before'],
                    'admission': prepared['admission'], 'external_acknowledgement': prepared['external_acknowledgement'],
+                   'publisher_alignment': alignment,
+                   'ruled_time_budget': budget.proof(),
                    'environment_before_sha256': sha(prepared['environment']), 'environment_after_sha256': sha(updated),
                    'storage_admission': [prepared['storage_admission']], 'started_at': datetime.now(timezone.utc).isoformat()}
         OUTPUT.mkdir(mode=0o700)
@@ -620,6 +841,7 @@ def complete_recovery(target, contract, source, *, host, backup, storage, exclus
         deadline = time.monotonic() + SECONDS
         def check(stage):
             require(time.monotonic() < deadline, 'availability_completion_deadline')
+            budget.remaining(0)
             outcome['storage_admission'].append(storage_admission(contract, stage))
         try:
             write_new(OUTPUT / 'environment-before.fernet', prepared['cipher'].encrypt(prepared['environment']))
@@ -648,12 +870,15 @@ def complete_recovery(target, contract, source, *, host, backup, storage, exclus
             check('before_worker_start')
             host.service('start', old.UNITS[2])
             outcome['units_after'] = boundary(host, storage, target, True)
+            outcome['completion_unit_provenance'] = completion_unit_provenance(host, outcome['units_after'])
             outcome['worker_configuration_provenance'] = host.worker_configuration(updated, target, outcome['units_after'])
             outcome['health'] = await_direct_health(target)
             require(old.snapshot(host, backup, storage) == prepared['before'], 'availability_post_start_preservation')
             require(loaded_external_state(host, contract['external_configuration_ack'])
                     == prepared['external_acknowledgement']['loaded_state'], 'availability_external_post_start_race')
             check('complete')
+            require(completion_unit_provenance(host, outcome['units_after']) == outcome['completion_unit_provenance'],
+                    'availability_completion_unit_final_race')
             outcome.update(complete=True, stage='complete', completed_at=datetime.now(timezone.utc).isoformat(),
                            preserved=prepared['before'], actual_provider_model_verified=False,
                            next_step='Separately qualified same-URL browser/provider acceptance; allowance remains unconsumed.')
@@ -694,10 +919,19 @@ def main(argv=None):
         return 0
     if args.execute:
         require(NATIVE_APPROVAL_PROTOCOL_QUALIFIED, 'availability_native_authorization_protocol_unqualified')
+    started = time.monotonic()
     contract = load_contract()
-    source = source_gate(args.operator_commit, contract)
+    budget = RuledBudget(contract)
+    # Include declaration authentication in the same source-check allowance.
+    budget.started = started
+    budget.deadline = started + RULED_BUDGET['maximum_seconds']
+    with budget.stage('source_checks', 360 + 120 + 90 + 30 + SECONDS):
+        source = source_gate(args.operator_commit, contract)
+    require(time.monotonic() - started <= RULED_BUDGET['source_checks_seconds'],
+            'availability_ruled_stage_time_budget')
     exclusion, backup, env_writer, managed, storage = old.modules()
     result = complete_recovery(args.operator_commit, contract, source, host=old.Host(managed), backup=backup,
-                               storage=storage, exclusion=exclusion, env_writer=env_writer, preflight=args.preflight)
+                               storage=storage, exclusion=exclusion, env_writer=env_writer,
+                               preflight=args.preflight, budget=budget)
     print(json.dumps(result, sort_keys=True, default=str))
     return 0 if result['complete'] else 2

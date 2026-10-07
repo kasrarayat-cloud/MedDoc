@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import Mock, patch
 
 from ops import private_availability_recovery as act
-from ops.test_repair_source_permissions import FictionalOS
+from ops.test_repair_source_permissions import FictionalOS, stat_copy
 
 
 TARGET = '8' * 40
@@ -217,16 +217,23 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         cipher = SimpleNamespace(encrypt=lambda value: b'fictional-cipher:' + act.sha(value).encode())
         prepared = {'original': {'before': original, 'expected_population': original, 'backup': {'original': True}},
                     'before': current, 'environment': environment(), 'cipher': cipher, 'backup': {'coverage': 'original'},
-                    'admission': {'allowed_deltas': {'publisher': {'healthy': False}}}, 'units': {'stopped': True},
+                    'admission': {'allowed_deltas': {'publisher': {'healthy': False,
+                        'current_full_row': {'healthy': False}, 'publication': {'invocation': 'a' * 32}}}},
+                    'units': {'stopped': True},
                     'external_acknowledgement': {'loaded_state': {'fictional': 'exact'}}, 'storage_admission': {'passed': True}}
         host = SimpleNamespace(state=Mock(return_value={'MainPID': '0', 'ActiveState': 'inactive'}),
                                service=Mock(), worker_configuration=Mock(return_value={'actual_provider_model_verified': False}))
         contract = {'original_policy': {'original_receipts': {'original': 'unchanged'}},
-                    'external_configuration_ack': {'qualified': True}, 'installation_qualified': True}
+                    'external_configuration_ack': {'qualified': True}, 'installation_qualified': True,
+                    'publisher_alignment': act.PUBLISHER_ALIGNMENT, 'ruled_time_budget': act.RULED_BUDGET}
         stack = ExitStack()
         stack.enter_context(patch.object(act, 'OUTPUT', root / 'exclusive-result'))
         stack.enter_context(patch.object(act, 'ATTEMPT', root / 'exclusive-attempt'))
         stack.enter_context(patch.object(act, 'existing_operation_locks', return_value=nullcontext()))
+        alignment = {'selected_row_sha256': act.sha(act.encode({'healthy': False})),
+                     'selected_invocation': 'a' * 32}
+        stack.enter_context(patch.object(act, 'aligned_publication_exclusion', return_value=nullcontext(alignment)))
+        stack.enter_context(patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '1200'}))
         stack.enter_context(patch.object(act, 'readiness', return_value=prepared))
         stack.enter_context(patch.object(act, 'stopped_scope', return_value=prepared['units']))
         stack.enter_context(patch.object(act.old, 'snapshot', return_value=current))
@@ -234,6 +241,7 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         stack.enter_context(patch.object(act, 'forward_source'))
         stack.enter_context(patch.object(act, 'storage_admission', return_value={'passed': True}))
         stack.enter_context(patch.object(act, 'boundary', return_value={'fictional': 'boundary'}))
+        stack.enter_context(patch.object(act, 'completion_unit_provenance', return_value={'fictional': 'measured'}))
         stack.enter_context(patch.object(act, 'direct_health', return_value=[]))
         # This wholly invented pipeline exercises preservation/failure ordering,
         # not the unqualified native authorization or actual installation.
@@ -695,6 +703,258 @@ class DescriptorSourceGateTests(unittest.TestCase):
             with patch.object(act.source_files, 'bytes_at', side_effect=race):
                 with self.assertRaisesRegex(act.Refusal, 'public_source_descriptor_refused'):
                     act.operator_source_bytes('public.py', tree=root)
+
+
+class NaturalPublisherSequencingTests(unittest.TestCase):
+    def observations(self):
+        row = {'id': 1, 'created_at': '2026-09-30T00:00:00+00:00', 'key': 'backup',
+            'condition': 'expired', 'severity': 'error', 'healthy': False, 'action': 'renew',
+            'payload': {'fictional': 'retained input'}, 'computed_at': '2026-10-07T02:00:00+00:00',
+            'published_at': '2026-10-07T02:00:00.200000+00:00', 'expected_interval_seconds': 300}
+        unit = {'ActiveState': 'failed', 'SubState': 'failed', 'MainPID': '0', 'LoadState': 'loaded',
+            'FragmentPath': '/etc/systemd/system/' + act.PUBLISHER, 'DropInPaths': '',
+            'NeedDaemonReload': 'no', 'InvocationID': 'a' * 32, 'Result': 'exit-code',
+            'ExecMainStatus': '1', 'ExecMainStartTimestamp': 'Wed 2026-10-07 02:00:00 UTC',
+            'ExecMainExitTimestamp': 'Wed 2026-10-07 02:00:01 UTC'}
+        timer = {'ActiveState': 'active', 'SubState': 'waiting', 'LoadState': 'loaded',
+            'UnitFileState': 'enabled', 'FragmentPath': '/etc/systemd/system/' + act.PUBLISHER_TIMER,
+            'DropInPaths': '', 'NeedDaemonReload': 'no'}
+        before = {'row': row, 'unit': unit, 'timer': timer, 'journal': [], 'coherent_unit': True}
+        after = deepcopy(before)
+        after['row'].update(computed_at='2026-10-07T02:05:00.123450+00:00',
+                            published_at='2026-10-07T02:05:00.200000+00:00')
+        after['unit'].update(InvocationID='b' * 32, ExecMainStartTimestamp='Wed 2026-10-07 02:05:00 UTC',
+                             ExecMainExitTimestamp='Wed 2026-10-07 02:05:01 UTC')
+        after['journal'] = [('b' * 32, 'Published backup status: expired (error).')]
+        return before, after
+
+    def test_natural_unhealthy_publication_is_verified_without_changing_health(self):
+        before, after = self.observations()
+        deferred = deepcopy(after)
+        deferred['row'] = deepcopy(before['row'])
+        observe = Mock(side_effect=[before, deferred, after])
+        with patch.object(act.time, 'sleep') as sleep:
+            result = act.await_natural_publication({'publisher_alignment': act.PUBLISHER_ALIGNMENT}, observe)
+        self.assertTrue(result['publication']['publication_verified'])
+        self.assertFalse(result['publication']['backup_healthy'])
+        self.assertEqual(result['publication']['exit']['status'], '1')
+        self.assertEqual(observe.call_count, 3)
+        sleep.assert_called_once_with(1)
+
+    def test_real_identity_source_invocation_and_journal_faults_refuse(self):
+        before, after = self.observations()
+        changes = [lambda v: v['row'].update(id=2), lambda v: v['row'].update(expected_interval_seconds=301),
+            lambda v: v['row'].update(extra='unknown'), lambda v: v.update(journal=[]),
+            lambda v: v['row'].update(computed_at='2026-10-07T02:05:10+00:00'),
+            lambda v: v['unit'].update(InvocationID='bad'), lambda v: v['unit'].update(ExecMainStatus='0'),
+            lambda v: v['journal'].append(('b' * 32, 'CommandError fictional'))]
+        for index, change in enumerate(changes):
+            wrong = deepcopy(after); change(wrong)
+            with self.subTest(index=index), self.assertRaises((act.Refusal, act.publisher_judge.VerificationFailure)):
+                act.await_natural_publication({'publisher_alignment': act.PUBLISHER_ALIGNMENT},
+                                               Mock(side_effect=[before, wrong]))
+
+    def test_running_to_completed_to_waiting_transition_selects_only_stable_boundary(self):
+        before, after = self.observations()
+        running = deepcopy(after)
+        running['unit'].update(ActiveState='activating', SubState='start', MainPID='123')
+        running['timer']['SubState'] = 'running'
+        completed_running = deepcopy(after); completed_running['timer']['SubState'] = 'running'
+        observe = Mock(side_effect=[before, running, completed_running, after, after])
+        with patch.object(act.time, 'sleep') as sleep:
+            selected = act.await_natural_publication({'publisher_alignment': act.PUBLISHER_ALIGNMENT}, observe)
+        self.assertEqual(selected['timer']['SubState'], 'waiting')
+        self.assertEqual(observe.call_count, 4)
+        self.assertEqual(sleep.call_count, 2)
+        with patch.object(act, 'existing_operation_locks', return_value=nullcontext()), \
+             patch.object(act, 'storage_admission', return_value={}), \
+             patch.object(act, 'publisher_unit_sources', return_value={'same': True}), \
+             patch.object(act, 'publisher_observer', return_value=observe), \
+             patch.object(act, 'await_natural_publication', return_value=selected):
+            with act.aligned_publication_exclusion(TARGET, {}, None,
+                    SimpleNamespace(hold=lambda _: nullcontext()), SimpleNamespace(remaining=Mock())) as proof:
+                self.assertEqual(proof['selected_invocation'], 'b' * 32)
+        self.assertEqual(observe.call_count, 5)
+
+    def test_natural_wait_uses_monotonic_deadline_and_does_not_retry_full_admission(self):
+        before, after = self.observations()
+        clock = [0]
+        def sleep(seconds): clock[0] += seconds
+        with patch.object(act.time, 'monotonic', side_effect=lambda: clock[0]), \
+             patch.object(act.time, 'sleep', side_effect=sleep), \
+             patch.object(act, 'readiness', side_effect=AssertionError('no admission retry')):
+            observe = Mock(return_value=before)
+            with self.assertRaisesRegex(act.Refusal, 'natural_publication_timeout'):
+                act.await_natural_publication({'publisher_alignment': act.PUBLISHER_ALIGNMENT}, observe)
+            self.assertEqual(clock[0], 360)
+            self.assertEqual(observe.call_count, 361)
+        count = [0]
+        def slow_observe():
+            count[0] += 1
+            if count[0] == 2:
+                clock[0] = 361
+                return after
+            return before
+        clock[0] = 0
+        with patch.object(act.time, 'monotonic', side_effect=lambda: clock[0]), \
+             self.assertRaisesRegex(act.Refusal, 'natural_publication_timeout'):
+            act.await_natural_publication({'publisher_alignment': act.PUBLISHER_ALIGNMENT},
+                slow_observe)
+
+    def test_operation_locks_precede_natural_tick_and_publication_hold_covers_admission(self):
+        from contextlib import contextmanager
+        events = []
+        @contextmanager
+        def scope(name):
+            events.append(name + ':enter')
+            try: yield
+            finally: events.append(name + ':exit')
+        _, selected = self.observations()
+        selected['publication'] = {'invocation': 'b' * 32}
+        budget = SimpleNamespace(remaining=Mock())
+        with patch.object(act, 'existing_operation_locks', side_effect=lambda: scope('four-input-locks')), \
+             patch.object(act, 'storage_admission', return_value={'passed': True}), \
+             patch.object(act, 'publisher_unit_sources', return_value={'two': 'exact public units'}), \
+             patch.object(act, 'publisher_observer', return_value=lambda: selected), \
+             patch.object(act, 'await_natural_publication', side_effect=lambda *a: events.append('natural-tick') or selected):
+            exclusion = SimpleNamespace(hold=lambda owner: scope('publication-hold'))
+            with act.aligned_publication_exclusion(TARGET, {}, None, exclusion, budget) as proof:
+                events.append('full-admission')
+                self.assertEqual(proof['selected_invocation'], 'b' * 32)
+                self.assertEqual(proof['manual_publications'], 0)
+        self.assertEqual(events, ['four-input-locks:enter', 'natural-tick', 'publication-hold:enter',
+                                 'full-admission', 'publication-hold:exit', 'four-input-locks:exit'])
+
+    def test_any_selected_component_or_public_unit_drift_refuses_before_admission(self):
+        _, selected = self.observations(); selected['publication'] = {'invocation': 'b' * 32}
+        for name in ('row', 'unit', 'timer', 'journal', 'unit_source'):
+            current = deepcopy(selected)
+            if name == 'journal': current[name].append(('b' * 32, 'additional'))
+            elif name != 'unit_source': current[name]['unexpected'] = True
+            sources = [{'same': True}, {'changed': True}] if name == 'unit_source' else [{'same': True}] * 2
+            with self.subTest(name=name), patch.object(act, 'existing_operation_locks', return_value=nullcontext()), \
+                 patch.object(act, 'storage_admission', return_value={}), \
+                 patch.object(act, 'publisher_unit_sources', side_effect=sources), \
+                 patch.object(act, 'publisher_observer', return_value=lambda: current), \
+                 patch.object(act, 'await_natural_publication', return_value=selected), \
+                 self.assertRaises(act.Refusal):
+                with act.aligned_publication_exclusion(TARGET, {}, None,
+                        SimpleNamespace(hold=lambda _: nullcontext()), SimpleNamespace(remaining=Mock())):
+                    self.fail('must not reach admission')
+
+    def test_each_publisher_poll_opens_fresh_readonly_snapshot_with_only_owned_reads(self):
+        import psycopg
+        _, selected = self.observations()
+        conns = [Mock(), Mock()]
+        for conn in conns:
+            conn.__enter__ = Mock(return_value=conn); conn.__exit__ = Mock(return_value=False)
+            conn.execute.return_value.fetchone.return_value = {'current_user': 'quillmd_backup',
+                'current_database': 'quillmd_fresh', 'read_only': 'on'}
+            conn.execute.return_value.fetchall.return_value = [{'row': selected['row']}]
+        def properties(unit, names):
+            return selected['timer'] if unit == act.PUBLISHER_TIMER else selected['unit']
+        raw = act.encode({'_SYSTEMD_INVOCATION_ID': 'b' * 32, 'MESSAGE': selected['journal'][0][1]})
+        backup = SimpleNamespace(source_options=Mock(return_value={'dbname': 'fictional'}))
+        with patch.object(psycopg, 'connect', side_effect=conns) as connect, \
+             patch.object(act, 'own_unit_properties', side_effect=properties) as show, \
+             patch.object(act.old, 'command', return_value=raw) as command:
+            observe = act.publisher_observer(backup)
+            self.assertEqual(observe(), observe())
+        self.assertEqual(connect.call_count, 2)
+        self.assertTrue(all(call.kwargs['connect_timeout'] == 10 for call in connect.call_args_list))
+        for conn in conns:
+            self.assertEqual([c.args[0] for c in conn.execute.call_args_list], [
+                'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY', "SET LOCAL timezone='UTC'",
+                "SET LOCAL statement_timeout='10s'",
+                "SELECT current_user,current_database(),current_setting('transaction_read_only') AS read_only",
+                "SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='backup'"])
+        self.assertEqual({c.args[0] for c in show.call_args_list}, {act.PUBLISHER, act.PUBLISHER_TIMER})
+        self.assertTrue(all(c.args[0][:3] == ['journalctl', '-u', act.PUBLISHER] for c in command.call_args_list))
+
+    def test_native_completion_preserves_legacy_map_and_requires_measured_stable_uuid(self):
+        legacy = {unit: {'ActiveState': 'active', 'SubState': 'running', 'MainPID': str(100 + index),
+            'FragmentPath': '/etc/systemd/system/' + unit, 'DropInPaths': '', 'UnitFileState': 'enabled',
+            'ExecMainStartTimestampMonotonic': str(200 + index)} for index, unit in enumerate(act.old.UNITS)}
+        original = deepcopy(legacy)
+        measured = {unit: {**state, 'InvocationID': str(index + 1) * 32, 'NeedDaemonReload': 'no'}
+                    for index, (unit, state) in enumerate(legacy.items())}
+        host = SimpleNamespace(state=lambda unit: legacy[unit])
+        with patch.object(act, 'own_unit_properties', side_effect=lambda unit, _: measured[unit]):
+            self.assertEqual(act.completion_unit_provenance(host, legacy), measured)
+        self.assertEqual(legacy, original)
+        for field, value in (('InvocationID', ''), ('NeedDaemonReload', 'yes'), ('MainPID', '999')):
+            wrong = deepcopy(measured); wrong[act.old.UNITS[0]][field] = value
+            with self.subTest(field=field), patch.object(act, 'own_unit_properties', side_effect=lambda unit, _: wrong[unit]), \
+                 self.assertRaises(act.Refusal):
+                act.completion_unit_provenance(host, legacy)
+        first = measured[act.old.UNITS[0]]
+        with patch.object(act, 'own_unit_properties', side_effect=[first, {**first, 'InvocationID': 'f' * 32}]), \
+             self.assertRaisesRegex(act.Refusal, 'observation_race'):
+            act.completion_unit_provenance(host, legacy)
+
+    def test_owned_public_unit_sources_refuse_private_mode_link_content_and_path_swap(self):
+        class FictionalRootOS:
+            def __getattr__(self, name): return getattr(os, name)
+            def fstat(self, fd): return stat_copy(os.fstat(fd), st_uid=0, st_gid=0)
+        for fault in ('none', 'private_mode', 'hardlink', 'symlink', 'content', 'path_swap'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); root.chmod(0o755)
+                pins = {act.PUBLISHER: act.sha(b'fictional service'), act.PUBLISHER_TIMER: act.sha(b'fictional timer')}
+                for name, raw in ((act.PUBLISHER, b'fictional service'), (act.PUBLISHER_TIMER, b'fictional timer')):
+                    (root / name).write_bytes(raw); (root / name).chmod(0o644)
+                file = root / act.PUBLISHER
+                if fault == 'private_mode': file.chmod(0o600)
+                if fault == 'hardlink': os.link(file, root / 'another-link')
+                if fault == 'symlink': file.unlink(); file.symlink_to(root / act.PUBLISHER_TIMER)
+                if fault == 'content': file.write_bytes(b'different actual source')
+                real_open_root, real_bytes = act.source_files.open_root, act.source_files.bytes_at
+                def bytes_at(fd, maximum):
+                    raw = real_bytes(fd, maximum)
+                    if fault == 'path_swap':
+                        replacement = root / 'replacement'; replacement.write_bytes(raw); replacement.chmod(0o644)
+                        os.replace(replacement, file)
+                    return raw
+                with patch.object(act, 'os', FictionalRootOS()), \
+                     patch.object(act.source_files, 'open_root', side_effect=lambda _: real_open_root(root)), \
+                     patch.object(act, 'PUBLISHER_UNIT_PINS', pins), \
+                     patch.object(act.source_files, 'bytes_at', side_effect=bytes_at) as read:
+                    if fault == 'none':
+                        proof = act.publisher_unit_sources()
+                        self.assertEqual({name: value['sha256'] for name, value in proof.items()}, pins)
+                    else:
+                        with self.assertRaises((act.Refusal, act.source_files.Refusal, OSError)):
+                            act.publisher_unit_sources()
+                        if fault in ('private_mode', 'hardlink', 'symlink'): read.assert_not_called()
+
+    def test_explicit_outer_budget_and_stage_elapsed_time_refuse_insufficient_time(self):
+        contract = {'ruled_time_budget': act.RULED_BUDGET}
+        for value in ('', '1199', '1200.0', '3600'):
+            with self.subTest(value=value), patch.dict(os.environ, {'RULED_ACT_MAX_SECS': value}), \
+                 self.assertRaisesRegex(act.Refusal, 'explicit_ruled_time_budget'):
+                act.RuledBudget(contract)
+        clock = [0]
+        with patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '1200'}), \
+             patch.object(act.time, 'monotonic', side_effect=lambda: clock[0]):
+            budget = act.RuledBudget(contract)
+            with self.assertRaisesRegex(act.Refusal, 'stage_time_budget'):
+                with budget.stage('full_readiness', 270): clock[0] = 91
+            clock[0] = 931
+            with self.assertRaisesRegex(act.Refusal, 'budget_remaining'): budget.remaining(270)
+
+    def test_failed_full_admission_or_selected_row_mismatch_has_no_outputs_or_actions(self):
+        for mismatch in (False, True):
+            with tempfile.TemporaryDirectory() as temp:
+                stack, prepared, host, contract = AvailabilityRecoveryTests().fixture_recovery(Path(temp))
+                if mismatch: prepared['admission']['allowed_deltas']['publisher']['current_full_row']['changed'] = True
+                with stack, patch.object(act, 'readiness', side_effect=None if mismatch else act.Refusal('meaningful_failure'),
+                                         return_value=prepared) as readiness, self.assertRaises(act.Refusal):
+                    try:
+                        act.complete_recovery(TARGET, contract, {}, host=host, backup=None, storage=None,
+                            exclusion=SimpleNamespace(bind_runtime=Mock()), env_writer=None)
+                    finally:
+                        readiness.assert_called_once()
+                        self.assertFalse(act.OUTPUT.exists()); self.assertFalse(act.ATTEMPT.exists())
+                        host.service.assert_not_called()
 
 
 if __name__ == '__main__':
