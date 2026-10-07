@@ -2,7 +2,8 @@
 
 This is an inert preparation. All three operational source gates and the application
 normal-origin gate remain false. The actual preserving availability receipt and
-completed private browser/provider campaign are required before qualification.
+cited private acceptance operations base are required before protocol qualification.
+Completed private browser/provider evidence remains a runtime execution gate.
 No deployment, ingress, login, provider, migration or database write is authorized
 by this draft alone. The existing recorded task authorization covers the later
 reviewed route; no additional provider allowance is introduced.
@@ -48,27 +49,41 @@ static assets, schemas and original captures remain byte-identical.
   "outer_ceiling_seconds": 2400,
   "private_acceptance": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/complete.json",
-    "sha256": null
+    "binding": "private-acceptance-completion-cross-hashes-v1"
   },
-  "private_acceptance_qualified": false,
+  "private_acceptance_protocol_qualified": false,
+  "private_acceptance_completed": false,
   "private_accepted_revision": null,
   "private_authority": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/parent-phase-verify.json",
-    "sha256": null
+    "binding": "private-acceptance-completion-cross-hashes-v1"
   },
   "private_ingress_sha256": "cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a",
   "private_origin": "https://app.quillmd.com:9443",
   "private_report": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/independent-verification.json",
-    "sha256": null
+    "binding": "private-acceptance-completion-cross-hashes-v1"
   },
   "provider_calls": 0,
+  "runtime_receipt_binding_protocol": "private-acceptance-completion-cross-hashes-v1",
+  "session_completion_reserve_seconds": 60,
+  "session_forward_reserve_seconds": 600,
   "source_base": "ff60bc49bc053715c66fd741f9151a70819e1617"
 }
 ```
 
-Qualification binds the genuine availability completion, private campaign
-completion, full independent report, and final parent-phase authority. It retains
+Protocol qualification binds the genuine availability completion, actual served
+release and exact fully cited acceptance operations base. Both normal source
+citations can finish before the private campaign while installed source and the
+normal environment/ingress remain unchanged. The source never claims that a
+future campaign completed. At runtime, fixed nofollow/protected complete/report/
+progress/final-authority/admission paths authenticate their exact operations and
+served identities, the literal availability SHA, complete-to-report hash,
+report-to-progress hash, and authority-to-both-admission hashes. Missing, failed,
+incomplete or causally inconsistent evidence refuses before any service,
+environment, ingress or authenticated request. The entire frozen independent
+original/current clinical, Word, financial and preservation proof then reruns;
+the packet's completion booleans cannot substitute for that proof. It retains
 the original 36-table/212-session encrypted capture and its failure chain; it
 never creates a new historical capture. The existing blank customer Word fixture
 and new synthetic four-field allergy form/mapping/files remain covered by the
@@ -126,6 +141,30 @@ maintenance503 without creating or deleting a preview session. Existing grants
 continue through the same real account/MFA/department boundary. Admin host stays
 maintenance; staff use the existing protected console on the doctor origin.
 
+The genuine final doctor storage state and separate final admin readback state
+are hash-bound through the completed campaign progress/report. The original MFA
+storage and its original interval remain immutable. The controller only reads
+the exact four existing session rows; it does not issue a private keepalive GET,
+renew, create or recover a session/grant. HMAC, actor/MFA identity, exact cookie
+security/host/path, browser/database expiry and unchanged preview fingerprint,
+issued and seen are checked against the actual clock. The earliest doctor/
+preview browser/database expiry, preview idle and absolute limits must exceed
+600 seconds immediately before mutation. The forward work has a 540-second
+checked interval that starts before the final pre-mutation session read, so
+that read and its following population guard consume the same budget. The final
+population guard precedes the last TTL read; completion separately requires
+more than 60 seconds for
+the already-requested authenticated served verification. The 2400-second outer
+ceiling and rollback reserve stay distinct. A slow proof or expired session
+refuses; no historical interval is stretched and no freshness is invented.
+The completed receipt, independent report, progress and authority/admission
+chain are re-read around both full verification and each live-session
+observation and must retain their admitted bytes.
+The forward deadline is checked after durable completion I/O. If that write
+stalls past the deadline, the measured failure/rollback receipt is authoritative;
+any already-written completion candidate is preserved and is valid only when
+there is no failed receipt. The controller does not return success in that case.
+
 The post-publication structural checks create no authenticated session and issue
 no provider call. They prove anonymous app/admin maintenance, unchanged marketing
 and retired-host statuses, exact current population, own measured served revision
@@ -149,9 +188,11 @@ single attempt is never reused. The 2400-second ruled ceiling includes source
 checks/natural selection/admission/transition and a reserved bounded rollback;
 its checks refuse insufficient time and do not promise eventual completion.
 
-Exact prerequisites still pending are the actual cited private-acceptance base,
-served release and four genuine hash-bound receipts, current original nginx
+Exact protocol prerequisites still pending are the actual cited private-acceptance base,
+served release and genuine literal availability receipt hash, current original nginx
 metadata, finished independent refutation, and exact PR/merge citation. These
 are specific execution inputs, not a request for further historical VoiceAssist
 approval. Existing V8/V15 exports and recorded preservation decision remain
-untouched, and historical deployment approval remains unverified.
+untouched, and historical deployment approval remains unverified. Runtime execution
+additionally requires the genuinely completed cross-bound private campaign and
+live final browser states; neither is asserted by source qualification.

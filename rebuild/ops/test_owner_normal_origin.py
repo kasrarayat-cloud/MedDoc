@@ -2,6 +2,7 @@
 import ast
 from contextlib import contextmanager
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 import io
 import json
 import os
@@ -41,13 +42,17 @@ class FictionalHost:
         self.native=object();self.environment=ENV
         self.env_writer=SimpleNamespace(replace_environment=self.replace_env)
         self.cipher=SimpleNamespace(encrypt=lambda raw:b'fictional-cipher:'+raw)
-        self.preservation=MagicMock(return_value={'full_original_and_new_records_verified':True})
+        self.preservation=MagicMock(return_value={'full_original_and_new_records_verified':True,'private_acceptance_sha256':'c'*64})
         self.full_preservation=self.preservation
+        self.session_admission=MagicMock(side_effect=lambda minimum:{'remaining_seconds':1790,'required_remaining_seconds':minimum,
+            'session_renewal_performed':False,'database_writes':0})
         self.routes=MagicMock(return_value={'https://app.quillmd.com':503})
     @contextmanager
     def hold(self):
         self.events.append('five-locks-held');yield;self.events.append('five-locks-released')
     def check(self,*a): pass
+    def check_hold(self): pass
+    def forward_budget(self):self.events.append('bounded-forward-budget')
     def git(self,tree,*args):
         if args[:2]==('rev-parse','HEAD'):return (self.revision+'\n').encode()
         if args[:2]==('branch','--show-current'):return b'main\n'
@@ -86,7 +91,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
             for mode in ('--execute','--preflight'):
                 with self.assertRaisesRegex(act.Refusal,'source_protocol_unqualified'):
                     act.main([mode,'--operations-revision',TARGET])
-        self.assertFalse(act.ACTIVE_PROTOCOL_QUALIFIED);self.assertFalse(act.PRIVATE_ACCEPTANCE_QUALIFIED)
+        self.assertFalse(act.ACTIVE_PROTOCOL_QUALIFIED);self.assertFalse(act.PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED)
         self.assertFalse(act.INGRESS_PUBLICATION_QUALIFIED)
     def test_main_passes_the_checked_buffers_not_a_template_tuple(self):
         host=object();buffers={act.TEMPLATE:TEMPLATE};policy={}
@@ -121,17 +126,32 @@ class NormalOriginOperatorTests(unittest.TestCase):
                 self.run_transition(root,host,policy,True)
             self.assertEqual(host.events,['five-locks-held']);self.assertFalse(host.records)
             self.assertFalse((root/'output').exists())
+    def test_live_session_ttl_refusal_never_renews_or_stops_services(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);_,host,policy=self.fixture(root)
+            host.session_admission.side_effect=act.Refusal('normal443_existing_session_remaining_ttl')
+            with self.assertRaisesRegex(act.Refusal,'remaining_ttl'):self.run_transition(root,host,policy,True)
+            host.preservation.assert_called_once();self.assertFalse(host.records);self.assertFalse((root/'output').exists())
+            self.assertEqual(host.events,['five-locks-held'])
+    def test_ttl_recheck_before_marker_records_precise_failure_without_any_mutation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);_,host,policy=self.fixture(root)
+            host.session_admission.side_effect=[{'remaining_seconds':700},act.Refusal('normal443_existing_session_remaining_ttl')]
+            with self.assertRaisesRegex(act.Refusal,'preparation_failed'):self.run_transition(root,host,policy,True)
+            self.assertNotIn('attempt',host.records);self.assertEqual(host.revision,PRIOR);self.assertEqual(host.environment,ENV)
+            self.assertEqual(host.records['failed.json']['failure_reason'],'normal443_existing_session_remaining_ttl')
+            self.assertEqual(host.records['failed.json']['service_actions'],0)
     def test_execute_is_one_forward_transition_of_own_services_then_one_file(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);_,host,policy=self.fixture(root)
             result=self.run_transition(root,host,policy,True)
             self.assertTrue(result['complete']);self.assertEqual(result['served_revision'],TARGET)
-            self.assertEqual(host.events[1:4],['stop:worker','stop:admin','stop:doctor'])
+            self.assertEqual(host.events[2:5],['stop:worker','stop:admin','stop:doctor'])
             self.assertLess(host.events.index('fast-forward'),host.events.index('start:doctor'))
             self.assertLess(host.events.index('start:worker'),host.events.index('only-quillmd-ingress'))
             self.assertEqual(host.events.count('fast-forward'),1)
             self.assertEqual(set(host.records),{'environment-before.fernet','environment-enabled.fernet','environment-disabled.fernet',
-                'original-ingress.conf','prepared.json','attempt','complete.json'})
+                'original-ingress.conf','prepared.json','live-sessions-before.json','attempt','complete.json'})
             self.assertTrue(host.records['complete.json']['full_original_and_new_acceptance_population_preserved'])
             self.assertFalse(host.records['complete.json']['actual_provider_model_reverified_by_this_transition'])
             with self.assertRaisesRegex(act.Refusal,'single_consumable_attempt'):
@@ -233,7 +253,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
                 act.NativeHost({'active_protocol_qualified':True},TARGET,{},0)
     def test_source_gate_authenticates_each_dependency_and_exact_intermediate_operations_scope(self):
         policy={'private_accepted_revision':PRIOR,**{key:True for key in (
-            'active_protocol_qualified','private_acceptance_qualified','ingress_publication_qualified')}}
+            'active_protocol_qualified','private_acceptance_protocol_qualified','ingress_publication_qualified')}}
         def run(bad=None):
             def raw(relative):
                 if relative=='rebuild/core/preview_access.py':return b'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED=True\n'
@@ -278,6 +298,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
     def test_full_preservation_binds_current_publisher_to_adapter_and_reports_new_health_admission(self):
         import types
         host=object.__new__(act.NativeHost);host.served=PRIOR;host.check_hold=MagicMock()
+        host.check_private_inputs=MagicMock()
         health={'id':b'fictional-uuid','created_at':b'original','key':b'backup'}
         original={str(i):{} for i in range(35)}
         original['core_servicehealth']={'columns':list(health),'rows':[b'fictional COPY row']}
@@ -285,6 +306,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
         host.verifier=SimpleNamespace(original_continuation_capture=lambda *_:(None,None,{'tables':{'django_session':{'rows':212}}},original),
             row_mapping=lambda *_:{'fictional-uuid':dict(health)},service_health_original=lambda _:full)
         host.publisher_admission=MagicMock(return_value={'current_full_row':full})
+        host.inputs={'private_acceptance':({},b'fictional qualified private completion')}
         host.current_private_completion=MagicMock();host.historical_policy={};host.authority={};host.common=object()
         host.backup=SimpleNamespace(source_options=lambda *_:{})
         host.old=SimpleNamespace(ROLES=())
@@ -305,6 +327,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
         self.assertTrue(result['private_workflow_report']['preservation']['new_health_publications_admitted'])
         self.assertFalse(report['preservation']['new_health_publications_admitted'])
         self.assertFalse(result['original_capture_replaced']);host.publisher_admission.assert_called_once()
+        self.assertEqual(host.check_private_inputs.call_count,2)
 
 
 class ActualRetainedVerifierTests(unittest.TestCase):
@@ -319,6 +342,8 @@ class ActualRetainedVerifierTests(unittest.TestCase):
         module.CAMPAIGN=str(act.EVIDENCE/'installed-acceptance-v3-20261007')
         def gate():raise act.Refusal('source_protocol_unqualified')
         module.v3_execution_gate=gate
+        module.validate_admin_final_storage=lambda *_:(_ for _ in ()).throw(AssertionError('installed read'))
+        module.validate_doctor_final_storage=module.validate_admin_final_storage
         module.protected=lambda *args:(_ for _ in ()).throw(AssertionError('installed read'))
         verify,namespace=act.memory_verifier(module)
         self.assertIs(namespace['v3_execution_gate'],gate)
@@ -327,6 +352,244 @@ class ActualRetainedVerifierTests(unittest.TestCase):
         self.assertEqual(act.sha(path.read_bytes()),act.FROZEN_V3)
         module.__dict__['__authenticated_source']=raw+b'\n# counterexample'
         with self.assertRaisesRegex(act.Refusal,'frozen_verifier_hash'):act.memory_verifier(module)
+    @unittest.skipUnless((act.EVIDENCE/'recovery-20261007/acceptance-v3-preparation-v2-20261007/verify_installed_acceptance_v3.py').exists(),
+                         'Retained fixed source fixture is host-local, not a live verification')
+    def test_memory_adapter_preserves_current_final_storage_checks_before_database_access(self):
+        import re,types
+        path=act.EVIDENCE/'recovery-20261007/acceptance-v3-preparation-v2-20261007/verify_installed_acceptance_v3.py'
+        raw=act.source_files.protected(path);module=types.ModuleType('_fictional_final_storage_memory_verifier')
+        module.__file__=str(path);module.__dict__['__authenticated_source']=raw
+        campaign=Path('/fictional-fixed-campaign');origin='https://app.quillmd.com:9443';calls=[]
+        readback={'complete':True,'origin':origin,'normal_MFA_session_reused':True,'fresh_MFA_submissions':0,
+            'auth_reset':False,'department_privacy_verified':True,'started_at':'2026-10-07T00:00:00+00:00',
+            'finished_at':'2026-10-07T00:00:01+00:00','checks':[{'name':name,'width':width,'status':200,
+                'no_page_overflow':True,'accessibility_violations':[]} for name in ('overview','services','organizations')
+                for width in (1440,768,390)]}
+        progress={'origin':origin,'browser_workflows_complete':True,'independent_readback_pending':True,'complete':False,
+            'existing_records_edited':0,'admin_readback':readback,'release':PRIOR,'cases':[{'name':name} for name in
+                ('soap-typed','custom-word-typed','soap-voice','allergy-missing','allergy-legitimate')],
+            'started':'2026-10-07T00:00:00+00:00','finished':'2026-10-07T00:00:02+00:00',
+            'doctor_final_storage_state':{}}
+        def admin(p):calls.append('admin');return {'complete':True}
+        def doctor(p):calls.append('doctor');raise act.Refusal('normal443_checked_final_doctor_proof_reached')
+        module.__dict__.update(CAMPAIGN=str(campaign),ACCEPTANCE_CAMPAIGN=campaign,ORIGIN=origin,Path=Path,re=re,
+            json=json,datetime=datetime,require=act.require,v3_execution_gate=lambda:None,
+            protected=lambda _:act.encode(progress),validate_admin_final_storage=admin,validate_doctor_final_storage=doctor)
+        verify,_=act.memory_verifier(module)
+        with patch('psycopg.connect',side_effect=AssertionError('database connection')), \
+             self.assertRaisesRegex(act.Refusal,'checked_final_doctor_proof_reached'):
+            verify(SimpleNamespace(progress=str(campaign/'progress.json'),output=None))
+        self.assertEqual(calls,['admin','doctor'])
+
+
+class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
+    def chain(self):
+        policy={key:{'path':str(path),'binding':act.RUNTIME_BINDING} for key,path in act.PRIVATE_PATHS.items()}
+        availability={'complete':True,'source':{'operator_commit':PRIOR}}
+        avail_raw=act.encode(availability);policy['availability']={'path':str(act.PRIVATE_PATHS['availability']),'sha256':act.sha(avail_raw)}
+        admissions={phase:{'format':3,'operations_revision':act.BASE,'served_revision':PRIOR,'phase':phase}
+                    for phase in ('before-auth','after-auth')}
+        admission_paths={phase:act.EVIDENCE/'installed-acceptance-v3-preparation-20261007'/('admission-'+phase+'.json')
+                         for phase in admissions}
+        admission_items={phase:{'path':str(admission_paths[phase]),'sha256':act.sha(act.encode(packet))}
+                         for phase,packet in admissions.items()}
+        progress={'operations_revision':act.BASE,'served_revision':PRIOR,'activation_sha256':act.sha(avail_raw),
+                  'browser_workflows_complete':True,'complete':False,'independent_readback_pending':True,
+                  'admin_readback':{'complete':True},'preparation':admissions,
+                  'doctor_final_storage_state':{'path':'fictional fixed state','sha256':'a'*64,'captured_at':'fictional capture'}}
+        report={'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,'activation_sha256':act.sha(avail_raw),
+                'provider_calls':0,'database_writes':0,'cases':[{'name':name} for name in (
+                    'soap-typed','custom-word-typed','soap-voice','allergy-missing','allergy-legitimate')],
+                'preservation':{'all_36_tables_all_old_rows_columns_compared':True,'all_67_old_referenced_files_preserved':True},
+                'browser_progress_sha256':act.sha(act.encode(progress)),
+                'admin_readback':{**progress['admin_readback'],'final_storage_state_verification':{'complete':True}},
+                'doctor_final_storage_state':{**progress['doctor_final_storage_state'],'verification':{'complete':True}}}
+        complete={'format':3,'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,
+                  'independent_report':str(act.PRIVATE_PATHS['private_report']),
+                  'independent_report_sha256':act.sha(act.encode(report)),'availability_preserved':True,'provider_retries':0}
+        authority={'phase':'verify','operations_revision':act.BASE,'served_revision':PRIOR,
+                   'authority':{'operations_revision':act.BASE,'served_revision':PRIOR,
+                       'availability_receipt_sha256':act.sha(avail_raw),'admissions':admission_items},
+                   'admission_sha256':{phase:item['sha256'] for phase,item in admission_items.items()}}
+        records={act.PRIVATE_PATHS['private_acceptance']:act.encode(complete),act.PRIVATE_PATHS['private_report']:act.encode(report),
+                 act.PRIVATE_PATHS['private_authority']:act.encode(authority),act.PRIVATE_PATHS['availability']:avail_raw,
+                 act.PRIVATE_PATHS['private_acceptance'].parent/'progress.json':act.encode(progress),
+                 **{admission_paths[phase]:act.encode(packet) for phase,packet in admissions.items()}}
+        policy['private_accepted_revision']=PRIOR
+        return policy,records
+    def test_runtime_completion_is_causally_bound_without_future_hash_constants(self):
+        policy,records=self.chain()
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]):
+            actual=act.private_receipts(policy)
+        self.assertEqual(actual['private_acceptance'][0]['served_revision'],PRIOR)
+        self.assertEqual(actual['progress'][0]['preparation']['after-auth']['operations_revision'],act.BASE)
+        self.assertNotIn('sha256',policy['private_acceptance'])
+    def test_missing_or_inconsistent_runtime_evidence_refuses(self):
+        for key,field,value,label in (
+            ('private_acceptance','complete',False,'completed_private_acceptance'),
+            ('private_acceptance','served_revision',TARGET,'completed_private_acceptance'),
+            ('private_acceptance','independent_report_sha256','f'*64,'completed_private_acceptance'),
+            ('private_report','browser_progress_sha256','f'*64,'completed_private_acceptance'),
+            ('private_authority','admission_sha256',{'before-auth':'f'*64,'after-auth':'f'*64},'private_admission_causal_chain')):
+            with self.subTest(field=field):
+                policy,records=self.chain();path=act.PRIVATE_PATHS[key];record=json.loads(records[path]);record[field]=value
+                records[path]=act.encode(record)
+                # Isolate the deeper progress binding by preserving the actual
+                # complete-to-report causal hash when report content changes.
+                if key=='private_report':
+                    complete=json.loads(records[act.PRIVATE_PATHS['private_acceptance']])
+                    complete['independent_report_sha256']=act.sha(records[path])
+                    records[act.PRIVATE_PATHS['private_acceptance']]=act.encode(complete)
+                    label='completed_browser_cross_binding'
+                with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+                     self.assertRaisesRegex(act.Refusal,label):act.private_receipts(policy)
+        policy,records=self.chain();policy['private_report']['path']='/tmp/nonexistent-or-unreviewed-output'
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]),self.assertRaises(act.Refusal):
+            act.private_receipts(policy)
+    def test_admitted_runtime_chain_cannot_drift_after_the_full_proof(self):
+        policy,records=self.chain();host=object.__new__(act.NativeHost);host.policy=policy
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]):
+            host.inputs=act.private_receipts(policy)
+            self.assertEqual(host.check_private_inputs(),host.inputs)
+            # Even equivalent JSON cannot silently replace the admitted bytes.
+            path=act.PRIVATE_PATHS['private_acceptance'];records[path]+=b'\n'
+            with self.assertRaisesRegex(act.Refusal,'private_inputs_unchanged'):host.check_private_inputs()
+    def test_slow_guard_consumes_forward_ttl_budget_before_completion(self):
+        fixture=self.sessions();at,secret,fp,actors,states,rows,_,_,decoder=fixture
+        for state in states.values():
+            for cookie in state['cookies']:
+                if cookie['name'] != 'quillmd_doctor_csrf':cookie['expires']=at.timestamp()+601
+        for row in rows.values():row['expire_date']=at+timedelta(seconds=601)
+        clock=[0];count=[0];host=FictionalHost();host.deadline=2400;host.forward_deadline=None
+        host.check=lambda reserve=0:act.NativeHost.check(host,reserve)
+        host.check_hold=lambda:host.check()
+        host.forward_budget=lambda:act.NativeHost.forward_budget(host)
+        def sessions(minimum):
+            count[0]+=1
+            if count[0]==3:clock[0]=535
+            return act.live_session_admission(states,rows,actors,secret,fp,decoder,at+timedelta(seconds=clock[0]),
+                                             minimum,admin_device='otp_totp.totpdevice/5')
+        host.session_admission=sessions
+        delayed=[False,False]
+        def snapshot():
+            host.check()
+            if count[0]==2 and not delayed[0]:clock[0]+=70;delayed[0]=True
+            if count[0]==3 and not delayed[1]:clock[0]+=70;delayed[1]=True
+            host.check();return deepcopy(host.guard)
+        host.snapshot=snapshot
+        def routes():clock[0]=535;return {'https://app.quillmd.com':503}
+        host.routes=routes
+        policy={'private_accepted_revision':PRIOR,'original_ingress_metadata':metadata(ORIGINAL)}
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            with patch.object(act,'OUTPUT',root/'output'),patch.object(act,'ATTEMPT',root/'attempt'), \
+                 patch.object(act,'OLD_INGRESS_SHA',act.sha(ORIGINAL)),patch.object(act.time,'monotonic',side_effect=lambda:clock[0]):
+                result=act.transition(host,policy,TARGET,{act.TEMPLATE:TEMPLATE},execute=True)
+        self.assertTrue(result['complete']);self.assertEqual(host.forward_deadline,540)
+        self.assertEqual(host.records['complete.json']['live_session_admission_after']['remaining_seconds'],66)
+        self.assertEqual(clock[0],535);self.assertFalse(delayed[1])
+        # A later slow capture cannot be hidden after the final TTL proof.
+        self.assertGreater(act.live_session_admission(states,rows,actors,secret,fp,decoder,
+            at+timedelta(seconds=clock[0]),0,admin_device='otp_totp.totpdevice/5')['remaining_seconds'],60)
+    def test_slow_completion_fsync_cannot_return_success_after_live_session_expiry(self):
+        fixture=self.sessions();at,secret,fp,actors,states,rows,_,_,decoder=fixture
+        for state in states.values():
+            for cookie in state['cookies']:
+                if cookie['name'] != 'quillmd_doctor_csrf':cookie['expires']=at.timestamp()+601
+        for row in rows.values():row['expire_date']=at+timedelta(seconds=601)
+        clock=[0];count=[0];host=FictionalHost();host.deadline=2400;host.forward_deadline=None
+        host.check=lambda reserve=0:act.NativeHost.check(host,reserve)
+        host.check_hold=lambda:host.check()
+        host.forward_budget=lambda:act.NativeHost.forward_budget(host)
+        def sessions(minimum):
+            count[0]+=1
+            if count[0]==3:clock[0]=500
+            return act.live_session_admission(states,rows,actors,secret,fp,decoder,at+timedelta(seconds=clock[0]),
+                                             minimum,admin_device='otp_totp.totpdevice/5')
+        host.session_admission=sessions;real_write=host.write
+        def stalled_write(name,value):
+            real_write(name,value)
+            if name=='complete.json':clock[0]+=110
+        host.write=stalled_write
+        policy={'private_accepted_revision':PRIOR,'original_ingress_metadata':metadata(ORIGINAL)}
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            with patch.object(act,'OUTPUT',root/'output'),patch.object(act,'ATTEMPT',root/'attempt'), \
+                 patch.object(act,'OLD_INGRESS_SHA',act.sha(ORIGINAL)),patch.object(act.time,'monotonic',side_effect=lambda:clock[0]):
+                with self.assertRaisesRegex(act.Refusal,'failed_with_preserved_evidence'):
+                    act.transition(host,policy,TARGET,{act.TEMPLATE:TEMPLATE},execute=True)
+        self.assertEqual(clock[0],610);self.assertEqual(host.forward_deadline,540)
+        self.assertTrue(host.records['complete.json']['completion_valid_only_without_failed_receipt'])
+        self.assertEqual(host.records['failed.json']['failure_reason'],'normal443_bounded_forward_interval')
+        self.assertTrue(host.records['failed.json']['rollback']['private_availability_preserved'])
+        self.assertEqual(host.raw,ORIGINAL)
+        self.assertIn(b'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED="0"',host.environment)
+    def sessions(self):
+        from django.core import signing
+        at=datetime.now(timezone.utc);secret='fictional-session-key-only';fp='e'*40
+        actors={'doctor':'fictional-doctor','admin':'fictional-admin'};states={};rows={};payloads={}
+        def signed(value):
+            return signing.TimestampSigner(key=secret,salt='django.contrib.sessions.SessionStore',fallback_keys=[]).sign_object(value)
+        for index,actor in enumerate(('doctor','admin')):
+            doctor_key=chr(97+index*2)*32;preview_key=chr(98+index*2)*32
+            normal={'_auth_user_id':actors[actor],'_auth_user_backend':'core.auth.VerifiedBackend','session_version':1}
+            if actor=='admin':normal['otp_device_id']='otp_totp.totpdevice/5'
+            grant={'kind':'quillmd-preview-v1','grant':{'fingerprint':fp,'issued':at.timestamp()-300,'seen':at.timestamp()-10},
+                   'flows':{},'_session_expiry':1800}
+            payloads[doctor_key]=normal;payloads[preview_key]=grant
+            cookies=[]
+            for name,key,site in (('quillmd_doctor_session',doctor_key,'Strict'),('__Host-quillmd_preview',preview_key,'Lax'),
+                                  ('quillmd_doctor_csrf','fictional-csrf-'+actor,'Strict')):
+                cookies.append({'name':name,'value':key,'domain':'app.quillmd.com','path':'/','httpOnly':True,
+                                'secure':True,'sameSite':site,'expires':at.timestamp()+1700})
+            states[actor]={'cookies':cookies,'origins':[]}
+            for key in (doctor_key,preview_key):
+                rows[key]={'session_key':key,'session_data':signed(payloads[key]),'expire_date':at+timedelta(seconds=1700)}
+        decoder=lambda raw,key:signing.loads(raw.decode(),key=key,salt='django.contrib.sessions.SessionStore',fallback_keys=[],max_age=None)
+        return at,secret,fp,actors,states,rows,payloads,signed,decoder
+    def admit(self,fixture,minimum=600):
+        at,secret,fp,actors,states,rows,_,_,decoder=fixture
+        return act.live_session_admission(states,rows,actors,secret,fp,decoder,at,minimum,admin_device='otp_totp.totpdevice/5')
+    def test_genuine_signatures_four_rows_and_measured_ttl_without_renewal(self):
+        fixture=self.sessions();before=deepcopy(fixture[4:7]);result=self.admit(fixture)
+        self.assertEqual(result['remaining_seconds'],1700);self.assertFalse(result['session_renewal_performed'])
+        self.assertEqual(result['database_writes'],0);self.assertEqual(fixture[4:7],before)
+        self.assertNotIn('session_data',json.dumps(result));self.assertNotIn('a'*32,json.dumps(result))
+    def test_every_live_expiry_boundary_requires_strict_forward_reserve(self):
+        for actor in ('doctor','admin'):
+            for boundary in ('doctor-db','doctor-browser','preview-db','preview-browser','idle','absolute'):
+                with self.subTest(actor=actor,boundary=boundary):
+                    fixture=self.sessions();at,_,_,_,states,rows,payloads,signed,_=fixture
+                    cookies={c['name']:c for c in states[actor]['cookies']}
+                    normal=cookies['quillmd_doctor_session'];preview=cookies['__Host-quillmd_preview']
+                    if boundary.endswith('-db'):rows[(normal if boundary.startswith('doctor') else preview)['value']]['expire_date']=at+timedelta(seconds=600)
+                    elif boundary.endswith('-browser'):(normal if boundary.startswith('doctor') else preview)['expires']=at.timestamp()+600
+                    else:
+                        payload=payloads[preview['value']]
+                        payload['grant']['seen' if boundary=='idle' else 'issued']=at.timestamp()-(1200 if boundary=='idle' else 6600)
+                        if boundary=='idle':payload['grant']['issued']=at.timestamp()-1500
+                        rows[preview['value']]['session_data']=signed(payload)
+                    with self.assertRaisesRegex(act.Refusal,'remaining_ttl'):self.admit(fixture)
+    def test_expired_signature_still_authenticates_history_but_cannot_admit_live_access(self):
+        fixture=self.sessions();at,secret,_,_,_,rows,_,_,decoder=fixture
+        self.assertTrue(decoder(rows['a'*32]['session_data'].encode(),secret))
+        expired=(at+timedelta(seconds=1800),*fixture[1:])
+        with self.assertRaises(act.Refusal):self.admit(expired)
+    def test_wrong_mfa_actor_cookie_scope_grant_signature_or_population_refuses(self):
+        for bad in ('mfa','actor','cookie','fingerprint','signature','extra-row','missing-row','duplicate-key'):
+            with self.subTest(bad=bad):
+                fixture=self.sessions();_,_,_,_,states,rows,payloads,signed,_=fixture
+                if bad in ('mfa','actor'):
+                    payloads['c'*32]['otp_device_id' if bad=='mfa' else '_auth_user_id']='wrong'
+                    rows['c'*32]['session_data']=signed(payloads['c'*32])
+                elif bad=='cookie':states['admin']['cookies'][0]['secure']=False
+                elif bad=='fingerprint':
+                    payloads['b'*32]['grant']['fingerprint']='wrong';rows['b'*32]['session_data']=signed(payloads['b'*32])
+                elif bad=='signature':rows['a'*32]['session_data']+='tampered'
+                elif bad=='extra-row':rows['z'*32]=dict(rows['a'*32],session_key='z'*32)
+                elif bad=='missing-row':del rows['a'*32]
+                else:states['admin']['cookies'][0]['value']='a'*32
+                with self.assertRaises(Exception):self.admit(fixture)
 
 
 class GeneratedSingleFileHelperTests(unittest.TestCase):

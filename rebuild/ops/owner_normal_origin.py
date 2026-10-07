@@ -58,9 +58,12 @@ ALLOWED = frozenset((DECL, TEMPLATE, 'rebuild/quillmd/settings.py', 'rebuild/cor
 SHARED_NAMES = b'    server_name quillmd.com www.quillmd.com app.quillmd.com admin.quillmd.com;'
 RESTRICTED_NAMES = b'    server_name quillmd.com www.quillmd.com admin.quillmd.com;'
 ACTIVE_PROTOCOL_QUALIFIED = False
-PRIVATE_ACCEPTANCE_QUALIFIED = False
+PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = False
 INGRESS_PUBLICATION_QUALIFIED = False
 OUTER_SECONDS = 2400
+RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
+SESSION_FORWARD_RESERVE = 600
+SESSION_COMPLETION_RESERVE = 60
 PRIVATE_PATHS = {
     'private_acceptance': EVIDENCE / 'installed-acceptance-v3-20261007/complete.json',
     'private_report': EVIDENCE / 'installed-acceptance-v3-20261007/independent-verification.json',
@@ -75,7 +78,7 @@ def require(condition, label):
 
 def sha(raw): return hashlib.sha256(raw).hexdigest()
 def encode(value): return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
-def qualified(): return ACTIVE_PROTOCOL_QUALIFIED and PRIVATE_ACCEPTANCE_QUALIFIED and INGRESS_PUBLICATION_QUALIFIED
+def qualified(): return ACTIVE_PROTOCOL_QUALIFIED and PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED and INGRESS_PUBLICATION_QUALIFIED
 
 def application_gate(preview, settings):
     tree = ast.parse(preview)
@@ -115,6 +118,11 @@ def contract(raw):
         and result.get('provider_calls') == result.get('authentication_submissions') == result.get('database_writes') == 0
         and result.get('automatic_retries') is False and result.get('outer_ceiling_seconds') == OUTER_SECONDS,
         'normal443_exact_prospective_scope')
+    require(result.get('runtime_receipt_binding_protocol') == RUNTIME_BINDING
+        and result.get('private_acceptance_completed') is False
+        and result.get('session_forward_reserve_seconds') == SESSION_FORWARD_RESERVE
+        and result.get('session_completion_reserve_seconds') == SESSION_COMPLETION_RESERVE,
+        'normal443_prospective_runtime_admission_contract')
     return result
 
 def source_gate(target):
@@ -144,7 +152,7 @@ def source_gate(target):
     result = contract(buffers[DECL])
     application_gate(buffers['rebuild/core/preview_access.py'], buffers['rebuild/quillmd/settings.py'])
     require(set(old.git(SOURCE, 'diff', '--name-only', result['private_accepted_revision'], BASE).decode().splitlines()) == PRIVATE_OPS, 'normal443_intermediate_four_operational_paths')
-    require(all(result.get(key) is True for key in ('active_protocol_qualified', 'private_acceptance_qualified',
+    require(all(result.get(key) is True for key in ('active_protocol_qualified', 'private_acceptance_protocol_qualified',
                 'ingress_publication_qualified')), 'normal443_committed_qualification')
     commit = os.environ.get('RULED_MUTATION_DECL_COMMIT', '')
     require(os.environ.get('RULED_MUTATION_DECLARATION') == DECL and re.fullmatch('[a-f0-9]{40}', commit)
@@ -163,14 +171,20 @@ def pinned_receipt(item, label, expected_path):
     require(sha(raw) == item['sha256'], label)
     return json.loads(raw), raw
 
+def runtime_receipt(item, label, expected_path):
+    require(isinstance(item, dict) and set(item) == {'path', 'binding'}
+        and item['path'] == str(expected_path) and item['binding'] == RUNTIME_BINDING, label)
+    raw = source_files.protected(expected_path)
+    return json.loads(raw), raw
+
 def private_receipts(policy):
-    values = {key: pinned_receipt(policy.get(key), 'normal443_' + key + '_pin', path)
-              for key, path in PRIVATE_PATHS.items()}
+    values = {key: (pinned_receipt if key == 'availability' else runtime_receipt)(
+                policy.get(key), 'normal443_' + key + '_pin', path) for key, path in PRIVATE_PATHS.items()}
     accepted, report, authority, availability = [values[key][0] for key in PRIVATE_PATHS]
     require(accepted.get('format') == 3 and accepted.get('complete') is True
         and accepted['operations_revision'] == BASE and accepted['served_revision'] == policy['private_accepted_revision']
         and accepted['independent_report'] == str(PRIVATE_PATHS['private_report'])
-        and accepted['independent_report_sha256'] == policy['private_report']['sha256']
+        and accepted['independent_report_sha256'] == sha(values['private_report'][1])
         and accepted['availability_preserved'] is True and accepted['provider_retries'] == 0,
         'normal443_completed_private_acceptance')
     require(report.get('complete') is True and report['operations_revision'] == BASE
@@ -185,7 +199,96 @@ def private_receipts(policy):
         and authority['served_revision'] == accepted['served_revision']
         and availability.get('complete') is True and availability['source']['operator_commit'] == accepted['served_revision'],
         'normal443_private_chain_identity')
+    progress_path = PRIVATE_PATHS['private_acceptance'].parent / 'progress.json'
+    progress_raw = source_files.protected(progress_path)
+    progress = json.loads(progress_raw)
+    require(report['browser_progress_sha256'] == sha(progress_raw)
+        and progress['operations_revision'] == BASE and progress['served_revision'] == accepted['served_revision']
+        and progress['activation_sha256'] == policy['availability']['sha256']
+        and progress['browser_workflows_complete'] is True and progress['complete'] is False
+        and progress['independent_readback_pending'] is True and not progress.get('failure')
+        and {key:value for key,value in report['admin_readback'].items() if key != 'final_storage_state_verification'}
+            == progress['admin_readback']
+        and set(report['admin_readback']) == set(progress['admin_readback']) | {'final_storage_state_verification'}
+        and {key:value for key,value in report['doctor_final_storage_state'].items() if key != 'verification'}
+            == progress['doctor_final_storage_state']
+        and set(report['doctor_final_storage_state']) == set(progress['doctor_final_storage_state']) | {'verification'},
+        'normal443_completed_browser_cross_binding')
+    require(authority['authority']['operations_revision'] == BASE
+        and authority['authority']['served_revision'] == accepted['served_revision']
+        and authority['authority']['availability_receipt_sha256'] == policy['availability']['sha256'],
+        'normal443_final_authority_cross_binding')
+    for phase in ('before-auth', 'after-auth'):
+        path = Path(authority['authority']['admissions'][phase]['path'])
+        require(path == EVIDENCE / 'installed-acceptance-v3-preparation-20261007' / ('admission-' + phase + '.json'),
+                'normal443_fixed_private_admission')
+        packet, packet_raw = pinned_receipt(authority['authority']['admissions'][phase],
+                                             'normal443_final_admission_hash', path)
+        require(authority['admission_sha256'][phase] == sha(packet_raw)
+            and progress['preparation'][phase] == packet and packet['operations_revision'] == BASE
+            and packet['served_revision'] == accepted['served_revision'], 'normal443_private_admission_causal_chain')
+    values['progress'] = progress, progress_raw
     return values
+
+def live_session_admission(states, rows, actors, secret, fingerprint, decoder, at, minimum, *, admin_device):
+    """Observe existing live grants; do not renew or manufacture their freshness."""
+    require(set(states) == set(actors) == {'doctor', 'admin'} and isinstance(rows, dict)
+        and callable(decoder) and type(minimum) is int and minimum >= 0
+        and isinstance(at, datetime) and at.tzinfo is not None
+        and re.fullmatch('otp_totp.totpdevice/[1-9][0-9]*', admin_device or ''), 'normal443_live_session_inputs')
+    now = at.timestamp(); expected = {}; limits = {}; evidence = {}
+    for actor, state in states.items():
+        require(isinstance(state, dict) and set(state) == {'cookies', 'origins'} and state['origins'] == []
+            and isinstance(state['cookies'], list) and len(state['cookies']) == 3,
+            'normal443_final_storage_state_shape')
+        names = {'__Host-quillmd_preview': 'Lax', 'quillmd_doctor_session': 'Strict', 'quillmd_doctor_csrf': 'Strict'}
+        cookies = {item.get('name'): item for item in state['cookies']}
+        require(set(cookies) == set(names) and len(cookies) == len(state['cookies']), 'normal443_final_cookie_population')
+        for name, site in names.items():
+            item = cookies[name]
+            require(item['domain'] == 'app.quillmd.com' and item['path'] == '/' and item['secure'] is True
+                and item['httpOnly'] is True and item['sameSite'] == site and isinstance(item['value'], str)
+                and item['value'], 'normal443_final_cookie_contract')
+        doctor, preview = (cookies[name] for name in ('quillmd_doctor_session', '__Host-quillmd_preview'))
+        for cookie in (doctor, preview):
+            key = cookie['value']
+            require(re.fullmatch('[a-z0-9]{32}', key) and key not in expected
+                and type(cookie['expires']) in (int, float) and math.isfinite(cookie['expires']),
+                'normal443_named_unique_existing_session')
+            expected[key] = actor
+            require(key in rows and set(rows[key]) == {'session_key', 'session_data', 'expire_date'}
+                and rows[key]['session_key'] == key, 'normal443_existing_session_row')
+            expiry = rows[key]['expire_date']
+            expiry = datetime.fromisoformat(expiry) if isinstance(expiry, str) else expiry
+            require(isinstance(expiry, datetime) and expiry.tzinfo is not None, 'normal443_aware_session_expiry')
+            limits[actor + ':' + cookie['name'] + ':database'] = expiry.timestamp()
+            limits[actor + ':' + cookie['name'] + ':browser'] = cookie['expires']
+        normal = decoder(rows[doctor['value']]['session_data'].encode(), secret)
+        grant = decoder(rows[preview['value']]['session_data'].encode(), secret)
+        require(str(normal.get('_auth_user_id')) == actors[actor]
+            and (actor != 'admin' or normal.get('otp_device_id') == admin_device),
+            'normal443_existing_actor_and_mfa_payload')
+        require(set(grant) == {'kind', 'grant', 'flows', '_session_expiry'} and grant['kind'] == 'quillmd-preview-v1'
+            and isinstance(grant['flows'], dict) and set(grant['grant']) == {'fingerprint', 'issued', 'seen'}
+            and grant['grant']['fingerprint'] == fingerprint, 'normal443_existing_preview_payload')
+        issued, seen = (grant['grant'][name] for name in ('issued', 'seen'))
+        require(all(type(value) in (int, float) and math.isfinite(value) for value in (issued, seen))
+            and issued <= seen <= now and 0 <= now - issued < 7200 and 0 <= now - seen < 1800,
+            'normal443_existing_grant_currently_valid')
+        limits[actor + ':preview:idle'] = seen + 1800
+        limits[actor + ':preview:absolute'] = issued + 7200
+        evidence[actor] = {'actor_id': actors[actor], 'session_keys_sha256': [sha(item['value'].encode()) for item in (doctor, preview)],
+            'rows_sha256': [sha(encode({**rows[item['value']], 'expire_date':
+                rows[item['value']]['expire_date'].isoformat() if isinstance(rows[item['value']]['expire_date'], datetime)
+                else rows[item['value']]['expire_date']})) for item in (doctor, preview)],
+            'storage_state_sha256': sha(encode(state)), 'normal_MFA_payload_present': actor == 'admin',
+            'preview_issued': issued, 'preview_seen': seen}
+    require(set(rows) == set(expected) and len(rows) == 4, 'normal443_exact_four_existing_session_rows')
+    remaining = min(limits.values()) - now
+    require(remaining > minimum, 'normal443_existing_session_remaining_ttl')
+    return {'observed_at': at.isoformat(), 'remaining_seconds': remaining, 'required_remaining_seconds': minimum,
+        'expires_at_by_boundary': limits, 'actors': evidence, 'session_renewal_performed': False,
+        'authentication_submissions': 0, 'provider_calls': 0, 'database_writes': 0}
 
 def controlled_environment(original, previous, target, *, enabled):
     values = dotenv_values(stream=StringIO(original.decode()), interpolate=False)
@@ -231,6 +334,26 @@ def memory_verifier(module):
     constants = [node for node in ast.walk(function) if isinstance(node, ast.Constant) and node.value == 'installed-acceptance-v2-20261006']
     require(len(constants) == 4 and {node.lineno for node in constants} == {942,973,998,1044}, 'normal443_exact_campaign_literals')
     for node in constants: node.value = Path(module.CAMPAIGN).name
+    # The checked current acceptance adapter adds these two independent final
+    # state proofs. Reconstruct the same additions from the frozen function;
+    # otherwise removing its output sink would accidentally drop those checks.
+    for name in ('validate_admin_final_storage', 'validate_doctor_final_storage'):
+        require(callable(module.__dict__.get(name)), 'normal443_checked_final_state_helpers')
+    assignments = [node for node in function.body if isinstance(node, ast.Assign)
+        and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'admin_end']
+    expected = ast.parse("admin_end=datetime.fromisoformat(readback['finished_at'].replace('Z','+00:00'))").body[0]
+    require(len(assignments) == 1 and ast.dump(assignments[0], include_attributes=False)
+        == ast.dump(expected, include_attributes=False), 'normal443_exact_final_state_interval_adapter')
+    position = function.body.index(assignments[0]) + 1
+    function.body[position:position] = ast.parse(
+        "readback['final_storage_state_verification']=validate_admin_final_storage(progress)\n"
+        "progress['doctor_final_storage_state']['verification']=validate_doctor_final_storage(progress)").body
+    reports = [node.value for node in function.body if isinstance(node, ast.Assign)
+        and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and node.targets[0].id == 'report'
+        and isinstance(node.value, ast.Dict)]
+    require(len(reports) == 1, 'normal443_exact_complete_report')
+    reports[0].keys.append(ast.Constant('doctor_final_storage_state'))
+    reports[0].values.append(ast.parse("progress['doctor_final_storage_state']", mode='eval').body)
     require(len(function.body) > 5 and ast.unparse(function.body[-5]) == 'destination = Path(args.output)'
         and isinstance(function.body[-4], ast.Expr) and isinstance(function.body[-3], ast.Assign)
         and isinstance(function.body[-2], ast.With) and isinstance(function.body[-1], ast.Expr)
@@ -297,14 +420,98 @@ class NativeHost:
             pinned_receipt(item, 'normal443_private_admission_hash', self.acceptance.PREPARATION / ('admission-' + phase + '.json'))
         self.original_environment = self.old.protected(APP / '.env', 65536)
         self.cipher = self.backup.key_at(self.old.KEY)
+        values = dotenv_values(stream=StringIO(self.original_environment.decode()), interpolate=False)
+        self.session_secret = values['QUILLMD_SECRET_KEY']
+        from django.utils.crypto import salted_hmac
+        self.preview_fingerprint = salted_hmac('quillmd-preview-v1', values['QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME']
+            + '\0' + values['QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD'], secret=self.session_secret).hexdigest()
+        del values
+        self.forward_deadline = None
 
     def git(self, tree, *args): return old.git(tree, *args)
     def read_source(self, path):
         relative = str(Path(path).relative_to(SOURCE))
         require(relative in self.buffers, 'normal443_checked_module_read')
         return self.buffers[relative]
-    def check(self, reserve=0): require(time.monotonic() + reserve < self.deadline, 'normal443_outer_deadline')
-    def snapshot(self): return self.old.snapshot(self.native, self.backup, self.storage)
+    def check(self, reserve=0):
+        now = time.monotonic()
+        require(now + reserve < self.deadline, 'normal443_outer_deadline')
+        if getattr(self, 'forward_deadline', None) is not None and not getattr(self, 'rolling_back', False):
+            require(now < self.forward_deadline, 'normal443_bounded_forward_interval')
+    def forward_budget(self):
+        self.check(500)
+        self.forward_deadline = time.monotonic() + SESSION_FORWARD_RESERVE - SESSION_COMPLETION_RESERVE
+
+    def check_private_inputs(self):
+        current = private_receipts(self.policy)
+        require(set(current) == set(self.inputs)
+            and all(current[key][1] == value[1] for key, value in self.inputs.items()),
+            'normal443_completed_private_inputs_unchanged')
+        return current
+
+    def session_admission(self, minimum):
+        """Read current rows and the genuine final browser state; no HTTP request."""
+        import psycopg
+        from psycopg.rows import dict_row
+        self.check_hold()
+        self.check_private_inputs()
+        progress = self.inputs['progress'][0]
+        readback = progress['admin_readback']
+        private_report = self.inputs['private_report'][0]
+        admin_proof = self.acceptance.validate_admin_final_storage(progress)
+        doctor_proof = self.acceptance.validate_doctor_final_storage(progress)
+        require(admin_proof == private_report['admin_readback']['final_storage_state_verification']
+            and doctor_proof == private_report['doctor_final_storage_state']['verification'],
+            'normal443_same_genuine_final_storage_proofs')
+        directory = PRIVATE_PATHS['private_acceptance'].parent
+        doctor = progress['doctor_final_storage_state']
+        admin = {'path': readback['final_storage_state_path'], 'sha256': readback['final_storage_state_sha256'],
+                 'captured_at': readback['final_storage_state_captured_at']}
+        states = {}
+        for actor, item, path in (('doctor', doctor, directory / 'browser-session.json'),
+                                  ('admin', admin, directory / 'admin-browser-session-after-readback.json')):
+            require(set(item) == {'path', 'sha256', 'captured_at'}, 'normal443_final_storage_state_binding')
+            state, raw = pinned_receipt({'path': item['path'], 'sha256': item['sha256']},
+                                         'normal443_final_storage_state_hash', path)
+            captured = datetime.fromisoformat(item['captured_at'].replace('Z', '+00:00'))
+            begin = datetime.fromisoformat(progress['started'].replace('Z', '+00:00'))
+            end = datetime.fromisoformat(progress['finished'].replace('Z', '+00:00'))
+            require(begin <= captured <= end and captured.tzinfo is not None,
+                    'normal443_genuine_final_state_capture_interval')
+            if actor == 'admin':
+                require(datetime.fromisoformat(progress['clinical_workflows_completed_at'].replace('Z', '+00:00'))
+                    <= datetime.fromisoformat(readback['started_at'].replace('Z', '+00:00')) <= captured
+                    <= datetime.fromisoformat(readback['finished_at'].replace('Z', '+00:00')),
+                    'normal443_admin_state_after_clinical_campaign')
+            states[actor] = state
+        actors = {str(row['quoted_user']) for row in progress['attempts']}
+        require(len(actors) == 1, 'normal443_original_campaign_actor')
+        actors = {'doctor': actors.pop(), 'admin': str(readback['actor_id'])}
+        auth = json.loads(self.acceptance.protected(self.acceptance.ADMIN / 'normal-authentication.json'))
+        meta_raw = self.acceptance.protected(self.acceptance.ADMIN / 'metadata-after-normal-mfa.json')
+        require(sha(meta_raw) == auth['authentication_metadata']['normal_mfa_sha256']
+            and str(auth['actor_id']) == actors['admin'], 'normal443_existing_admin_device_evidence')
+        admin_device = 'otp_totp.totpdevice/' + str(json.loads(meta_raw)['device']['id'])
+        keys = [cookie['value'] for state in states.values() for cookie in state['cookies']
+                if cookie['name'] in ('quillmd_doctor_session', '__Host-quillmd_preview')]
+        require(len(keys) == len(set(keys)) == 4, 'normal443_exact_named_final_session_keys')
+        with psycopg.connect(**self.backup.source_options(APP, self.old.ROLES), row_factory=dict_row) as conn:
+            self.acceptance.readonly_connection_flags(conn)
+            rows = conn.execute('SELECT session_key,session_data,expire_date FROM django_session WHERE session_key=ANY(%s)',
+                                (keys,)).fetchall()
+            require(len(rows) == 4, 'normal443_four_existing_live_session_rows')
+            result = live_session_admission(states, {row['session_key']: dict(row) for row in rows}, actors,
+                self.session_secret, self.preview_fingerprint, self.verifier.normal_session,
+                datetime.now(timezone.utc), minimum, admin_device=admin_device)
+            conn.rollback()
+        self.check_private_inputs()
+        self.check_hold()
+        return result
+    def snapshot(self):
+        self.check_hold()
+        result = self.old.snapshot(self.native, self.backup, self.storage)
+        self.check_hold()
+        return result
     def service(self, action, unit):
         require(action in ('start', 'stop') and unit in self.old.UNITS, 'normal443_own_service_scope')
         self.check_hold()
@@ -313,11 +520,14 @@ class NativeHost:
             ['/usr/bin/systemctl', action, unit]) + ",check=True,timeout=30,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)\n"
         self.native.helper(code, 40)
     def boundary(self, release):
+        self.check_hold()
         result = self.old.await_service_boundary(self.native, self.storage, release)
         proof = self.recovery.completion_unit_provenance(self.native, result)
         self.recovery.await_direct_health(release)
-        return {'units': result, 'completion_unit_provenance': proof,
-                'worker_configuration_provenance': self.native.worker_configuration(self.old.protected(APP / '.env', 65536), release, result)}
+        result = {'units': result, 'completion_unit_provenance': proof,
+                  'worker_configuration_provenance': self.native.worker_configuration(self.old.protected(APP / '.env', 65536), release, result)}
+        self.check_hold()
+        return result
     def foreign(self):
         require(RECOVERY_DECL in self.buffers, 'normal443_checked_recovery_contract')
         # The declaration is authenticated separately to BASE, as are all retained
@@ -421,6 +631,7 @@ class NativeHost:
         import psycopg
         from psycopg.rows import dict_row
         self.check_hold()
+        self.check_private_inputs()
         _, _, manifest, original = self.verifier.original_continuation_capture(self.historical_policy, datetime.now(timezone.utc))
         require(len(original) == 36 and manifest['tables']['django_session']['rows'] == 212, 'normal443_original_36_tables_212_sessions')
         columns = original['core_servicehealth']['columns']
@@ -451,6 +662,7 @@ class NativeHost:
         module.admitted_original_row = admitted
         verify, _ = memory_verifier(module)
         report = verify(types.SimpleNamespace(progress=str(self.acceptance.CAMPAIGN / 'progress.json'), output=None))
+        self.check_private_inputs()
         self.check_hold()
         require(report['complete'] is True and report['provider_calls'] == report['database_writes'] == 0
             and report['served_revision'] == self.served, 'normal443_complete_original_and_new_campaign_verification')
@@ -460,6 +672,7 @@ class NativeHost:
         report['preservation'] = {**report['preservation'], 'new_health_publications_admitted': True,
             'health_publication_admission': 'complete current row independently source-adjudicated against original identity'}
         return {'private_workflow_report': report, 'current_source_adjudicated_backup': publisher,
+                'private_acceptance_sha256': sha(self.inputs['private_acceptance'][1]),
                 'original_capture_replaced': False, 'current_population_guard_is_not_a_new_historical_baseline': True}
     def ingress(self):
         path = Path(INGRESS)
@@ -540,11 +753,13 @@ print(json.dumps(m,sort_keys=True))
             statuses = {}
             for origin, expected in (('https://app.quillmd.com',503), ('https://admin.quillmd.com',503),
                                       ('https://quillmd.com',200), ('https://www.quillmd.com',200), ('https://pro.quillmd.com',410)):
+                self.check_hold()
                 response = client.get(origin+'/', headers={'Cookie':''})
                 require(response.status_code == expected, 'normal443_anonymous_or_cotenant_http')
                 if expected == 503:
                     require(response.headers.get('retry-after') == '3600' and response.headers.get('cache-control') in ('no-store', 'no-store, no-store'), 'normal443_maintenance_headers')
                 statuses[origin] = response.status_code
+            self.check_hold()
             return statuses
 
 def transition(host, policy, target, buffers, *, execute=False):
@@ -562,6 +777,8 @@ def transition(host, policy, target, buffers, *, execute=False):
         # The input locks do not prevent an owner/browser from writing an old
         # row between verification and the guard capture.
         compare_guard(before, host.snapshot())
+        sessions = host.session_admission(SESSION_FORWARD_RESERVE)
+        compare_guard(before, host.snapshot())
         foreign = host.foreign()
         original, metadata = host.ingress()
         require(before['configuration'][INGRESS] == metadata
@@ -578,12 +795,14 @@ def transition(host, policy, target, buffers, *, execute=False):
         if not execute:
             return {'complete':True,'read_only_preflight':True,'execution_performed':False,
                 'candidate_sha256':sha(candidate),'full_original_and_new_acceptance_population_reverified':True,
+                'private_acceptance_admitted':True,'live_session_admission':sessions,
                 'original_capture_replaced':False,'provider_calls':0,'authentication_submissions':0,'database_writes':0}
         host.check(500)
         OUTPUT.mkdir(mode=0o700)
         prepared = {'format':1,'complete':False,'protocol':'owner-normal443-active-source-v1', 'previous_served_revision':prior,
-            'served_revision':target,'private_acceptance_sha256':policy['private_acceptance']['sha256'],
+            'served_revision':target,'private_acceptance_sha256':private['private_acceptance_sha256'],
             'preservation':private,'guard_before':before,'foreign_before':foreign,'units_before':own,
+            'private_acceptance_admitted':True,'live_session_admission_before':sessions,
             'candidate_sha256':sha(candidate),'original_ingress_metadata':metadata,'provider_calls':0,
             'authentication_submissions':0,'database_writes':0,'original_capture_replaced':False,'automatic_retries':False}
         forwarded = False; ingress_helper_completed = False; mutation_started = False
@@ -594,6 +813,13 @@ def transition(host, policy, target, buffers, *, execute=False):
             host.write('original-ingress.conf',original); host.write('prepared.json',prepared)
             compare_guard(before, host.snapshot()); host.check(500)
             require(host.foreign() == foreign, 'normal443_foreign_before_marker_race')
+            # Start the forward budget before the last live-session read. Its
+            # database observation and following guard capture consume that
+            # budget rather than introducing an unmeasured expiry gap.
+            host.forward_budget()
+            sessions = host.session_admission(SESSION_FORWARD_RESERVE)
+            compare_guard(before, host.snapshot())
+            host.write('live-sessions-before.json',sessions)
             host.write('attempt',{'format':1,'attempt':1,'served_revision':target,'output':str(OUTPUT),'provider_calls':0,'authentication_submissions':0,'automatic_retries':False})
             mutation_started = True
             for unit in reversed(host.old.UNITS): host.service('stop',unit)
@@ -610,16 +836,30 @@ def transition(host, policy, target, buffers, *, execute=False):
             statuses = host.routes()
             compare_guard(before, host.snapshot(), ingress=new_metadata)
             require(host.foreign() == foreign and host.boundary(target) == active, 'normal443_final_source_or_foreign_race')
+            compare_guard(before, host.snapshot(), ingress=new_metadata)
+            # No potentially lengthy population capture follows this fresh
+            # TTL observation. Retain its completion reserve for evidence I/O.
+            final_sessions = host.session_admission(SESSION_COMPLETION_RESERVE)
+            host.check_hold()
             completed = {**prepared,'complete':True,'stage':'complete','units_after':active,'ingress_after':new_metadata,
                 'anonymous_http_statuses':statuses,'owner_normal_origin_enabled':True,'preview_origin':'https://app.quillmd.com:9443',
                 'normal_origin':'https://app.quillmd.com','full_original_and_new_acceptance_population_preserved':True,
                 'actual_provider_model_reverified_by_this_transition':False,'workflow_byte_identity_inherited_from_private_acceptance':True}
+            completed['live_session_admission_after'] = final_sessions
+            completed['session_renewal_performed'] = False
+            completed['completion_valid_only_without_failed_receipt'] = True
             host.write('complete.json',completed)
+            # Durable evidence I/O also consumes the forward interval. An I/O
+            # stall must enter the measured failure/rollback path rather than
+            # returning success with expired grants. Preserve both receipts.
+            host.check_hold()
             return {'complete':True,'application_url':'https://app.quillmd.com/','private_origin':'https://app.quillmd.com:9443',
                 'served_revision':target,'restricted_to_existing_owner_grants':True,'provider_calls':0,'authentication_submissions':0,'database_writes':0}
         except BaseException as error:
+            reason = str(error) if isinstance(error, Refusal) and re.fullmatch('normal443_[a-z0-9_]+', str(error)) else None
             if not mutation_started:
-                host.write('failed.json',{**prepared,'stage':'preparation_failed','failure_kind':type(error).__name__,'mutation_started':False,'service_actions':0,'ingress_actions':0,'automatic_retries':False})
+                host.write('failed.json',{**prepared,'stage':'preparation_failed','failure_kind':type(error).__name__,
+                    'failure_reason':reason,'mutation_started':False,'service_actions':0,'ingress_actions':0,'automatic_retries':False})
                 raise Refusal('normal443_preparation_failed_preserving_availability') from None
             host.rolling_back = True
             rollback = {'attempted':True,'source_reset':False,'provider_calls':0,'authentication_submissions':0,
@@ -655,7 +895,7 @@ def transition(host, policy, target, buffers, *, execute=False):
                 rollback.update(complete=True,private_availability_preserved=True,owner_normal_origin_enabled=False,served_revision=release,ingress=restored)
             except BaseException:
                 rollback.update(complete=False,private_availability_preserved=False,fail_stop=host.old.best_effort_private_stop(host.native))
-            host.write('failed.json',{**prepared,'stage':'failed','failure_kind':type(error).__name__,'rollback':rollback,
+            host.write('failed.json',{**prepared,'stage':'failed','failure_kind':type(error).__name__,'failure_reason':reason,'rollback':rollback,
                 'ingress_helper_completed_before_failure':ingress_helper_completed,'automatic_retries':False})
             raise Refusal('normal443_failed_with_preserved_evidence') from None
 
@@ -665,7 +905,8 @@ def main(argv=None, *, host=None):
     args=parser.parse_args(argv)
     if not (args.preflight or args.execute):
         print(json.dumps({'execution_performed':False,'installed_state_accessed':False,'active_protocol_qualified':ACTIVE_PROTOCOL_QUALIFIED,
-            'private_acceptance_qualified':PRIVATE_ACCEPTANCE_QUALIFIED,'ingress_publication_qualified':INGRESS_PUBLICATION_QUALIFIED,
+            'private_acceptance_protocol_qualified':PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED,
+            'private_acceptance_completed':False,'ingress_publication_qualified':INGRESS_PUBLICATION_QUALIFIED,
             'provider_calls':0,'authentication_submissions':0,'database_writes':0,'automatic_retries':False},sort_keys=True));return 0
     started=time.monotonic();policy,buffers=source_gate(args.operations_revision)
     host=host if host is not None else NativeHost(policy,args.operations_revision,buffers,started,
