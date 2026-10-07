@@ -52,7 +52,8 @@ NATIVE_NAMES = ('managed_helper', 'private_storage', 'backup_restore', 'email_ac
                 'activation_exclusion', 'legacy_model_activation', 'repair_source_permissions',
                 'publisher_verification', 'private_availability_recovery')
 USED_SOURCE = ALLOWED | frozenset('rebuild/ops/' + name + '.py' for name in NATIVE_NAMES) | frozenset((
-    'scripts/check-citation.sh', 'scripts/lib/runs-api.sh'))
+    'scripts/check-citation.sh', 'scripts/lib/runs-api.sh',
+    'docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md'))
 ORIGIN = 'https://app.quillmd.com:9443'
 MODEL = 'claude-sonnet-5-5'
 PROFILE = {'max_tokens': 6000, 'timeout_seconds': 60, 'max_retries': 0,
@@ -91,6 +92,138 @@ PARENT_PHASES = ('normal-auth', 'browser', 'verify')
 PUBLICATION_LOCK = 'publication/.activation-publication.lock'
 PUBLISHER = 'quillmd-fresh-operations-publisher.service'
 PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
+
+# A separate exact post-restoration boundary; the historical receipt stays immutable.
+POST_RESTORE_PROPOSAL = BASE / 'recovery-20261007/post-restoration-current-preservation-proposal-ee71e3-v1.json'
+POST_RESTORE_PROPOSAL_SHA = '5521e9a5fc47573b8c315ccc5a7c4c38c66deb48d453f532023aae2165bf220a'
+POST_RESTORE_OWNER_REPLY = BASE / 'recovery-20261007/owner-post-restoration-preservation-message-ee71e3-v1.json'
+POST_RESTORE_OWNER_REPLY_SHA = '54c79de6d9d9805ceda92881db58c91447f09495391b84e526e2975be96b836f'
+POST_RESTORE_PINS = {'availability_receipt_sha256': '17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd',
+ 'configuration_differences': [{'before': {'device': 2050,
+                                           'gid': 0,
+                                           'inode': 920081,
+                                           'mode': 420,
+                                           'sha256': '051f70eaec42aa7c7736cefb59668b9b082989ca076c31924a320635600f96eb',
+                                           'uid': 0},
+                                'current': {'device': 2050,
+                                            'gid': 0,
+                                            'inode': 918217,
+                                            'mode': 420,
+                                            'sha256': '051f70eaec42aa7c7736cefb59668b9b082989ca076c31924a320635600f96eb',
+                                            'uid': 0},
+                                'path': '/etc/nginx/sites-available/voice.kasitcorp.com'},
+                               {'before': {'device': 2050,
+                                           'gid': 0,
+                                           'inode': 918217,
+                                           'mode': 420,
+                                           'sha256': 'e7d586f4c0a3c342234533d5cc8647a982e959eb3fc847b2f867bbea1907e3c3',
+                                           'uid': 0},
+                                'current': {'device': 2050,
+                                            'gid': 0,
+                                            'inode': 918246,
+                                            'mode': 420,
+                                            'sha256': 'e7d586f4c0a3c342234533d5cc8647a982e959eb3fc847b2f867bbea1907e3c3',
+                                            'uid': 0},
+                                'path': '/etc/nginx/snippets/founder-dashboard-callback.conf'},
+                               {'before': {'device': 2050,
+                                           'gid': 0,
+                                           'inode': 918246,
+                                           'mode': 420,
+                                           'sha256': '7c00d8f2f8bf1d126466ff3b8e28d0934aef6664d83c1e9f7950e3cab83d9008',
+                                           'uid': 0},
+                                'current': {'device': 2050,
+                                            'gid': 0,
+                                            'inode': 918239,
+                                            'mode': 420,
+                                            'sha256': '7c00d8f2f8bf1d126466ff3b8e28d0934aef6664d83c1e9f7950e3cab83d9008',
+                                            'uid': 0},
+                                'path': '/etc/systemd/system/founder-dashboard-callback.service'},
+                               {'before': {'device': 2050,
+                                           'gid': 0,
+                                           'inode': 920385,
+                                           'mode': 420,
+                                           'sha256': 'c80609f72457a8ce056cec3fd19b2bab9c9c1edde5a35098b7071a6989c57e72',
+                                           'uid': 0},
+                                'current': {'device': 2050,
+                                            'gid': 0,
+                                            'inode': 920504,
+                                            'mode': 420,
+                                            'sha256': 'aac5369f1a8398e98838b28de22942e890122fe063c4594f0b1c2b96ffa58dec',
+                                            'uid': 0},
+                                'path': '/etc/systemd/system/voiceassistmain-product.service'}],
+ 'current_public_records': [{'metadata': [2050,
+                                          918217,
+                                          0,
+                                          0,
+                                          420,
+                                          1549,
+                                          1791399914209634909,
+                                          1791399914211634948],
+                             'path': '/etc/nginx/sites-available/voice.kasitcorp.com',
+                             'sha256': '051f70eaec42aa7c7736cefb59668b9b082989ca076c31924a320635600f96eb'},
+                            {'metadata': [2050,
+                                          918246,
+                                          0,
+                                          0,
+                                          420,
+                                          722,
+                                          1791399912809607089,
+                                          1791399912810607109],
+                             'path': '/etc/nginx/snippets/founder-dashboard-callback.conf',
+                             'sha256': 'e7d586f4c0a3c342234533d5cc8647a982e959eb3fc847b2f867bbea1907e3c3'},
+                            {'metadata': [2050,
+                                          918239,
+                                          0,
+                                          0,
+                                          420,
+                                          685,
+                                          1791399912807607049,
+                                          1791399912808607069],
+                             'path': '/etc/systemd/system/founder-dashboard-callback.service',
+                             'sha256': '7c00d8f2f8bf1d126466ff3b8e28d0934aef6664d83c1e9f7950e3cab83d9008'},
+                            {'metadata': [2050,
+                                          920504,
+                                          0,
+                                          0,
+                                          420,
+                                          611,
+                                          1791401765002048371,
+                                          1791401765003048392],
+                             'path': '/etc/systemd/system/voiceassistmain-product.service',
+                             'sha256': 'aac5369f1a8398e98838b28de22942e890122fe063c4594f0b1c2b96ffa58dec'},
+                            {'metadata': [2050,
+                                          920502,
+                                          0,
+                                          0,
+                                          420,
+                                          87955,
+                                          1791401765000048327,
+                                          1791401765001048349],
+                             'path': '/etc/voiceassistmain-product.json',
+                             'sha256': 'c72fa8d89faeb08a45ee5650c20592965555acc40d8bc3f786f2a68caa3e6e7e'},
+                            {'metadata': [2050,
+                                          395871,
+                                          0,
+                                          0,
+                                          420,
+                                          1292,
+                                          1791401768854132218,
+                                          1791401768855132239],
+                             'path': '/var/lib/voiceassistmain-product-installation/8c13fe1a-5bda-4bdf-bc73-4b5cac49b1f4.json',
+                             'sha256': '47b774566b9298cf93fb7e0fd97546dae6b6130e20991aff0807b2e9ece1a8ea'}],
+ 'product_loaded_state': {'ActiveState': 'active',
+                          'DropInPaths': '',
+                          'ExecMainStartTimestampMonotonic': '338077210152',
+                          'FragmentPath': '/etc/systemd/system/voiceassistmain-product.service',
+                          'Group': 'voiceassistmain',
+                          'InvocationID': 'f3ab81f527df45a0baa38aa22a8a22d2',
+                          'LoadState': 'loaded',
+                          'MainPID': '2659478',
+                          'NeedDaemonReload': 'no',
+                          'SubState': 'running',
+                          'UnitFileState': 'enabled',
+                          'User': 'voiceassistmain',
+                          'WorkingDirectory': '/opt/voiceassistmain-product/releases/ee71e3c32364ca06a3a25c60'}}
 PUBLISHER_JUDGE_FIELDS = ('Result', 'ExecMainStartTimestamp', 'ExecMainExitTimestamp',
                           'ExecMainStatus', 'InvocationID')
 DEFERRAL_STDOUT = ('Publication deferred: an activation holds exclusion. '
@@ -150,6 +283,9 @@ def failure_summary(error):
             elif isinstance(value, str) and re.fullmatch('v3_[a-z0-9_]{1,96}', value): yield value
     labels = {value for function in globals().values() if isinstance(function, types.FunctionType)
               for value in constants(function.__code__)}
+    labels.update(node.value for node in ast.walk(ast.parse(CONFIGURATION_ADMISSION_SOURCE))
+                  if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                  and re.fullmatch('v3_[a-z0-9_]{1,96}', node.value))
     labels.update('v3_preserved_' + name for name in ('mail', 'static', 'configuration', 'old_files'))
     labels.update('v3_fixed_adapter_' + name for name in ('native_child_gate', 'contract_import',
         'declaration_buffer', 'runtime_authority', 'closed_citation', 'initial_gate_report'))
@@ -229,12 +365,94 @@ def module_from_bytes(raw, path, expected):
     return module
 
 
+CONFIGURATION_ADMISSION_SOURCE = r'''
+import ast as _configuration_ast
+import copy as _configuration_copy
+
+def configuration_same(left, right):
+    if type(left) is not type(right):
+        return False
+    if isinstance(left, dict):
+        return (all(type(key) is str for key in left) and all(type(key) is str for key in right)
+                and set(left) == set(right) and all(configuration_same(left[key], right[key]) for key in left))
+    if isinstance(left, list):
+        return len(left) == len(right) and all(configuration_same(a, b) for a, b in zip(left, right))
+    return left == right
+
+def current_configuration_proof(expected, current, proof):
+    need(isinstance(expected, dict) and isinstance(current, dict) and isinstance(proof, dict),
+         'v3_current_configuration_proof_inputs')
+    need(all(type(path) is str for path in expected) and all(type(path) is str for path in current),
+         'v3_current_configuration_string_paths')
+    differences = POST_RESTORE_PINS['configuration_differences']
+    paths = {item['path'] for item in differences}
+    need(len(paths) == len(differences) == 4
+         and {path for path in set(expected) | set(current)
+              if path not in expected or path not in current
+              or not configuration_same(expected[path], current[path])} == paths,
+         'v3_current_configuration_exact_four_paths')
+    need(all(configuration_same(expected.get(item['path']), item['before'])
+             and configuration_same(current.get(item['path']), item['current'])
+             for item in differences), 'v3_current_configuration_exact_metadata')
+    need(isinstance(POST_RESTORE_OWNER_REPLY_SHA, str) and len(POST_RESTORE_OWNER_REPLY_SHA) == 64,
+         'v3_current_configuration_owner_reply_required')
+    required = {'format': 1, 'protocol': 'post-restoration-exact-owner-preservation-v1',
+                'proposal_sha256': POST_RESTORE_PROPOSAL_SHA,
+                'owner_reply_sha256': POST_RESTORE_OWNER_REPLY_SHA,
+                'availability_receipt_sha256': POST_RESTORE_PINS['availability_receipt_sha256'],
+                'configuration_differences': differences,
+                'product_loaded_state': POST_RESTORE_PINS['product_loaded_state'],
+                'historical_deployment_authorization_verified': False,
+                'current_owner_preservation_authorized': True,
+                'original_baseline_replaced': False, 'voiceassistmain_changes_authorized': False}
+    need(configuration_same(proof, required),
+         'v3_current_configuration_proof_binding')
+    return True
+
+def adapt_configuration_admission(scope, raw):
+    tree = _configuration_ast.parse(raw)
+    functions = [node for node in tree.body if isinstance(node, _configuration_ast.FunctionDef)
+                 and node.name == 'admission']
+    need(len(functions) == 1, 'v3_current_configuration_exact_frozen_admission')
+    function = _configuration_copy.deepcopy(functions[0])
+    expected = _configuration_ast.parse("snapshot.get(name)==receipt['before'].get(name)", mode='eval').body
+    comparisons = [node for node in _configuration_ast.walk(function)
+                   if isinstance(node, _configuration_ast.Compare)
+                   and _configuration_ast.dump(node, include_attributes=False)
+                   == _configuration_ast.dump(expected, include_attributes=False)]
+    need(len(comparisons) == 1, 'v3_current_configuration_exact_frozen_predicate')
+    replacement = _configuration_ast.parse(
+        "(snapshot.get(name)==receipt['before'].get(name) if name!='configuration' else "
+        "(configuration_same(snapshot.get(name),receipt['before'].get(name)) or "
+        "current_configuration_proof(receipt['before'].get(name), snapshot.get(name), "
+        "report.get('co_tenant_preservation_admission'))))", mode='eval').body
+    class Replace(_configuration_ast.NodeTransformer):
+        def visit_Compare(self, node):
+            return _configuration_copy.deepcopy(replacement) if node is comparisons[0] else self.generic_visit(node)
+    function = Replace().visit(function)
+    namespace = dict(scope, current_configuration_proof=current_configuration_proof)
+    exec(compile(_configuration_ast.fix_missing_locations(_configuration_ast.Module(body=[function], type_ignores=[])),
+                 '<reviewed-exact-configuration-admission>', 'exec'), namespace)
+    scope['admission'] = namespace['admission']
+'''
+
+
+def configuration_helpers(scope):
+    scope.update(POST_RESTORE_PINS=copy.deepcopy(POST_RESTORE_PINS),
+                 POST_RESTORE_PROPOSAL_SHA=POST_RESTORE_PROPOSAL_SHA,
+                 POST_RESTORE_OWNER_REPLY_SHA=POST_RESTORE_OWNER_REPLY_SHA)
+    exec(compile(CONFIGURATION_ADMISSION_SOURCE, '<reviewed-configuration-proof>', 'exec'), scope)
+    return scope
+
+
 def frozen_modules(reader=protected):
     """Authenticate all transitive inputs before compiling pure helpers."""
     blobs = {name: reader(FROZEN / name) for name in DEPENDENCIES}
     require(all(sha(blobs[name]) == digest for name, digest in DEPENDENCIES.items()), 'v3_transitive_dependency_drift')
     common = module_from_bytes(blobs['acceptance_v3_contract.py'], FROZEN / 'acceptance_v3_contract.py',
                                DEPENDENCIES['acceptance_v3_contract.py'])
+    configuration_helpers(common.__dict__)['adapt_configuration_admission'](
+        common.__dict__, blobs['acceptance_v3_contract.py'])
     original = reader(BASE / 'verify_installed_acceptance_v2.py')
     verifier = module_from_bytes(original, BASE / 'verify_installed_acceptance_v2.py', FROZEN_B77)
     adapt_publisher_adjudicator(verifier)
@@ -535,10 +753,132 @@ def live_identity(availability, current, served):
             'same_pid_start_source_and_configuration': True}
 
 
-def preserved_snapshot(expected, current, database):
+def current_external_boundary(recovery, acknowledgement):
+    """Observe the separately authorized exact current boundary; change no foreign state."""
+    execution_gate()
+    require(isinstance(POST_RESTORE_OWNER_REPLY_SHA, str)
+            and re.fullmatch('[a-f0-9]{64}', POST_RESTORE_OWNER_REPLY_SHA),
+            'v3_current_configuration_owner_reply_required')
+    proposal_raw = protected(POST_RESTORE_PROPOSAL)
+    require(sha(proposal_raw) == POST_RESTORE_PROPOSAL_SHA, 'v3_current_configuration_proposal_hash')
+    proposal = json.loads(proposal_raw)
+    same = configuration_helpers({'need': require})['configuration_same']
+    require(all(same(proposal.get(key), value) for key, value in POST_RESTORE_PINS.items()),
+            'v3_current_configuration_proposal_binding')
+    reply_raw = protected(POST_RESTORE_OWNER_REPLY, 65536)
+    require(sha(reply_raw) == POST_RESTORE_OWNER_REPLY_SHA, 'v3_current_configuration_owner_reply_hash')
+    reply = json.loads(reply_raw)
+    require(type(reply.get('format')) is int and reply['format'] == 1
+            and reply.get('decision') == 'authorize_exact_post_restoration_preservation_boundary'
+            and reply.get('proposal_sha256') == POST_RESTORE_PROPOSAL_SHA
+            and isinstance(reply.get('owner_reply'), str) and reply['owner_reply'].strip()
+            and reply.get('historical_deployment_authorization_verified') is False
+            and reply.get('voiceassistmain_changes_authorized') is False,
+            'v3_current_configuration_owner_reply_scope')
+    # Authenticate the earlier seven-path decision as history, without asking its
+    # native reader to pretend the earlier product invocation is still current.
+    export, boundary = recovery.owner_boundary_inputs(acknowledgement)
+    recovery.acknowledge_current_owner_configuration(boundary['before'], boundary['after'], acknowledgement)
+    native = recovery.native_boundary_identity()
+    require(native == export['native_host_proof'], 'v3_current_configuration_native_host')
+    product = POST_RESTORE_PINS['product_loaded_state']
+    product_name = recovery.EXTERNAL_UNIT.rsplit('/', 1)[1]
+    require(recovery.owner_unit_state(product_name, tuple(product)) == product,
+            'v3_current_configuration_product_state')
+    sources = recovery.source_files
+    receipt_path = '/var/lib/voiceassistmain-product-installation/8c13fe1a-5bda-4bdf-bc73-4b5cac49b1f4.json'
+    public_records = POST_RESTORE_PINS['current_public_records']
+    required_paths = {item['path'] for item in POST_RESTORE_PINS['configuration_differences']} | {
+        '/etc/voiceassistmain-product.json', receipt_path}
+    require(len(public_records) == 6 and {item['path'] for item in public_records} == required_paths,
+            'v3_current_configuration_public_path_scope')
+    parsed = {}
+    with sources.open_root(Path('/')) as root_fd:
+        for item in public_records:
+            path = item['path']; fd = sources.open_relative(root_fd, path[1:])
+            try:
+                before = os.fstat(fd)
+                require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 0
+                        and stat.S_IMODE(before.st_mode) == 0o644 and before.st_nlink == 1
+                        and not os.listxattr(fd) and recovery.full_native_metadata(before) == item['metadata'],
+                        'v3_current_configuration_public_metadata')
+                raw = sources.bytes_at(fd, 2 * 1024 * 1024)
+                require(sha(raw) == item['sha256'], 'v3_current_configuration_public_bytes')
+                reopened = sources.open_relative(root_fd, path[1:])
+                try:
+                    require(sources.stable(before) == sources.stable(os.fstat(fd))
+                            == sources.stable(os.fstat(reopened)), 'v3_current_configuration_public_race')
+                finally:
+                    os.close(reopened)
+                if path == recovery.EXTERNAL_UNIT:
+                    require([line for line in raw.splitlines() if line.strip().startswith(b'WorkingDirectory=')]
+                            == [b'WorkingDirectory=' + product['WorkingDirectory'].encode()],
+                            'v3_current_configuration_working_directory')
+                if path.endswith('.json'):
+                    parsed[path] = json.loads(raw)
+            finally:
+                os.close(fd)
+        additional = export['additional_configuration_evidence']
+        for item in additional['exact_added_files']:
+            recovery.owner_public_record(root_fd, item['path'], item['sha256'], item['metadata'])
+        for item in additional['exact_added_enablement_links']:
+            path = Path(item['path']); parent = sources.open_relative(root_fd, str(path.parent)[1:], directory=True)
+            try:
+                before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+                require(stat.S_ISLNK(before.st_mode) and before.st_uid == before.st_gid == 0 and before.st_nlink == 1
+                        and recovery.full_native_metadata(before) == item['metadata']
+                        and os.readlink(path.name, dir_fd=parent) == recovery.CURRENT_OWNER_PINS['added_links'][str(path)],
+                        'v3_current_configuration_enablement_link')
+                require(sources.stable(before) == sources.stable(os.stat(path.name, dir_fd=parent, follow_symlinks=False)),
+                        'v3_current_configuration_enablement_race')
+            finally:
+                os.close(parent)
+    manifest = parsed['/etc/voiceassistmain-product.json']
+    receipt = parsed[receipt_path]
+    manifest_sha = next(item['sha256'] for item in public_records if item['path'] == '/etc/voiceassistmain-product.json')
+    require(manifest['installation_id'] == receipt['installation_id'] == '8c13fe1a-5bda-4bdf-bc73-4b5cac49b1f4'
+            and manifest['source_sha256'] == receipt['source_sha256']
+                == 'ee71e3c32364ca06a3a25c60f7ac45861dc1942db36565b6875be8a7e008aa26'
+            and manifest['release_root'] == receipt['release_root'] == product['WorkingDirectory']
+            and receipt['manifest_sha256'] == manifest_sha
+            and type(receipt['main_pid']) is int and receipt['main_pid'] == int(product['MainPID'])
+            and receipt['installed'] is True and type(receipt['calls_started']) is int and receipt['calls_started'] == 0
+            and type(receipt['provider_writes']) is int and receipt['provider_writes'] == 0
+            and receipt['nginx_changed'] is False, 'v3_current_configuration_installation_binding')
+    stable_units = {}
+    for expected in additional['loaded_states']:
+        name = expected['Id']; stable = {key: value for key, value in expected.items() if key not in ('ActiveState', 'SubState')}
+        for _ in range(2):
+            actual = recovery.owner_unit_state(name, tuple(expected))
+            require({key: actual[key] for key in stable} == stable
+                    and actual['ActiveState'] in ('active', 'inactive', 'activating', 'deactivating', 'failed',
+                                                  'reloading', 'maintenance')
+                    and actual['SubState'] in ('dead', 'running', 'waiting', 'elapsed', 'exited', 'failed', 'start',
+                        'start-pre', 'start-post', 'stop', 'stop-sigterm', 'stop-sigkill', 'stop-post',
+                        'final-sigterm', 'final-sigkill', 'auto-restart', 'cleaning', 'reload'),
+                    'v3_current_configuration_other_unit_configuration')
+        stable_units[name] = stable
+    require(recovery.owner_unit_state(product_name, tuple(product)) == product
+            and recovery.native_boundary_identity() == native, 'v3_current_configuration_native_final_race')
+    proof = {'format': 1, 'protocol': 'post-restoration-exact-owner-preservation-v1',
+             'proposal_sha256': POST_RESTORE_PROPOSAL_SHA, 'owner_reply_sha256': POST_RESTORE_OWNER_REPLY_SHA,
+             'availability_receipt_sha256': POST_RESTORE_PINS['availability_receipt_sha256'],
+             'configuration_differences': copy.deepcopy(POST_RESTORE_PINS['configuration_differences']),
+             'product_loaded_state': copy.deepcopy(product), 'historical_deployment_authorization_verified': False,
+             'current_owner_preservation_authorized': True, 'original_baseline_replaced': False,
+             'voiceassistmain_changes_authorized': False}
+    return {'configuration_admission': proof, 'native_host_proof': native,
+            'additional_unit_configuration': stable_units}
+
+
+def preserved_snapshot(expected, current, database, configuration_proof=None):
     require(current['database'] == database, 'v3_database_snapshot_race')
-    for label in ('mail', 'static', 'configuration'):
+    for label in ('mail', 'static'):
         require(expected[label] == current[label], 'v3_preserved_' + label)
+    helpers = configuration_helpers({'need': require})
+    if not helpers['configuration_same'](expected['configuration'], current['configuration']):
+        helpers['current_configuration_proof'](
+            expected['configuration'], current['configuration'], configuration_proof)
     require(all(current['files'].get(name) == value for name, value in expected['files'].items()),
             'v3_preserved_old_files')
     return True
@@ -1476,7 +1816,15 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     # preserving their predicates without re-importing a mutable filename.
     py = ("import base64,json,sys;scope={};exec(compile(base64.b64decode("
           + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode())
-          + "),'<authenticated-v3-contract>','exec'),scope);value=json.load(sys.stdin);"
+          + "),'<authenticated-v3-contract>','exec'),scope);"
+          + "scope.update(POST_RESTORE_PINS=json.loads(" + repr(encode(POST_RESTORE_PINS).decode())
+          + "),POST_RESTORE_PROPOSAL_SHA=" + repr(POST_RESTORE_PROPOSAL_SHA)
+          + ",POST_RESTORE_OWNER_REPLY_SHA=" + repr(POST_RESTORE_OWNER_REPLY_SHA) + ");"
+          + "exec(compile(" + repr(CONFIGURATION_ADMISSION_SOURCE)
+          + ",'<reviewed-configuration-proof>','exec'),scope);"
+          + "scope['adapt_configuration_admission'](scope,base64.b64decode("
+          + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode()) + "));"
+          + "value=json.load(sys.stdin);"
           "raw=bytes.fromhex(value['raw_hex']);args=value['args'];kind=value['kind'];"
           "result=scope['availability'](raw,bytes.fromhex(value['original_hex']),**args)"
           "if kind=='availability'else scope['auth_sequence'](raw,**args)if kind=='auth'"
@@ -1836,7 +2184,16 @@ class InstalledHost:
         return proof
 
     def snapshot(self):
-        return self.old.snapshot(self.native, self.backup, self.storage)
+        acknowledgement = self.recovery.contract_from_bytes(
+            self.read_source(self.source / self.recovery.DECL))['external_configuration_ack']
+        before = current_external_boundary(self.recovery, acknowledgement)
+        snapshot = self.old.snapshot(self.native, self.backup, self.storage)
+        configuration_helpers({'need': require})['current_configuration_proof'](
+            self.receipt['before']['configuration'], snapshot['configuration'], before['configuration_admission'])
+        require(current_external_boundary(self.recovery, acknowledgement) == before,
+                'v3_current_configuration_snapshot_race')
+        self.current_co_tenant_boundary = before
+        return snapshot
 
     def recheck_source_and_idle(self, receipt, operations, served):
         require(self.inside, 'v3_parent_hold_required')
@@ -1933,7 +2290,8 @@ class InstalledHost:
                 and admission['allowed_deltas']['publisher']['current_full_row']
                     == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
         snapshot = self.snapshot()
-        preserved_snapshot(receipt['before'], snapshot, admission['current_database_fingerprint'])
+        preserved_snapshot(receipt['before'], snapshot, admission['current_database_fingerprint'],
+                           self.current_co_tenant_boundary['configuration_admission'])
         worker = receipt['units_after'][UNITS[2]]
         report = {'format': 3, 'complete': True, 'phase': phase, 'operations_revision': operations,
             'served_revision': served, 'availability_receipt_sha256': sha(self.availability_raw),
@@ -1942,6 +2300,7 @@ class InstalledHost:
             'provider_calls': 0, 'database_writes_by_verifier': 0, 'current_snapshot': snapshot,
             'current_database_fingerprint': admission['current_database_fingerprint'],
             'allowed_deltas': admission['allowed_deltas'], 'service_identities': receipt['units_after'],
+            'co_tenant_preservation_admission': self.current_co_tenant_boundary['configuration_admission'],
             'worker_running_idle': {'unit': UNITS[2], 'pid': int(worker['MainPID']),
                 'start_monotonic_usec': worker['ExecMainStartTimestampMonotonic'],
                 'pending_jobs': 0, 'held_reservations': 0, 'unresolved_reaper_paths': 0,
@@ -2022,6 +2381,13 @@ def installed_contract(host):
     require(contract.get('protocol_qualified') is True and all(contract.get(name) is True for name in (
         'execution_qualified', 'native_authorization_protocol_qualified', 'fixed_child_protocol_qualified')),
         'v3_declaration_source_qualification_required')
+    require(contract.get('post_restoration_preservation') == {
+                'protocol': 'post-restoration-exact-owner-preservation-v1',
+                'proposal': {'path': str(POST_RESTORE_PROPOSAL), 'sha256': POST_RESTORE_PROPOSAL_SHA},
+                'owner_reply': {'path': str(POST_RESTORE_OWNER_REPLY), 'sha256': POST_RESTORE_OWNER_REPLY_SHA}}
+            and isinstance(POST_RESTORE_OWNER_REPLY_SHA, str)
+            and re.fullmatch('[a-f0-9]{64}', POST_RESTORE_OWNER_REPLY_SHA),
+            'v3_current_configuration_declared_owner_binding')
     expected_paths = {'admin_directory': ADMIN, 'availability_directory': AVAILABILITY,
                       'preparation_directory': PREPARATION, 'campaign_directory': CAMPAIGN, 'attempt_marker': ATTEMPT}
     require(all(contract.get(name) == str(path) for name, path in expected_paths.items())
@@ -2126,7 +2492,12 @@ def plan():
             'maximum_generations': 5, 'maximum_transcriptions': 1, 'maximum_provider_exposure': '0.70',
             'maximum_authentication_seconds': 180, 'shared_browser_verifier_seconds': 1200,
             'provider_retries': 0, 'unknown_outcome_stops': True, 'real_runner_adapter_available': True,
-            'remaining_dependencies': ['exact merged operations and normal-descendant citations',
+            'post_restoration_current_boundary': {'proposal_path': str(POST_RESTORE_PROPOSAL),
+                'proposal_sha256': POST_RESTORE_PROPOSAL_SHA,
+                'owner_reply_source_binding_present': isinstance(POST_RESTORE_OWNER_REPLY_SHA, str),
+                'historical_deployment_authorization_verified': False},
+            'remaining_dependencies': ['exact separately bound owner reply for the four post-restoration differences',
+                'exact merged operations and normal-descendant citations',
                 'fresh bounded native source, recovery and preservation admissions',
                 'one authorized normal-MFA and synthetic workflow campaign'],
             'normal_443_is_separate_qualification': True}
