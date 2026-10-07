@@ -115,7 +115,7 @@ static assets, schemas and original captures remain byte-identical.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "9fad5a65e196428726540da0f0936f70cc768d05"
+  "source_base": "8f7709c9c654d33e6eb104658c1d70389fab5c11"
 }
 ```
 
@@ -372,3 +372,30 @@ co-tenant boundary, current sessions and normal completion remain runtime
 prerequisites. Any further unadmitted co-tenant difference refuses before an
 authenticated request or service action. No campaign, transition or authenticated
 served verification is asserted by source qualification.
+
+## Phase preservation binding correction — 7 October 2026
+
+The current acceptance operations BASE is the actual PR1307 merge
+`8f7709c9c654d33e6eb104658c1d70389fab5c11`. Its range from the installed
+`4194f58cb37b13e179810db486b54bf2fe7a42a8` remains exactly the four acceptance
+operational paths. Earlier prose and the PR1306 citation above remain historical;
+they do not establish a citation for this new BASE. Its exact complete merge
+citation is independently required by the execution gate, as are the prospective
+normal head and merge citations.
+
+The checked acceptance source binds the full owner preservation scope reply at
+SHA-256 `eba2682c051e29c5d915f21f02e06175562b5b602ab10c48fd42f6152f2c216e`
+and the exact recorded b3 decision at
+`c3fa17f7f7d2c79a9cf09e89d577cfda1f5477f1cc3dee780a61a7450c0b21cc`.
+The original baseline, exports and all failure records remain intact. Historical
+deployment approval and manifest/PID uncertainty remain unverified facts. One
+immutable observation proves preservation across QuillMD's own acceptance phase;
+the normal consumer independently binds its actual retained raw bytes and all
+completion/report/admission hashes, then measures its own operations. Neither
+procedure approves unrelated deployment changes or replaces the original baseline.
+
+The focused portable test fixtures explicitly represent native identity and the
+ownership of five actual disposable lock descriptors. Wrong identities and owners,
+released locks and replaced paths still refuse. Production predicates are unchanged.
+No authentication, provider call, normal publication or served verification has
+occurred as a result of this source binding correction.
