@@ -277,6 +277,43 @@ def frozen_verifier():
     return module
 
 
+def publisher_observation_connection(conn):
+    """Canonicalize only the three timestamp columns on each publisher read.
+
+    PostgreSQL row_to_json omits trailing fractional zeroes. The frozen
+    adjudicator parses its initial timestamps, but compares the reread's JSON
+    strings directly. Use the same aware UTC representation on both reads;
+    preserve every column and all actual timestamp, unit and journal changes.
+    This proxy permits only the frozen observer's exact read-only statement.
+    """
+    class Connection:
+        def execute(self, statement):
+            require(statement == "SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='backup'",
+                    'availability_publisher_observation_statement')
+            cursor = conn.execute(statement)
+            class Cursor:
+                def fetchall(self):
+                    result = []
+                    for item in cursor.fetchall():
+                        require(isinstance(item, dict) and isinstance(item.get('row'), dict),
+                                'availability_publisher_observation_row')
+                        row = dict(item['row'])
+                        for name in ('created_at', 'computed_at', 'published_at'):
+                            value = row.get(name)
+                            require(isinstance(value, (str, datetime)),
+                                    'availability_publisher_observation_time')
+                            try:
+                                stamp = value if isinstance(value, datetime) else datetime.fromisoformat(value)
+                            except ValueError:
+                                raise Refusal('availability_publisher_observation_time') from None
+                            require(stamp.tzinfo is not None, 'availability_publisher_observation_time')
+                            row[name] = stamp.astimezone(timezone.utc).isoformat()
+                        result.append({**item, 'row': row})
+                    return result
+            return Cursor()
+    return Connection()
+
+
 def database_admission(contract, original, verifier, backup):
     """Adapt qualified read-only functions; no frozen main/auth/progress function runs."""
     import psycopg
@@ -306,7 +343,7 @@ def database_admission(contract, original, verifier, backup):
                                                    old_rows['core_servicehealth']['columns'], keys['core_servicehealth']).values())
         rows = [row for row in original_health if row['key'] == b'backup']
         require(len(rows) == 1, 'availability_one_original_publisher')
-        publisher = verifier.publisher_source_admission(conn, rows[0], policy)
+        publisher = verifier.publisher_source_admission(publisher_observation_connection(conn), rows[0], policy)
         semantic = verifier.continuation_rows_admission(old_rows, current, keys,
                     {**policy, 'original_tables': manifest['tables']}, secret, fingerprint, None, publisher)
         fingerprint = verifier.continuation_database_fingerprint(conn, tables, baseline, backup)

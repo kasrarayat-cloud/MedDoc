@@ -40,6 +40,27 @@ remainsUNKNOWN. The03:18 co-tenant unit discrepancy independently explains a
 current preservation refusal, not the missing historical reason. Preserve all
 original and failed continuation receipts, sealed environments and outputs.
 
+### Publisher timestamp comparison repair,7October2026
+
+The14:34 read-only refusal retained the fixed label
+`publisher_record_changed_during_adjudication`, not its individual observations.
+It does not establish which row, unit or journal component differed. Preserve that
+receipt and do not infer its historical cause from a later successful admission.
+
+A controlled counterexample proves a comparison defect in the frozen verifier:
+PostgreSQL JSON represents the unchanged instant `.123450` as `.12345`; the
+initial adjudicator parses it back to `.123450`, while its reread compares the
+original JSON string. The recovery adapter canonicalizes only `created_at`,
+`computed_at` and `published_at` to aware UTC instants on both publisher reads.
+All eleven columns, every timestamp microsecond, actual unit/invocation drift,
+journal drift, source pins, reproduction and private-input checks remain guarded.
+Missing, malformed or naive timestamps refuse. The adapter permits only the
+frozen observer's exact read-only SQL statement. It performs no write or publish.
+
+The frozen verifier and its original qualification remain byte-identical. This
+comparison repair does not acknowledge co-tenant deployment authorization, pause
+timers, suppress concurrent metadata changes or enable installation execution.
+
 Timeline evidence is
 rebuild/.runtime/owner-demo-20261006/recovery-20261007/timeline-20261007T052127Z.json,
 SHA2564203bc23a31572fdb2b36afa7286748e3be7d6e7d2bb5725fabf0f2a0d7b666d.

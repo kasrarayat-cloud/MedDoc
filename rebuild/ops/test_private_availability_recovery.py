@@ -1,6 +1,7 @@
 """Focused invented-state controls; no host, DB, auth, provider or service actions."""
 from contextlib import ExitStack, nullcontext, redirect_stdout
 from copy import deepcopy
+from datetime import datetime, timezone
 from io import StringIO
 import hashlib
 import json
@@ -359,6 +360,10 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         self.assertEqual(connect.call_count, 1)
         self.assertEqual(conn.execute.call_args_list[0].args,
                          ('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY',))
+        observer = verifier.publisher_source_admission.call_args.args[0]
+        self.assertIsNot(observer, conn)
+        with self.assertRaisesRegex(act.Refusal, 'publisher_observation_statement'):
+            observer.execute('UPDATE core_servicehealth SET healthy=true')
         self.assertIsNone(verifier.continuation_rows_admission.call_args.args[6])
         self.assertEqual(report['allowed_deltas']['publisher'], publisher)
         self.assertEqual(report['current_database_fingerprint'], {'all': 'fingerprints'})
@@ -371,6 +376,99 @@ class AvailabilityRecoveryTests(unittest.TestCase):
             with patch.object(psycopg, 'connect', return_value=conn), \
                  patch.object(act, 'protected', return_value=b'fictional cipher'), self.assertRaises(act.Refusal):
                 act.database_admission({'original_policy': {}}, original, verifier, backup)
+
+    @staticmethod
+    def publisher_observation(row):
+        cursor = Mock()
+        cursor.fetchall.return_value = [{'row': row, 'retained_transport_field': 'unchanged'}]
+        conn = Mock()
+        conn.execute.return_value = cursor
+        proxy = act.publisher_observation_connection(conn)
+        observed = proxy.execute("SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='backup'").fetchall()
+        return observed, conn
+
+    def test_publisher_json_trailing_fractional_zeros_use_identical_initial_and_reread_instants(self):
+        row = {'created_at': '2026-10-06T02:00:00.12345+00:00',
+               'computed_at': '2026-10-07T02:00:00.5+00:00',
+               'published_at': '2026-10-07T02:00:00.6+00:00',
+               'id': 'original', 'key': 'backup', 'condition': 'failure', 'severity': 'failure',
+               'healthy': False, 'action': 'Preserve unhealthy state.', 'payload': {'exact': True},
+               'expected_interval_seconds': 300}
+        original = deepcopy(row)
+        # The frozen initial parse expands fractional zeroes; raw JSON reread
+        # strings differ even while all values and all eleven columns are stable.
+        parsed = {**row, **{name: datetime.fromisoformat(row[name]).isoformat()
+                            for name in ('created_at', 'computed_at', 'published_at')}}
+        self.assertNotEqual(parsed, row)
+        before, conn = self.publisher_observation(row)
+        after, _ = self.publisher_observation(row)
+        self.assertEqual(before, after)
+        self.assertEqual(before[0]['row'], parsed)
+        self.assertEqual(before[0]['retained_transport_field'], 'unchanged')
+        self.assertEqual(set(before[0]['row']), set(row))
+        self.assertEqual(row, original)
+        self.assertEqual(conn.execute.call_count, 1)
+
+    def test_publisher_timestamp_offsets_canonicalize_equal_instants_without_rounding(self):
+        row = {'created_at': '2026-10-06T04:00:00.12345+02:00',
+               'computed_at': '2026-10-07T01:00:00.000001-01:00',
+               'published_at': datetime(2026, 10, 7, 2, 0, 0, 2, tzinfo=timezone.utc)}
+        result, _ = self.publisher_observation(row)
+        self.assertEqual(result[0]['row'], {
+            'created_at': '2026-10-06T02:00:00.123450+00:00',
+            'computed_at': '2026-10-07T02:00:00.000001+00:00',
+            'published_at': '2026-10-07T02:00:00.000002+00:00'})
+
+    def test_publisher_timestamp_adapter_preserves_real_microsecond_drift(self):
+        row = {name: '2026-10-07T02:00:00.12345+00:00'
+               for name in ('created_at', 'computed_at', 'published_at')}
+        before, _ = self.publisher_observation(row)
+        for name in row:
+            changed = {**row, name: '2026-10-07T02:00:00.123451+00:00'}
+            after, _ = self.publisher_observation(changed)
+            self.assertNotEqual(before, after)
+
+    def test_publisher_timestamp_adapter_rejects_naive_malformed_missing_and_non_time_values(self):
+        row = {name: '2026-10-07T02:00:00+00:00'
+               for name in ('created_at', 'computed_at', 'published_at')}
+        for name in row:
+            for value in ('2026-10-07T02:00:00', 'invalid', '', None, 0,
+                          datetime(2026, 10, 7, 2, 0, 0)):
+                with self.subTest(name=name, kind=type(value).__name__), self.assertRaisesRegex(
+                        act.Refusal, 'publisher_observation_time'):
+                    self.publisher_observation({**row, name: value})
+            with self.subTest(missing=name), self.assertRaisesRegex(act.Refusal, 'publisher_observation_time'):
+                self.publisher_observation({key: value for key, value in row.items() if key != name})
+
+    def test_publisher_timestamp_adapter_keeps_non_time_drift_missing_and_extra_columns_visible(self):
+        row = {name: '2026-10-07T02:00:00+00:00'
+               for name in ('created_at', 'computed_at', 'published_at')}
+        row.update(id='original', key='backup', healthy=False, action='failure',
+                   condition='failure', severity='failure', payload={'exact': True}, expected_interval_seconds=300)
+        before, _ = self.publisher_observation(row)
+        for name, value in (('id', 'different'), ('key', 'different'), ('healthy', True),
+                            ('action', 'different'), ('condition', 'different'), ('severity', 'different'),
+                            ('payload', {'exact': False}), ('expected_interval_seconds', 301)):
+            with self.subTest(name=name):
+                after, _ = self.publisher_observation({**row, name: value})
+                self.assertNotEqual(before, after)
+        extra, _ = self.publisher_observation({**row, 'unlisted': 'must remain visible'})
+        self.assertIn('unlisted', extra[0]['row'])
+        missing, _ = self.publisher_observation({key: value for key, value in row.items() if key != 'healthy'})
+        self.assertNotIn('healthy', missing[0]['row'])
+
+    def test_publisher_timestamp_adapter_rejects_other_statement_and_non_row_transport(self):
+        conn = Mock()
+        proxy = act.publisher_observation_connection(conn)
+        for statement in ('SELECT * FROM core_servicehealth', 'DELETE FROM core_servicehealth',
+                          "SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='other'"):
+            with self.assertRaisesRegex(act.Refusal, 'publisher_observation_statement'):
+                proxy.execute(statement)
+        conn.execute.assert_not_called()
+        for item in (None, [], {'row': []}, {'row': None}, {}):
+            conn.execute.return_value.fetchall.return_value = [item]
+            with self.assertRaisesRegex(act.Refusal, 'publisher_observation_row'):
+                proxy.execute("SELECT row_to_json(h) AS row FROM core_servicehealth h WHERE key='backup'").fetchall()
 
     def test_original_publisher_and_session_policy_must_equal_prepared_qualified_git_policy(self):
         raw = b'<!-- legacy-model-contract -->\n```json\n' + act.encode({'execution_qualified': True,
