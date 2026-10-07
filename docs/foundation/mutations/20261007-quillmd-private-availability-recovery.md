@@ -535,3 +535,28 @@ The publisher timestamp repair is inherited from merged PR #1302 (ff60bc49).
 It is not reapplied. The unshipped bigint comparison proposal was withdrawn by
 6b42a044f after model/migration inspection established the actual UUID schema.
 The real selected UUID and all eleven row fields remain unchanged and checked.
+
+
+## Preserved source-only preflight refusal and public Git blob bound
+
+The ruled preflight of ce8213cd at17:49:07–13UTC refused with
+bounded_command_failed before publication locks, private admission, attempt
+marker, source advance or service actions. Its protected output remains at
+rebuild/.runtime/owner-demo-20261006/recovery-20261007/reviewed-availability-preflight-ce821-20261007-v1.log
+(SHA2566dc7a4c83c5deffb9029dbeb3177fbe44b18f29a2466e1d2228f58737adef81f).
+
+The first tracked blob in the complete public-source comparison that exceeds
+the frozen command helper's2MiB stdout ceiling is the13,762,674-byte design
+archive. The failed output retained only the fixed label, not the original argv.
+The exact source and existing Git object therefore establish a deterministic
+current bound failure before private admission; they do not invent a missing
+raw command receipt. This comparison cannot reach citation/private admission
+with that genuine unchanged blob and the old bound.
+Only public Git blob comparisons now use the existing reviewed source-permission
+primitive's16MiB ceiling and sanitized Git environment. The original2MiB command
+helper, index/revision/declaration/citation predicates, descriptor/metadata checks,
+exact Git byte comparisons and all installation/preservation checks stay intact.
+A genuine isolated Git fixture admits a2MiB+1 exact blob, refuses16MiB+1, and
+proves the unchanged frozen helper still refuses the former. Foreign roots,
+abbreviated revisions and traversing/absolute paths refuse before Git executes.
+The genuine owner decision and seven-difference boundary are unchanged.

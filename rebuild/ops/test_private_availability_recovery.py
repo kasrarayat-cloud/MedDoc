@@ -557,12 +557,45 @@ class DescriptorSourceGateTests(unittest.TestCase):
             stack.enter_context(patch.object(module, 'ROOT', root))
             stack.enter_context(patch.object(module, 'SOURCE', operator))
         stack.enter_context(patch.object(act.old, 'git', side_effect=git))
+        stack.enter_context(patch.object(act.source_files, 'git', side_effect=git))
         stack.enter_context(patch.object(act, 'FROZEN_OPERATOR', act.sha(files['rebuild/ops/legacy_model_activation.py'])))
         stack.enter_context(patch.object(act, 'FROZEN_VERIFIER', act.sha(b'fictional frozen verifier')))
         stack.enter_context(patch.object(act, 'contract_from_bytes', return_value=contract))
         stack.enter_context(patch.dict(os.environ, RULED_MUTATION_DECLARATION=act.DECL,
                                       RULED_MUTATION_DECL_COMMIT=declaration_commit))
         return stack, operator, files, installed, canary, contract
+
+
+    def test_genuine_public_git_blobs_over_frozen_command_bound_remain_exact_and_bounded(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as temporary:
+            tree = Path(temporary)
+            subprocess.run(['git', 'init', '-q', str(tree)], check=True)
+            small = tree / 'public-small.bin'; large = tree / 'public-large.bin'
+            small.write_bytes(b'S' * (2 * 1024 * 1024 + 1))
+            large.write_bytes(b'L' * (16 * 1024 * 1024 + 1))
+            subprocess.run(['git', '-C', str(tree), 'add', small.name, large.name], check=True)
+            subprocess.run(['git', '-C', str(tree), '-c', 'user.name=Offline synthetic fixture',
+                '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Synthetic public blobs'], check=True)
+            revision = subprocess.check_output(['git', '-C', str(tree), 'rev-parse', 'HEAD']).decode().strip()
+            with patch.object(act, 'SOURCE', tree):
+                self.assertEqual(act.public_git_blob(tree, revision, small.name), small.read_bytes())
+                with self.assertRaisesRegex(act.Refusal, 'public_git_blob_refused'):
+                    act.public_git_blob(tree, revision, large.name)
+                # Preserve the frozen ceiling for every unrelated command.
+                with self.assertRaisesRegex(act.old.Refusal, 'bounded_command_failed'):
+                    act.old.command(['git', '-C', str(tree), 'show', revision + ':' + small.name])
+
+    def test_public_git_blob_foreign_tree_revision_and_paths_refuse_before_git(self):
+        faults = [(Path('/unapproved'), TARGET, 'public.bin'),
+                  (act.SOURCE, 'a' * 12, 'public.bin'),
+                  (act.SOURCE, TARGET, '../private.env'),
+                  (act.SOURCE, TARGET, '/private.env')]
+        with patch.object(act.source_files, 'git') as git:
+            for tree, revision, relative in faults:
+                with self.subTest(relative=relative, tree=tree), self.assertRaises(act.Refusal):
+                    act.public_git_blob(tree, revision, relative)
+            git.assert_not_called()
 
     def test_fixture_public_parents_are_explicit_under_private_process_umask(self):
         with tempfile.TemporaryDirectory() as temporary:
