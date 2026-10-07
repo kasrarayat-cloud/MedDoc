@@ -38,22 +38,31 @@ SELF = 'rebuild/ops/owner_acceptance_v3.py'
 TEST = 'rebuild/ops/test_owner_acceptance_v3.py'
 ENTRY = 'scripts/run-owner-acceptance-v3.py'
 DECL = 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md'
-ALLOWED = frozenset((SELF, TEST, ENTRY, DECL))
+OPERATIONS_ALLOWED = frozenset((SELF, TEST, ENTRY, DECL))
+CI_LOCK = 'package-lock.json'
+CI_LOCK_BEFORE_SHA = 'a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e'
+CI_LOCK_AFTER_SHA = 'a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136'
+CI_MANIFEST_PINS = {
+    'package.json': 'b79c199a199caf1dd6b8329c64132a2660129eb2f474997cb6a27c105414c412',
+    'apps/marketing/package.json': 'e1e7848f7a9ed7e66c6a60036a36b00d7d86e53a4112b5aceee6326ed317cb7e',
+}
+CI_INSTALLED_MODES = {CI_LOCK: 0o600, 'package.json': 0o664, 'apps/marketing/package.json': 0o664}
+ALLOWED = OPERATIONS_ALLOWED | frozenset((CI_LOCK,))
 M6 = '4194f58cb37b13e179810db486b54bf2fe7a42a8'
-OPERATIONS_REVISION_POLICY = 'derive_clean_canonical_worktree_head_with_exact_or_reviewed_normal_descendant_main_and_ci_v2'
+OPERATIONS_REVISION_POLICY = 'derive_clean_canonical_worktree_head_with_exact_pinned_ci_lock_and_reviewed_normal_descendant_main_and_ci_v3'
 NORMAL_DECL = 'docs/foundation/mutations/20261007-quillmd-owner-normal443.md'
 NORMAL_SELF = 'rebuild/ops/owner_normal_origin.py'
 NORMAL_ALLOWED = frozenset((NORMAL_DECL, NORMAL_SELF, 'rebuild/ops/test_owner_normal_origin.py',
     'scripts/prepare-owner-normal-origin.py', 'rebuild/deploy/owner-normal-https.conf',
     'rebuild/quillmd/settings.py', 'rebuild/core/preview_access.py',
-    'rebuild/core/tests/test_owner_normal_origin.py'))
+    'rebuild/core/tests/test_owner_normal_origin.py', 'rebuild/core/tests/test_preview_access.py'))
 NORMAL_RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
 NATIVE_NAMES = ('managed_helper', 'private_storage', 'backup_restore', 'email_activation',
                 'activation_exclusion', 'legacy_model_activation', 'repair_source_permissions',
                 'publisher_verification', 'private_availability_recovery')
 USED_SOURCE = ALLOWED | frozenset('rebuild/ops/' + name + '.py' for name in NATIVE_NAMES) | frozenset((
     'scripts/check-citation.sh', 'scripts/lib/runs-api.sh',
-    'docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md'))
+    'docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md')) | frozenset(CI_MANIFEST_PINS)
 ORIGIN = 'https://app.quillmd.com:9443'
 MODEL = 'claude-sonnet-5-5'
 PROFILE = {'max_tokens': 6000, 'timeout_seconds': 60, 'max_retries': 0,
@@ -376,6 +385,29 @@ def bounded_bytes(path, *, private, maximum=16 * 1024 * 1024):
 
 def protected(path, maximum=16 * 1024 * 1024):
     return bounded_bytes(path, private=True, maximum=maximum)
+
+
+def ci_original_artifact(relative):
+    """Read only three inert original JSON artifacts in their retained modes."""
+    require(type(relative) is str and relative in CI_INSTALLED_MODES,
+            'v3_fixed_original_ci_artifact')
+    path = ROOT / relative
+    with nofollow_file(path) as fd:
+        before = os.fstat(fd)
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == before.st_gid == 1000
+                and stat.S_IMODE(before.st_mode) == CI_INSTALLED_MODES[relative]
+                and before.st_nlink == 1 and before.st_size <= 2 * 1024 * 1024
+                and not os.listxattr(fd), 'v3_original_ci_artifact_identity')
+        with os.fdopen(os.dup(fd), 'rb') as stream:
+            raw = stream.read(2 * 1024 * 1024 + 1)
+        identity = lambda item: (item.st_dev, item.st_ino, item.st_size, item.st_mode,
+                                item.st_uid, item.st_gid, item.st_nlink, item.st_mtime_ns, item.st_ctime_ns)
+        after = os.fstat(fd)
+        with nofollow_file(path) as attached:
+            require(identity(before) == identity(after) == identity(os.fstat(attached))
+                    and len(raw) == before.st_size and not os.listxattr(fd)
+                    and not os.listxattr(attached), 'v3_original_ci_artifact_race')
+        return raw
 
 
 def write_new(path, value):
@@ -799,6 +831,42 @@ def captured_publisher_factory(verifier, conn, original, policy):
     return captured[0]
 
 
+def ci_dependency_lock_contract():
+    """One exact CI source correction; installed dependencies are not replaced."""
+    return {'protocol': 'marketing-ci-next-lock-correction-v1', 'path': CI_LOCK,
+        'before_sha256': CI_LOCK_BEFORE_SHA, 'after_sha256': CI_LOCK_AFTER_SHA,
+        'previous_next_version': '16.3.6', 'next_version': '16.3.8',
+        'unchanged_manifest_sha256': dict(CI_MANIFEST_PINS),
+        'installed_artifact_modes': {path: format(mode, '04o') for path, mode in CI_INSTALLED_MODES.items()},
+        'native_dependency_installs': 0, 'native_marketing_builds': 0,
+        'native_marketing_service_actions': 0, 'served_runtime_dependency_changes': 0,
+        'future_lock_changes_admitted': False}
+
+
+def ci_dependency_lock_admission(host, operations, served):
+    """Authenticate the original served lock and the one reviewed CI replacement."""
+    before = host.git(host.source, 'show', M6 + ':' + CI_LOCK)
+    original = host.git(host.source, 'show', served + ':' + CI_LOCK)
+    following = host.git(host.source, 'show', operations + ':' + CI_LOCK)
+    require(sha(before) == sha(original) == CI_LOCK_BEFORE_SHA
+            and before == original and sha(following) == CI_LOCK_AFTER_SHA,
+            'v3_exact_ci_lock_git_artifacts')
+    require(host.read_ci_original(CI_LOCK) == original
+            and host.read_source(host.source / CI_LOCK) == following,
+            'v3_exact_ci_lock_worktree_artifacts')
+    host.readability(host.source / CI_LOCK)
+    for relative, expected in CI_MANIFEST_PINS.items():
+        baseline = host.git(host.source, 'show', M6 + ':' + relative)
+        installed = host.git(host.source, 'show', served + ':' + relative)
+        operational = host.git(host.source, 'show', operations + ':' + relative)
+        require(sha(baseline) == expected and baseline == installed == operational
+                and host.read_ci_original(relative) == baseline
+                and host.read_source(host.source / relative) == baseline,
+                'v3_unchanged_ci_workspace_manifests')
+        host.readability(host.source / relative)
+    return ci_dependency_lock_contract()
+
+
 def declaration_contract(raw):
     match = re.findall(rb'<!-- owner-acceptance-v3-contract -->\s*```json\s*(.*?)```', raw, re.S)
     require(len(match) == 1, 'v3_single_contract_required')
@@ -807,6 +875,9 @@ def declaration_contract(raw):
             and result.get('approved_source_paths') == sorted(ALLOWED)
             and result.get('source_base') == M6 and result.get('dependency_sha256') == DEPENDENCIES,
             'v3_exact_declaration_scope')
+    require(configuration_helpers({'need': require})['configuration_same'](
+                result.get('ci_only_dependency_lock'), ci_dependency_lock_contract()),
+            'v3_exact_declared_ci_lock_correction')
     require(result.get('maximum_generations') == 5 and result.get('maximum_transcriptions') == 1
             and result.get('maximum_provider_exposure') == '0.70'
             and result.get('concurrency') == 1 and result.get('provider_retries') == 0
@@ -833,7 +904,7 @@ def merged_main_admission(host, contract, operations, served):
         return {'revision': target, 'kind': 'exact_acceptance_operations'}
     host.git(ROOT, 'merge-base', '--is-ancestor', operations, target)
     changes = set(host.git(ROOT, 'diff', '--name-only', operations, target).decode().splitlines())
-    require(changes == NORMAL_ALLOWED, 'v3_normal_descendant_exact_eight_path_scope')
+    require(changes == NORMAL_ALLOWED, 'v3_normal_descendant_exact_nine_path_scope')
     raw = host.git(ROOT, 'show', target + ':' + NORMAL_DECL)
     matches = re.findall(rb'<!-- owner-normal443-contract -->\s*```json\s*(.*?)```', raw, re.S)
     require(len(matches) == 1, 'v3_normal_descendant_single_contract')
@@ -878,7 +949,7 @@ def merged_main_admission(host, contract, operations, served):
     commit = full_revision(host.git(ROOT, 'log', '-1', '--format=%H', target, '--', NORMAL_DECL).strip().decode())
     require(host.git(ROOT, 'show', commit + ':' + NORMAL_DECL) == raw,
             'v3_normal_descendant_committed_declaration')
-    # The exact eight-path diff already excludes every used acceptance source;
+    # The exact nine-path diff already excludes every used acceptance source;
     # compare them explicitly so this dependency boundary remains executable.
     for relative in USED_SOURCE:
         require(host.git(ROOT, 'show', target + ':' + relative)
@@ -906,7 +977,7 @@ def source_gate(host, contract, operations, served, environment):
     main_proof = merged_main_admission(host, contract, operations, served)
     host.git(source, 'merge-base', '--is-ancestor', M6, operations)
     changes = set(host.git(source, 'diff', '--name-only', M6, operations).decode().splitlines())
-    require(changes == ALLOWED, 'v3_operations_four_path_scope')
+    require(changes == ALLOWED, 'v3_operations_four_paths_and_exact_ci_lock_scope')
     require(environment.get('RULED_MUTATION_DECLARATION') == DECL, 'v3_normal_ruled_door')
     commit = full_revision(environment.get('RULED_MUTATION_DECL_COMMIT'))
     declaration = host.read_source(source / DECL)
@@ -919,6 +990,7 @@ def source_gate(host, contract, operations, served, environment):
     require(host.git(ROOT, 'branch', '--show-current').strip() == b'main'
             and host.git(ROOT, 'rev-parse', 'HEAD').strip().decode() == served
             and not host.git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'v3_clean_served_revision')
+    ci_lock = ci_dependency_lock_admission(host, operations, served)
     tracked = host.git(ROOT, 'ls-files', 'rebuild').decode().splitlines()
     for relative in tracked:
         require(host.read_source(ROOT / relative) == host.git(ROOT, 'show', served + ':' + relative),
@@ -933,7 +1005,7 @@ def source_gate(host, contract, operations, served, environment):
     return {'operations_revision': derived_operations, 'served_revision': served,
             'operations_revision_policy': OPERATIONS_REVISION_POLICY,
             'operations_source': str(source), 'changed_paths': sorted(changes), 'citation_verified': True,
-            'merged_main': main_proof}
+            'merged_main': main_proof, 'ci_only_dependency_lock': ci_lock}
 
 
 def exact_cgroup(raw, unit):
@@ -2436,6 +2508,9 @@ class InstalledHost:
     def read_source(self, path):
         return bounded_bytes(path, private=False)
 
+    def read_ci_original(self, relative):
+        return ci_original_artifact(relative)
+
     def readability(self, path):
         tree = self.source if Path(path).is_relative_to(self.source) else ROOT
         relative = str(Path(path).relative_to(tree))
@@ -3016,6 +3091,7 @@ def plan():
             'phase_preservation_protocol_qualified': PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
             'phase_preservation': phase_declaration(),
             'origin': ORIGIN, 'source_base': M6, 'declaration': DECL, 'source_paths': sorted(ALLOWED),
+            'ci_only_dependency_lock': ci_dependency_lock_contract(),
             'dependency_sha256': DEPENDENCIES, 'operations_revision': None, 'served_revision': None,
             'prospective_served_revision': M6,
             'operations_revision_policy': OPERATIONS_REVISION_POLICY,
