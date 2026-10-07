@@ -245,7 +245,7 @@ def source_gate(target):
                 buffers[relative] = raw
     require(len(buffers) == 2, 'citation_source_population')
     sealed_citation(buffers['scripts/check-citation.sh'], buffers['scripts/lib/runs-api.sh'], target)
-    return {'operator_commit': target, 'installed_commit': INSTALLED, 'changed_paths': sorted(changes)}
+    return {'operator_commit': target, 'installed_commit': INSTALLED, 'operator_changed_paths': sorted(changes)}
 
 
 def installed_index():
