@@ -491,3 +491,16 @@ owner decision and reviewed qualification are pending. Success acknowledgements
 include qualified=true only after the corresponding protocol checks have passed,
 so the independently qualified acceptance adapter can consume a genuine completion.
 The natural-publication wait, its full admission and time bounds are unchanged.
+
+### Source-faithful publication ID comparison,7October2026
+
+The frozen adjudicator explicitly converts the bigint `id` to its decimal string;
+the natural SQL observer preserves its JSON integer. Comparing their full-row
+hashes directly therefore rejects the same row (`1` versus `"1"`). A comparison
+bridge changes only the selected row's ID spelling to the frozen representation.
+It requires a native positive bigint integer, refuses booleans/floats/text/out-of-
+range IDs and preserves every other field. The selected native-row hash remains
+retained beside its separate comparison-row hash; no observed evidence is rewritten.
+Real ID changes, timestamp microsecond changes, payload drift and unknown/missing
+columns still refuse before outputs, attempt marker or service action. The existing
+three-timestamp SQL adapter and all frozen publisher source checks are unchanged.
