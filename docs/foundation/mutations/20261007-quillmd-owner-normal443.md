@@ -111,7 +111,7 @@ static assets, schemas and original captures remain byte-identical.
   "served_verification_protocol_qualified": false,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "5696e30de8323d53d4a9f3f614346cd2af555a86"
+  "source_base": "9fad5a65e196428726540da0f0936f70cc768d05"
 }
 ```
 
@@ -239,7 +239,7 @@ The genuine availability completion is now bound to SHA-256
 and actual served release `4194f58cb37b13e179810db486b54bf2fe7a42a8`.
 This recovery binding does not qualify a prospective campaign or transition.
 The actual acceptance operations merge is
-`5696e30de8323d53d4a9f3f614346cd2af555a86`; its four operational paths were
+`9fad5a65e196428726540da0f0936f70cc768d05`; its four operational paths were
 checked against served `4194f58c`. The original public nginx descriptor was
 re-observed through the bounded reviewed reader and retains device2050,
 inode919665, root ownership, mode0644, single link, no xattrs and the pinned hash.
@@ -340,11 +340,15 @@ ran.
 The normal foreign-boundary consumer now delegates directly to the checked
 acceptance descendant's `current_external_boundary`, retaining the exact original
 recovery declaration, V8/V15 history and earlier owner decision. It never invokes
-the obsolete earlier-current reader or captures a replacement baseline. The new
-separately recorded four-row current-preservation decision and exact cited
-acceptance descendant BASE remain pending. This local draft remains inert; the
-new served-verification source qualification is false, the existing normal
-environment default is disabled, and no new acceptance BASE, owner reply or
-completed campaign is asserted. Before publication, the actual cited acceptance
-merge must replace the current BASE pin and pass the exact source/dependency
-checks; its owner reply must be genuinely recorded and independently authenticated.
+the obsolete earlier-current reader or captures a replacement baseline. The actual
+current-preservation acceptance merge is now bound as BASE. Its checked source
+authenticates the protected owner reply at SHA-256
+`54c79de6d9d9805ceda92881db58c91447f09495391b84e526e2975be96b836f`
+and exactly the four separately reviewed post-restoration differences. Historical
+deployment authorization remains unverified; original captures, exports and the
+earlier owner decision remain intact. This binding does not authorize any further
+VoiceAssist change. The acceptance merge citation is still pending, so the new
+served-verification source qualification remains false. The normal environment
+default is disabled, and genuine completed campaign, current sessions and normal
+completion remain runtime prerequisites. No campaign, transition or authenticated
+served verification is asserted by the new source base.
