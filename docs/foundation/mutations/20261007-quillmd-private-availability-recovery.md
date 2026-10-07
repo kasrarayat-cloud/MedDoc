@@ -492,7 +492,7 @@ include qualified=true only after the corresponding protocol checks have passed,
 so the independently qualified acceptance adapter can consume a genuine completion.
 The natural-publication wait, its full admission and time bounds are unchanged.
 
-### Source-faithful publication ID comparison,7October2026
+### Withdrawn publication ID comparison proposal,7October2026
 
 The frozen adjudicator explicitly converts the bigint `id` to its decimal string;
 the natural SQL observer preserves its JSON integer. Comparing their full-row
@@ -504,3 +504,12 @@ retained beside its separate comparison-row hash; no observed evidence is rewrit
 Real ID changes, timestamp microsecond changes, payload drift and unknown/missing
 columns still refuse before outputs, attempt marker or service action. The existing
 three-timestamp SQL adapter and all frozen publisher source checks are unchanged.
+
+Correction before publication or execution: that proposal used an integer fixture
+without checking the actual schema. `ServiceHealth` inherits `Entity.id`, a UUID
+primary key, also defined in migration0018. Native JSON already spells that UUID
+as a string; the frozen string conversion changes no bytes. The bigint-only
+bridge would reject the real schema and has been removed. The unshipped proposal
+commit remains retained as failure evidence. Natural-publication fixtures now use
+the actual UUID shape, checked against both model and migration. The original
+full-row comparison, timestamp adapter and all meaningful refusal gates remain.

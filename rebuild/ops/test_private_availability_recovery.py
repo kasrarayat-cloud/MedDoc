@@ -231,7 +231,6 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         stack.enter_context(patch.object(act, 'ATTEMPT', root / 'exclusive-attempt'))
         stack.enter_context(patch.object(act, 'existing_operation_locks', return_value=nullcontext()))
         alignment = {'selected_row_sha256': act.sha(act.encode({'healthy': False})),
-                     'selected_comparison_row_sha256': act.sha(act.encode({'healthy': False})),
                      'selected_invocation': 'a' * 32}
         stack.enter_context(patch.object(act, 'aligned_publication_exclusion', return_value=nullcontext(alignment)))
         stack.enter_context(patch.dict(os.environ, {'RULED_ACT_MAX_SECS': '1200'}))
@@ -969,60 +968,29 @@ class CurrentOwnerBoundaryTests(unittest.TestCase):
 
 
 class NaturalPublisherSequencingTests(unittest.TestCase):
-    def test_frozen_id_spelling_admits_selected_row_but_real_row_drift_refuses(self):
-        _, observed = self.observations()
-        native = observed['row']
-        alignment = {'selected_row_sha256': act.sha(act.encode(native)),
-            'selected_comparison_row_sha256': act.sha(act.encode(act.selected_publisher_comparison_row(native))),
-            'selected_invocation': 'b' * 32}
-        for fault in (None, 'id', 'computed_at', 'payload'):
-            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
-                stack, prepared, host, contract = AvailabilityRecoveryTests().fixture_recovery(Path(temp))
-                admitted = act.selected_publisher_comparison_row(native)
-                if fault == 'id': admitted['id'] = '2'
-                elif fault == 'computed_at': admitted['computed_at'] = '2026-10-07T02:05:00.123451+00:00'
-                elif fault == 'payload': admitted['payload'] = {'changed': 'actual field'}
-                prepared['admission']['allowed_deltas']['publisher'] = {
-                    'current_full_row': admitted, 'publication': {'invocation': 'b'*32}}
-                with stack, patch.object(act, 'aligned_publication_exclusion', return_value=nullcontext(alignment)):
-                    if fault:
-                        with self.assertRaisesRegex(act.Refusal, 'admitted_selected_publication_identity'):
-                            act.complete_recovery(TARGET, contract, {}, host=host, backup=None, storage=None,
-                                exclusion=SimpleNamespace(bind_runtime=Mock()), env_writer=None, preflight=True)
-                    else:
-                        result = act.complete_recovery(TARGET, contract, {}, host=host, backup=None, storage=None,
-                            exclusion=SimpleNamespace(bind_runtime=Mock()), env_writer=None, preflight=True)
-                        self.assertTrue(result['complete'])
-                    self.assertFalse(act.OUTPUT.exists()); self.assertFalse(act.ATTEMPT.exists())
-                    host.service.assert_not_called()
+    def test_selected_uuid_shape_matches_the_installed_model_and_migration(self):
+        import ast
+        import uuid
+        model = ast.parse((act.SOURCE / 'rebuild/core/models.py').read_text())
+        entity = next(n for n in model.body if isinstance(n, ast.ClassDef) and n.name == 'Entity')
+        field = next(n.value for n in entity.body if isinstance(n, ast.Assign)
+                     and any(isinstance(t, ast.Name) and t.id == 'id' for t in n.targets))
+        self.assertIsInstance(field, ast.Call)
+        self.assertEqual(field.func.attr, 'UUIDField')
+        service = next(n for n in model.body if isinstance(n, ast.ClassDef) and n.name == 'ServiceHealth')
+        self.assertTrue(any(isinstance(b, ast.Name) and b.id == 'Entity' for b in service.bases))
+        migration = (act.SOURCE / 'rebuild/core/migrations/0018_servicehealth.py').read_text()
+        self.assertIn("('id', models.UUIDField(", migration)
+        before, after = self.observations()
+        self.assertEqual(before['row']['id'], str(uuid.UUID(before['row']['id'])))
+        self.assertEqual(after['row']['id'], str(after['row']['id']))
+        self.assertEqual(act.sha(act.encode(after['row'])),
+                         act.sha(act.encode({**after['row'], 'id': str(after['row']['id'])})))
 
-    def test_comparison_only_bigint_spelling_preserves_all_eleven_fields(self):
-        _, observed = self.observations()
-        native = observed['row']; original = deepcopy(native)
-        expected = {**native, 'id': '1'}
-        self.assertEqual(act.selected_publisher_comparison_row(native), expected)
-        self.assertEqual(native, original)
-        self.assertNotEqual(act.sha(act.encode(native)), act.sha(act.encode(expected)))
-        for field in act.PUBLISHER_ROW_FIELDS:
-            changed = deepcopy(native)
-            changed[field] = 2 if field == 'id' else {'changed': field}
-            self.assertNotEqual(act.sha(act.encode(act.selected_publisher_comparison_row(changed))),
-                                act.sha(act.encode(expected)))
-        maximum = {**native, 'id': (1 << 63) - 1}
-        self.assertEqual(act.selected_publisher_comparison_row(maximum)['id'], str((1 << 63) - 1))
 
-    def test_bool_float_text_missing_extra_and_non_bigint_ids_refuse(self):
-        _, observed = self.observations()
-        for value in (True, False, 1.0, '1', '01', '-1', None, 0, -1, 1 << 63):
-            with self.subTest(value=value), self.assertRaisesRegex(act.Refusal, 'comparison_id'):
-                act.selected_publisher_comparison_row({**observed['row'], 'id': value})
-        for row in ({key: value for key, value in observed['row'].items() if key != 'payload'},
-                    {**observed['row'], 'extra': 'unexplained'}):
-            with self.assertRaisesRegex(act.Refusal, 'comparison_id'):
-                act.selected_publisher_comparison_row(row)
 
     def observations(self):
-        row = {'id': 1, 'created_at': '2026-09-30T00:00:00+00:00', 'key': 'backup',
+        row = {'id': '7c888874-aa01-4ae1-b7b1-275e08307061', 'created_at': '2026-09-30T00:00:00+00:00', 'key': 'backup',
             'condition': 'expired', 'severity': 'error', 'healthy': False, 'action': 'renew',
             'payload': {'fictional': 'retained input'}, 'computed_at': '2026-10-07T02:00:00+00:00',
             'published_at': '2026-10-07T02:00:00.200000+00:00', 'expected_interval_seconds': 300}
@@ -1058,7 +1026,7 @@ class NaturalPublisherSequencingTests(unittest.TestCase):
 
     def test_real_identity_source_invocation_and_journal_faults_refuse(self):
         before, after = self.observations()
-        changes = [lambda v: v['row'].update(id=2), lambda v: v['row'].update(expected_interval_seconds=301),
+        changes = [lambda v: v['row'].update(id='7c888874-aa01-4ae1-b7b1-275e08307062'), lambda v: v['row'].update(expected_interval_seconds=301),
             lambda v: v['row'].update(extra='unknown'), lambda v: v.update(journal=[]),
             lambda v: v['row'].update(computed_at='2026-10-07T02:05:10+00:00'),
             lambda v: v['unit'].update(InvocationID='bad'), lambda v: v['unit'].update(ExecMainStatus='0'),
@@ -1090,8 +1058,6 @@ class NaturalPublisherSequencingTests(unittest.TestCase):
                     SimpleNamespace(hold=lambda _: nullcontext()), SimpleNamespace(remaining=Mock())) as proof:
                 self.assertEqual(proof['selected_invocation'], 'b' * 32)
                 self.assertEqual(proof['selected_row_sha256'], act.sha(act.encode(selected['row'])))
-                self.assertEqual(proof['selected_comparison_row_sha256'],
-                                 act.sha(act.encode({**selected['row'], 'id': '1'})))
         self.assertEqual(observe.call_count, 5)
 
     def test_natural_wait_uses_monotonic_deadline_and_does_not_retry_full_admission(self):

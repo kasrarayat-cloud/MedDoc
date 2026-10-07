@@ -470,14 +470,6 @@ def publisher_unit_sources():
     return result
 
 
-def selected_publisher_comparison_row(row):
-    """Match the frozen verifier's bigint ID spelling without changing evidence."""
-    require(isinstance(row, dict) and set(row) == PUBLISHER_ROW_FIELDS
-            and type(row['id']) is int and 0 < row['id'] <= (1 << 63) - 1,
-            'availability_publisher_comparison_id')
-    return {**row, 'id': str(row['id'])}
-
-
 def publisher_observer(backup):
     """Every poll gets a new read-only snapshot, so a natural commit is visible."""
     import psycopg
@@ -579,8 +571,6 @@ def aligned_publication_exclusion(target, contract, backup, exclusion, budget):
                     'availability_ruled_stage_time_budget')
             proof = {'protocol': PUBLISHER_ALIGNMENT['protocol'], 'selected_invocation': selected['unit']['InvocationID'],
                 'selected_row_sha256': sha(encode(selected['row'])), 'selected_unit_sha256': sha(encode(selected['unit'])),
-                'selected_comparison_row_sha256': sha(encode(selected_publisher_comparison_row(selected['row']))),
-                'id_comparison_protocol': 'frozen-bigint-id-string-v1',
                 'selected_journal_sha256': sha(encode(selected['journal'])), 'publication': selected['publication'],
                 'maximum_wait_seconds': 360, 'storage_admission': storage_proof, 'unit_sources': sources,
                 'manual_publications': 0, 'timer_or_service_actions': 0, 'provider_calls': 0}
@@ -1116,7 +1106,7 @@ def complete_recovery(target, contract, source, *, host, backup, storage, exclus
         with budget.stage('full_readiness', 30 + SECONDS):
             prepared = readiness(contract, host, backup, storage, preflight=preflight)
         publisher = prepared['admission']['allowed_deltas']['publisher']
-        require(sha(encode(publisher['current_full_row'])) == alignment['selected_comparison_row_sha256']
+        require(sha(encode(publisher['current_full_row'])) == alignment['selected_row_sha256']
                 and publisher['publication']['invocation'] == alignment['selected_invocation'],
                 'availability_admitted_selected_publication_identity')
         if preflight:
