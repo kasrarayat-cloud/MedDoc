@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fixed inert CLI; no installed reads precede the source qualification gate."""
+"""Reviewed fixed CLI; default performs no installed reads or actions."""
 from pathlib import Path
 import json
 import sys

@@ -1,8 +1,9 @@
-"""Fixed, presently inert owner acceptance protocol for the private QuillMD app.
+"""Reviewed, bounded owner acceptance protocol for the private QuillMD app.
 
 This operational tool changes no clinical generation, application security,
-services or existing records. Real entry points refuse before installed reads.
-The pure admissions below are usable with fictional, authenticated test inputs.
+services or existing records. Installed entry points require the normal ruled
+door, exact cited sources, genuine recovery evidence and fresh native admissions.
+Default invocation describes the scope without accessing installed state.
 """
 from contextlib import contextmanager, ExitStack
 from datetime import datetime, timezone, timedelta
@@ -81,9 +82,9 @@ DEPENDENCIES = {
     'test-preparation.py': 'c835678e5bf541172fa66a9f5b8ef07f4f080889783dfaaddc924198881847da',
 }
 # These are source qualifications, never environment/declaration switches.
-EXECUTION_QUALIFIED = False
-NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED = False
-FIXED_CHILD_PROTOCOL_QUALIFIED = False
+EXECUTION_QUALIFIED = True
+NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED = True
+FIXED_CHILD_PROTOCOL_QUALIFIED = True
 ENTRY_OBSERVATIONS = {'installed_state_accessed': False, 'authentication_possible': False,
                       'provider_possible': False}
 PARENT_PHASES = ('normal-auth', 'browser', 'verify')
@@ -2125,10 +2126,9 @@ def plan():
             'maximum_generations': 5, 'maximum_transcriptions': 1, 'maximum_provider_exposure': '0.70',
             'maximum_authentication_seconds': 180, 'shared_browser_verifier_seconds': 1200,
             'provider_retries': 0, 'unknown_outcome_stops': True, 'real_runner_adapter_available': True,
-            'remaining_dependencies': ['genuine complete availability/native authorization receipt',
-                'actual reviewed operational descendant for M6 and publisher closure',
-                'finished source qualification of checked native/normal-auth/browser/verifier adapters',
-                'finished independent refutation and exact merged citation'],
+            'remaining_dependencies': ['exact merged operations and normal-descendant citations',
+                'fresh bounded native source, recovery and preservation admissions',
+                'one authorized normal-MFA and synthetic workflow campaign'],
             'normal_443_is_separate_qualification': True}
 
 

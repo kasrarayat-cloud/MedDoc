@@ -1,17 +1,24 @@
-# QuillMD owner acceptance v3 — inert operational preparation
+# QuillMD owner acceptance v3 — reviewed bounded qualification
 
-This revision implements read-only admissions, the native parent/child dispatcher
-and a fixed five-case acceptance sequence. It authorizes **offline preparation only**. No installed authentication,
-network, provider, database, campaign/session, service, source, environment,
-static, restore, capture or migration action is qualified by this declaration.
-The source qualification constants remain false. Default invocation prints a
-plan; every installed mode refuses before installed reads or lock acquisition.
-No environment variable or declaration boolean enables these source gates.
+The owner-authorized native recovery completed on 7 October 2026 at
+18:53:08.918320 UTC. Its protected completion receipt and actual served revision
+are pinned below. This source qualifies the checked native parent/child,
+normal-MFA, browser and independent-verifier protocol after the finished controls
+and review. Campaign completion remains an unobserved runtime fact.
 
-The source is the separate four-path worktree from reviewed M6. It leaves every
-frozen preparation, failed attempt, original capture and campaign allowance
-untouched. Local source preparation is authorized; push and merge remain coordinated
-through the ordinary reviewed PR and exact citation gates.
+Execution requires the ordinary committed declaration door, exact cited source
+identities, genuine complete recovery evidence, native service identity, continuous
+five kernel exclusions and fresh complete preservation admissions. The single
+campaign retains five generations, one transcription, $0.70 exposure, concurrency
+one, zero provider retries and one existing normal administrator MFA submission.
+It uses only the authorized synthetic actors and fixed fixtures. Unknown outcomes
+stop without replay, rollback or alteration of historical records. Default
+invocation describes scope with no installed reads or actions.
+
+The operational source remains separate from the installed served release.
+VoiceAssistMain, MFA settings, original captures, failed continuations, immutable
+frozen dependencies and historical deployment-approval uncertainty are preserved.
+Push, merge and every installed action remain governed by their reviewed gates.
 
 acceptance_admin_preparation_sha256: c8fa9d63de993fca8aacb33a0ce5f295b3a1bfdc7c685bce598acf841453e90f
 acceptance_browser_sha256: d58204d839ecf150bb918f34899f0d7784f312a2e3f55008248df01916667aa0
@@ -32,7 +39,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "attempt_marker": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-attempt-20261007.json",
   "authentication_seconds": 180,
   "availability_directory": "/opt/meddoc-pro/rebuild/.runtime/private-availability-recovery-20261007",
-  "availability_receipt_sha256": null,
+  "availability_receipt_sha256": "17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd",
   "browser_verifier_seconds": 1200,
   "campaign_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007",
   "concurrency": 1,
@@ -46,13 +53,13 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "test-preparation.py": "c835678e5bf541172fa66a9f5b8ef07f4f080889783dfaaddc924198881847da",
     "verify_installed_acceptance_v3.py": "34d4d3bf0b9641a2f642717b33833beb7a7f49a0c043bc095e592c41a78b0023"
   },
-  "execution_qualified": false,
-  "fixed_child_protocol_qualified": false,
+  "execution_qualified": true,
+  "fixed_child_protocol_qualified": true,
   "format": 3,
   "maximum_generations": 5,
   "maximum_provider_exposure": "0.70",
   "maximum_transcriptions": 1,
-  "native_authorization_protocol_qualified": false,
+  "native_authorization_protocol_qualified": true,
   "normal_443_provider_calls": 0,
   "normal_443_qualified": false,
   "operations_revision": null,
@@ -134,7 +141,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "outer_ceiling_seconds": 1680,
   "preparation_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007",
   "preparation_only": true,
-  "protocol_qualified": false,
+  "protocol_qualified": true,
   "provider_retries": 0,
   "served_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
   "source_base": "4194f58cb37b13e179810db486b54bf2fe7a42a8"
@@ -481,3 +488,27 @@ availability pin remains null. No installed authentication, provider call,
 database write, service action or normal publication has been performed by this
 source-only preparation. The existing 1680-second wrapper bound remains an upper
 limit without a completion guarantee.
+
+### Genuine recovery binding and protocol qualification, 7 October 2026
+
+The reviewed one-shot availability recovery completed at 18:53:08.918320 UTC;
+`private-availability-recovery-20261007/complete.json` has SHA-256
+`17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd`.
+The receipt independently binds served revision `4194f58c`, all three active native
+QuillMD services, their PIDs/invocations, direct synthetic-only web health,
+original records/files and the exact current-owner VoiceAssistMain preservation
+boundary. Recovery made zero authentication submissions or provider calls. This
+qualification supersedes earlier inert preparation status while preserving those
+records. It does not assert that any acceptance workflow or normal443 transition
+has occurred.
+
+The finished source qualifies the three checked protocol constants and pins only
+the genuine recovery receipt. Operational revision remains derived from the exact
+clean cited worktree head. Environment variables and declaration booleans cannot
+override source qualifications; negative controls explicitly set each qualification
+false and prove refusal before installed reads. The qualified default plan remains
+read-only. Actual authenticated dashboards, raw worker model, provider costs and
+served review-to-export workflows require the single bounded runtime campaign.
+All 73 affected local controls passed after this receipt binding and source
+qualification, including independent false-source refusals and the read-only
+qualified default. These controls do not constitute campaign execution evidence.

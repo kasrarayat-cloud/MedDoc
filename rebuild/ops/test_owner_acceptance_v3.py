@@ -107,6 +107,8 @@ def docx(values):
 
 
 class InertAndSourceTests(unittest.TestCase):
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_default_and_every_real_entry_refuse_before_io(self):
         with (patch.object(v3, 'protected', side_effect=AssertionError('installed read')),
               patch.object(socket, 'create_connection', side_effect=AssertionError('network')),
@@ -120,6 +122,8 @@ class InertAndSourceTests(unittest.TestCase):
                     v3.main(['--' + mode, '--operations-revision', OPS, '--served-revision', SERVED])
             with self.assertRaises(v3.Refusal): v3.InstalledHost()
 
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_declaration_flags_cannot_enable_source_gate(self):
         with patch.dict(os.environ, {'V3_EXECUTION_QUALIFIED': '1'}):
             for _ in (False, True):
@@ -128,6 +132,28 @@ class InertAndSourceTests(unittest.TestCase):
         self.assertFalse(v3.NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED)
         self.assertFalse(v3.FIXED_CHILD_PROTOCOL_QUALIFIED)
 
+    def test_qualified_default_still_describes_without_installed_access(self):
+        with (patch.object(v3, 'protected', side_effect=AssertionError('installed read')),
+              patch.object(socket, 'create_connection', side_effect=AssertionError('network')),
+              patch.object(subprocess, 'Popen', side_effect=AssertionError('child')),
+              patch('sys.stdout', new=io.StringIO()) as stream):
+            self.assertEqual(v3.main([]), 0)
+        result = json.loads(stream.getvalue())
+        self.assertFalse(result['installed_state_accessed'])
+        self.assertEqual((result['provider_calls'], result['authentication_submissions'], result['database_writes']), (0, 0, 0))
+        self.assertTrue(all(result[name] for name in ('execution_qualified',
+            'native_authorization_protocol_qualified', 'fixed_child_protocol_qualified')))
+
+    def test_each_source_qualification_is_independently_required(self):
+        names = ('EXECUTION_QUALIFIED', 'NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED', 'FIXED_CHILD_PROTOCOL_QUALIFIED')
+        for name in names:
+            values = dict.fromkeys(names, True); values[name] = False
+            with self.subTest(name=name), patch.multiple(v3, **values), patch.dict(os.environ, {name: '1'}):
+                with self.assertRaisesRegex(v3.Refusal, 'source_protocol_unqualified'):
+                    v3.execution_gate()
+
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_installed_collectors_refuse_before_roles_key_socket_or_db(self):
         with patch.object(v3, 'frozen_modules', side_effect=AssertionError('source read')), \
              patch.object(socket, 'create_connection', side_effect=AssertionError('socket')) as sock:
@@ -135,6 +161,8 @@ class InertAndSourceTests(unittest.TestCase):
                 with self.assertRaises(v3.Refusal): call()
             self.assertEqual(sock.call_count, 0)
 
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_default_native_locks_and_child_refuse_before_os_calls(self):
         with (patch.object(os, 'open', side_effect=AssertionError('installed lock')),
               patch.object(subprocess, 'Popen', side_effect=AssertionError('native child'))):
@@ -806,6 +834,8 @@ class NativeAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(v3.Refusal, 'declaration_source_qualification'):
             v3.installed_contract(FakeHost())
 
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_refusal_reports_known_early_zero_and_unknown_entered_phase(self):
         clean = {'installed_state_accessed':False,'authentication_possible':False,'provider_possible':False}
         with patch.dict(v3.ENTRY_OBSERVATIONS, clean, clear=True):
@@ -1005,6 +1035,8 @@ class FinancialAndExportTests:
                 adapted.verify(types.SimpleNamespace(progress=str(v3.CAMPAIGN/'progress.json')))
         self.assertEqual(events,['admin-final','doctor-final','database-boundary'])
 
+    @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
+                    FIXED_CHILD_PROTOCOL_QUALIFIED=False)
     def test_actual_frozen_verifier_adapter_retains_gate_and_full_verifier(self):
         raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
         authority = v3.derive_authority(contract(),self.common,OPS,SERVED,{})
