@@ -1,5 +1,5 @@
 """Fictional files only: concrete scope, race, rollback and no-op controls."""
-from contextlib import ExitStack, nullcontext
+from contextlib import ExitStack, contextmanager, nullcontext
 import json
 import os
 from pathlib import Path
@@ -10,12 +10,54 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from . import repair_source_permissions as act
+from ops import repair_source_permissions as act
 
 TARGET = 'a' * 40
 
 
+def stat_copy(info, **changes):
+    fields = {name: getattr(info, name) for name in dir(info) if name.startswith('st_')}
+    return SimpleNamespace(**{**fields, **changes})
+
+
+class FictionalOS:
+    """Private proxy: fixture creator ownership represents native UID/GID1000."""
+    def __init__(self, uid, gid):
+        self.uid, self.gid = uid, gid
+
+    def __getattr__(self, name):
+        return getattr(os, name)
+
+    def owner_info(self, info):
+        return stat_copy(info, st_uid=1000 if info.st_uid == self.uid else info.st_uid,
+                         st_gid=1000 if info.st_gid == self.gid else info.st_gid)
+
+    def fstat(self, fd):
+        return self.owner_info(os.fstat(fd))
+
+    def getuid(self):
+        return 1000
+
+    geteuid = getuid
+    getgid = getuid
+    getegid = getuid
+
+    @contextmanager
+    def scandir(self, fd):
+        with os.scandir(fd) as children:
+            yield (SimpleNamespace(name=child.name,
+                   stat=lambda follow_symlinks=False, child=child:
+                       self.owner_info(child.stat(follow_symlinks=follow_symlinks))) for child in children)
+
+
 class SourcePermissionRepairTests(unittest.TestCase):
+    def setUp(self):
+        self.native_os = FictionalOS(os.getuid(), os.getgid())
+        self.real_metadata = act.metadata
+        self.enterContext(patch.object(act, 'os', self.native_os))
+        self.enterContext(patch.object(act, 'metadata', side_effect=lambda info:
+            self.real_metadata(self.native_os.owner_info(info))))
+
     def fixture(self, tree):
         tree.chmod(0o755)
         files = {'rebuild/ops/app.py': b'fictional public source\n',
@@ -527,6 +569,33 @@ class SourcePermissionRepairTests(unittest.TestCase):
                             act.rollback_identity(fd, row, 0o644)
             finally:
                 os.close(fd)
+
+    def test_ci_uid_gid1001_representation_exercises_successful_repair_and_foreign_refusal(self):
+        uid, gid = os.getuid(), os.getgid()
+        ci_os = FictionalOS(1001, 1001)
+        normalize = ci_os.owner_info
+        represented = set()
+        def ci_owner_info(info):
+            observed = stat_copy(info, st_uid=1001 if info.st_uid == uid else info.st_uid,
+                                 st_gid=1001 if info.st_gid == gid else info.st_gid)
+            represented.add((observed.st_uid, observed.st_gid))
+            return normalize(observed)
+        ci_os.owner_info = ci_owner_info
+        with patch.object(act, 'os', ci_os), patch.object(act, 'metadata', side_effect=lambda info:
+                self.real_metadata(ci_os.owner_info(info))), tempfile.TemporaryDirectory() as temporary:
+            stack, manifest, _, _ = self.fixture(Path(temporary))
+            with stack:
+                self.assertTrue(self.execute(manifest)['complete'])
+                self.assertIn((1001, 1001), represented)
+                row = manifest['candidates'][0]
+                fd = os.open(Path(temporary) / row['path'], os.O_RDONLY)
+                try:
+                    foreign = stat_copy(os.fstat(fd), st_uid=1002, st_gid=1002)
+                    with patch.object(ci_os, 'fstat', return_value=foreign), \
+                         self.assertRaisesRegex(act.Refusal, 'inventory_metadata'):
+                        act.verify_fd(fd, row, row['target_mode'])
+                finally:
+                    os.close(fd)
 
 
 if __name__ == '__main__':

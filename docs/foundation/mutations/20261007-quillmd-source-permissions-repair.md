@@ -117,8 +117,10 @@ Finished qualification, before any installed permission action:
 
 - Repair module SHA256:
   0aad1f7c7228afd1f512da48266cbe00e37db0428aacc3c46983ee0026d7379e.
-- All 47 focused repair and availability tests pass using the existing isolated
-  Python environment; no dependency installation or application build occurred.
+- All 48 focused repair and availability tests pass using the existing isolated
+  Python environment. Exact CI-style discovery separately passes all 31 repair
+  tests, including an explicit fictional UID/GID 1001 success and foreign-owner
+  refusal control; no dependency installation or application build occurred.
 - Independent race/rollback refutation retested all five concrete controls on
   that exact source. Final protected report:
   rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permissions-independent-final-race-retest-v2.json;
@@ -138,3 +140,23 @@ Finished qualification, before any installed permission action:
 During this qualification, the retained native administrator deployment-evidence
 export was still absent. This qualification changes no native approval protocol,
 installation qualification or external configuration acknowledgement.
+
+The first PR CI run, 37585708403 on
+6d3fd360f1c4e1ff4cda9d047431b6ed5ecdfd43, failed because the new test module's
+relative import was incompatible with the repository's actual discovery command.
+The focused module invocation had hidden that difference. The PR became a draft
+at discovery; the completed failed run was retained, not cancelled or retried.
+Its complete failed-step log is
+rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permissions-pr1299-initial-ci-failure.log,
+SHA256 db50c88ed24619693052255c777c18eff795e2dc00de39d80ddc78caf65834d2.
+The tests now use the repository's import convention and a private fictional
+ownership adapter, keeping production UID/GID 1000 checks unchanged. No refusal
+or success tests were skipped. Requalification requires fresh CI on the corrected
+commit and its eventual merge; the failed run cannot supply that citation.
+Independent portability refutation then passed exact discovery and 11 additional
+represented-UID/GID-1001 inode, mode, content, link, race and foreign-owner/type
+controls, with zero skipped controls and non-owner metadata unchanged. Protected
+report: rebuild/.runtime/owner-demo-20261006/recovery-20261007/source-permissions-independent-test-portability-v1.json,
+SHA256 1671a529b0eb09c68c12eebce78c8d9e37e311a744f642e8814b690ccf92ac83.
+Reviewed test module SHA256:
+b2f2347a11d00416b75c69ef0e9207194533c4741d33ae8da72bdaa279016497.
