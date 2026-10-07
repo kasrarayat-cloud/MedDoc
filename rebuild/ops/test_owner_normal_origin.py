@@ -454,6 +454,13 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         self.assertEqual(actual['private_acceptance'][0]['served_revision'],PRIOR)
         self.assertEqual(actual['progress'][0]['preparation']['after-auth']['operations_revision'],act.BASE)
         self.assertNotIn('sha256',policy['private_acceptance'])
+    def test_complete_candidate_with_any_fixed_parent_stop_record_is_never_admitted(self):
+        for parent in (act.PRIVATE_PATHS['private_acceptance'].parent,act.PRIVATE_PATHS['private_authority'].parent):
+            with self.subTest(parent=parent):
+                policy,records=self.chain();stop=parent/'STOP.json'
+                with patch.object(act.os.path,'lexists',side_effect=lambda path:Path(path)==stop), \
+                     patch.object(act.source_files,'protected',side_effect=AssertionError('stopped candidate read')):
+                    with self.assertRaisesRegex(act.Refusal,'private_campaign_stop_record_absent'):act.private_receipts(policy)
     def test_missing_or_inconsistent_runtime_evidence_refuses(self):
         for key,field,value,label in (
             ('private_acceptance','complete',False,'completed_private_acceptance'),

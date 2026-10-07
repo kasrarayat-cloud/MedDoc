@@ -32,7 +32,7 @@ APP = ROOT / 'rebuild'
 PYTHON = APP / '.venv/bin/python'
 RUNTIME = APP / '.runtime'
 EVIDENCE = RUNTIME / 'owner-demo-20261006'
-BASE = 'ff60bc49bc053715c66fd741f9151a70819e1617'
+BASE = '5696e30de8323d53d4a9f3f614346cd2af555a86'
 SELF = 'rebuild/ops/owner_normal_origin.py'
 TEST = 'rebuild/ops/test_owner_normal_origin.py'
 ENTRY = 'scripts/prepare-owner-normal-origin.py'
@@ -57,9 +57,9 @@ ALLOWED = frozenset((DECL, TEMPLATE, 'rebuild/quillmd/settings.py', 'rebuild/cor
     'rebuild/core/tests/test_owner_normal_origin.py', SELF, TEST, ENTRY))
 SHARED_NAMES = b'    server_name quillmd.com www.quillmd.com app.quillmd.com admin.quillmd.com;'
 RESTRICTED_NAMES = b'    server_name quillmd.com www.quillmd.com admin.quillmd.com;'
-ACTIVE_PROTOCOL_QUALIFIED = False
-PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = False
-INGRESS_PUBLICATION_QUALIFIED = False
+ACTIVE_PROTOCOL_QUALIFIED = True
+PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = True
+INGRESS_PUBLICATION_QUALIFIED = True
 OUTER_SECONDS = 2400
 RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
 SESSION_FORWARD_RESERVE = 600
@@ -178,6 +178,10 @@ def runtime_receipt(item, label, expected_path):
     return json.loads(raw), raw
 
 def private_receipts(policy):
+    require(not any(os.path.lexists(path) for path in (
+        PRIVATE_PATHS['private_acceptance'].parent / 'STOP.json',
+        PRIVATE_PATHS['private_authority'].parent / 'STOP.json')),
+        'normal443_private_campaign_stop_record_absent')
     values = {key: (pinned_receipt if key == 'availability' else runtime_receipt)(
                 policy.get(key), 'normal443_' + key + '_pin', path) for key, path in PRIVATE_PATHS.items()}
     accepted, report, authority, availability = [values[key][0] for key in PRIVATE_PATHS]

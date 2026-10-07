@@ -22,9 +22,9 @@ from django.views.decorators.http import require_http_methods, require_POST
 from .security import audit, rate_limit
 
 COOKIE = '__Host-quillmd_preview'
-# Later source qualification and an explicit setting are both required. A
+# Reviewed source qualification and an explicit setting are both required. A
 # declaration, environment variable or ingress change alone cannot enable 443.
-OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED = False
+OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED = True
 OWNER_NORMAL_HOST = 'app.quillmd.com'
 SIGN_IN = '/preview/sign-in/'
 SIGN_OUT = '/preview/sign-out/'

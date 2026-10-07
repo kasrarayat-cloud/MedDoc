@@ -1,15 +1,16 @@
 # Restricted owner normal-origin transition, 7 October 2026
 
-This is an inert preparation. All three operational source gates and the application
-normal-origin gate remain false. The actual preserving availability receipt and
-cited private acceptance operations base are required before protocol qualification.
-Completed private browser/provider evidence remains a runtime execution gate.
-No deployment, ingress, login, provider, migration or database write is authorized
-by this draft alone. The existing recorded task authorization covers the later
-reviewed route; no additional provider allowance is introduced.
+This source qualifies the reviewed normal-origin protocol and application gate,
+bound to the genuine preserving availability receipt and actual private acceptance
+operations merge. Exact citations are checked at execution; this declaration does
+not claim that pending CI has completed. The application setting stays disabled
+until runtime admission of the genuine completed private campaign. Completed
+private browser/provider evidence and the full frozen independent proof remain
+execution gates. The existing recorded task authorization covers this reviewed
+route; no additional provider allowance is introduced.
 
-The source base shown below is a preparation base only. Before qualification it
-must become the exact, fully cited private acceptance operations merge. The
+The source base shown below is the actual private acceptance operations merge;
+its full citation and the exact normal target citation remain execution gates. The
 accepted served revision is the actual recovery release in its genuine receipt,
 never a remembered or fabricated SHA. The intermediate accepted-operations
 revision must differ from that served release on exactly the four established
@@ -21,7 +22,7 @@ static assets, schemas and original captures remain byte-identical.
 <!-- owner-normal443-contract -->
 ```json
 {
-  "active_protocol_qualified": false,
+  "active_protocol_qualified": true,
   "approved_source_paths": [
     "docs/foundation/mutations/20261007-quillmd-owner-normal443.md",
     "rebuild/core/preview_access.py",
@@ -42,16 +43,23 @@ static assets, schemas and original captures remain byte-identical.
   "database_writes": 0,
   "format": 1,
   "ingress_path": "/etc/nginx/sites-available/quillmd",
-  "ingress_publication_qualified": false,
+  "ingress_publication_qualified": true,
   "origin": "https://app.quillmd.com",
-  "original_ingress_metadata": null,
+  "original_ingress_metadata": {
+    "device": 2050,
+    "gid": 0,
+    "inode": 919665,
+    "mode": 420,
+    "sha256": "ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a",
+    "uid": 0
+  },
   "original_ingress_sha256": "ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a",
   "outer_ceiling_seconds": 2400,
   "private_acceptance": {
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/complete.json",
     "binding": "private-acceptance-completion-cross-hashes-v1"
   },
-  "private_acceptance_protocol_qualified": false,
+  "private_acceptance_protocol_qualified": true,
   "private_acceptance_completed": false,
   "private_accepted_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
   "private_authority": {
@@ -68,7 +76,7 @@ static assets, schemas and original captures remain byte-identical.
   "runtime_receipt_binding_protocol": "private-acceptance-completion-cross-hashes-v1",
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "ff60bc49bc053715c66fd741f9151a70819e1617"
+  "source_base": "5696e30de8323d53d4a9f3f614346cd2af555a86"
 }
 ```
 
@@ -81,7 +89,10 @@ progress/final-authority/admission paths authenticate their exact operations and
 served identities, the literal availability SHA, complete-to-report hash,
 report-to-progress hash, and authority-to-both-admission hashes. Missing, failed,
 incomplete or causally inconsistent evidence refuses before any service,
-environment, ingress or authenticated request. The entire frozen independent
+environment, ingress or authenticated request. Both fixed preparation/campaign
+STOP markers must be absent;
+a completed candidate followed by a stopped parent is preserved and refused.
+The entire frozen independent
 original/current clinical, Word, financial and preservation proof then reruns;
 the packet's completion booleans cannot substitute for that proof. It retains
 the original 36-table/212-session encrypted capture and its failure chain; it
@@ -192,11 +203,25 @@ The genuine availability completion is now bound to SHA-256
 `17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd`
 and actual served release `4194f58cb37b13e179810db486b54bf2fe7a42a8`.
 This recovery binding does not qualify a prospective campaign or transition.
-All source gates remain false while the actual cited private-acceptance base,
-current original nginx metadata, finished qualification review and exact normal
-PR/merge citation remain pending. These
+The actual acceptance operations merge is
+`5696e30de8323d53d4a9f3f614346cd2af555a86`; its four operational paths were
+checked against served `4194f58c`. The original public nginx descriptor was
+re-observed through the bounded reviewed reader and retains device2050,
+inode919665, root ownership, mode0644, single link, no xattrs and the pinned hash.
+The three operational source gates and application source gate now qualify the
+finished protocol. The explicit application environment setting remains disabled.
+The acceptance merge's complete CI citation and exact normal PR/merge citations
+remain pending execution prerequisites. These
 are specific execution inputs, not a request for further historical VoiceAssist
 approval. Existing V8/V15 exports and recorded preservation decision remain
 untouched, and historical deployment approval remains unverified. Runtime execution
 additionally requires the genuinely completed cross-bound private campaign and
 live final browser states; neither is asserted by source qualification.
+
+The finished qualified source passed 39 focused operator controls and 11
+database-free middleware/API/CSRF controls. Those controls include each independent
+false-source refusal, a read-only qualified default, genuine HMAC live-session
+expiry boundaries, slow guard/completion I/O regressions and refusal of a completed
+candidate with a fixed parent STOP marker. The independent finished review found
+no remaining demonstrated timing or qualification defect. These controls are
+source evidence; they do not claim that the future campaign or transition ran.
