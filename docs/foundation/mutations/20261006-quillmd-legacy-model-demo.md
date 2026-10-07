@@ -307,6 +307,26 @@ Origin/Referer headers. No provider counts, model/profile, clinical or MFA polic
 Both qualification flags are now true on that prospective evidence. Actual future CI,
 backup, MFA, storage, installed model and same-URL acceptance remain execution gates.
 
+The first exact-head CI on `8cecf1aa9af5cbe823941116e022a749c05870c5` is retained
+as a failure, not a citation. Its protected original job log is
+`owner-demo-20261006/ci-37553330356-job-112573713574-original.log`,
+SHA256 `af76ca4ff3c83052c8403a82c38c72dc5b67db6e33f066c2eeb4f7fa2e5aabee`.
+The three-template repair restores the established literal answer-section marker and
+short visible support/patient instructions. Clinical engine and test assertions stay
+unchanged. The exact25 failing cases were rerun on the isolated fixture:24 passed;
+one ordinary Word integration case explicitly skipped because that launcher has no
+qualified Word runtime. Its log SHA256 is
+`bb938a126bacfe97195863469e45800942a00be4020a03a37917d91327d2fdf5`.
+The ordinary exact-head CI must exercise that case with the required Word ownership
+boundary; this local skip is not a waiver or an installed-flow qualification.
+The independent final three-template addendum is
+`owner-demo-20261006/owner-dashboard-finished-independent-qualification-v9.json`,
+SHA256 `544ece7eaad137e2a4fab1caaba8c043fd88f511cd0a96b59d77f0175c08d782`.
+It confirms32 rendered clinical states preserve every existing control/content and
+executes the actual established test extractors against distinct answer sections.
+All13 supported/refused upload phrases stay visible. Operator, tests and runtime
+acceptance pins remain identical to the qualified V8 bytes.
+
 The normal committed ruled door may first execute exactly `/usr/bin/node /opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/prepare-installed-admin-auth.mjs --execute <exact-cited-40sha>`, bound by acceptance_admin_preparation_sha256 above. Default/self-test is no-send. Its only negative security request is one invalid-CSRF/no-OTP POST that must return403 with device/auth/throttle metadata unchanged; retain before/after proof and then perform one ordinary staff login/MFA without retry or reset. It enforces the exact merged-main CI citation and qualified committed declaration before reading credentials or using the network. Provider requests remain0. No arbitrary preparatory command is authorized.
 
 Before the capture, perform exactly one ordinary protected staff login/MFA through the SAMEhttps://app.quillmd.com:9443/console/ flow and retain canonical private `owner-demo-20261006/installed-admin-before-activation/normal-authentication.json` plus `browser-session.json`. The proof names its actor UUID, actual UTC authentication timestamp, origin=https://app.quillmd.com:9443, session_cookie_name=quillmd_doctor_session, session path/hash, normal_mfa_login=true and auth_reset=false, complete=true, release equal to the exact cited target and csrf403_no_OTP_noauththrottle=true; timestamp is nonfuture and less than1800seconds old before private mutation, and precedes the actual fresh manifest. Legitimate login/session/counter changes enter the fresh baseline. No new listener, role switch, loopback-header spoofing or security change is admitted. The installer only reads this proof/hash; it never logs in, resets authentication or exposes cookie values. The browser reuses those normal staff account and preview-gate sessions for read-only admin overview/services/organizations. Every old OTP field and all existing ServiceHealth fields remain strictly unchanged. Only the explicitly identified old staff account-session key may renew its authenticated signing timestamp and1800-second expiry within the measured normal GET/save interval; its signed payload remains identical. Only the explicitly identified old staff preview-session key may renew grant.seen, integer _session_expiry and its authenticated signed timestamp/expiry during that same observed block, following the unchanged1800-second idle and7200-second absolute policy. The original preview kind, fingerprint, issued time, flows and all other payload fields remain identical. New synthetic campaign sessions must also satisfy the unchanged account/preview lifetime and timestamp policies. Every other old session row stays byte-identical; no authentication or MFA policy is changed.
