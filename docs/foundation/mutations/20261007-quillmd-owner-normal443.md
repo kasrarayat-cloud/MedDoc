@@ -56,24 +56,59 @@ static assets, schemas and original captures remain byte-identical.
   "original_ingress_sha256": "ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a",
   "outer_ceiling_seconds": 2400,
   "private_acceptance": {
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/complete.json",
-    "binding": "private-acceptance-completion-cross-hashes-v1"
+    "binding": "private-acceptance-completion-cross-hashes-v1",
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/complete.json"
   },
-  "private_acceptance_protocol_qualified": true,
   "private_acceptance_completed": false,
+  "private_acceptance_protocol_qualified": true,
   "private_accepted_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
   "private_authority": {
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/parent-phase-verify.json",
-    "binding": "private-acceptance-completion-cross-hashes-v1"
+    "binding": "private-acceptance-completion-cross-hashes-v1",
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/parent-phase-verify.json"
   },
   "private_ingress_sha256": "cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a",
   "private_origin": "https://app.quillmd.com:9443",
   "private_report": {
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/independent-verification.json",
-    "binding": "private-acceptance-completion-cross-hashes-v1"
+    "binding": "private-acceptance-completion-cross-hashes-v1",
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/independent-verification.json"
   },
   "provider_calls": 0,
   "runtime_receipt_binding_protocol": "private-acceptance-completion-cross-hashes-v1",
+  "served_verification_policy": {
+    "GET_requests_maximum": 2,
+    "SQL_statement_count": "not_instrumented",
+    "attempt": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/owner-normal443-served-verification-attempt-v1.json",
+    "audit_action": "admin.services_read",
+    "audit_primary_key": "canonical UUID; no sequence",
+    "audit_rows_added": 1,
+    "authentication_submissions": 0,
+    "automatic_retries": false,
+    "clinical_writes": 0,
+    "completion_valid_only_without_STOP": true,
+    "existing_session_rows_updated_maximum": 4,
+    "forward_interval_maximum_seconds": 540,
+    "mode": "--verify-served",
+    "new_session_rows": 0,
+    "original_capture_and_campaign_intervals_immutable": true,
+    "output": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/owner-normal443-served-verification-v1",
+    "per_actor_request_interval_maximum_seconds": 60,
+    "post_proof_session_reserve_seconds": 60,
+    "pre_GET_session_reserve_seconds": 600,
+    "provider_calls": 0,
+    "requests": [
+      {
+        "actor": "doctor",
+        "method": "GET",
+        "path": "/"
+      },
+      {
+        "actor": "admin",
+        "method": "GET",
+        "path": "/console/services/"
+      }
+    ]
+  },
+  "served_verification_protocol_qualified": false,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
   "source_base": "5696e30de8323d53d4a9f3f614346cd2af555a86"
@@ -225,3 +260,91 @@ expiry boundaries, slow guard/completion I/O regressions and refusal of a comple
 candidate with a fixed parent STOP marker. The independent finished review found
 no remaining demonstrated timing or qualification defect. These controls are
 source evidence; they do not claim that the future campaign or transition ran.
+
+
+The separate `--verify-served` command is a distinct one-shot verification after a
+genuine completed normal transition. Its fixed protected output and attempt paths
+are declared above. Source qualification of this new mode remains false until its
+finished checks and independent refutation complete. Its read-only default never
+claims that either a campaign, transition or authenticated served verification
+has run.
+
+The command authenticates the real normal completion, unchanged private causal
+chain, exact current clean installed revision/citation, current native service
+identities, controlled environment and owned ingress. It continuously proves its
+own fixed argv, PID/start ticks and five kernel exclusions, rather than assuming
+a private-acceptance parent. Before either request it reruns the full original and
+private-campaign proof and captures the entire actual 36-table COPY population.
+The immutable qualified inventory remains intact: only the two changed normal
+application files are additionally bound to their original inventory values and
+actual checked target Git bytes. Every other inventory predicate stays exact.
+The genuine frozen service verifier runs unchanged against actual normal
+completion PIDs/start times/proofs and current revision; private workflow evidence
+continues to identify served4194. The owned nginx block hides upstream
+Cache-Control and Retry-After so it emits exactly one canonical maintenance header
+of each kind and the original frozen header checks remain exact.
+
+Using genuine existing final doctor/admin storage states, it issues exactly one
+GET to `/` and one to `/console/services/` on the normal HTTPS origin. Each has a
+15-second request timeout, no redirects/retries, no sign-in, and no subresources;
+status200, exact URLs, actual dashboard markers and current admin release are
+required. Distinct actual before/after storage states and each measured request
+interval are protected and retained. The current grant, browser-cookie and
+session-row lifetimes must exceed600seconds before the request phase; a540second
+forward bound includes request execution, full post-request proof and durable
+evidence I/O. The fresh final actual state must retain60seconds, and the bound is
+checked after completion fsync.
+
+The two GETs necessarily save the same four existing session rows and create one
+UUID `admin.services_read` audit event. This separate verification reports those
+actual writes: at most four changed existing rows, no new session rows, exactly
+one audit addition, no clinical writes, and SQL statement count uninstrumented.
+The top-level `database_writes:0` applies to the source/environment/ingress
+transition, not these separate authenticated GETs. Independent frozen HMAC
+validators require unchanged full normal payload/MFA and preview issued,
+fingerprint/flows, with only source-derived seen/expiry renewals inside each real
+request interval. Every original audit row remains byte-identical; the sole new
+row has the actual admin actor, canonical UUID, null organization/department,
+empty target/details, and creation time inside the admin request interval.
+No sequence is exempted because the actual audit primary key is a UUID.
+
+Only after those exact deltas pass the independent validators, the full frozen
+original/private-campaign verifier reruns with an explicit in-memory admission
+projection of those two complete live tables to their authenticated pre-GET
+population. Projection activates only when the actual complete post-row map and
+column/primary-key identities match; historical captures and campaign intervals
+are never edited. All other current tables, columns, old rows, sequences, catalog,
+files, MFA, financial/provider records and exclusions remain exact. The encrypted
+renewal custody stores only the four measured session pairs and new audit row.
+Any failure after genuine normal-completion admission writes a protected STOP,
+preserves actual session/audit records and normal availability, and permits no
+automatic retry or replay. A completion candidate is valid only without STOP.
+No service, environment, ingress, provider, generation or authentication submission
+occurs during this separate verification. Private typed/voice/custom-Word workflow
+and raw worker-model results remain the genuine4194 campaign evidence; the new
+report identifies the actually served normal revision separately.
+
+
+The finished draft passed 70 focused operator controls and 11 database-free app
+controls. The actual Node request algorithm was executed only with fictional
+request transport; genuine frozen HMAC, session-renewal, COPY row-map and native
+service algorithms were exercised with disposable inputs. No installed GET,
+authentication, provider, service, ingress or database mutation was performed by
+these source checks. Independent refutation identified and repaired the two-file
+inventory rejection, duplicated maintenance headers, initial directory-fsync STOP
+gap and outside-attempt directory-identity gap. The final reviewed ownership
+delta refused both the nonce and request launch on an actual changed directory
+inode. These tests do not establish that normal publication or served verification
+ran.
+
+The normal foreign-boundary consumer now delegates directly to the checked
+acceptance descendant's `current_external_boundary`, retaining the exact original
+recovery declaration, V8/V15 history and earlier owner decision. It never invokes
+the obsolete earlier-current reader or captures a replacement baseline. The new
+separately recorded four-row current-preservation decision and exact cited
+acceptance descendant BASE remain pending. This local draft remains inert; the
+new served-verification source qualification is false, the existing normal
+environment default is disabled, and no new acceptance BASE, owner reply or
+completed campaign is asserted. Before publication, the actual cited acceptance
+merge must replace the current BASE pin and pass the exact source/dependency
+checks; its owner reply must be genuinely recorded and independently authenticated.

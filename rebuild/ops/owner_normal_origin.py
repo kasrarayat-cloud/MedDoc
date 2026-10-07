@@ -7,6 +7,7 @@ its exact current population is held unchanged. No login or provider call runs.
 import argparse
 import ast
 import base64
+import copy
 from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -22,6 +23,7 @@ import subprocess
 import sys
 import time
 import types
+import uuid
 from dotenv import dotenv_values
 from . import legacy_model_activation as old
 from . import repair_source_permissions as source_files
@@ -45,6 +47,8 @@ PRIVATE_INGRESS_SHA = 'cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec
 CADDY_SHA = 'bf0c14729a4ae86ecf2e8ff34d9b5e68aeba55a0bb0c06879580bc73e3a23c87'
 OUTPUT = EVIDENCE / 'owner-normal443-publication-v1'
 ATTEMPT = EVIDENCE / 'owner-normal443-attempt-v1.json'
+VERIFY_OUTPUT = EVIDENCE / 'owner-normal443-served-verification-v1'
+VERIFY_ATTEMPT = EVIDENCE / 'owner-normal443-served-verification-attempt-v1.json'
 ACCEPTANCE = 'rebuild/ops/owner_acceptance_v3.py'
 RECOVERY_DECL = 'docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md'
 PRIVATE_OPS = frozenset((ACCEPTANCE, 'rebuild/ops/test_owner_acceptance_v3.py', 'scripts/run-owner-acceptance-v3.py', 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md'))
@@ -60,6 +64,19 @@ RESTRICTED_NAMES = b'    server_name quillmd.com www.quillmd.com admin.quillmd.c
 ACTIVE_PROTOCOL_QUALIFIED = True
 PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = True
 INGRESS_PUBLICATION_QUALIFIED = True
+SERVED_VERIFICATION_PROTOCOL_QUALIFIED = False
+SERVED_VERIFICATION_POLICY = {
+    'mode':'--verify-served','output':str(VERIFY_OUTPUT),'attempt':str(VERIFY_ATTEMPT),
+    'requests':[{'actor':'doctor','method':'GET','path':'/'},
+                {'actor':'admin','method':'GET','path':'/console/services/'}],
+    'GET_requests_maximum':2,'existing_session_rows_updated_maximum':4,'new_session_rows':0,
+    'audit_rows_added':1,'audit_action':'admin.services_read','audit_primary_key':'canonical UUID; no sequence',
+    'clinical_writes':0,'authentication_submissions':0,'provider_calls':0,'automatic_retries':False,
+    'SQL_statement_count':'not_instrumented','per_actor_request_interval_maximum_seconds':60,
+    'pre_GET_session_reserve_seconds':600,'post_proof_session_reserve_seconds':60,
+    'forward_interval_maximum_seconds':540,'completion_valid_only_without_STOP':True,
+    'original_capture_and_campaign_intervals_immutable':True,
+}
 OUTER_SECONDS = 2400
 RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
 SESSION_FORWARD_RESERVE = 600
@@ -123,6 +140,9 @@ def contract(raw):
         and result.get('session_forward_reserve_seconds') == SESSION_FORWARD_RESERVE
         and result.get('session_completion_reserve_seconds') == SESSION_COMPLETION_RESERVE,
         'normal443_prospective_runtime_admission_contract')
+    require(result.get('served_verification_policy') == SERVED_VERIFICATION_POLICY
+        and result.get('served_verification_protocol_qualified') is SERVED_VERIFICATION_PROTOCOL_QUALIFIED,
+        'normal443_exact_separate_served_verification_policy')
     return result
 
 def source_gate(target):
@@ -234,6 +254,146 @@ def private_receipts(policy):
     values['progress'] = progress, progress_raw
     return values
 
+def normal_completion(policy, target):
+    require(not os.path.lexists(OUTPUT / 'failed.json'), 'normal443_no_failed_normal_transition')
+    raw = source_files.protected(OUTPUT / 'complete.json')
+    value = json.loads(raw)
+    require(value.get('format') == 1 and value.get('complete') is True and value.get('stage') == 'complete'
+        and value.get('served_revision') == target and value.get('previous_served_revision') == policy['private_accepted_revision']
+        and value.get('completion_valid_only_without_failed_receipt') is True
+        and value.get('owner_normal_origin_enabled') is True and value.get('session_renewal_performed') is False
+        and value.get('provider_calls') == value.get('authentication_submissions') == value.get('database_writes') == 0
+        and value.get('full_original_and_new_acceptance_population_preserved') is True,
+        'normal443_genuine_completed_normal_transition')
+    attempt = json.loads(source_files.protected(ATTEMPT))
+    require(attempt.get('attempt') == 1 and attempt.get('served_revision') == target and attempt.get('output') == str(OUTPUT)
+        and attempt.get('automatic_retries') is False, 'normal443_original_single_transition_attempt')
+    inputs = private_receipts(policy)
+    require(value.get('private_acceptance_sha256') == sha(inputs['private_acceptance'][1]),
+            'normal443_same_completed_private_campaign')
+    return value, raw
+
+SERVED_TABLES = frozenset('auth_group auth_group_permissions auth_permission core_auditevent core_code\ncore_codeset core_codesuggestion core_costreconciliation core_department core_encounter\ncore_invitation core_job core_ledgerentry core_loginattempt core_membership core_organization\ncore_patient core_payment core_platformcost core_providerreceipt core_refund core_reservation\ncore_servicehealth core_template core_templateversion core_usage core_user core_user_groups\ncore_user_user_permissions core_verification core_wallet core_webhookevent django_content_type\ndjango_migrations django_session otp_totp_totpdevice'.split())
+SERVED_AUDIT_COLUMNS = frozenset(('id', 'created_at', 'actor_id', 'organization_id', 'department_id', 'action', 'target', 'details'))
+
+class ServedDeltaRefusal(ValueError):
+    pass
+
+def served_require(value, message):
+    if not value:
+        raise ServedDeltaRefusal(message)
+
+def served_uuid(value):
+    served_require(isinstance(value, str), 'UUID string required')
+    try:
+        result = str(uuid.UUID(value))
+    except (ValueError, AttributeError) as exc:
+        raise ServedDeltaRefusal('Canonical UUID required') from exc
+    served_require(result == value, 'Canonical UUID required')
+    return value
+
+def served_payload_same(before, after):
+    try:
+        encoded = [json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False) for value in (before, after)]
+    except (TypeError, ValueError) as exc:
+        raise ServedDeltaRefusal('Finite JSON session payload required') from exc
+    return encoded[0] == encoded[1]
+
+def served_copy_tables(tables):
+    """Index every original raw row without decoding/normalizing COPY bytes."""
+    served_require(isinstance(tables, dict) and set(tables) == SERVED_TABLES, 'Exact 36-table COPY population required')
+    indexed = {}
+    for table, packet in tables.items():
+        served_require(isinstance(packet, dict) and set(packet) == {'columns', 'rows', 'primary_keys'}, 'Exact COPY table packet required')
+        columns, rows, keys = (packet[name] for name in ('columns', 'rows', 'primary_keys'))
+        served_require(isinstance(columns, list) and columns and all((isinstance(c, str) and c for c in columns)) and (len(set(columns)) == len(columns)) and isinstance(keys, list) and keys and (len(set(keys)) == len(keys)) and all((k in columns for k in keys)) and isinstance(rows, list), 'COPY schema and primary keys required')
+        positions = [columns.index(key) for key in keys]
+        result = {}
+        for raw in rows:
+            served_require(isinstance(raw, bytes) and raw.endswith(b'\n') and (b'\n' not in raw[:-1]) and (b'\r' not in raw), 'One complete byte COPY row required')
+            cells = raw[:-1].split(b'\t')
+            served_require(len(cells) == len(columns), 'COPY column count differs')
+            key = tuple((cells[index] for index in positions))
+            served_require(all((cell != b'\\N' for cell in key)) and key not in result, 'Null/duplicate COPY primary key')
+            result[key] = (raw, dict(zip(columns, cells)))
+        indexed[table] = result
+    return indexed
+
+def admit_served_deltas(before, after, keys, actors, intervals, secret, fingerprint, verifier):
+    """Admit exact GET/save deltas using genuine frozen cryptographic helpers."""
+    served_require(set(keys) == set(actors) == set(intervals) == {'doctor', 'admin'}, 'Exact doctor/admin inputs required')
+    served_require(all((callable(getattr(verifier, name, None)) for name in ('normal_session', 'validate_admin_renewal', 'validate_preview_renewal', 'copy_value', 'parsed_timestamp'))), 'Checked frozen renewal verifier interface required')
+    for actor in ('doctor', 'admin'):
+        served_uuid(actors[actor])
+        served_require(isinstance(keys[actor], dict) and set(keys[actor]) == {'normal', 'preview'}, 'Exact two named keys per actor')
+        interval = intervals[actor]
+        served_require(isinstance(interval, (list, tuple)) and len(interval) == 2 and all((isinstance(t, datetime) and t.tzinfo is not None and (t.utcoffset() is not None) for t in interval)) and (0 <= (interval[1] - interval[0]).total_seconds() <= 60), 'Measured aware bounded GET interval required')
+    served_require(actors['doctor'] != actors['admin'], 'Distinct doctor/admin identities required')
+    named = [keys[actor][kind] for actor in ('doctor', 'admin') for kind in ('normal', 'preview')]
+    served_require(all((isinstance(key, str) and re.fullmatch('[a-z0-9]{32}', key) for key in named)) and len(set(named)) == 4, 'Four distinct existing session keys required')
+    old, new = (served_copy_tables(before), served_copy_tables(after))
+    for table in SERVED_TABLES:
+        served_require(before[table]['columns'] == after[table]['columns'] and before[table]['primary_keys'] == after[table]['primary_keys'], 'COPY schema/primary keys changed: ' + table)
+        if table not in {'django_session', 'core_auditevent'}:
+            served_require(old[table] == new[table], 'Unrelated table/row changed: ' + table)
+    session = before['django_session']
+    served_require(set(session['columns']) == {'session_key', 'session_data', 'expire_date'} and session['primary_keys'] == ['session_key'], 'Exact Django session COPY schema required')
+    audit = before['core_auditevent']
+    served_require(set(audit['columns']) == SERVED_AUDIT_COLUMNS and audit['primary_keys'] == ['id'], 'Exact UUID AuditEvent COPY schema required')
+    old_sessions, new_sessions = (old['django_session'], new['django_session'])
+    served_require(set(old_sessions) == set(new_sessions), 'New/deleted session key refused')
+    allowed = {(key.encode(),) for key in named}
+    served_require(allowed <= set(old_sessions), 'Named original session missing')
+    for key, row in old_sessions.items():
+        if key not in allowed:
+            served_require(new_sessions[key] == row, 'Unrelated session changed')
+    evidence = []
+    for actor in ('doctor', 'admin'):
+        for kind in ('normal', 'preview'):
+            key = (keys[actor][kind].encode(),)
+            old_raw, prior = old_sessions[key]
+            new_raw, current = new_sessions[key]
+            served_require(prior['session_key'] == current['session_key'] == key[0], 'Existing session identity changed')
+            previous = verifier.normal_session(prior['session_data'], secret)
+            following = verifier.normal_session(current['session_data'], secret)
+            served_require(isinstance(previous, dict) and isinstance(following, dict), 'Authenticated session dictionary required')
+            prior_expiry = verifier.parsed_timestamp(prior['expire_date'])
+            served_require(prior_expiry.tzinfo is not None and prior_expiry.utcoffset() is not None and (prior_expiry > intervals[actor][0]), 'Original named database session expired at GET start')
+            if kind == 'normal':
+                served_require(served_payload_same(previous, following) and str(previous.get('_auth_user_id')) == actors[actor], 'Authenticated normal payload/actor changed')
+                if actor == 'admin':
+                    served_require(isinstance(previous.get('otp_device_id'), str) and re.fullmatch('otp_totp.totpdevice/[1-9][0-9]*', previous['otp_device_id']), 'Original admin MFA identity missing/invalid')
+                renewal = verifier.validate_admin_renewal(current, following, intervals[actor])
+            else:
+                renewal = verifier.validate_preview_renewal(current, following, intervals[actor], fingerprint, previous)
+                old_payload, new_payload = (copy.deepcopy(previous), copy.deepcopy(following))
+                for payload in (old_payload, new_payload):
+                    payload['grant'].pop('seen', None)
+                    payload.pop('_session_expiry', None)
+                served_require(served_payload_same(old_payload, new_payload), 'Preview payload JSON types/values changed')
+            changes = [column for column in session['columns'] if prior[column] != current[column]]
+            served_require(set(changes) <= {'session_data', 'expire_date'}, 'Unexpected session column changed')
+            evidence.append({'actor': actor, 'kind': kind, 'actor_id': actors[actor], 'session_key_sha256': sha(key[0]), 'before_row_sha256': sha(old_raw), 'after_row_sha256': sha(new_raw), 'changed_columns': changes, 'renewal': renewal})
+    old_audit, new_audit = (old['core_auditevent'], new['core_auditevent'])
+    served_require(set(old_audit) <= set(new_audit), 'Original AuditEvent removed')
+    for key, row in old_audit.items():
+        served_require(new_audit[key] == row, 'Original AuditEvent bytes changed')
+    added = set(new_audit) - set(old_audit)
+    served_require(len(added) == 1, 'Exactly one genuine admin.services_read UUID AuditEvent required')
+    audit_key = next(iter(added))
+    audit_raw, row = new_audit[audit_key]
+    audit_id = served_uuid(verifier.copy_value(row['id']).decode())
+    served_require(row['id'] == audit_id.encode(), 'Canonical UUID COPY identity required')
+    served_require(row['actor_id'] == actors['admin'].encode() and row['organization_id'] == row['department_id'] == b'\\N' and (row['action'] == b'admin.services_read') and (row['target'] == b''), 'Unexpected admin.services_read identity/fields')
+    try:
+        details = json.loads(verifier.copy_value(row['details']))
+    except (ValueError, UnicodeError) as exc:
+        raise ServedDeltaRefusal('AuditEvent JSON details invalid') from exc
+    served_require(isinstance(details, dict) and details == {}, 'Unexpected admin.services_read details')
+    created = verifier.parsed_timestamp(row['created_at'])
+    served_require(created.tzinfo is not None and created.utcoffset() is not None and (intervals['admin'][0] <= created <= intervals['admin'][1]), 'AuditEvent outside actual admin GET interval')
+    return {'projected_tables': copy.deepcopy(after), 'session_renewals': evidence, 'session_rows_changed': sum((bool(item['changed_columns']) for item in evidence)), 'audit_addition': {'id': audit_id, 'action': 'admin.services_read', 'actor_id': actors['admin'], 'created_at': created.isoformat(), 'row_sha256': sha(audit_raw)}, 'unchanged_tables': sorted(SERVED_TABLES - {'django_session', 'core_auditevent'}), 'new_session_keys': 0, 'database_writes_by_admission': 0, 'authentication_submissions': 0, 'provider_calls': 0}
+
 def live_session_admission(states, rows, actors, secret, fingerprint, decoder, at, minimum, *, admin_device):
     """Observe existing live grants; do not renew or manufacture their freshness."""
     require(set(states) == set(actors) == {'doctor', 'admin'} and isinstance(rows, dict)
@@ -331,7 +491,7 @@ def compare_guard(before, after, *, ingress=None):
             'normal443_idle_worker_finances')
     return True
 
-def memory_verifier(module):
+def memory_verifier(module, *, installed_inventory=None):
     """Remove only the checked exclusive output sink; return its complete report."""
     require(sha(module.__authenticated_source) == FROZEN_V3, 'normal443_frozen_verifier_hash')
     function = copy_function(module.__authenticated_source, 'verify')
@@ -364,7 +524,20 @@ def memory_verifier(module):
         and 'os.O_EXCL' in ast.unparse(function.body[-3])
         and ast.unparse(function.body[-1]).startswith('print(json.dumps('), 'normal443_exact_report_sink')
     function.body[-5:] = [ast.Return(value=ast.Name(id='report', ctx=ast.Load()))]
+    if installed_inventory is not None:
+        require(callable(installed_inventory), 'normal443_checked_normal_inventory_admission')
+        comparisons = [node for node in ast.walk(function) if isinstance(node, ast.Compare)
+            and ast.unparse(node) == 'sha((APP.parent / name).read_bytes()) == value']
+        require(len(comparisons) == 1, 'normal443_exact_installed_inventory_comparison')
+        original = comparisons[0]
+        replacement = ast.Call(func=ast.Name(id='normal_installed_inventory_path',ctx=ast.Load()),
+            args=[ast.Name(id='name',ctx=ast.Load()),ast.Name(id='value',ctx=ast.Load())],keywords=[])
+        class Replace(ast.NodeTransformer):
+            def visit_Compare(self, node):
+                return ast.copy_location(replacement,node) if node is original else self.generic_visit(node)
+        function = Replace().visit(function)
     namespace = dict(module.__dict__)
+    if installed_inventory is not None: namespace['normal_installed_inventory_path'] = installed_inventory
     exec(compile(ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])), module.__file__, 'exec'), namespace)
     return namespace['verify'], namespace
 
@@ -374,6 +547,35 @@ def copy_function(raw, name):
     require(len(nodes) == 1, 'normal443_exact_frozen_function')
     return copy.deepcopy(nodes[0])
 
+def normal_service_verifier(module, raw, host, completion):
+    require(sha(raw)==FROZEN_V3,'normal443_frozen_service_verifier_identity')
+    function=copy_function(raw,'verify_service_identity')
+    namespace=dict(module.__dict__)
+    exec(compile(ast.fix_missing_locations(ast.Module(body=[function],type_ignores=[])),module.__file__,'exec'),namespace)
+    actual_services=namespace['verify_service_identity']
+    def services(release,activation,storage):
+        require(release==host.served,'normal443_unchanged_private_workflow_release')
+        require(host.boundary(host.operations)==completion['units_after'],'normal443_same_actual_normal_services')
+        result=actual_services(host.operations,{'units_after':completion['units_after']['units']},storage)
+        require(host.boundary(host.operations)==completion['units_after'],'normal443_same_actual_normal_services')
+        return {**result,'current_served_revision':host.operations,'private_workflow_served_revision':release,
+            'completion_unit_provenance':completion['units_after']['completion_unit_provenance']}
+    return services
+
+def admitted_served_projection(module, projection):
+    tables={'django_session','core_auditevent'}
+    require(set(projection)=={'post_populations','projected_populations','columns','primary_keys'}
+        and all(set(projection[key])==tables for key in projection), 'normal443_exact_two_table_projection')
+    genuine_mapping=module.row_mapping
+    def mapping(table,lines,columns,primary_keys):
+        actual=genuine_mapping(table,lines,columns,primary_keys)
+        if table in tables and actual==projection['post_populations'][table]:
+            require(columns==projection['columns'][table] and primary_keys==projection['primary_keys'][table],
+                    'normal443_projection_actual_column_identity')
+            return copy.deepcopy(projection['projected_populations'][table])
+        return actual
+    return mapping
+
 def normal_controller_command(operations, source, mode, pid, started, acquired, deadline, *,
                               parse_start,
                               monotonic=time.monotonic,
@@ -382,7 +584,7 @@ def normal_controller_command(operations, source, mode, pid, started, acquired, 
     """Authenticate this normal controller; never reinterpret private authority."""
     now = monotonic()
     require(pid == os.getpid() and os.getuid() == os.geteuid() == 1000
-        and mode in ('--execute', '--preflight') and re.fullmatch('[a-f0-9]{40}', operations or '')
+        and mode in ('--execute', '--preflight', '--verify-served') and re.fullmatch('[a-f0-9]{40}', operations or '')
         and type(acquired) in (int, float) and type(deadline) in (int, float)
         and math.isfinite(acquired) and math.isfinite(deadline)
         and 0 < acquired <= now < deadline and callable(parse_start), 'normal443_own_controller_interval')
@@ -508,6 +710,7 @@ class NativeHost:
                 self.session_secret, self.preview_fingerprint, self.verifier.normal_session,
                 datetime.now(timezone.utc), minimum, admin_device=admin_device)
             conn.rollback()
+        self.live_states, self.live_actors, self.live_admin_device = states, actors, admin_device
         self.check_private_inputs()
         self.check_hold()
         return result
@@ -534,12 +737,14 @@ class NativeHost:
         return result
     def foreign(self):
         require(RECOVERY_DECL in self.buffers, 'normal443_checked_recovery_contract')
-        # The declaration is authenticated separately to BASE, as are all retained
-        # V8/V15/owner decision inputs consumed by this unchanged native reader.
+        # Retain the old declaration/history; the checked acceptance descendant
+        # separately authenticates the exact current post-restoration boundary.
         declaration = self.buffers[RECOVERY_DECL]
         require(declaration == self.git(ROOT, 'show', self.served + ':' + self.recovery.DECL), 'normal443_recovery_declaration')
         policy = self.recovery.contract_from_bytes(declaration)
-        return self.recovery.loaded_external_state(self.native, policy['external_configuration_ack'])
+        current=getattr(self.acceptance,'current_external_boundary',None)
+        require(callable(current),'normal443_checked_current_external_boundary')
+        return current(self.recovery,policy['external_configuration_ack'])
     @contextmanager
     def hold(self):
         with ExitStack() as stack:
@@ -631,7 +836,19 @@ class NativeHost:
         actual = self.recovery.completion_unit_provenance(self.native, receipt['units_after'])
         require(actual == receipt['completion_unit_provenance'] and sha(self.old.protected(APP/'.env',65536)) == receipt['environment_after_sha256'], 'normal443_same_private_completion_identity')
         return actual
-    def full_preservation(self):
+    def installed_inventory(self, name, expected):
+        """Admit only the two cited application paths after genuine publication."""
+        paths = {'rebuild/core/preview_access.py', 'rebuild/quillmd/settings.py'}
+        if name not in paths: return sha((APP.parent / name).read_bytes()) == expected
+        self.check_hold()
+        require(expected == sha(self.git(ROOT,'show',self.served+':'+name)),
+                'normal443_immutable_private_inventory_path')
+        with source_files.open_root(ROOT) as root:
+            actual = source_files.operator_bytes(name,0o644,root)
+        require(actual == self.buffers[name] == self.git(ROOT,'show',self.operations+':'+name),
+                'normal443_actual_cited_normal_application_path')
+        self.check_hold(); return True
+    def full_preservation(self, *, completion=None, projection=None):
         import psycopg
         from psycopg.rows import dict_row
         self.check_hold()
@@ -656,6 +873,12 @@ class NativeHost:
                                                  self.current_private_completion,
                                                  publisher_admission=self.publisher_admission)
         setattr(module, '__authenticated_source', raw)
+        if completion is not None:
+            require(completion['served_revision'] == self.operations
+                and self.boundary(self.operations) == completion['units_after'], 'normal443_same_actual_normal_services')
+            module.verify_service_identity = normal_service_verifier(module,raw,self,completion)
+        if projection is not None:
+            module.row_mapping = admitted_served_projection(module,projection)
         genuine_old = module.admitted_original_row
         def admitted(original_row, names, transition, table, actor, authentication):
             result = genuine_old(original_row, names, transition, table, actor, authentication)
@@ -664,7 +887,7 @@ class NativeHost:
                 and self.verifier.service_health_original(health) == publisher['current_full_row'], 'normal443_only_source_adjudicated_backup_progress')
             return dict(health)
         module.admitted_original_row = admitted
-        verify, _ = memory_verifier(module)
+        verify, _ = memory_verifier(module, installed_inventory=self.installed_inventory if completion is not None else None)
         report = verify(types.SimpleNamespace(progress=str(self.acceptance.CAMPAIGN / 'progress.json'), output=None))
         self.check_private_inputs()
         self.check_hold()
@@ -761,10 +984,234 @@ print(json.dumps(m,sort_keys=True))
                 response = client.get(origin+'/', headers={'Cookie':''})
                 require(response.status_code == expected, 'normal443_anonymous_or_cotenant_http')
                 if expected == 503:
-                    require(response.headers.get('retry-after') == '3600' and response.headers.get('cache-control') in ('no-store', 'no-store, no-store'), 'normal443_maintenance_headers')
+                    require(response.headers.get('retry-after') == '3600' and response.headers.get('cache-control') == 'no-store', 'normal443_maintenance_headers')
                 statuses[origin] = response.status_code
             self.check_hold()
             return statuses
+
+    def copy_population(self):
+        """Read the complete current COPY population into memory; never recapture history."""
+        import psycopg
+        from psycopg import sql
+        from psycopg.rows import dict_row
+        self.check_hold(); result = {}
+        with psycopg.connect(**self.backup.source_options(APP,self.old.ROLES),row_factory=dict_row) as conn:
+            self.acceptance.readonly_connection_flags(conn)
+            conn.execute("SET LOCAL timezone='UTC'"); conn.execute("SET LOCAL datestyle='ISO, MDY'")
+            query=lambda statement:[tuple(row.values()) for row in conn.execute(statement).fetchall()]
+            keys=self.backup.table_queries(query)
+            require(set(keys)==SERVED_TABLES,'normal443_served_exact_current_36_tables')
+            for table,primary_keys in keys.items():
+                columns=[row['column_name'] for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=%s ORDER BY ordinal_position",(table,)).fetchall()]
+                statement=sql.SQL('COPY (SELECT * FROM public.{} ORDER BY {}) TO STDOUT').format(
+                    sql.Identifier(table),sql.SQL(',').join(map(sql.Identifier,primary_keys)))
+                with conn.cursor().copy(statement) as stream: raw=b''.join(bytes(chunk) for chunk in stream)
+                result[table]={'columns':columns,'primary_keys':list(primary_keys),'rows':raw.splitlines(keepends=True)}
+            conn.rollback()
+        served_copy_tables(result); self.check_hold(); return result
+
+    def check_verification_directory(self):
+        with source_files.open_root(VERIFY_OUTPUT) as directory:
+            observed=os.fstat(directory)
+            require((observed.st_dev,observed.st_ino,observed.st_uid,observed.st_gid,stat.S_IMODE(observed.st_mode))
+                ==self.served_directory_identity,'normal443_same_owned_verification_directory')
+
+    def verify_write(self,name,value):
+        require(name=='STOP.json' or re.fullmatch(r'[a-z0-9-]+\.(?:json|log|fernet)',name or '') is not None,
+                'normal443_fixed_verification_leaf')
+        raw=value if isinstance(value,bytes) else encode(value)+b'\n'
+        require(len(raw)<=16*1024*1024,'normal443_verification_evidence_bound')
+        self.check_verification_directory()
+        path=VERIFY_ATTEMPT if name=='attempt.json' else VERIFY_OUTPUT/name
+        with source_files.open_root(path.parent) as parent:
+            if path.parent==VERIFY_OUTPUT:
+                observed=os.fstat(parent)
+                require((observed.st_dev,observed.st_ino,observed.st_uid,observed.st_gid,stat.S_IMODE(observed.st_mode))
+                    ==self.served_directory_identity,'normal443_same_owned_verification_directory')
+            fd=os.open(path.name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600,dir_fd=parent)
+            with os.fdopen(fd,'wb') as stream:
+                os.fchmod(stream.fileno(),0o600);observed=os.fstat(stream.fileno())
+                require(stat.S_ISREG(observed.st_mode) and observed.st_uid==observed.st_gid==1000
+                    and observed.st_nlink==1 and not os.listxattr(stream.fileno()),'normal443_owned_verification_evidence')
+                stream.write(raw);stream.flush();os.fsync(stream.fileno())
+            os.fsync(parent)
+        self.check_verification_directory()
+
+    def authenticated_gets(self,states):
+        """Exactly two API requests; no browser, subresources, redirects, retry or login."""
+        self.check_hold()
+        self.check_verification_directory()
+        code=r"""import fs from 'node:fs';import {createRequire} from 'node:module';import crypto from 'node:crypto';
+const {request}=createRequire('/opt/meddoc-pro/package.json')('@playwright/test');
+const input=JSON.parse(fs.readFileSync(0,'utf8'));const output={complete:false,attempts:[]};
+const must=(value,label)=>{if(!value)throw new Error(label)};const sha=v=>crypto.createHash('sha256').update(v).digest('hex');
+try{for(const [actor,path,markers] of [['doctor','/',['Clinical workspace','A little less paperwork.']],['admin','/console/services/',['Administration','Workspace health.','Release',input.target]]]){
+ let ctx;const item={actor,path,started_at:new Date().toISOString(),GET_requests:0};output.attempts.push(item);
+ try{ctx=await request.newContext({storageState:input.states[actor],ignoreHTTPSErrors:false,timeout:15000});
+  item.before=await ctx.storageState();const url='https://app.quillmd.com'+path;item.GET_requests=1;
+  const response=await ctx.get(url,{maxRedirects:0,maxRetries:0,timeout:15000,failOnStatusCode:false});
+  item.status=response.status();item.url=response.url();const body=await response.body();must(body.length<=2097152,'bounded served HTML');
+  item.body_sha256=sha(body);item.after=await ctx.storageState();const text=body.toString('utf8');
+  must(item.status===200&&item.url===url&&(response.headers()['content-type']||'').includes('text/html'),'exact authenticated dashboard response');
+  must(markers.every(value=>text.includes(value))&&!text.includes('name="password"'),'actual protected dashboard markers');item.markers_verified=true;
+ }finally{if(ctx)await ctx.dispose();item.finished_at=new Date().toISOString();}
+}output.complete=true;}catch{output.failure='normal443_authenticated_served_GET_failed_or_unknown';}
+console.log(JSON.stringify(output));if(!output.complete)process.exitCode=2;
+"""
+        self.check_verification_directory()
+        self.acceptance.child_process(['/usr/bin/node','--input-type=module','-e',code],self.source,VERIFY_OUTPUT,
+            'served-get',min(self.forward_deadline,time.monotonic()+60),ruled=False,
+            environment={'PATH':'/usr/sbin:/usr/bin:/sbin:/bin'},input_bytes=encode({'states':states,'target':self.operations}),
+            writer=lambda path,raw:self.verify_write(Path(path).name,raw))
+        self.check_verification_directory()
+        report=json.loads(source_files.protected(VERIFY_OUTPUT/'served-get-stdout.log'))
+        require(report.get('complete') is True and len(report.get('attempts',[]))==2
+            and [item.get('actor') for item in report['attempts']]==['doctor','admin'],
+            'normal443_complete_two_served_GETs')
+        self.check_hold(); return report
+
+def population_fingerprints(population):
+    return {table:{'rows':len(item['rows']),'sha256':sha(b''.join(item['rows']))} for table,item in population.items()}
+
+def guard_with_admitted_served_changes(before,after,before_rows,after_rows,admission):
+    require(before['database']['tables']==population_fingerprints(before_rows)
+        and after['database']['tables']==population_fingerprints(after_rows),
+        'normal443_complete_COPY_and_snapshot_same_population')
+    require(admission['new_session_keys']==0 and admission['session_rows_changed']<=4
+        and admission['audit_addition']['action']=='admin.services_read', 'normal443_exact_served_delta_guard')
+    projected=copy.deepcopy(after)
+    for table in ('django_session','core_auditevent'):
+        projected['database']['tables'][table]=copy.deepcopy(before['database']['tables'][table])
+    compare_guard(before,projected)
+    return True
+
+def served_projection(before,after,verifier):
+    return {'columns':{table:after[table]['columns'] for table in ('django_session','core_auditevent')},
+        'primary_keys':{table:after[table]['primary_keys'] for table in ('django_session','core_auditevent')},
+        'post_populations':{table:verifier.row_mapping(table,after[table]['rows'],after[table]['columns'],after[table]['primary_keys'])
+            for table in ('django_session','core_auditevent')},
+        'projected_populations':{table:verifier.row_mapping(table,before[table]['rows'],before[table]['columns'],before[table]['primary_keys'])
+            for table in ('django_session','core_auditevent')}}
+
+def verify_served(host,policy,target):
+    require(SERVED_VERIFICATION_PROTOCOL_QUALIFIED,'normal443_served_verification_protocol_unqualified')
+    require(not os.path.lexists(VERIFY_OUTPUT) and not os.path.lexists(VERIFY_ATTEMPT),
+            'normal443_single_served_verification_attempt')
+    completion,completion_raw=normal_completion(policy,target)
+    host.served_request_attempted=False
+    created=False
+    try:
+        with source_files.open_root(VERIFY_OUTPUT.parent) as directory:
+            os.mkdir(VERIFY_OUTPUT.name,0o700,dir_fd=directory);created=True
+            observed=os.stat(VERIFY_OUTPUT.name,dir_fd=directory,follow_symlinks=False)
+            host.served_directory_identity=(observed.st_dev,observed.st_ino,observed.st_uid,observed.st_gid,stat.S_IMODE(observed.st_mode))
+            require(stat.S_ISDIR(observed.st_mode) and observed.st_uid==observed.st_gid==1000
+                and stat.S_IMODE(observed.st_mode)==0o700,'normal443_owned_verification_directory')
+            os.fsync(directory)
+        return _verify_served(host,policy,target,completion,completion_raw)
+    except BaseException as error:
+        # A collision is not our evidence directory. Never put STOP into it.
+        # Once our exclusive mkdir succeeded, even its parent fsync failure
+        # belongs to this single attempt and must enter the retained stop path.
+        if not created:raise
+        host.rolling_back=True
+        reason=str(error) if isinstance(error,Refusal) and re.fullmatch('normal443_[a-z0-9_]+',str(error)) else None
+        host.verify_write('STOP.json',{'complete':False,'current_served_revision':target,
+            'request_attempt_started':host.served_request_attempted,'failure_kind':type(error).__name__,'failure_reason':reason,
+            'GET_outcomes':'unknown unless retained response logs and renewal observations establish them',
+            'clinical_writes':0,'authentication_submissions':0,'provider_calls':0,'automatic_retries':False,
+            'normal_availability_left_in_place':True,'session_and_audit_records_preserved':True})
+        raise Refusal('normal443_served_verification_stopped_preserving_records') from None
+
+def _verify_served(host,policy,target,completion,completion_raw):
+    with host.hold():
+        require(host.git(ROOT,'rev-parse','HEAD').strip().decode()==target
+            and host.git(ROOT,'branch','--show-current').strip()==b'main'
+            and not host.git(ROOT,'status','--porcelain','--untracked-files=no').strip(), 'normal443_exact_installed_normal_source')
+        require(host.boundary(target)==completion['units_after'],'normal443_actual_normal_completion_native_identity')
+        original=host.cipher.decrypt(source_files.protected(OUTPUT/'environment-before.fernet'))
+        enabled=host.cipher.decrypt(source_files.protected(OUTPUT/'environment-enabled.fernet'))
+        require(enabled==controlled_environment(original,policy['private_accepted_revision'],target,enabled=True)
+            and host.old.protected(APP/'.env',65536)==enabled,'normal443_exact_completed_normal_environment')
+        ingress,metadata=host.ingress()
+        require(metadata==completion['ingress_after'] and sha(ingress)==completion['candidate_sha256'],
+                'normal443_actual_completed_normal_ingress')
+        foreign=host.foreign(); before=host.snapshot(); before_rows=host.copy_population()
+        require(before['database']['tables']==population_fingerprints(before_rows),'normal443_pre_GET_population_binding')
+        full_before=host.full_preservation(completion=completion)
+        compare_guard(before,host.snapshot())
+        host.forward_budget(); live_before=host.session_admission(SESSION_FORWARD_RESERVE)
+        states=copy.deepcopy(host.live_states); actors=dict(host.live_actors)
+        keys={actor:{kind:next(c['value'] for c in state['cookies'] if c['name']==name)
+            for kind,name in (('normal','quillmd_doctor_session'),('preview','__Host-quillmd_preview'))}
+            for actor,state in states.items()}
+        compare_guard(before,host.snapshot())
+        host.verify_write('prepared.json',{'format':1,'complete':False,'normal_completion_sha256':sha(completion_raw),
+            'current_served_revision':target,'private_workflow_revision':policy['private_accepted_revision'],
+            'live_session_admission':live_before,'original_capture_replaced':False,
+            'authentication_submissions':0,'provider_calls':0,'clinical_writes':0,'automatic_retries':False})
+        host.verify_write('before-proof.json',full_before)
+        host.verify_write('attempt.json',{'format':1,'attempt':1,'normal_completion_sha256':sha(completion_raw),
+            'current_served_revision':target,'GET_requests_maximum':2,'authentication_submissions':0,
+            'provider_calls':0,'automatic_retries':False})
+        host.served_request_attempted=True; browser=host.authenticated_gets(states)
+        intervals={}; following={}
+        for item in browser['attempts']:
+            actor=item['actor'];begin=datetime.fromisoformat(item['started_at'].replace('Z','+00:00'))
+            end=datetime.fromisoformat(item['finished_at'].replace('Z','+00:00'))
+            require(item['GET_requests']==1 and 0<=(end-begin).total_seconds()<=60
+                and item['before']==states[actor], 'normal443_genuine_single_GET_capture_interval')
+            intervals[actor]=(begin,end);following[actor]=item['after']
+            host.verify_write(actor+'-state-before.json',item['before']);host.verify_write(actor+'-state-after.json',item['after'])
+        after_rows=host.copy_population();after=host.snapshot()
+        admission=admit_served_deltas(before_rows,after_rows,keys,actors,intervals,
+            host.session_secret,host.preview_fingerprint,host.verifier)
+        guard_with_admitted_served_changes(before,after,before_rows,after_rows,admission)
+        # Raw full COPY populations stay in memory. Retain only the four
+        # measured session pairs and new audit row inside encrypted custody.
+        observed={}
+        for table in ('django_session','core_auditevent'):
+            selected = {value.encode() for item in keys.values() for value in item.values()} if table=='django_session' else {admission['audit_addition']['id'].encode()}
+            position=after_rows[table]['columns'].index('session_key' if table=='django_session' else 'id')
+            observed[table]={'columns':after_rows[table]['columns'],**{kind+'_rows':[
+                base64.b64encode(row).decode() for row in population[table]['rows']
+                if row[:-1].split(b'\t')[position] in selected]
+                for kind,population in (('before',before_rows),('after',after_rows))}}
+        host.verify_write('renewal-observations.fernet',host.cipher.encrypt(encode(observed)))
+        projected=served_projection(before_rows,after_rows,host.verifier)
+        full_after=host.full_preservation(completion=completion,projection=projected)
+        compare_guard(after,host.snapshot())
+        require(normal_completion(policy,target)[1]==completion_raw,'normal443_normal_completion_inputs_unchanged')
+        require(host.foreign()==foreign and host.boundary(target)==completion['units_after'],
+                'normal443_post_GET_native_and_foreign_preserved')
+        indexed=served_copy_tables(after_rows)['django_session']
+        actual_sessions={key[0].decode():{'session_key':key[0].decode(),
+            'session_data':host.verifier.copy_value(row[1]['session_data']).decode(),
+            'expire_date':host.verifier.parsed_timestamp(row[1]['expire_date'])}
+            for key,row in indexed.items() if key[0].decode() in {value for item in keys.values() for value in item.values()}}
+        live_after=live_session_admission(following,actual_sessions,actors,host.session_secret,
+            host.preview_fingerprint,host.verifier.normal_session,datetime.now(timezone.utc),SESSION_COMPLETION_RESERVE,
+            admin_device=host.live_admin_device)
+        host.check_hold()
+        report={'format':1,'complete':True,'current_served_revision':target,
+            'private_workflow_revision':policy['private_accepted_revision'],'normal_completion_sha256':sha(completion_raw),
+            'authenticated_GETs':[{'actor':item['actor'],'path':item['path'],'status':item['status'],
+                'started_at':item['started_at'],'finished_at':item['finished_at'],'body_sha256':item['body_sha256'],
+                'markers_verified':item['markers_verified']} for item in browser['attempts']],
+            'session_rows_updated':admission['session_rows_changed'],'new_session_rows':0,
+            'audit_rows_added':1,'audit_addition':admission['audit_addition'],'SQL_statement_count':'not_instrumented',
+            'session_renewals':admission['session_renewals'],'clinical_writes':0,'authentication_submissions':0,
+            'provider_calls':0,'automatic_retries':False,'original_capture_replaced':False,
+            'post_GET_full_original_and_private_campaign_proof':full_after,
+            'session_admission_projection':'Only independently admitted four renewals and one audit addition projected to the actual pre-GET population; original capture and campaign intervals unchanged.',
+            'live_session_admission_after':live_after,'completion_valid_only_without_STOP':True}
+        host.verify_write('complete.json',report);host.check_hold()
+        return {'complete':True,'application_url':'https://app.quillmd.com/',
+            'admin_url':'https://app.quillmd.com/console/services/','served_revision':target,
+            'private_workflow_revision':policy['private_accepted_revision'],'authenticated_GETs':2,
+            'session_rows_updated':admission['session_rows_changed'],'audit_rows_added':1,
+            'new_session_rows':0,'clinical_writes':0,'authentication_submissions':0,'provider_calls':0}
 
 def transition(host, policy, target, buffers, *, execute=False):
     require(type(buffers) is dict and TEMPLATE in buffers, 'normal443_checked_template_buffer')
@@ -906,14 +1353,18 @@ def transition(host, policy, target, buffers, *, execute=False):
 def main(argv=None, *, host=None):
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--operations-revision')
     mode=parser.add_mutually_exclusive_group();mode.add_argument('--preflight',action='store_true');mode.add_argument('--execute',action='store_true')
+    mode.add_argument('--verify-served',action='store_true')
     args=parser.parse_args(argv)
-    if not (args.preflight or args.execute):
+    if not (args.preflight or args.execute or args.verify_served):
         print(json.dumps({'execution_performed':False,'installed_state_accessed':False,'active_protocol_qualified':ACTIVE_PROTOCOL_QUALIFIED,
             'private_acceptance_protocol_qualified':PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED,
             'private_acceptance_completed':False,'ingress_publication_qualified':INGRESS_PUBLICATION_QUALIFIED,
+            'served_verification_protocol_qualified':SERVED_VERIFICATION_PROTOCOL_QUALIFIED,
+            'served_authenticated_verification_completed':False,
             'provider_calls':0,'authentication_submissions':0,'database_writes':0,'automatic_retries':False},sort_keys=True));return 0
+    if args.verify_served:require(SERVED_VERIFICATION_PROTOCOL_QUALIFIED,'normal443_served_verification_protocol_unqualified')
     started=time.monotonic();policy,buffers=source_gate(args.operations_revision)
     host=host if host is not None else NativeHost(policy,args.operations_revision,buffers,started,
-                                                mode='--execute' if args.execute else '--preflight')
-    result=transition(host,policy,args.operations_revision,buffers,execute=args.execute)
+                                                mode='--verify-served' if args.verify_served else ('--execute' if args.execute else '--preflight'))
+    result=verify_served(host,policy,args.operations_revision) if args.verify_served else transition(host,policy,args.operations_revision,buffers,execute=args.execute)
     print(json.dumps(result,sort_keys=True));return 0 if result['complete'] else 2

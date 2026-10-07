@@ -758,4 +758,692 @@ class NormalControllerHolderTests(unittest.TestCase):
             finally:
                 for fd in fds:os.close(fd)
 
+def copy_field(value):
+    if value is None:
+        return b'\\N'
+    raw = value if isinstance(value, bytes) else str(value).encode()
+    return raw.replace(b'\\', b'\\\\').replace(b'\t', b'\\t').replace(b'\n', b'\\n').replace(b'\r', b'\\r')
+
+def copy_row(columns, values):
+    return b'\t'.join((copy_field(values[column]) for column in columns)) + b'\n'
+
+class ServedRenewalTests(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        global ACTUAL_SERVED_RENEWAL_VERIFIER
+        import math
+        frozen = Path('/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/acceptance-v3-preparation-v2-20261007/verify_installed_acceptance_v3.py')
+        if not frozen.exists():
+            raise unittest.SkipTest('Exact retained frozen pure-helper source not present')
+        raw = frozen.read_bytes()
+        if act.sha(raw) != '34d4d3bf0b9641a2f642717b33833beb7a7f49a0c043bc095e592c41a78b0023':
+            raise AssertionError('Frozen pure-helper source differs')
+        names = {'parsed_timestamp', 'copy_value', 'normal_session', 'validate_admin_renewal', 'validate_preview_renewal', 'row_mapping'}
+        functions = [node for node in ast.parse(raw).body if isinstance(node, ast.FunctionDef) and node.name in names]
+        if {node.name for node in functions} != names:
+            raise AssertionError('Frozen helper population differs')
+        namespace = {'require': act.served_require, 'datetime': datetime, 'timezone': timezone, 'timedelta': timedelta, 'math': math, 'copy': __import__('copy')}
+        exec(compile(ast.Module(body=functions, type_ignores=[]), str(frozen), 'exec'), namespace)
+        ACTUAL_SERVED_RENEWAL_VERIFIER = SimpleNamespace(**{name: namespace[name] for name in names})
+
+    def fixture(self):
+        from django.core import signing
+        self.secret = 'synthetic-disposable-HMAC-secret'
+        self.fp = 'e' * 40
+        self.actors = {'doctor': '11111111-1111-4111-8111-111111111111', 'admin': '22222222-2222-4222-8222-222222222222'}
+        self.keys = {'doctor': {'normal': 'a' * 32, 'preview': 'b' * 32}, 'admin': {'normal': 'c' * 32, 'preview': 'd' * 32}}
+        self.at = datetime(2026, 10, 7, 12, tzinfo=timezone.utc)
+        self.intervals = {actor: (self.at + timedelta(seconds=index * 10), self.at + timedelta(seconds=index * 10 + 4)) for index, actor in enumerate(('doctor', 'admin'))}
+        self.before = {table: {'columns': ['id', 'value'], 'primary_keys': ['id'], 'rows': [b'old\tunchanged\n']} for table in act.SERVED_TABLES}
+        session_columns = ['session_key', 'session_data', 'expire_date']
+        audit_columns = ['id', 'created_at', 'actor_id', 'organization_id', 'department_id', 'action', 'target', 'details']
+        self.before['django_session'] = {'columns': session_columns, 'primary_keys': ['session_key'], 'rows': []}
+        self.before['core_auditevent'] = {'columns': audit_columns, 'primary_keys': ['id'], 'rows': [copy_row(audit_columns, {'id': '33333333-3333-4333-8333-333333333333', 'created_at': self.at - timedelta(seconds=500), 'actor_id': self.actors['admin'], 'organization_id': None, 'department_id': None, 'action': 'prior.audit', 'target': '', 'details': '{}'})]}
+        self.payloads = {}
+        self.new_payloads = {}
+        self.new_rows = []
+        for actor in ('doctor', 'admin'):
+            begin, end = self.intervals[actor]
+            normal = {'_auth_user_id': self.actors[actor], '_auth_user_backend': 'core.auth.VerifiedBackend', '_auth_user_hash': 'synthetic-existing-full-hash'}
+            if actor == 'admin':
+                normal['otp_device_id'] = 'otp_totp.totpdevice/5'
+            preview = {'kind': 'quillmd-preview-v1', 'grant': {'fingerprint': self.fp, 'issued': (self.at - timedelta(seconds=300)).timestamp(), 'seen': (self.at - timedelta(seconds=10)).timestamp()}, 'flows': {'existing': 'unchanged'}, '_session_expiry': 1800}
+            for kind, payload in (('normal', normal), ('preview', preview)):
+                key = self.keys[actor][kind]
+                self.payloads[key] = deepcopy(payload)
+                later = deepcopy(payload)
+                if kind == 'preview':
+                    later['grant']['seen'] = (begin + timedelta(seconds=1)).timestamp()
+                self.new_payloads[key] = later
+                self.before['django_session']['rows'].append(copy_row(session_columns, {'session_key': key, 'session_data': self.signed(payload, self.at - timedelta(seconds=10)), 'expire_date': self.at + timedelta(seconds=1700)}))
+                self.new_rows.append(copy_row(session_columns, {'session_key': key, 'session_data': self.signed(later, begin + timedelta(seconds=2)), 'expire_date': begin + timedelta(seconds=1803)}))
+        self.before['django_session']['rows'].append(copy_row(session_columns, {'session_key': 'z' * 32, 'session_data': self.signed({'unrelated': True}, self.at), 'expire_date': self.at + timedelta(seconds=1800)}))
+        self.after = deepcopy(self.before)
+        self.after['django_session']['rows'] = self.new_rows + [self.before['django_session']['rows'][-1]]
+        self.after['core_auditevent']['rows'].append(copy_row(audit_columns, {'id': '44444444-4444-4444-8444-444444444444', 'created_at': self.intervals['admin'][0] + timedelta(seconds=1), 'actor_id': self.actors['admin'], 'organization_id': None, 'department_id': None, 'action': 'admin.services_read', 'target': '', 'details': '{}'}))
+        return (self.before, self.after)
+
+    def signed(self, payload, at):
+        from django.core import signing
+        with patch('django.core.signing.time.time', return_value=at.timestamp()):
+            return signing.TimestampSigner(key=self.secret, salt='django.contrib.sessions.SessionStore', fallback_keys=[]).sign_object(payload)
+
+    def admit(self):
+        return act.admit_served_deltas(self.before, self.after, self.keys, self.actors, self.intervals, self.secret, self.fp, ACTUAL_SERVED_RENEWAL_VERIFIER)
+
+    def mutate_session(self, actor, kind, *, payload=None, expired=None, sign_at=None, old=False):
+        table = (self.before if old else self.after)['django_session']
+        key = self.keys[actor][kind]
+        idx = next((index for index, row in enumerate(table['rows']) if row.startswith(key.encode() + b'\t')))
+        cells = dict(zip(table['columns'], table['rows'][idx][:-1].split(b'\t')))
+        if payload is not None:
+            cells['session_data'] = self.signed(payload, sign_at or self.intervals[actor][0] + timedelta(seconds=2)).encode()
+        if expired is not None:
+            cells['expire_date'] = str(expired).encode()
+        table['rows'][idx] = copy_row(table['columns'], cells)
+
+    def mutate_audit(self, **changes):
+        table = self.after['core_auditevent']
+        values = dict(zip(table['columns'], table['rows'][-1][:-1].split(b'\t')))
+        values = {key: None if value == b'\\N' else value for key, value in values.items()}
+        values.update(changes)
+        table['rows'][-1] = copy_row(table['columns'], values)
+
+    def test_positive_genuine_frozen_HMAC_helpers_and_byte_projection(self):
+        self.fixture()
+        original = deepcopy((self.before, self.after))
+        result = self.admit()
+        self.assertEqual(result['projected_tables'], self.after)
+        self.assertEqual(result['session_rows_changed'], 4)
+        self.assertEqual(len(result['unchanged_tables']), 34)
+        self.assertEqual(result['audit_addition']['action'], 'admin.services_read')
+        self.assertEqual((self.before, self.after), original)
+        serialized = json.dumps({key: value for key, value in result.items() if key != 'projected_tables'})
+        self.assertNotIn(self.secret, serialized)
+        self.assertNotIn('a' * 32, serialized)
+        self.assertNotIn('session_data', serialized.replace('"session_data"', ''))
+
+    def test_normal_full_payload_actor_and_MFA_changes_refused(self):
+        self.fixture()
+        for actor, field, value in (('doctor', '_auth_user_hash', 'changed'), ('doctor', '_auth_user_id', self.actors['admin']), ('admin', 'otp_device_id', 'otp_totp.totpdevice/6'), ('admin', '_session_expiry', 600)):
+            with self.subTest(actor=actor, field=field):
+                self.fixture()
+                payload = deepcopy(self.new_payloads[self.keys[actor]['normal']])
+                payload[field] = value
+                self.mutate_session(actor, 'normal', payload=payload)
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_original_admin_MFA_required_even_when_unchanged(self):
+        self.fixture()
+        payload = deepcopy(self.payloads[self.keys['admin']['normal']])
+        payload.pop('otp_device_id')
+        self.mutate_session('admin', 'normal', payload=payload, old=True)
+        self.mutate_session('admin', 'normal', payload=payload)
+        with self.assertRaises(act.ServedDeltaRefusal):
+            self.admit()
+
+    def test_preview_fingerprint_issued_flows_expiry_and_seen_refused(self):
+        for change in ('fingerprint', 'issued', 'flows', 'remaining', 'seen', 'extra'):
+            with self.subTest(change=change):
+                self.fixture()
+                payload = deepcopy(self.new_payloads[self.keys['doctor']['preview']])
+                if change == 'fingerprint':
+                    payload['grant']['fingerprint'] = 'f' * 40
+                if change == 'issued':
+                    payload['grant']['issued'] += 1
+                if change == 'flows':
+                    payload['flows']['other'] = 'introduced'
+                if change == 'remaining':
+                    payload['_session_expiry'] = 1900
+                if change == 'seen':
+                    payload['grant']['seen'] = self.at.timestamp() - 1
+                if change == 'extra':
+                    payload['extra'] = True
+                self.mutate_session('doctor', 'preview', payload=payload)
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_genuine_original_and_current_HMACs_required(self):
+        from django.core.signing import BadSignature
+        for old in (False, True):
+            for index in range(4):
+                with self.subTest(old=old, index=index):
+                    self.fixture()
+                    table = (self.before if old else self.after)['django_session']
+                    table['rows'][index] = table['rows'][index].replace(b':', b':x', 1)
+                    with self.assertRaises(BadSignature):
+                        self.admit()
+
+    def test_signed_payload_JSON_type_changes_do_not_compare_equal(self):
+        for kind in ('normal', 'preview'):
+            with self.subTest(kind=kind):
+                self.fixture()
+                key = self.keys['doctor'][kind]
+                prior = deepcopy(self.payloads[key])
+                following = deepcopy(self.new_payloads[key])
+                if kind == 'normal':
+                    prior['existing_flag'] = True
+                    following['existing_flag'] = 1
+                else:
+                    prior['flows']['existing'] = True
+                    following['flows']['existing'] = 1
+                self.mutate_session('doctor', kind, old=True, payload=prior, sign_at=self.at - timedelta(seconds=10))
+                self.mutate_session('doctor', kind, payload=following)
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_expiry_signature_and_actual_window_refused(self):
+        for kind, fault in ((kind, fault) for kind in ('normal', 'preview') for fault in ('expiry', 'sign', 'prior-expired', 'interval')):
+            with self.subTest(kind=kind, fault=fault):
+                self.fixture()
+                if fault == 'expiry':
+                    self.mutate_session('doctor', kind, expired=self.at + timedelta(seconds=1810))
+                if fault == 'sign':
+                    self.mutate_session('doctor', kind, payload=self.new_payloads[self.keys['doctor'][kind]], sign_at=self.at - timedelta(seconds=1))
+                if fault == 'prior-expired':
+                    self.mutate_session('doctor', kind, old=True, expired=self.at)
+                if fault == 'interval':
+                    self.intervals['doctor'] = (self.at + timedelta(seconds=5), self.at + timedelta(seconds=6))
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_every_other_table_and_unnamed_session_byte_preserved(self):
+        for table in act.SERVED_TABLES - {'django_session', 'core_auditevent'}:
+            with self.subTest(table=table):
+                self.fixture()
+                self.after[table]['rows'][0] = b'old\tchanged\n'
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+        self.fixture()
+        self.after['django_session']['rows'][-1] = self.after['django_session']['rows'][-1].replace(b'z', b'y', 1)
+        with self.assertRaises(act.ServedDeltaRefusal):
+            self.admit()
+
+    def test_new_removed_duplicate_or_other_changed_session_refused(self):
+        for fault in ('new', 'removed', 'duplicate', 'other-change'):
+            with self.subTest(fault=fault):
+                self.fixture()
+                rows = self.after['django_session']['rows']
+                if fault == 'new':
+                    rows.append(rows[-1].replace(b'z' * 32, b'y' * 32))
+                if fault == 'removed':
+                    rows.pop()
+                if fault == 'duplicate':
+                    rows.append(rows[0])
+                if fault == 'other-change':
+                    rows[-1] = rows[-1].replace(b':', b':x', 1)
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_exact_audit_addition_and_source_fields_required(self):
+        self.fixture()
+        changes = ({'action': 'admin.other'}, {'actor_id': self.actors['doctor']}, {'organization_id': self.actors['admin']}, {'department_id': self.actors['admin']}, {'target': 'unexpected'}, {'details': '{"extra":true}'}, {'details': '[]'}, {'created_at': self.at}, {'id': '4'}, {'id': '44444444-4444-4444-8444-44444444444A'})
+        for change in changes:
+            with self.subTest(change=change):
+                self.fixture()
+                self.mutate_audit(**change)
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+        for fault in ('missing', 'extra', 'old-mutated', 'old-removed', 'duplicate'):
+            with self.subTest(fault=fault):
+                self.fixture()
+                rows = self.after['core_auditevent']['rows']
+                if fault == 'missing':
+                    rows.pop()
+                if fault == 'extra':
+                    rows.append(rows[-1].replace(b'44444444-4444-4444-8444-444444444444', b'55555555-5555-4555-8555-555555555555'))
+                if fault == 'old-mutated':
+                    rows[0] = rows[0].replace(b'prior.audit', b'alter.audit')
+                if fault == 'old-removed':
+                    rows.pop(0)
+                if fault == 'duplicate':
+                    rows.append(rows[-1])
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+    def test_COPY_schema_population_framing_and_inputs_refused(self):
+        for fault in ('table', 'columns', 'pk', 'no-lf', 'raw-lf', 'extra-cell', 'shared-key', 'naive-time', 'long-window'):
+            with self.subTest(fault=fault):
+                self.fixture()
+                if fault == 'table':
+                    self.after.pop('auth_group')
+                if fault == 'columns':
+                    self.after['core_auditevent']['columns'][3] = 'org_id'
+                if fault == 'pk':
+                    self.after['auth_group']['primary_keys'] = ['value']
+                if fault == 'no-lf':
+                    self.after['auth_group']['rows'][0] = b'old\tunchanged'
+                if fault == 'raw-lf':
+                    self.after['auth_group']['rows'][0] = b'old\tunchanged\nextra\n'
+                if fault == 'extra-cell':
+                    self.after['auth_group']['rows'][0] = b'old\tunchanged\textra\n'
+                if fault == 'shared-key':
+                    self.keys['admin']['normal'] = self.keys['doctor']['normal']
+                if fault == 'naive-time':
+                    self.intervals['doctor'] = tuple((t.replace(tzinfo=None) for t in self.intervals['doctor']))
+                if fault == 'long-window':
+                    self.intervals['doctor'] = (self.at, self.at + timedelta(seconds=1201))
+                with self.assertRaises(act.ServedDeltaRefusal):
+                    self.admit()
+
+class ServedVerificationControllerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls): ServedRenewalTests.setUpClass()
+
+    def fixture(self, root):
+        source=ServedRenewalTests();source.fixture();clock=[0.0]
+        host=SimpleNamespace(events=[],records={},rolling_back=False,phase=0,verifier=ACTUAL_SERVED_RENEWAL_VERIFIER,
+            session_secret=source.secret,preview_fingerprint=source.fp,live_actors=source.actors,
+            live_admin_device='otp_totp.totpdevice/5',source=act.SOURCE,operations=TARGET)
+        def states(after):
+            result={}
+            for actor in ('doctor','admin'):
+                expiry=(source.intervals[actor][0]+timedelta(seconds=1803) if after else source.at+timedelta(seconds=1700)).timestamp()
+                cookies=[]
+                for kind,name,site in (('normal','quillmd_doctor_session','Strict'),('preview','__Host-quillmd_preview','Lax'),
+                                      ('csrf','quillmd_doctor_csrf','Strict')):
+                    cookies.append({'name':name,'value':source.keys[actor][kind] if kind!='csrf' else 'existing-CSRF',
+                        'domain':'app.quillmd.com','path':'/','expires':expiry,'httpOnly':True,'secure':True,'sameSite':site})
+                result[actor]={'cookies':cookies,'origins':[]}
+            return result
+        host.live_states=states(False); following=states(True)
+        original=ENV;enabled=act.controlled_environment(original,PRIOR,TARGET,enabled=True)
+        ingress=b'actual-fictional-normal-ingress';units={'units':{'doctor':'same-current-PID'},'completion_unit_provenance':{'same':True}}
+        completion={'format':1,'complete':True,'stage':'complete','served_revision':TARGET,
+            'previous_served_revision':PRIOR,'completion_valid_only_without_failed_receipt':True,
+            'owner_normal_origin_enabled':True,'session_renewal_performed':False,
+            'provider_calls':0,'authentication_submissions':0,'database_writes':0,
+            'full_original_and_new_acceptance_population_preserved':True,'units_after':units,
+            'ingress_after':metadata(ingress),'candidate_sha256':act.sha(ingress)}
+        policy={'private_accepted_revision':PRIOR}
+        host.cipher=SimpleNamespace(decrypt=lambda value:value,encrypt=lambda value:b'protected-fictional:'+value)
+        host.old=SimpleNamespace(protected=lambda *_:enabled)
+        @contextmanager
+        def held():host.events.append('hold');yield
+        host.hold=held
+        def checked():
+            host.events.append('held')
+            if hasattr(host,'forward_deadline') and not host.rolling_back and clock[0]>=host.forward_deadline:
+                raise act.Refusal('normal443_bounded_forward_interval')
+        host.check_hold=checked
+        host.git=lambda _,*args:(TARGET.encode() if args==('rev-parse','HEAD') else b'main' if args==('branch','--show-current') else b'')
+        host.boundary=lambda _:deepcopy(units);host.foreign=lambda:{'same-current-external-boundary':True}
+        host.ingress=lambda:(ingress,metadata(ingress))
+        def snapshot():
+            checked();result=population()
+            result['database']['tables']=act.population_fingerprints(source.after if host.phase else source.before)
+            return result
+        host.snapshot=snapshot
+        host.copy_population=lambda:deepcopy(source.after if host.phase else source.before)
+        def full(**options):
+            checked();host.events.append('full-after' if options.get('projection') else 'full-before')
+            self.assertEqual(options['completion'],completion)
+            if options.get('projection'):
+                self.assertEqual(options['projection'],act.served_projection(source.before,source.after,host.verifier))
+            return {'complete':True,'private_workflow_revision':PRIOR,'all_original_and_new_rows':True}
+        host.full_preservation=full
+        def budget():host.forward_deadline=clock[0]+540
+        host.forward_budget=budget
+        def session_admission(minimum):
+            host.events.append('live-'+str(minimum));indexed=act.served_copy_tables(source.before)['django_session']
+            rows={key[0].decode():{'session_key':key[0].decode(),'session_data':host.verifier.copy_value(row[1]['session_data']).decode(),
+                'expire_date':host.verifier.parsed_timestamp(row[1]['expire_date'])}
+                for key,row in indexed.items() if key[0].decode() in {v for item in source.keys.values() for v in item.values()}}
+            result=act.live_session_admission(host.live_states,rows,source.actors,source.secret,source.fp,
+                host.verifier.normal_session,source.at+timedelta(seconds=clock[0]),minimum,admin_device=host.live_admin_device)
+            checked();return result
+        host.session_admission=session_admission
+        def gets(_):
+            checked();host.events.append('two-GETs');host.phase=1;clock[0]=14
+            return {'complete':True,'attempts':[{'actor':actor,'path':'/' if actor=='doctor' else '/console/services/',
+                'GET_requests':1,'started_at':source.intervals[actor][0].isoformat(),'finished_at':source.intervals[actor][1].isoformat(),
+                'before':deepcopy(host.live_states[actor]),'after':following[actor],'status':200,
+                'body_sha256':'f'*64,'markers_verified':True} for actor in ('doctor','admin')]}
+        host.authenticated_gets=gets
+        def write(name,value):
+            self.assertNotIn(name,host.records);host.records[name]=deepcopy(value)
+        host.verify_write=write
+        paths={act.OUTPUT/'environment-before.fernet':original,act.OUTPUT/'environment-enabled.fernet':enabled}
+        real_live=act.live_session_admission
+        def clock_live(*args,**kwargs):
+            args=list(args);args[6]=source.at+timedelta(seconds=clock[0]);return real_live(*args,**kwargs)
+        return source,host,policy,completion,clock,paths,clock_live
+
+    def run_verify(self,root,host,policy,completion,paths,clock_live):
+        with patch.object(act,'VERIFY_OUTPUT',root/'verification'),patch.object(act,'VERIFY_ATTEMPT',root/'attempt.json'), \
+             patch.object(act,'SERVED_VERIFICATION_PROTOCOL_QUALIFIED',True), \
+             patch.object(act,'normal_completion',return_value=(completion,act.encode(completion))), \
+             patch.object(act.source_files,'protected',side_effect=lambda path:paths[path]), \
+             patch.object(act,'live_session_admission',side_effect=clock_live):
+            return act.verify_served(host,policy,TARGET)
+
+    def test_genuine_HMAC_two_GETs_full_projection_and_honest_write_report(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+            result=self.run_verify(root,host,policy,complete,paths,live)
+            self.assertEqual((result['authenticated_GETs'],result['session_rows_updated'],result['audit_rows_added']),(2,4,1))
+            self.assertEqual((result['new_session_rows'],result['clinical_writes'],result['authentication_submissions'],result['provider_calls']),(0,0,0,0))
+            report=host.records['complete.json'];self.assertEqual(report['current_served_revision'],TARGET)
+            self.assertEqual(report['private_workflow_revision'],PRIOR);self.assertEqual(report['SQL_statement_count'],'not_instrumented')
+            self.assertNotIn('database_writes',report);self.assertTrue(report['completion_valid_only_without_STOP'])
+            self.assertEqual(host.events.count('two-GETs'),1);self.assertLess(host.events.index('full-before'),host.events.index('two-GETs'))
+            self.assertLess(host.events.index('two-GETs'),host.events.index('full-after'))
+            observed=json.loads(host.records['renewal-observations.fernet'].removeprefix(b'protected-fictional:'))
+            self.assertEqual([len(observed[t][k]) for t,k in (('django_session','before_rows'),('django_session','after_rows'),
+                            ('core_auditevent','before_rows'),('core_auditevent','after_rows'))],[4,4,0,1])
+            self.assertNotIn('STOP.json',host.records)
+            with self.assertRaisesRegex(act.Refusal,'single_served_verification_attempt'):
+                self.run_verify(root,host,policy,complete,paths,live)
+
+    def test_low_TTL_and_failed_original_proof_preserve_STOP_before_any_GET(self):
+        for fault in ('TTL','original-proof'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+                if fault=='TTL':clock[0]=1200
+                else:host.full_preservation=MagicMock(side_effect=act.Refusal('normal443_original_proof_refused'))
+                with self.assertRaisesRegex(act.Refusal,'stopped_preserving_records'):
+                    self.run_verify(root,host,policy,complete,paths,live)
+                self.assertNotIn('two-GETs',host.events);self.assertFalse(host.records['STOP.json']['request_attempt_started'])
+                self.assertNotIn('attempt.json',host.records);self.assertTrue(host.records['STOP.json']['normal_availability_left_in_place'])
+
+    def test_unknown_GET_failure_keeps_one_attempt_STOP_and_does_not_replay(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+            host.authenticated_gets=MagicMock(side_effect=TimeoutError('unknown actual request outcome'))
+            with self.assertRaisesRegex(act.Refusal,'stopped_preserving_records'):
+                self.run_verify(root,host,policy,complete,paths,live)
+            host.authenticated_gets.assert_called_once();self.assertTrue(host.records['STOP.json']['request_attempt_started'])
+            self.assertIn('attempt.json',host.records);self.assertNotIn('complete.json',host.records)
+            self.assertIsNone(host.records['STOP.json']['failure_reason'])
+
+    def test_unrelated_row_change_cannot_enter_projection_or_full_postproof(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+            source.after['core_patient']['rows'][0]=b'old\tchanged-clinical-row\n'
+            with self.assertRaisesRegex(act.Refusal,'stopped_preserving_records'):
+                self.run_verify(root,host,policy,complete,paths,live)
+            self.assertIn('two-GETs',host.events);self.assertNotIn('full-after',host.events)
+            self.assertIn('STOP.json',host.records);self.assertNotIn('complete.json',host.records)
+
+    def test_slow_postproof_and_completion_fsync_cannot_return_success(self):
+        for stall in ('proof','fsync'):
+            with self.subTest(stall=stall),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+                genuine_full=host.full_preservation;genuine_write=host.verify_write
+                def full(**options):
+                    value=genuine_full(**options)
+                    if stall=='proof' and options.get('projection'):clock[0]=600
+                    return value
+                def write(name,value):
+                    genuine_write(name,value)
+                    if stall=='fsync' and name=='complete.json':clock[0]=600
+                host.full_preservation=full;host.verify_write=write
+                with self.assertRaisesRegex(act.Refusal,'stopped_preserving_records'):
+                    self.run_verify(root,host,policy,complete,paths,live)
+                self.assertIn('STOP.json',host.records)
+                self.assertEqual('complete.json' in host.records,stall=='fsync')
+                self.assertTrue(host.records['STOP.json']['session_and_audit_records_preserved'])
+
+    def test_complete_COPY_guard_preserves_every_other_population_and_sequences(self):
+        source=ServedRenewalTests();source.fixture();admission=source.admit()
+        before=population();after=deepcopy(before)
+        before['database']['tables']=act.population_fingerprints(source.before)
+        after['database']['tables']=act.population_fingerprints(source.after)
+        self.assertTrue(act.guard_with_admitted_served_changes(before,after,source.before,source.after,admission))
+        for key in ('catalog','invariants','referenced_files'):
+            with self.subTest(key=key):
+                bad=deepcopy(after);bad['database'][key]={'changed':True}
+                with self.assertRaises(act.Refusal):act.guard_with_admitted_served_changes(before,bad,source.before,source.after,admission)
+        bad=deepcopy(after);bad['database']['tables']['core_auditevent']['sha256']='unbound'
+        with self.assertRaisesRegex(act.Refusal,'COPY_and_snapshot_same_population'):
+            act.guard_with_admitted_served_changes(before,bad,source.before,source.after,admission)
+
+    def test_new_mode_unqualified_refuses_before_installed_read_and_default_is_inert(self):
+        with patch.object(act,'SERVED_VERIFICATION_PROTOCOL_QUALIFIED',False), \
+             patch.object(act.source_files,'protected',side_effect=AssertionError('installed read')), \
+             patch.object(act,'source_gate',side_effect=AssertionError('source action')),patch('sys.stdout',new=io.StringIO()) as stream:
+            self.assertEqual(act.main([]),0)
+            with self.assertRaisesRegex(act.Refusal,'served_verification_protocol_unqualified'):
+                act.main(['--verify-served','--operations-revision',TARGET])
+        default=json.loads(stream.getvalue());self.assertFalse(default['served_authenticated_verification_completed'])
+        self.assertFalse(default['installed_state_accessed']);self.assertFalse(default['execution_performed'])
+
+    def test_new_mode_qualified_default_still_never_claims_access_or_verification(self):
+        with patch.object(act,'SERVED_VERIFICATION_PROTOCOL_QUALIFIED',True), \
+             patch.object(act.source_files,'protected',side_effect=AssertionError('installed read')), \
+             patch.object(act,'source_gate',side_effect=AssertionError('source action')),patch('sys.stdout',new=io.StringIO()) as stream:
+            self.assertEqual(act.main([]),0)
+        default=json.loads(stream.getvalue());self.assertTrue(default['served_verification_protocol_qualified'])
+        self.assertFalse(default['served_authenticated_verification_completed']);self.assertFalse(default['execution_performed'])
+        self.assertFalse(default['installed_state_accessed'])
+        self.assertEqual((default['provider_calls'],default['authentication_submissions'],default['database_writes']),(0,0,0))
+
+    def test_new_mode_uses_own_fixed_argv_witness_and_rejects_execute_substitution(self):
+        witness=NormalControllerHolderTests();pid=os.getpid();started=witness.process_start(Path('/proc/self/stat').read_text())
+        now=time.monotonic();options={'operations':TARGET,'source':act.SOURCE,'mode':'--verify-served',
+            'pid':pid,'started':started,'acquired':now-1,'deadline':now+10,'parse_start':witness.process_start}
+        result=act.normal_controller_command(**options,read_bytes=lambda _:witness.argv('--verify-served'))
+        self.assertEqual(result['own_mode'],'--verify-served')
+        with self.assertRaisesRegex(act.Refusal,'own_fixed_command'):
+            act.normal_controller_command(**options,read_bytes=lambda _:witness.argv('--execute'))
+
+    def test_created_directory_parent_fsync_failure_gets_STOP_and_collision_is_untouched(self):
+        for fault in ('fsync','collision'):
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);source,host,policy,complete,clock,paths,live=self.fixture(root)
+                if fault=='fsync':
+                    with patch.object(act.os,'fsync',side_effect=OSError('fictional one-time parent fsync failure')), \
+                         self.assertRaisesRegex(act.Refusal,'stopped_preserving_records'):
+                        self.run_verify(root,host,policy,complete,paths,live)
+                    self.assertTrue((root/'verification').is_dir());self.assertIn('STOP.json',host.records)
+                    self.assertFalse(host.records['STOP.json']['request_attempt_started']);self.assertNotIn('hold',host.events)
+                else:
+                    with patch.object(act.os,'mkdir',side_effect=FileExistsError('foreign collision')), \
+                         self.assertRaises(FileExistsError):self.run_verify(root,host,policy,complete,paths,live)
+                    self.assertFalse(host.records);self.assertFalse(host.events)
+
+class ServedCollectorAndFrozenProofTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls): ServedRenewalTests.setUpClass()
+
+    def collector(self,fault=''):
+        import inspect,subprocess
+        tree=ast.parse(inspect.getsource(act.NativeHost.authenticated_gets).strip())
+        code=next(n.value.value for n in ast.walk(tree) if isinstance(n,ast.Assign)
+            and any(isinstance(t,ast.Name) and t.id=='code' for t in n.targets))
+        original="const {request}=createRequire('/opt/meddoc-pro/package.json')('@playwright/test');"
+        self.assertEqual(code.count(original),1)
+        mock=r'''const trace=[];const fault=FAULT;let number=0;
+const request={newContext:async options=>{trace.push({kind:'context',options});let saved=structuredClone(options.storageState);return {
+ storageState:async()=>structuredClone(saved),dispose:async()=>trace.push({kind:'dispose'}),
+ get:async(url,options)=>{const index=number++;trace.push({kind:'GET',url,options});if(fault==='timeout'&&index===0)throw Error('fictional timeout');
+ saved.cookies[0].expires+=1;const text=index===0?'Clinical workspace A little less paperwork.':'Administration Workspace health. Release '+input.target;
+ return {status:()=>fault==='redirect'&&index===0?302:200,url:()=>url,
+ headers:()=>({'content-type':'text/html'}),body:async()=>Buffer.from(fault==='login'&&index===0?'<input name="password">':text)};}};}};
+process.on('exit',()=>console.error(JSON.stringify(trace)));
+'''.replace('FAULT',json.dumps(fault))
+        states={actor:{'cookies':[{'name':'fictional-existing','value':actor,'expires':1800}], 'origins':[]}
+                for actor in ('doctor','admin')}
+        output=subprocess.run(['/usr/bin/node','--input-type=module','-e',code.replace(original,mock)],
+            input=act.encode({'states':states,'target':TARGET}),capture_output=True,timeout=10)
+        return output,json.loads(output.stdout),json.loads(output.stderr),states
+
+    def test_actual_JS_collector_exact_two_GETs_and_real_state_intervals(self):
+        result,report,trace,states=self.collector();self.assertEqual(result.returncode,0);self.assertTrue(report['complete'])
+        gets=[item for item in trace if item['kind']=='GET'];self.assertEqual([item['url'] for item in gets],
+            ['https://app.quillmd.com/','https://app.quillmd.com/console/services/'])
+        for item in gets:self.assertEqual(item['options'],{'maxRedirects':0,'maxRetries':0,'timeout':15000,'failOnStatusCode':False})
+        contexts=[item for item in trace if item['kind']=='context'];self.assertEqual(len(contexts),2)
+        for item in contexts:self.assertFalse(item['options']['ignoreHTTPSErrors']);self.assertEqual(item['options']['timeout'],15000)
+        self.assertEqual(len([item for item in trace if item['kind']=='dispose']),2)
+        for attempt in report['attempts']:
+            self.assertEqual(attempt['before'],states[attempt['actor']]);self.assertNotEqual(attempt['after'],attempt['before'])
+            self.assertTrue(attempt['markers_verified']);self.assertEqual(attempt['GET_requests'],1)
+            self.assertLessEqual(datetime.fromisoformat(attempt['started_at'].replace('Z','+00:00')),
+                datetime.fromisoformat(attempt['finished_at'].replace('Z','+00:00')))
+        self.assertNotIn('Clinical workspace',json.dumps(report))
+
+    def test_actual_JS_redirect_login_and_unknown_timeout_stop_without_next_GET_or_retry(self):
+        for fault in ('redirect','login','timeout'):
+            with self.subTest(fault=fault):
+                result,report,trace,_=self.collector(fault)
+                self.assertEqual(result.returncode,2);self.assertFalse(report['complete'])
+                self.assertEqual(len([item for item in trace if item['kind']=='GET']),1)
+                self.assertEqual(len(report['attempts']),1);self.assertEqual(report['attempts'][0]['actor'],'doctor')
+                self.assertIn('finished_at',report['attempts'][0]);self.assertEqual(report['failure'],'normal443_authenticated_served_GET_failed_or_unknown')
+
+    def test_projection_admits_only_actual_full_post_maps_and_preserves_historical_reads(self):
+        fixture=ServedRenewalTests();fixture.fixture();fixture.admit()
+        projection=act.served_projection(fixture.before,fixture.after,ACTUAL_SERVED_RENEWAL_VERIFIER)
+        module=SimpleNamespace(row_mapping=ACTUAL_SERVED_RENEWAL_VERIFIER.row_mapping)
+        mapping=act.admitted_served_projection(module,projection)
+        for table in ('django_session','core_auditevent'):
+            packet=fixture.after[table]
+            self.assertEqual(mapping(table,packet['rows'],packet['columns'],packet['primary_keys']),projection['projected_populations'][table])
+            historical=fixture.before[table]
+            self.assertEqual(mapping(table,historical['rows'],historical['columns'],historical['primary_keys']),
+                ACTUAL_SERVED_RENEWAL_VERIFIER.row_mapping(table,historical['rows'],historical['columns'],historical['primary_keys']))
+            drift=packet['rows']+[packet['rows'][-1].replace(b'\n',b'-foreign\n')]
+            with self.assertRaises(act.ServedDeltaRefusal):mapping(table,drift,packet['columns'],packet['primary_keys'])
+        bad=deepcopy(projection);bad['post_populations']['core_patient']={}
+        with self.assertRaisesRegex(act.Refusal,'exact_two_table_projection'):act.admitted_served_projection(module,bad)
+
+    def service_fixture(self):
+        import types
+        frozen=act.EVIDENCE/'recovery-20261007/acceptance-v3-preparation-v2-20261007/verify_installed_acceptance_v3.py'
+        raw=frozen.read_bytes();self.assertEqual(act.sha(raw),act.FROZEN_V3)
+        units={};proofs={};calls=[]
+        for index,surface in enumerate(('doctor','admin','worker')):
+            name='quillmd-fresh-'+surface+'.service';pid=str(100+index)
+            units[name]={'ActiveState':'active','MainPID':pid,'ExecMainStartTimestampMonotonic':str(500+index),
+                'FragmentPath':'/etc/systemd/system/'+name,'DropInPaths':''}
+            proofs[surface+'.json']={'passed':True,'surface':surface,'release':TARGET,'pid':int(pid),
+                'identity':{'all_capability_sets_empty':True,'no_new_privileges':True}}
+        boundary={'units':units,'completion_unit_provenance':{'actual-new-starts':'verified'}}
+        host=SimpleNamespace(served=PRIOR,operations=TARGET,boundary=MagicMock(return_value=deepcopy(boundary)))
+        module=types.ModuleType('_fictional-genuine-normal-service-verifier');module.__file__=str(frozen)
+        installed_unit=b'WorkingDirectory=/opt/meddoc-pro/rebuild\n'
+        def run(argv):
+            calls.append(argv)
+            if argv[:4]==['git','-C','/opt/meddoc-pro','rev-parse']:return TARGET.encode()
+            if argv[0]=='systemctl':return '\n'.join(key+'='+value for key,value in units[argv[2]].items()).encode()
+            if argv[:4]==['git','-C','/opt/meddoc-pro','show']:return installed_unit
+            raise AssertionError(argv)
+        module.__dict__.update(v3_execution_gate=lambda:None,require=act.require,run=run,Path=Path,json=json,
+            sha=act.sha,encoded=lambda value:act.encode(value)+b'\n',exact_native_cgroup=MagicMock())
+        storage=SimpleNamespace(read_file=lambda _,name:act.encode(proofs[name]))
+        def http_get(url,**_):
+            if url.startswith('http://127.0.0.1:'):
+                surface='doctor' if ':9130/' in url else 'admin'
+                return SimpleNamespace(status_code=200,json=lambda:{'status':'ok','data_mode':'synthetic-only','surface':surface,'release':TARGET})
+            return SimpleNamespace(status_code=503,headers={'retry-after':'3600','cache-control':'no-store'})
+        return raw,module,host,{'units_after':boundary},storage,http_get,installed_unit,calls
+
+    def test_actual_unchanged_frozen_service_algorithm_uses_new_PIDs_and_rejects_header_or_process_drift(self):
+        raw,module,host,completion,storage,http_get,unit,calls=self.service_fixture()
+        verify=act.normal_service_verifier(module,raw,host,completion)
+        with patch('httpx.get',side_effect=http_get),patch.object(Path,'read_bytes',return_value=unit):
+            result=verify(PRIOR,{'unused-private-activation':True},storage)
+            self.assertEqual(result['current_served_revision'],TARGET);self.assertEqual(result['private_workflow_served_revision'],PRIOR)
+            self.assertEqual(result['doctor']['pid'],100);self.assertEqual(host.boundary.call_count,2)
+            with self.assertRaisesRegex(act.Refusal,'unchanged_private_workflow_release'):verify(TARGET,{},storage)
+            host.boundary.return_value={'foreign-process':True}
+            with self.assertRaisesRegex(act.Refusal,'same_actual_normal_services'):verify(PRIOR,{},storage)
+        host.boundary.return_value=completion['units_after']
+        def duplicate(url,**kwargs):
+            value=http_get(url,**kwargs)
+            if url.startswith('https://'):value.headers['retry-after']='3600, 3600'
+            return value
+        with patch('httpx.get',side_effect=duplicate),patch.object(Path,'read_bytes',return_value=unit), \
+             self.assertRaisesRegex(act.Refusal,'Public maintenance'):verify(PRIOR,{},storage)
+        template=(act.SOURCE/act.TEMPLATE).read_text()
+        self.assertEqual(template.count('proxy_hide_header Cache-Control;'),1)
+        self.assertEqual(template.count('proxy_hide_header Retry-After;'),1)
+        with self.assertRaisesRegex(act.Refusal,'frozen_service_verifier_identity'):
+            act.normal_service_verifier(module,raw+b'\n',host,completion)
+
+    def test_inventory_original_pins_and_exact_target_metadata_bytes_remain_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);host=object.__new__(act.NativeHost);host.served=PRIOR;host.operations=TARGET
+            host.check_hold=MagicMock();name='rebuild/core/preview_access.py';old=b'old-qualified';current=b'new-qualified'
+            path=root/name;path.parent.mkdir(parents=True);path.write_bytes(current);path.chmod(0o644)
+            host.buffers={name:current};host.git=lambda _,operation,pin:old if pin==PRIOR+':'+name else current
+            with patch.object(act,'ROOT',root),patch.object(act,'APP',root/'rebuild'):
+                self.assertTrue(host.installed_inventory(name,act.sha(old)))
+                with self.assertRaisesRegex(act.Refusal,'immutable_private_inventory_path'):host.installed_inventory(name,act.sha(current))
+                path.write_bytes(b'foreign changed bytes')
+                with self.assertRaisesRegex(act.Refusal,'actual_cited_normal_application_path'):host.installed_inventory(name,act.sha(old))
+                path.write_bytes(current);path.chmod(0o664)
+                with self.assertRaisesRegex(act.source_files.Refusal,'operator_file_identity'):host.installed_inventory(name,act.sha(old))
+                other=root/'rebuild/core/unchanged.py';other.write_bytes(b'unchanged')
+                self.assertTrue(host.installed_inventory('rebuild/core/unchanged.py',act.sha(b'unchanged')))
+                self.assertFalse(host.installed_inventory('rebuild/core/unchanged.py',act.sha(b'foreign')))
+
+    def test_committed_policy_has_exact_separate_writes_and_fixed_paths(self):
+        raw=(act.SOURCE/act.DECL).read_bytes();policy=act.contract(raw)
+        self.assertEqual(policy['served_verification_policy'],act.SERVED_VERIFICATION_POLICY)
+        self.assertEqual(policy['database_writes'],0)
+        changed=raw.replace(b'"audit_rows_added": 1',b'"audit_rows_added": 0')
+        with self.assertRaisesRegex(act.Refusal,'exact_separate_served_verification_policy'):act.contract(changed)
+
+    def test_real_private_writer_and_nonce_refuse_replaced_output_directory_before_GET(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);output=root/'verification';output.mkdir(mode=0o700)
+            host=object.__new__(act.NativeHost);info=output.stat()
+            host.served_directory_identity=(info.st_dev,info.st_ino,info.st_uid,info.st_gid,info.st_mode&0o7777)
+            host.check_hold=MagicMock();host.acceptance=SimpleNamespace(child_process=MagicMock(side_effect=AssertionError('GET launch')))
+            host.source=act.SOURCE;host.operations=TARGET;host.forward_deadline=time.monotonic()+30
+            with patch.object(act,'VERIFY_OUTPUT',output),patch.object(act,'VERIFY_ATTEMPT',root/'attempt.json'):
+                host.verify_write('prepared.json',{'synthetic':True})
+                self.assertEqual((output/'prepared.json').stat().st_mode&0o7777,0o600)
+                self.assertEqual(json.loads((output/'prepared.json').read_bytes()),{'synthetic':True})
+                with self.assertRaises(FileExistsError):host.verify_write('prepared.json',{'foreign':True})
+                output.rename(root/'retained-original');output.mkdir(mode=0o700)
+                for name in ('attempt.json','STOP.json','doctor-state-after.json'):
+                    with self.subTest(name=name),self.assertRaisesRegex(act.Refusal,'same_owned_verification_directory'):
+                        host.verify_write(name,{'foreign':True})
+                with self.assertRaisesRegex(act.Refusal,'same_owned_verification_directory'):host.authenticated_gets({})
+                host.acceptance.child_process.assert_not_called();self.assertFalse((root/'attempt.json').exists())
+                self.assertEqual(list(output.iterdir()),[])
+                self.assertEqual(json.loads((root/'retained-original/prepared.json').read_bytes()),{'synthetic':True})
+
+    def test_immediate_pre_child_directory_reread_catches_late_replacement(self):
+        host=object.__new__(act.NativeHost);host.check_hold=MagicMock()
+        host.check_verification_directory=MagicMock(side_effect=[None,act.Refusal('normal443_same_owned_verification_directory')])
+        host.acceptance=SimpleNamespace(child_process=MagicMock(side_effect=AssertionError('GET launch')))
+        with self.assertRaisesRegex(act.Refusal,'same_owned_verification_directory'):host.authenticated_gets({})
+        self.assertEqual(host.check_verification_directory.call_count,2);host.acceptance.child_process.assert_not_called()
+
+    def test_foreign_boundary_delegates_only_to_checked_current_acceptance_without_recapture(self):
+        host=object.__new__(act.NativeHost);host.served=PRIOR;declaration=b'unchanged original recovery declaration'
+        acknowledgement={'original-owner-decision':'retained-history'}
+        host.buffers={act.RECOVERY_DECL:declaration};host.git=MagicMock(return_value=declaration)
+        host.recovery=SimpleNamespace(DECL=act.RECOVERY_DECL,contract_from_bytes=MagicMock(return_value={
+            'external_configuration_ack':acknowledgement}),
+            loaded_external_state=MagicMock(side_effect=AssertionError('obsolete current reader')))
+        proof={'configuration_admission':{'original_baseline_replaced':False,'current-exact-four':'future-bound'},
+            'native_host_proof':{'actual-current':'measured'}}
+        host.acceptance=SimpleNamespace(current_external_boundary=MagicMock(return_value=proof))
+        self.assertEqual(host.foreign(),proof)
+        host.acceptance.current_external_boundary.assert_called_once_with(host.recovery,acknowledgement)
+        host.recovery.contract_from_bytes.assert_called_once_with(declaration)
+        host.git.assert_called_once_with(act.ROOT,'show',PRIOR+':'+act.RECOVERY_DECL)
+        host.recovery.loaded_external_state.assert_not_called()
+        host.acceptance.current_external_boundary=MagicMock(side_effect=act.Refusal('v3_current_configuration_owner_reply_required'))
+        with self.assertRaisesRegex(act.Refusal,'current_configuration_owner_reply_required'):host.foreign()
+
+    def test_foreign_unchecked_declaration_or_absent_current_function_refuses_without_fallback(self):
+        host=object.__new__(act.NativeHost);host.served=PRIOR
+        host.buffers={};host.git=MagicMock(side_effect=AssertionError('Git read'))
+        with self.assertRaisesRegex(act.Refusal,'checked_recovery_contract'):host.foreign()
+        host.buffers={act.RECOVERY_DECL:b'original'};host.recovery=SimpleNamespace(DECL=act.RECOVERY_DECL,
+            contract_from_bytes=MagicMock(return_value={'external_configuration_ack':{'retained':'original'}}))
+        host.git=MagicMock(return_value=b'foreign')
+        with self.assertRaisesRegex(act.Refusal,'recovery_declaration'):host.foreign()
+        host.recovery.contract_from_bytes.assert_not_called()
+        host.git.return_value=b'original';host.acceptance=SimpleNamespace()
+        with self.assertRaisesRegex(act.Refusal,'checked_current_external_boundary'):host.foreign()
+
 if __name__=='__main__':unittest.main()
