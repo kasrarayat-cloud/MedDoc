@@ -163,6 +163,138 @@ class InertAndSourceTests(unittest.TestCase):
             with self.assertRaises(v3.Refusal): v3.full_revision(value)
         with self.assertRaises(v3.Refusal): v3.source_gate(FakeHost(), contract(), OPS, SERVED, {})
 
+    def normal_descendant_host(self):
+        target='4'*40
+        class NormalHost(FakeHost):
+            def __init__(self):
+                super().__init__();self.contract['availability_receipt_sha256']='5'*64
+                self.normal_changes=set(v3.NORMAL_ALLOWED);self.normal_source_drift=False
+                self.normal_policy={'format':1,'source_base':OPS,'private_accepted_revision':SERVED,
+                    'approved_source_paths':sorted(v3.NORMAL_ALLOWED),
+                    'availability':{'path':str(v3.AVAILABILITY/'complete.json'),'sha256':'5'*64},
+                    'origin':'https://app.quillmd.com','private_origin':v3.ORIGIN,
+                    'ingress_path':'/etc/nginx/sites-available/quillmd',
+                    'original_ingress_sha256':'ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a',
+                    'private_ingress_sha256':'cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a',
+                    'caddy_sha256':'bf0c14729a4ae86ecf2e8ff34d9b5e68aeba55a0bb0c06879580bc73e3a23c87',
+                    'runtime_receipt_binding_protocol':v3.NORMAL_RUNTIME_BINDING,'private_acceptance_completed':False,
+                    'active_protocol_qualified':True,'private_acceptance_protocol_qualified':True,
+                    'ingress_publication_qualified':True,'authentication_submissions':0,'provider_calls':0,
+                    'database_writes':0,'automatic_retries':False,'outer_ceiling_seconds':2400,
+                    'session_forward_reserve_seconds':600,'session_completion_reserve_seconds':60}
+                for name,path in [('private_acceptance',v3.CAMPAIGN/'complete.json'),('private_report',v3.REPORT),
+                                  ('private_authority',v3.PREPARATION/'parent-phase-verify.json')]:
+                    self.normal_policy[name]={'path':str(path),'binding':v3.NORMAL_RUNTIME_BINDING}
+                self.normal_module=("BASE="+repr(OPS)+"\nRUNTIME_BINDING="+repr(v3.NORMAL_RUNTIME_BINDING)+
+                    "\nACTIVE_PROTOCOL_QUALIFIED=True\nPRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED=True\nINGRESS_PUBLICATION_QUALIFIED=True\n").encode()
+            def git(self,tree,*args):
+                if args==('rev-parse','origin/main'):return target.encode()+b'\n'
+                if args[:3]==('diff','--name-only',OPS):return '\n'.join(sorted(self.normal_changes)).encode()
+                if args[:1]==('show',):
+                    revision,relative=args[1].split(':',1)
+                    if relative==v3.NORMAL_DECL:return b'<!-- owner-normal443-contract -->\n```json\n'+v3.encode(self.normal_policy)+b'\n```'
+                    if revision==target and relative==v3.NORMAL_SELF:return self.normal_module
+                    if revision==target and relative=='rebuild/core/preview_access.py':return b'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED=True\n'
+                    if revision==target and relative=='rebuild/quillmd/settings.py':return b"QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', '0') == '1'\n"
+                    if revision==target and self.normal_source_drift and relative==v3.SELF:return b'changed used acceptance bytes'
+                return super().git(tree,*args)
+        return NormalHost(),target
+
+    def test_only_exact_cited_normal_descendant_prospective_contract_is_admitted(self):
+        host,target=self.normal_descendant_host()
+        result=v3.source_gate(host,host.contract,OPS,SERVED,host.environment)
+        self.assertEqual(result['merged_main']['revision'],target)
+        self.assertFalse(result['merged_main']['private_acceptance_completed_claimed'])
+        self.assertIn(('citation',target),host.events)
+        changes=[lambda h:h.normal_changes.add('rebuild/core/generation.py'),
+            lambda h:h.normal_changes.remove(v3.NORMAL_SELF),lambda h:setattr(h,'normal_source_drift',True),
+            lambda h:setattr(h,'served',OPS),lambda h:h.normal_policy.update(source_base='6'*40),
+            lambda h:h.normal_policy.update(private_accepted_revision=OPS),
+            lambda h:h.normal_policy.update(runtime_receipt_binding_protocol='trust_future_success'),
+            lambda h:h.normal_policy.update(private_acceptance_completed=True),
+            lambda h:h.normal_policy.update(active_protocol_qualified=False),
+            lambda h:h.normal_policy.update(private_acceptance_protocol_qualified=False),
+            lambda h:h.normal_policy.update(ingress_publication_qualified=False),
+            lambda h:h.normal_policy['availability'].update(sha256='6'*64),
+            lambda h:h.normal_policy['private_report'].update(path='/elsewhere/report.json'),
+            lambda h:h.normal_policy['private_acceptance'].update(binding='future-unbound-receipt'),
+            lambda h:setattr(h,'normal_module',h.normal_module.replace(b'ACTIVE_PROTOCOL_QUALIFIED=True',b'ACTIVE_PROTOCOL_QUALIFIED=False')),
+            lambda h:setattr(h,'normal_module',h.normal_module.replace(OPS.encode(),('6'*40).encode()))]
+        for position,change in enumerate(changes):
+            bad,_=self.normal_descendant_host();change(bad)
+            with self.subTest(counterexample=position),self.assertRaises(v3.Refusal):
+                v3.source_gate(bad,bad.contract,OPS,SERVED,bad.environment)
+        bad,_=self.normal_descendant_host()
+        bad.citation=lambda revision:v3.require(revision!=target,'fictional_missing_exact_target_citation')
+        with self.assertRaisesRegex(v3.Refusal,'target_citation'):
+            v3.source_gate(bad,bad.contract,OPS,SERVED,bad.environment)
+        bad,_=self.normal_descendant_host();original_git=bad.git;observations=[]
+        def moving_main(tree,*args):
+            if args==('rev-parse','origin/main'):
+                observations.append(True)
+                if len(observations)>1:return ('7'*40).encode()+b'\n'
+            return original_git(tree,*args)
+        bad.git=moving_main
+        with self.assertRaisesRegex(v3.Refusal,'unchanged_during_source_admission'):
+            v3.source_gate(bad,bad.contract,OPS,SERVED,bad.environment)
+
+    def test_genuine_git_normal_descendant_scope_ancestry_and_installed_revision_controls(self):
+        """Real disposable Git trees; fictional citation callback never claims CI."""
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)/'installed';root.mkdir()
+            def git(tree,*args):
+                return subprocess.run(['/usr/bin/git','-C',str(tree),*args],check=True,
+                    capture_output=True,timeout=15).stdout
+            def write(tree,relative,raw):
+                path=tree/relative;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(raw);path.chmod(0o644)
+            git(root,'init','-b','main');git(root,'config','user.name','Fictional offline control')
+            git(root,'config','user.email','fictional@example.invalid')
+            for relative in v3.USED_SOURCE|v3.NORMAL_ALLOWED:write(root,relative,b'fictional original bytes\n')
+            git(root,'add','.');git(root,'commit','-m','Fictional served baseline')
+            served=git(root,'rev-parse','HEAD').strip().decode()
+            source=root/'.worktrees/operations';normal=root/'.worktrees/normal'
+            git(root,'worktree','add','-b','fictional-operations',str(source),served)
+            host,_=self.normal_descendant_host();policy=host.normal_policy
+            current=host.contract;current.update(source_base=served,served_revision=served)
+            for relative in v3.ALLOWED:write(source,relative,b'fictional changed operations\n')
+            write(source,v3.DECL,declaration(current));git(source,'add','.');git(source,'commit','-m','Fictional acceptance operations')
+            operations=git(source,'rev-parse','HEAD').strip().decode()
+            git(root,'worktree','add','-b','fictional-normal',str(normal),operations)
+            for relative in v3.NORMAL_ALLOWED:write(normal,relative,b'fictional prospective normal bytes\n')
+            policy.update(source_base=operations,private_accepted_revision=served)
+            write(normal,v3.NORMAL_DECL,b'<!-- owner-normal443-contract -->\n```json\n'+v3.encode(policy)+b'\n```')
+            write(normal,v3.NORMAL_SELF,host.normal_module.replace(OPS.encode(),operations.encode()))
+            write(normal,'rebuild/core/preview_access.py',b'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED=True\n')
+            write(normal,'rebuild/quillmd/settings.py',b"QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', '0') == '1'\n")
+            git(normal,'add','.');git(normal,'commit','-m','Fictional exact eight-path normal descendant')
+            target=git(normal,'rev-parse','HEAD').strip().decode();git(root,'update-ref','refs/remotes/origin/main',target)
+            class GitHost(FakeHost):
+                def git(self,tree,*args):return git(tree,*args)
+                def read_source(self,path):return path.read_bytes()
+                def canonical(self,path):return path.resolve(strict=True)
+            actual=GitHost();actual.source=source;actual.contract=current
+            actual.environment={'RULED_MUTATION_DECLARATION':v3.DECL,'RULED_MUTATION_DECL_COMMIT':operations}
+            with patch.object(v3,'ROOT',root),patch.object(v3,'M6',served):
+                result=v3.source_gate(actual,current,operations,served,actual.environment)
+                self.assertEqual(result['merged_main']['revision'],target)
+                # An unstated installed revision fails even with exact descendant source.
+                git(root,'update-ref','refs/heads/main',operations)
+                with self.assertRaisesRegex(v3.Refusal,'clean_served_revision'):
+                    v3.source_gate(actual,current,operations,served,actual.environment)
+                git(root,'update-ref','refs/heads/main',served)
+                # A genuine later Git commit with a ninth used path cannot pass.
+                write(normal,v3.SELF,b'changed acceptance operator in later main\n')
+                git(normal,'add',v3.SELF);git(normal,'commit','-m','Fictional forbidden ninth path')
+                drift=git(normal,'rev-parse','HEAD').strip().decode();git(root,'update-ref','refs/remotes/origin/main',drift)
+                with self.assertRaisesRegex(v3.Refusal,'exact_eight_path_scope'):
+                    v3.source_gate(actual,current,operations,served,actual.environment)
+                # A real unrelated commit cannot be made an ancestor by policy claims.
+                tree=git(root,'rev-parse',served+'^{tree}').strip().decode()
+                unrelated=git(root,'commit-tree',tree,'-m','Fictional unrelated root').strip().decode()
+                git(root,'update-ref','refs/remotes/origin/main',unrelated)
+                with self.assertRaises(subprocess.CalledProcessError):
+                    v3.source_gate(actual,current,operations,served,actual.environment)
+
     def test_cgroup_whitespace_and_foreign_unit_refuse(self):
         unit = v3.UNITS[2]
         v3.exact_cgroup('0::/system.slice/' + unit + '\n', unit)
@@ -742,6 +874,136 @@ class FinancialAndExportTests:
         with self.assertRaisesRegex(v3.Refusal,'dependency_drift'):
             v3.javascript_adapter(wrong,'browser',declaration_raw,authority,check)
         self.assertEqual({name:v3.sha(v3.protected(v3.FROZEN/name)) for name in v3.DEPENDENCIES},v3.DEPENDENCIES)
+
+    def final_admin_storage_fixture(self, root):
+        admin=root/'admin';campaign=root/'campaign';admin.mkdir(mode=0o700);campaign.mkdir(mode=0o700)
+        state={'cookies':[{'name':name,'value':'fictional-'+name,'secure':True,'httpOnly':True,'sameSite':site,
+            'domain':'app.quillmd.com','path':'/','expires':1000.0} for name,site in
+            [('__Host-quillmd_preview','Lax'),('quillmd_doctor_session','Strict'),('quillmd_doctor_csrf','Strict')]],'origins':[]}
+        original=v3.encode(state);final=copy.deepcopy(state)
+        for cookie in final['cookies']:cookie['expires']=2000.0
+        final_raw=v3.encode(final);final_path=campaign/'admin-browser-session-after-readback.json'
+        authentication={'actor_id':'fictional-staff','session_file':str(admin/'browser-session.json'),
+                        'session_sha256':v3.sha(original)}
+        auth_raw=v3.encode(authentication)
+        for path,raw in [(admin/'browser-session.json',original),(admin/'normal-authentication.json',auth_raw),
+                         (final_path,final_raw)]:path.write_bytes(raw);path.chmod(0o600)
+        progress={'started':'2026-10-07T12:00:00Z','clinical_workflows_completed_at':'2026-10-07T12:05:00Z',
+            'finished':'2026-10-07T12:05:11Z','cases':[{'name':name,'browser_complete':True} for name in v3.CASES],
+            'admin_readback':{'actor_id':'fictional-staff','started_at':'2026-10-07T12:05:01Z',
+                'finished_at':'2026-10-07T12:05:10Z','final_storage_state_captured_at':'2026-10-07T12:05:09Z',
+                'final_storage_state_path':str(final_path),'final_storage_state_sha256':v3.sha(final_raw),
+                'protected_session_sha256':v3.sha(original),'preparation_evidence_sha256':v3.sha(auth_raw)}}
+        return admin,campaign,final_path,original,final_raw,progress
+
+    def test_genuine_final_admin_state_files_bind_original_cookie_identity_and_real_interval(self):
+        with tempfile.TemporaryDirectory() as temp:
+            admin,campaign,final,original,final_raw,progress=self.final_admin_storage_fixture(Path(temp))
+            with patch.object(v3,'ADMIN',admin),patch.object(v3,'FINAL_ADMIN_STATE',final):
+                proof=v3.validate_admin_final_storage(progress)
+                self.assertTrue(proof['complete']);self.assertEqual(proof['sha256'],v3.sha(final_raw))
+                self.assertEqual((admin/'browser-session.json').read_bytes(),original)
+                self.assertFalse(proof['expiry_modified_by_adapter'])
+                for field,value in [('final_storage_state_captured_at','2026-10-07T12:04:59Z'),
+                    ('final_storage_state_captured_at','2026-10-07T12:05:12Z'),
+                    ('final_storage_state_sha256','0'*64),('final_storage_state_path',str(admin/'browser-session.json'))]:
+                    bad=copy.deepcopy(progress);bad['admin_readback'][field]=value
+                    with self.subTest(field=field),self.assertRaises(v3.Refusal):v3.validate_admin_final_storage(bad)
+                bad=copy.deepcopy(progress);bad['clinical_workflows_completed_at']='2026-10-07T12:05:02Z'
+                with self.assertRaises(v3.Refusal):v3.validate_admin_final_storage(bad)
+                for name in ('quillmd_doctor_session','__Host-quillmd_preview'):
+                    state=json.loads(final_raw);next(row for row in state['cookies'] if row['name']==name)['value']='counterfeit'
+                    changed=v3.encode(state);final.write_bytes(changed)
+                    bad=copy.deepcopy(progress);bad['admin_readback']['final_storage_state_sha256']=v3.sha(changed)
+                    with self.assertRaisesRegex(v3.Refusal,'same_authenticated_cookie_identity'):v3.validate_admin_final_storage(bad)
+                final.write_bytes(final_raw);final.unlink();final.symlink_to(admin/'browser-session.json')
+                with self.assertRaises((v3.Refusal,OSError)):v3.validate_admin_final_storage(progress)
+                self.assertEqual((admin/'browser-session.json').read_bytes(),original)
+
+    def test_actual_js_block_moves_after_clinical_loop_and_captures_before_context_close(self):
+        blobs={name:v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
+        authority=v3.derive_authority(contract(),self.common,OPS,SERVED,{})
+        adapted=v3.javascript_adapter(blobs,'browser',declaration(),authority,{'argv':['fictional'],'source_fd':9})
+        beginning=b'  const adminContext=await browser.newContext({storageState:JSON.parse(adminSessionBytes)});let readback;\n'
+        ending=b'  }finally{await adminContext.close();if(readback){readback.finished_at=new Date().toISOString();save();}}\n'
+        self.assertGreater(adapted.index(beginning),adapted.index(b'result.clinical_workflows_completed_at='))
+        self.assertGreater(adapted.index(beginning),adapted.index(b'for(const [name,index,voice,spec] of cases)'))
+        block=adapted[adapted.index(beginning):adapted.index(ending)+len(ending)].decode()
+        self.assertEqual(adapted.count(beginning),1);self.assertEqual(adapted.count(b'const population=await adminContext.request.get'),1)
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);admin=root/'admin';campaign=root/'campaign';admin.mkdir(mode=0o700);campaign.mkdir(mode=0o700)
+            state={'cookies':[{'name':name,'value':'fictional-'+name,'secure':True,'httpOnly':True,'sameSite':site,
+                'domain':'app.quillmd.com','path':'/'} for name,site in [('__Host-quillmd_preview','Lax'),
+                 ('quillmd_doctor_session','Strict'),('quillmd_doctor_csrf','Strict')]],'origins':[]}
+            original=v3.encode(state);(admin/'browser-session.json').write_bytes(original);(admin/'browser-session.json').chmod(0o600)
+            prelude=("import fs from 'node:fs';import path from 'node:path';import crypto from 'node:crypto';"
+                "const require={resolve:()=>'/fictional/axe'},ORIGIN='https://app.quillmd.com:9443';"
+                "const ADMIN="+json.dumps(str(admin))+",CAMPAIGN="+json.dumps(str(campaign))+",OUTPUT=CAMPAIGN;"
+                "function must(value,label){if(!value)throw new Error(label)};"+v3.JS_OWNED_IO.decode()+
+                "const digest=value=>crypto.createHash('sha256').update(value).digest('hex');"
+                "const adminSessionBytes=privateRead(ADMIN+'/browser-session.json'),adminEvidenceBytes=Buffer.from('{}'),adminEvidence={actor_id:'fictional-staff'};"
+                "const result={},events=[];let pageURL='',width=1440;function save(){};function validateCookies(value){must(value.length===3,'cookies')};"
+                "function fixtureRead(file,encoding){must(file==='/fictional/axe','fixture read');return 'fictional axe'};"
+                "const page={setDefaultTimeout(){},async goto(url){events.push('GET '+url);pageURL=url;return {status:()=>200}},url:()=>pageURL,"
+                "async setViewportSize(value){width=value.width},async evaluate(value){if(typeof value==='string')return;const text=String(value);"
+                "if(text.includes('scrollWidth'))return {width,documentWidth:width,labels:['System health']};if(text.includes('axe.run'))return [];},"
+                "async screenshot({path:filename}){fs.writeFileSync(filename,Buffer.from('fictional screenshot'),{mode:0o600,flag:'wx'})}};"
+                "const context={async route(){},async newPage(){return page},request:{async get(url){events.push('GET '+url);return {status:()=>200,json:async()=>({patients:[]})}}},"
+                "async cookies(){return JSON.parse(adminSessionBytes).cookies},async storageState(){events.push('capture');return JSON.parse(adminSessionBytes)},async close(){events.push('close')}};"
+                "const browser={async newContext({storageState}){must(JSON.stringify(storageState)===adminSessionBytes.toString(),'actual original state');return context}};\n")
+            script=prelude+block.replace('reviewedRead(require.resolve','fixtureRead(require.resolve')+\
+                "must(events.filter(value=>value.startsWith('GET ')).length===4,'same existing GET population');"\
+                "must(events.indexOf('capture')<events.indexOf('close'),'capture before close');"\
+                "must(result.admin_readback.checks.length===9&&result.admin_readback.complete,'nine checks');"\
+                "must(result.admin_readback.final_storage_state_sha256===digest(privateRead(result.admin_readback.final_storage_state_path)),'genuine hash');"\
+                "must(privateRead(ADMIN+'/browser-session.json').equals(adminSessionBytes),'original MFA file unchanged');"\
+                "console.log(JSON.stringify({events,readback:result.admin_readback}));"
+            completed=subprocess.run(['/usr/bin/node','--input-type=module','-'],input=script.encode(),capture_output=True,timeout=15)
+            self.assertEqual(completed.returncode,0,completed.stderr.decode())
+            report=json.loads(completed.stdout)['readback'];self.assertEqual(report['final_storage_state_path'],str(campaign/'admin-browser-session-after-readback.json'))
+            self.assertEqual((admin/'browser-session.json').read_bytes(),original)
+
+    def test_genuine_existing_doctor_final_state_hash_and_capture_are_bound(self):
+        with tempfile.TemporaryDirectory() as temp:
+            campaign=Path(temp);path=campaign/'browser-session.json';raw=v3.encode({'cookies':[],'origins':[]})
+            path.write_bytes(raw);path.chmod(0o600)
+            progress={'started':'2026-10-07T12:00:00Z','finished':'2026-10-07T12:05:11Z',
+                'doctor_final_storage_state':{'path':str(path),'sha256':v3.sha(raw),'captured_at':'2026-10-07T12:05:10Z'}}
+            with patch.object(v3,'CAMPAIGN',campaign):
+                self.assertTrue(v3.validate_doctor_final_storage(progress)['complete'])
+                for field,value in [('sha256','0'*64),('path',str(campaign/'elsewhere.json')),
+                    ('captured_at','2026-10-07T11:59:59Z'),('captured_at','2026-10-07T12:05:12Z')]:
+                    bad=copy.deepcopy(progress);bad['doctor_final_storage_state'][field]=value
+                    with self.subTest(field=field),self.assertRaises(v3.Refusal):v3.validate_doctor_final_storage(bad)
+                path.write_bytes(raw+b' ')
+                with self.assertRaisesRegex(v3.Refusal,'actual_hash'):v3.validate_doctor_final_storage(progress)
+                path.unlink();path.symlink_to(campaign/'elsewhere.json')
+                with self.assertRaises((v3.Refusal,OSError)):v3.validate_doctor_final_storage(progress)
+
+    def test_actual_independent_verifier_calls_both_final_storage_checks_before_database(self):
+        raw=v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
+        authority=v3.derive_authority(contract(),self.common,OPS,SERVED,{})
+        adapted=v3.verifier_adapter(raw,self.common,authority,self.verifier,publisher_admission=lambda *args:None)
+        progress={'origin':v3.ORIGIN,'browser_workflows_complete':True,'independent_readback_pending':True,
+            'complete':False,'existing_records_edited':0,'release':SERVED,'started':'2026-10-07T12:00:00Z',
+            'finished':'2026-10-07T12:05:11Z','cases':[{'name':name} for name in v3.CASES],
+            'doctor_final_storage_state':{},'admin_readback':{'complete':True,'origin':v3.ORIGIN,
+                'normal_MFA_session_reused':True,'fresh_MFA_submissions':0,'auth_reset':False,
+                'department_privacy_verified':True,'started_at':'2026-10-07T12:05:01Z','finished_at':'2026-10-07T12:05:10Z',
+                'checks':[{'name':name,'width':width,'status':200,'no_page_overflow':True,'accessibility_violations':[]}
+                          for name in ('overview','services','organizations') for width in (1440,768,390)]}}
+        events=[]
+        def admin(value):events.append('admin-final');return {'complete':True}
+        def doctor(value):events.append('doctor-final');return {'complete':True}
+        def stop(value):events.append('database-boundary');raise v3.Refusal('fictional_stop_before_database')
+        with patch.object(adapted,'v3_execution_gate',lambda:None),\
+             patch.object(adapted,'protected',lambda path:v3.encode(progress)),\
+             patch.object(adapted,'validate_admin_final_storage',admin),\
+             patch.object(adapted,'validate_doctor_final_storage',doctor),\
+             patch.object(adapted,'activation_inputs',stop):
+            with self.assertRaisesRegex(v3.Refusal,'fictional_stop_before_database'):
+                adapted.verify(types.SimpleNamespace(progress=str(v3.CAMPAIGN/'progress.json')))
+        self.assertEqual(events,['admin-final','doctor-final','database-boundary'])
 
     def test_actual_frozen_verifier_adapter_retains_gate_and_full_verifier(self):
         raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')

@@ -56,7 +56,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "normal_443_provider_calls": 0,
   "normal_443_qualified": false,
   "operations_revision": null,
-  "operations_revision_policy": "derive_clean_canonical_worktree_head_with_exact_merged_main_scope_and_ci_v1",
+  "operations_revision_policy": "derive_clean_canonical_worktree_head_with_exact_or_reviewed_normal_descendant_main_and_ci_v2",
   "origin": "https://app.quillmd.com:9443",
   "original_frozen_verifier_sha256": "b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c",
   "original_policy": {
@@ -436,3 +436,48 @@ which includes the narrow public Git blob bound repair. Earlier ce821/709469
 preparations remain archived. This update inherits the already merged publisher
 repair without reapplying it. All execution gates remain false and the actual
 availability receipt remains null until genuine reviewed restoration completes.
+
+### Final session capture and prospective normal descendant, 7 October 2026
+
+The authenticated browser adapter now moves the same staff readback block after
+the five clinical workflows. Its three existing dashboard GETs, nine viewport
+checks and existing empty patient-population GET keep their original predicates.
+It records the actual clinical completion time, then captures the same admin
+context before closing it. The separate protected output is
+`installed-acceptance-v3-20261007/admin-browser-session-after-readback.json`;
+the original `installed-admin-acceptance-v3-20261007/browser-session.json` and
+normal MFA evidence remain immutable. The readback binds the actual final path,
+byte SHA and capture time inside its measured interval. The independent verifier
+authenticates those bytes, original MFA hashes, unchanged doctor/preview cookie
+identity and the clinical/readback ordering. The existing final doctor state is
+also captured to memory, written through the same protected output helper and
+bound to progress and the independent report with its actual SHA and capture
+time. No cookie expiry is edited, and no GET, authentication or provider call is
+added by these adaptations. Frozen source bytes and hash pins remain unchanged.
+
+The source gate still derives the exact clean operations worktree head, its
+four-path diff from M6, and separately verifies the installed served tree. It
+additionally admits one prospective normal-origin descendant on `origin/main`
+only when the exact ancestor relation and full citation hold, its diff is exactly
+the eight reviewed normal paths, and its committed declaration/source flags bind
+this acceptance operations revision, served revision and actual availability
+SHA. The fixed runtime protocol is
+`private-acceptance-completion-cross-hashes-v1`: future completion/report/final
+authority paths are explicit runtime inputs, and the source claim remains
+`private_acceptance_completed:false`. The default-disabled application setting,
+normal qualification literals and all used acceptance bytes are checked. A
+changing main reference during admission refuses. This permits both normal CI
+citations to finish before campaign authentication; normal publication still
+requires the genuine complete/report/progress/authority/admission cross-hashes
+and full independent original/current proof before any transition.
+
+The focused local suite passes 71 controls, including actual private final-state
+files, cookie counterfeits with recomputed hashes, symlink/drift refusals, a Node
+execution of the unchanged staff GET block, the real frozen independent verifier
+call path and disposable genuine Git ancestry/scope/installed-revision controls.
+Citation callbacks in the disposable tests are fictional and do not qualify CI.
+All three acceptance source qualification flags remain false; the actual
+availability pin remains null. No installed authentication, provider call,
+database write, service action or normal publication has been performed by this
+source-only preparation. The existing 1680-second wrapper bound remains an upper
+limit without a completion guarantee.

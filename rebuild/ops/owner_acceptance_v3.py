@@ -39,7 +39,19 @@ ENTRY = 'scripts/run-owner-acceptance-v3.py'
 DECL = 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md'
 ALLOWED = frozenset((SELF, TEST, ENTRY, DECL))
 M6 = '4194f58cb37b13e179810db486b54bf2fe7a42a8'
-OPERATIONS_REVISION_POLICY = 'derive_clean_canonical_worktree_head_with_exact_merged_main_scope_and_ci_v1'
+OPERATIONS_REVISION_POLICY = 'derive_clean_canonical_worktree_head_with_exact_or_reviewed_normal_descendant_main_and_ci_v2'
+NORMAL_DECL = 'docs/foundation/mutations/20261007-quillmd-owner-normal443.md'
+NORMAL_SELF = 'rebuild/ops/owner_normal_origin.py'
+NORMAL_ALLOWED = frozenset((NORMAL_DECL, NORMAL_SELF, 'rebuild/ops/test_owner_normal_origin.py',
+    'scripts/prepare-owner-normal-origin.py', 'rebuild/deploy/owner-normal-https.conf',
+    'rebuild/quillmd/settings.py', 'rebuild/core/preview_access.py',
+    'rebuild/core/tests/test_owner_normal_origin.py'))
+NORMAL_RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
+NATIVE_NAMES = ('managed_helper', 'private_storage', 'backup_restore', 'email_activation',
+                'activation_exclusion', 'legacy_model_activation', 'repair_source_permissions',
+                'publisher_verification', 'private_availability_recovery')
+USED_SOURCE = ALLOWED | frozenset('rebuild/ops/' + name + '.py' for name in NATIVE_NAMES) | frozenset((
+    'scripts/check-citation.sh', 'scripts/lib/runs-api.sh'))
 ORIGIN = 'https://app.quillmd.com:9443'
 MODEL = 'claude-sonnet-5-5'
 PROFILE = {'max_tokens': 6000, 'timeout_seconds': 60, 'max_retries': 0,
@@ -83,6 +95,7 @@ PUBLISHER_JUDGE_FIELDS = ('Result', 'ExecMainStartTimestamp', 'ExecMainExitTimes
 DEFERRAL_STDOUT = ('Publication deferred: an activation holds exclusion. '
                    'Nothing written; the existing row keeps its own freshness.')
 REPORT = CAMPAIGN / 'independent-verification.json'
+FINAL_ADMIN_STATE = CAMPAIGN / 'admin-browser-session-after-readback.json'
 FIXTURE_PINS = {
     'acceptance_admin_preparation_sha256': DEPENDENCIES['prepare-installed-admin-auth-v3.mjs'],
     'acceptance_browser_sha256': DEPENDENCIES['installed-browser-acceptance-v3.mjs'],
@@ -363,6 +376,80 @@ def declaration_contract(raw):
     return result
 
 
+def source_literal(raw, name, expected):
+    assignments = [node.value for node in ast.parse(raw).body if isinstance(node, ast.Assign)
+                   and any(isinstance(target, ast.Name) and target.id == name for target in node.targets)]
+    require(len(assignments) == 1 and isinstance(assignments[0], ast.Constant)
+            and type(assignments[0].value) is type(expected) and assignments[0].value == expected,
+            'v3_normal_descendant_exact_source_literal')
+
+
+def merged_main_admission(host, contract, operations, served):
+    """Allow only the cited prospective normal-origin release atop these exact operations."""
+    target = full_revision(host.git(ROOT, 'rev-parse', 'origin/main').strip().decode())
+    if target == operations:
+        return {'revision': target, 'kind': 'exact_acceptance_operations'}
+    host.git(ROOT, 'merge-base', '--is-ancestor', operations, target)
+    changes = set(host.git(ROOT, 'diff', '--name-only', operations, target).decode().splitlines())
+    require(changes == NORMAL_ALLOWED, 'v3_normal_descendant_exact_eight_path_scope')
+    raw = host.git(ROOT, 'show', target + ':' + NORMAL_DECL)
+    matches = re.findall(rb'<!-- owner-normal443-contract -->\s*```json\s*(.*?)```', raw, re.S)
+    require(len(matches) == 1, 'v3_normal_descendant_single_contract')
+    policy = json.loads(matches[0])
+    availability_sha = contract.get('availability_receipt_sha256')
+    require(re.fullmatch('[a-f0-9]{64}', availability_sha or '')
+            and policy.get('format') == 1 and policy.get('source_base') == operations
+            and policy.get('private_accepted_revision') == served
+            and policy.get('approved_source_paths') == sorted(NORMAL_ALLOWED)
+            and policy.get('availability') == {'path': str(AVAILABILITY / 'complete.json'), 'sha256': availability_sha}
+            and policy.get('origin') == 'https://app.quillmd.com' and policy.get('private_origin') == ORIGIN
+            and policy.get('ingress_path') == '/etc/nginx/sites-available/quillmd'
+            and policy.get('original_ingress_sha256') == 'ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a'
+            and policy.get('private_ingress_sha256') == 'cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a'
+            and policy.get('caddy_sha256') == 'bf0c14729a4ae86ecf2e8ff34d9b5e68aeba55a0bb0c06879580bc73e3a23c87'
+            and policy.get('runtime_receipt_binding_protocol') == NORMAL_RUNTIME_BINDING
+            and policy.get('private_acceptance_completed') is False
+            and all(policy.get(name) is True for name in ('active_protocol_qualified',
+                'private_acceptance_protocol_qualified', 'ingress_publication_qualified'))
+            and policy.get('authentication_submissions') == policy.get('provider_calls') == policy.get('database_writes') == 0
+            and policy.get('automatic_retries') is False and policy.get('outer_ceiling_seconds') == 2400
+            and policy.get('session_forward_reserve_seconds') == 600
+            and policy.get('session_completion_reserve_seconds') == 60,
+            'v3_normal_descendant_exact_prospective_contract')
+    for name, path in (('private_acceptance', CAMPAIGN / 'complete.json'), ('private_report', REPORT),
+                       ('private_authority', PREPARATION / 'parent-phase-verify.json')):
+        require(policy.get(name) == {'path': str(path), 'binding': NORMAL_RUNTIME_BINDING},
+                'v3_normal_descendant_fixed_runtime_inputs')
+    source = host.git(ROOT, 'show', target + ':' + NORMAL_SELF)
+    source_literal(source, 'BASE', operations)
+    source_literal(source, 'RUNTIME_BINDING', NORMAL_RUNTIME_BINDING)
+    for name in ('ACTIVE_PROTOCOL_QUALIFIED', 'PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED', 'INGRESS_PUBLICATION_QUALIFIED'):
+        source_literal(source, name, True)
+    preview = host.git(ROOT, 'show', target + ':rebuild/core/preview_access.py')
+    source_literal(preview, 'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED', True)
+    setting = [node.value for node in ast.parse(host.git(ROOT, 'show', target + ':rebuild/quillmd/settings.py')).body
+               if isinstance(node, ast.Assign) and any(isinstance(item, ast.Name)
+                   and item.id == 'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED' for item in node.targets)]
+    expected = ast.parse("os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', '0') == '1'", mode='eval').body
+    require(len(setting) == 1 and ast.dump(setting[0], include_attributes=False)
+            == ast.dump(expected, include_attributes=False), 'v3_normal_descendant_default_disabled_application')
+    commit = full_revision(host.git(ROOT, 'log', '-1', '--format=%H', target, '--', NORMAL_DECL).strip().decode())
+    require(host.git(ROOT, 'show', commit + ':' + NORMAL_DECL) == raw,
+            'v3_normal_descendant_committed_declaration')
+    # The exact eight-path diff already excludes every used acceptance source;
+    # compare them explicitly so this dependency boundary remains executable.
+    for relative in USED_SOURCE:
+        require(host.git(ROOT, 'show', target + ':' + relative)
+                == host.git(host.source, 'show', operations + ':' + relative),
+                'v3_normal_descendant_unchanged_used_acceptance_source')
+    host.citation(target)
+    return {'revision': target, 'kind': 'reviewed_normal_descendant', 'source_base': operations,
+            'served_revision': served, 'availability_receipt_sha256': availability_sha,
+            'changed_paths': sorted(changes), 'normal_declaration_commit': commit,
+            'normal_declaration_sha256': sha(raw), 'runtime_receipt_binding_protocol': NORMAL_RUNTIME_BINDING,
+            'private_acceptance_completed_claimed': False, 'citation_verified': True}
+
+
 def source_gate(host, contract, operations, served, environment):
     """Two independently cited identities; operational code is not served code."""
     full_revision(operations); full_revision(served)
@@ -374,8 +461,7 @@ def source_gate(host, contract, operations, served, environment):
     operations = derived_operations
     require(not host.git(source, 'status', '--porcelain', '--untracked-files=no').strip(),
             'v3_clean_operations_revision')
-    require(host.git(ROOT, 'rev-parse', 'origin/main').strip().decode() == operations,
-            'v3_operations_exact_merged_main')
+    main_proof = merged_main_admission(host, contract, operations, served)
     host.git(source, 'merge-base', '--is-ancestor', M6, operations)
     changes = set(host.git(source, 'diff', '--name-only', M6, operations).decode().splitlines())
     require(changes == ALLOWED, 'v3_operations_four_path_scope')
@@ -396,13 +482,16 @@ def source_gate(host, contract, operations, served, environment):
         require(host.read_source(ROOT / relative) == host.git(ROOT, 'show', served + ':' + relative),
                 'v3_served_tracked_byte_identity')
         host.readability(ROOT / relative)
-    for relative in ALLOWED:
+    for relative in USED_SOURCE:
         require(host.read_source(source / relative) == host.git(source, 'show', operations + ':' + relative),
                 'v3_operations_tracked_byte_identity')
         host.readability(source / relative)
+    require(host.git(ROOT, 'rev-parse', 'origin/main').strip().decode() == main_proof['revision'],
+            'v3_merged_main_unchanged_during_source_admission')
     return {'operations_revision': derived_operations, 'served_revision': served,
             'operations_revision_policy': OPERATIONS_REVISION_POLICY,
-            'operations_source': str(source), 'changed_paths': sorted(changes), 'citation_verified': True}
+            'operations_source': str(source), 'changed_paths': sorted(changes), 'citation_verified': True,
+            'merged_main': main_proof}
 
 
 def exact_cgroup(raw, unit):
@@ -842,6 +931,69 @@ def installed_auth_packet():
              'before_raw': 'metadata-before.json', 'invalid_raw': 'metadata-after-invalid-csrf.json',
              'after_raw': 'metadata-after-normal-mfa.json'}
     return {key: protected(ADMIN / name) for key, name in names.items()}
+
+
+def validate_admin_final_storage(progress, reader=None):
+    """Authenticate the actually captured final GET context; retain original MFA evidence."""
+    reader = protected if reader is None else reader
+    readback = progress['admin_readback']
+    require(readback.get('final_storage_state_path') == str(FINAL_ADMIN_STATE)
+            and re.fullmatch('[a-f0-9]{64}', readback.get('final_storage_state_sha256') or ''),
+            'v3_exact_final_admin_storage_binding')
+    started, finished = stamp(progress['started']), stamp(progress['finished'])
+    workflows = stamp(progress['clinical_workflows_completed_at'])
+    begin, captured, end = [stamp(readback[name]) for name in
+                           ('started_at', 'final_storage_state_captured_at', 'finished_at')]
+    require(started <= workflows <= begin <= captured <= end <= finished
+            and 0 <= (end - begin).total_seconds() <= 1200
+            and {row['name'] for row in progress['cases']} == set(CASES) and len(progress['cases']) == 5
+            and all(row.get('browser_complete') is True for row in progress['cases']),
+            'v3_final_admin_capture_actual_readback_interval')
+    original_raw = reader(ADMIN / 'browser-session.json')
+    authentication_raw = reader(ADMIN / 'normal-authentication.json')
+    authentication = json.loads(authentication_raw)
+    final_raw = reader(FINAL_ADMIN_STATE)
+    require(sha(final_raw) == readback['final_storage_state_sha256']
+            and sha(original_raw) == authentication.get('session_sha256') == readback.get('protected_session_sha256')
+            and sha(authentication_raw) == readback.get('preparation_evidence_sha256')
+            and authentication.get('session_file') == str(ADMIN / 'browser-session.json')
+            and authentication.get('actor_id') == readback.get('actor_id'),
+            'v3_final_admin_storage_evidence_hashes')
+    expected = {'__Host-quillmd_preview': 'Lax', 'quillmd_doctor_session': 'Strict', 'quillmd_doctor_csrf': 'Strict'}
+    populations = []
+    for raw in (original_raw, final_raw):
+        state = json.loads(raw); cookies = state.get('cookies')
+        require(isinstance(cookies, list) and len(cookies) == 3
+                and {row.get('name') for row in cookies} == set(expected), 'v3_final_admin_exact_cookie_population')
+        for cookie in cookies:
+            require(cookie.get('secure') is True and cookie.get('httpOnly') is True
+                    and cookie.get('sameSite') == expected[cookie['name']]
+                    and cookie.get('domain') == 'app.quillmd.com' and cookie.get('path') == '/'
+                    and isinstance(cookie.get('value'), str) and cookie['value'],
+                    'v3_final_admin_served_cookie_scope')
+        populations.append({row['name']: row['value'] for row in cookies})
+    names = ('quillmd_doctor_session', '__Host-quillmd_preview')
+    require(all(populations[0][name] == populations[1][name] for name in names),
+            'v3_final_admin_same_authenticated_cookie_identity')
+    return {'complete': True, 'path': str(FINAL_ADMIN_STATE), 'sha256': sha(final_raw),
+            'captured_at': readback['final_storage_state_captured_at'],
+            'readback_interval': [readback['started_at'], readback['finished_at']],
+            'same_authenticated_cookie_fingerprint': {name: sha(populations[1][name].encode()) for name in names},
+            'original_MFA_storage_sha256': sha(original_raw), 'authentication_submissions': 0,
+            'additional_GET_requests_by_verifier': 0, 'expiry_modified_by_adapter': False}
+
+
+def validate_doctor_final_storage(progress, reader=None):
+    """Bind the existing final doctor state to the genuine progress capture."""
+    reader = protected if reader is None else reader
+    item = progress.get('doctor_final_storage_state', {})
+    path = CAMPAIGN / 'browser-session.json'
+    require(item.get('path') == str(path) and re.fullmatch('[a-f0-9]{64}', item.get('sha256') or '')
+            and stamp(progress['started']) <= stamp(item['captured_at']) <= stamp(progress['finished']),
+            'v3_exact_final_doctor_storage_binding')
+    raw = reader(path)
+    require(sha(raw) == item['sha256'], 'v3_final_doctor_storage_actual_hash')
+    return {'complete': True, **item, 'additional_requests': 0, 'expiry_modified_by_adapter': False}
 
 
 def final_admission(verifier, packets, expected, preservation, operations, served):
@@ -1288,6 +1440,36 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
             for name, expected in DEPENDENCIES.items()), 'v3_transitive_dependency_drift')
     filename = 'prepare-installed-admin-auth-v3.mjs' if phase == 'normal-auth' else 'installed-browser-acceptance-v3.mjs'
     original = blobs[filename]
+    if phase == 'browser':
+        # Move the same authenticated block; its GET, layout, accessibility and
+        # privacy predicates remain byte-identical. No frozen input is edited.
+        start = b"  const adminContext=await browser.newContext({storageState:JSON.parse(adminSessionBytes)});let readback;\n"
+        end = b"  }finally{await adminContext.close();if(readback){readback.finished_at=new Date().toISOString();save();}}\n"
+        require(original.count(start) == original.count(end) == 1, 'v3_fixed_admin_readback_block')
+        first, last = original.index(start), original.index(end) + len(end)
+        require(first < last, 'v3_fixed_admin_readback_block')
+        block = original[first:last]
+        capture = (b"const finalAdminState=await adminContext.storageState();"
+            b"readback.final_storage_state_captured_at=new Date().toISOString();"
+            b"readback.final_storage_state_path=OUTPUT+'/admin-browser-session-after-readback.json';"
+            b"durable(readback.final_storage_state_path,finalAdminState,true);"
+            b"readback.final_storage_state_sha256=digest(privateRead(readback.final_storage_state_path));"
+            b"readback.complete=true;save();")
+        block = replace_once(block, b'readback.complete=true;save();', capture, 'final_admin_storage_capture')
+        clinical_end = b"  result.browser_workflows_complete=true;result.independent_billing_history_pending=true;"
+        result = original[:first] + original[last:]
+        result = replace_once(result, clinical_end,
+            b"  result.clinical_workflows_completed_at=new Date().toISOString();save();\n" + block + clinical_end,
+            'final_admin_readback_position')
+        result = replace_once(result,
+            b"await ctx.storageState({path:OUTPUT+'/browser-session.json'});fs.chmodSync(OUTPUT+'/browser-session.json',0o600);",
+            b"const finalDoctorState=await ctx.storageState();const doctorCapturedAt=new Date().toISOString();"
+            b"durable(OUTPUT+'/browser-session.json',finalDoctorState,true);"
+            b"result.doctor_final_storage_state={path:OUTPUT+'/browser-session.json',"
+            b"sha256:digest(privateRead(OUTPUT+'/browser-session.json')),captured_at:doctorCapturedAt};",
+            'final_doctor_storage_capture')
+    else:
+        result = original
     common = blobs['acceptance-v3-contract.mjs']
     # The original pure validators execute authenticated Python bytes via stdin,
     # preserving their predicates without re-importing a mutable filename.
@@ -1308,7 +1490,7 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
         + json.dumps(str(PYTHON)) + ",['-B','-c'," + json.dumps(py)
         + "],{input:JSON.stringify({kind,...args}),encoding:'utf8',maxBuffer:4194304,timeout:15000}));}\n").encode()
     url = 'data:text/javascript;base64,' + base64.b64encode(common).decode()
-    result = replace_once(original, b"from './acceptance-v3-contract.mjs'", ('from ' + json.dumps(url)).encode(), 'contract_import')
+    result = replace_once(result, b"from './acceptance-v3-contract.mjs'", ('from ' + json.dumps(url)).encode(), 'contract_import')
     result = result.replace(b'privateRead(new URL(import.meta.url).pathname)',
                             ('Buffer.from(' + json.dumps(base64.b64encode(original).decode()) + ",'base64')").encode())
     expected_reads = 2 if phase == 'normal-auth' else 1
@@ -1364,10 +1546,32 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
             'v3_fixed_verifier_destination')
     for node in constants:
         node.value = CAMPAIGN.name
+    functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'verify']
+    require(len(functions) == 1, 'v3_exact_final_admin_verifier_function')
+    assignments = [node for node in functions[0].body if isinstance(node, ast.Assign)
+                   and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                   and node.targets[0].id == 'admin_end']
+    expected = ast.parse("admin_end=datetime.fromisoformat(readback['finished_at'].replace('Z','+00:00'))").body[0]
+    require(len(assignments) == 1 and ast.dump(assignments[0], include_attributes=False)
+            == ast.dump(expected, include_attributes=False), 'v3_exact_final_admin_verifier_interval')
+    position = functions[0].body.index(assignments[0]) + 1
+    functions[0].body.insert(position, ast.parse(
+        "readback['final_storage_state_verification']=validate_admin_final_storage(progress)").body[0])
+    functions[0].body.insert(position + 1, ast.parse(
+        "progress['doctor_final_storage_state']['verification']=validate_doctor_final_storage(progress)").body[0])
+    reports = [node for node in functions[0].body if isinstance(node, ast.Assign)
+               and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+               and node.targets[0].id == 'report' and isinstance(node.value, ast.Dict)]
+    require(len(reports) == 1 and not any(isinstance(key, ast.Constant) and key.value == 'doctor_final_storage_state'
+            for key in reports[0].value.keys), 'v3_exact_final_doctor_verifier_report')
+    reports[0].value.keys.append(ast.Constant('doctor_final_storage_state'))
+    reports[0].value.values.append(ast.parse("progress['doctor_final_storage_state']", mode='eval').body)
     module = types.ModuleType('_quillmd_v3_independent_verifier')
     module.__file__ = str(FROZEN / 'verify_installed_acceptance_v3.py')
     module.__dict__.update(v3_execution_gate=execution_gate, validate_v3_availability=common.availability,
         validate_v3_admission=common.admission, validate_v3_auth_sequence=common.auth_sequence,
+        validate_admin_final_storage=validate_admin_final_storage,
+        validate_doctor_final_storage=validate_doctor_final_storage,
         AVAILABILITY=str(AVAILABILITY), PREPARATION=str(PREPARATION), ADMIN=str(ADMIN), CAMPAIGN=str(CAMPAIGN))
     exec(compile(ast.fix_missing_locations(tree), module.__file__, 'exec'), module.__dict__)
     module.load_v3_authority = lambda operations, served: copy.deepcopy(authority) if (
@@ -1389,9 +1593,7 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
 
 def checked_native_modules(host):
     """Private package namespace resolves transitive relative imports to checked bytes."""
-    names = ('managed_helper', 'private_storage', 'backup_restore', 'email_activation',
-             'activation_exclusion', 'legacy_model_activation', 'repair_source_permissions',
-             'publisher_verification', 'private_availability_recovery')
+    names = NATIVE_NAMES
     blobs = {}
     for name in names:
         relative = 'rebuild/ops/' + name + '.py'
