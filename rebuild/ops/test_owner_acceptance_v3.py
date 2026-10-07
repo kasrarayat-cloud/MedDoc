@@ -1541,6 +1541,72 @@ class FinancialAndExportTests:
             with self.assertRaises(RuntimeError): self.verifier.validate_admin_renewal(bad, decoded, (begin, end))
 
 
+    def test_actual_frozen_configuration_adapter_preserves_raw_report_and_unrelated_checks(self):
+        controls = PostRestorationConfigurationTests(); controls.setUp()
+        try:
+            common, _, _ = v3.frozen_modules()
+            database = {'pending_jobs': 0, 'held': 0}
+            before = {'configuration': controls.before, 'files': {}, 'mail': {}, 'static': {}, 'database': database}
+            units = {name: {'MainPID': '123', 'ExecMainStartTimestampMonotonic': '456'} for name in common.UNITS}
+            receipt = {'before': before, 'units_after': units, 'completed_at': START.isoformat(),
+                       'admission': {'allowed_deltas': {'health_session': {}}}}
+            report = {'format': 3, 'complete': True, 'phase': 'before-auth', 'operations_revision': OPS,
+                'served_revision': SERVED, 'availability_receipt_sha256': 'c'*64,
+                'original_activation': common.ORIGINAL, 'original_failed_sha256': common.ORIGINAL_SHA,
+                'original_backup_manifest_cipher_sha256': common.BACKUP_SHA, 'original_records_adjudicated': True,
+                'provider_calls': 0, 'database_writes_by_verifier': 0,
+                'current_snapshot': dict(before, configuration=controls.after), 'current_database_fingerprint': database,
+                'service_identities': units, 'worker_running_idle': {'unit': common.UNITS[2], 'pid': 123,
+                    'start_monotonic_usec': '456', 'pending_jobs': 0, 'held_reservations': 0,
+                    'unresolved_reaper_paths': 0, 'existing_job_receipt_usage_rows_unchanged': True},
+                'allowed_deltas': {'health_session': {}, 'publisher': {'all_eleven_columns_accounted_for': True,
+                    'publication': {'publication_verified': True}}, 'original_row_transitions': [], 'added_rows': [],
+                    'normal_mfa': None}, 'started_at': START.isoformat(), 'finished_at': START.isoformat(),
+                'co_tenant_preservation_admission': controls.proof}
+            def check(value, hash_override=None):
+                raw = v3.encode(value)
+                authority = {'admissions': {'before-auth': {'path': common.PREPARATION+'/admission-before-auth.json',
+                    'sha256': v3.sha(raw) if hash_override is None else hash_override}}}
+                return common.admission(raw, 'before-auth', authority, receipt, OPS, SERVED, 'c'*64)
+            self.assertEqual(check(report), report)
+            self.assertEqual(report['current_snapshot']['configuration'], controls.after)
+            self.assertEqual(receipt['before']['configuration'], controls.before)
+            for key, value in [('complete', False), ('provider_calls', 1), ('service_identities', {}),
+                               ('original_failed_sha256', 'a'*64)]:
+                bad = copy.deepcopy(report); bad[key] = value
+                with self.subTest(key=key), self.assertRaises(RuntimeError): check(bad)
+            for label in ('files', 'mail', 'static'):
+                bad = copy.deepcopy(report); bad['current_snapshot'][label]['foreign'] = True
+                with self.subTest(label=label), self.assertRaises(RuntimeError): check(bad)
+            with self.assertRaises(RuntimeError): check(report, 'a'*64)
+            # Exercise the actual embedded Python program from the checked JS
+            # adapter, importing only its pure contract module. The fictional
+            # native gate is never invoked; no installed or network I/O runs.
+            import re
+            blobs = {name: v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
+            adapted = v3.javascript_adapter(blobs, 'browser', declaration(), {},
+                {'argv': ['-B', '-c', 'fictional gate must never execute'], 'source_fd': 9})
+            match = re.search(rb'from ("data:text/javascript;base64,[^"]+")', adapted)
+            self.assertIsNotNone(match)
+            uri = json.loads(match.group(1))
+            javascript = ("import fs from 'node:fs';import {validateV3} from " + json.dumps(uri)
+                + ";console.log(JSON.stringify(validateV3('admission',JSON.parse(fs.readFileSync(0,'utf8')))));" )
+            def javascript_check(value):
+                raw = v3.encode(value)
+                arguments = {'phase': 'before-auth', 'authority': {'admissions': {'before-auth': {
+                    'path': common.PREPARATION+'/admission-before-auth.json', 'sha256': v3.sha(raw)}}},
+                    'receipt': receipt, 'operations': OPS, 'served': SERVED, 'availability_sha': 'c'*64}
+                return subprocess.run(['/usr/bin/node', '--input-type=module', '-e', javascript],
+                    input=v3.encode({'raw_hex': raw.hex(), 'args': arguments}), capture_output=True, timeout=15)
+            passed = javascript_check(report)
+            self.assertEqual(passed.returncode, 0, passed.stderr.decode())
+            self.assertEqual(json.loads(passed.stdout), report)
+            bad = copy.deepcopy(report); bad['current_snapshot']['configuration']['/fictional/unchanged']['inode'] = 43
+            self.assertNotEqual(javascript_check(bad).returncode, 0)
+        finally:
+            controls.doCleanups()
+
+
 class ExposureAndFilesTests(unittest.TestCase):
     def attempts(self):
         return [{'job_id': str(index), 'kind': 'transcription' if index == 2 else 'generation',
@@ -1567,6 +1633,259 @@ class ExposureAndFilesTests(unittest.TestCase):
             with self.subTest(label=label), self.assertRaises(v3.Refusal):
                 v3.file_catalog_admission(before, bad, before['database']['catalog'], {'new': 'b'}, {'held': 0})
         with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
+
+
+class PostRestorationConfigurationTests(unittest.TestCase):
+    """Exact finite boundary controls; all inputs are fictional in-memory copies."""
+    def setUp(self):
+        patcher = patch.object(v3, 'POST_RESTORE_OWNER_REPLY_SHA', 'b' * 64)
+        patcher.start(); self.addCleanup(patcher.stop)
+        self.scope = v3.configuration_helpers({'need': v3.require})
+        changes = copy.deepcopy(v3.POST_RESTORE_PINS['configuration_differences'])
+        self.before = {item['path']: copy.deepcopy(item['before']) for item in changes}
+        self.after = {item['path']: copy.deepcopy(item['current']) for item in changes}
+        self.before['/fictional/unchanged'] = self.after['/fictional/unchanged'] = {'inode': 42, 'sha256': 'fixed'}
+        self.proof = {'format': 1, 'protocol': 'post-restoration-exact-owner-preservation-v1',
+            'proposal_sha256': v3.POST_RESTORE_PROPOSAL_SHA, 'owner_reply_sha256': 'b' * 64,
+            'availability_receipt_sha256': v3.POST_RESTORE_PINS['availability_receipt_sha256'],
+            'configuration_differences': changes,
+            'product_loaded_state': copy.deepcopy(v3.POST_RESTORE_PINS['product_loaded_state']),
+            'historical_deployment_authorization_verified': False,
+            'current_owner_preservation_authorized': True, 'original_baseline_replaced': False,
+            'voiceassistmain_changes_authorized': False}
+
+    def check(self, before=None, after=None, proof=None):
+        return self.scope['current_configuration_proof'](
+            self.before if before is None else before, self.after if after is None else after,
+            self.proof if proof is None else proof)
+
+    def test_exact_four_rows_pass_without_modifying_any_input(self):
+        original = copy.deepcopy((self.before, self.after, self.proof))
+        self.assertTrue(self.check())
+        self.assertEqual((self.before, self.after, self.proof), original)
+
+    def test_each_undeclared_path_addition_deletion_or_change_refuses(self):
+        for mode in ('add', 'delete', 'change'):
+            after = copy.deepcopy(self.after)
+            if mode == 'add': after['/foreign/new'] = {'inode': 1}
+            elif mode == 'delete': del after['/fictional/unchanged']
+            else: after['/fictional/unchanged']['inode'] = 43
+            with self.subTest(mode=mode), self.assertRaises(v3.Refusal): self.check(after=after)
+
+    def test_each_pinned_before_after_metadata_field_is_strict(self):
+        for side in ('before', 'after'):
+            for item in v3.POST_RESTORE_PINS['configuration_differences']:
+                for field in item['current']:
+                    value = copy.deepcopy(self.before if side == 'before' else self.after)
+                    prior = value[item['path']][field]
+                    value[item['path']][field] = prior + 1 if type(prior) is int else prior + 'foreign'
+                    with self.subTest(side=side, path=item['path'], field=field), self.assertRaises(v3.Refusal):
+                        self.check(**{side: value})
+
+    def test_metadata_booleans_cannot_stand_in_for_integer_owners(self):
+        after = copy.deepcopy(self.after); after[next(iter(after))]['uid'] = False
+        with self.assertRaises(v3.Refusal): self.check(after=after)
+
+    def test_unadmitted_metadata_types_and_key_population_are_preserved(self):
+        self.before['/fictional/unchanged'] = {'uid': 0, 'gid': 0, 'inode': 42, 'sha256': 'fixed'}
+        self.after['/fictional/unchanged'] = copy.deepcopy(self.before['/fictional/unchanged'])
+        self.after['/fictional/unchanged']['uid'] = False
+        with self.assertRaises(v3.Refusal): self.check()
+        self.before['/fictional/unchanged'] = None
+        del self.after['/fictional/unchanged']
+        with self.assertRaises(v3.Refusal): self.check()
+        self.assertFalse(self.scope['configuration_same']({1: 'value'}, {True: 'value'}))
+        self.before[1] = 'value'; self.after[True] = 'value'
+        with self.assertRaisesRegex(v3.Refusal, 'string_paths'): self.check()
+
+    def test_unchanged_legacy_configuration_cannot_bypass_typed_comparison(self):
+        before = {'configuration': {'unadmitted': {'uid': 0}}, 'files': {}, 'mail': {}, 'static': {}}
+        current = dict(before, configuration={'unadmitted': {'uid': False}})
+        report = {'complete': True, 'current_snapshot': current}
+        raw = v3.encode(report)
+        with self.assertRaises(v3.Refusal):
+            self.adapter()(raw, 'before-auth', {'sha256': v3.sha(raw)}, {'before': before}, OPS, SERVED, 'c'*64)
+        before['database'] = current['database'] = {'unchanged': 1}
+        with self.assertRaises(v3.Refusal):
+            v3.preserved_snapshot(before, current, before['database'])
+
+    def test_original_boundary_cannot_be_replaced_by_current(self):
+        with self.assertRaises(v3.Refusal): self.check(before=copy.deepcopy(self.after))
+
+    def test_earlier_or_missing_owner_reply_and_expanded_authority_refuse(self):
+        for key, value in [('owner_reply_sha256', 'a' * 64), ('proposal_sha256', 'a' * 64),
+            ('availability_receipt_sha256', 'a' * 64), ('current_owner_preservation_authorized', False),
+            ('historical_deployment_authorization_verified', True), ('original_baseline_replaced', True),
+            ('voiceassistmain_changes_authorized', True), ('format', True)]:
+            proof = copy.deepcopy(self.proof); proof[key] = value
+            with self.subTest(key=key), self.assertRaises(v3.Refusal): self.check(proof=proof)
+        for key in self.proof:
+            proof = copy.deepcopy(self.proof); del proof[key]
+            with self.subTest(missing=key), self.assertRaises(v3.Refusal): self.check(proof=proof)
+        proof = copy.deepcopy(self.proof); proof['unreviewed'] = True
+        with self.assertRaises(v3.Refusal): self.check(proof=proof)
+
+    def test_product_invocation_and_unit_state_are_bound(self):
+        for key in self.proof['product_loaded_state']:
+            proof = copy.deepcopy(self.proof); proof['product_loaded_state'][key] += 'foreign'
+            with self.subTest(key=key), self.assertRaises(v3.Refusal): self.check(proof=proof)
+
+    def test_missing_new_reply_denies_native_before_any_input_read(self):
+        with patch.object(v3, 'POST_RESTORE_OWNER_REPLY_SHA', None), \
+             patch.object(v3, 'protected', side_effect=AssertionError('input read')):
+            with self.assertRaisesRegex(v3.Refusal, 'owner_reply_required'):
+                v3.current_external_boundary(object(), {})
+
+    def adapter(self, raw=None):
+        if raw is None:
+            raw = b'''def admission(raw, phase, authority, receipt, operations, served, availability_sha):
+ report = json.loads(raw)
+ need(report['complete'] is True, 'original_complete')
+ need(sha(raw) == authority['sha256'], 'original_raw_hash')
+ snapshot = report['current_snapshot']
+ for name in ('files','mail','static','configuration'):
+  need(snapshot.get(name)==receipt['before'].get(name), 'original_preserved_'+name)
+ return report
+'''
+        scope = v3.configuration_helpers({'need': v3.require, 'json': json, 'sha': v3.sha})
+        exec(compile(raw, '<fictional-frozen-admission>', 'exec'), scope)
+        scope['adapt_configuration_admission'](scope, raw)
+        return scope['admission']
+
+    def test_adapter_retains_original_report_hash_and_other_predicates(self):
+        before = {'configuration': self.before, 'mail': {'old': 1}, 'files': {'old': 2}, 'static': {'old': 3}}
+        report = {'complete': True, 'current_snapshot': dict(before, configuration=self.after),
+                  'co_tenant_preservation_admission': self.proof}
+        adapter = self.adapter()
+        raw = v3.encode(report); authority = {'sha256': v3.sha(raw)}
+        self.assertEqual(adapter(raw, 'before-auth', authority, {'before': before}, OPS, SERVED, 'c'*64), report)
+        for label in ('files', 'mail', 'static'):
+            bad = copy.deepcopy(report); bad['current_snapshot'][label]['old'] += 1
+            raw = v3.encode(bad)
+            with self.subTest(label=label), self.assertRaises(v3.Refusal):
+                adapter(raw, 'before-auth', {'sha256': v3.sha(raw)}, {'before': before}, OPS, SERVED, 'c'*64)
+        bad = copy.deepcopy(report); bad['complete'] = False; raw = v3.encode(bad)
+        with self.assertRaises(v3.Refusal):
+            adapter(raw, 'before-auth', {'sha256': v3.sha(raw)}, {'before': before}, OPS, SERVED, 'c'*64)
+        with self.assertRaises(v3.Refusal):
+            adapter(v3.encode(report), 'before-auth', {'sha256': 'a'*64}, {'before': before}, OPS, SERVED, 'c'*64)
+
+    def test_adapter_rejects_frozen_predicate_drift(self):
+        raw = b"def admission(*args):\n return True\n"
+        with self.assertRaises(v3.Refusal): self.adapter(raw)
+
+    def test_admission_keeps_actual_configuration_and_explicit_proof(self):
+        before = {'database': {'unchanged': 1}, 'configuration': self.before, 'mail': {}, 'static': {}, 'files': {}}
+        current = dict(before, configuration=self.after)
+        self.assertTrue(v3.preserved_snapshot(before, current, before['database'], self.proof))
+        self.assertEqual(current['configuration'], self.after)
+        self.assertEqual(before['configuration'], self.before)
+        with self.assertRaises(v3.Refusal): v3.preserved_snapshot(before, current, before['database'])
+
+
+class PostRestorationNativeTests(unittest.TestCase):
+    """Disposable descriptor fixtures; no host unit, root record or authentication access."""
+    @contextmanager
+    def fixture(self, receipt_change=None, reply_change=None, unit_change=None, detach=False):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); pins = copy.deepcopy(v3.POST_RESTORE_PINS)
+            product = copy.deepcopy(pins['product_loaded_state'])
+            manifest = {'installation_id': '8c13fe1a-5bda-4bdf-bc73-4b5cac49b1f4',
+                'source_sha256': 'ee71e3c32364ca06a3a25c60f7ac45861dc1942db36565b6875be8a7e008aa26',
+                'release_root': product['WorkingDirectory']}
+            manifest_raw = v3.encode(manifest)
+            receipt = dict(manifest, manifest_sha256=v3.sha(manifest_raw), main_pid=int(product['MainPID']),
+                           installed=True, calls_started=0, provider_writes=0, nginx_changed=False)
+            if receipt_change: receipt_change(receipt)
+            files = {}; calls = {}; root_stat = FixtureOwnerOS()
+            def represented(fd):
+                info = root_stat.fstat(fd); info.st_uid = info.st_gid = 0
+                return info
+            metadata = lambda info: [info.st_dev, info.st_ino, info.st_uid, info.st_gid,
+                stat.S_IMODE(info.st_mode), info.st_size, info.st_mtime_ns, info.st_ctime_ns]
+            stable = lambda info: tuple(metadata(info))
+            for index, item in enumerate(pins['current_public_records']):
+                path = root / str(index)
+                if item['path'].endswith('voiceassistmain-product.service'):
+                    raw = b'[Service]\nWorkingDirectory=' + product['WorkingDirectory'].encode() + b'\n'
+                elif item['path'] == '/etc/voiceassistmain-product.json': raw = manifest_raw
+                elif item['path'].endswith('.json'): raw = v3.encode(receipt)
+                else: raw = b'fictional unchanged callback configuration'
+                path.write_bytes(raw); path.chmod(0o644); files[item['path'][1:]] = path
+                fd = os.open(path, os.O_RDONLY)
+                try: item['metadata'] = metadata(represented(fd))
+                finally: os.close(fd)
+                item['sha256'] = v3.sha(raw)
+            proposal = {key: copy.deepcopy(value) for key, value in pins.items()}
+            proposal_raw = v3.encode(proposal); proposal_sha = v3.sha(proposal_raw)
+            reply = {'format': 1, 'decision': 'authorize_exact_post_restoration_preservation_boundary',
+                'proposal_sha256': proposal_sha, 'owner_reply': 'fictional explicit owner reply',
+                'historical_deployment_authorization_verified': False, 'voiceassistmain_changes_authorized': False}
+            if reply_change: reply_change(reply)
+            reply_raw = v3.encode(reply)
+            @contextmanager
+            def open_root(path):
+                self.assertEqual(path, Path('/')); yield 123
+            def open_relative(root_fd, relative):
+                self.assertEqual(root_fd, 123); path = files[relative]
+                calls[relative] = calls.get(relative, 0) + 1
+                if detach and calls[relative] == 2:
+                    replacement = root / 'detached'; replacement.write_bytes(path.read_bytes()); replacement.chmod(0o644)
+                    path = replacement
+                return os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            additional = {'exact_added_files': [], 'exact_added_enablement_links': [], 'loaded_states': []}
+            native = {'fixture': 'explicitly fictional native identity'}
+            recovery = types.SimpleNamespace(EXTERNAL_UNIT='/etc/systemd/system/voiceassistmain-product.service',
+                owner_boundary_inputs=lambda ack: ({'native_host_proof': native,
+                    'additional_configuration_evidence': additional}, {'before': {}, 'after': {}}),
+                acknowledge_current_owner_configuration=lambda *args: {'fictional': True},
+                native_boundary_identity=lambda: copy.deepcopy(native),
+                owner_unit_state=lambda name, fields: unit_change(copy.deepcopy(product)) if unit_change else copy.deepcopy(product),
+                full_native_metadata=metadata,
+                source_files=types.SimpleNamespace(open_root=open_root, open_relative=open_relative,
+                    bytes_at=lambda fd, limit: os.read(fd, limit), stable=stable))
+            shim = types.SimpleNamespace(fstat=represented, listxattr=os.listxattr, close=os.close)
+            def private(path, *args):
+                if path == v3.POST_RESTORE_PROPOSAL: return proposal_raw
+                if path == v3.POST_RESTORE_OWNER_REPLY: return reply_raw
+                raise AssertionError('unlisted private input')
+            with patch.object(v3, 'POST_RESTORE_PINS', pins), \
+                 patch.object(v3, 'POST_RESTORE_PROPOSAL_SHA', proposal_sha), \
+                 patch.object(v3, 'POST_RESTORE_OWNER_REPLY_SHA', v3.sha(reply_raw)), \
+                 patch.object(v3, 'protected', private), patch.object(v3, 'os', shim):
+                yield recovery, calls
+
+    def test_real_disposable_descriptor_bytes_and_reopens_prove_current_native_fragment(self):
+        with self.fixture() as (recovery, calls):
+            proof = v3.current_external_boundary(recovery, {})
+            self.assertTrue(proof['configuration_admission']['current_owner_preservation_authorized'])
+            self.assertFalse(proof['configuration_admission']['historical_deployment_authorization_verified'])
+            self.assertEqual(len(calls), 6)
+            self.assertTrue(all(count == 2 for count in calls.values()))
+
+    def test_actual_installation_semantics_refuse_despite_matching_artifact_hash(self):
+        for key, value in [('main_pid', 999), ('manifest_sha256', 'a'*64), ('installed', False),
+            ('source_sha256', 'a'*64), ('release_root', '/wrong'), ('calls_started', 1),
+            ('calls_started', False), ('provider_writes', 1), ('nginx_changed', True)]:
+            with self.subTest(key=key), self.fixture(receipt_change=lambda row: row.update({key:value})) as (recovery, _):
+                with self.assertRaisesRegex(v3.Refusal, 'installation_binding'):
+                    v3.current_external_boundary(recovery, {})
+
+    def test_native_product_identity_refuses_before_public_descriptor_access(self):
+        with self.fixture(unit_change=lambda row: dict(row, InvocationID='a'*32)) as (recovery, calls):
+            with self.assertRaisesRegex(v3.Refusal, 'product_state'): v3.current_external_boundary(recovery, {})
+            self.assertEqual(calls, {})
+
+    def test_native_reopen_cannot_adopt_a_replacement_inode(self):
+        with self.fixture(detach=True) as (recovery, _):
+            with self.assertRaisesRegex(v3.Refusal, 'public_race'): v3.current_external_boundary(recovery, {})
+
+    def test_reply_cannot_manufacture_historical_or_mutation_authority(self):
+        for key, value in [('format', True), ('decision', 'generic approval'), ('proposal_sha256', 'a'*64),
+                           ('historical_deployment_authorization_verified', True), ('voiceassistmain_changes_authorized', True)]:
+            with self.subTest(key=key), self.fixture(reply_change=lambda row: row.update({key:value})) as (recovery, calls):
+                with self.assertRaisesRegex(v3.Refusal, 'owner_reply_scope'): v3.current_external_boundary(recovery, {})
+                self.assertEqual(calls, {})
 
 
 def local_qualification_suite():

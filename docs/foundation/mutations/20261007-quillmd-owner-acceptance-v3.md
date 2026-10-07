@@ -139,6 +139,17 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "resume_output": "/opt/meddoc-pro/rebuild/.runtime/legacy-model-continuation-20261007"
   },
   "outer_ceiling_seconds": 1680,
+  "post_restoration_preservation": {
+    "owner_reply": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-post-restoration-preservation-message-ee71e3-v1.json",
+      "sha256": null
+    },
+    "proposal": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/post-restoration-current-preservation-proposal-ee71e3-v1.json",
+      "sha256": "5521e9a5fc47573b8c315ccc5a7c4c38c66deb48d453f532023aae2165bf220a"
+    },
+    "protocol": "post-restoration-exact-owner-preservation-v1"
+  },
   "preparation_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007",
   "preparation_only": true,
   "protocol_qualified": true,
@@ -512,3 +523,13 @@ served review-to-export workflows require the single bounded runtime campaign.
 All 73 affected local controls passed after this receipt binding and source
 qualification, including independent false-source refusals and the read-only
 qualified default. These controls do not constitute campaign execution evidence.
+
+## Separate post-restoration current preservation proposal
+
+Read-only acceptance preflight observed two subsequent VoiceAssist installations at 19:20 and 19:36 UTC. The current unit differs from the successful QuillMD restoration boundary only in WorkingDirectory (eeae88… to ee71e3…). Three additional configuration files retain exact bytes/owners/modes but have new inodes. The exact four differences, native public metadata, matching installation/manifest and running product invocation are pinned in the separate proposal above. The original recovery receipt, V8/V15 exports and earlier owner decision remain immutable.
+
+This draft cannot execute: the required new exact owner reply is absent. Historical deployment approval remains unverified; an installation receipt proves installation, not authorization. When separately authorized, the protocol admits only these four source-pinned differences and reauthenticates the actual public records, native product and unchanged added-unit/link boundaries before and after every snapshot. The frozen admission predicate is adapted only for configuration, requiring the independent explicit four-row proof; its raw report/hash and every other comparison remain unchanged. Neither a new capture nor the current population replaces the historical baseline.
+
+Independent finished refutation demonstrated a draft type-equality counterexample: outside the four allowed paths, uid integer0 to booleanFalse passed Python equality. The protected offline demonstrator is retained separately. The correction uses recursive typed JSON equality and explicit key presence for the entire configuration population, including the unchanged-configuration fallback. Regression controls reject that case, deleted null-valued paths, non-string object keys and old comparison fallback; the other frozen predicates and genuine raw-report hash remain exact. This does not claim any live metadata type change.
+
+All 92 affected offline controls passed on the finished draft, including the actual JavaScript-to-Python pure admission program. The exclusive protected log is `current-preservation-acceptance-affected-checks-v2.log` under the recovery evidence directory, SHA256 `0df4951ab510bd5774caf900fd810ed130df23d53331532c61a36e7b28003a83`. No live authentication, provider, service or database action occurred in these controls. Independent final refutation found no remaining demonstrated counterexample. The new owner reply binding remains absent; these results qualify local preparation only.
