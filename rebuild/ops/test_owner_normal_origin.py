@@ -417,8 +417,16 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         policy={key:{'path':str(path),'binding':act.RUNTIME_BINDING} for key,path in act.PRIVATE_PATHS.items()}
         availability={'complete':True,'source':{'operator_commit':PRIOR}}
         avail_raw=act.encode(availability);policy['availability']={'path':str(act.PRIVATE_PATHS['availability']),'sha256':act.sha(avail_raw)}
+        binding={'operations_revision':act.BASE,'served_revision':PRIOR,'availability_receipt_sha256':act.sha(avail_raw),
+                 'parent_pid':999999,'parent_start_ticks':456,'preparation_directory':str(act.PRIVATE_PHASE.parent)}
+        observation={'protocol':act.PRIVATE_PHASE_PROTOCOL,'binding':binding,'configuration':{'retained':'immutable'},
+                     'external_boundary':{'metadata_ns':'1791410000000000001'}}
+        phase_raw=act.encode(observation)
+        phase_proof={'protocol':act.PRIVATE_PHASE_PROTOCOL,'phase_observation_path':str(act.PRIVATE_PHASE),
+                     'phase_observation_sha256':act.sha(phase_raw),'phase_observation':observation}
         admissions={phase:{'format':3,'operations_revision':act.BASE,'served_revision':PRIOR,'phase':phase}
                     for phase in ('before-auth','after-auth')}
+        for packet in admissions.values():packet['co_tenant_preservation_admission']=deepcopy(phase_proof)
         admission_paths={phase:act.EVIDENCE/'installed-acceptance-v3-preparation-20261007'/('admission-'+phase+'.json')
                          for phase in admissions}
         admission_items={phase:{'path':str(admission_paths[phase]),'sha256':act.sha(act.encode(packet))}
@@ -428,6 +436,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                   'admin_readback':{'complete':True},'preparation':admissions,
                   'doctor_final_storage_state':{'path':'fictional fixed state','sha256':'a'*64,'captured_at':'fictional capture'}}
         report={'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,'activation_sha256':act.sha(avail_raw),
+                'co_tenant_preservation_admission':deepcopy(phase_proof),
                 'provider_calls':0,'database_writes':0,'cases':[{'name':name} for name in (
                     'soap-typed','custom-word-typed','soap-voice','allergy-missing','allergy-legitimate')],
                 'preservation':{'all_36_tables_all_old_rows_columns_compared':True,'all_67_old_referenced_files_preserved':True},
@@ -435,15 +444,20 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                 'admin_readback':{**progress['admin_readback'],'final_storage_state_verification':{'complete':True}},
                 'doctor_final_storage_state':{**progress['doctor_final_storage_state'],'verification':{'complete':True}}}
         complete={'format':3,'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,
+                  'phase_preservation_sha256':act.sha(phase_raw),'co_tenant_preservation_admission':deepcopy(phase_proof),
                   'independent_report':str(act.PRIVATE_PATHS['private_report']),
                   'independent_report_sha256':act.sha(act.encode(report)),'availability_preserved':True,'provider_retries':0}
         authority={'phase':'verify','operations_revision':act.BASE,'served_revision':PRIOR,
+                   'parent_pid':binding['parent_pid'],'parent_start_ticks':binding['parent_start_ticks'],
+                   'phase_preservation_sha256':act.sha(phase_raw),
                    'authority':{'operations_revision':act.BASE,'served_revision':PRIOR,
+                       'phase_preservation':{'path':str(act.PRIVATE_PHASE),'sha256':act.sha(phase_raw),'binding':binding},
                        'availability_receipt_sha256':act.sha(avail_raw),'admissions':admission_items},
                    'admission_sha256':{phase:item['sha256'] for phase,item in admission_items.items()}}
         records={act.PRIVATE_PATHS['private_acceptance']:act.encode(complete),act.PRIVATE_PATHS['private_report']:act.encode(report),
                  act.PRIVATE_PATHS['private_authority']:act.encode(authority),act.PRIVATE_PATHS['availability']:avail_raw,
                  act.PRIVATE_PATHS['private_acceptance'].parent/'progress.json':act.encode(progress),
+                 act.PRIVATE_PHASE:phase_raw,
                  **{admission_paths[phase]:act.encode(packet) for phase,packet in admissions.items()}}
         policy['private_accepted_revision']=PRIOR
         return policy,records
@@ -454,6 +468,50 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         self.assertEqual(actual['private_acceptance'][0]['served_revision'],PRIOR)
         self.assertEqual(actual['progress'][0]['preparation']['after-auth']['operations_revision'],act.BASE)
         self.assertNotIn('sha256',policy['private_acceptance'])
+        self.assertEqual(actual['phase_preservation'][1],records[act.PRIVATE_PHASE])
+
+    def test_actual_private_phase_record_is_immutable_history_without_parent_liveness_revival(self):
+        policy,records=self.chain();host=object.__new__(act.NativeHost);host.policy=policy
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+             patch.object(act.Path,'read_text',side_effect=AssertionError('historical parent must not be revived')):
+            host.inputs=act.private_receipts(policy)
+            self.assertEqual(host.inputs['phase_preservation'][0]['binding']['parent_pid'],999999)
+            records[act.PRIVATE_PHASE]+=b'\n'
+            with self.assertRaisesRegex(act.Refusal,'retained_private_phase_file_binding'):host.check_private_inputs()
+
+    def test_private_phase_hash_observation_and_parent_binding_cannot_be_substituted(self):
+        for key,mutate,label in (
+            ('private_acceptance',lambda row:row.__setitem__('phase_preservation_sha256','f'*64),'phase_file_binding'),
+            ('private_authority',lambda row:row.__setitem__('parent_start_ticks',789),'phase_file_binding'),
+            ('private_authority',lambda row:row['authority']['phase_preservation'].__setitem__('path','/tmp/other.json'),'phase_file_binding'),
+            ('private_report',lambda row:row['co_tenant_preservation_admission']['phase_observation']['external_boundary'].__setitem__('metadata_ns','1791410000000000002'),'phase_proof_binding'),
+            ('private_acceptance',lambda row:row.pop('co_tenant_preservation_admission'),'phase_proof_binding')):
+            with self.subTest(key=key,label=label):
+                policy,records=self.chain();path=act.PRIVATE_PATHS[key];row=json.loads(records[path]);mutate(row);records[path]=act.encode(row)
+                if key=='private_report':
+                    complete=json.loads(records[act.PRIVATE_PATHS['private_acceptance']]);complete['independent_report_sha256']=act.sha(records[path])
+                    records[act.PRIVATE_PATHS['private_acceptance']]=act.encode(complete)
+                with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+                     self.assertRaisesRegex(act.Refusal,label):act.private_receipts(policy)
+
+    def test_admission_proof_cannot_disappear_even_when_its_whole_causal_chain_is_rehashed(self):
+        policy,records=self.chain();phase='after-auth'
+        authority=json.loads(records[act.PRIVATE_PATHS['private_authority']])
+        path=Path(authority['authority']['admissions'][phase]['path']);packet=json.loads(records[path])
+        packet.pop('co_tenant_preservation_admission');records[path]=act.encode(packet)
+        authority['authority']['admissions'][phase]['sha256']=act.sha(records[path])
+        authority['admission_sha256'][phase]=act.sha(records[path])
+        records[act.PRIVATE_PATHS['private_authority']]=act.encode(authority)
+        progress_path=act.PRIVATE_PATHS['private_acceptance'].parent/'progress.json'
+        progress=json.loads(records[progress_path]);progress['preparation'][phase]=packet
+        records[progress_path]=act.encode(progress)
+        report=json.loads(records[act.PRIVATE_PATHS['private_report']]);report['browser_progress_sha256']=act.sha(records[progress_path])
+        records[act.PRIVATE_PATHS['private_report']]=act.encode(report)
+        complete=json.loads(records[act.PRIVATE_PATHS['private_acceptance']])
+        complete['independent_report_sha256']=act.sha(records[act.PRIVATE_PATHS['private_report']])
+        records[act.PRIVATE_PATHS['private_acceptance']]=act.encode(complete)
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+             self.assertRaisesRegex(act.Refusal,'retained_private_phase_admission_binding'):act.private_receipts(policy)
     def test_complete_candidate_with_any_fixed_parent_stop_record_is_never_admitted(self):
         for parent in (act.PRIVATE_PATHS['private_acceptance'].parent,act.PRIVATE_PATHS['private_authority'].parent):
             with self.subTest(parent=parent):
@@ -1418,6 +1476,7 @@ process.on('exit',()=>console.error(JSON.stringify(trace)));
 
     def test_foreign_boundary_delegates_only_to_checked_current_acceptance_without_recapture(self):
         host=object.__new__(act.NativeHost);host.served=PRIOR;declaration=b'unchanged original recovery declaration'
+        host.check_hold=MagicMock()
         acknowledgement={'original-owner-decision':'retained-history'}
         host.buffers={act.RECOVERY_DECL:declaration};host.git=MagicMock(return_value=declaration)
         host.recovery=SimpleNamespace(DECL=act.RECOVERY_DECL,contract_from_bytes=MagicMock(return_value={
@@ -1431,11 +1490,13 @@ process.on('exit',()=>console.error(JSON.stringify(trace)));
         host.recovery.contract_from_bytes.assert_called_once_with(declaration)
         host.git.assert_called_once_with(act.ROOT,'show',PRIOR+':'+act.RECOVERY_DECL)
         host.recovery.loaded_external_state.assert_not_called()
+        self.assertEqual(host.check_hold.call_count,2)
         host.acceptance.current_external_boundary=MagicMock(side_effect=act.Refusal('v3_current_configuration_owner_reply_required'))
         with self.assertRaisesRegex(act.Refusal,'current_configuration_owner_reply_required'):host.foreign()
 
     def test_foreign_unchecked_declaration_or_absent_current_function_refuses_without_fallback(self):
         host=object.__new__(act.NativeHost);host.served=PRIOR
+        host.check_hold=MagicMock()
         host.buffers={};host.git=MagicMock(side_effect=AssertionError('Git read'))
         with self.assertRaisesRegex(act.Refusal,'checked_recovery_contract'):host.foreign()
         host.buffers={act.RECOVERY_DECL:b'original'};host.recovery=SimpleNamespace(DECL=act.RECOVERY_DECL,
@@ -1445,5 +1506,19 @@ process.on('exit',()=>console.error(JSON.stringify(trace)));
         host.recovery.contract_from_bytes.assert_not_called()
         host.git.return_value=b'original';host.acceptance=SimpleNamespace()
         with self.assertRaisesRegex(act.Refusal,'checked_current_external_boundary'):host.foreign()
+
+    def test_foreign_observation_requires_own_live_normal_controller_through_reread(self):
+        host=object.__new__(act.NativeHost);host.served=PRIOR
+        host.buffers={act.RECOVERY_DECL:b'original'};host.git=MagicMock(return_value=b'original')
+        host.recovery=SimpleNamespace(DECL=act.RECOVERY_DECL,
+            contract_from_bytes=lambda _: {'external_configuration_ack':{'retained':'original'}})
+        observer=MagicMock(return_value={'voiceassist_actions':0})
+        host.acceptance=SimpleNamespace(current_external_boundary=observer)
+        host.check_hold=MagicMock(side_effect=act.Refusal('normal443_kernel_five_locks'))
+        with self.assertRaisesRegex(act.Refusal,'kernel_five_locks'):host.foreign()
+        observer.assert_not_called();host.git.assert_not_called()
+        host.check_hold=MagicMock(side_effect=[None,act.Refusal('normal443_kernel_five_locks')])
+        with self.assertRaisesRegex(act.Refusal,'kernel_five_locks'):host.foreign()
+        observer.assert_called_once();self.assertEqual(host.check_hold.call_count,2)
 
 if __name__=='__main__':unittest.main()

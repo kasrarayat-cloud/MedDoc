@@ -86,6 +86,8 @@ PRIVATE_PATHS = {
     'private_report': EVIDENCE / 'installed-acceptance-v3-20261007/independent-verification.json',
     'private_authority': EVIDENCE / 'installed-acceptance-v3-preparation-20261007/parent-phase-verify.json',
     'availability': RUNTIME / 'private-availability-recovery-20261007/complete.json'}
+PRIVATE_PHASE = EVIDENCE / 'installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json'
+PRIVATE_PHASE_PROTOCOL = 'quill-only-phase-preservation-v1'
 
 class Refusal(RuntimeError):
     pass
@@ -136,6 +138,7 @@ def contract(raw):
         and result.get('automatic_retries') is False and result.get('outer_ceiling_seconds') == OUTER_SECONDS,
         'normal443_exact_prospective_scope')
     require(result.get('runtime_receipt_binding_protocol') == RUNTIME_BINDING
+        and result.get('private_phase_preservation') == {'path': str(PRIVATE_PHASE), 'binding': RUNTIME_BINDING}
         and result.get('private_acceptance_completed') is False
         and result.get('session_forward_reserve_seconds') == SESSION_FORWARD_RESERVE
         and result.get('session_completion_reserve_seconds') == SESSION_COMPLETION_RESERVE,
@@ -242,6 +245,31 @@ def private_receipts(policy):
         and authority['authority']['served_revision'] == accepted['served_revision']
         and authority['authority']['availability_receipt_sha256'] == policy['availability']['sha256'],
         'normal443_final_authority_cross_binding')
+    phase_raw = source_files.protected(PRIVATE_PHASE)
+    observation = json.loads(phase_raw)
+    require(type(observation) is dict, 'normal443_retained_private_phase_object')
+    phase_pin = authority['authority'].get('phase_preservation', {})
+    binding = observation.get('binding', {})
+    proof = report.get('co_tenant_preservation_admission', {})
+    require(type(phase_pin) is dict and set(phase_pin) == {'path', 'sha256', 'binding'}
+        and phase_pin['path'] == str(PRIVATE_PHASE)
+        and phase_pin['sha256'] == sha(phase_raw) == accepted.get('phase_preservation_sha256')
+            == authority.get('phase_preservation_sha256')
+        and phase_pin['binding'] == binding
+        and type(binding) is dict and set(binding) == {'operations_revision', 'served_revision',
+            'availability_receipt_sha256', 'parent_pid', 'parent_start_ticks', 'preparation_directory'}
+        and binding['operations_revision'] == BASE and binding['served_revision'] == accepted['served_revision']
+        and binding['availability_receipt_sha256'] == policy['availability']['sha256']
+        and binding['preparation_directory'] == str(PRIVATE_PHASE.parent)
+        and all(type(binding[name]) is int and binding[name] > 0
+            and binding[name] == authority.get(name) for name in ('parent_pid', 'parent_start_ticks')),
+        'normal443_retained_private_phase_file_binding')
+    require(type(proof) is dict and proof.get('protocol') == observation.get('protocol') == PRIVATE_PHASE_PROTOCOL
+        and proof.get('phase_observation_path') == str(PRIVATE_PHASE)
+        and proof.get('phase_observation_sha256') == sha(phase_raw)
+        and proof.get('phase_observation') == observation
+        and accepted.get('co_tenant_preservation_admission') == proof,
+        'normal443_retained_private_phase_proof_binding')
     for phase in ('before-auth', 'after-auth'):
         path = Path(authority['authority']['admissions'][phase]['path'])
         require(path == EVIDENCE / 'installed-acceptance-v3-preparation-20261007' / ('admission-' + phase + '.json'),
@@ -251,7 +279,12 @@ def private_receipts(policy):
         require(authority['admission_sha256'][phase] == sha(packet_raw)
             and progress['preparation'][phase] == packet and packet['operations_revision'] == BASE
             and packet['served_revision'] == accepted['served_revision'], 'normal443_private_admission_causal_chain')
+        require(packet.get('co_tenant_preservation_admission') == proof,
+                'normal443_retained_private_phase_admission_binding')
     values['progress'] = progress, progress_raw
+    # The old native parent identity is retained history, never a live normal
+    # controller. Current operation liveness is proved by check_hold separately.
+    values['phase_preservation'] = observation, phase_raw
     return values
 
 def normal_completion(policy, target):
@@ -736,6 +769,7 @@ class NativeHost:
         self.check_hold()
         return result
     def foreign(self):
+        self.check_hold()
         require(RECOVERY_DECL in self.buffers, 'normal443_checked_recovery_contract')
         # Retain the old declaration/history; the checked acceptance descendant
         # separately authenticates the exact current post-restoration boundary.
@@ -744,7 +778,9 @@ class NativeHost:
         policy = self.recovery.contract_from_bytes(declaration)
         current=getattr(self.acceptance,'current_external_boundary',None)
         require(callable(current),'normal443_checked_current_external_boundary')
-        return current(self.recovery,policy['external_configuration_ack'])
+        result = current(self.recovery,policy['external_configuration_ack'])
+        self.check_hold()
+        return result
     @contextmanager
     def hold(self):
         with ExitStack() as stack:

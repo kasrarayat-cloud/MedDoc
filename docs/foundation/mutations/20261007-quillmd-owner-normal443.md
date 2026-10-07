@@ -68,6 +68,10 @@ static assets, schemas and original captures remain byte-identical.
   },
   "private_ingress_sha256": "cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a",
   "private_origin": "https://app.quillmd.com:9443",
+  "private_phase_preservation": {
+    "binding": "private-acceptance-completion-cross-hashes-v1",
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json"
+  },
   "private_report": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/independent-verification.json"
@@ -151,6 +155,17 @@ descriptors and current path identities. It does not relabel this controller as
 the historical private acceptance parent. The existing private authority remains
 distinct and immutable. No callback invents a current observation, no manual publication occurs, and
 intermediate invocation exit history is explicitly unassessed.
+
+The immutable private inputs include the actual protected co-tenant phase
+observation file. Its full hash and operations/served/recovery/process-start
+binding must agree with private completion, the independent report, both
+admissions and final authority. Equivalent JSON bytes or a different observation
+cannot silently replace that file. The private parent identity is retained as
+history; this normal controller separately proves its own live five-lock hold
+before and after each fresh foreign observation. Current configuration and
+metadata remain exact throughout each normal operation. Historical deployment
+approval and the unexplained intermediate manifest mismatch remain unverified;
+neither is manufactured by preserving the observed state.
 
 Before changing source, a strict current transition guard is captured, the complete frozen verifier re-reads actual original
 and newly admitted campaign records. Its output sink returns the complete report
