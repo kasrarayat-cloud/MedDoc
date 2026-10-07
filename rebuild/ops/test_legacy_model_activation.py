@@ -141,6 +141,316 @@ class QualificationRefusals(unittest.TestCase):
             act.read_qualification(act.RUNTIME / 'fictional.json', '0' * 64)
 
 
+class ContinuationPreservation(unittest.TestCase):
+    def test_continuation_source_gate_requires_only_four_repairs_and_all_exact_citations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary);source = root/'.worktrees/proposed';source.mkdir(parents=True)
+            installed = root/act.SELF;installed.parent.mkdir(parents=True);installed.write_bytes(b'invented-installed-M')
+            decl = source/act.DECL;decl.parent.mkdir(parents=True);decl.write_bytes(b'invented-committed-authority')
+            target = '8' * 40;extra = [False]
+            paths = sorted(act.CONTINUATION_REPAIRS)
+            def git(tree, *args):
+                if args == ('rev-parse', 'HEAD'):return (target if tree == source else act.CONTINUATION_RELEASE).encode()
+                if args == ('rev-parse', 'origin/main'):return target.encode()
+                if args == ('branch', '--show-current'):return b'main'
+                if args[:2] == ('status', '--porcelain'):return b''
+                if args[:2] == ('merge-base', '--is-ancestor'):return b''
+                if args[:2] == ('diff', '--name-only'):
+                    return '\n'.join(paths + (['rebuild/templates/encounter_form.html'] if extra[0] else [])).encode()
+                if args == ('ls-files', 'rebuild'):return act.SELF.encode()
+                if args[:3] == ('log', '-1', '--format=%H'):return target.encode()
+                if args == ('show', target + ':' + act.DECL):return decl.read_bytes()
+                if args == ('show', act.CONTINUATION_RELEASE + ':' + act.SELF):return installed.read_bytes()
+                raise AssertionError((tree, args))
+            contract = {'execution_qualified': True, 'baseline': act.BASELINE, 'approved_source_paths': paths}
+            with patch.multiple(act, ROOT=root, SOURCE=source, DEPENDENCIES=()), \
+                    patch.object(act, 'git', side_effect=git), \
+                    patch.object(act, 'continuation_policy', return_value={'repair_source_paths': paths}), \
+                    patch.object(act, 'command') as command, \
+                    patch.dict(act.os.environ, RULED_MUTATION_DECLARATION=act.DECL, RULED_MUTATION_DECL_COMMIT=target):
+                self.assertEqual(act.source_gate(target, contract, executing=True, resuming=True)['shared_head'],
+                                 act.CONTINUATION_RELEASE)
+                self.assertEqual([call.args[0][-1] for call in command.call_args_list],
+                                 [target, act.BASELINE, act.CONTINUATION_RELEASE])
+                command.reset_mock();extra[0] = True
+                with self.assertRaisesRegex(act.Refusal, 'continuation_source_scope'):
+                    act.source_gate(target, contract, executing=True, resuming=True)
+                command.assert_not_called()
+
+    def test_only_exact_prospective_qualified_phase_and_reviewed_children_are_admitted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary);auth = root/'auth.mjs';verifier = root/'verify.py'
+            for path in (auth, verifier):path.write_bytes(b'reviewed invented child');path.chmod(0o600)
+            policy = {'qualified': True, 'original_activation': str(act.CONTINUATION_ORIGINAL),
+                      'original_release': act.CONTINUATION_RELEASE, 'original_receipts': act.CONTINUATION_RECEIPTS,
+                      'repair_source_paths': sorted(act.CONTINUATION_REPAIRS), 'resume_output': str(root/'resume'),
+                      'resume_attempt_marker': str(root/'marker'), 'admin_evidence_directory': str(root/'admin'),
+                      'admin_preparation_path': str(auth), 'admission_verifier_path': str(verifier),
+                      'admin_preparation_sha256': act.sha(auth.read_bytes()),
+                      'admission_verifier_sha256': act.sha(verifier.read_bytes()),
+                      'preparation_maximum_seconds': 180, 'original_backup_reused': True, 'new_capture': False,
+                      'provider_calls': 0, 'automatic_retries': False, 'publisher_admission_policy': {'qualified': True}}
+            with patch.multiple(act, CONTINUATION_OUTPUT=root/'resume', CONTINUATION_ATTEMPT=root/'marker',
+                                CONTINUATION_ADMIN=root/'admin', CONTINUATION_PREPARATION=auth, ACCEPTANCE_VERIFIER=verifier):
+                self.assertEqual(act.continuation_policy({'continuation_contract': policy}), policy)
+                for name, value in (('qualified', False), ('original_activation', '/wrong/attempt'),
+                                    ('resume_output', str(root/'alias')), ('new_capture', True),
+                                    ('provider_calls', 1), ('automatic_retries', True),
+                                    ('repair_source_paths', sorted(act.CONTINUATION_REPAIRS | {'rebuild/core/jobs.py'})),
+                                    ('publisher_admission_policy', {'qualified': False})):
+                    changed = dict(policy);changed[name] = value
+                    with self.subTest(name=name), self.assertRaises(act.Refusal):
+                        act.continuation_policy({'continuation_contract': changed})
+                verifier.write_bytes(b'changed after review')
+                with self.assertRaisesRegex(act.Refusal, 'reviewed_artifact'):
+                    act.continuation_policy({'continuation_contract': policy})
+
+    def test_fixed_adjudicator_is_target_bound_and_current_population_and_every_nondatabase_field_are_rechecked(self):
+        for fault in (None, 'release', 'old-proof', 'catalog-race', 'file-race', 'mail-race', 'static-race', 'security-race'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary);verifier = root/'verify.py';verifier.write_bytes(b'qualified');verifier.chmod(0o600)
+                population = {'database': {'tables': {}, 'catalog': {'columns': 'exact'}, 'invariants': {},
+                                          'pending_jobs': 0, 'held': 0, 'referenced_files': {}},
+                              'files': {}, 'mail': {}, 'static': {}, 'configuration': {}}
+                report = {'format': 1, 'complete': True, 'phase': 'before-auth', 'release': '8' * 40,
+                          'original_activation': str(act.CONTINUATION_ORIGINAL),
+                          'original_failed_sha256': act.CONTINUATION_RECEIPTS['failed.json'],
+                          'original_backup_manifest_cipher_sha256': 'a' * 64, 'original_records_adjudicated': True,
+                          'provider_calls': 0, 'database_writes': 0, 'current_database_fingerprint': population['database']}
+                if fault == 'release':report['release'] = '9' * 40
+                if fault == 'old-proof':report['original_failed_sha256'] = '0' * 64
+                report_path = root/'admission-before-auth.json';raw = act.encode(report)
+                report_path.write_bytes(raw);report_path.chmod(0o600)
+                summary = {'complete': True, 'phase': 'before-auth', 'release': '8' * 40,
+                           'report': str(report_path), 'sha256': act.sha(raw), 'provider_calls': 0,
+                           'database_writes': 0, 'current_database_fingerprint': population['database']}
+                stdout = act.encode(summary);stdout_path = root/'admission-before-auth-stdout.log'
+                stdout_path.write_bytes(stdout);stdout_path.chmod(0o600)
+                actual = deepcopy(population)
+                if fault == 'catalog-race':actual['database']['catalog']['columns'] = 'unknown'
+                for key, label in (('files', 'file-race'), ('mail', 'mail-race'), ('static', 'static-race'),
+                                   ('configuration', 'security-race')):
+                    if fault == label:actual[key]['unknown'] = {'sha256': 'new'}
+                child = Mock(return_value={'stdout_sha256': act.sha(stdout)})
+                with patch.multiple(act, CONTINUATION_OUTPUT=root, ACCEPTANCE_VERIFIER=verifier), \
+                        patch.object(act, 'acceptance_child', child), patch.object(act, 'snapshot', return_value=actual):
+                    args = ('before-auth', '8' * 40, root, {'admission_verifier_sha256': act.sha(verifier.read_bytes())},
+                            {'backup': {'manifest_cipher_sha256': 'a' * 64}, 'expected_population': population})
+                    kwargs = dict(host=Mock(), backup=Mock(), storage=Mock(), deadline=act.time.monotonic()+10)
+                    if fault:
+                        with self.assertRaises(act.Refusal):act.continuation_admission(*args, **kwargs)
+                    else:
+                        evidence, current = act.continuation_admission(*args, **kwargs)
+                        self.assertEqual(current, population);self.assertEqual(evidence['sha256'], act.sha(raw))
+                    self.assertEqual(child.call_count, 1)
+                    self.assertEqual(child.call_args.args[0][-4:], ['--phase', 'before-auth', '--continuation-directory', str(root)])
+
+    def test_structural_health_never_creates_an_anonymous_preview_session(self):
+        target = '4' * 40
+        def get(url, **kwargs):
+            if ':9130/' in url or ':9131/' in url:
+                return SimpleNamespace(status_code=200, json=lambda: {
+                    'release': target, 'surface': 'doctor' if ':9130/' in url else 'admin',
+                    'data_mode': 'synthetic-only'})
+            status = 200 if url == 'https://quillmd.com/' else 410 if url == 'https://pro.quillmd.com/' else 503
+            return SimpleNamespace(status_code=status, headers={'retry-after': '3600', 'cache-control': 'no-store'})
+        with patch('httpx.get', side_effect=get), patch('httpx.Client') as client:
+            act.health(target)
+            client.assert_not_called()
+            response = SimpleNamespace(status_code=302, headers={'location': '/preview/sign-in/?flow=' + 'a' * 32})
+            client.return_value.__enter__.return_value.get.return_value = response
+            act.health(target, probe_preview=True)
+            client.return_value.__enter__.return_value.get.assert_called_once_with('/health/')
+
+    @contextmanager
+    def fixture(self, failure=None, diagnostic_enospc=False, first_stop_failure=False):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary);runtime = root / 'runtime';runtime.mkdir(mode=0o700)
+            output = runtime / 'continuation';marker = runtime / 'attempt.json'
+            original_environment = environment()
+            current = [act.render(original_environment, act.CONTINUATION_RELEASE)[0]]
+            target = '8' * 40;head = [act.CONTINUATION_RELEASE];held = [False];trace = []
+            population = {'database': {'tables': {'django_session': {'rows': 213, 'sha256': 'preserved-plus-health'},
+                                                 'core_servicehealth': {'rows': 1, 'sha256': 'adjudicated-publisher'}},
+                                      'catalog': {}, 'invariants': {}, 'pending_jobs': 0, 'held': 0, 'referenced_files': {}},
+                          'files': {'old-file': {'sha256': 'unchanged'}}, 'mail': {}, 'static': {}, 'configuration': {}}
+            original = {'backup': {'capture_attempts': 1, 'provider_calls': 0},
+                        'before': {'original': 'authenticated-212'}, 'expected_population': deepcopy(population)}
+            policy = {'original_receipts': {'failed.json': 'a' * 64}, 'health_session': {'kind': 'anonymous'},
+                      'admin_preparation_sha256': act.sha(b'qualified-auth'), 'preparation_maximum_seconds': 180}
+            states = {unit: {'ActiveState': 'inactive', 'MainPID': '0'} for unit in act.UNITS + act.OPERATIONS}
+            host = Mock();host.state.side_effect = lambda unit: dict(states[unit])
+            def service(action, unit):
+                trace.append((action, unit, held[0]))
+                if action == 'stop' and first_stop_failure and unit == act.UNITS[0]:
+                    raise RuntimeError('invented-first-stop-error')
+                states[unit] = {'ActiveState': 'active' if action == 'start' else 'inactive',
+                                'MainPID': str(100 + act.UNITS.index(unit)) if action == 'start' else '0'}
+            host.service.side_effect = service
+            host.worker_configuration.return_value = {'values': {**act.MODEL_VALUES, 'QUILLMD_RELEASE_SHA': target}}
+            @contextmanager
+            def hold(owner):
+                held[0] = True;trace.append(('hold-enter',))
+                try: yield
+                finally:
+                    trace.append(('hold-exit', tuple(states[u]['ActiveState'] for u in act.UNITS)))
+                    held[0] = False
+            exclusion = SimpleNamespace(bind_runtime=Mock(), hold=hold)
+            cipher = SimpleNamespace(encrypt=lambda raw: raw)
+            backup = Mock();writer = Mock()
+            def replace(path, before, after):
+                self.assertEqual(current[0], before);self.assertTrue(held[0]);current[0] = after
+                trace.append(('env-published',))
+            writer.replace_environment.side_effect = replace
+            def git(tree, *args):
+                if args == ('rev-parse', 'HEAD'):return head[0].encode()
+                if args[:2] == ('merge', '--ff-only'):
+                    self.assertTrue(held[0]);head[0] = args[2];trace.append(('source-published',));return b''
+                raise AssertionError(args)
+            def admission(phase, *args, **kwargs):
+                self.assertTrue(held[0]);trace.append(('admission', phase))
+                if failure == phase:raise act.Refusal('invented-unexplained-population')
+                return {'path': str(output / ('admission-' + phase + '.json')), 'sha256': 'f' * 64}, deepcopy(population)
+            def child(argv, directory, label, deadline, **kwargs):
+                self.assertTrue(held[0]);self.assertEqual(label, 'normal-authentication')
+                self.assertEqual(states[act.UNITS[2]]['MainPID'], '0')
+                self.assertTrue(all(states[u]['ActiveState'] == 'active' for u in act.UNITS[:2]))
+                trace.append(('normal-auth',))
+                population['database']['tables']['django_session'] = {'rows': 215, 'sha256': 'known-auth-retained'}
+                if failure == 'auth':raise act.Refusal('unknown-auth-outcome')
+                return {'exit_code': 0}
+            def acceptance(*args, **kwargs):
+                self.assertTrue(held[0]);trace.append(('acceptance',))
+                population['files']['new-result'] = {'sha256': 'retain-provider-outcome'}
+                if failure == 'acceptance':raise act.Refusal('unknown-provider-outcome')
+                return {'complete': True}
+            def health(release, **kwargs):
+                if failure == 'post-start' and states[act.UNITS[2]]['ActiveState'] == 'active':
+                    raise act.Refusal('invented-health-refusal')
+                return [{'data_mode': 'synthetic-only'}]
+            actual_write = act.write_new
+            def write(path, raw):
+                if diagnostic_enospc and path.name == 'failed.json':raise OSError(errno.ENOSPC, 'invented-full-disk')
+                return actual_write(path, raw)
+            replacements = dict(continuation_policy=Mock(return_value=policy),
+                continuation_original=Mock(return_value=(original, original_environment, current[0], {'original': True}, cipher)),
+                continuation_admission=Mock(side_effect=admission), snapshot=Mock(side_effect=lambda *args: deepcopy(population)),
+                protected=Mock(side_effect=lambda path, *args: current[0] if path.name == '.env' else b'qualified-auth'),
+                storage_admission=Mock(return_value={}), git=Mock(side_effect=git), operation_locks=nullcontext,
+                await_service_boundary=Mock(side_effect=lambda *args, **kwargs: {u: dict(states[u]) for u in act.UNITS
+                    if kwargs.get('worker_required', True) or u != act.UNITS[2]}),
+                await_health=Mock(side_effect=health), acceptance_child=Mock(side_effect=child),
+                acceptance_preparation=Mock(return_value={'qualified': True}), installed_acceptance=Mock(side_effect=acceptance),
+                write_new=Mock(side_effect=write))
+            with patch.multiple(act, CONTINUATION_OUTPUT=output, CONTINUATION_ATTEMPT=marker,
+                                ACCEPTANCE_OUTPUT=runtime/'campaign', RUNTIME=runtime), patch.multiple(act, **replacements):
+                yield SimpleNamespace(args=SimpleNamespace(operator_commit=target, acceptance_v2=True,
+                                                           fresh_backup=False, rollback=False),
+                    host=host, backup=backup, storage=Mock(), exclusion=exclusion, writer=writer, output=output,
+                    marker=marker, held=held, states=states, trace=trace, replacements=replacements,
+                    population=population, target=target, head=head)
+
+    def invoke(self, f):
+        return act.resume_pre_acceptance(f.args, {}, {}, {'operator_commit': f.target},
+            host=f.host, backup=f.backup, storage=f.storage, exclusion=f.exclusion, env_writer=f.writer)
+
+    def test_known_auth_and_acceptance_retain_original_receipts_without_capture_or_replay(self):
+        with self.fixture() as f:
+            receipt = self.invoke(f)
+            self.assertTrue(receipt['complete']);self.assertTrue(f.marker.exists())
+            self.assertFalse(receipt['continuation']['new_capture'])
+            self.assertEqual(receipt['before']['database']['tables']['django_session']['rows'], 215)
+            self.assertEqual(sum(row[0] == 'normal-auth' for row in f.trace), 1)
+            self.assertEqual(sum(row[0] == 'acceptance' for row in f.trace), 1)
+            self.assertEqual(f.trace[-1][1], ('active', 'active', 'active'))
+            f.backup.backup.assert_not_called()
+            with self.assertRaisesRegex(act.Refusal, 'replay'):self.invoke(f)
+
+    def test_unexplained_initial_population_refuses_before_marker_source_env_or_unit_mutation(self):
+        with self.fixture('before-auth') as f:
+            with self.assertRaises(act.Refusal):self.invoke(f)
+            self.assertFalse(f.marker.exists());f.host.service.assert_not_called()
+            f.writer.replace_environment.assert_not_called()
+            self.assertEqual(f.head[0], act.CONTINUATION_RELEASE)
+
+    def test_auth_unknown_population_and_restart_failures_stop_inside_original_hold_even_with_enospc(self):
+        for failure in ('auth', 'after-auth', 'post-start'):
+            with self.subTest(failure=failure), self.fixture(failure, diagnostic_enospc=True) as f:
+                with self.assertRaises(act.Refusal):self.invoke(f)
+                self.assertEqual(f.trace[-1][1], ('inactive', 'inactive', 'inactive'))
+                self.assertTrue(all(row[2] for row in f.trace if row[0] == 'stop'))
+                self.assertNotIn(('acceptance',), f.trace)
+                self.assertEqual(f.population['database']['tables']['django_session']['rows'], 215)
+
+    def test_first_stop_error_does_not_skip_admin_worker_or_delay_cleanup_until_hold_release(self):
+        with self.fixture('post-start', diagnostic_enospc=True, first_stop_failure=True) as f:
+            with self.assertRaises(act.Refusal):self.invoke(f)
+            self.assertEqual(f.trace[-1][1], ('active', 'inactive', 'inactive'))
+            self.assertTrue(all(row[2] for row in f.trace if row[0] == 'stop'))
+            for unit in act.UNITS:self.assertTrue(any(row[:2] == ('stop', unit) for row in f.trace))
+
+    def test_acceptance_unknown_outcome_preserves_all_started_units_and_new_record(self):
+        with self.fixture('acceptance') as f:
+            with self.assertRaises(act.Refusal):self.invoke(f)
+            self.assertIn('new-result', f.population['files'])
+            self.assertEqual(f.trace[-1][1], ('active', 'active', 'active'))
+            self.assertFalse(any(row[0] == 'stop' for row in f.trace))
+            self.assertEqual(sum(row[0] == 'acceptance' for row in f.trace), 1)
+
+    def test_expired_preparation_or_mutation_budget_never_begins_a_later_action_and_cleanup_still_runs(self):
+        for crossing in ('before-auth', 'source', 'environment', 'first-web', 'auth', 'after-auth', 'complete-checkpoint'):
+            with self.subTest(crossing=crossing), self.fixture() as f:
+                clock = [0.0];actions = []
+                admission = f.replacements['continuation_admission'].side_effect
+                git = f.replacements['git'].side_effect
+                replace = f.writer.replace_environment.side_effect
+                service = f.host.service.side_effect
+                child = f.replacements['acceptance_child'].side_effect
+                write = f.replacements['write_new'].side_effect
+                def admit(phase, *args, **kwargs):
+                    result = admission(phase, *args, **kwargs)
+                    if crossing == phase:clock[0] = 241.0
+                    return result
+                def source(tree, *args):
+                    if args[:2] == ('merge', '--ff-only'):actions.append(('source', clock[0]))
+                    result = git(tree, *args)
+                    if crossing == 'source' and args[:2] == ('merge', '--ff-only'):clock[0] = 241.0
+                    return result
+                def environment(*args):
+                    actions.append(('environment', clock[0]));result = replace(*args)
+                    if crossing == 'environment':clock[0] = 241.0
+                    return result
+                def unit(action, name):
+                    if action == 'start':actions.append((name, clock[0]))
+                    result = service(action, name)
+                    if crossing == 'first-web' and action == 'start' and name == act.UNITS[0]:clock[0] = 241.0
+                    return result
+                def authentication(*args, **kwargs):
+                    actions.append(('auth', clock[0]));result = child(*args, **kwargs)
+                    if crossing == 'auth':clock[0] = 241.0
+                    return result
+                def checkpoint(path, raw):
+                    result = write(path, raw)
+                    if crossing == 'complete-checkpoint' and path.name == 'complete.json':clock[0] = 241.0
+                    return result
+                f.replacements['continuation_admission'].side_effect = admit
+                f.replacements['git'].side_effect = source
+                f.writer.replace_environment.side_effect = environment
+                f.host.service.side_effect = unit
+                f.replacements['acceptance_child'].side_effect = authentication
+                f.replacements['write_new'].side_effect = checkpoint
+                with patch.object(act.time, 'monotonic', side_effect=lambda: clock[0]), self.assertRaises(act.Refusal):
+                    self.invoke(f)
+                self.assertTrue(all(at < 240 for _, at in actions), actions)
+                self.assertEqual(f.trace[-1][1], ('inactive', 'inactive', 'inactive'))
+                self.assertTrue(all(row[2] for row in f.trace if row[0] == 'stop'))
+                self.assertFalse(any(row[0] == 'acceptance' for row in f.trace))
+                if crossing == 'before-auth':
+                    self.assertFalse(f.marker.exists());self.assertEqual(actions, [])
+                elif crossing == 'after-auth':
+                    self.assertFalse(any(row[:2] == ('start', act.UNITS[2]) for row in f.trace))
+
+
 class StaticPreservation(unittest.TestCase):
     def test_font_rewrite_and_compressed_payloads_are_exact_not_only_manifest_names(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -206,10 +516,18 @@ class StaticPreservation(unittest.TestCase):
         with patch.object(Path, 'read_bytes', return_value=raw), patch.object(act.os, 'statvfs', return_value=measured):
             report = act.storage_admission(contract, 'fictional checkpoint')
             self.assertEqual(report['original_preflight_percentage_verdict'], 'RED')
-            self.assertEqual(report['projected_available_bytes'], 32 * 1024 ** 3)
-            measured.f_bavail = 29 * 1024 ** 3
+            self.assertEqual(report['projected_available_bytes'], 28 * 1024 ** 3)
+            self.assertEqual(report['conservative_remaining_allowances']['background_bytes'], 8 * 1024 ** 3)
+            measured.f_bavail = 34 * 1024 ** 3
+            self.assertEqual(act.storage_admission(contract, 'exact reserve')['projected_available_bytes'],
+                             act.STORAGE_RESERVE)
+            # The old4GiB estimate would admit this33GiB observation; the measured8GiB forecast refuses it.
+            measured.f_bavail = 33 * 1024 ** 3
             with self.assertRaisesRegex(act.Refusal, 'task_storage_reserve'):
                 act.storage_admission(contract, 'fictional later checkpoint')
+            stale = dict(contract, storage_allowances={**act.STORAGE_ALLOWANCES, 'background_bytes': 4 * 1024 ** 3})
+            with self.assertRaisesRegex(act.Refusal, 'storage_exception_scope'):
+                act.storage_admission(stale, 'stale projection')
 
 
 class FreshCapturePreservation(unittest.TestCase):
@@ -394,7 +712,7 @@ class InExclusionRecovery(unittest.TestCase):
                 head[0] = act.BASELINE;trace.append(('source-baseline',));return {}
             def boundary(*args):
                 self.assertTrue(held[0]);return deepcopy(states)
-            def health(release):
+            def health(release, **kwargs):
                 self.assertEqual(release, head[0]);self.assertTrue(all(row['ActiveState'] == 'active' for row in states.values()))
                 if recovery_health_failure and ('source-baseline',) in trace:
                     raise act.Refusal('fictional_recovery_http_failure')

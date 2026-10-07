@@ -86,13 +86,85 @@ No candidate V1 installation is authorized.
   },
   "static_before_inventory_sha256": "7c3b7a06d5e91e96845d83da120192c1ec56ba57628e4d735aac3ccab9f30c06",
   "storage_authority_path": "docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md",
-  "storage_authority_sha256": "8e5e819c28e253ad223f40669119d25431e1502e5917234d9ba8f8ab56e4dad5",
+  "storage_authority_sha256": "0b6c19a7e07410cd3a5b715dff8bb905a07e6babe5c0aa79b65858eab5e8178e",
   "storage_allowances": {
     "peak_bytes": 5368709120,
     "rollback_bytes": 1073741824,
-    "background_bytes": 4294967296
+    "background_bytes": 8589934592
   },
-  "storage_minimum_reserve_bytes": 21474836480
+  "storage_minimum_reserve_bytes": 21474836480,
+  "continuation_contract": {
+    "qualified": true,
+    "original_activation": "/opt/meddoc-pro/rebuild/.runtime/legacy-model-demo-20261007T012249Z",
+    "original_release": "4d46a71520275d76a36aa83ddff1a85939711a04",
+    "original_receipts": {
+      "failed.json": "a29e230d8c1b0d13cd33af76ad42231443956792de25060af400d809c3f27e05",
+      "recovery.json": "df8191bf9e3666db38a1478cd03754187a8106a0efafe3faec5ee46231af496f",
+      "static_installed.json": "9f910ddda3bebabdd2faa7ae7c1484b8cfce31c5314b8ef4f459c93d1c535787",
+      "fresh-backup-attempt.json": "fbbe24e19627269b0c63167753b362ef0b58045998a449d2df8fafd59365906e",
+      "fresh_backup_verified.json": "8b5984868fe8e5ac2164f9088298fd2cd05ce28b59c13856cf8fcf7868ba9395"
+    },
+    "original_before_sha256": "8c0a506868bd3252165d2648e65c6e140251673aee8c10840d927f300f8e2423",
+    "original_expected_population_sha256": "92784df89c271b1a389d60836eee18e097e8f11e16586836a0a4b41334ba7f78",
+    "repair_source_paths": [
+      "docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md",
+      "docs/foundation/mutations/20261006-quillmd-legacy-model-demo.md",
+      "rebuild/ops/legacy_model_activation.py",
+      "rebuild/ops/test_legacy_model_activation.py"
+    ],
+    "resume_output": "/opt/meddoc-pro/rebuild/.runtime/legacy-model-continuation-20261007",
+    "resume_attempt_marker": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/legacy-ui-continuation-attempt-20261007.json",
+    "health_session": {
+      "key_sha256": "617740b17fded78491fa6f865ae9a78de6213c84c9586338b9d359937375d153",
+      "session_data_sha256": "d5402ec8486a90c55c6962cdea73f64381cfacf556aba1a22e114f89b96fa3e3",
+      "created_at": "2026-10-07T01:24:33.205090+00:00",
+      "expire_date": "2026-10-07T01:54:33.669884+00:00",
+      "signed_at": "2026-10-07T01:24:33+00:00",
+      "destination": "/health/",
+      "kind": "quillmd-preview-v1",
+      "expiry_seconds": 1800,
+      "no_grant_no_account_auth": true
+    },
+    "publisher_admission_policy": {
+      "qualified": true,
+      "requires": "Every column of exactly the original backup ServiceHealth row must be independently reproduced from unchanged publisher and authenticated retained operational inputs; actual systemd invocation, journal and database row must agree. Unknown rows or writes refuse.",
+      "source_sha256": {
+        "rebuild/core/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "rebuild/core/email_backend.py": "4def1ffa4a0ea64570b14a71213fd85c17d86a31870f5efb34832b02a0c856e5",
+        "rebuild/core/management/commands/publish_operations_status.py": "bde8c41a5aecb449c586beadcd4b390a6360beadc60294b4d72631028b1548fd",
+        "rebuild/core/models.py": "3b9bbefa25bafa9647625b6c4b3021e85e90d7ab1e895f2d07dc5f551d505c25",
+        "rebuild/ops/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "rebuild/ops/activation_exclusion.py": "6b55ea3ab70eba8fbc7e4675137ea1da11ff0396a9ed9af5196243c0ae73d2da",
+        "rebuild/ops/automatic_offsite.py": "a923950de95108a33b746f95a33e64d49bd63079b490c25a96835773fb77f237",
+        "rebuild/ops/backup_alerts.py": "11328255580d6cfad6e7faf7d4db15685ef48ffbdd900a1070f15faf769ed9c8",
+        "rebuild/ops/backup_restore.py": "a80eda6720169e245a1f34df3c3354a7e3c835192c6cc58c3525ccd4e4957bdd",
+        "rebuild/ops/install_backup_schedule.py": "15df1f15654b6b2d7c12db2f9c81ac5505ed9986e4bc0e5801e82fb3ca2d11b0",
+        "rebuild/ops/install_offsite_policy.py": "23814cb220dbc2a33b07da8163cc5af26cbd07571ecb9774ed5a48014a766526",
+        "rebuild/ops/install_offsite_schedule.py": "9816140fa823bbafb896f8f4ca517ac69ea13254b79a2924cf98af6eab47fec8",
+        "rebuild/ops/managed_helper.py": "b6378f202baeecc6e673267d424952835fd432879e61151d40e79df0bee41611",
+        "rebuild/ops/offsite_account_audit.py": "3dcb164ec4cc81668e2d38a23080177ea913fc6bd5870edc75602aaa5e3d1a9f",
+        "rebuild/ops/offsite_allocation.py": "784a632b299de799c4cd5af2d8c147e2f5d1d89cdf1a87640cd95c4d08e13b3d",
+        "rebuild/ops/offsite_backup.py": "4428c2cdb57be909c5ac4b82ebea812d149b3940c8a695d2433fdbb7b297ed12",
+        "rebuild/ops/offsite_operator.py": "47f1c372c577b2f64c08ddb0004c7a78e0b983ace8dc7013a14ec4f75f99d37e",
+        "rebuild/ops/offsite_renewal.py": "18ea15fd6ec04715d33dff699f896aab1e7f12d0380a7ba73d1d99c48aaf1f61",
+        "rebuild/ops/private_storage.py": "3f2264837df9fb465db6049759025501bd8c5d377196503289b63b34fa58a1d0",
+        "rebuild/ops/publisher_verification.py": "01146783ed4b346331a9b1624da7ccdd49e7f0ca88ede09beaf8d62c0e537cc7",
+        "rebuild/ops/scheduled_backup.py": "f9c3a5cdddec3740551b2f0413d5b6b4d3f7ba8fbd8c65920af577634d7d37dd",
+        "rebuild/core/management/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "rebuild/core/management/commands/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "admission_verifier_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/verify_installed_acceptance_v2.py",
+    "admission_verifier_sha256": "4a449e622c14435113ea350930a9eef88131f920dae2265a9cff8ba064c8021b",
+    "admin_preparation_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/prepare-installed-admin-auth.mjs",
+    "admin_preparation_sha256": "4311f318a8d566ec023cdac7db4a507c263f3cd4bc8285bb28935a87f38b6457",
+    "admin_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-continuation-20261007",
+    "preparation_maximum_seconds": 180,
+    "original_backup_reused": true,
+    "new_capture": false,
+    "provider_calls": 0,
+    "automatic_retries": false
+  }
 }
 ```
 
@@ -280,9 +352,9 @@ The protected qualification above retains five actual Anthropic requests/respons
 
 Historical repaired-actuator refutation is retained in `owner-demo-20261006/activation-repaired-independent-refutation.json`. The later backup/cgroup/cadence/recovery fail-stop findings and raw failed proofs remain intact. The exact final operator source hash `986102a3e66d5491417fa5fc5bc379f857d956fe286e4a2ef41a5c2e9080363e` passed43 focused invented-byte tests and its own independent finished pass: `owner-dashboard-independent-refutation-v7.json`, `owner-dashboard-fresh-capture-independent-v7.json`, `owner-dashboard-recovery-phase-independent-v7.json`, and `owner-dashboard-final-refutation-supplement-v7.json` report NOTHING FOUND within their exercised claims. The supplement hash is `d39175623197375a345a1779834a62392fae36dc1045d3e72b2d8c193cbfa9c9`. The separate exact-native-cgroup byte pass is retained in `owner-dashboard-cgroup-whitespace-fixed-v7.json` with hash `cdb0b615021d79fc3aa3bd90642bad14c1d359d3d4f020e1d4ef46a557b7fba6`. Runtime acceptance scripts require their separate finished qualification; no historical report is treated as qualification for new bytes.
 
-acceptance_admin_preparation_sha256: b49a34ff60f1e32ecd4e587f51543ea2a68b2be0e034463fa988e291921f2b94
-acceptance_browser_sha256: af14a21e48b3b3c3956382c730fc0515e67fbc9af0f678951e272b1b0cea8023
-acceptance_verifier_sha256: 57dd521e26f54f9d7b6f294c46a1d001e7c91f5b900742c64ded02a3b5fade64
+acceptance_admin_preparation_sha256: 4311f318a8d566ec023cdac7db4a507c263f3cd4bc8285bb28935a87f38b6457
+acceptance_browser_sha256: 1eb0ea8fe0389b087ecec61e367e371444c0245519aac59a361540e56b483470
+acceptance_verifier_sha256: 4a449e622c14435113ea350930a9eef88131f920dae2265a9cff8ba064c8021b
 acceptance_options_sha256: 748ae77377f867255a75d6717a2119f176378bd8fe02714cfbff043464ff84bc
 acceptance_allergy_manifest_sha256: eaebefde696a8944b2788bd422f7316e431fd39e07e253fcc6fababfc00aac05
 acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef01924553838889dbab0ab9
@@ -343,3 +415,94 @@ with reserved=0 before/after. Every other old clinical/financial/auth/MFA row st
 all new rows/files must belong to the enumerated actor/actions/forms/encounters/jobs.
 
 Each attempt is recorded before the one UI submit, fresh quote names5.5 and2/10/0.20rates, concurrency1, no automatic retry. Known normal charged deliverability and response model are verified before advancing; a failed/reconciliation/unknown outcome creates STOP and blocks later submissions. Technical exposure is bounded by five frozen small generation inputs at0.10USD each and one recording at the existing0.20USD quote, at most0.70USD. Provider client deadlines remain60seconds/90seconds; each browser outcome wait is bounded120seconds. Synthesized browser microphone capture/stop/preview/discard is tested without submitting it, then the one frozen WAV is uploaded. This proves recorder controls with a synthetic Chromium device, not human hardware. Raw transcript stays separate until explicit correction/save; raw/corrected hashes and audit remain. Five first-answer sets must match the frozen fictional values and supported/missing decisions before normal review/finalization/export; app attempts to finalize/download an undecided missing field must refuse before explicit review. The browser progress remains complete=false pending independent readback of immutable actual jobs, real raw responses, usage/settlement, preserved history, exported original XML and final MFA/public gates. No installed outbound wire capture is claimed.
+
+## Prospective preserving continuation — 7 October 2026 (qualification pending)
+
+The exact merged release 4d46a71520275d76a36aa83ddff1a85939711a04 passed
+CI37555776937 and secrets37555776719 before the original permitted act. That
+act failed after startup: its own anonymous HTTPS9443 /health/ gate probe saved
+one ordinary preview resume session, then strict post-start preservation refused
+the new row. Automatic recovery correctly refused the same delta. All three
+private units were fail-stopped; acceptance never started and provider calls were0.
+The original failed/recovery/static/fresh-backup receipts and encrypted capture
+remain untouched. They are evidence of failure, not a completed installation.
+
+Authenticated read-only comparisons prove all212 original sessions and the other
+35 tables, private files, mail, static and security configuration unchanged at
+the first diagnosis. The separately identified session is retained, never deleted.
+After the original exclusion released, the ordinary operations publisher refreshed
+its original backup ServiceHealth row. This later operational delta requires a
+separate complete source/journal/systemd proof; no health field is simply excluded
+and the original comparison remains strict. The continuation is inadmissible if
+that proof or any original-record preservation check fails.
+
+The separate fixed continuation phase has its own prospective one-attempt marker,
+not a reset or retry of the consumed original installation. It reuses the original
+authenticated capture as evidence of its original212-session population and every
+old clinical record/file. It does not falsely claim that capture contains the
+subsequent session or publisher row. Strict independent admission must authenticate
+and account for these exact nonclinical changes separately. No database restore,
+old receipt rewrite, source discard, arbitrary command, package/schema/Word change,
+public launch, real-patient admission or provider replay is permitted.
+
+Only after the new finished procedure is independently qualified, normally
+reviewed/merged and cited on the exact new commit may it advance source ff-only
+and replace only the release stamp in the already rendered5.5 environment.
+Static assets and every unrelated configuration byte remain exact. The operations
+locks and publication exclusion cover initial preservation admission through final
+acceptance. All three private units must initially be inactive. Doctor/admin may
+start with the worker still stopped solely for one explicitly pinned, ordinary
+staff HTTPS9443 login/MFA and one invalid-CSRF/no-OTP proof. Its dedicated normal
+authentication evidence directory retains all earlier authentication evidence.
+Expired sessions are never recovered or reused. Only that named staff actor's
+ordinary last_login, successful audit/login metadata, exact confirmed OTP device
+counter/last_used_at, and enumerated new signed account/preview sessions may change,
+within the measured normal request intervals and unchanged actual MFA/session
+policy. All credentials, device key/configuration/failure-throttle metadata and
+other historical sessions/authentication records remain unchanged. No reset,
+role switch, loopback-header impersonation or authentication bypass is admitted.
+
+A second independent admission proves the complete original population plus
+those exact normal-authentication changes. Only then may the worker start.
+Actual new-PID service boundary, source, effective synthetic-only mode, environment
+provenance and truly read-only structural health must pass; the HTTPS preview/MFA
+gate is proven by the ordinary authenticated browser flow, not another mutating
+anonymous health request. Preserve raw absent QUILLMD_DATA_MODE as null; require
+unchanged source's literal SYNTHETIC_ONLY=True and actual synthetic-only health,
+reject any explicit nonsynthetic configuration. Label/configuration proof remains
+separate from actual provider-returned model.
+
+After a genuinely complete continuation receipt only, the existing unconsumed
+installed campaign may send at most the same five synthetic generations and one
+transcription (concurrency1, provider exposure at most0.70USD, no automatic retries).
+Both frozen children remain within this continuation's original exclusion.
+All previous failures, historical documents/jobs, source/worktrees and rollback
+materials remain intact. Pre-acceptance failure independently stops every private
+unit and preserves progress; after acceptance starts no rollback/replay is allowed.
+No original deterministic rollback population guard is widened.
+
+The independent backup reader keeps its32MiB default for all operational queries.
+Only the authenticated current retained dump's no-network, read-only pg_restore
+SQL expansion receives a separately reviewed128MiB ceiling, supported by its
+measured43,632,683-byte output. It never restores a database or writes plaintext.
+Historical session signatures are authenticated against their original capture
+window; current admission/lifetimes and browser renewals still use their actual
+measured request intervals. No clock-bound failure is hidden by forging expiry.
+
+The final qualification and any later correction are recorded below. Future CI,
+preservation, backup, normal MFA, storage reserve and same-URL acceptance remain
+separate execution gates.
+
+## Finished continuation qualification — 7 October 2026
+
+The original installation and deterministic recovery remain failed. Historical V8/V9 qualification describes the bytes committed in4d46a71520275d76a36aa83ddff1a85939711a04, including its historical runtime pins; it did not establish same-URL acceptance and does not qualify the revised runtime pins now stated above. The observed installation failure supersedes any inference that the earlier qualification proved a complete installed demonstration.
+
+The finished continuation operator SHA25689b79c18d6cdbeb2c78595d314df76dd8aa0185e14efa3d4f8b7550a117634f3 and tests5004ebd44b4cd6a39ea4d98ef6833a9195618f6c02aac4d9b282f024da99849a passed53 focused tests with0skips, independently repeated. Its finished refutation is owner-demo-20261006/owner-continuation-finished-operator-independent-qualification-v1-20261007.json, SHA2561806241701dad2fada96b077710c645044024424a6a6b74d7d5ca5cdf7291d89. The reviewer first demonstrated a240-second deadline defect against an earlier candidate; that original proof920537f4fd686f4adab388b90cd856c5ca5bbde00698532d0fc22833a92dd234 is retained, alongside the repaired exact-clock proof8e7a652b17741c7b6027b5b34f3ec7ea7037c6d8249ed083bae204f4c88880d8. The final operator checks deadlines before each new action and never starts the worker at or after the deadline; exception cleanup still stops every private unit inside the held exclusion before diagnostic I/O. No original rollback guard is widened.
+
+The final three runtime pins above are bound by owner-demo-20261006/owner-continuation-finished-runtime-independent-qualification-v1-20261007.json, SHA256dc87e1c4073efed2229c2a4a721140e265f1e0cafff958df794a4022b4e499c8. The actual-function offline proof793fb66a83d009bc9583780d93ff3d3d2ba7921ee0dde86cf77676b8d4160345 covers31 positive/110 refusal controls, all36 tables/all212 original sessions, current23-source publisher graph with both private-file readers, authenticated historical sessions and precisely scoped normal MFA/preview transitions. The JS proof8a51978b5fd23e611305505671d157f4a40320a3778d3a8801ecedf0cd0f49cf retains the bounded preauth/browser continuation controls. Independent actual-function/source/cache/catalog preservation controls are retained with SHA256726bc31367b44cd22ffb4078520f1d75e4f6e3914edfae01d7a68e33b33b2108. No finding was demonstrated against these finished bytes in the exercised claims; none of these controls is live provider or same-URL acceptance.
+
+An intermediate verifier had a concrete catalog-source error: pg_constraint.relnamespace is nonexistent. The graded source-inspection finding45493c3c29bfd0e42ac623931bb98a73bd7fcb87dec24acbe09601142289e597 explicitly records that no production SQL query/error was claimed and those intermediate bytes were not archived. The final verifier uses actual pg_constraint.connamespace and every catalog statement remains byte-identical to the qualified operator. All8 final queries were executed read-only against the isolated QA database; proof fd331d3c8a4a53c4968e659faecf71f432e52d9fd2c7470f83afb1b226453e9a also demonstrates the original query's UndefinedColumn refusal there. This correction does not replace expected catalog values with live state.
+
+The continuation and publisher-policy qualification flags attest only the reviewed prospective procedure and hash-pinned evidence. Normal finished-declaration review, PR, exact new merged-commit CI/secrets citation, actual retained original capture authentication, complete source/catalog/record/file/configuration admission, normal MFA, storage reserve and same-URL request/response/export acceptance remain mandatory. No fixture or isolated-QA model label becomes live evidence.
+
+The normal committed ruled door may execute only the new explicit --resume-pre-acceptance --acceptance-v2 --execute path with the exact cited40-character operator commit and the original protected legacy qualification. It does not select --fresh-backup or --rollback. The fixed continuation admin-preparation child may execute only --execute-continuation <exact-cited40sha> <fixed-continuation-directory> as already source-pinned. The stdout-only --preflight-continuation child may be used for read-only readiness diagnosis from this committed declaration with all four existing operation locks and the installed publication lock held; it creates no continuation output/attempt marker, authenticates nobody and sends0provider requests/0database writes. Lock-related existing operational state remains separately identified. Repeated read-only readiness observations do not consume or replay the installation/campaign and must never substitute live expected values for original evidence. No publisher timer is stopped/started or health made green; every original operational row must be independently justified from retained inputs and actual invocation.

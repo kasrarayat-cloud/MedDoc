@@ -102,7 +102,20 @@ STATIC_INPUTS = frozenset({'app.css', 'app.js', 'fonts/dm-sans.ttf', 'fonts/OFL-
                            'django_otp/css/login.css', 'otp_totp/css/qrcode.css', 'otp_totp/js/qrcode.js'})
 STORAGE_AUTHORITY = 'docs/foundation/mutations/20261006-owner-dashboard-storage-exception.md'
 STORAGE_RESERVE = 20 * 1024 ** 3
-STORAGE_ALLOWANCES = {'peak_bytes': 5 * 1024 ** 3, 'rollback_bytes': 1024 ** 3, 'background_bytes': 4 * 1024 ** 3}
+STORAGE_ALLOWANCES = {'peak_bytes': 5 * 1024 ** 3, 'rollback_bytes': 1024 ** 3, 'background_bytes': 8 * 1024 ** 3}
+CONTINUATION_ORIGINAL = RUNTIME / 'legacy-model-demo-20261007T012249Z'
+CONTINUATION_RELEASE = '4d46a71520275d76a36aa83ddff1a85939711a04'
+CONTINUATION_OUTPUT = RUNTIME / 'legacy-model-continuation-20261007'
+CONTINUATION_ATTEMPT = ACCEPTANCE_ROOT / 'legacy-ui-continuation-attempt-20261007.json'
+CONTINUATION_ADMIN = ACCEPTANCE_ROOT / 'installed-admin-continuation-20261007'
+CONTINUATION_PREPARATION = ACCEPTANCE_ROOT / 'prepare-installed-admin-auth.mjs'
+CONTINUATION_REPAIRS = frozenset({SELF, DECL, 'rebuild/ops/test_legacy_model_activation.py', STORAGE_AUTHORITY})
+CONTINUATION_RECEIPTS = {
+    'failed.json': 'a29e230d8c1b0d13cd33af76ad42231443956792de25060af400d809c3f27e05',
+    'recovery.json': 'df8191bf9e3666db38a1478cd03754187a8106a0efafe3faec5ee46231af496f',
+    'static_installed.json': '9f910ddda3bebabdd2faa7ae7c1484b8cfce31c5314b8ef4f459c93d1c535787',
+    'fresh-backup-attempt.json': 'fbbe24e19627269b0c63167753b362ef0b58045998a449d2df8fafd59365906e',
+    'fresh_backup_verified.json': '8b5984868fe8e5ac2164f9088298fd2cd05ce28b59c13856cf8fcf7868ba9395'}
 
 
 class Refusal(RuntimeError):
@@ -327,7 +340,7 @@ def restore_source(target):
     return {'source': BASELINE, 'scoped_old_new_bytes_only': True, 'untracked_files_removed': False}
 
 
-def source_gate(commit, contract, *, executing, recovering=False):
+def source_gate(commit, contract, *, executing, recovering=False, resuming=False):
     require(re.fullmatch('[a-f0-9]{40}', commit or '') and SOURCE.is_relative_to(ROOT / '.worktrees')
             and SOURCE.resolve() == SOURCE, 'retained_operator_source')
     require(git(SOURCE, 'rev-parse', 'HEAD').strip().decode() == commit
@@ -339,7 +352,15 @@ def source_gate(commit, contract, *, executing, recovering=False):
         require((SOURCE / relative).read_bytes() == git(SOURCE, 'show', BASELINE + ':' + relative),
                 'dependency_byte_identity')
     head = git(ROOT, 'rev-parse', 'HEAD').strip().decode()
-    require(head in (BASELINE, commit) and git(ROOT, 'branch', '--show-current').strip() == b'main', 'shared_deploy_surface_drift')
+    if resuming:
+        continuation = continuation_policy(contract)
+        repairs = set(git(SOURCE, 'diff', '--name-only', CONTINUATION_RELEASE, commit).decode().splitlines())
+        git(SOURCE, 'merge-base', '--is-ancestor', CONTINUATION_RELEASE, commit)
+        require(repairs == CONTINUATION_REPAIRS
+                and continuation.get('repair_source_paths') == sorted(repairs), 'continuation_source_scope')
+        require(head == CONTINUATION_RELEASE, 'continuation_installed_source')
+    require(head in (BASELINE, commit, CONTINUATION_RELEASE if resuming else BASELINE)
+            and git(ROOT, 'branch', '--show-current').strip() == b'main', 'shared_deploy_surface_drift')
     if recovering:
         source_recovery_state(commit)
     else:
@@ -361,6 +382,8 @@ def source_gate(commit, contract, *, executing, recovering=False):
                 'committed_declaration_identity')
         command(['bash', str(SOURCE / 'scripts/check-citation.sh'), commit], cwd=SOURCE)
         command(['bash', str(SOURCE / 'scripts/check-citation.sh'), BASELINE], cwd=SOURCE)
+        if resuming:
+            command(['bash', str(SOURCE / 'scripts/check-citation.sh'), CONTINUATION_RELEASE], cwd=SOURCE)
     return {'operator_commit': commit, 'shared_head': head, 'changed_paths': sorted(changed)}
 
 
@@ -825,7 +848,12 @@ def restore_static(preparation, activation_directory):
     return {'previous_manifest_aliases_restored': True, 'immutable_assets_retained': True, 'after': after}
 
 
-def health(release):
+def health(release, *, probe_preview=False):
+    """Structural readiness; the ordinary gated GET creates an anonymous session.
+
+    That probe is permitted only before the authoritative preservation baseline.
+    Post-start and recovery checks retain the immutable ingress fingerprint instead.
+    """
     import httpx
     result = []
     for port, surface in ((9130, 'doctor'), (9131, 'admin')):
@@ -843,9 +871,10 @@ def health(release):
             'marketing_status')
     require(httpx.get('https://pro.quillmd.com/', timeout=10, follow_redirects=False).status_code == 410,
             'retired_status')
-    from .preview_http import sign_in_path
-    with httpx.Client(base_url='https://app.quillmd.com:9443', timeout=10, follow_redirects=False) as client:
-        sign_in_path(client.get('/health/'))
+    if probe_preview:
+        from .preview_http import sign_in_path
+        with httpx.Client(base_url='https://app.quillmd.com:9443', timeout=10, follow_redirects=False) as client:
+            sign_in_path(client.get('/health/'))
     return result
 
 
@@ -861,9 +890,11 @@ def await_health(release, timeout=30):
             time.sleep(0.2)
 
 
-def service_boundary(host, storage, release):
+def service_boundary(host, storage, release, *, worker_required=True):
     result = {}
-    for unit, surface in zip(UNITS, ('doctor', 'admin', 'worker')):
+    require(type(worker_required) is bool, 'private_boundary_mode')
+    surfaces = ('doctor', 'admin', 'worker') if worker_required else ('doctor', 'admin')
+    for unit, surface in zip(UNITS, surfaces):
         state = host.state(unit)
         require(state.get('ActiveState') == 'active' and int(state.get('MainPID', '0')) > 0
                 and state.get('FragmentPath') == '/etc/systemd/system/' + unit
@@ -885,12 +916,12 @@ def service_boundary(host, storage, release):
     return result
 
 
-def await_service_boundary(host, storage, release, timeout=30):
+def await_service_boundary(host, storage, release, timeout=30, *, worker_required=True):
     """Type=simple start returns before its existing launcher writes the new-PID proof."""
     deadline = time.monotonic() + timeout
     while True:
         try:
-            return service_boundary(host, storage, release)
+            return service_boundary(host, storage, release, worker_required=worker_required)
         except Refusal as error:
             require(str(error) == 'same_pid_boundary_proof' and time.monotonic() < deadline,
                     'startup_boundary_deadline_or_refusal')
@@ -935,7 +966,7 @@ def best_effort_capture(outcome, label, operation):
         outcome[label + '_capture_failure'] = type(error).__name__
 
 
-def acceptance_preparation(contract, target):
+def acceptance_preparation(contract, target, *, continuation=False):
     """Fixed prospective synthetic campaign; hash admission performs no login or request."""
     require(re.fullmatch('[a-f0-9]{40}', target or '') is not None, 'acceptance_target_identity')
     scope = {'browser_path': str(ACCEPTANCE_BROWSER), 'verifier_path': str(ACCEPTANCE_VERIFIER),
@@ -960,9 +991,10 @@ def acceptance_preparation(contract, target):
         hashes[label] = sha(protected(path, 2 * 1024 * 1024))
         require(hashes[label] == pin(label), 'acceptance_reviewed_artifact_identity')
     # The ordinary admin login/MFA is performed before capture; only its protected proof is read here.
-    auth_raw = protected(ACCEPTANCE_ROOT / 'installed-admin-before-activation/normal-authentication.json')
+    admin_directory = CONTINUATION_ADMIN if continuation else ACCEPTANCE_ROOT / 'installed-admin-before-activation'
+    auth_raw = protected(admin_directory / 'normal-authentication.json')
     auth = json.loads(auth_raw)
-    session = ACCEPTANCE_ROOT / 'installed-admin-before-activation/browser-session.json'
+    session = admin_directory / 'browser-session.json'
     require(auth.get('format') == 1 and auth.get('complete') is True and auth.get('release') == target
             and auth.get('csrf403_no_OTP_noauththrottle') is True
             and auth.get('normal_mfa_login') is True and auth.get('auth_reset') is False
@@ -1006,9 +1038,9 @@ def acceptance_child(argv, destination, label, deadline, *, ruled):
     return {'exit_code': 0, 'stdout_sha256': sha(stdout), 'stderr_sha256': sha(stderr), 'automatic_retries': 0}
 
 
-def installed_acceptance(target, directory, prepared):
+def installed_acceptance(target, directory, prepared, *, continuation=False):
     """Caller retains the installation exclusion through both exact reviewed children."""
-    require(prepared == acceptance_preparation(declaration()[1], target), 'acceptance_preparation_drift')
+    require(prepared == acceptance_preparation(declaration()[1], target, continuation=continuation), 'acceptance_preparation_drift')
     deadline = time.monotonic() + ACCEPTANCE_SECONDS
     child_scope = {'complete': False, 'installer_provider_calls': 0,
                    'delegated_maximum_generations': 5, 'delegated_maximum_transcriptions': 1,
@@ -1028,6 +1060,244 @@ def installed_acceptance(target, directory, prepared):
     return child_scope
 
 
+def continuation_policy(contract):
+    """One named failed attempt; prospective source-qualified repair, never a retry."""
+    policy = contract.get('continuation_contract', {})
+    require(policy.get('qualified') is True and policy.get('original_activation') == str(CONTINUATION_ORIGINAL)
+            and policy.get('original_release') == CONTINUATION_RELEASE
+            and policy.get('original_receipts') == CONTINUATION_RECEIPTS
+            and policy.get('repair_source_paths') == sorted(CONTINUATION_REPAIRS)
+            and policy.get('resume_output') == str(CONTINUATION_OUTPUT)
+            and policy.get('resume_attempt_marker') == str(CONTINUATION_ATTEMPT)
+            and policy.get('admin_evidence_directory') == str(CONTINUATION_ADMIN)
+            and policy.get('admin_preparation_path') == str(CONTINUATION_PREPARATION)
+            and policy.get('admission_verifier_path') == str(ACCEPTANCE_VERIFIER)
+            and policy.get('preparation_maximum_seconds') == 180
+            and policy.get('original_backup_reused') is True and policy.get('new_capture') is False
+            and policy.get('provider_calls') == 0 and policy.get('automatic_retries') is False
+            and policy.get('publisher_admission_policy', {}).get('qualified') is True,
+            'prospective_continuation_scope')
+    for key, path in (('admin_preparation_sha256', CONTINUATION_PREPARATION),
+                      ('admission_verifier_sha256', ACCEPTANCE_VERIFIER)):
+        expected = policy.get(key)
+        require(re.fullmatch('[a-f0-9]{64}', expected or '') is not None
+                and sha(protected(path, 2 * 1024 * 1024)) == expected, 'continuation_reviewed_artifact')
+    return policy
+
+
+def continuation_original(policy, backup):
+    """Authenticate retained evidence and ORIGINAL coverage, not a fresh current capture."""
+    rows = {}
+    for name, digest in CONTINUATION_RECEIPTS.items():
+        raw = protected(CONTINUATION_ORIGINAL / name, 32 * 1024 * 1024)
+        require(sha(raw) == digest, 'continuation_original_receipt_identity')
+        rows[name] = json.loads(raw)
+    original = rows['failed.json']
+    require(original.get('complete') is False and original.get('acceptance_started') is False
+            and original.get('provider_calls') == 0 and original.get('stage') == 'failed'
+            and original.get('source', {}).get('operator_commit') == CONTINUATION_RELEASE
+            and original.get('before') == original.get('stopped_baseline')
+            and sha(encode(original['before'])) == policy.get('original_before_sha256')
+            and sha(encode(original['expected_population'])) == policy.get('original_expected_population_sha256'),
+            'continuation_original_failure_scope')
+    require(rows['fresh_backup_verified.json'].get('backup') == original.get('backup')
+            and rows['fresh_backup_verified.json'].get('before') == original['before']
+            and rows['static_installed.json'].get('expected_population') == original['expected_population']
+            and {k: v for k, v in original['expected_population'].items() if k != 'static'}
+            == {k: v for k, v in original['before'].items() if k != 'static'}
+            and sha(protected(CAPTURE_ATTEMPT)) == CONTINUATION_RECEIPTS['fresh-backup-attempt.json'],
+            'continuation_retained_capture_and_population')
+    receipt = original['backup']
+    require(receipt.get('capture_attempts') == 1 and receipt.get('provider_calls') == 0
+            and receipt.get('local_encrypted_capture') is True and receipt.get('offsite_upload') is False,
+            'continuation_original_capture_scope')
+    authenticated = verify_backup(Path(receipt['backup_directory']), receipt['manifest_cipher_sha256'],
+                                  original['before'], backup)
+    authenticated['all_original_tables_covered'] = authenticated.pop('all_current_tables_covered')
+    authenticated.update(coverage_basis='original_before', current_population_covered=False,
+                         new_capture_performed=False)
+    cipher = backup.key_at(KEY)
+    before = cipher.decrypt(protected(CONTINUATION_ORIGINAL / 'environment-before.fernet', 65536))
+    current = cipher.decrypt(protected(CONTINUATION_ORIGINAL / 'environment-after.fernet', 65536))
+    declared, configuration = render(before, CONTINUATION_RELEASE)
+    require(current == declared and sha(before) == original['configuration']['before_sha256']
+            and sha(current) == original['configuration']['after_sha256'], 'continuation_original_environment')
+    return original, before, current, authenticated, cipher
+
+
+def continuation_admission(phase, target, directory, policy, original, *, host, backup, storage, deadline):
+    """Fixed independently qualified read-only adjudicator; locally recheck its entire result."""
+    require(phase in ('before-auth', 'after-auth') and directory == CONTINUATION_OUTPUT,
+            'continuation_admission_phase')
+    require(sha(protected(ACCEPTANCE_VERIFIER, 2 * 1024 * 1024)) == policy['admission_verifier_sha256'],
+            'continuation_admission_source_drift')
+    argv = [str(APP / '.venv/bin/python'), '-B', str(ACCEPTANCE_VERIFIER), '--admit-continuation',
+            '--phase', phase, '--continuation-directory', str(directory)]
+    child = acceptance_child(argv, directory, 'admission-' + phase, deadline, ruled=False)
+    stdout = protected(directory / ('admission-' + phase + '-stdout.log'), 2 * 1024 * 1024)
+    require(sha(stdout) == child['stdout_sha256'], 'continuation_admission_stdout_identity')
+    summary = json.loads(stdout)
+    report_path = directory / ('admission-' + phase + '.json')
+    require(summary.get('complete') is True and summary.get('phase') == phase
+            and summary.get('release') == target
+            and summary.get('report') == str(report_path) and summary.get('provider_calls') == 0
+            and summary.get('database_writes') == 0, 'continuation_admission_summary')
+    raw = protected(report_path, 32 * 1024 * 1024)
+    require(sha(raw) == summary.get('sha256'), 'continuation_admission_report_identity')
+    report = json.loads(raw)
+    require(report.get('format') == 1 and report.get('complete') is True and report.get('phase') == phase
+            and report.get('release') == target
+            and report.get('original_activation') == str(CONTINUATION_ORIGINAL)
+            and report.get('original_failed_sha256') == CONTINUATION_RECEIPTS['failed.json']
+            and report.get('original_backup_manifest_cipher_sha256') == original['backup']['manifest_cipher_sha256']
+            and report.get('original_records_adjudicated') is True
+            and report.get('provider_calls') == 0 and report.get('database_writes') == 0,
+            'continuation_original_record_adjudication')
+    current = snapshot(host, backup, storage)
+    require(current['database'] == report.get('current_database_fingerprint')
+            and current['database'] == summary.get('current_database_fingerprint'), 'continuation_admission_population_race')
+    require({k: v for k, v in current.items() if k != 'database'}
+            == {k: v for k, v in original['expected_population'].items() if k != 'database'},
+            'continuation_files_static_mail_or_security_delta')
+    return {'path': str(report_path), 'sha256': sha(raw), 'report': report, 'child': child}, current
+
+
+def resume_pre_acceptance(args, contract, evidence, source_info, *, host, backup, storage, exclusion, env_writer):
+    """Preserve the failed install and legitimate lifecycle rows; no original-act replay."""
+    policy = continuation_policy(contract)
+    require(getattr(args, 'acceptance_v2', False) is True and not getattr(args, 'fresh_backup', False)
+            and not getattr(args, 'rollback', False), 'continuation_explicit_phase')
+    require(not os.path.lexists(CONTINUATION_ATTEMPT) and not os.path.lexists(CONTINUATION_OUTPUT)
+            and not os.path.lexists(ACCEPTANCE_OUTPUT), 'continuation_attempt_or_campaign_replay')
+    storage_before = storage_admission(contract, 'continuation_preparation')
+    original, original_environment, current, backup_proof, cipher = continuation_original(policy, backup)
+    require(protected(APP / '.env', 65536) == current, 'continuation_installed_environment')
+    updated, configuration = render(original_environment, args.operator_commit)
+    # Exact prior canonical assignments mean the continuation changes ONLY the source stamp.
+    release_line = ('QUILLMD_RELEASE_SHA="' + args.operator_commit + '"\n').encode()
+    old_release_line = ('QUILLMD_RELEASE_SHA="' + CONTINUATION_RELEASE + '"\n').encode()
+    require(updated.count(release_line) == 1 and updated.replace(release_line, old_release_line) == current,
+            'continuation_release_only_environment')
+    configuration['before_sha256'] = sha(current)
+    CONTINUATION_OUTPUT.mkdir(mode=0o700)
+    write_new(CONTINUATION_OUTPUT / 'environment-before.fernet', cipher.encrypt(current))
+    write_new(CONTINUATION_OUTPUT / 'environment-after.fernet', cipher.encrypt(updated))
+    outcome = {'format': 1, 'complete': False, 'stage': 'continuation_prepared', 'provider_calls': 0,
+               'started_at': datetime.now(timezone.utc).isoformat(), 'source': source_info,
+               'directory': str(CONTINUATION_OUTPUT), 'installed_engine_baseline': BASELINE,
+               'configuration': configuration, 'qualification': evidence, 'backup': original['backup'],
+               'continuation': {'original_activation': str(CONTINUATION_ORIGINAL),
+                   'original_receipts': policy['original_receipts'], 'original_release': CONTINUATION_RELEASE,
+                   'original_before': original['before'], 'original_expected_population': original['expected_population'],
+                   'original_backup': original['backup'], 'original_backup_authentication': backup_proof,
+                   'health_session': policy['health_session'], 'new_capture': False, 'original_attempt_replayed': False},
+               'storage_admission': [storage_before], 'acceptance_started': False}
+    def checkpoint(stage):
+        outcome['stage'] = stage
+        outcome['storage_admission'].append(storage_admission(contract, stage))
+        write_new(CONTINUATION_OUTPUT / (stage + '.json'), encode(outcome))
+        print(json.dumps({'stage': stage, 'complete': outcome['complete'], 'provider_calls': 0,
+                          'evidence_directory': str(CONTINUATION_OUTPUT)}, sort_keys=True), flush=True)
+    checkpoint('prepared')
+    mutation_started = False
+    try:
+        exclusion.bind_runtime(RUNTIME)
+        with operation_locks(), exclusion.hold('legacy-model-continuation:' + args.operator_commit[:12]):
+            try:
+                for unit in UNITS + OPERATIONS:
+                    state = host.state(unit)
+                    require(state.get('ActiveState') in ('inactive', 'failed') and state.get('MainPID') == '0',
+                            'continuation_private_or_operator_active')
+                require(git(ROOT, 'rev-parse', 'HEAD').strip().decode() == CONTINUATION_RELEASE
+                        and protected(APP / '.env', 65536) == current
+                        and not os.path.lexists(CONTINUATION_ATTEMPT), 'continuation_initial_identity_race')
+                preparation_deadline = time.monotonic() + policy['preparation_maximum_seconds']
+                proof, before = continuation_admission('before-auth', args.operator_commit, CONTINUATION_OUTPUT,
+                    policy, original, host=host, backup=backup, storage=storage,
+                    deadline=preparation_deadline)
+                require(time.monotonic() < preparation_deadline, 'continuation_preparation_bound')
+                outcome['continuation']['admission_before_auth'] = proof
+                outcome['before_auth'] = before
+                checkpoint('original_records_admitted')
+                require(time.monotonic() < preparation_deadline, 'continuation_preparation_bound')
+                deadline = time.monotonic() + COMPLETION_SECONDS
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                write_new(CONTINUATION_ATTEMPT, encode({'format': 1, 'attempt': 1, 'source': args.operator_commit,
+                    'original_activation': str(CONTINUATION_ORIGINAL), 'directory': str(CONTINUATION_OUTPUT),
+                    'automatic_retries': False, 'provider_calls': 0}))
+                mutation_started = True
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                git(ROOT, 'merge', '--ff-only', args.operator_commit)
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                env_writer.replace_environment(APP / '.env', current, updated)
+                require(snapshot(host, backup, storage) == before, 'continuation_stopped_preservation')
+                checkpoint('configuration_written')
+                # Authentication has no worker/provider transport. Retain every normal auth/audit row.
+                for unit in UNITS[:2]:
+                    require(time.monotonic() < deadline, 'continuation_completion_bound')
+                    host.service('start', unit)
+                outcome['web_units_before_auth'] = await_service_boundary(host, storage, args.operator_commit,
+                                                                         worker_required=False)
+                require(host.state(UNITS[2]).get('MainPID') == '0'
+                        and host.state(UNITS[2]).get('ActiveState') in ('inactive', 'failed'),
+                        'continuation_worker_before_auth')
+                outcome['health_before_auth'] = await_health(args.operator_commit)
+                require(snapshot(host, backup, storage) == before, 'continuation_pre_auth_start_preservation')
+                require(sha(protected(CONTINUATION_PREPARATION, 2 * 1024 * 1024))
+                        == policy['admin_preparation_sha256'], 'continuation_auth_source_drift')
+                auth = ['bash', str(SOURCE / 'scripts/run-ruled-mutation.sh'), '--declaration', DECL, '--',
+                        '/usr/bin/node', str(CONTINUATION_PREPARATION), '--execute-continuation',
+                        args.operator_commit, str(CONTINUATION_OUTPUT)]
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                outcome['continuation']['normal_authentication_child'] = acceptance_child(auth, CONTINUATION_OUTPUT,
+                    'normal-authentication', min(deadline, time.monotonic() + policy['preparation_maximum_seconds']), ruled=True)
+                acceptance = acceptance_preparation(contract, args.operator_commit, continuation=True)
+                outcome['acceptance_preparation'] = acceptance
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                proof, admitted = continuation_admission('after-auth', args.operator_commit, CONTINUATION_OUTPUT,
+                    policy, original, host=host, backup=backup, storage=storage, deadline=deadline)
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                outcome['continuation']['admission_after_auth'] = proof
+                outcome['before'] = outcome['stopped_baseline'] = outcome['expected_population'] = admitted
+                outcome['baseline_phase'] = 'after_normal_authentication_before_worker_start'
+                checkpoint('normal_authentication_admitted')
+                require(host.state(UNITS[2]).get('MainPID') == '0'
+                        and host.state(UNITS[2]).get('ActiveState') in ('inactive', 'failed'),
+                        'continuation_worker_during_auth')
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                host.service('start', UNITS[2])
+                outcome['units_after'] = await_service_boundary(host, storage, args.operator_commit)
+                outcome['worker_configuration_provenance'] = host.worker_configuration(updated, args.operator_commit,
+                                                                                      outcome['units_after'])
+                require(all(outcome['worker_configuration_provenance']['values'].get(key) == value
+                            for key, value in configuration['values'].items()), 'continuation_worker_configuration')
+                outcome['health'] = await_health(args.operator_commit)
+                require(snapshot(host, backup, storage) == admitted, 'continuation_post_start_preservation')
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                outcome['complete'] = True
+                checkpoint('complete')
+                require(time.monotonic() < deadline, 'continuation_completion_bound')
+                outcome['acceptance_started'] = True
+                outcome['acceptance'] = installed_acceptance(args.operator_commit, CONTINUATION_OUTPUT, acceptance,
+                                                            continuation=True)
+            except BaseException as error:
+                outcome['complete'] = False
+                outcome['failure_kind'] = type(error).__name__
+                if mutation_started and not outcome['acceptance_started']:
+                    outcome['fail_stop'] = best_effort_private_stop(host)
+                best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
+                raise Refusal('continuation_failed_no_automatic_retry') from None
+    except BaseException as error:
+        outcome['complete'] = False
+        outcome.setdefault('failure_kind', type(error).__name__)
+        if mutation_started and not outcome['acceptance_started'] and 'fail_stop' not in outcome:
+            outcome['fail_stop'] = best_effort_private_stop(host)
+        if 'failure_checkpoint' not in outcome and 'failure_checkpoint_capture_failure' not in outcome:
+            best_effort_capture(outcome, 'failure_checkpoint', lambda: checkpoint('failed'))
+        raise Refusal('continuation_failed_no_automatic_retry') from None
+    return outcome
+
+
 def execute(args, contract, evidence, source_info, *, host, backup, storage, exclusion, env_writer):
     require(getattr(args, 'fresh_backup', False) is True, 'explicit_one_fresh_capture_required')
     require(contract.get('rollback_qualified') is True, 'prospectively_qualified_recovery_required')
@@ -1040,7 +1310,7 @@ def execute(args, contract, evidence, source_info, *, host, backup, storage, exc
     before_values = dotenv_values(stream=StringIO(original.decode()), interpolate=False)
     require(before_values.get('QUILLMD_RELEASE_SHA') == BASELINE, 'running_release_baseline')
     updated, configuration = render(original, args.operator_commit)
-    health(BASELINE)
+    health(BASELINE, probe_preview=True)
     units_before = service_boundary(host, storage, BASELINE)
     destination = RUNTIME / ('legacy-model-demo-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ'))
     destination.mkdir(mode=0o700)
@@ -1310,6 +1580,8 @@ def main(argv=None):
     parser.add_argument('--acceptance-v2', action='store_true', help='Retain exclusion for the exact separately bounded synthetic campaign.')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--rollback', action='store_true')
+    parser.add_argument('--resume-pre-acceptance', action='store_true',
+                        help='One preserving continuation of the exact failed pre-acceptance install; never replays it.')
     parser.add_argument('--activation-directory', type=Path)
     args = parser.parse_args(argv)
     if not args.execute:
@@ -1319,8 +1591,17 @@ def main(argv=None):
                           'note': 'No environment, provider, service or database is accessed by this plan.'}, sort_keys=True))
         return 0
     raw, contract = declaration()
-    info = source_gate(args.operator_commit, contract, executing=True, recovering=args.rollback)
+    require(not args.resume_pre_acceptance or (not args.rollback and not args.fresh_backup),
+            'continuation_cli_scope')
+    info = source_gate(args.operator_commit, contract, executing=True, recovering=args.rollback,
+                       resuming=args.resume_pre_acceptance)
     exclusion, backup, env_writer, managed, storage = modules()
+    if args.resume_pre_acceptance:
+        require(args.qualification and args.acceptance_v2, 'continuation_qualification_and_acceptance_required')
+        evidence = read_qualification(args.qualification, contract.get('qualification_sha256'))
+        resume_pre_acceptance(args, contract, evidence, info, host=Host(managed), backup=backup, storage=storage,
+                             exclusion=exclusion, env_writer=env_writer)
+        return 0
     if args.rollback:
         require(contract.get('rollback_qualified') is True, 'separately_committed_rollback_required')
         rollback(args, info, contract=contract, host=Host(managed), backup=backup, storage=storage,
