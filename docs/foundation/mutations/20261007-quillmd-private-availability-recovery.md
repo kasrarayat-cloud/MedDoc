@@ -183,15 +183,30 @@ and reviewed. No current unit hash is inserted as an approved expected value.
   },
   "database_restore": false,
   "external_configuration_ack": {
-    "approval_protocol": null,
-    "qualified": false,
-    "reason": "Existing owner deployment authorization is not exposed by native-readable root installation receipts. Its protected guard evidence must be recovered through legitimately available native administrator access and independently reviewed before any qualification.",
+    "approval_protocol": "current-owner-preservation-boundary-v1",
+    "boundary_sha256": "a70f3b53fbf12a888d7c08f644d6a78df78cf621abd2c3d1a23d6e506b0e2798",
+    "current_owner_preservation_authorized": true,
+    "historical_deployment_authorization_verified": false,
+    "independent_review": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/native-admin-v15-independent-lineage-adjudication-v1.json",
+      "sha256": "423390761a5de0b994ffe972e1f52f630c97cbf8dc6d8795cd8cda9f67da53ff"
+    },
+    "native_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/native-admin-deployment-evidence-export-v15.json",
+      "sha256": "b23c70d6811a9a1e14e24a6a495e5d4f0aeca2c4d9c7fc68cf2c2f7d5b77568b"
+    },
+    "owner_decision_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/co-tenant-unit-evidence-v1/owner-current-configuration-preservation-decision-v1.json",
+      "sha256": "2f522ec71fdca5334143e5f051cb18131102c448da91d15eb46c544625be1e1f"
+    },
+    "qualified": true,
+    "reason": "The recorded user reply authorizes exactly the seven current preservation differences. V15 and independent review establish current release, installation, configuration and loaded identity. Historical deployment authorization remains unverified; no VoiceAssistMain mutation is authorized.",
     "unit_path": "/etc/systemd/system/voiceassistmain-product.service"
   },
   "format": 1,
   "frozen_operator_sha256": "89b79c18d6cdbeb2c78595d314df76dd8aa0185e14efa3d4f8b7550a117634f3",
   "frozen_verifier_sha256": "b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c",
-  "installation_qualified": false,
+  "installation_qualified": true,
   "new_capture": false,
   "original_policy": {
     "admin_evidence_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-continuation-20261007",
@@ -429,3 +444,94 @@ This proposal does not qualify native approval or installation. Both source gate
 remain false pending actual reviewed authorization and installation readiness.
 Historical V8 collection is evidenced in the conversation; its literal false
 lineage field is unassessed. No V11 execution receipt is asserted by this amendment.
+
+## Conditional exact current-owner preservation boundary
+
+V15 native collection establishes the current product release source
+eeae88c6d13c779d53d7ec7b51f42a9806d21dfa9e4ba6d1f80d40b3204adef1,
+installation 030f73df-e981-4307-a877-df153aab68f9, manifest b8271787… and
+installation receipt d25b84d7…. The original product unit remains 1cea3533…;
+the current c80609f7… differs only in its literal WorkingDirectory release.
+Its original global-baseline inode920060 is distinct from the retained previous
+file inode395704. Neither the native export nor matching installation records
+establishes historical owner authorization. The independent V15 review leaves
+that authorization unverified and identifies no demonstrated authorization conflict.
+
+The pending smallest owner decision is to preserve exactly this current product
+WorkingDirectory replacement and these six additions during QuillMD recovery:
+
+- /etc/systemd/system/voiceassist-restaurant-tajrish-20261007@.service
+- /etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.service
+- /etc/systemd/system/voiceassist-restaurant-tajrish-20261007-retention.timer
+- /etc/systemd/system/voiceassistmain-restaurant-voice.service
+- /etc/systemd/system/timers.target.wants/voiceassist-restaurant-tajrish-20261007-retention.timer
+- /etc/systemd/system/multi-user.target.wants/voiceassistmain-restaurant-voice.service
+
+The distinct current-owner-preservation-boundary-v1 consumer requires exactly
+seven global-configuration deltas, their exact metadata and byte hashes/link
+targets bound to the immutable V15 export and independent review, and a separately
+pinned protected record of the actual explicit owner reply. The pending declaration
+has no owner decision evidence. No reply or approval receipt is manufactured here.
+Historical deployment authorization remains unverified even after a future current
+preservation decision; existing-approved-root-deployment-v1 keeps its separate
+original single-product-delta evidence requirements.
+
+After a genuine reviewed decision, each native boundary read reauthenticates that
+decision, all seven paths, the full current product loaded invocation, three
+non-template restaurant unit configurations and the current manifest and installation
+receipt bytes/source/path/installation bindings. Reads use native UID1000, fixed
+paths, nofollow descriptors and metadata checks before bytes. The bare restaurant
+template is not queried as a loaded unit. Restaurant process PIDs are not pinned;
+their legitimate lifecycle activity may advance while their declared configuration,
+UnitFileState and no-reload/no-drop-in requirements remain exact. The current product
+invocation remains exact. Existing premarker and post-start rereads consume this
+same boundary. This procedure never changes VoiceAssistMain files, services or
+deployment and never replaces the original global baseline or failure exports.
+
+The source INSTALLATION_QUALIFIED constant consistently governs both declaration
+parsing and execution. It and both approval-protocol gates remain false while the
+owner decision and reviewed qualification are pending. Success acknowledgements
+include qualified=true only after the corresponding protocol checks have passed,
+so the independently qualified acceptance adapter can consume a genuine completion.
+The natural-publication wait, its full admission and time bounds are unchanged.
+
+### Withdrawn publication ID comparison proposal,7October2026
+
+The frozen adjudicator explicitly converts the bigint `id` to its decimal string;
+the natural SQL observer preserves its JSON integer. Comparing their full-row
+hashes directly therefore rejects the same row (`1` versus `"1"`). A comparison
+bridge changes only the selected row's ID spelling to the frozen representation.
+It requires a native positive bigint integer, refuses booleans/floats/text/out-of-
+range IDs and preserves every other field. The selected native-row hash remains
+retained beside its separate comparison-row hash; no observed evidence is rewritten.
+Real ID changes, timestamp microsecond changes, payload drift and unknown/missing
+columns still refuse before outputs, attempt marker or service action. The existing
+three-timestamp SQL adapter and all frozen publisher source checks are unchanged.
+
+Correction before publication or execution: that proposal used an integer fixture
+without checking the actual schema. `ServiceHealth` inherits `Entity.id`, a UUID
+primary key, also defined in migration0018. Native JSON already spells that UUID
+as a string; the frozen string conversion changes no bytes. The bigint-only
+bridge would reject the real schema and has been removed. The unshipped proposal
+commit remains retained as failure evidence. Natural-publication fixtures now use
+the actual UUID shape, checked against both model and migration. The original
+full-row comparison, timestamp adapter and all meaningful refusal gates remain.
+
+
+## Recorded exact preservation decision and recovery qualification
+
+The owner answered “Authorize this exact preservation boundary” to question
+call_75026206f84147ca968af5cbe6ba1eec in this conversation. The protected
+transcription and strict decision document are hash-bound in the contract above.
+They authorize only the seven already enumerated current comparison differences,
+without replacing the original capture or claiming historical deployment approval.
+V8's hard-coded false remains unassessed; V11 execution remains unestablished.
+The historical authorization source gate remains false. The distinct current
+preservation gate and installation gate are qualified in this reviewed revision;
+execution still requires the exact merged source, complete citation, native
+rereads, complete original preservation admission, and the ruled procedure.
+
+The publisher timestamp repair is inherited from merged PR #1302 (ff60bc49).
+It is not reapplied. The unshipped bigint comparison proposal was withdrawn by
+6b42a044f after model/migration inspection established the actual UUID schema.
+The real selected UUID and all eleven row fields remain unchanged and checked.

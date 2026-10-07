@@ -246,6 +246,7 @@ class AvailabilityRecoveryTests(unittest.TestCase):
         # This wholly invented pipeline exercises preservation/failure ordering,
         # not the unqualified native authorization or actual installation.
         stack.enter_context(patch.object(act, 'NATIVE_APPROVAL_PROTOCOL_QUALIFIED', True))
+        stack.enter_context(patch.object(act, 'INSTALLATION_QUALIFIED', True))
         return stack, prepared, host, contract
 
     def test_pending_preflight_writes_no_outputs_or_marker_and_never_starts(self):
@@ -320,13 +321,17 @@ class AvailabilityRecoveryTests(unittest.TestCase):
                          'availability_protected_operation_failure')
 
     def test_actual_execute_gate_cannot_be_opened_by_future_declaration_flags_or_fake_proof(self):
-        with patch.object(act, 'readiness', side_effect=AssertionError('must not read state')), \
+        with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+             patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+             patch.object(act, 'readiness', side_effect=AssertionError('must not read state')), \
              patch.object(act, 'existing_operation_locks', side_effect=AssertionError('must not create/open locks')):
             with self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
                 act.complete_recovery(TARGET, {'installation_qualified': True,
                     'external_configuration_ack': {'qualified': True, 'fabricated': True}}, {},
                     host=None, backup=None, storage=None, exclusion=None, env_writer=None)
-        with patch.object(act, 'load_contract', side_effect=AssertionError('must not read authority/state')):
+        with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+             patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+             patch.object(act, 'load_contract', side_effect=AssertionError('must not read authority/state')):
             with self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
                 act.main(['--execute', '--operator-commit', TARGET])
 
@@ -705,9 +710,296 @@ class DescriptorSourceGateTests(unittest.TestCase):
                     act.operator_source_bytes('public.py', tree=root)
 
 
+class CurrentOwnerBoundaryTests(unittest.TestCase):
+    def fixture(self, root):
+        """Entirely fictional linked receipts; never create a real owner decision."""
+        root.chmod(0o700)
+        pins = deepcopy(act.CURRENT_OWNER_PINS)
+        unit_raw = b'[Service]\nWorkingDirectory=' + pins['new_working_directory'].encode() + b'\n'
+        pins['current_unit_sha256'] = act.sha(unit_raw)
+        pins['original_metadata']['sha256'] = act.sha(b'fictional original')
+        files = []
+        for index, path in enumerate(pins['added_files']):
+            pins['added_files'][path] = act.sha(('fictional unit ' + str(index)).encode())
+            files.append({'path': path, 'sha256': pins['added_files'][path],
+                          'metadata': [2050, 10 + index, 0, 0, 0o644, 20, 30, 40]})
+        links = []
+        for path, target in pins['added_links'].items():
+            fixture_path = root / path[1:]; fixture_path.parent.mkdir(parents=True, exist_ok=True)
+            fixture_path.symlink_to(target)
+            info = stat_copy(fixture_path.lstat(), st_uid=0, st_gid=0)
+            links.append({'path': path, 'target': target, 'metadata': act.full_native_metadata(info)})
+        product = {'Id': 'voiceassistmain-product.service', 'WorkingDirectory': pins['new_working_directory'],
+            'FragmentPath': act.EXTERNAL_UNIT, 'DropInPaths': '', 'LoadState': 'loaded', 'ActiveState': 'active',
+            'SubState': 'running', 'UnitFileState': 'enabled', 'NeedDaemonReload': 'no', 'User': 'voiceassistmain',
+            'Group': 'voiceassistmain', 'InvocationID': 'a' * 32, 'MainPID': '123',
+            'ExecMainStartTimestamp': 'Wed 2026-10-07 02:00:00 UTC', 'ExecMainStartTimestampMonotonic': '1000'}
+        added = []
+        for name in ('voiceassist-restaurant-tajrish-20261007-retention.service',
+                     'voiceassist-restaurant-tajrish-20261007-retention.timer', 'voiceassistmain-restaurant-voice.service'):
+            row = {'Id': name, 'FragmentPath': '/etc/systemd/system/' + name, 'DropInPaths': '',
+                'LoadState': 'loaded', 'NeedDaemonReload': 'no', 'UnitFileState': 'enabled',
+                'ActiveState': 'active', 'SubState': 'waiting' if name.endswith('.timer') else 'running'}
+            if name.endswith('retention.service'):
+                row.update(UnitFileState='static', ActiveState='inactive', SubState='dead')
+            if name.endswith('.service'):
+                row.update(User='voiceassistmain', Group='voiceassistmain',
+                    WorkingDirectory='/home/voiceassistmain/VoiceAssistMain' if name.endswith('retention.service') else '/')
+            added.append(row)
+        parsed = {'manifest': {'source_sha256': pins['source_sha256'], 'installation_id': pins['installation_id'],
+                             'release_root': pins['new_working_directory']},
+            'installation': {'source_sha256': pins['source_sha256'], 'installation_id': pins['installation_id'],
+                'release_root': pins['new_working_directory'], 'main_pid': 123, 'installed': True,
+                'calls_started': 0, 'provider_writes': 0, 'nginx_changed': False}}
+        pins['manifest']['sha256'] = act.sha(act.encode(parsed['manifest']))
+        parsed['installation']['manifest_sha256'] = pins['manifest']['sha256']
+        pins['installation']['sha256'] = act.sha(act.encode(parsed['installation']))
+        binding = {name: {**pins[name], 'device': 2050, 'inode': 20, 'uid': 0, 'gid': 0, 'mode': '0o644',
+                         'size': 20, 'mtime_ns': 30, 'ctime_ns': 40} for name in parsed}
+        binding.update(observed_current_source_sha256=pins['source_sha256'], receipt_matches_same_loaded_pid=True)
+        product_record = {'path': act.EXTERNAL_UNIT, 'sha256': pins['current_unit_sha256'],
+                          'metadata': [2050, 9, 0, 0, 0o644, len(unit_raw), 30, 40]}
+        export = {'bounded_collection_complete': True, 'measured_native_checks_complete': True,
+            'native_administrator': True, 'missing': [], 'original_baseline_immutable': True,
+            'approval_lineage_assessment': 'unassessed', 'service_actions': 0, 'provider_calls': 0,
+            'collected_at_utc': '2026-10-07T02:00:00+00:00', 'records': [],
+            'original_release': pins['old_working_directory'], 'expected_current_source_sha256': pins['source_sha256'],
+            'original_and_observed_unit_evidence': {'original_immutable_unit': {'sha256': pins['original_metadata']['sha256']},
+                'observed_current_unit': product_record, 'no_bytes_change_outside_original_working_directory_line': True,
+                'original_baseline_replaced': False, 'observed_current_release': pins['new_working_directory']},
+            'same_loaded_state': product, 'native_host_proof': {'fictional': 'native identity'},
+            'additional_configuration_evidence': {'exact_added_files': files, 'exact_added_enablement_links': links,
+                'loaded_states': added, 'template_loaded_state_not_claimed': True}, 'installation_binding': binding}
+        pins['native_evidence'] = evidence(root / 'fictional-v15.json', act.encode(export))
+        review = {'exports': {'v15': {**pins['native_evidence'], 'collected_at_utc': export['collected_at_utc'], 'record_count': 0}},
+            'adjudication': {'current_authorization_verified': False, 'current_source_installation_and_unit_identity_established': True}}
+        pins['independent_review'] = evidence(root / 'fictional-review.json', act.encode(review))
+        before = {act.EXTERNAL_UNIT: pins['original_metadata'], '/unrelated': {'unchanged': True}}
+        current = {act.EXTERNAL_UNIT: act.export_configuration_metadata(product_record),
+            **{item['path']: act.export_configuration_metadata(item) for item in files},
+            **{item['path']: act.export_configuration_metadata(item, link=True) for item in links},
+            '/unrelated': {'unchanged': True}}
+        boundary = {'before': {act.EXTERNAL_UNIT: pins['original_metadata']},
+                    'after': {k: v for k, v in current.items() if k != '/unrelated'}}
+        ack = {'approval_protocol': act.CURRENT_OWNER_PROTOCOL, 'unit_path': act.EXTERNAL_UNIT, 'qualified': True,
+               'boundary_sha256': act.sha(act.encode(boundary)),
+               'native_evidence': pins['native_evidence'], 'independent_review': pins['independent_review']}
+        reply = evidence(root / 'owner-current-configuration-preservation-message-v1.txt', b'Fictional explicit owner response')
+        decision = {'format': 1, 'protocol': act.CURRENT_OWNER_PROTOCOL,
+            'decision': 'authorize_exact_current_preservation_boundary', 'boundary_sha256': ack['boundary_sha256'],
+            'native_evidence': pins['native_evidence'], 'independent_review': pins['independent_review'],
+            'owner_reply_evidence': reply, 'historical_deployment_authorization_verified': False,
+            'current_owner_preservation_authorized': True, 'original_baseline_replaced': False,
+            'voiceassistmain_changes_authorized': False}
+        decision_path = root / 'owner-current-configuration-preservation-decision-v1.json'
+        ack['owner_decision_evidence'] = evidence(decision_path, act.encode(decision))
+        stack = ExitStack()
+        stack.enter_context(patch.object(act, 'CURRENT_OWNER_PINS', pins))
+        stack.enter_context(patch.object(act, 'OWNER_EVIDENCE_ROOT', root))
+        stack.enter_context(patch.object(act, 'OWNER_DECISION_PATH', decision_path))
+        public = {act.EXTERNAL_UNIT: unit_raw, **{item['path']: ('fictional unit ' + str(index)).encode()
+            for index, item in enumerate(files)}, **{pins[name]['path']: act.encode(parsed[name]) for name in parsed}}
+        return stack, before, current, ack, export, decision, public
+
+    def test_exact_seven_preservation_requires_separate_source_gate_and_owner_decision(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
+            with stack:
+                with patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False), \
+                     self.assertRaisesRegex(act.Refusal, 'current_owner_protocol_unqualified'):
+                    act.acknowledge_configuration(before, current, ack)
+                with patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True):
+                    result = act.acknowledge_configuration(before, current, ack)
+                self.assertTrue(result['qualified']); self.assertTrue(result['current_owner_preservation_authorized'])
+                self.assertFalse(result['historical_deployment_authorization_verified'])
+                self.assertEqual(result['configuration_deltas']['before'][act.EXTERNAL_UNIT], before[act.EXTERNAL_UNIT])
+                self.assertEqual(len(result['configuration_deltas']['after']), 7)
+                self.assertFalse(act.NATIVE_APPROVAL_PROTOCOL_QUALIFIED)
+
+    def test_extra_missing_metadata_changed_or_preexisting_additions_refuse(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
+            changes = [lambda b, c: c.update(extra={'unapproved': True}),
+                lambda b, c: c.pop(next(iter(act.CURRENT_OWNER_PINS['added_links']))),
+                lambda b, c: c[act.EXTERNAL_UNIT].update(inode=999),
+                lambda b, c: c[act.EXTERNAL_UNIT].update(sha256='0' * 64),
+                lambda b, c: b.update({next(iter(act.CURRENT_OWNER_PINS['added_files'])): {'preexisting': True}}),
+                lambda b, c: b[act.EXTERNAL_UNIT].update(inode=888),
+                lambda b, c: c['/unrelated'].update(unchanged=False)]
+            with stack:
+                for index, change in enumerate(changes):
+                    b, c = deepcopy(before), deepcopy(current); change(b, c)
+                    with self.subTest(index=index), self.assertRaises(act.Refusal):
+                        act.owner_boundary_configuration(b, c, ack)
+
+    def test_pending_seven_delta_preflight_cannot_infer_approval_from_root_export(self):
+        with tempfile.TemporaryDirectory() as temp:
+            stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
+            original, following, _, _ = population(); original['configuration'] = before; following['configuration'] = current
+            with stack, patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', False):
+                result = act.compare_population({'expected_population': original}, following,
+                    {'current_database_fingerprint': following['database']}, ack, allow_pending=True)
+            self.assertEqual(result['status'], 'RED'); self.assertFalse(result['qualified'])
+            self.assertFalse(result['historical_deployment_authorization_verified'])
+            self.assertFalse(result['current_owner_preservation_authorized'])
+
+    def test_forged_scope_historical_approval_rejection_and_reply_drift_refuse(self):
+        for key, value in (('decision', 'reject'), ('boundary_sha256', '0' * 64),
+                ('historical_deployment_authorization_verified', True), ('current_owner_preservation_authorized', False),
+                ('voiceassistmain_changes_authorized', True), ('original_baseline_replaced', True), ('format', True)):
+            with self.subTest(key=key), tempfile.TemporaryDirectory() as temp:
+                stack, before, current, ack, _, decision, _ = self.fixture(Path(temp))
+                decision[key] = value
+                p = Path(ack['owner_decision_evidence']['path']); p.write_bytes(act.encode(decision))
+                ack['owner_decision_evidence']['sha256'] = act.sha(p.read_bytes())
+                with stack, patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True), \
+                     self.assertRaisesRegex(act.Refusal, 'decision_scope'):
+                    act.acknowledge_configuration(before, current, ack)
+        with tempfile.TemporaryDirectory() as temp:
+            stack, before, current, ack, _, decision, _ = self.fixture(Path(temp))
+            Path(decision['owner_reply_evidence']['path']).write_bytes(b'Changed or withdrawn fictional reply')
+            with stack, patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True), \
+                 self.assertRaisesRegex(act.Refusal, 'reply_hash'):
+                act.acknowledge_configuration(before, current, ack)
+
+    def test_export_and_review_drift_or_wrong_pins_refuse(self):
+        for name in ('native_evidence', 'independent_review', 'boundary_sha256'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temp:
+                stack, before, current, ack, _, _, _ = self.fixture(Path(temp))
+                if name == 'boundary_sha256': ack[name] = '0' * 64
+                else: Path(ack[name]['path']).write_bytes(b'changed retained proof')
+                with stack, self.assertRaises(act.Refusal): act.owner_boundary_configuration(before, current, ack)
+
+    def native_context(self, root, export, public, fault=None):
+        class FictionalRootOS:
+            def __getattr__(self, name): return getattr(os, name)
+            def stat(self, *args, **kwargs): return stat_copy(os.stat(*args, **kwargs), st_uid=0, st_gid=0)
+        stack = ExitStack()
+        stack.enter_context(patch.object(act, 'CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED', True))
+        stack.enter_context(patch.object(act, 'native_boundary_identity', return_value=export['native_host_proof']))
+        states = {row['Id']: row for row in [export['same_loaded_state'], *export['additional_configuration_evidence']['loaded_states']]}
+        def observe(name, properties):
+            value = deepcopy(states[name])
+            if fault == 'unit_state' and name.endswith('retention.timer'): value['UnitFileState'] = 'disabled'
+            if fault == 'unit_reload': value['NeedDaemonReload'] = 'yes'
+            if fault == 'product_invocation' and name == 'voiceassistmain-product.service': value['InvocationID'] = 'b' * 32
+            if fault == 'restaurant_activity' and name.endswith('retention.service'): value.update(ActiveState='activating', SubState='start')
+            self.assertNotIn('MainPID', properties) if name != 'voiceassistmain-product.service' else None
+            return value
+        stack.enter_context(patch.object(act, 'owner_unit_state', side_effect=observe))
+        real_open = act.source_files.open_root
+        stack.enter_context(patch.object(act.source_files, 'open_root', side_effect=lambda _: real_open(root)))
+        stack.enter_context(patch.object(act, 'os', FictionalRootOS()))
+        def record(fd, path, digest, metadata):
+            raw = public[path]
+            if fault == 'working_directory' and path == act.EXTERNAL_UNIT: raw = raw.replace(b'WorkingDirectory=', b'WorkingDirectory=/incompatible/')
+            if fault == 'manifest' and path == act.CURRENT_OWNER_PINS['manifest']['path']:
+                value = json.loads(raw); value['source_sha256'] = '0' * 64; raw = act.encode(value)
+            if fault == 'installation' and path == act.CURRENT_OWNER_PINS['installation']['path']:
+                value = json.loads(raw); value['installation_id'] = 'wrong'; raw = act.encode(value)
+            return raw
+        reader = stack.enter_context(patch.object(act, 'owner_public_record', side_effect=record))
+        return stack, reader
+
+    def test_native_boundary_reads_manifest_receipt_all_seven_paths_and_only_three_added_units(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp); stack, _, _, ack, export, _, public = self.fixture(root)
+            native, reader = self.native_context(root, export, public, 'restaurant_activity')
+            with stack, native:
+                result = act.loaded_external_state(None, ack)
+            self.assertEqual(len(result['configuration']), 7)
+            self.assertEqual({c.args[1] for c in reader.call_args_list}, set(public))
+            self.assertEqual(len(result['additional_unit_configuration']), 3)
+            self.assertTrue(all('MainPID' not in row and 'InvocationID' not in row for row in result['additional_unit_configuration'].values()))
+
+    def test_native_wrong_unit_state_invocation_working_directory_manifest_installation_and_link_refuse(self):
+        for fault in ('unit_state', 'unit_reload', 'product_invocation', 'working_directory', 'manifest', 'installation', 'link'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); stack, _, _, ack, export, _, public = self.fixture(root)
+                if fault == 'link':
+                    link = root / next(iter(act.CURRENT_OWNER_PINS['added_links']))[1:]
+                    link.unlink(); link.symlink_to('/wrong/target')
+                native, _ = self.native_context(root, export, public, fault)
+                with stack, native, self.assertRaises(act.Refusal): act.loaded_external_state(None, ack)
+
+    def test_declaration_and_execute_share_one_source_installation_qualification_constant(self):
+        raw = (act.SOURCE / act.DECL).read_bytes()
+        marker = b'<!-- private-availability-contract -->\n```json\n'
+        head, tail = raw.split(marker, 1); body, end = tail.split(b'\n```', 1); contract = json.loads(body)
+        with patch.object(act, 'original_qualified_policy', return_value=contract['original_policy']):
+            self.assertTrue(act.contract_from_bytes(raw)['installation_qualified'])
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+                 self.assertRaisesRegex(act.Refusal, 'prospective_scope'):
+                act.contract_from_bytes(raw)
+            contract['installation_qualified'] = False
+            unqualified = head + marker + act.encode(contract) + b'\n```' + end
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False):
+                self.assertFalse(act.contract_from_bytes(unqualified)['installation_qualified'])
+            with self.assertRaisesRegex(act.Refusal, 'prospective_scope'):
+                act.contract_from_bytes(unqualified)
+            with patch.object(act, 'INSTALLATION_QUALIFIED', False), \
+                 self.assertRaisesRegex(act.Refusal, 'authorization_protocol_unqualified'):
+                act.complete_recovery(TARGET, contract, {}, host=None, backup=None, storage=None, exclusion=None, env_writer=None)
+
+    def test_native_public_reader_rejects_bad_metadata_links_bytes_and_same_bytes_path_swap(self):
+        class FictionalRootOS:
+            def __getattr__(self, name): return getattr(os, name)
+            def fstat(self, fd): return stat_copy(os.fstat(fd), st_uid=0, st_gid=0)
+        for fault in ('none', 'private_mode', 'hardlink', 'symlink', 'bytes', 'path_swap'):
+            with self.subTest(fault=fault), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp); file = root / act.EXTERNAL_UNIT[1:]
+                file.parent.mkdir(parents=True); file.write_bytes(b'fictional public unit'); file.chmod(0o644)
+                pins = deepcopy(act.CURRENT_OWNER_PINS); pins['current_unit_sha256'] = act.sha(file.read_bytes())
+                expected = act.full_native_metadata(stat_copy(file.stat(), st_uid=0, st_gid=0))
+                if fault == 'private_mode': file.chmod(0o600)
+                if fault == 'hardlink': os.link(file, file.with_name('another-link'))
+                if fault == 'symlink': file.unlink(); file.symlink_to(file.with_name('another-link'))
+                if fault == 'bytes':
+                    file.write_bytes(b'different source bytes')
+                    expected = act.full_native_metadata(stat_copy(file.stat(), st_uid=0, st_gid=0))
+                real_read = act.source_files.bytes_at
+                def read(fd, maximum):
+                    raw = real_read(fd, maximum)
+                    if fault == 'path_swap':
+                        other = file.with_name('replacement'); other.write_bytes(raw); other.chmod(0o644)
+                        os.replace(other, file)
+                    return raw
+                with patch.object(act, 'os', FictionalRootOS()), patch.object(act, 'CURRENT_OWNER_PINS', pins), \
+                     patch.object(act.source_files, 'bytes_at', side_effect=read) as reader, \
+                     act.source_files.open_root(root) as fd:
+                    if fault == 'none':
+                        self.assertEqual(act.owner_public_record(fd, act.EXTERNAL_UNIT, pins['current_unit_sha256'], expected),
+                                         b'fictional public unit')
+                    else:
+                        with self.assertRaises((act.Refusal, act.source_files.Refusal, OSError)):
+                            act.owner_public_record(fd, act.EXTERNAL_UNIT, pins['current_unit_sha256'], expected)
+                        if fault in ('private_mode', 'hardlink', 'symlink'): reader.assert_not_called()
+
+
 class NaturalPublisherSequencingTests(unittest.TestCase):
+    def test_selected_uuid_shape_matches_the_installed_model_and_migration(self):
+        import ast
+        import uuid
+        model = ast.parse((act.SOURCE / 'rebuild/core/models.py').read_text())
+        entity = next(n for n in model.body if isinstance(n, ast.ClassDef) and n.name == 'Entity')
+        field = next(n.value for n in entity.body if isinstance(n, ast.Assign)
+                     and any(isinstance(t, ast.Name) and t.id == 'id' for t in n.targets))
+        self.assertIsInstance(field, ast.Call)
+        self.assertEqual(field.func.attr, 'UUIDField')
+        service = next(n for n in model.body if isinstance(n, ast.ClassDef) and n.name == 'ServiceHealth')
+        self.assertTrue(any(isinstance(b, ast.Name) and b.id == 'Entity' for b in service.bases))
+        migration = (act.SOURCE / 'rebuild/core/migrations/0018_servicehealth.py').read_text()
+        self.assertIn("('id', models.UUIDField(", migration)
+        before, after = self.observations()
+        self.assertEqual(before['row']['id'], str(uuid.UUID(before['row']['id'])))
+        self.assertEqual(after['row']['id'], str(after['row']['id']))
+        self.assertEqual(act.sha(act.encode(after['row'])),
+                         act.sha(act.encode({**after['row'], 'id': str(after['row']['id'])})))
+
+
+
     def observations(self):
-        row = {'id': 1, 'created_at': '2026-09-30T00:00:00+00:00', 'key': 'backup',
+        row = {'id': '7c888874-aa01-4ae1-b7b1-275e08307061', 'created_at': '2026-09-30T00:00:00+00:00', 'key': 'backup',
             'condition': 'expired', 'severity': 'error', 'healthy': False, 'action': 'renew',
             'payload': {'fictional': 'retained input'}, 'computed_at': '2026-10-07T02:00:00+00:00',
             'published_at': '2026-10-07T02:00:00.200000+00:00', 'expected_interval_seconds': 300}
@@ -743,7 +1035,7 @@ class NaturalPublisherSequencingTests(unittest.TestCase):
 
     def test_real_identity_source_invocation_and_journal_faults_refuse(self):
         before, after = self.observations()
-        changes = [lambda v: v['row'].update(id=2), lambda v: v['row'].update(expected_interval_seconds=301),
+        changes = [lambda v: v['row'].update(id='7c888874-aa01-4ae1-b7b1-275e08307062'), lambda v: v['row'].update(expected_interval_seconds=301),
             lambda v: v['row'].update(extra='unknown'), lambda v: v.update(journal=[]),
             lambda v: v['row'].update(computed_at='2026-10-07T02:05:10+00:00'),
             lambda v: v['unit'].update(InvocationID='bad'), lambda v: v['unit'].update(ExecMainStatus='0'),
@@ -774,6 +1066,7 @@ class NaturalPublisherSequencingTests(unittest.TestCase):
             with act.aligned_publication_exclusion(TARGET, {}, None,
                     SimpleNamespace(hold=lambda _: nullcontext()), SimpleNamespace(remaining=Mock())) as proof:
                 self.assertEqual(proof['selected_invocation'], 'b' * 32)
+                self.assertEqual(proof['selected_row_sha256'], act.sha(act.encode(selected['row'])))
         self.assertEqual(observe.call_count, 5)
 
     def test_natural_wait_uses_monotonic_deadline_and_does_not_retry_full_admission(self):
