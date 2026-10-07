@@ -97,7 +97,7 @@ PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
 POST_RESTORE_PROPOSAL = BASE / 'recovery-20261007/post-restoration-current-preservation-proposal-ee71e3-v1.json'
 POST_RESTORE_PROPOSAL_SHA = '5521e9a5fc47573b8c315ccc5a7c4c38c66deb48d453f532023aae2165bf220a'
 POST_RESTORE_OWNER_REPLY = BASE / 'recovery-20261007/owner-post-restoration-preservation-message-ee71e3-v1.json'
-POST_RESTORE_OWNER_REPLY_SHA = None  # Required actual new owner reply; never reuse the earlier decision.
+POST_RESTORE_OWNER_REPLY_SHA = '54c79de6d9d9805ceda92881db58c91447f09495391b84e526e2975be96b836f'
 POST_RESTORE_PINS = {'availability_receipt_sha256': '17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd',
  'configuration_differences': [{'before': {'device': 2050,
                                            'gid': 0,
