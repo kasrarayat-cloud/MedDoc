@@ -278,6 +278,16 @@ class AutomaticOffsiteTests(unittest.TestCase):
                 transport.request('GET', 'https://api.backblazeb2.com/example', limit=50)
             self.assertEqual(request.call_count, 1)
 
+    def test_default_budget_clock_resolves_at_construction_and_checks_each_reservation(self):
+        # The whole-cycle executor and its budget must share the operation clock.
+        # A policy may expire between requests: admission never extends it.
+        with patch.object(auto, 'now', side_effect=[self.at, self.at + timedelta(days=8)]):
+            budget = auto.Budget(self.state, self.policy)
+            budget.debit(0)
+            with self.assertRaises(auto.Refusal) as caught:
+                budget.debit(0)
+        self.assertEqual(caught.exception.code, 'policy_expired')
+
     def test_budget_download_expiry_and_deadline_prevent_network(self):
         cases = [(dict(self.policy, daily_download_budget_bytes=10), lambda: self.at, lambda: 1, 'budget_exhausted'),
                  (self.policy, lambda: self.at + timedelta(days=8), lambda: 1, 'policy_expired')]

@@ -280,8 +280,11 @@ class Budget:
 
     Reservations survive errors and are never refunded, since timeout does not imply no provider work.
     """
-    def __init__(self, state, limits, clock=now, monotonic=time.monotonic):
-        self.path, self.limits, self.clock, self.monotonic = Path(state) / 'budget.json', limits, clock, monotonic
+    def __init__(self, state, limits, clock=None, monotonic=time.monotonic):
+        # Resolve the operation clock at construction, rather than capturing a
+        # different callable when this module is imported. Every reservation
+        # still checks the policy's actual expiry immediately before I/O.
+        self.path, self.limits, self.clock, self.monotonic = Path(state) / 'budget.json', limits, now if clock is None else clock, monotonic
         self.deadline = monotonic() + limits['max_run_seconds']
 
     def assert_live(self):

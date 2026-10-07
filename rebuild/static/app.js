@@ -298,3 +298,58 @@ document.querySelectorAll("form[data-voice-form]").forEach((form) => {
   stop.addEventListener("click", () => { if (recorder?.state === "recording") recorder.stop(); });
   window.addEventListener("pagehide", () => { generation += 1; release(); if (audioUrl) URL.revokeObjectURL(audioUrl); });
 });
+
+// The mobile drawer changes navigation only. It never changes a user's role,
+// session, department, or any clinical form state. Without JS navigation stays visible.
+const workspaceShell = document.querySelector('.app-shell');
+const workspaceNav = document.getElementById('workspace-navigation');
+const navigationToggle = document.querySelector('[data-nav-toggle]');
+if (workspaceShell && workspaceNav && navigationToggle) {
+  const mobileNavigation = window.matchMedia('(max-width: 740px)');
+  const navigationBackdrop = document.querySelector('.navigation-backdrop');
+  const mainColumn = document.querySelector('.main-column');
+  let navigationOpen = false;
+  workspaceShell.classList.add('nav-ready');
+  const applyNavigation = (open, restoreFocus = false) => {
+    navigationOpen = mobileNavigation.matches && open;
+    workspaceShell.classList.toggle('nav-open', navigationOpen);
+    navigationToggle.setAttribute('aria-expanded', String(navigationOpen));
+    workspaceNav.inert = mobileNavigation.matches && !navigationOpen;
+    if (mobileNavigation.matches && !navigationOpen) workspaceNav.setAttribute('aria-hidden', 'true');
+    else workspaceNav.removeAttribute('aria-hidden');
+    if (navigationBackdrop) navigationBackdrop.hidden = !navigationOpen;
+    if (mainColumn) mainColumn.inert = navigationOpen;
+    if (navigationOpen) workspaceNav.querySelector('[data-nav-close]').focus();
+    else if (restoreFocus) navigationToggle.focus();
+  };
+  navigationToggle.addEventListener('click', () => applyNavigation(true));
+  document.querySelectorAll('[data-nav-close]').forEach((button) => button.addEventListener('click', () => applyNavigation(false, true)));
+  workspaceNav.addEventListener('keydown', (event) => {
+    if (!navigationOpen) return;
+    if (event.key === 'Escape') { event.preventDefault(); applyNavigation(false, true); }
+    if (event.key === 'Tab') {
+      const controls = [...workspaceNav.querySelectorAll('a[href],button:not([disabled]),input:not([disabled])')].filter((item) => item.getClientRects().length);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+  });
+  mobileNavigation.addEventListener('change', () => applyNavigation(false));
+  applyNavigation(false);
+}
+
+// Search only rows the server has already authorized and rendered; no patient
+// identifiers are sent to another endpoint and this is not an all-history search.
+const documentSearch = document.querySelector('[data-document-search]');
+if (documentSearch) {
+  const rows = [...document.querySelectorAll('[data-document-row]')];
+  const indexedRows = rows.map(row => ({row, text: row.textContent.toLocaleLowerCase()}));
+  document.querySelector('[data-document-search-tools]').hidden = false;
+  documentSearch.addEventListener('input', () => {
+    const term = documentSearch.value.trim().toLocaleLowerCase();
+    let count = 0;
+    indexedRows.forEach(({row, text}) => {row.hidden = !text.includes(term); if (!row.hidden) count++;});
+    document.querySelector('[data-document-search-result]').textContent = `${count} of ${rows.length} recent documents shown.`;
+    document.querySelector('[data-document-search-empty]').hidden = count !== 0;
+  });
+}

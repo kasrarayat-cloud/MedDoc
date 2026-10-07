@@ -2,29 +2,44 @@
 {% block title %}Workspace{% endblock %}
 {% block content %}
 <div class="page-heading">
-  <div><div class="eyebrow">Your clinical workspace</div><h1>From notes to completed forms.</h1><p>Start with an original form. Review every supported answer before it leaves your workspace.</p></div>
+  <div><div class="eyebrow">Your workspace</div><h1>A little less paperwork.</h1><p>Add documented notes to a supported form, then review each answer before export.</p></div>
   <div class="actions"><a class="button" href="{% url 'encounter_new' %}">New document <span aria-hidden="true">＋</span></a></div>
 </div>
+<section class="start-grid" aria-label="Start a document">
+  <a class="start-card start-card-primary" href="{% url 'encounter_new' %}">
+    <span class="start-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-5-5L3 14z"/></svg></span><span class="start-arrow" aria-hidden="true">↗</span>
+    <h2>Start with your notes</h2><p>Choose a form and patient. Add exact labelled answers, then create a draft to review.</p>
+  </a>
+  <a class="start-card" href="{% url 'encounter_new' %}#voice-next">
+    <span class="start-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></span><span class="start-arrow" aria-hidden="true">↗</span>
+    <h2>Speak your notes</h2><p>Create a document first. Record or upload audio, then correct and save the returned transcript.</p>
+  </a>
+  <a class="start-card" href="{% url 'template_upload' %}">
+    <span class="start-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 7V4h6l3 3h9v13H3z"/></svg></span><span class="start-arrow" aria-hidden="true">↗</span>
+    <h2>Use your own form</h2><p>Upload a supported blank Word or PDF form. Check its answer fields before using it.</p>
+  </a>
+</section>
+<p class="workflow-note" data-labelled-notes-limit><strong>For this private demo:</strong> Use the prepared SOAP form and the exact labels for documented facts: <span class="mono">Subjective:</span>, <span class="mono">Objective:</span>, <span class="mono">Assessment:</span> or <span class="mono">Plan:</span>. Omit undocumented sections; missing fields stay blank for review. Free-prose SOAP rewriting and arbitrary Word layouts are not qualified.</p>
 <section class="section">
-  <div class="section-heading"><h2>Recent documents</h2><span class="small muted">Visible within your authorized scope</span></div>
+  <div class="section-heading"><h2>Pick up where you left off</h2><span class="small muted">Recent documents in your authorized scope</span></div>
   {% if encounters %}
-  <div class="table-wrap"><table><thead><tr><th scope="col">Document</th><th scope="col">Patient</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col"><span class="muted">Action</span></th></tr></thead><tbody>
-    {% for encounter in encounters %}<tr><td><a href="{% url 'encounter_detail' encounter.pk %}">{{ encounter.template_version.template.name }}</a><span class="subline">Mapping v{{ encounter.template_version.number }}</span></td><td>{{ encounter.patient.display_name|default:'No patient assigned' }}{% if encounter.patient.reference %}<span class="subline">{{ encounter.patient.reference }}</span>{% endif %}</td><td><span class="badge {{ encounter.status }}">{{ encounter.get_status_display|default:encounter.status }}</span></td><td class="number">{{ encounter.created_at|date:'M j, Y' }}</td><td><a href="{% url 'encounter_detail' encounter.pk %}">{% if encounter.status == 'finalized' %}View document{% else %}Continue{% endif %}<span aria-hidden="true"> →</span></a></td></tr>{% endfor %}
-  </tbody></table></div>
+  <div class="table-wrap document-table" aria-label="Recent documents"><div class="document-toolbar" data-document-search-tools hidden><label for="document-search">Search recent documents or patients</label><input id="document-search" type="search" data-document-search autocomplete="off" placeholder="Form or patient name"><p class="small muted" data-document-search-result role="status">Filters the recent documents shown below.</p></div><table><thead><tr><th scope="col">Document</th><th scope="col">Patient</th><th scope="col">Status</th><th scope="col">Created</th><th scope="col"><span class="muted">Action</span></th></tr></thead><tbody>
+    {% for encounter in encounters %}<tr data-document-row><td data-label="Document"><a href="{% url 'encounter_detail' encounter.pk %}">{{ encounter.template_version.template.name }}</a><span class="subline">Mapping v{{ encounter.template_version.number }}</span></td><td data-label="Patient">{{ encounter.patient.display_name|default:'No patient assigned' }}{% if encounter.patient.reference %}<span class="subline">{{ encounter.patient.reference }}</span>{% endif %}</td><td data-label="Status"><span class="badge {{ encounter.status }}">{{ encounter.get_status_display|default:encounter.status }}</span></td><td data-label="Created" class="number">{{ encounter.created_at|date:'M j, Y' }}</td><td data-label="Action"><a class="document-action" href="{% url 'encounter_detail' encounter.pk %}">{% if encounter.status == 'finalized' %}View document{% else %}Continue{% endif %}<span aria-hidden="true"> →</span></a></td></tr>{% endfor %}
+  </tbody></table><p class="empty-state compact" data-document-search-empty hidden>No recent documents match this search.</p></div>
   {% else %}
   <div class="empty-state">
     <svg class="empty-glyph" viewBox="0 0 30 36" aria-hidden="true"><path d="M6 2h13l6 6v26H6zM19 2v7h6M11 15h9m-9 6h9m-9 6h6"/></svg>
-    <h2>Your first document starts here</h2><p>Upload a supported blank form, add a fictional patient, type or dictate documented notes, then review each answer with its source evidence. The upload page lists which forms are supported.</p><div class="actions"><a class="button" href="{% url 'template_upload' %}">Upload your first form</a><a href="{% url 'patients' %}">Add a patient</a></div>
+    <h2>Your first document starts here</h2><p>Upload a supported blank form and add a fictional patient. Then type or dictate notes and review the answers with their sources.</p><div class="actions"><a class="button" href="{% url 'template_upload' %}">Upload your first form</a><a href="{% url 'patients' %}">Add a patient</a></div>
   </div>
   {% endif %}
 </section>
 <div class="split">
   <section class="section" id="templates">
-    <div class="section-heading"><h2>Form library</h2><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div>
+    <div class="section-heading"><h2>My forms</h2><a href="{% url 'template_upload' %}">Upload form <span aria-hidden="true">＋</span></a></div>
     {% for template in templates %}
     <div class="template-row"><span class="file-kind">{{ template.format|upper }}</span><div><a href="{% url 'template_detail' template.pk %}">{{ template.name }}</a><p>Original retained · Added {{ template.created_at|date:'M j, Y' }}</p></div><a href="{% url 'encounter_new' %}?template={{ template.pk }}" aria-label="Use form: {{ template.name }}">Use form <span aria-hidden="true">→</span></a></div>
     {% empty %}<div class="empty-state compact"><p>No forms yet. <a href="{% url 'template_upload' %}">Upload a supported blank form</a>; it and its mapping versions will appear here.</p></div>{% endfor %}
   </section>
-  <aside class="aside"><h2>Connected services</h2>{% include 'integrations.html' %}<p class="small muted">Service status reflects this private environment. A simulated provider does not send information to a live service.</p></aside>
+  <aside class="aside"><h2>Careful review comes first</h2><p>Check the complete answer and its source. Missing or conflicting information needs your decision before export.</p><h2>Connected services</h2>{% include 'integrations.html' %}<p class="small muted">These are configuration indicators for this environment. A simulated provider makes no live request.</p></aside>
 </div>
 {% endblock %}
