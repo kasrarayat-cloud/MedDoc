@@ -46,6 +46,9 @@ NEW_TABLES=frozenset({'core_templatepreparation','core_preparationreceipt'})
 ADDED_COLUMNS=frozenset({'prepared_path','prepared_sha256','preparation_id'})
 CAMPAIGN='word-milestone-delivery-20261008-v1'
 CAMPAIGN_SCOPE='fe387adcfb7f9397a7c54c342270063f9fc7f6cdd45b357e6ab16e47d16670c8'
+SCHEMA_PROOF_DIR=RUNTIME/'ai-word-preparation-20261008/native-https-acceptance-v1/pg17-schema-qualification-v1'
+SCHEMA_PROOF_SHA='008c7e53a5d1b0503faf2b99ad3af22e61abb5ec57b7b15e2a500689b4e93e7c'
+ROLLBACK_PROOF_SHA='d46e9881e8b1004cce89bb375f4a725a77c3e36605db3f5f48fd830ea0652f1c'
 ENV_KEYS=frozenset({'QUILLMD_RELEASE_SHA','QUILLMD_WORD_PREPARATION_ENABLED',
                    'QUILLMD_WORD_PREPARATION_CAMPAIGN','QUILLMD_WORD_PREPARATION_CAMPAIGN_SCOPE_SHA256',
                    'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED'})
@@ -306,7 +309,7 @@ SCHEMA_CONTRACT = {'constraints': {'core_preparationreceipt:core_preparationrece
                       'rebuild/core/migrations/0021_preparation_failure_evidence.py': '004efca73837351ab76ca01c5359b517c66cd088925f988af14bea50d871617e',
                       'rebuild/core/migrations/0022_wm_output_followup.py': '048a2b23f4c9d1c5882d01916d50ffa8e2abbfdfdc50d007c3559209fabcf1a7',
                       'rebuild/core/migrations/0023_delivery_campaign.py': '34ec7325a29f69f7c3c5c120fa34048df6f512224b1cd6cd5bd06c8a652fdc46'},
- 'postgresql_server_version_num': '160015',
+ 'postgresql_server_version_num': '170011',
  'provenance_sha256': '43edc9904e6f1e09c527820d051a5f6fc968d883f0d525e23c81d21489f5f3b5'}
 
 
@@ -330,6 +333,72 @@ def admission_space(phase):
     require(available>=MINIMUM_SPACE,'storage_28gib')
     return {'phase':phase,'available_bytes':available,'minimum_available_bytes':MINIMUM_SPACE,
             'filesystem_device':ROOT.stat().st_dev,'available_inodes':observed.f_favail}
+
+
+def foreign_service_observation(configuration):
+    """Observe template files and concrete instances without inventing a template PID."""
+    foreign=sorted(Path(name).name for name,row in configuration.items()
+        if name.startswith('/etc/systemd/system/') and name.endswith('.service')
+        and 'sha256' in row and not Path(name).name.startswith('quillmd-'))
+    require(len(foreign)<=128 and len(foreign)==len(set(foreign)),'bounded_foreign_service_population')
+    require(all(re.fullmatch(r'[A-Za-z0-9_.:@-]+\.service',name) for name in foreign),'foreign_unit_name')
+    properties='LoadState,ActiveState,SubState,MainPID,InvocationID,FragmentPath,DropInPaths,UnitFileState,WorkingDirectory,ExecMainStartTimestampMonotonic'
+    file_values={'enabled','enabled-runtime','linked','linked-runtime','alias','masked','masked-runtime',
+        'static','disabled','indirect','generated','transient','bad'}
+    def unique(pairs):
+        row={}
+        for key,value in pairs:
+            require(key not in row,'foreign_duplicate_property');row[key]=value
+        return row
+    def parsed(raw):return json.loads(raw,object_pairs_hook=unique)
+    def state(unit):
+        raw=old.command(['systemctl','show',unit,'--property='+properties],timeout=10)
+        lines=raw.decode().splitlines();require(all('=' in line for line in lines),'foreign_property_line')
+        row=unique(line.split('=',1) for line in lines)
+        require(set(row)==set(properties.split(',')) and row['MainPID'].isdigit()
+            and row['LoadState'] in {'stub','loaded','error','merged','masked','bad-setting'}
+            and row['ActiveState'] in {'active','reloading','inactive','failed','activating','deactivating','maintenance','refreshing'}
+            and re.fullmatch('[a-z][a-z0-9-]{0,63}',row['SubState'])
+            and row['UnitFileState'] in file_values
+            and re.fullmatch('[a-f0-9]{32}|',row['InvocationID'])
+            and row['ExecMainStartTimestampMonotonic'].isdigit(),'foreign_concrete_state')
+        return row
+    templates=[name for name in foreign if name.endswith('@.service')]
+    result={name:state(name) for name in foreign if name not in templates}
+    if not templates:return result
+    records=parsed(old.command(['systemctl','list-unit-files',*templates,'--type=service',
+        '--output=json','--no-pager'],timeout=10))
+    require(isinstance(records,list) and len(records)==len(templates),'foreign_template_file_population')
+    file_states={}
+    for row in records:
+        require(isinstance(row,dict) and row.get('unit_file') in templates
+            and row['unit_file'] not in file_states and row.get('state') in file_values
+            and 'preset' in row and row['preset'] in (None,'enabled','disabled','ignored'),
+            'foreign_template_file_state')
+        file_states[row['unit_file']]=row
+    require(set(file_states)==set(templates),'foreign_template_file_population')
+    patterns=[name[:-len('@.service')]+'@*.service' for name in templates]
+    enumeration=['systemctl','list-units',*patterns,'--all','--type=service','--output=json','--no-pager']
+    instances=parsed(old.command(enumeration,timeout=10))
+    require(isinstance(instances,list) and len(instances)+len(foreign)<=128,'bounded_foreign_instance_population')
+    seen=set()
+    for name in templates:
+        result[name]={'template_file':True,'UnitFileState':file_states[name]['state'],
+            'UnitFilePreset':file_states[name].get('preset'),'instances':{}}
+    for row in instances:
+        require(isinstance(row,dict) and isinstance(row.get('unit'),str),'foreign_instance_row')
+        unit=row['unit'];parents=[name for name in templates
+            if re.fullmatch(re.escape(name[:-len('@.service')])+r'@[^@/]+\.service',unit)]
+        require(len(parents)==1 and unit not in seen,'foreign_instance_identity')
+        observed=state(unit)
+        require(all(observed[property_name]==row.get(list_name) for property_name,list_name
+            in (('LoadState','load'),('ActiveState','active'),('SubState','sub'))),'foreign_instance_enumeration_drift')
+        result[parents[0]]['instances'][unit]=observed;seen.add(unit)
+    # Refuse an instance arriving/disappearing or changing state while the
+    # concrete records were read. Never publish a stale partial population.
+    current=parsed(old.command(enumeration,timeout=10))
+    require(current==instances,'foreign_instance_population_drift')
+    return result
 
 
 def render_environment(original,candidate,*,recovery=False):
@@ -362,6 +431,25 @@ def render_environment(original,candidate,*,recovery=False):
     return updated
 
 
+def schema_qualification():
+    raw=protected(SCHEMA_PROOF_DIR/'pg17-canonical-schema-contract-v1.json',2*1024**2)
+    rollback_raw=protected(SCHEMA_PROOF_DIR/'pg17-forward-rollback-proof-v1.json',2*1024**2)
+    require(sha(raw)==SCHEMA_PROOF_SHA and sha(rollback_raw)==ROLLBACK_PROOF_SHA,'pg17_qualification_bytes')
+    value=json.loads(raw);rollback=json.loads(rollback_raw)
+    require(value['postgresql_server_version_num']==SCHEMA_CONTRACT['postgresql_server_version_num']
+        and rollback['postgresql_server_version_num']==value['postgresql_server_version_num'],'pg17_qualification_engine')
+    require(value['constraints']==SCHEMA_CONTRACT['constraints'] and value['indexes']==SCHEMA_CONTRACT['indexes']
+        and len(value['functions'])==13 and len(value['triggers'])==11,'pg17_qualification_canonical_schema')
+    expected={'rebuild/core/migrations/'+name+'.py' for name in MIGRATIONS}
+    require(set(value['migration_sha256'])==expected and all(sha(old.public_source(SOURCE/name))==digest
+        for name,digest in value['migration_sha256'].items()),'pg17_qualification_migration_bytes')
+    require(rollback['rows_identical_after_rollback'] is True and rollback['schema_identical_after_rollback'] is True
+        and rollback['before_rows']==rollback['after_rows'] and rollback['before_schema']==rollback['after_schema']
+        and rollback['sequence_advances']=={'django_migrations_id_seq':5,'django_content_type_id_seq':2,'auth_permission_id_seq':8},
+        'pg17_qualification_actual_rollback')
+    return {'canonical':SCHEMA_PROOF_SHA,'rollback':ROLLBACK_PROOF_SHA}
+
+
 def source_pins(candidate):
     require(re.fullmatch('[a-f0-9]{40}',candidate or ''),'candidate_sha')
     require(old.git(SOURCE,'rev-parse','HEAD').strip().decode()==candidate,'operator_candidate_head')
@@ -384,6 +472,7 @@ def source_pins(candidate):
         require(raw==old.git(SOURCE,'show',candidate+':'+relative),'tracked_source_bytes')
         result[relative]=sha(raw)
     require(DECL in result,'committed_declaration_required')
+    schema_qualification()
     old.command(['bash',str(SOURCE/'scripts/check-citation.sh'),candidate],cwd=SOURCE,timeout=120)
     return result
 
@@ -831,13 +920,7 @@ class NativeHost:
     def snapshot(self,before=None):
         self.check_hold();files=self.storage.inventory(Path('/var/lib/quillmd/files'))
         configuration=self.native.configuration()
-        foreign=[Path(name).name for name,row in configuration.items() if name.startswith('/etc/systemd/system/')
-            and name.endswith('.service') and 'sha256' in row and not Path(name).name.startswith('quillmd-')]
-        require(len(foreign)<=128 and len(foreign)==len(set(foreign)),'bounded_foreign_service_population')
-        states={}
-        for unit in sorted(foreign):
-            raw=old.command(['systemctl','show',unit,'--property=ActiveState,SubState,MainPID,InvocationID,FragmentPath,DropInPaths,UnitFileState,WorkingDirectory,ExecMainStartTimestampMonotonic'],timeout=10)
-            states[unit]=dict(line.split('=',1) for line in raw.decode().splitlines() if '=' in line)
+        states=foreign_service_observation(configuration)
         result={'files':files,'mail':self.storage.inventory(Path('/var/lib/quillmd/mail')),
                 'configuration':configuration,'foreign_services':states,'database':self.database(files,before)}
         self.check_hold();return result
