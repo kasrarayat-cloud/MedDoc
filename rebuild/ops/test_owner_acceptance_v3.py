@@ -2362,34 +2362,6 @@ class FinancialAndExportTests:
             self.assertNotEqual(checked(bad).returncode, 0)
 
 
-class ExposureAndFilesTests(unittest.TestCase):
-    def attempts(self):
-        return [{'job_id': str(index), 'kind': 'transcription' if index == 2 else 'generation',
-                 'send_sequence': index + 1, 'retries': 0, 'passed': True,
-                 'actual_cost': '.01', 'quote_maximum': '.20' if index == 2 else '.10'} for index in range(6)]
-    def test_exact_six_attempts_and_every_unknown_stops(self):
-        self.assertEqual(v3.exposure_admission(self.attempts(), complete=True)['generations'], 5)
-        for key, value in [('passed', False), ('actual_cost', None), ('actual_cost', 'NaN'), ('retries', 1),
-                           ('quote_maximum', '.11'), ('quote_maximum', '-1'), ('quote_maximum', '.001'),
-                           ('quote_maximum', 'NaN'), ('actual_cost', '.11'), ('send_sequence', 3)]:
-            rows = self.attempts(); rows[0][key] = value
-            with self.subTest(key=key, value=value), self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
-        rows = self.attempts(); rows[-1]['job_id'] = rows[0]['job_id']
-        with self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
-        with self.assertRaises(v3.Refusal): v3.exposure_admission(self.attempts()[:-1], complete=True)
-    def test_no_current_state_baseline_replacement_and_foreign_file_refuse(self):
-        before = {'files': {'old': {'sha256': 'a'}}, 'mail': {}, 'static': {'x': 'old'}, 'configuration': {'cfg': 'old'},
-                  'database': {'catalog': {'columns': 'original'}, 'invariants': {'held': 0}}}
-        current = copy.deepcopy(before); current['files']['new'] = {'sha256': 'b'}
-        result = v3.file_catalog_admission(before, current, before['database']['catalog'], {'new': 'b'}, {'held': 0})
-        self.assertTrue(result['all_old_file_metadata_bytes_preserved'])
-        for label in ('configuration', 'static', 'mail', 'files'):
-            bad = copy.deepcopy(current); bad[label]['unexpected'] = {'sha256': 'foreign'}
-            with self.subTest(label=label), self.assertRaises(v3.Refusal):
-                v3.file_catalog_admission(before, bad, before['database']['catalog'], {'new': 'b'}, {'held': 0})
-        with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
-
-
     def test_actual_common_and_node_bridge_require_same_owner_packet_and_original_files(self):
         import re
         verifier,old,current,keys,manifest,baseline,pins,cipher=OwnerInteractiveOverlayTests().fixture()
@@ -2429,6 +2401,36 @@ class ExposureAndFilesTests(unittest.TestCase):
         self.assertEqual(common.admission(v3.encode(report),**args),report)
         bad=copy.deepcopy(report);bad.pop('owner_interactive_preservation');args=arguments(bad);args['authority'].pop('owner_interactive_preservation')
         with self.assertRaises(RuntimeError):common.admission(v3.encode(bad),**args)
+
+
+class ExposureAndFilesTests(unittest.TestCase):
+    def attempts(self):
+        return [{'job_id': str(index), 'kind': 'transcription' if index == 2 else 'generation',
+                 'send_sequence': index + 1, 'retries': 0, 'passed': True,
+                 'actual_cost': '.01', 'quote_maximum': '.20' if index == 2 else '.10'} for index in range(6)]
+    def test_exact_six_attempts_and_every_unknown_stops(self):
+        self.assertEqual(v3.exposure_admission(self.attempts(), complete=True)['generations'], 5)
+        for key, value in [('passed', False), ('actual_cost', None), ('actual_cost', 'NaN'), ('retries', 1),
+                           ('quote_maximum', '.11'), ('quote_maximum', '-1'), ('quote_maximum', '.001'),
+                           ('quote_maximum', 'NaN'), ('actual_cost', '.11'), ('send_sequence', 3)]:
+            rows = self.attempts(); rows[0][key] = value
+            with self.subTest(key=key, value=value), self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
+        rows = self.attempts(); rows[-1]['job_id'] = rows[0]['job_id']
+        with self.assertRaises(v3.Refusal): v3.exposure_admission(rows)
+        with self.assertRaises(v3.Refusal): v3.exposure_admission(self.attempts()[:-1], complete=True)
+    def test_no_current_state_baseline_replacement_and_foreign_file_refuse(self):
+        before = {'files': {'old': {'sha256': 'a'}}, 'mail': {}, 'static': {'x': 'old'}, 'configuration': {'cfg': 'old'},
+                  'database': {'catalog': {'columns': 'original'}, 'invariants': {'held': 0}}}
+        current = copy.deepcopy(before); current['files']['new'] = {'sha256': 'b'}
+        result = v3.file_catalog_admission(before, current, before['database']['catalog'], {'new': 'b'}, {'held': 0})
+        self.assertTrue(result['all_old_file_metadata_bytes_preserved'])
+        for label in ('configuration', 'static', 'mail', 'files'):
+            bad = copy.deepcopy(current); bad[label]['unexpected'] = {'sha256': 'foreign'}
+            with self.subTest(label=label), self.assertRaises(v3.Refusal):
+                v3.file_catalog_admission(before, bad, before['database']['catalog'], {'new': 'b'}, {'held': 0})
+        with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
+
+
 
 
 @patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
