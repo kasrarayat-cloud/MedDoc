@@ -1,16 +1,18 @@
 # Restricted owner normal-origin transition, 7 October 2026
 
 This source qualifies the reviewed normal-origin protocol and application gate,
-bound to the genuine preserving availability receipt and actual private acceptance
-operations merge. Exact citations are checked at execution; this declaration does
+bound to the genuine preserving availability receipt and exact private acceptance
+operational ancestor incorporated through the reviewed pull request. Exact
+citations are checked at execution; this declaration does
 not claim that pending CI has completed. The application setting stays disabled
 until runtime admission of the genuine completed private campaign. Completed
 private browser/provider evidence and the full frozen independent proof remain
 execution gates. The existing recorded task authorization covers this reviewed
 route; no additional provider allowance is introduced.
 
-The source base shown below is the actual private acceptance operations merge;
-its full citation and the exact normal target citation remain execution gates. The
+The source base shown below is the exact private acceptance operational ancestor;
+its own full citation, ancestry in the actual merged normal target, unchanged used
+dependencies and the exact normal target citation remain execution gates. The
 accepted served revision is the actual recovery release in its genuine receipt,
 never a remembered or fabricated SHA. The intermediate accepted-operations
 revision must differ from that served release on exactly the four established
@@ -20,6 +22,18 @@ application changes are limited to preview access and its explicit default-disab
 setting, plus the legacy disabled-origin refusal test. Clinical generation, Word,
 Python dependencies, installed Node dependencies, static assets, schemas and
 original captures remain byte-identical.
+
+8 October correction: the operational source base is now
+`4a1d0c141262fd096571f2af22c31e864c0bad15`, retaining the same five-path scope
+from the installed recovery release. Its fresh child admission binds the actual
+reviewed normal descendant for the existing GitHub main-reference comparison.
+The prior `8b5aec69` operations and `70fea651` normal merge, their completed
+citations and the original frozen-helper false refusal remain historical records.
+The operational ancestor receives its own exact CI citation and reaches main
+only through the integration PR; it is not described as the later merge commit.
+Runtime campaign completion, authentication and actual provider model are still
+unobserved. The nine-path normal scope, preserved originals, one-shot allowances
+and failure behavior are unchanged.
 
 <!-- owner-normal443-contract -->
 ```json
@@ -140,7 +154,7 @@ original captures remain byte-identical.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "8b5aec69f8545fbfa5f2acb17f97f646f6ee241b"
+  "source_base": "4a1d0c141262fd096571f2af22c31e864c0bad15"
 }
 ```
 
