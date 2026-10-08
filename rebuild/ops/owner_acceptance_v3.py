@@ -81,6 +81,18 @@ PYTHON = APP / '.venv/bin/python'
 LOCKS = ('legacy-model-activation.lock', 'backup-monitor/capture.lock',
          'automatic-offsite/execution.lock', 'backup-alerts/monitor.lock')
 FROZEN_B77 = 'b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c'
+# A single retained, expired, unprivileged session; never a future-row exemption.
+EXPIRED_SESSION_KIND = 'retained_expired_anonymous_preview'
+EXPIRED_SESSION_EVIDENCE = BASE / 'recovery-20261007/before-auth-added-row-bounded-reconciliation-v1.json'
+EXPIRED_SESSION_EVIDENCE_SHA = '9e07eb0cdb7baa7770ae3c4f15f71d13a0ccf3bf7c3c17445597830b465468a8'
+EXPIRED_SESSION_PIN = {
+    'primary_key_sha256': 'bef13f296c1336c397fafd1cf6d5b6292d5c6bf64bba02ea8d20bbde48310366',
+    'copy_primary_key_sha256': '4046d064ab7eddfec87e24a438a27c64253fe60039b2269fa8d53c8a05ea9178',
+    'row_sha256': '48a98693b7f15e39dbb1b24c910c688cb0aaeda4acfa53bb6f911cad1136679a',
+    'payload_sha256': '934f580f2ebb8b1eaa1a22496f14b4a4e25b6742665f569ab2d57121e9eb93be',
+    'expire_date': '2026-10-08 01:36:03.885947+00',
+    'created': 1791421563.8615303, 'destination': '/', 'expiry_seconds': 1800,
+}
 DEPENDENCIES = {
     'prepare-installed-admin-auth-v3.mjs': 'c8fa9d63de993fca8aacb33a0ce5f295b3a1bfdc7c685bce598acf841453e90f',
     'installed-browser-acceptance-v3.mjs': 'd58204d839ecf150bb918f34899f0d7784f312a2e3f55008248df01916667aa0',
@@ -711,6 +723,7 @@ def frozen_modules(reader=protected):
     original = reader(BASE / 'verify_installed_acceptance_v2.py')
     verifier = module_from_bytes(original, BASE / 'verify_installed_acceptance_v2.py', FROZEN_B77)
     adapt_publisher_adjudicator(verifier)
+    adapt_expired_session_validator(verifier)
     return common, verifier, json.loads(blobs['historical-qualified-policy.json'])
 
 
@@ -1370,10 +1383,63 @@ def preserved_snapshot(expected, current, database, configuration_proof=None, *,
     return True
 
 
+def expired_session_descriptor():
+    return {'kind': EXPIRED_SESSION_KIND, 'source_proof': {
+        'pin': copy.deepcopy(EXPIRED_SESSION_PIN), 'evidence_sha256': EXPIRED_SESSION_EVIDENCE_SHA,
+        'requester_identified': False, 'account_authentication': False, 'MFA': False, 'access_grant': False}}
+
+
+def validate_expired_session(verifier, row, columns, secret):
+    require(columns == ['session_key', 'session_data', 'expire_date'] and set(row) == set(columns)
+            and sha(encode([row['session_key'].decode()])) == EXPIRED_SESSION_PIN['primary_key_sha256']
+            and sha(verifier.encoded([row['session_key'].decode()])) == EXPIRED_SESSION_PIN['copy_primary_key_sha256']
+            and verifier.row_digest(row, columns) == EXPIRED_SESSION_PIN['row_sha256']
+            and row['expire_date'].decode() == EXPIRED_SESSION_PIN['expire_date'], 'v3_exact_retained_expired_session_row')
+    value = verifier.normal_session(row['session_data'], secret)
+    require(type(value) is dict and sha(encode(value)) == EXPIRED_SESSION_PIN['payload_sha256']
+            and set(value) == {'kind', 'flows', '_session_expiry'}
+            and value['kind'] == 'quillmd-preview-v1' and type(value['_session_expiry']) is int
+            and value['_session_expiry'] == EXPIRED_SESSION_PIN['expiry_seconds']
+            and type(value['flows']) is dict and len(value['flows']) == 1, 'v3_exact_retained_expired_session_payload')
+    nonce, flow = next(iter(value['flows'].items()))
+    require(isinstance(nonce, str) and re.fullmatch('[a-f0-9]{32}', nonce)
+            and type(flow) is dict and set(flow) == {'created', 'destination'}
+            and type(flow['created']) is float and flow['created'] == EXPIRED_SESSION_PIN['created']
+            and flow['destination'] == EXPIRED_SESSION_PIN['destination']
+            and stamp(EXPIRED_SESSION_PIN['expire_date']) < stamp('2026-10-08T01:54:17.857371+00:00'),
+            'v3_retained_session_expired_unprivileged_flow')
+    return expired_session_descriptor()
+
+
+def preserved_expired_session_count(rows, *, required=False):
+    selected = [row for row in rows if row.get('descriptor', {}).get('kind') == EXPIRED_SESSION_KIND
+                or row.get('primary_key_sha256') == EXPIRED_SESSION_PIN['copy_primary_key_sha256']]
+    require(len(selected) == 1 if required else len(selected) <= 1, 'v3_one_retained_expired_session_required')
+    for row in selected:
+        require(row == {'table': 'django_session', 'primary_key_sha256': EXPIRED_SESSION_PIN['copy_primary_key_sha256'],
+                       'row_sha256': EXPIRED_SESSION_PIN['row_sha256'], 'descriptor': expired_session_descriptor()},
+                'v3_exact_retained_expired_session_descriptor')
+    return len(selected)
+
+
+def adapt_expired_session_validator(verifier):
+    original = verifier.validate_admitted_added_row
+    def checked(row, columns, prior, admin_actor, secret, *args):
+        if prior.get('descriptor', {}).get('kind') == EXPIRED_SESSION_KIND or (
+                prior.get('primary_key_sha256') == EXPIRED_SESSION_PIN['copy_primary_key_sha256']):
+            preserved_expired_session_count([prior], required=True)
+            require(validate_expired_session(verifier, row, columns, secret) == prior['descriptor'],
+                    'v3_retained_expired_session_final_proof')
+            return
+        return original(row, columns, prior, admin_actor, secret, *args)
+    verifier.validate_admitted_added_row = checked
+
+
 def authenticated_rows_admission(verifier, old, current, keys, policy, secret, fingerprint, auth, publisher, edge_ip=None):
     """Use the qualified COPY algorithm, with explicit route input instead of I/O.
 
-    The one replaced AST statement is its TCP route observation. The caller
+    The TCP route statement is replaced and one exact expired row is admitted.
+    All original comparisons and unknown-row refusals remain. The caller
     supplies a route address observed by the qualified native collector under
     the same hold. This helper itself has no socket or installed-state access.
     """
@@ -1397,7 +1463,29 @@ def authenticated_rows_admission(verifier, old, current, keys, policy, secret, f
             require(str(ipaddress.ip_address(edge_ip)) == edge_ip, 'v3_canonical_native_edge_address')
         except (ValueError, TypeError):
             raise Refusal('v3_canonical_native_edge_address') from None
-    namespace = dict(verifier.__dict__, supplied_edge_ip=edge_ip)
+    # Insert one branch before generic authentication-cookie handling. Count
+    # the actual retained row; do not filter it or replace the original capture.
+    branches = [node for node in ast.walk(function) if isinstance(node, ast.If)
+                and ast.unparse(node.test) == "auth and table == 'django_session'"]
+    require(len(branches) == 1, 'v3_exact_expired_session_branch')
+    target = branches[0]
+    added = ast.parse("""if table == 'django_session' and sha(encoded([row['session_key'].decode()])) == expired_pin['copy_primary_key_sha256']:
+    descriptor = validate_retained_session(row, columns, secret)
+""").body[0]
+    added.orelse = [target]
+    class Insert(ast.NodeTransformer):
+        def visit_If(self, node):
+            return added if node is target else self.generic_visit(node)
+    function = Insert().visit(function)
+    counts = [node for node in ast.walk(function) if isinstance(node, ast.Compare)
+              and ast.unparse(node) == "counts['django_session'] == (3 if auth else 1)"]
+    require(len(counts) == 1, 'v3_exact_expired_session_count')
+    counts[0].comparators[0] = ast.parse(
+        '(3 if auth else 1) + retained_count(added_evidence)', mode='eval').body
+    raw = ast.Module(body=[function], type_ignores=[])
+    namespace = dict(verifier.__dict__, supplied_edge_ip=edge_ip, expired_pin=EXPIRED_SESSION_PIN,
+                     validate_retained_session=lambda row, columns, secret: validate_expired_session(verifier, row, columns, secret),
+                     retained_count=preserved_expired_session_count)
     exec(compile(ast.fix_missing_locations(raw), '<qualified-v3-pure-copy-adapter>', 'exec'), namespace)
     return namespace['continuation_rows_admission'](old, current, keys, policy, secret, fingerprint, auth, publisher)
 
@@ -1565,7 +1653,7 @@ def old_and_added_rows_admission(verifier, original, current, keys, manifest, af
                 and len(before) == manifest['tables'][table]['rows'] and before.keys() <= after.keys(),
                 'v3_authenticated_original_rows_undeleted')
         for primary, row in before.items():
-            digest = sha(encode([cell.decode() for cell in primary]))
+            digest = sha(verifier.encoded([cell.decode() for cell in primary]))
             transition = transitions.get((table, digest))
             if transition is not None:
                 row = verifier.admitted_original_row(row, columns, transition, table, auth['admin']['actor_id'], auth)
@@ -1582,7 +1670,7 @@ def old_and_added_rows_admission(verifier, original, current, keys, manifest, af
         added = [row for primary, row in after.items() if primary not in before]
         counts[table] = len(added)
         for row in added:
-            digest = sha(encode([row[name].decode() for name in keys[table]])); identity = (table, digest)
+            digest = sha(verifier.encoded([row[name].decode() for name in keys[table]])); identity = (table, digest)
             if identity in admitted_added:
                 verifier.validate_admitted_added_row(row, columns, admitted_added[identity], auth['admin']['actor_id'],
                     context['secret'], context['preview_fingerprint'], context['admin_read_interval'], context['actor'],
@@ -1595,7 +1683,8 @@ def old_and_added_rows_admission(verifier, original, current, keys, manifest, af
     require(counts.get('core_encounter') == 5 and counts.get('core_job') == 6
             and counts.get('core_usage') == counts.get('core_providerreceipt') == 6
             and counts.get('core_template') == counts.get('core_templateversion') == 1
-            and counts.get('django_session') == 5 and counts.get('otp_totp_totpdevice') == 0,
+            and counts.get('django_session') == 5 + preserved_expired_session_count(admitted_added.values())
+            and counts.get('otp_totp_totpdevice') == 0,
             'v3_exact_new_case_auth_population')
     return {'all_original_tables_rows_columns_compared': True, 'original_capture_replaced': False,
             'OTP_unchanged_after_one_declared_MFA': True, 'all_health_fields_strict_after_publication_admission': True,
@@ -1748,8 +1837,12 @@ def installed_database_admission(contract, *, auth_packet=None, operations=None,
             edge_ip = route.getsockname()[0]
     options = backup.source_options(APP, legacy.ROLES)
     with psycopg.connect(**options, row_factory=dict_row) as conn:
-        return readonly_copy_admission(conn, verifier, backup, original, baseline, manifest,
-                                       policy, secret, fingerprint, auth, edge_ip, publisher_admission)
+        result = readonly_copy_admission(conn, verifier, backup, original, baseline, manifest,
+                                         policy, secret, fingerprint, auth, edge_ip, publisher_admission)
+    require(sha(protected(EXPIRED_SESSION_EVIDENCE)) == EXPIRED_SESSION_EVIDENCE_SHA,
+            'v3_retained_expired_session_evidence_pin')
+    preserved_expired_session_count(result['allowed_deltas']['added_rows'], required=True)
+    return result
 
 
 def installed_auth_packet():
@@ -2426,15 +2519,24 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
         require(callable(phase_preservation), 'v3_phase_verifier_callback')
         reports[0].value.keys.append(ast.Constant('co_tenant_preservation_admission'))
         reports[0].value.values.append(ast.parse('phase_preservation()', mode='eval').body)
+    population_functions = [node for node in tree.body if isinstance(node, ast.FunctionDef)
+                            and node.name == 'verify_preservation']
+    require(len(population_functions) == 1, 'v3_exact_final_preservation_function')
+    session_counts = [node for node in ast.walk(population_functions[0]) if isinstance(node, ast.Compare)
+                      and ast.unparse(node) == "new_counts['django_session'] == 5"]
+    require(len(session_counts) == 1, 'v3_exact_final_retained_session_count')
+    session_counts[0].comparators[0] = ast.parse(
+        '5 + preserved_expired_session_count(admitted_added.values(), required=True)', mode='eval').body
     module = types.ModuleType('_quillmd_v3_independent_verifier')
     module.__file__ = str(FROZEN / 'verify_installed_acceptance_v3.py')
     module.__dict__.update(v3_execution_gate=execution_gate, validate_v3_availability=common.availability,
         validate_v3_admission=common.admission, validate_v3_auth_sequence=common.auth_sequence,
         validate_admin_final_storage=validate_admin_final_storage,
         validate_doctor_final_storage=validate_doctor_final_storage,
-        phase_preservation=phase_preservation,
+        phase_preservation=phase_preservation, preserved_expired_session_count=preserved_expired_session_count,
         AVAILABILITY=str(AVAILABILITY), PREPARATION=str(PREPARATION), ADMIN=str(ADMIN), CAMPAIGN=str(CAMPAIGN))
     exec(compile(ast.fix_missing_locations(tree), module.__file__, 'exec'), module.__dict__)
+    adapt_expired_session_validator(module)
     module.load_v3_authority = lambda operations, served: copy.deepcopy(authority) if (
         operations == authority['operations_revision'] and served == authority['served_revision']) else require(False, 'v3_verifier_authority_revision')
     # The operational descendant's reviewed publisher closure handles native
@@ -2568,6 +2670,7 @@ class InstalledHost:
         require(sha(original_verifier) == FROZEN_B77, 'v3_frozen_dependency_hash')
         setattr(self.availability_verifier, '__authenticated_source', original_verifier)
         adapt_publisher_adjudicator(self.availability_verifier)
+        adapt_expired_session_validator(self.availability_verifier)
 
     def authority(self):
         result = derive_authority(self.contract, self.common, self.operations, self.served, self.admission_raws)

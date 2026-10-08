@@ -701,3 +701,45 @@ changes no native mode. Operations copies require their indexed0644 modes. The
 later declared normal source fast-forward changes only the pinned lock bytes and
 its indexed0644 source file mode; unchanged manifests retain their exact bytes
 and native modes. Existing installed Node dependencies remain untouched.
+
+
+## Exact retained expired session — 8 October 2026
+
+The 01:36 UTC actual acceptance invocation refused before preparation,
+authentication, provider calls or database writes. Its original log remains
+unchanged (SHA-256 e05db89631f5ec04368ecd95ee800d2f1920660e4eadda5ad3ecaaf59833144f).
+A separate read-only trace establishes an undeclared added session as a current
+pre-auth refusal, without retroactively certifying the original exception.
+The bounded reconciliation is retained at SHA-256
+9e07eb0cdb7baa7770ae3c4f15f71d13a0ccf3bf7c3c17445597830b465468a8.
+All 212 original sessions and all other original rows remain unchanged except
+the independently source-adjudicated existing publisher row.
+
+Preserve exactly one additional expired anonymous preview row: primary-key
+fingerprint bef13f296c1336c397fafd1cf6d5b6292d5c6bf64bba02ea8d20bbde48310366;
+full COPY row SHA-256 48a98693b7f15e39dbb1b24c910c688cb0aaeda4acfa53bb6f911cad1136679a;
+canonical decoded payload SHA-256 934f580f2ebb8b1eaa1a22496f14b4a4e25b6742665f569ab2d57121e9eb93be;
+expiry 2026-10-08 01:36:03.885947+00. Its signed payload has only kind,
+flows and _session_expiry, one root-destination flow created at
+1791421563.8615303, expiry 1800 seconds, and no account authentication, MFA or
+access grant. Requester remains unidentified. This preservation admits no
+privilege and certifies no request origin or deployment approval.
+
+The original capture, original health-session qualification and every failure
+record remain intact. Exact signature, full row, payload, descriptor, population
+counts and retention are checked through before-auth, after-auth and final
+verification, including normal HTTPS continuation. No rows are filtered,
+deleted, substituted or generally excluded; another addition, an altered or
+missing pinned row, an original-row change, or malformed proof refuses. This
+focused operational repair changes no application, service, clinical output,
+authentication policy, provider model, allowance or unrelated deployment.
+
+
+The reconciliation fingerprints use JSON without a trailing newline. The frozen
+COPY lifecycle fingerprints use JSON plus a trailing newline. Both are explicit:
+COPY primary-key fingerprint 4046d064ab7eddfec87e24a438a27c64253fe60039b2269fa8d53c8a05ea9178.
+The exact live read established matching row bytes and expiry and distinct
+encoding hashes, with no writes, authentication or provider calls. The initial
+new-repair comparison failure and encoding diagnosis are retained separately;
+neither modifies the original reconciliation or failure record. The pure final
+join uses the same frozen COPY fingerprint encoding for admitted row identities.
