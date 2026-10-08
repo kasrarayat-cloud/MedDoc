@@ -39,7 +39,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
 <!-- owner-acceptance-v3-contract -->
 ```json
 {
-  "admin_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-acceptance-v3-20261007",
+  "admin_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-acceptance-v4-20261008",
   "approved_source_paths": [
     "docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md",
     "package-lock.json",
@@ -47,12 +47,12 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "rebuild/ops/test_owner_acceptance_v3.py",
     "scripts/run-owner-acceptance-v3.py"
   ],
-  "attempt_marker": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-attempt-20261007.json",
+  "attempt_marker": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-attempt-20261008.json",
   "authentication_seconds": 180,
   "availability_directory": "/opt/meddoc-pro/rebuild/.runtime/private-availability-recovery-20261007",
   "availability_receipt_sha256": "17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd",
   "browser_verifier_seconds": 1200,
-  "campaign_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007",
+  "campaign_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-20261008",
   "ci_only_dependency_lock": {
     "after_sha256": "a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136",
     "before_sha256": "a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e",
@@ -93,6 +93,45 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "maximum_provider_exposure": "0.70",
   "maximum_transcriptions": 1,
   "native_authorization_protocol_qualified": true,
+  "native_gate_diagnostic": {
+    "automatic_retries": false,
+    "database_immutability_inferred_from_child_counter": false,
+    "diagnostic_authentication_submissions": 0,
+    "diagnostic_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-native-gate-diagnostic-20261008",
+    "diagnostic_parent_mode": "--gate-preflight",
+    "diagnostic_provider_calls": 0,
+    "native_child_seconds": 90,
+    "new_actual_paths": [
+      "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008",
+      "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-acceptance-v4-20261008",
+      "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-20261008",
+      "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-attempt-20261008.json"
+    ],
+    "originals_moved_deleted_or_replaced": false,
+    "parent_phase_seconds": 180,
+    "protocol": "checked-native-gate-diagnostic-v1",
+    "retained_files": {
+      "STOP.json": "e6c5e1d355a5f123b5cc21b1b82a13a1a43850b9fd6fe19c7b68a0cfb30045cd",
+      "admission-before-auth.json": "7dd5db3b1341d451b5d999f4814f108c7f62f5238996b2edd383b39be047213c",
+      "co-tenant-phase-preservation.json": "362c0ac4dd3583e6aa50251be5b15be21f68d7d3d39eb17b8e390e297a225c35",
+      "normal-auth-stderr.log": "a5762bbcee325d14fa40143ab0e024f7200ebe8cc141a4e14183cdc2b7acc60a",
+      "normal-auth-stdout.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "parent-phase-normal-auth.json": "2f3a55557abbf7ab15dab756f69bef33b244b11ff97d865ca637cc226757a140",
+      "parent.json": "7c24507d2bcdb61d15f5f91cbc2aa552d8e5ac10889363feb1fc5a081e480a2e",
+      "publisher-alignment.json": "5d9687290dfbf5d36a46fbb7146da811f6cae1c050c49139244dc48a6379ffa8"
+    },
+    "retained_proofs": {
+      "a3-normal-auth-node-checked-handoff-independent-v1.json": "5d086dde363f5f928deccf46c03b626db2401e9007b8b833368178d44d5510e2",
+      "acceptance-v3-expiry-resolved-actual-campaign-v1.log": "446069c03cbdab18378c30256f5ad68cc4f41d6e7b8aedc92ca41aa03ba93f58",
+      "normal-auth-first-gate-source-only-refutation-v1.json": "ff11a289105a5f36a9d76834df8d28d1816657a4ebfce6aacac08bde0b417cae"
+    },
+    "source_qualified": true,
+    "stopped_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/stopped-authentication-first-gate-retained-evidence-v1.json",
+      "sha256": "39739041d6d830d7b602bf14049bb85a129bba02289a464399683a68aece68d2"
+    },
+    "stopped_v3_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007"
+  },
   "normal_443_provider_calls": 0,
   "normal_443_qualified": false,
   "operations_revision": null,
@@ -186,7 +225,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "historical_manifest_pid_match_required": false,
     "original_baseline_replaced": false,
     "phase_baseline_captured_once": true,
-    "phase_observation_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json",
+    "phase_observation_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/co-tenant-phase-preservation.json",
     "protected_external_configuration_paths": [
       "/etc/systemd/system/voiceassistmain-product.service",
       "/etc/nginx/sites-available/voice.kasitcorp.com",
@@ -218,7 +257,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     },
     "protocol": "post-restoration-exact-owner-preservation-v1"
   },
-  "preparation_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007",
+  "preparation_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008",
   "preparation_only": true,
   "protocol_qualified": true,
   "provider_retries": 0,
@@ -788,3 +827,61 @@ code, application security, source reset, migration, provider allowance, service
 state or VoiceAssistMain resource. Authenticated acceptance and the subsequent
 normal HTTPS transition remain authorized only through their existing reviewed
 ruled doors after exact source citation and affected controls.
+
+
+## 8 October — retain the stopped v3 gate and diagnose before authentication
+
+The exact eight-file v3 preparation and its STOP remain at their original paths.
+The source pins the lead's closed retained-evidence record, failed campaign log,
+raw child streams and both independent source proofs. They establish that the
+frozen first gate stopped before credential reads, browser launch and normal
+authentication or provider submission. They do not establish database immutability
+from the generic child counter, or the specific native predicate that failed.
+The earlier 82.546872-second context-to-stderr interval is not a Node-gate duration.
+
+The new native-gate diagnostic protocol remains unqualified in this draft. Its
+fixed `--gate-preflight` controller uses the same five kernel holds and fresh
+source, original-record, live-service and phase-preservation admission. It creates
+only the separate `installed-native-gate-diagnostic-20261008` evidence directory.
+Its checked Node module calls the same native gate and exits before all frozen
+authentication statements. The native child retains the 90-second limit and the
+parent phase retains 180 seconds; the outer ceiling remains 1680 seconds.
+
+Each gate writes one exclusive protected record with source and parent-context
+bindings, actual monotonic elapsed time, exit/signal/closed transport category,
+a whitelisted native summary, and bounded raw child streams. Raw exception text
+is preserved only in protected evidence. The public failure reports a fixed or
+source-whitelisted code. A failed or unknown gate leaves STOP and permits no
+automatic retry or authentication/provider replay. Diagnostic database statement
+counts are uninstrumented and are reported as unknown.
+
+A later actual campaign uses the separately declared v4 preparation, administrator,
+campaign and attempt paths. The failed v3 preparation is never moved, deleted,
+reused or overwritten; the three old v3 actual-effect paths must remain absent.
+The fixed diagnostic profile is selected solely by its three exact source-defined
+CLI modes, before constructing the native host. It cannot create the v4 paths or
+enter the authentication/browser code. Original captures, all protected native
+configuration, MFA, model checks, five-generation/one-transcription allowances and
+synthetic-only enforcement retain their existing requirements. Actual campaign
+and diagnostic completion remain runtime facts, not source-qualification claims.
+
+
+## 8 October - finished diagnostic source qualification
+
+The focused diagnostic protocol is source-qualified after 147 affected local
+controls passed with no skips, including the real Node and sealed-buffer gate.
+The author record is `native-gate-diagnostic-author-finished-draft-v1.json`,
+SHA-256 `747a20a572a04816ec1112e715d7cdf94e1fead175d7e7a4d7b9792b3e89ecf4`.
+The independent finished refutation is
+`native-gate-diagnostic-finished-independent-refutation-v1.json`, SHA-256
+`5ebb74f56cf8eb819ff95ca09c8d5a9efd7505cfe91f1da0e2b0c821c72fa795`.
+Both records are retained under the existing recovery evidence directory.
+The independent pass demonstrated and verified repairs for the declared actual
+path versus diagnostic runtime profile and the diagnostic-only STOP target.
+The finished source has not executed a native diagnostic or authenticated
+campaign. The original stopped v3 evidence remains retained exactly.
+
+This source qualification supersedes the draft qualification statement above.
+Native gate success, exact failure predicate and timing, authenticated access,
+worker model, clinical workflows and normal HTTPS remain runtime facts to prove
+through their reviewed procedures. Source qualification does not assert them.

@@ -71,10 +71,33 @@ PRICING = 'configured-v1:a2f0c372e0933e2ba28ea9219a8758571af82e675aec749f6f73e41
 CASES = ('soap-typed', 'custom-word-typed', 'soap-voice', 'allergy-missing', 'allergy-legitimate')
 UNITS = tuple('quillmd-fresh-' + name + '.service' for name in ('doctor', 'admin', 'worker'))
 AVAILABILITY = RUNTIME / 'private-availability-recovery-20261007'
-PREPARATION = BASE / 'installed-acceptance-v3-preparation-20261007'
-ADMIN = BASE / 'installed-admin-acceptance-v3-20261007'
-CAMPAIGN = BASE / 'installed-acceptance-v3-20261007'
-ATTEMPT = BASE / 'installed-acceptance-v3-attempt-20261007.json'
+ACTUAL_PREPARATION = BASE / 'installed-acceptance-v4-preparation-20261008'
+PREPARATION = ACTUAL_PREPARATION
+ADMIN = BASE / 'installed-admin-acceptance-v4-20261008'
+CAMPAIGN = BASE / 'installed-acceptance-v4-20261008'
+ATTEMPT = BASE / 'installed-acceptance-v4-attempt-20261008.json'
+GATE_DIAGNOSTIC = BASE / 'installed-native-gate-diagnostic-20261008'
+STOPPED_V3_PREPARATION = BASE / 'installed-acceptance-v3-preparation-20261007'
+STOPPED_GATE_EVIDENCE = BASE / 'recovery-20261007/stopped-authentication-first-gate-retained-evidence-v1.json'
+STOPPED_GATE_EVIDENCE_SHA = '39739041d6d830d7b602bf14049bb85a129bba02289a464399683a68aece68d2'
+STOPPED_GATE_FILES = {
+    'STOP.json': 'e6c5e1d355a5f123b5cc21b1b82a13a1a43850b9fd6fe19c7b68a0cfb30045cd',
+    'admission-before-auth.json': '7dd5db3b1341d451b5d999f4814f108c7f62f5238996b2edd383b39be047213c',
+    'co-tenant-phase-preservation.json': '362c0ac4dd3583e6aa50251be5b15be21f68d7d3d39eb17b8e390e297a225c35',
+    'normal-auth-stderr.log': 'a5762bbcee325d14fa40143ab0e024f7200ebe8cc141a4e14183cdc2b7acc60a',
+    'normal-auth-stdout.log': 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    'parent-phase-normal-auth.json': '2f3a55557abbf7ab15dab756f69bef33b244b11ff97d865ca637cc226757a140',
+    'parent.json': '7c24507d2bcdb61d15f5f91cbc2aa552d8e5ac10889363feb1fc5a081e480a2e',
+    'publisher-alignment.json': '5d9687290dfbf5d36a46fbb7146da811f6cae1c050c49139244dc48a6379ffa8',
+}
+STOPPED_GATE_PROOFS = {
+    'a3-normal-auth-node-checked-handoff-independent-v1.json': '5d086dde363f5f928deccf46c03b626db2401e9007b8b833368178d44d5510e2',
+    'normal-auth-first-gate-source-only-refutation-v1.json': 'ff11a289105a5f36a9d76834df8d28d1816657a4ebfce6aacac08bde0b417cae',
+    'acceptance-v3-expiry-resolved-actual-campaign-v1.log': '446069c03cbdab18378c30256f5ad68cc4f41d6e7b8aedc92ca41aa03ba93f58',
+}
+STOPPED_GATE_OPERATIONS = '554d4508c5072fef75c705087ef993663598e1fe'
+STOPPED_GATE_ABSENT = tuple(BASE / name for name in ('installed-admin-acceptance-v3-20261007',
+    'installed-acceptance-v3-20261007', 'installed-acceptance-v3-attempt-20261007.json'))
 ORIGINAL = RUNTIME / 'legacy-model-demo-20261007T012249Z'
 CONSUMED = RUNTIME / 'legacy-model-continuation-20261007'
 PYTHON = APP / '.venv/bin/python'
@@ -117,9 +140,10 @@ EXECUTION_QUALIFIED = True
 NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED = True
 FIXED_CHILD_PROTOCOL_QUALIFIED = True
 PHASE_PRESERVATION_PROTOCOL_QUALIFIED = True
+NATIVE_GATE_DIAGNOSTIC_QUALIFIED = True
 ENTRY_OBSERVATIONS = {'installed_state_accessed': False, 'authentication_possible': False,
                       'provider_possible': False}
-PARENT_PHASES = ('normal-auth', 'browser', 'verify')
+PARENT_PHASES = ('normal-auth', 'browser', 'verify', 'gate-preflight')
 PUBLICATION_LOCK = 'publication/.activation-publication.lock'
 PUBLISHER = 'quillmd-fresh-operations-publisher.service'
 PUBLISHER_TIMER = 'quillmd-fresh-operations-publisher.timer'
@@ -333,8 +357,99 @@ def stamp(value):
 
 def execution_gate():
     require(EXECUTION_QUALIFIED and NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED
-            and FIXED_CHILD_PROTOCOL_QUALIFIED and PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
+            and FIXED_CHILD_PROTOCOL_QUALIFIED and PHASE_PRESERVATION_PROTOCOL_QUALIFIED
+            and NATIVE_GATE_DIAGNOSTIC_QUALIFIED,
             'v3_execution_source_protocol_unqualified')
+
+
+def native_gate_contract():
+    return {'protocol': 'checked-native-gate-diagnostic-v1',
+        'source_qualified': NATIVE_GATE_DIAGNOSTIC_QUALIFIED,
+        'diagnostic_directory': str(GATE_DIAGNOSTIC), 'diagnostic_parent_mode': '--gate-preflight',
+        'native_child_seconds': 90, 'parent_phase_seconds': 180,
+        'diagnostic_authentication_submissions': 0, 'diagnostic_provider_calls': 0,
+        'new_actual_paths': [str(ACTUAL_PREPARATION), str(ADMIN), str(CAMPAIGN), str(ATTEMPT)],
+        'stopped_v3_directory': str(STOPPED_V3_PREPARATION),
+        'stopped_evidence': {'path': str(STOPPED_GATE_EVIDENCE), 'sha256': STOPPED_GATE_EVIDENCE_SHA},
+        'retained_files': dict(STOPPED_GATE_FILES), 'retained_proofs': dict(STOPPED_GATE_PROOFS),
+        'originals_moved_deleted_or_replaced': False, 'database_immutability_inferred_from_child_counter': False,
+        'automatic_retries': False}
+
+
+def select_gate_diagnostic_profile():
+    """Only the three fixed diagnostic CLIs select this one process's profile."""
+    global PREPARATION, PHASE_PRESERVATION_PATH
+    require(PREPARATION == ACTUAL_PREPARATION, 'v3_gate_profile_selected_once')
+    PREPARATION = GATE_DIAGNOSTIC
+    PHASE_PRESERVATION_PATH = PREPARATION / 'co-tenant-phase-preservation.json'
+
+
+def stopped_gate_admission(record, files, proofs):
+    """A pre-credential refusal permits a separate attempt, never an unknown replay."""
+    require(type(record) is dict and record.get('kind') == 'stopped-authentication-first-gate-retained-evidence'
+        and type(record.get('format')) is int and record['format'] == 1
+        and type(record.get('actual_exit')) is int and record['actual_exit'] == 2
+        and record.get('operations_revision') == STOPPED_GATE_OPERATIONS and record.get('served_revision') == M6
+        and record.get('preparation_directory') == str(STOPPED_V3_PREPARATION)
+        and record.get('originals_moved_deleted_or_replaced') is False
+        and record.get('specific_native_predicate_not_retained') is True
+        and record.get('database_writes_counter_not_retained') is True
+        and all(type(record.get(name)) is int and record[name] == 0
+            for name in ('authentication_submissions', 'provider_calls', 'automatic_retries'))
+        and record.get('absent_paths') == [str(path) for path in STOPPED_GATE_ABSENT],
+        'v3_stopped_gate_source_evidence')
+    expected_paths = {str(STOPPED_V3_PREPARATION / name) for name in STOPPED_GATE_FILES}
+    require(set(record.get('retained_files', {})) == expected_paths and set(files) == set(STOPPED_GATE_FILES)
+        and set(proofs) == set(STOPPED_GATE_PROOFS), 'v3_stopped_gate_exact_population')
+    for name, digest in STOPPED_GATE_FILES.items():
+        item = record['retained_files'][str(STOPPED_V3_PREPARATION / name)]
+        require(item.get('sha256') == digest == sha(files[name]) and item.get('mode') == '0600'
+            and type(item.get('uid')) is int and item['uid'] == 1000
+            and type(item.get('gid')) is int and item['gid'] == 1000
+            and type(item.get('nlink')) is int and item['nlink'] == 1
+            and type(item.get('size')) is int and item['size'] == len(files[name]),
+            'v3_stopped_gate_original_file')
+    require(all(sha(proofs[name]) == digest for name, digest in STOPPED_GATE_PROOFS.items())
+        and record.get('actual_log_sha256') == STOPPED_GATE_PROOFS['acceptance-v3-expiry-resolved-actual-campaign-v1.log']
+        and record.get('independent_source_proofs') == {name: digest for name, digest in STOPPED_GATE_PROOFS.items()
+            if name.endswith('.json')}, 'v3_stopped_gate_independent_record_pins')
+    refusal = json.loads(files['normal-auth-stderr.log'])
+    expected_refusal = {'complete': False, 'provider_calls': 0, 'authentication_submissions': 0,
+        'installed_state_accessed': True, 'reason': 'acceptance_v3_execution_unqualified'}
+    same = configuration_helpers({'need': require})['configuration_same']
+    require(files['normal-auth-stdout.log'] == b'' and same(refusal, record.get('actual_child_refusal'))
+        and same(refusal, expected_refusal),
+        'v3_stopped_gate_precredential_refusal')
+    stop = json.loads(files['STOP.json'])
+    require(stop.get('complete') is False and stop.get('reason') == 'v3_authentication_failed_or_unknown_no_replay'
+        and stop.get('operations_revision') == STOPPED_GATE_OPERATIONS and stop.get('served_revision') == M6
+        and stop.get('unknown_outcome_blocks_replay') is True and stop.get('automatic_retries') is False,
+        'v3_stopped_gate_stop_retained')
+    return {'complete': True, 'stopped_evidence_sha256': STOPPED_GATE_EVIDENCE_SHA,
+        'original_files_preserved': len(files), 'known_authentication_submissions': 0, 'known_provider_calls': 0,
+        'database_writes': None, 'old_preparation_reused': False, 'automatic_retries': False}
+
+
+def authenticate_stopped_gate():
+    execution_gate()
+    raw = protected(STOPPED_GATE_EVIDENCE)
+    require(sha(raw) == STOPPED_GATE_EVIDENCE_SHA, 'v3_stopped_gate_evidence_hash')
+    record = json.loads(raw)
+    require(not any(os.path.lexists(path) for path in STOPPED_GATE_ABSENT), 'v3_stopped_gate_later_attempt_refused')
+    files = {name: protected(STOPPED_V3_PREPARATION / name) for name in STOPPED_GATE_FILES}
+    proofs = {name: protected(STOPPED_GATE_EVIDENCE.parent / name) for name in STOPPED_GATE_PROOFS}
+    result = stopped_gate_admission(record, files, proofs)
+    for name in STOPPED_GATE_FILES:
+        with nofollow_file(STOPPED_V3_PREPARATION / name) as fd:
+            info = os.fstat(fd); expected = record['retained_files'][str(STOPPED_V3_PREPARATION / name)]
+            require((info.st_dev, info.st_ino, info.st_uid, info.st_gid, stat.S_IMODE(info.st_mode), info.st_nlink, info.st_size)
+                == (expected['device'], expected['inode'], 1000, 1000, 0o600, 1, expected['size']),
+                'v3_stopped_gate_original_identity')
+            require(sha(os.read(fd, 2 * 1024 * 1024)) == expected['sha256'], 'v3_stopped_gate_original_reread')
+    require(all(protected(STOPPED_V3_PREPARATION / name) == value for name, value in files.items())
+        and protected(STOPPED_GATE_EVIDENCE) == raw
+        and not any(os.path.lexists(path) for path in STOPPED_GATE_ABSENT), 'v3_stopped_gate_collection_race')
+    return result
 
 
 ANONYMOUS_PURE_SOURCE = r'''"""Pure once-captured anonymous-session preservation helpers.
@@ -545,8 +660,23 @@ def adapt_phase_anonymous_validator(verifier, packet):
 exec(compile(ANONYMOUS_PURE_SOURCE, "<reviewed-phase-anonymous-helpers>", "exec"), globals())
 
 
-def failure_summary(error):
-    """Known early zeros differ from an entered phase with an unknown outcome."""
+FROZEN_GATE_FAILURE_LABELS = frozenset((
+    'acceptance_v3_actual_auth_phase_sequence', 'acceptance_v3_admission_after_actual_availability',
+    'acceptance_v3_admission_phase', 'acceptance_v3_admission_pin', 'acceptance_v3_all_live_service_identities',
+    'acceptance_v3_auth_admission_binding', 'acceptance_v3_availability_authority_binding',
+    'acceptance_v3_availability_interval', 'acceptance_v3_aware_timestamp', 'acceptance_v3_completed_recovery_admission',
+    'acceptance_v3_current_snapshot_binding', 'acceptance_v3_exact_admission_report',
+    'acceptance_v3_exact_new_authentication', 'acceptance_v3_exact_revisions', 'acceptance_v3_execution_unqualified',
+    'acceptance_v3_full_original_rows_and_publisher_admission', 'acceptance_v3_genuine_complete_availability_required',
+    'acceptance_v3_independent_availability_preservation', 'acceptance_v3_no_auth_before_auth',
+    'acceptance_v3_one_bound_normal_mfa', 'acceptance_v3_original_failure_hash', 'acceptance_v3_original_population_retained',
+    'acceptance_v3_running_idle_worker', 'acceptance_v3_running_service_identity',
+    'acceptance_v3_same_worker_configuration_provenance', 'acceptance_v3_served_health',
+    'acceptance_v3_served_source_binding', 'acceptance_v3_three_units', 'acceptance_v3_timestamp', 'acceptance_v3_worker_profile',
+    *('acceptance_v3_preserved_' + name for name in ('files', 'mail', 'static', 'configuration'))))
+
+
+def native_failure_labels():
     def constants(code):
         for value in code.co_consts:
             if isinstance(value, types.CodeType): yield from constants(value)
@@ -561,10 +691,18 @@ def failure_summary(error):
     labels.update('v3_preserved_' + name for name in ('mail', 'static', 'configuration', 'old_files'))
     labels.update('v3_fixed_adapter_' + name for name in ('native_child_gate', 'contract_import',
         'declaration_buffer', 'runtime_authority', 'closed_citation', 'initial_gate_report'))
+    labels.update(FROZEN_GATE_FAILURE_LABELS)
+    return labels
+
+
+def failure_summary(error):
+    """Known early zeros differ from an entered phase with an unknown outcome."""
+    labels = native_failure_labels()
     if type(error) is RuntimeError and str(error) == 'Undeclared pre-acceptance table row added':
         label = 'v3_undeclared_preacceptance_added_row'
     else:
-        label = str(error) if isinstance(error, (Refusal, PhaseAnonymousRefusal)) and str(error) in labels else 'v3_fixed_protocol_failure'
+        label = str(error) if (isinstance(error, (Refusal, PhaseAnonymousRefusal))
+            or type(error) is RuntimeError and str(error) in FROZEN_GATE_FAILURE_LABELS) and str(error) in labels else 'v3_fixed_protocol_failure'
     return {'format': 3, 'complete': False, 'reason': label,
         'installed_state_accessed': ENTRY_OBSERVATIONS['installed_state_accessed'],
         'provider_calls': None if ENTRY_OBSERVATIONS['provider_possible'] else 0,
@@ -924,7 +1062,8 @@ def adapt_configuration_admission(scope, raw):
 
 
 def configuration_constants():
-    return dict(POST_RESTORE_PINS=copy.deepcopy(POST_RESTORE_PINS),
+    return dict(PREPARATION=str(PREPARATION), ADMIN=str(ADMIN), CAMPAIGN=str(CAMPAIGN),
+                POST_RESTORE_PINS=copy.deepcopy(POST_RESTORE_PINS),
                 POST_RESTORE_PROPOSAL_SHA=POST_RESTORE_PROPOSAL_SHA,
                 POST_RESTORE_OWNER_REPLY_SHA=POST_RESTORE_OWNER_REPLY_SHA,
                 PRESERVATION_SCOPE_REPLY_SHA=PRESERVATION_SCOPE_REPLY_SHA,
@@ -1173,7 +1312,7 @@ def merged_main_admission(host, contract, operations, served):
             and policy.get('session_completion_reserve_seconds') == 60,
             'v3_normal_descendant_exact_prospective_contract')
     for name, path in (('private_acceptance', CAMPAIGN / 'complete.json'), ('private_report', REPORT),
-                       ('private_authority', PREPARATION / 'parent-phase-verify.json')):
+                       ('private_authority', ACTUAL_PREPARATION / 'parent-phase-verify.json')):
         require(policy.get(name) == {'path': str(path), 'binding': NORMAL_RUNTIME_BINDING},
                 'v3_normal_descendant_fixed_runtime_inputs')
     source = host.git(ROOT, 'show', target + ':' + NORMAL_SELF)
@@ -2268,8 +2407,8 @@ def deadline_remaining(deadline, clock=time.monotonic):
 
 def fixed_child_argv(source, phase, operations, served):
     full_revision(operations); full_revision(served)
-    require(phase in ('before-auth', 'normal-auth', 'after-auth', 'browser', 'verify'), 'v3_fixed_child_phase')
-    mode = '--dispatch-' + phase if phase in ('normal-auth', 'browser') else (
+    require(phase in ('before-auth', 'normal-auth', 'after-auth', 'browser', 'verify', 'gate-preflight'), 'v3_fixed_child_phase')
+    mode = '--dispatch-' + phase if phase in ('normal-auth', 'browser', 'gate-preflight') else (
         '--verify' if phase == 'verify' else '--admit-' + phase)
     return [str(PYTHON), '-B', str(source / ENTRY), mode,
             '--operations-revision', operations, '--served-revision', served]
@@ -2432,6 +2571,36 @@ def protocol_pipeline(host, contract, operations, served):
             raise
 
 
+def gate_preflight_pipeline(host, contract, operations, served):
+    """Same native Node gate, under a new held phase; never enter auth code."""
+    require(PREPARATION == GATE_DIAGNOSTIC and host.own_hold_mode == '--gate-preflight',
+            'v3_gate_preflight_fixed_profile')
+    source_gate(host, contract, operations, served, host.environment)
+    host.authenticate_dependencies()
+    receipt = host.authenticate_availability(contract, operations, served)
+    require(host.fresh_paths_absent(), 'v3_gate_preflight_exclusive_paths')
+    outer_deadline = host.clock() + 1680
+    with host.exclusions(operations, outer_deadline):
+        host.recheck_source_and_idle(receipt, operations, served)
+        before = host.admit('before-auth', contract, receipt, operations, served)
+        require(before['complete'] is True, 'v3_before_auth_admission_incomplete')
+        host.create_exclusive_preparation(operations, served, before)
+        deadline = min(host.clock() + 180, outer_deadline)
+        try:
+            child = host.child('gate-preflight', operations, served, deadline)
+            report = host.gate_diagnostic_evidence(child['parent_context_sha256'])
+            host.recheck_source_and_idle(receipt, operations, served)
+            host.recheck_phase_preservation()
+            deadline_remaining(deadline, host.clock)
+            write_new(PREPARATION / 'complete.json', report)
+            host.recheck_phase_preservation()
+            deadline_remaining(deadline, host.clock)
+            return report
+        except BaseException:
+            host.write_stop('v3_readonly_native_gate_failed_no_authentication_or_replay')
+            raise
+
+
 @contextmanager
 def sealed_buffer(raw):
     """A child executes these exact bytes, never a second pathname read."""
@@ -2447,7 +2616,7 @@ def sealed_buffer(raw):
         os.close(fd)
 
 
-CHECKED_BOOTSTRAP = """import fcntl,hashlib,os,sys
+CHECKED_BOOTSTRAP = """import fcntl,hashlib,json,os,sys,traceback
 fd=int(sys.argv[1]);expected=sys.argv[2];filename=sys.argv[3]
 seals=fcntl.F_SEAL_WRITE|fcntl.F_SEAL_GROW|fcntl.F_SEAL_SHRINK|fcntl.F_SEAL_SEAL
 assert fcntl.fcntl(fd,fcntl.F_GET_SEALS)==seals
@@ -2456,7 +2625,12 @@ sys.path.insert(0,os.path.dirname(os.path.dirname(os.path.dirname(filename)))+'/
 sys.argv=[filename]+sys.argv[4:]
 scope={'__file__':filename,'__name__':'_quillmd_v3_checked_child','CHECKED_SOURCE_FD':fd}
 exec(compile(raw,filename,'exec'),scope)
-raise SystemExit(scope['main']())
+try:
+ raise SystemExit(scope['main']())
+except Exception as error:
+ traceback.print_exc(file=sys.stderr)
+ print(json.dumps(scope['failure_summary'](error)),flush=True)
+ raise SystemExit(2)
 """
 
 
@@ -2507,9 +2681,9 @@ def parent_phase_admission(context, phase, operations, served, *, monotonic=time
             and math.isfinite(context['deadline_monotonic']) and context['deadline_monotonic'] > monotonic(),
             'v3_parent_phase_live_deadline')
     proc = Path('/proc') / str(pid)
-    mode = '--execute'
+    mode = '--gate-preflight' if phase == 'gate-preflight' else '--execute'
     if self_mode is not None:
-        require(pid == os.getpid() and self_mode in ('--execute', '--preflight', '--admit-before-auth'),
+        require(pid == os.getpid() and self_mode in ('--execute', '--preflight', '--admit-before-auth', '--gate-preflight'),
                 'v3_exact_own_holder_mode')
         mode = self_mode
     expected_argv = [str(PYTHON), '-B', str(source / ENTRY), mode,
@@ -2547,6 +2721,7 @@ def derive_authority(contract, common, operations, served, admission_raws):
     require(set(admission_raws) <= {'before-auth', 'after-auth'}, 'v3_runtime_admission_population')
     result = copy.deepcopy(contract)
     result.update(operations_revision=full_revision(operations), served_revision=full_revision(served),
+                  preparation_directory=str(PREPARATION),
                   original_activation=str(ORIGINAL), original_receipts=common.ORIGINAL_RECEIPTS,
                   failed_continuation_receipts=common.FAILED_CONTINUATION,
                   admissions={phase: {'path': str(PREPARATION / ('admission-' + phase + '.json')),
@@ -2630,6 +2805,125 @@ function checkedNewDir(filename,options){
 """
 
 
+def native_gate_javascript(child_check):
+    """One checked native observation; raw diagnostics stay in one protected file."""
+    argv = child_check['argv']
+    require(type(child_check.get('source_fd')) is int and child_check['source_fd'] >= 3
+        and type(argv) is list and len(argv) == 13 and all(type(item) is str for item in argv)
+        and argv[:4] == ['-B', '-c', CHECKED_BOOTSTRAP, '3']
+        and type(argv[4]) is str and re.fullmatch('[a-f0-9]{64}', argv[4])
+        and type(argv[5]) is str and argv[5].endswith('/' + SELF)
+        and argv[6] in ('--child-check-normal-auth', '--child-check-browser', '--child-check-gate-preflight')
+        and argv[7] == '--operations-revision' and argv[9] == '--served-revision'
+        and argv[11] == '--parent-context-sha256' and re.fullmatch('[a-f0-9]{64}', argv[12]),
+        'v3_native_gate_fixed_checked_argv')
+    full_revision(argv[8]); full_revision(argv[10])
+    phase = argv[6].removeprefix('--child-check-')
+    require((phase == 'gate-preflight') == (PREPARATION == GATE_DIAGNOSTIC), 'v3_native_gate_fixed_profile')
+    filename = str(PREPARATION / ('native-gate-' + phase + '.json'))
+    binding = {'operations_revision': argv[8], 'served_revision': argv[10],
+        'checked_source_sha256': argv[4], 'parent_context_sha256': argv[12],
+        'phase': phase, 'preparation_directory': str(PREPARATION)}
+    prefix = ("import gateFs from 'node:fs';import gateCrypto from 'node:crypto';\n"
+        + 'const gateFilename=' + json.dumps(filename) + ',gateBinding=' + encode(binding).decode()
+        + ',gateReasons=new Set(' + json.dumps(sorted(native_failure_labels())) + ');\n')
+    functions = r'''
+function gateOutput(value){return Buffer.isBuffer(value)?value:typeof value==='string'?Buffer.from(value):Buffer.alloc(0);}
+function gateSummary(raw,status){
+ try{
+  const value=JSON.parse(raw.toString());
+  if(status===0&&Object.keys(value).sort().join(',')==='complete,parent_hold_verified,phase'
+      &&value.complete===true&&value.parent_hold_verified===true&&value.phase===gateBinding.phase)return value;
+  const fields=['format','complete','reason','installed_state_accessed','provider_calls','authentication_submissions',
+    'database_writes','phase_outcomes_require_protected_receipts','automatic_retries','arbitrary_exception_text_exported'];
+  if(status!==0&&Object.keys(value).sort().join(',')===fields.sort().join(',')&&value.format===3
+      &&value.complete===false&&gateReasons.has(value.reason)&&typeof value.installed_state_accessed==='boolean'
+      &&[value.provider_calls,value.authentication_submissions,value.database_writes].every(x=>x===0||x===null)
+      &&typeof value.phase_outcomes_require_protected_receipts==='boolean'&&value.automatic_retries===false
+      &&value.arbitrary_exception_text_exported===false)return value;
+ }catch{}
+ return {complete:false,reason:'v3_native_gate_child_report_unqualified'};
+}
+function gateSave(value){
+ const parents=[];let parent,fd,attached;
+ try{
+  parent=gateFs.openSync('/',gateFs.constants.O_RDONLY|gateFs.constants.O_DIRECTORY|gateFs.constants.O_NOFOLLOW);parents.push(parent);
+  let current='';for(const name of path.dirname(gateFilename).split('/').filter(Boolean)){
+   current+='/'+name;parent=gateFs.openSync('/proc/self/fd/'+parent+'/'+name,gateFs.constants.O_RDONLY|gateFs.constants.O_DIRECTORY|gateFs.constants.O_NOFOLLOW);parents.push(parent);
+   if(gateFs.readlinkSync('/proc/self/fd/'+parent)!==current)throw new Error('v3_native_gate_output_parent');
+  }
+  const p=gateFs.fstatSync(parent);if(!p.isDirectory()||p.uid!==1000||p.gid!==1000||(p.mode&0o7777)!==0o700)throw new Error('v3_native_gate_output_parent');
+  const target='/proc/self/fd/'+parent+'/'+path.basename(gateFilename),raw=Buffer.from(JSON.stringify(value)+'\n');
+  if(raw.length>5*1024*1024)throw new Error('v3_native_gate_output_bound');
+  fd=gateFs.openSync(target,gateFs.constants.O_WRONLY|gateFs.constants.O_CREAT|gateFs.constants.O_EXCL|gateFs.constants.O_NOFOLLOW,0o600);
+  gateFs.writeFileSync(fd,raw);gateFs.fsyncSync(fd);gateFs.fsyncSync(parent);
+  attached=gateFs.openSync(target,gateFs.constants.O_RDONLY|gateFs.constants.O_NOFOLLOW|gateFs.constants.O_NONBLOCK);
+  const identity=s=>[s.dev,s.ino,s.uid,s.gid,s.mode,s.nlink,s.size,s.mtimeNs,s.ctimeNs].map(String).join(':');
+  const actual=gateFs.fstatSync(fd,{bigint:true}),other=gateFs.fstatSync(attached,{bigint:true});
+  if(!actual.isFile()||actual.uid!==1000n||actual.gid!==1000n||(actual.mode&0o7777n)!==0o600n||actual.nlink!==1n
+      ||identity(actual)!==identity(other)||gateFs.readlinkSync('/proc/self/fd/'+parent)!==path.dirname(gateFilename))throw new Error('v3_native_gate_output_identity');
+ }finally{if(attached!==undefined)gateFs.closeSync(attached);if(fd!==undefined)gateFs.closeSync(fd);for(const item of parents.reverse())gateFs.closeSync(item);}
+}
+export function executionGate(){
+ const begin=process.hrtime.bigint(),started=new Date().toISOString();let stdout=Buffer.alloc(0),stderr=Buffer.alloc(0),status=0,signal=null,transport=null;
+ try{stdout=gateOutput(GATE_EXECUTION);}catch(error){
+  stdout=gateOutput(error.stdout);stderr=gateOutput(error.stderr);
+  status=Number.isInteger(error.status)?error.status:null;
+  signal=['SIGTERM','SIGKILL','SIGABRT','SIGSEGV'].includes(error.signal)?error.signal:null;
+  transport=['ETIMEDOUT','ENOBUFS','ENOENT','EACCES'].includes(error.code)?error.code:'fixed_child_failure';
+ }
+ const elapsed=(process.hrtime.bigint()-begin).toString(),native=gateSummary(stdout,status);
+ const complete=status===0&&native.complete===true&&BigInt(elapsed)<=90000000000n;
+ const value={format:1,complete,binding:gateBinding,started_at:started,finished_at:new Date().toISOString(),
+   native_child_seconds:90,elapsed_monotonic_ns:elapsed,status,signal,transport,native_summary:native,
+   raw_stdout_hex:stdout.toString('hex'),raw_stderr_hex:stderr.toString('hex'),
+   stdout_sha256:gateCrypto.createHash('sha256').update(stdout).digest('hex'),stderr_sha256:gateCrypto.createHash('sha256').update(stderr).digest('hex'),
+   authentication_submissions:0,provider_calls:0,database_writes:null,automatic_retries:false};
+ gateSave(value);
+ const safe={complete,reason:complete?'v3_native_gate_passed':'v3_native_gate_refused',phase:gateBinding.phase,
+   status,signal,transport,elapsed_monotonic_ns:elapsed,native_summary:native,protected_record:gateFilename,
+   authentication_submissions:0,provider_calls:0,database_writes:null,automatic_retries:false};
+ if(!complete){const error=new Error('v3_native_gate_refused');error.quillmdGateSummary=safe;throw error;}return safe;
+}
+'''
+    invocation = ('execFileSync(' + json.dumps(str(PYTHON)) + ',' + json.dumps(argv)
+        + ",{timeout:90000,maxBuffer:1048576,stdio:['pipe','pipe','pipe'," + str(child_check['source_fd']) + ']})')
+    return (prefix + functions.replace('GATE_EXECUTION', invocation)).encode()
+
+
+def native_gate_record_admission(value, binding):
+    """A complete diagnostic comes only from the matching checked native result."""
+    fields = {'format', 'complete', 'binding', 'started_at', 'finished_at', 'native_child_seconds',
+        'elapsed_monotonic_ns', 'status', 'signal', 'transport', 'native_summary',
+        'raw_stdout_hex', 'raw_stderr_hex', 'stdout_sha256', 'stderr_sha256',
+        'authentication_submissions', 'provider_calls', 'database_writes', 'automatic_retries'}
+    require(type(value) is dict and set(value) == fields
+        and type(value['format']) is int and value['format'] == 1 and value['complete'] is True
+        and configuration_helpers({'need': require})['configuration_same'](value['binding'], binding)
+        and type(value['status']) is int and value['status'] == 0
+        and value['signal'] is value['transport'] is None
+        and type(value['native_child_seconds']) is int and value['native_child_seconds'] == 90
+        and type(value['elapsed_monotonic_ns']) is str and re.fullmatch('[1-9][0-9]*', value['elapsed_monotonic_ns'])
+        and int(value['elapsed_monotonic_ns']) <= 90_000_000_000
+        and type(value['authentication_submissions']) is int and value['authentication_submissions'] == 0
+        and type(value['provider_calls']) is int and value['provider_calls'] == 0
+        and value['database_writes'] is None and value['automatic_retries'] is False,
+        'v3_gate_diagnostic_complete_native_record')
+    native = {'complete': True, 'phase': binding['phase'], 'parent_hold_verified': True}
+    require(configuration_helpers({'need': require})['configuration_same'](value['native_summary'], native)
+        and stamp(value['started_at']) <= stamp(value['finished_at']), 'v3_gate_diagnostic_native_summary')
+    streams = {}
+    for name in ('stdout', 'stderr'):
+        raw = value['raw_' + name + '_hex']
+        require(type(raw) is str and len(raw) <= 2 * 1048576 and len(raw) % 2 == 0
+            and re.fullmatch('[a-f0-9]*', raw), 'v3_gate_diagnostic_raw_child_bound')
+        streams[name] = bytes.fromhex(raw)
+        require(sha(streams[name]) == value[name + '_sha256'], 'v3_gate_diagnostic_raw_child_hash')
+    require(configuration_helpers({'need': require})['configuration_same'](json.loads(streams['stdout']), native)
+        and streams['stderr'] == b'', 'v3_gate_diagnostic_actual_child_result')
+    return copy.deepcopy(value['native_summary'])
+
+
 def javascript_adapter(blobs, phase, declaration, authority, child_check):
     """Exact frozen algorithm plus source-owned authority and checked-byte imports.
 
@@ -2694,11 +2988,14 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
           "result=scope['availability'](raw,bytes.fromhex(value['original_hex']),**args)"
           "if kind=='availability'else scope['auth_sequence'](raw,**args)if kind=='auth'"
           "else scope['admission'](raw,**args);print(json.dumps(result,separators=(',',':')))")
-    gate = ("export function executionGate(){execFileSync(" + json.dumps(str(PYTHON)) + ","
-            + json.dumps(child_check['argv']) + ",{encoding:'utf8',timeout:90000,maxBuffer:1048576,"
-            "stdio:['pipe','pipe','pipe'," + str(child_check['source_fd']) + "]});}")
+    gate = native_gate_javascript(child_check)
     old_gate = b"export function executionGate(){if(!EXECUTION_QUALIFIED||!NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED||!FIXED_RUNNER_QUALIFIED)throw new Error('acceptance_v3_execution_unqualified');}"
-    common = replace_once(common, old_gate, gate.encode(), 'native_child_gate')
+    common = replace_once(common, old_gate, gate, 'native_child_gate')
+    for name, value in (('PREPARATION', PREPARATION), ('ADMIN', ADMIN), ('CAMPAIGN', CAMPAIGN)):
+        old_value = STOPPED_V3_PREPARATION if name == 'PREPARATION' else BASE / (
+            'installed-admin-acceptance-v3-20261007' if name == 'ADMIN' else 'installed-acceptance-v3-20261007')
+        common = replace_once(common, ("export const " + name + "='" + str(old_value) + "';").encode(),
+            ('export const ' + name + '=' + json.dumps(str(value)) + ';').encode(), 'fixed_runtime_' + name)
     start = common.index(b'export function validateV3(kind,args){')
     common = common[:start] + ("const verifiedRawInputs=new Map();export function validateV3(kind,args){"
         "const value={kind,...args};if(kind==='admission'){if(verifiedRawInputs.has('availability'))"
@@ -2739,6 +3036,9 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     # Node has sent nothing at this point; it must not deny those observations.
     result = replace_once(result, b'installed_state_accessed:false,reason:',
                           b'installed_state_accessed:true,reason:', 'initial_gate_report')
+    result = replace_once(result, b"catch{console.error(JSON.stringify({complete:false,provider_calls:0,authentication_submissions:0,installed_state_accessed:true,reason:'acceptance_v3_execution_unqualified'}));process.exit(2);}",
+        b"catch(error){console.error(JSON.stringify(error?.quillmdGateSummary||{complete:false,provider_calls:0,authentication_submissions:0,database_writes:null,installed_state_accessed:true,reason:'v3_native_gate_evidence_failure',automatic_retries:false}));process.exit(2);}",
+        'safe_nested_gate_report')
     # The frozen I/O helpers use pathname checks followed by opens. Keep the
     # clinical/auth algorithms, but close those parents and retain only newly
     # created output descriptors; a replacement cannot redirect a save.
@@ -2968,6 +3268,7 @@ class InstalledHost:
         setattr(self.availability_verifier, '__authenticated_source', original_verifier)
         adapt_publisher_adjudicator(self.availability_verifier)
         adapt_expired_session_validator(self.availability_verifier)
+        self.stopped_gate_evidence = authenticate_stopped_gate()
 
     def authority(self):
         result = derive_authority(self.contract, self.common, self.operations, self.served, self.admission_raws)
@@ -2989,7 +3290,7 @@ class InstalledHost:
         return receipt
 
     def fresh_paths_absent(self):
-        return not any(os.path.lexists(path) for path in (PREPARATION, ADMIN, CAMPAIGN, ATTEMPT))
+        return not any(os.path.lexists(path) for path in {PREPARATION, ACTUAL_PREPARATION, ADMIN, CAMPAIGN, ATTEMPT})
 
     @contextmanager
     def exclusions(self, operations, deadline):
@@ -3112,7 +3413,7 @@ class InstalledHost:
     def database_admission(self, contract, auth_packet, operations, served):
         cutoff = None
         if self.anonymous_sessions is None:
-            require(self.inside and self.own_hold_mode in ('--execute', '--preflight')
+            require(self.inside and self.own_hold_mode in ('--execute', '--preflight', '--gate-preflight')
                     and self.parent_lock_context['parent_pid'] == os.getpid()
                     and self.parent_lock_context['parent_start_ticks'] == process_start(Path('/proc/self/stat').read_text())
                     and self.co_tenant_phase_observation is None and not self.admission_raws and auth_packet is None,
@@ -3147,7 +3448,7 @@ class InstalledHost:
         require(current_external_boundary(self.recovery, acknowledgement) == before,
                 'v3_current_configuration_snapshot_race')
         if self.co_tenant_phase_observation is None:
-            require(self.inside and self.own_hold_mode in ('--execute', '--preflight', '--admit-before-auth', '--admit-after-auth')
+            require(self.inside and self.own_hold_mode in ('--execute', '--preflight', '--admit-before-auth', '--admit-after-auth', '--gate-preflight')
                     and self.parent_lock_context['parent_pid'] == os.getpid()
                     and self.parent_lock_context['parent_start_ticks'] == process_start(Path('/proc/self/stat').read_text()),
                     'v3_child_cannot_capture_new_phase_baseline')
@@ -3336,10 +3637,26 @@ class InstalledHost:
         require(raw == self.git(self.source, 'show', operations + ':' + SELF), 'v3_child_checked_source')
         mode = '--verify' if phase == 'verify' else '--dispatch-' + phase
         with sealed_buffer(raw) as fd:
-            return child_process(checked_python_argv(self.source, fd, raw, [mode, '--operations-revision', operations,
+            result = child_process(checked_python_argv(self.source, fd, raw, [mode, '--operations-revision', operations,
                 '--served-revision', served, '--parent-context-sha256', context_sha]), self.source,
                 PREPARATION, phase, deadline, ruled=False, pass_fds=(fd,),
                 environment=child_environment(self.environment))
+        return dict(result, parent_context_sha256=context_sha)
+
+    def gate_diagnostic_evidence(self, context_sha):
+        require(self.inside and PREPARATION == GATE_DIAGNOSTIC, 'v3_gate_diagnostic_parent_hold')
+        path = PREPARATION / 'native-gate-gate-preflight.json'; raw = protected(path, 5 * 1024 * 1024)
+        value = json.loads(raw)
+        binding = {'operations_revision': self.operations, 'served_revision': self.served,
+            'checked_source_sha256': sha(self.read_source(self.source / SELF)),
+            'parent_context_sha256': context_sha, 'phase': 'gate-preflight', 'preparation_directory': str(PREPARATION)}
+        native_gate_record_admission(value, binding)
+        return {'format': 1, 'complete': True, 'read_only_native_gate_preflight': True,
+            'operations_revision': self.operations, 'served_revision': self.served,
+            'native_gate_record': {'path': str(path), 'sha256': sha(raw), 'binding': binding},
+            'elapsed_monotonic_ns': value['elapsed_monotonic_ns'], 'native_summary': value['native_summary'],
+            'authentication_submissions': 0, 'provider_calls': 0, 'database_writes': None,
+            'actual_campaign_paths_created': False, 'automatic_retries': False}
 
     def normal_auth_evidence(self):
         return installed_auth_packet()
@@ -3363,7 +3680,8 @@ class InstalledHost:
             'availability_preserved': True, 'provider_retries': 0})
 
     def write_stop(self, reason):
-        target = CAMPAIGN if os.path.lexists(CAMPAIGN) else PREPARATION
+        target = PREPARATION if PREPARATION == GATE_DIAGNOSTIC else (
+            CAMPAIGN if os.path.lexists(CAMPAIGN) else PREPARATION)
         write_new(target / 'STOP.json', {'format': 3, 'complete': False, 'reason': reason,
             'operations_revision': self.operations, 'served_revision': self.served,
             'unknown_outcome_blocks_replay': True, 'records_and_availability_left_in_place': True,
@@ -3385,8 +3703,9 @@ def installed_contract(host):
             and isinstance(POST_RESTORE_OWNER_REPLY_SHA, str)
             and re.fullmatch('[a-f0-9]{64}', POST_RESTORE_OWNER_REPLY_SHA),
             'v3_current_configuration_declared_owner_binding')
+    require(contract.get('native_gate_diagnostic') == native_gate_contract(), 'v3_native_gate_declared_protocol')
     expected_paths = {'admin_directory': ADMIN, 'availability_directory': AVAILABILITY,
-                      'preparation_directory': PREPARATION, 'campaign_directory': CAMPAIGN, 'attempt_marker': ATTEMPT}
+                      'preparation_directory': ACTUAL_PREPARATION, 'campaign_directory': CAMPAIGN, 'attempt_marker': ATTEMPT}
     require(all(contract.get(name) == str(path) for name, path in expected_paths.items())
             and contract.get('outer_ceiling_seconds') == 1680, 'v3_fixed_native_paths_and_ceiling')
     for name, expected in FIXTURE_PINS.items():
@@ -3402,7 +3721,7 @@ def phase_declaration():
         'b3_authorized_history': {'proposal_path': str(B3_PRESERVATION_PROPOSAL),
             'proposal_sha256': B3_PRESERVATION_PROPOSAL_SHA, 'owner_reply_path': str(B3_PRESERVATION_REPLY),
             'owner_reply_sha256': B3_PRESERVATION_REPLY_SHA},
-        'phase_observation_path': str(PHASE_PRESERVATION_PATH),
+        'phase_observation_path': str(ACTUAL_PREPARATION / 'co-tenant-phase-preservation.json'),
         'protected_external_configuration_paths': list(PHASE_CONFIGURATION_PATHS),
         'historical_approval_verified': False, 'future_deployment_approval': False,
         'historical_manifest_pid_match_required': False, 'foreign_release_inventory_scan': False,
@@ -3438,15 +3757,16 @@ def admit_parent_child(host, phase, context_sha):
     raw = protected(PREPARATION / ('parent-phase-' + phase + '.json'))
     require(sha(raw) == context_sha, 'v3_parent_context_changed')
     context = json.loads(raw)
+    require((phase == 'gate-preflight') == (PREPARATION == GATE_DIAGNOSTIC), 'v3_parent_child_fixed_profile')
     parent_phase_admission(context, phase, host.operations, host.served, source=host.source)
     alignment_raw = protected(PREPARATION / 'publisher-alignment.json')
     require(sha(alignment_raw) == context.get('publisher_alignment_sha256'),
             'v3_parent_publication_alignment_hash')
     host.publication_alignment = json.loads(alignment_raw)
     host.parent_lock_context = context
-    require(0 < context['deadline_monotonic'] - host.clock() <= (180 if phase == 'normal-auth' else 1200),
+    require(0 < context['deadline_monotonic'] - host.clock() <= (180 if phase in ('normal-auth', 'gate-preflight') else 1200),
             'v3_exact_phase_ceiling')
-    phases = ('before-auth',) if phase == 'normal-auth' else ('before-auth', 'after-auth')
+    phases = ('before-auth',) if phase in ('normal-auth', 'gate-preflight') else ('before-auth', 'after-auth')
     host.admission_raws = {value: protected(PREPARATION / ('admission-' + value + '.json')) for value in phases}
     require(context.get('admission_sha256') == {key: sha(value) for key, value in host.admission_raws.items()},
             'v3_parent_admission_hashes')
@@ -3456,7 +3776,7 @@ def admit_parent_child(host, phase, context_sha):
     for value, report_raw in host.admission_raws.items():
         host.common.admission(report_raw, value, host.authority(), receipt, host.operations, host.served,
                               sha(host.availability_raw))
-    if phase != 'normal-auth':
+    if phase not in ('normal-auth', 'gate-preflight'):
         attempt = json.loads(protected(ATTEMPT))
         require(attempt.get('format') == 3 and attempt.get('attempt') == 1
                 and attempt.get('operations_revision') == host.operations and attempt.get('served_revision') == host.served
@@ -3490,7 +3810,17 @@ def dispatch_javascript(host, phase, context_sha, declaration):
             '--served-revision', host.served, '--parent-context-sha256', context_sha]
     check = {'argv': checked_python_argv(host.source, 3, raw, args)[1:], 'source_fd': fd,
              'merged_main_revision': full_revision(host.admitted_main_revision)}
-    javascript = javascript_adapter(host.blobs, phase, declaration, host.authority(), check)
+    javascript = javascript_adapter(host.blobs, 'normal-auth' if phase == 'gate-preflight' else phase,
+                                    declaration, host.authority(), check)
+    if phase == 'gate-preflight':
+        # Import the same authenticated common module and call its exact gate.
+        # No frozen authentication statement, credential reader or browser exists.
+        first = javascript.index(b'\n') + 1
+        javascript = javascript[:first] + (
+            b"try{const result=executionGate();console.log(JSON.stringify(result));}"
+            b"catch(error){console.error(JSON.stringify(error?.quillmdGateSummary||"
+            b"{complete:false,reason:'v3_native_gate_evidence_failure',authentication_submissions:0,"
+            b"provider_calls:0,database_writes:null,automatic_retries:false}));process.exit(2);}\n")
     # Replace this one process in the parent's owned session. A new independent
     # child group would escape its timeout/unknown-outcome drain.
     with sealed_buffer(javascript) as script:
@@ -3528,6 +3858,7 @@ def plan():
             'native_authorization_protocol_qualified': NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED,
             'fixed_child_protocol_qualified': FIXED_CHILD_PROTOCOL_QUALIFIED,
             'phase_preservation_protocol_qualified': PHASE_PRESERVATION_PROTOCOL_QUALIFIED,
+            'native_gate_diagnostic': native_gate_contract(),
             'phase_preservation': phase_declaration(),
             'origin': ORIGIN, 'source_base': M6, 'declaration': DECL, 'source_paths': sorted(ALLOWED),
             'ci_only_dependency_lock': ci_dependency_lock_contract(),
@@ -3551,34 +3882,40 @@ def plan():
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group()
-    for name in ('execute', 'preflight', 'admit-before-auth', 'admit-after-auth', 'verify',
-                 'dispatch-normal-auth', 'dispatch-browser', 'child-check-normal-auth', 'child-check-browser'):
+    for name in ('execute', 'preflight', 'admit-before-auth', 'admit-after-auth', 'verify', 'gate-preflight',
+                 'dispatch-normal-auth', 'dispatch-browser', 'dispatch-gate-preflight',
+                 'child-check-normal-auth', 'child-check-browser', 'child-check-gate-preflight'):
         mode.add_argument('--' + name, action='store_true')
     parser.add_argument('--operations-revision')
     parser.add_argument('--served-revision')
     parser.add_argument('--parent-context-sha256')
     args = parser.parse_args(argv)
     modes = ('execute', 'preflight', 'admit_before_auth', 'admit_after_auth', 'verify',
-             'dispatch_normal_auth', 'dispatch_browser', 'child_check_normal_auth', 'child_check_browser')
+             'dispatch_normal_auth', 'dispatch_browser', 'child_check_normal_auth', 'child_check_browser',
+             'gate_preflight', 'dispatch_gate_preflight', 'child_check_gate_preflight')
     if any(getattr(args, name) for name in modes):
         execution_gate()
+        if args.gate_preflight or args.dispatch_gate_preflight or args.child_check_gate_preflight:
+            select_gate_diagnostic_profile()
         ENTRY_OBSERVATIONS['installed_state_accessed'] = True
         operations, served = full_revision(args.operations_revision), full_revision(args.served_revision)
         host = InstalledHost()
-        host.own_hold_mode = ('--execute' if args.execute else '--preflight' if args.preflight
+        host.own_hold_mode = ('--gate-preflight' if args.gate_preflight else '--execute' if args.execute else '--preflight' if args.preflight
                              else '--admit-before-auth' if args.admit_before_auth else None)
         declaration, contract = installed_contract(host)
         host.bind(contract, operations, served)
         host.authenticate_dependencies()
         if args.execute:
             report = protocol_pipeline(host, contract, operations, served)
-        elif args.dispatch_normal_auth or args.dispatch_browser:
-            return dispatch_javascript(host, 'normal-auth' if args.dispatch_normal_auth else 'browser',
+        elif args.gate_preflight:
+            report = gate_preflight_pipeline(host, contract, operations, served)
+        elif args.dispatch_normal_auth or args.dispatch_browser or args.dispatch_gate_preflight:
+            return dispatch_javascript(host, 'gate-preflight' if args.dispatch_gate_preflight else 'normal-auth' if args.dispatch_normal_auth else 'browser',
                                        args.parent_context_sha256, declaration)
         elif args.verify:
             report = dispatch_verification(host, args.parent_context_sha256)
-        elif args.child_check_normal_auth or args.child_check_browser:
-            phase = 'normal-auth' if args.child_check_normal_auth else 'browser'
+        elif args.child_check_normal_auth or args.child_check_browser or args.child_check_gate_preflight:
+            phase = 'gate-preflight' if args.child_check_gate_preflight else 'normal-auth' if args.child_check_normal_auth else 'browser'
             admit_parent_child(host, phase, args.parent_context_sha256)
             report = {'complete': True, 'phase': phase, 'parent_hold_verified': True}
         else:
