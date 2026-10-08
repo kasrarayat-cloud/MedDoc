@@ -34,7 +34,7 @@ APP = ROOT / 'rebuild'
 PYTHON = APP / '.venv/bin/python'
 RUNTIME = APP / '.runtime'
 EVIDENCE = RUNTIME / 'owner-demo-20261006'
-BASE = '4b037b171c2a732ff74c65fc8a276ca5abd60169'
+BASE = '90e12465343a7e1655d48926772ca20c270b0bca'
 SELF = 'rebuild/ops/owner_normal_origin.py'
 TEST = 'rebuild/ops/test_owner_normal_origin.py'
 ENTRY = 'scripts/prepare-owner-normal-origin.py'
@@ -73,6 +73,7 @@ ACTIVE_PROTOCOL_QUALIFIED = True
 PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED = True
 INGRESS_PUBLICATION_QUALIFIED = True
 SERVED_VERIFICATION_PROTOCOL_QUALIFIED = True
+OWNER_INTERACTIVE_PROTOCOL_QUALIFIED = True
 SERVED_VERIFICATION_POLICY = {
     'mode':'--verify-served','output':str(VERIFY_OUTPUT),'attempt':str(VERIFY_ATTEMPT),
     'requests':[{'actor':'doctor','method':'GET','path':'/'},
@@ -96,6 +97,8 @@ PRIVATE_PATHS = {
     'availability': RUNTIME / 'private-availability-recovery-20261007/complete.json'}
 PRIVATE_PHASE = EVIDENCE / 'installed-acceptance-v4-preparation-20261008/co-tenant-phase-preservation.json'
 PRIVATE_PHASE_PROTOCOL = 'quill-only-phase-preservation-v1'
+PRIVATE_OWNER_COHORT = PRIVATE_PHASE.parent / 'owner-interactive-comparison-cohort.json'
+OWNER_COHORT_PROTOCOL = 'exact-owner-interactive-comparison-cohort-v1'
 
 class Refusal(RuntimeError):
     pass
@@ -105,7 +108,8 @@ def require(condition, label):
 
 def sha(raw): return hashlib.sha256(raw).hexdigest()
 def encode(value): return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
-def qualified(): return ACTIVE_PROTOCOL_QUALIFIED and PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED and INGRESS_PUBLICATION_QUALIFIED
+def qualified(): return (ACTIVE_PROTOCOL_QUALIFIED and PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED
+    and INGRESS_PUBLICATION_QUALIFIED and OWNER_INTERACTIVE_PROTOCOL_QUALIFIED)
 
 def ci_dependency_contract():
     return {'protocol':'marketing-ci-next-lock-correction-v1','path':CI_LOCK,
@@ -240,6 +244,8 @@ def contract(raw):
         'normal443_exact_prospective_scope')
     require(result.get('runtime_receipt_binding_protocol') == RUNTIME_BINDING
         and result.get('private_phase_preservation') == {'path': str(PRIVATE_PHASE), 'binding': RUNTIME_BINDING}
+        and result.get('private_owner_interactive_cohort') == {'path': str(PRIVATE_OWNER_COHORT), 'binding': RUNTIME_BINDING}
+        and result.get('owner_interactive_protocol_qualified') is OWNER_INTERACTIVE_PROTOCOL_QUALIFIED
         and result.get('private_acceptance_completed') is False
         and result.get('session_forward_reserve_seconds') == SESSION_FORWARD_RESERVE
         and result.get('session_completion_reserve_seconds') == SESSION_COMPLETION_RESERVE,
@@ -304,6 +310,34 @@ def runtime_receipt(item, label, expected_path):
         and item['path'] == str(expected_path) and item['binding'] == RUNTIME_BINDING, label)
     raw = source_files.protected(expected_path)
     return json.loads(raw), raw
+
+def owner_cohort_receipt(raw, pin, binding):
+    """Bind retained encrypted bytes; the checked acceptance verifier proves rows."""
+    require(type(raw) is bytes and len(raw) <= 3 * 1024 * 1024,
+            'normal443_owner_cohort_bounded_bytes')
+    packet = json.loads(raw)
+    require(type(packet) is dict and set(packet) == {'format', 'protocol', 'binding', 'evidence', 'summary', 'ciphertext'}
+        and type(packet['format']) is int and packet['format'] == 1
+        and packet['protocol'] == OWNER_COHORT_PROTOCOL and type(packet['ciphertext']) is str
+        and 0 < len(packet['ciphertext']) <= 2 * 1024 * 1024,
+        'normal443_owner_cohort_closed_packet')
+    header = {key: value for key, value in packet.items() if key != 'ciphertext'}
+    require(type(pin) is dict and set(pin) == {'path', 'sha256', 'header'}
+        and pin['path'] == str(PRIVATE_OWNER_COHORT) and pin['sha256'] == sha(raw)
+        and encode(pin['header']) == encode(header) and encode(packet['binding']) == encode(binding),
+        'normal443_owner_cohort_hash_header_phase_binding')
+    return packet
+
+def checked_owner_cohort_api(acceptance, pin, raw):
+    require(callable(getattr(acceptance, 'owner_overlay_public', None)),
+            'normal443_checked_owner_cohort_api')
+    helpers = acceptance.configuration_helpers({'need': require})
+    validate = helpers.get('owner_public_admission')
+    require(callable(validate), 'normal443_checked_owner_cohort_public_api')
+    validate(pin)
+    require(encode(acceptance.owner_overlay_public(raw)) == encode(pin),
+            'normal443_checked_owner_cohort_exact_packet')
+    return pin
 
 def private_receipts(policy):
     require(not any(os.path.lexists(path) for path in (
@@ -375,6 +409,12 @@ def private_receipts(policy):
         and proof.get('phase_observation') == observation
         and accepted.get('co_tenant_preservation_admission') == proof,
         'normal443_retained_private_phase_proof_binding')
+    cohort_raw = source_files.protected(PRIVATE_OWNER_COHORT)
+    cohort_pin = authority['authority'].get('owner_interactive_cohort')
+    cohort = owner_cohort_receipt(cohort_raw, cohort_pin, binding)
+    require(encode(report.get('owner_interactive_preservation')) == encode(cohort_pin)
+        and encode(accepted.get('owner_interactive_preservation')) == encode(cohort_pin),
+        'normal443_owner_cohort_report_completion_binding')
     for phase in ('before-auth', 'after-auth'):
         path = Path(authority['authority']['admissions'][phase]['path'])
         require(path == EVIDENCE / 'installed-acceptance-v4-preparation-20261008' / ('admission-' + phase + '.json'),
@@ -386,10 +426,13 @@ def private_receipts(policy):
             and packet['served_revision'] == accepted['served_revision'], 'normal443_private_admission_causal_chain')
         require(packet.get('co_tenant_preservation_admission') == proof,
                 'normal443_retained_private_phase_admission_binding')
+        require(encode(packet.get('owner_interactive_preservation')) == encode(cohort_pin),
+                'normal443_owner_cohort_admission_binding')
     values['progress'] = progress, progress_raw
     # The old native parent identity is retained history, never a live normal
     # controller. Current operation liveness is proved by check_hold separately.
     values['phase_preservation'] = observation, phase_raw
+    values['owner_interactive_cohort'] = cohort, cohort_raw
     return values
 
 def normal_completion(policy, target):
@@ -762,6 +805,8 @@ class NativeHost:
         self.authority = self.inputs['private_authority'][0]['authority']
         require(self.authority['operations_revision'] == BASE and self.authority['served_revision'] == self.served,
                 'normal443_actual_private_authority')
+        checked_owner_cohort_api(self.acceptance, self.authority['owner_interactive_cohort'],
+                                self.inputs['owner_interactive_cohort'][1])
         for phase in ('before-auth', 'after-auth'):
             item = self.authority['admissions'][phase]
             pinned_receipt(item, 'normal443_private_admission_hash', self.acceptance.PREPARATION / ('admission-' + phase + '.json'))
@@ -1566,6 +1611,7 @@ def main(argv=None, *, host=None):
             'private_acceptance_protocol_qualified':PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED,
             'private_acceptance_completed':False,'ingress_publication_qualified':INGRESS_PUBLICATION_QUALIFIED,
             'served_verification_protocol_qualified':SERVED_VERIFICATION_PROTOCOL_QUALIFIED,
+            'owner_interactive_protocol_qualified':OWNER_INTERACTIVE_PROTOCOL_QUALIFIED,
             'served_authenticated_verification_completed':False,
             'provider_calls':0,'authentication_submissions':0,'database_writes':0,'automatic_retries':False},sort_keys=True));return 0
     if args.verify_served:require(SERVED_VERIFICATION_PROTOCOL_QUALIFIED,'normal443_served_verification_protocol_unqualified')

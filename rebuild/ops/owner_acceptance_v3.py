@@ -98,6 +98,20 @@ STOPPED_GATE_PROOFS = {
 STOPPED_GATE_OPERATIONS = '554d4508c5072fef75c705087ef993663598e1fe'
 STOPPED_GATE_ABSENT = tuple(BASE / name for name in ('installed-admin-acceptance-v3-20261007',
     'installed-acceptance-v3-20261007', 'installed-acceptance-v3-attempt-20261007.json'))
+
+OWNER_INTERACTIVE_PRESERVATION_QUALIFIED = True
+OWNER_OVERLAY_PROTOCOL = 'exact-owner-interactive-comparison-cohort-v1'
+OWNER_COHORT_NAME = 'owner-interactive-comparison-cohort.json'
+OWNER_USE_REPLY = BASE / 'recovery-20261007/owner-interactive-use-confirmation-20261008-v1.json'
+OWNER_USE_REPLY_SHA = 'dbf768d8b9d0a066764bfbda7c0c740a989f1844be4d471860d84e80c6cd87f7'
+OWNER_COPY_EVIDENCE = BASE / 'recovery-20261007/readonly-added-row-copy-reconciliation-v1.json'
+OWNER_COPY_EVIDENCE_SHA = '388656791d04af7b1b3cdd609837a04c80b1a03f50841c3ac71880d1c9c94c66'
+OWNER_FILE_EVIDENCE = BASE / 'recovery-20261007/owner-interactive-files-difference-v1.json'
+OWNER_FILE_EVIDENCE_SHA = '4668a40e961800d785f21a01b88dd699b17582456ccadca6b77801fa8201b2b5'
+OWNER_EVIDENCE_PINS = {'owner_reply': 'dbf768d8b9d0a066764bfbda7c0c740a989f1844be4d471860d84e80c6cd87f7', 'row_evidence': '388656791d04af7b1b3cdd609837a04c80b1a03f50841c3ac71880d1c9c94c66', 'file_evidence': '4668a40e961800d785f21a01b88dd699b17582456ccadca6b77801fa8201b2b5'}
+OWNER_ROW_PINS = {'core_auditevent': {'77eda15e3eded004b2224d85c5abd0473cb098d20f5e9bcb233cf0b9c1c03608': {'before': None, 'after': '6509766f20073b997ec40fcc855a2a758545861cbed091436f2d9d7911429ed9', 'columns': None}, '2d4fe91fdef8f4c77bc6fe497e41b98c6a8d79f06957d44c6915e1b337dbb1e9': {'before': None, 'after': 'e26c94341a6046bdc711e65ede521acad04e078be889f35873ee7d3065c03398', 'columns': None}, '7c1719ae2b2d6fd0cea5745fdccb4c4bed611948b754269895905e2678c7d700': {'before': None, 'after': '724eae5e6f16511bc82d9e45417c50dddc85c4312ababa18e766a130d127591d', 'columns': None}, 'cf318ced61d7b8ffe1c99d11b33ba09bad0b4a701949884c40b229cd4e8f359f': {'before': None, 'after': '5db05dba3b1a7a2867c08870b46337e0e3b4b03924db619ca4af551cd3cbf817', 'columns': None}, 'eef2d03bd35ebd8385beebcd4dd2973bcdd765c3b9960c87b672b6fec80ba142': {'before': None, 'after': '2f7df5a5a2a8382f244be87ea6a0e7ed36411b004a4a0c87db934f557d6c483c', 'columns': None}, 'f9b345dc445fd433be5af0109a5c9d22b8f3662c58648a90cbc23baac961d988': {'before': None, 'after': 'e4a5dfd7163c8ee6aa87081562071c1985b3af98ee795c834b6cb885e2d5cce5', 'columns': None}, '5157d6de1abe16204d362f7fdedce8c70756048cef1e56bb7c230324db2831c0': {'before': None, 'after': '777a8c586390b3a7a52ccd48eaa0beff24cf42376df03c982b37084be95481dd', 'columns': None}, 'f3b86f96dee230d8ba85671d2173e47a3ded151cd859922e3432adbaac709871': {'before': None, 'after': '5baa1535fa3c6c61611233e069f8fbaaa5698a67e935f1b78d367f45e4fa84ba', 'columns': None}, '63492b8bd784f98861f50302ecf8f67421afe5f18bdb33783253b519e8260af1': {'before': None, 'after': 'f9dc6cbac09a582a8cf45455e96e54c61c67c3061aeea2355d9792062cb1e5ff', 'columns': None}, 'acd5f1337c378128047cfe28c8d30ffc54a7a9df22d27dc06b6e46a8d46f244b': {'before': None, 'after': 'b8d40373afdf352585b4e5f0d83f4864fd04590871b6aeadc3554755f22c4562', 'columns': None}, '47ea9461c18b1f9cbd2d3c21e6fa9bcbd26f6ed7f8b05b96a8da84993defb864': {'before': None, 'after': '418a12a573437539fb6716dff2cfc57ace1a9c04610b08ea7f1914e261bcedcf', 'columns': None}, '0c7c7d5377daad45d2240b4ade9ba203136a726ab6027162bc9348756b8b9a09': {'before': None, 'after': 'a71240a1a632340874cef7b77bf01ac62edcbdc08a6b0ad449954f010a59b36e', 'columns': None}, '1e27493241fa141d82dc35410e43126be039d708948c5328a1ed61d5c56b9f10': {'before': None, 'after': 'c23ca25635a8c199c5fc06c2615e10b928f588a5856c0c48840853ace9948731', 'columns': None}, 'd2b6d4051da14ac50a6ae2fa062c0fa00d0fd62bae75e7bcbde0cf02946d81b5': {'before': None, 'after': '9ee0cd15a7703055ee43ce8de35c575079755244e535820c42cdffba15bb5297', 'columns': None}, '59dfd245d0511e908c063106fc09b8d6252985cf75b8624d953887fea8e19cd2': {'before': None, 'after': 'd8eb7b5a1b490d3a8f2f34c673227ef18ebaf10987c7c6936c3df0a5dab47e91', 'columns': None}, '975a557342b412f51a2e72336c7e2b6b2c4c6de8ebf45128ea956f94d1e57260': {'before': None, 'after': 'f687fbce65b8d3d12d180045e4454c506cd01a05a64de41dffacf1619068fd7d', 'columns': None}, '8e883caf20f3c50e160994f4d555cdc7758bfa7ac007b5ece80f167546bd1f34': {'before': None, 'after': 'bd9e065793cb0e9730e475e32834e4d3b80c04f03849cf9f7e08a475562921d4', 'columns': None}, 'bb37de6f85382364a9e7a767a9f28100eeda47a921dcbca13429ebf83b641291': {'before': None, 'after': '288c561b4eff69e9ea0743c574a2ec59a11f0e3e2064b4c098019b8e6a2cdacd', 'columns': None}, '0d5400f38e7fd23fde7a9f82f0019cd0ae2f86fb7ce4477d6409eeb25a2d10f0': {'before': None, 'after': 'd61d9f822b34c2826677d52e116effa89dabaa89a995b1c93d1bcaf8e0e0fc51', 'columns': None}, '1e5f839c55aef237b8a94cb671c6beb8e60740de44fe6232f93cfe3453f6a2ba': {'before': None, 'after': '8392db23cdaabb58a016f111ee7477ef33e85bc41b1c5af75c3a0c3143345e10', 'columns': None}, '947fbe4d6ec754841525ab228d0c0189e2db06787d1cfdc5fae6c84bc8c478d7': {'before': None, 'after': '8f184b7a5bbd1ae53b32725d3bb7a7d448effc9c217981d5e979708c48d47763', 'columns': None}, '7c98ce32265bd18731549988d668318ac22793427db09902fddfafdddb2e8e0e': {'before': None, 'after': '0ce0da9c91fcd91bb063bf1b5bad566cdf097b9d7631b7b2a8e45ad5021debce', 'columns': None}, '89cdd13365608fbfe17877f46619c819fa6167fc947f81a71a501222fc91cd6f': {'before': None, 'after': 'cf8ec7431059626ab06db5c208e22e02864fca18ba9fe34714cf770f12c317e8', 'columns': None}, 'd6f0f8877198a1132d7c86eda930a792fd457ab1a2217b197975ab3e57cdc994': {'before': None, 'after': '725871d4f1c5fac1d361b2c6fc1e66578af3807fc260538f15a5d6ef0f64e9eb', 'columns': None}, '6c9a985fffc585b89081d26bcefdf2e667056f7bff8d8885f84244a285ada275': {'before': None, 'after': '6b8004263b023feb1837a5896662d210eb0052cbfaf518c5983fc6f90e39c62d', 'columns': None}, 'b0fe6564e76a07ad25cf76ee2945ff4b2931194016956186faeadab4abfbec36': {'before': None, 'after': 'e7ece09be59615c2b07065a64d360b1a137754eac731b57155a2c65da817036c', 'columns': None}, '94122718a1aba92d30301d7abe230c4db1470db0f401f628d757b65ef22ccef1': {'before': None, 'after': 'c981b8c2604ad1b62b2f02cf04bbac9bf9ac8d333e28461a8f2a6d7bd9dbda7a', 'columns': None}, 'c5525fec3075c6de2ac77bba9397c902d1d8bd37a730b3a74f015c265a7f1311': {'before': None, 'after': '6ecdb015d91b6bdc470f8c17d2cda89e1ee4be9d516e25319e97feecd872d00c', 'columns': None}, 'e3c3950e0c2ba5c5ee9a89a998a0f1847a0313e7d4ba793b38d0dbaaf5cfe7ab': {'before': None, 'after': 'd09708212e37151c8fff1f060fcb36363041a8949fec21dfdab4fe8fcce9a334', 'columns': None}, 'fac193c683385a977f02bf77ca1ba7e8f74969eb72a1c6319173f56345ba3421': {'before': None, 'after': 'e6d2d6aa66d8ec8e13b3faf8cb15cf7efc3fb8c7f69f690d7340ddfe1cae3446', 'columns': None}}, 'core_encounter': {'e2a5d5628d7741612af6fc679efa25e96673305150c5d14250e9fd261e90526d': {'before': None, 'after': '8adb3aac196872579c934b7e63950b22134a31906773aed8a22905e3f85b2cdd', 'columns': None}, 'b699db18721b087b28689aeb2f52ad00b72246cee6cffec66a8e8819f6e4d43d': {'before': 'b57e10535f6c1e038591953bc729457c0f586667213552bca3e1ed0b2553d67b', 'after': '85ad26d8a3b6ad6c2ca3ba5f2f5f244889621fd306c392ee41f8b28ca860a129', 'columns': ['answers', 'revision']}}, 'core_job': {'20468313a1eccfbe0aa6c88a429610c3580702e3acf246912a8f1253a7370ddb': {'before': None, 'after': 'afa4b01b4b0024b3573ba71c8405bdb04d31dd1111da59a899fd9144db0e000d', 'columns': None}, '4ab33618c44799016f86000e8a69f3cad33ade00ae5ff62e1dccf6469ac9aaa3': {'before': None, 'after': '870279e7c4f7926988d32e9462fcfb0b91fa041921ca1d9567f520520377ac3c', 'columns': None}}, 'core_ledgerentry': {'42464a57f98662c732d82ea8642cedce8da32dc05f1b77312cad483f4afcec19': {'before': None, 'after': '3172028d11260751cef3753e40a3bf61dd3f7b348d57d14a0f9b99b340214c71', 'columns': None}, '163c94c1e0d133350ccba287346b107fb9828f91e20baf9a0eb4bb08f7ce5fba': {'before': None, 'after': 'bda1dcc71bbf752718d5bcebb40b5b02a1bdacd9450fb4317c2325db76c34844', 'columns': None}}, 'core_loginattempt': {'be770604ee12205d319401ec1b4c2e3daf960aacc0da4ae63fd14bbbffd8f4c5': {'before': 'bffeb5b16fe1cb8c2441c3a5c4bae415f494e02d570298990c5576b4d46d92ed', 'after': '849cd2f857827e98c8ad1dc63b3f2dafe4792cbaf178fae092ec48baffbc2998', 'columns': ['window_start']}, '8deb38f98dadd2f4cdcfd2302d57245f7f5bba658f45b856b9720efbfa601972': {'before': 'c84224a443eb70ad42440e29ae28a325303eda23b82be0fc9714e425e8d7e0fc', 'after': '7d9f2fa8a8bcc0c95ec27d772f1ccafd8051c65fbc72218d7f9abe01466bfe2a', 'columns': ['count', 'window_start']}, '3608ffe3f429036d4e2e5e03887888a038e36dd1673828e7f514c4e35b22cd19': {'before': '327f1f3d65710a2998796af5670160fc2ccd3cbfba56c54bccc327838f7e000b', 'after': '1f13d3592b3261996dcc1fbe20b9bd1c0d092451ca4b17f1951c4eca3bb6b937', 'columns': ['window_start']}, 'a7f61130d74cdbe2c01af1480c461444e00509e42e7676731a5228402912313b': {'before': '68bd1f974277ffd6ed0e11757d2cae7844cba5c5f28bb0b20cf9260ebad689a6', 'after': 'bfec89c269b596a5f9d93756697e4e50bbbdc0009a74129c542ba478ab172030', 'columns': ['window_start']}, '7b0f16610db794be9337ba77a25ef99fc20d840c533e65ff6e0d65a59ad74d6d': {'before': '7d5331722669c7b7017a056a3a3f0519e5d4a7145b2f770b3e89aefee1b90cbb', 'after': 'adb0f9cade696fdc95e382c011c94f029f817fe3ceb9d06f3135d1c28367909b', 'columns': ['window_start']}}, 'core_providerreceipt': {'c1f61fc46da07c52a1c49438a32dfd4852e752e6803fec5d1ae93e482549cbe7': {'before': None, 'after': '23d716a3ea23cb20f74482499715872a3290b0386ca9fd9dd775342987001dfc', 'columns': None}, '1c7106b82976437c2bf7b54a83d4d44a03ab0361022769e27cb1d1d2f69815f2': {'before': None, 'after': '687f57d3382f8f900ce0e71212124794d48d2e53b7d479428bf0a6c01865e31c', 'columns': None}}, 'core_reservation': {'f6d791d886b42c7cde20eccad313a826865f0d12ad14ce12cabeb13d9652f4c3': {'before': None, 'after': '230eb3c34f324d4ffa853f083dc549089ebc017f682528de00f29e50637fa99f', 'columns': None}, '1eb1578dae17bec4075d5c538554476090eef7853d35d6f7e3544b173b2b316e': {'before': None, 'after': 'f034ad75ae34ba25ba2432c1fa9e315bd0b9a58bc00997eb0bf46145f2300979', 'columns': None}}, 'core_usage': {'d163075022d28f60aba6a1941698b07b94003dffb10985093cedd31d6313be3a': {'before': None, 'after': '7e7c13f6abf38c386ae39ec9caac4a70e49a01a1f279d012ac27ba5e3d4fa678', 'columns': None}, 'f3ce02c1ef5c0997d7910bf09fe5526f61df546c1431acbce36204e8a65aa717': {'before': None, 'after': '6fb18a27b1a39dec64aca8e5ccb7afc3754fbd2b313d0daeaaa38dd437d2e8d7', 'columns': None}}, 'core_user': {'f1c23f3c43cd23c07887f338b4c942ca082235f30935bea0309b0e3d2b5deaa1': {'before': '7dff78ed934fc3a5615d094d51950b9cd93ac6f7f317bd96397c773a50005788', 'after': 'b475cc71f3c8172286f00da594e4ce1d1d75352ae1471afe644f14a28c625c9b', 'columns': ['last_login']}}, 'core_wallet': {'c78844109976cc0043ffb8d934bbc3c9ec1f601331868f0f39426c18ffa8ca8e': {'before': '669adb36b92d560ae400810e7929d098a0dcd5ce3489959d5dcef32a1630591a', 'after': '53422a9236658f58bf3c37803773762828026ac79a2a616739e995cbcd6ad383', 'columns': ['balance']}}, 'django_session': {'acf47c21362711fbcdf3966966489acb0e998ee78fd0450563e4cbc418644e0c': {'before': None, 'after': '80fd109352a30deb3336d4705906f80b924f283d32109d9531197cebdbcac411', 'columns': None}, 'e7425a4fbc259c36423cc0412fb0efab6945a722156fffcb3bb81c0d8fde5e6a': {'before': None, 'after': '2e77a808cab8cf6fe31cfecc4cfba867f891ed50959fe4e06ff6dd3a9b4131b0', 'columns': None}}}
+OWNER_FILES = {'audio/e31600b10490070971c623b4fe3a80150dbde992fc37da7b.webm': {'mode': 384, 'sha256': '408b3254bb777cf42efc587aaf92198c7b5a2f3d9a4e32b80f7270c8147359d2', 'size': 11753}, 'receipts/5093354ef039011a4ab3598d0f660dc55f736fe157cf6d46.json': {'mode': 384, 'sha256': 'edfbcb26eaf62108e9066c39be609eb1e4c79fb77baff0a9a37b064336677335', 'size': 40}, 'receipts/b3aa06204e631d162de2d41b7fc05c4b5d59d8a7aa2e2992.json': {'mode': 384, 'sha256': 'fcfb9b146919becf05b51f245a2afefa9293366351e383326b20a1c998b81e48', 'size': 5287}}
+
 ORIGINAL = RUNTIME / 'legacy-model-demo-20261007T012249Z'
 CONSUMED = RUNTIME / 'legacy-model-continuation-20261007'
 PYTHON = APP / '.venv/bin/python'
@@ -358,7 +372,7 @@ def stamp(value):
 def execution_gate():
     require(EXECUTION_QUALIFIED and NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED
             and FIXED_CHILD_PROTOCOL_QUALIFIED and PHASE_PRESERVATION_PROTOCOL_QUALIFIED
-            and NATIVE_GATE_DIAGNOSTIC_QUALIFIED,
+            and NATIVE_GATE_DIAGNOSTIC_QUALIFIED and OWNER_INTERACTIVE_PRESERVATION_QUALIFIED,
             'v3_execution_source_protocol_unqualified')
 
 
@@ -1043,13 +1057,15 @@ def adapt_configuration_admission(scope, raw):
                    == _configuration_ast.dump(expected, include_attributes=False)]
     need(len(comparisons) == 1, 'v3_current_configuration_exact_frozen_predicate')
     replacement = _configuration_ast.parse(
+        "(owner_report_admission(receipt['before'].get(name),snapshot.get(name),report,authority,operations,served,availability_sha) "
+        "if name=='files' and ('owner_interactive_preservation' in authority or 'owner_interactive_cohort' in authority) else "
         "(snapshot.get(name)==receipt['before'].get(name) if name!='configuration' else "
         "(phase_report_admission(receipt['before'].get(name),snapshot.get(name),report.get('co_tenant_preservation_admission'),"
         "report,authority,operations,served,availability_sha) if "
         "'phase_preservation' in authority else "
         "(configuration_same(snapshot.get(name),receipt['before'].get(name)) or "
         "current_configuration_proof(receipt['before'].get(name), snapshot.get(name), "
-        "report.get('co_tenant_preservation_admission')))))", mode='eval').body
+        "report.get('co_tenant_preservation_admission'))))))", mode='eval').body
     class Replace(_configuration_ast.NodeTransformer):
         def visit_Compare(self, node):
             return _configuration_copy.deepcopy(replacement) if node is comparisons[0] else self.generic_visit(node)
@@ -1071,13 +1087,15 @@ def configuration_constants():
                 PHASE_PRESERVATION_PATH=str(PHASE_PRESERVATION_PATH),
                 PHASE_PREPARATION_PATH=str(PREPARATION), PHASE_CONFIGURATION_PATHS=PHASE_CONFIGURATION_PATHS,
                 PHASE_LINK_TARGETS=PHASE_LINK_TARGETS, PHASE_OTHER_UNIT_FIELDS=PHASE_OTHER_UNIT_FIELDS,
-                PHASE_OWNER_HISTORY=PHASE_OWNER_HISTORY)
+                PHASE_OWNER_HISTORY=PHASE_OWNER_HISTORY, OWNER_OVERLAY_PROTOCOL=OWNER_OVERLAY_PROTOCOL,
+                OWNER_COHORT_NAME=OWNER_COHORT_NAME, OWNER_FILES=OWNER_FILES, OWNER_EVIDENCE_PINS=OWNER_EVIDENCE_PINS)
 
 
 def configuration_helpers(scope):
     scope.update(configuration_constants())
     exec(compile(ANONYMOUS_PURE_SOURCE, '<reviewed-phase-anonymous-helpers>', 'exec'), scope)
     exec(compile(CONFIGURATION_ADMISSION_SOURCE, '<reviewed-configuration-proof>', 'exec'), scope)
+    exec(compile(OWNER_OVERLAY_PURE_SOURCE, '<reviewed-owner-cohort-proof>', 'exec'), scope)
     return scope
 
 
@@ -1736,7 +1754,7 @@ def current_external_boundary(recovery, acknowledgement):
     return result
 
 
-def preserved_snapshot(expected, current, database, configuration_proof=None, *, phase_required=False):
+def preserved_snapshot(expected, current, database, configuration_proof=None, *, phase_required=False, owner_proof=None):
     require(current['database'] == database, 'v3_database_snapshot_race')
     for label in ('mail', 'static'):
         require(expected[label] == current[label], 'v3_preserved_' + label)
@@ -1747,9 +1765,291 @@ def preserved_snapshot(expected, current, database, configuration_proof=None, *,
             or not helpers['configuration_same'](expected['configuration'], current['configuration'])):
         helpers['current_configuration_proof'](
             expected['configuration'], current['configuration'], configuration_proof)
-    require(all(current['files'].get(name) == value for name, value in expected['files'].items()),
+    expected_files = expected['files']
+    if owner_proof is not None:
+        helpers['owner_public_admission'](owner_proof)
+        require(len(expected_files) == 74 and not (set(expected_files) & set(OWNER_FILES)),
+                'v3_owner_snapshot_original_files')
+        expected_files = dict(expected_files, **OWNER_FILES)
+    require(all(current['files'].get(name) == value for name, value in expected_files.items()),
             'v3_preserved_old_files')
     return True
+
+
+def owner_overlay_contract():
+    return {'protocol': OWNER_OVERLAY_PROTOCOL, 'source_qualified': OWNER_INTERACTIVE_PRESERVATION_QUALIFIED,
+        'owner_reply': {'path': str(OWNER_USE_REPLY), 'sha256': OWNER_USE_REPLY_SHA},
+        'row_evidence': {'path': str(OWNER_COPY_EVIDENCE), 'sha256': OWNER_COPY_EVIDENCE_SHA},
+        'file_evidence': {'path': str(OWNER_FILE_EVIDENCE), 'sha256': OWNER_FILE_EVIDENCE_SHA},
+        'cohort_path': str(ACTUAL_PREPARATION / OWNER_COHORT_NAME),
+        'diagnostic_cohort_path': str(GATE_DIAGNOSTIC / OWNER_COHORT_NAME),
+        'diagnostic_packet_not_campaign_authority': True,
+        'original_sessions': 212, 'comparison_sessions': 214, 'owner_added_rows': 43, 'owner_changed_rows': 8,
+        'original_referenced_files': 67, 'comparison_referenced_files': 70,
+        'original_capture_replaced': False, 'future_changes_automatically_approved': False,
+        'owner_MFA_certified': False, 'task_generations': 5, 'task_transcriptions': 1}
+
+
+def owner_overlay_evidence():
+    """The genuine owner reply and hash-only reconciliation are immutable inputs."""
+    raw = protected(OWNER_USE_REPLY); evidence = protected(OWNER_COPY_EVIDENCE); files = protected(OWNER_FILE_EVIDENCE)
+    require(sha(raw) == OWNER_USE_REPLY_SHA and sha(evidence) == OWNER_COPY_EVIDENCE_SHA
+            and sha(files) == OWNER_FILE_EVIDENCE_SHA, 'v3_owner_overlay_evidence_changed')
+    reply = json.loads(raw); rows = json.loads(evidence); inventory = json.loads(files)
+    require(reply.get('user_answer') == 'Yes, that was my use'
+            and reply.get('bounded_copy_evidence_sha256') == OWNER_COPY_EVIDENCE_SHA
+            and reply.get('future_changes_automatically_approved') is False
+            and reply.get('historical_baseline_replaced') is False,
+            'v3_owner_overlay_genuine_scope')
+    require(rows.get('complete') is True and rows.get('original_manifest_cipher_sha256') == 'e17f425d15edcac550d1a5a4b093bc3875f8d6536a795e960f5c181afc1a6480'
+            and rows.get('original_sessions') == 212
+            and rows.get('table_population') == 36
+            and all(not item['deleted_rows'] for item in rows['tables'].values())
+            and inventory.get('added_files') == OWNER_FILES, 'v3_owner_overlay_reconciliation_scope')
+    selected = {}
+    for table, item in rows['tables'].items():
+        if table == 'core_servicehealth':
+            continue
+        pins = {}
+        for row in item['added_rows']:
+            if table == 'django_session' and row['primary_key_sha256'] not in OWNER_ROW_PINS['django_session']:
+                continue
+            pins[row['primary_key_sha256']] = {'before': None, 'after': row['row_sha256'], 'columns': None}
+        for row in item['changed_original_rows']:
+            pins[row['primary_key_sha256']] = {'before': row['before_row_sha256'], 'after': row['after_row_sha256'],
+                                               'columns': row['changed_columns']}
+        if pins:
+            selected[table] = pins
+    require(anonymous_same(selected, OWNER_ROW_PINS), 'v3_owner_overlay_exact_evidence_rows')
+    return rows
+
+
+def owner_original_fingerprints(verifier, original, manifest, keys):
+    require(set(original) == set(manifest['tables']) == set(keys) and len(original) == 36,
+            'v3_owner_original_table_population')
+    fingerprints = {}
+    for table, data in original.items():
+        mapped = verifier.row_mapping(table, data['rows'], data['columns'], keys[table])
+        ordered = owner_ordered_rows(mapped, data['columns'])
+        fingerprints[table] = {'rows': len(mapped), 'sha256': sha(b''.join(ordered))}
+        require(fingerprints[table] == manifest['tables'][table], 'v3_owner_original_copy_identity')
+    require(fingerprints['django_session']['rows'] == 212, 'v3_owner_original_212_sessions')
+    return fingerprints
+
+
+def owner_ordered_rows(mapped, columns):
+    sort_key = lambda key: tuple(int(cell) if cell.isdigit() else cell for cell in key)
+    return [b'\t'.join(mapped[key][name] for name in columns) + b'\n' for key in sorted(mapped, key=sort_key)]
+
+
+def owner_overlay_rows(verifier, original, current, keys):
+    """Select only the exact 51 source-pinned COPY rows, never a fresh baseline."""
+    require(set(original) == set(current) == set(keys), 'v3_owner_overlay_capture_table_population')
+    result = {}
+    for table, pins in OWNER_ROW_PINS.items():
+        data = current[table]; columns = original[table]['columns']
+        require(data['columns'] == columns, 'v3_owner_overlay_exact_columns')
+        before = verifier.row_mapping(table, original[table]['rows'], columns, keys[table])
+        after = verifier.row_mapping(table, data['rows'], columns, keys[table])
+        by_hash = {sha(verifier.encoded([cell.decode() for cell in key])): (key, row) for key, row in after.items()}
+        require(len(by_hash) == len(after), 'v3_owner_overlay_unique_keys')
+        result[table] = {}
+        for digest, pin in pins.items():
+            require(digest in by_hash, 'v3_owner_overlay_named_row_missing')
+            key, row = by_hash[digest]
+            require(verifier.row_digest(row, columns) == pin['after'], 'v3_owner_overlay_named_row_changed')
+            if pin['before'] is None:
+                require(key not in before, 'v3_owner_overlay_added_row_preexisting')
+            else:
+                require(key in before and verifier.row_digest(before[key], columns) == pin['before']
+                        and sorted(name for name in columns if before[key][name] != row[name]) == pin['columns'],
+                        'v3_owner_overlay_original_change_scope')
+            result[table][digest] = base64.b64encode(b'\t'.join(row[name] for name in columns) + b'\n').decode()
+    return result
+
+
+def owner_project_cohort(verifier, original, baseline, manifest, keys, rows):
+    """A named in-memory comparison cohort; original capture inputs are untouched."""
+    original_fingerprints = owner_original_fingerprints(verifier, original, manifest, keys)
+    require(type(rows) is dict and set(rows) == set(OWNER_ROW_PINS)
+            and all(type(rows[table]) is dict and set(rows[table]) == set(pins)
+                    for table, pins in OWNER_ROW_PINS.items()), 'v3_owner_overlay_closed_row_population')
+    comparison = copy.deepcopy(original)
+    for table, pins in OWNER_ROW_PINS.items():
+        columns = original[table]['columns']
+        mapped = verifier.row_mapping(table, original[table]['rows'], columns, keys[table])
+        for digest, pin in pins.items():
+            try:
+                line = base64.b64decode(rows[table][digest], validate=True)
+            except (ValueError, TypeError):
+                raise Refusal('v3_owner_overlay_private_copy_encoding') from None
+            require(line.endswith(b'\n') and b'\n' not in line[:-1], 'v3_owner_overlay_one_copy_row')
+            row = dict(zip(columns, line[:-1].split(b'\t')))
+            require(len(line[:-1].split(b'\t')) == len(columns), 'v3_owner_overlay_copy_width')
+            primary = tuple(row[name] for name in keys[table])
+            require(sha(verifier.encoded([cell.decode() for cell in primary])) == digest
+                    and verifier.row_digest(row, columns) == pin['after'], 'v3_owner_overlay_private_row_pin')
+            if pin['before'] is None:
+                require(primary not in mapped, 'v3_owner_overlay_added_row_preexisting')
+            else:
+                require(primary in mapped and verifier.row_digest(mapped[primary], columns) == pin['before']
+                        and sorted(name for name in columns if mapped[primary][name] != row[name]) == pin['columns'],
+                        'v3_owner_overlay_original_change_scope')
+            mapped[primary] = row
+        comparison[table]['rows'] = owner_ordered_rows(mapped, columns)
+    derived_manifest = copy.deepcopy(manifest)
+    derived_manifest['tables'] = {table: {'rows': len(data['rows']), 'sha256': sha(b''.join(data['rows']))}
+                                  for table, data in comparison.items()}
+    derived_baseline = copy.deepcopy(baseline)
+    require(len(baseline['files']) == 74 and len(baseline['database']['referenced_files']) == 67
+            and not (set(OWNER_FILES) & set(baseline['files'])), 'v3_owner_original_file_population')
+    derived_baseline['files'].update(copy.deepcopy(OWNER_FILES))
+    derived_baseline['database']['referenced_files'].update({name: value['sha256'] for name, value in OWNER_FILES.items()})
+    # Only the explicitly derived COPY fingerprint and exact three references
+    # differ. Catalog, sequences, invariants, mail, configuration and static stay original.
+    derived_baseline['database']['tables'] = copy.deepcopy(derived_manifest['tables'])
+    derived_manifest['files'] = copy.deepcopy(manifest['files']) + [dict(value, path=name) for name, value in OWNER_FILES.items()]
+    require(derived_manifest['tables']['django_session']['rows'] == 214,
+            'v3_owner_comparison_214_sessions')
+    summary = {'original_table_fingerprints': original_fingerprints,
+               'comparison_table_fingerprints': derived_manifest['tables'],
+               'historical_original_sessions': 212, 'comparison_sessions': 214,
+               'owner_added_rows': 43, 'owner_changed_rows': 8,
+               'historical_original_referenced_files': 67, 'comparison_referenced_files': 70,
+               'historical_capture_replaced': False, 'future_changes_automatically_approved': False,
+               'owner_MFA_certified': False}
+    return comparison, derived_baseline, derived_manifest, summary
+
+
+def owner_packet_header(packet):
+    require(type(packet) is dict and set(packet) == {'format', 'protocol', 'binding', 'evidence', 'summary', 'ciphertext'}
+            and type(packet['format']) is int and packet['format'] == 1
+            and packet['protocol'] == OWNER_OVERLAY_PROTOCOL
+            and type(packet['ciphertext']) is str and len(packet['ciphertext']) <= 2 * 1024 * 1024,
+            'v3_owner_overlay_closed_private_packet')
+    return {name: copy.deepcopy(value) for name, value in packet.items() if name != 'ciphertext'}
+
+
+def owner_packet_decode(raw, cipher, verifier, original, baseline, manifest, keys, binding):
+    require(len(raw) <= 3 * 1024 * 1024, 'v3_owner_overlay_packet_bound')
+    packet = json.loads(raw); header = owner_packet_header(packet)
+    require(anonymous_same(header['binding'], binding) and header['evidence'] == OWNER_EVIDENCE_PINS,
+            'v3_owner_overlay_private_authority_binding')
+    rows = json.loads(cipher.decrypt(packet['ciphertext'].encode()))
+    cohort = owner_project_cohort(verifier, original, baseline, manifest, keys, rows)
+    require(anonymous_same(header['summary'], cohort[3]), 'v3_owner_overlay_private_summary')
+    return packet, cohort
+
+
+def owner_packet_capture(cipher, verifier, original, current, baseline, manifest, keys, binding):
+    rows = owner_overlay_rows(verifier, original, current, keys)
+    cohort = owner_project_cohort(verifier, original, baseline, manifest, keys, rows)
+    plaintext = encode(rows)
+    require(len(plaintext) <= 1024 * 1024, 'v3_owner_overlay_plaintext_bound')
+    packet = {'format': 1, 'protocol': OWNER_OVERLAY_PROTOCOL, 'binding': copy.deepcopy(binding),
+              'evidence': copy.deepcopy(OWNER_EVIDENCE_PINS), 'summary': cohort[3],
+              'ciphertext': cipher.encrypt(plaintext).decode()}
+    return encode(packet), cohort
+
+
+def owner_cohort_binding(operations, served, availability_sha, parent):
+    require(type(parent) is dict and type(parent.get('parent_pid')) is int and parent['parent_pid'] > 0
+            and type(parent.get('parent_start_ticks')) is int and parent['parent_start_ticks'] > 0,
+            'v3_owner_overlay_parent_binding')
+    return {'operations_revision': full_revision(operations), 'served_revision': full_revision(served),
+            'availability_receipt_sha256': availability_sha, 'parent_pid': parent['parent_pid'],
+            'parent_start_ticks': parent['parent_start_ticks'], 'preparation_directory': str(PREPARATION)}
+
+
+def owner_overlay_public(raw):
+    packet = json.loads(raw)
+    return {'path': str(PREPARATION / OWNER_COHORT_NAME), 'sha256': sha(raw), 'header': owner_packet_header(packet)}
+
+
+def install_owner_final_cohort(module, authority):
+    """Wrap the real frozen entry also used directly by normal.full_preservation."""
+    require('owner_interactive_cohort' in authority, 'v3_final_owner_overlay_required')
+    pin = authority['owner_interactive_cohort']
+    raw = protected(PREPARATION / OWNER_COHORT_NAME, 3 * 1024 * 1024)
+    require(anonymous_same(pin, owner_overlay_public(raw)), 'v3_final_owner_overlay_pin')
+    owner_overlay_evidence()
+    original_function = module.verify_preservation
+    def checked(conn, original, baseline, manifest, progress, actor, activation, storage, backup):
+        keys = backup.table_queries(lambda statement: [tuple(row.values()) for row in conn.execute(statement).fetchall()])
+        cipher = backup.key_at(APP / '.runtime/backup-secrets/fresh-backup-current-20260917.key')
+        binding = pin['header']['binding']
+        require(binding['operations_revision'] == authority['operations_revision']
+                and binding['served_revision'] == authority['served_revision']
+                and binding['availability_receipt_sha256'] == authority['availability_receipt_sha256'],
+                'v3_final_owner_overlay_revision')
+        _, cohort = owner_packet_decode(raw, cipher, module, original, baseline, manifest, keys, binding)
+        comparison, expected, derived_manifest, summary = cohort
+        result = original_function(conn, comparison, expected, derived_manifest, progress, actor, activation, storage, backup)
+        require(protected(PREPARATION / OWNER_COHORT_NAME, 3 * 1024 * 1024) == raw,
+                'v3_final_owner_overlay_packet_changed')
+        result['owner_interactive_preservation'] = copy.deepcopy(pin)
+        result['historical_original_records_separately_adjudicated'] = summary
+        result['comparison_cohort_is_original_capture'] = False
+        return result
+    module.verify_preservation = checked
+
+
+OWNER_OVERLAY_PURE_SOURCE = r'''
+def owner_public_admission(pin):
+    need(type(pin) is dict and set(pin) == {'path', 'sha256', 'header'}
+        and pin['path'] == PREPARATION + '/' + OWNER_COHORT_NAME
+        and type(pin['sha256']) is str and _configuration_re.fullmatch('[a-f0-9]{64}', pin['sha256']),
+        'v3_owner_public_packet_pin')
+    header = pin['header']
+    need(type(header) is dict and set(header) == {'format', 'protocol', 'binding', 'evidence', 'summary'}
+        and type(header['format']) is int and header['format'] == 1 and header['protocol'] == OWNER_OVERLAY_PROTOCOL
+        and anonymous_same(header['evidence'], OWNER_EVIDENCE_PINS), 'v3_owner_public_packet_header')
+    binding = header['binding']
+    need(type(binding) is dict and set(binding) == {'operations_revision', 'served_revision',
+        'availability_receipt_sha256', 'parent_pid', 'parent_start_ticks', 'preparation_directory'}
+        and all(type(binding[name]) is str and _configuration_re.fullmatch('[a-f0-9]{40}', binding[name])
+                for name in ('operations_revision', 'served_revision'))
+        and type(binding['availability_receipt_sha256']) is str
+        and _configuration_re.fullmatch('[a-f0-9]{64}', binding['availability_receipt_sha256'])
+        and all(type(binding[name]) is int and binding[name] > 0 for name in ('parent_pid', 'parent_start_ticks'))
+        and binding['preparation_directory'] == PREPARATION, 'v3_owner_public_packet_binding')
+    summary = header['summary']
+    fixed = {'historical_original_sessions': 212, 'comparison_sessions': 214,
+        'owner_added_rows': 43, 'owner_changed_rows': 8, 'historical_original_referenced_files': 67,
+        'comparison_referenced_files': 70, 'historical_capture_replaced': False,
+        'future_changes_automatically_approved': False, 'owner_MFA_certified': False}
+    need(type(summary) is dict and set(summary) == set(fixed) | {'original_table_fingerprints', 'comparison_table_fingerprints'}
+        and all(anonymous_same(summary.get(name), value) for name, value in fixed.items()),
+        'v3_owner_public_comparison_scope')
+    for field in ('original_table_fingerprints', 'comparison_table_fingerprints'):
+        population = summary[field]
+        need(type(population) is dict and len(population) == 36
+            and all(type(name) is str and _configuration_re.fullmatch('[a-z_0-9]+', name)
+                and type(value) is dict and set(value) == {'rows', 'sha256'}
+                and type(value['rows']) is int and value['rows'] >= 0 and type(value['sha256']) is str
+                and _configuration_re.fullmatch('[a-f0-9]{64}', value['sha256']) for name, value in population.items()),
+            'v3_owner_public_table_fingerprints')
+    need(set(summary['original_table_fingerprints']) == set(summary['comparison_table_fingerprints'])
+        and summary['original_table_fingerprints']['django_session']['rows'] == 212
+        and summary['comparison_table_fingerprints']['django_session']['rows'] == 214,
+        'v3_owner_public_original_comparison_distinction')
+    return pin
+
+def owner_report_admission(expected, current, report, authority, operations, served, availability_sha):
+    pin = owner_public_admission(authority.get('owner_interactive_cohort'))
+    need(anonymous_same(report.get('owner_interactive_preservation'), pin), 'v3_owner_report_packet_required')
+    binding = pin['header']['binding']
+    need(binding['operations_revision'] == operations == report['operations_revision']
+        and binding['served_revision'] == served == report['served_revision']
+        and binding['availability_receipt_sha256'] == availability_sha == report['availability_receipt_sha256']
+        and anonymous_same(binding, authority.get('phase_preservation', {}).get('binding')),
+        'v3_owner_report_current_phase_binding')
+    need(type(expected) is dict and len(expected) == 74 and not (set(expected) & set(OWNER_FILES)),
+        'v3_owner_report_original_files')
+    comparison = dict(expected, **OWNER_FILES)
+    need(anonymous_same(comparison, current), 'v3_owner_report_exact_file_comparison_cohort')
+    return True
+'''
 
 
 def expired_session_descriptor():
@@ -2012,7 +2312,9 @@ def speech_admission(verifier, packet, expected):
     require(job['kind'] == 'transcription' and job['state'] == 'succeeded' and packet['attempt_count'] == 1
             and job['id'] == expected['job_id'] and job['encounter_id'] == expected['encounter']
             and job['user_id'] == expected['actor'] and config.get('transcript_review_required') is True
-            and config.get('provider') == 'deepgram' and config.get('model') == 'nova-3-medical'
+            and config.get('provider') == 'anthropic' and config.get('model') == MODEL
+            and config.get('pricing_version') == PRICING
+            and packet['receipt']['provider'] == 'deepgram:nova-3-medical'
             and packet['timeout_seconds'] == 90 and packet['max_retries'] == 0, 'v3_actual_speech_job_profile')
     require(str(packet['receipt']['job_id']) == str(packet['usage']['job_id']) == job['id'], 'v3_speech_packet_database_row_binding')
     require(sha(packet['audio']) == '8bb6b53f2832ae830fc422e6fac366a383226fcb911e59a814466cb90809b8d7'
@@ -2180,7 +2482,8 @@ def readonly_connection_flags(conn):
 
 def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest, policy, secret, fingerprint,
                             auth=None, edge_ip=None, publisher_admission=None,
-                            anonymous_packet=None, anonymous_cutoff=None):
+                            anonymous_packet=None, anonymous_cutoff=None, owner_raw=None, owner_binding=None, owner_cipher=None,
+                            auth_packet=None, auth_revisions=None):
     """Source-faithful admission on an explicitly supplied read-only connection.
 
     The caller owns all five exclusions. No auth/migrations/writes occur here;
@@ -2189,6 +2492,23 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
     """
     readonly_connection_flags(conn)
     current, keys, tables = verifier.current_copy_tables(conn, original, backup)
+    cohort_raw = None; owner_pin = None
+    if owner_binding is not None:
+        require(owner_cipher is not None, 'v3_owner_cohort_cipher_required')
+        if owner_raw is None:
+            require(auth_packet is None and auth is None and anonymous_cutoff is not None,
+                    'v3_owner_cohort_only_first_before_auth_capture')
+            cohort_raw, cohort = owner_packet_capture(owner_cipher, verifier, original, current,
+                                                      baseline, manifest, keys, owner_binding)
+        else:
+            cohort_raw = owner_raw
+            _, cohort = owner_packet_decode(owner_raw, owner_cipher, verifier, original, baseline, manifest, keys, owner_binding)
+        original, baseline, manifest, summary = cohort
+        owner_pin = owner_overlay_public(cohort_raw)
+        if auth_packet is not None:
+            original_maps = {table: [dict(zip(data['columns'], line[:-1].split(b'\t'))) for line in data['rows']]
+                             for table, data in original.items()}
+            auth = authenticated_admin(verifier, auth_packet, original_maps, *auth_revisions)
     rows = verifier.row_mapping('core_servicehealth', original['core_servicehealth']['rows'],
                                  original['core_servicehealth']['columns'], keys['core_servicehealth'])
     health = [row for row in rows.values() if row['key'] == b'backup']
@@ -2201,17 +2521,21 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
     database = verifier.continuation_database_fingerprint(conn, tables, baseline, backup)
     conn.rollback()
     return {'complete': True, 'current_database_fingerprint': database, 'allowed_deltas': semantics,
+            'owner_cohort_raw': cohort_raw, 'owner_interactive_preservation': owner_pin,
             'original_records_adjudicated': True, 'read_only_role': 'quillmd_backup',
             'provider_calls': 0, 'database_writes': 0}
 
 
 def installed_database_admission(contract, *, auth_packet=None, operations=None, served=None,
                                  availability_sha=None, verifier_override=None, native_modules=None,
-                                 publisher_admission=None, anonymous_packet=None, anonymous_cutoff=None):
+                                 publisher_admission=None, anonymous_packet=None, anonymous_cutoff=None,
+                                 owner_raw=None, owner_binding=None):
     """Fixed native collection; one parent capture, exact retained packet thereafter."""
     execution_gate()
     require((anonymous_packet is None) != (anonymous_cutoff is None),
             'v3_native_anonymous_packet_or_initial_cutoff_required')
+    require(type(owner_binding) is dict, 'v3_native_owner_cohort_binding_required')
+    owner_overlay_evidence()
     import psycopg
     from psycopg.rows import dict_row
     from django.utils.crypto import salted_hmac
@@ -2240,9 +2564,6 @@ def installed_database_admission(contract, *, auth_packet=None, operations=None,
     del values  # no provider-key extraction or output
     auth = None; edge_ip = None
     if auth_packet is not None:
-        original_maps = {table: [dict(zip(data['columns'], line[:-1].split(b'\t'))) for line in data['rows']]
-                         for table, data in original.items()}
-        auth = authenticated_admin(verifier, auth_packet, original_maps, operations, served, availability_sha)
         # TCP route observation creates no HTTPS preview session and has no
         # credentials/provider request; it remains behind the real source gate.
         import socket
@@ -2252,7 +2573,8 @@ def installed_database_admission(contract, *, auth_packet=None, operations=None,
     with psycopg.connect(**options, row_factory=dict_row) as conn:
         result = readonly_copy_admission(conn, verifier, backup, original, baseline, manifest,
                                          policy, secret, fingerprint, auth, edge_ip, publisher_admission,
-                                         anonymous_packet, anonymous_cutoff)
+                                         anonymous_packet, anonymous_cutoff, owner_raw, owner_binding,
+                                         backup.key_at(legacy.KEY), auth_packet, (operations, served, availability_sha))
     require(sha(protected(EXPIRED_SESSION_EVIDENCE)) == EXPIRED_SESSION_EVIDENCE_SHA,
             'v3_retained_expired_session_evidence_pin')
     for path, digest in ANONYMOUS_FAILURE_RECORD_PINS.items():
@@ -2976,6 +3298,7 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
           + ",'<reviewed-phase-anonymous-helpers>','exec'),scope);"
           + "exec(compile(" + repr(CONFIGURATION_ADMISSION_SOURCE)
           + ",'<reviewed-configuration-proof>','exec'),scope);"
+          + "exec(compile(" + repr(OWNER_OVERLAY_PURE_SOURCE) + ",'<reviewed-owner-cohort-proof>','exec'),scope);"
           + "scope['adapt_configuration_admission'](scope,base64.b64decode("
           + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode()) + "));"
           + "value=json.load(sys.stdin);"
@@ -3064,6 +3387,8 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
     require(sha(raw) == DEPENDENCIES['verify_installed_acceptance_v3.py'], 'v3_frozen_dependency_hash')
     require((completion_check is None and phase_preservation is None) or 'phase_preservation' in authority,
             'v3_final_phase_packet_required')
+    require(not OWNER_INTERACTIVE_PRESERVATION_QUALIFIED or (completion_check is None and phase_preservation is None)
+            or 'owner_interactive_preservation' in authority, 'v3_final_owner_policy_required')
     packet = None
     if 'phase_preservation' in authority:
         pin = authority['phase_preservation']
@@ -3108,6 +3433,10 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
             for key in reports[0].value.keys), 'v3_exact_final_doctor_verifier_report')
     reports[0].value.keys.append(ast.Constant('doctor_final_storage_state'))
     reports[0].value.values.append(ast.parse("progress['doctor_final_storage_state']", mode='eval').body)
+    if 'owner_interactive_preservation' in authority:
+        require('owner_interactive_cohort' in authority, 'v3_final_owner_overlay_required')
+        reports[0].value.keys.append(ast.Constant('owner_interactive_preservation'))
+        reports[0].value.values.append(ast.parse("load_v3_authority(progress['operations_revision'], progress['served_revision'])['owner_interactive_cohort']", mode='eval').body)
     if phase_preservation is not None:
         require(callable(phase_preservation), 'v3_phase_verifier_callback')
         reports[0].value.keys.append(ast.Constant('co_tenant_preservation_admission'))
@@ -3147,6 +3476,8 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
         result['completion_unit_provenance'] = completion_check(activation)
         return result
     module.verify_service_identity = checked_services
+    if 'owner_interactive_preservation' in authority:
+        install_owner_final_cohort(module, authority)
     return module
 
 
@@ -3194,6 +3525,7 @@ class InstalledHost:
         self.co_tenant_phase_observation = None
         self.co_tenant_phase_raw = None
         self.anonymous_sessions = None
+        self.owner_cohort_raw = None
 
     def canonical(self, path):
         return Path(path).resolve(strict=True)
@@ -3276,6 +3608,8 @@ class InstalledHost:
             result['phase_preservation'] = {'path': str(PHASE_PRESERVATION_PATH),
                 'sha256': sha(self.co_tenant_phase_raw),
                 'binding': copy.deepcopy(self.co_tenant_phase_observation['binding'])}
+        if self.owner_cohort_raw is not None:
+            result['owner_interactive_cohort'] = owner_overlay_public(self.owner_cohort_raw)
         return result
 
     def authenticate_availability(self, contract, operations, served):
@@ -3423,7 +3757,17 @@ class InstalledHost:
         result = installed_database_admission(contract, auth_packet=auth_packet, operations=operations, served=served,
             availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
             native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission,
-            anonymous_packet=self.anonymous_sessions, anonymous_cutoff=cutoff)
+            anonymous_packet=self.anonymous_sessions, anonymous_cutoff=cutoff,
+            owner_raw=getattr(self, 'owner_cohort_raw', None),
+            owner_binding=owner_cohort_binding(operations, served, sha(self.availability_raw), self.parent_lock_context))
+        owner_raw = result.pop('owner_cohort_raw')
+        require(type(owner_raw) is bytes and anonymous_same(result['owner_interactive_preservation'], owner_overlay_public(owner_raw)),
+                'v3_owner_cohort_admission_cross_hash')
+        if getattr(self, 'owner_cohort_raw', None) is None:
+            require(cutoff is not None, 'v3_child_cannot_capture_owner_cohort')
+            self.owner_cohort_raw = owner_raw
+        else:
+            require(owner_raw == self.owner_cohort_raw, 'v3_owner_cohort_recapture_refused')
         observed = anonymous_packet_admission(result['allowed_deltas']['anonymous_sessions'])
         if self.anonymous_sessions is None:
             known = {
@@ -3470,6 +3814,10 @@ class InstalledHost:
         helpers['phase_configuration_proof'](self.receipt['before']['configuration'], snapshot['configuration'], proof)
         require(helpers['configuration_same'](before, self.co_tenant_phase_observation['external_boundary']),
                 'v3_phase_external_drift')
+        if getattr(self, 'owner_cohort_raw', None) is not None:
+            require(all(anonymous_same(snapshot['files'].get(name), value)
+                        for name, value in dict(self.receipt['before']['files'], **OWNER_FILES).items()),
+                    'v3_owner_comparison_files_changed')
         self.current_co_tenant_boundary = dict(before, configuration_admission=proof)
         return snapshot
 
@@ -3486,6 +3834,8 @@ class InstalledHost:
                 and helpers['configuration_same'](configuration, self.co_tenant_phase_observation['configuration']),
                 'v3_phase_preservation_drift')
         if os.path.lexists(PREPARATION):
+            require(protected(PREPARATION / OWNER_COHORT_NAME, 3 * 1024 * 1024) == self.owner_cohort_raw,
+                    'v3_owner_saved_cohort_changed')
             require(protected(PHASE_PRESERVATION_PATH) == self.co_tenant_phase_raw, 'v3_phase_saved_observation_changed')
         return phase_configuration_packet(self.receipt['before']['configuration'], self.co_tenant_phase_observation)
 
@@ -3581,7 +3931,8 @@ class InstalledHost:
                     == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
         snapshot = self.snapshot()
         preserved_snapshot(receipt['before'], snapshot, admission['current_database_fingerprint'],
-                           self.current_co_tenant_boundary['configuration_admission'], phase_required=True)
+                           self.current_co_tenant_boundary['configuration_admission'], phase_required=True,
+                           owner_proof=admission['owner_interactive_preservation'])
         worker = receipt['units_after'][UNITS[2]]
         report = {'format': 3, 'complete': True, 'phase': phase, 'operations_revision': operations,
             'served_revision': served, 'availability_receipt_sha256': sha(self.availability_raw),
@@ -3590,6 +3941,7 @@ class InstalledHost:
             'provider_calls': 0, 'database_writes_by_verifier': 0, 'current_snapshot': snapshot,
             'current_database_fingerprint': admission['current_database_fingerprint'],
             'allowed_deltas': admission['allowed_deltas'], 'service_identities': receipt['units_after'],
+            'owner_interactive_preservation': admission['owner_interactive_preservation'],
             'co_tenant_preservation_admission': self.current_co_tenant_boundary['configuration_admission'],
             'worker_running_idle': {'unit': UNITS[2], 'pid': int(worker['MainPID']),
                 'start_monotonic_usec': worker['ExecMainStartTimestampMonotonic'],
@@ -3610,6 +3962,8 @@ class InstalledHost:
         PREPARATION.mkdir(mode=0o700)
         require(self.co_tenant_phase_raw is not None, 'v3_phase_baseline_required')
         write_new(PHASE_PRESERVATION_PATH, self.co_tenant_phase_raw)
+        require(self.owner_cohort_raw is not None, 'v3_owner_cohort_required')
+        write_new(PREPARATION / OWNER_COHORT_NAME, self.owner_cohort_raw)
         write_new(PREPARATION / 'publisher-alignment.json', self.publication_alignment)
         write_new(PREPARATION / 'admission-before-auth.json', self.admission_raws['before-auth'])
         write_new(PREPARATION / 'parent.json', {'format': 3, 'operations_revision': operations,
@@ -3624,6 +3978,7 @@ class InstalledHost:
             'deadline_monotonic': deadline, 'locks': copy.deepcopy(self.lock_rows),
             'publisher_alignment_sha256': sha(encode(self.publication_alignment) + b'\n'),
             'phase_preservation_sha256': sha(self.co_tenant_phase_raw),
+            'owner_interactive_cohort_sha256': sha(self.owner_cohort_raw),
             'authority': self.authority(), 'admission_sha256': {k: sha(v) for k, v in self.admission_raws.items()}}
         raw = encode(value) + b'\n'
         write_new(PREPARATION / ('parent-phase-' + phase + '.json'), raw)
@@ -3666,7 +4021,8 @@ class InstalledHost:
         write_new(ATTEMPT, {'format': 3, 'attempt': 1, 'operations_revision': operations, 'served_revision': served,
             'before_auth_sha256': sha(self.admission_raws['before-auth']),
             'after_auth_sha256': sha(self.admission_raws['after-auth']),
-            'phase_preservation_sha256': sha(self.co_tenant_phase_raw), 'provider_retries': 0})
+            'phase_preservation_sha256': sha(self.co_tenant_phase_raw),
+            'owner_interactive_preservation': owner_overlay_public(self.owner_cohort_raw), 'provider_retries': 0})
 
     def independent_report(self):
         return json.loads(protected(REPORT))
@@ -3677,6 +4033,7 @@ class InstalledHost:
             'independent_report_sha256': sha(protected(REPORT)), 'independent_report': str(REPORT),
             'phase_preservation_sha256': sha(self.co_tenant_phase_raw),
             'co_tenant_preservation_admission': self.recheck_phase_preservation(),
+            'owner_interactive_preservation': owner_overlay_public(self.owner_cohort_raw),
             'availability_preserved': True, 'provider_retries': 0})
 
     def write_stop(self, reason):
@@ -3704,6 +4061,8 @@ def installed_contract(host):
             and re.fullmatch('[a-f0-9]{64}', POST_RESTORE_OWNER_REPLY_SHA),
             'v3_current_configuration_declared_owner_binding')
     require(contract.get('native_gate_diagnostic') == native_gate_contract(), 'v3_native_gate_declared_protocol')
+    require(contract.get('owner_interactive_preservation') == owner_overlay_contract()
+            and OWNER_INTERACTIVE_PRESERVATION_QUALIFIED, 'v3_owner_overlay_declared_protocol')
     expected_paths = {'admin_directory': ADMIN, 'availability_directory': AVAILABILITY,
                       'preparation_directory': ACTUAL_PREPARATION, 'campaign_directory': CAMPAIGN, 'attempt_marker': ATTEMPT}
     require(all(contract.get(name) == str(path) for name, path in expected_paths.items())
@@ -3772,6 +4131,12 @@ def admit_parent_child(host, phase, context_sha):
             'v3_parent_admission_hashes')
     receipt = host.authenticate_availability(host.contract, host.operations, host.served)
     adopt_phase_observation(host, protected(PHASE_PRESERVATION_PATH), context)
+    owner_raw = protected(PREPARATION / OWNER_COHORT_NAME, 3 * 1024 * 1024)
+    require(getattr(host, 'owner_cohort_raw', None) is None
+            and sha(owner_raw) == context.get('owner_interactive_cohort_sha256')
+            and anonymous_same(context['authority'].get('owner_interactive_cohort'), owner_overlay_public(owner_raw)),
+            'v3_child_owner_cohort_authority')
+    host.owner_cohort_raw = owner_raw
     require(context.get('authority') == host.authority(), 'v3_derived_parent_authority_changed')
     for value, report_raw in host.admission_raws.items():
         host.common.admission(report_raw, value, host.authority(), receipt, host.operations, host.served,
@@ -3783,6 +4148,7 @@ def admit_parent_child(host, phase, context_sha):
                 and attempt.get('before_auth_sha256') == sha(host.admission_raws['before-auth'])
                 and attempt.get('after_auth_sha256') == sha(host.admission_raws['after-auth'])
                 and attempt.get('phase_preservation_sha256') == sha(host.co_tenant_phase_raw)
+                and anonymous_same(attempt.get('owner_interactive_preservation'), owner_overlay_public(host.owner_cohort_raw))
                 and attempt.get('provider_retries') == 0, 'v3_single_clinical_attempt_binding')
     else:
         require(not any(os.path.lexists(path) for path in (ADMIN, CAMPAIGN, ATTEMPT)), 'v3_no_authentication_reuse')
@@ -3846,6 +4212,8 @@ def dispatch_verification(host, context_sha):
     proof = host.recheck_phase_preservation()
     require(configuration_helpers({'need': require})['configuration_same'](
         report.get('co_tenant_preservation_admission'), proof), 'v3_final_phase_report_binding')
+    require(anonymous_same(report.get('owner_interactive_preservation'), owner_overlay_public(host.owner_cohort_raw)),
+            'v3_final_owner_report_binding')
     parent_phase_admission(context, 'verify', host.operations, host.served, source=host.source)
     deadline_remaining(context['deadline_monotonic'], host.clock)
     return report

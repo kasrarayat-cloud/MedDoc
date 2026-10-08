@@ -115,7 +115,8 @@ class NormalOriginOperatorTests(unittest.TestCase):
         self.assertFalse(result['execution_performed'])
         self.assertEqual((result['provider_calls'],result['authentication_submissions'],result['database_writes']),(0,0,0))
     def test_each_source_qualification_is_required_independently_of_policy_or_environment(self):
-        names=('ACTIVE_PROTOCOL_QUALIFIED','PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED','INGRESS_PUBLICATION_QUALIFIED')
+        names=('ACTIVE_PROTOCOL_QUALIFIED','PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED','INGRESS_PUBLICATION_QUALIFIED',
+               'OWNER_INTERACTIVE_PROTOCOL_QUALIFIED')
         for name in names:
             values=dict.fromkeys(names,True);values[name]=False
             with self.subTest(name=name),patch.multiple(act,**values),patch.dict(os.environ,{name:'1'}), \
@@ -698,11 +699,19 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         observation={'protocol':act.PRIVATE_PHASE_PROTOCOL,'binding':binding,'configuration':{'retained':'immutable'},
                      'external_boundary':{'metadata_ns':'1791410000000000001'}}
         phase_raw=act.encode(observation)
+        cohort={'format':1,'protocol':act.OWNER_COHORT_PROTOCOL,'binding':deepcopy(binding),
+                'evidence':{'fictional':'retained only'},'summary':{'fictional':'source verifier proves rows'},
+                'ciphertext':'fictional-encrypted-exact-owner-subset'}
+        cohort_raw=act.encode(cohort)
+        cohort_pin={'path':str(act.PRIVATE_OWNER_COHORT),'sha256':act.sha(cohort_raw),
+                    'header':{key:value for key,value in cohort.items()if key!='ciphertext'}}
         phase_proof={'protocol':act.PRIVATE_PHASE_PROTOCOL,'phase_observation_path':str(act.PRIVATE_PHASE),
                      'phase_observation_sha256':act.sha(phase_raw),'phase_observation':observation}
         admissions={phase:{'format':3,'operations_revision':act.BASE,'served_revision':PRIOR,'phase':phase}
                     for phase in ('before-auth','after-auth')}
-        for packet in admissions.values():packet['co_tenant_preservation_admission']=deepcopy(phase_proof)
+        for packet in admissions.values():
+            packet['co_tenant_preservation_admission']=deepcopy(phase_proof)
+            packet['owner_interactive_preservation']=deepcopy(cohort_pin)
         admission_paths={phase:act.PRIVATE_PHASE.parent/('admission-'+phase+'.json')
                          for phase in admissions}
         admission_items={phase:{'path':str(admission_paths[phase]),'sha256':act.sha(act.encode(packet))}
@@ -713,6 +722,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                   'doctor_final_storage_state':{'path':'fictional fixed state','sha256':'a'*64,'captured_at':'fictional capture'}}
         report={'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,'activation_sha256':act.sha(avail_raw),
                 'co_tenant_preservation_admission':deepcopy(phase_proof),
+                'owner_interactive_preservation':deepcopy(cohort_pin),
                 'provider_calls':0,'database_writes':0,'cases':[{'name':name} for name in (
                     'soap-typed','custom-word-typed','soap-voice','allergy-missing','allergy-legitimate')],
                 'preservation':{'all_36_tables_all_old_rows_columns_compared':True,'all_67_old_referenced_files_preserved':True},
@@ -720,6 +730,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                 'admin_readback':{**progress['admin_readback'],'final_storage_state_verification':{'complete':True}},
                 'doctor_final_storage_state':{**progress['doctor_final_storage_state'],'verification':{'complete':True}}}
         complete={'format':3,'complete':True,'operations_revision':act.BASE,'served_revision':PRIOR,
+                  'owner_interactive_preservation':deepcopy(cohort_pin),
                   'phase_preservation_sha256':act.sha(phase_raw),'co_tenant_preservation_admission':deepcopy(phase_proof),
                   'independent_report':str(act.PRIVATE_PATHS['private_report']),
                   'independent_report_sha256':act.sha(act.encode(report)),'availability_preserved':True,'provider_retries':0}
@@ -727,13 +738,14 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                    'parent_pid':binding['parent_pid'],'parent_start_ticks':binding['parent_start_ticks'],
                    'phase_preservation_sha256':act.sha(phase_raw),
                    'authority':{'operations_revision':act.BASE,'served_revision':PRIOR,
+                       'owner_interactive_cohort':deepcopy(cohort_pin),
                        'phase_preservation':{'path':str(act.PRIVATE_PHASE),'sha256':act.sha(phase_raw),'binding':binding},
                        'availability_receipt_sha256':act.sha(avail_raw),'admissions':admission_items},
                    'admission_sha256':{phase:item['sha256'] for phase,item in admission_items.items()}}
         records={act.PRIVATE_PATHS['private_acceptance']:act.encode(complete),act.PRIVATE_PATHS['private_report']:act.encode(report),
                  act.PRIVATE_PATHS['private_authority']:act.encode(authority),act.PRIVATE_PATHS['availability']:avail_raw,
                  act.PRIVATE_PATHS['private_acceptance'].parent/'progress.json':act.encode(progress),
-                 act.PRIVATE_PHASE:phase_raw,
+                 act.PRIVATE_PHASE:phase_raw,act.PRIVATE_OWNER_COHORT:cohort_raw,
                  **{admission_paths[phase]:act.encode(packet) for phase,packet in admissions.items()}}
         policy['private_accepted_revision']=PRIOR
         return policy,records
@@ -741,7 +753,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         import importlib
         acceptance=importlib.import_module(act.__package__+'.owner_acceptance_v3')
         raw=(act.SOURCE/act.DECL).read_bytes();policy=act.contract(raw)
-        self.assertEqual(act.BASE,'4b037b171c2a732ff74c65fc8a276ca5abd60169')
+        self.assertEqual(act.BASE,'90e12465343a7e1655d48926772ca20c270b0bca')
         self.assertEqual(policy['source_base'],act.BASE)
         expected={'private_acceptance':acceptance.CAMPAIGN/'complete.json',
             'private_report':acceptance.CAMPAIGN/'independent-verification.json',
@@ -751,6 +763,8 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
             self.assertEqual(policy[key],{'path':str(path),'binding':act.RUNTIME_BINDING})
         self.assertEqual(act.PRIVATE_PHASE,acceptance.ACTUAL_PREPARATION/'co-tenant-phase-preservation.json')
         self.assertEqual(policy['private_phase_preservation'],{'path':str(act.PRIVATE_PHASE),'binding':act.RUNTIME_BINDING})
+        self.assertEqual(policy['private_owner_interactive_cohort'],{'path':str(act.PRIVATE_OWNER_COHORT),'binding':act.RUNTIME_BINDING})
+        self.assertIs(policy['owner_interactive_protocol_qualified'],act.OWNER_INTERACTIVE_PROTOCOL_QUALIFIED)
         self.assertFalse(policy['private_acceptance_completed'])
         self.assertEqual((policy['authentication_submissions'],policy['provider_calls'],policy['database_writes']),(0,0,0))
 
@@ -792,6 +806,76 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         self.assertEqual(actual['progress'][0]['preparation']['after-auth']['operations_revision'],act.BASE)
         self.assertNotIn('sha256',policy['private_acceptance'])
         self.assertEqual(actual['phase_preservation'][1],records[act.PRIVATE_PHASE])
+        self.assertEqual(actual['owner_interactive_cohort'][1],records[act.PRIVATE_OWNER_COHORT])
+
+    def test_owner_packet_hash_header_profile_and_type_are_not_inferred_from_success(self):
+        policy,records=self.chain();authority=json.loads(records[act.PRIVATE_PATHS['private_authority']])
+        pin=authority['authority']['owner_interactive_cohort'];binding=json.loads(records[act.PRIVATE_PHASE])['binding']
+        raw=records[act.PRIVATE_OWNER_COHORT];self.assertEqual(act.owner_cohort_receipt(raw,pin,binding)['format'],1)
+        for change in ('whitespace','bool_format','protocol','ciphertext','header','hash','path','diagnostic_binding'):
+            with self.subTest(change=change):
+                candidate=json.loads(raw);following=deepcopy(pin);value=raw
+                if change=='whitespace':value=raw+b'\n'
+                elif change=='bool_format':candidate['format']=True;value=act.encode(candidate)
+                elif change=='protocol':candidate['protocol']='automatic-future-approval';value=act.encode(candidate)
+                elif change=='ciphertext':candidate['ciphertext']='';value=act.encode(candidate)
+                elif change=='header':following['header']['summary']={'changed':True}
+                elif change=='hash':following['sha256']='f'*64
+                elif change=='path':following['path']='/tmp/replacement.json'
+                else:
+                    candidate['binding']['preparation_directory']=str(act.EVIDENCE/'installed-native-gate-diagnostic-20261008')
+                    value=act.encode(candidate);following['sha256']=act.sha(value)
+                    following['header']={key:item for key,item in candidate.items()if key!='ciphertext'}
+                with self.assertRaises(act.Refusal):act.owner_cohort_receipt(value,following,binding)
+
+    def test_owner_packet_proof_required_in_report_and_completion_even_after_rehash(self):
+        for name in ('private_acceptance','private_report'):
+            with self.subTest(name=name):
+                policy,records=self.chain();path=act.PRIVATE_PATHS[name];row=json.loads(records[path])
+                row.pop('owner_interactive_preservation');records[path]=act.encode(row)
+                if name=='private_report':
+                    complete=json.loads(records[act.PRIVATE_PATHS['private_acceptance']])
+                    complete['independent_report_sha256']=act.sha(records[path])
+                    records[act.PRIVATE_PATHS['private_acceptance']]=act.encode(complete)
+                with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+                     self.assertRaisesRegex(act.Refusal,'owner_cohort_report_completion_binding'):
+                    act.private_receipts(policy)
+
+    def test_both_owner_admissions_required_after_whole_causal_chain_rehash(self):
+        for phase in ('before-auth','after-auth'):
+            with self.subTest(phase=phase):
+                policy,records=self.chain();authority_path=act.PRIVATE_PATHS['private_authority']
+                authority=json.loads(records[authority_path]);path=Path(authority['authority']['admissions'][phase]['path'])
+                packet=json.loads(records[path]);packet.pop('owner_interactive_preservation');records[path]=act.encode(packet)
+                authority['authority']['admissions'][phase]['sha256']=act.sha(records[path])
+                authority['admission_sha256'][phase]=act.sha(records[path]);records[authority_path]=act.encode(authority)
+                progress_path=act.PRIVATE_PATHS['private_acceptance'].parent/'progress.json'
+                progress=json.loads(records[progress_path]);progress['preparation'][phase]=packet;records[progress_path]=act.encode(progress)
+                report=json.loads(records[act.PRIVATE_PATHS['private_report']]);report['browser_progress_sha256']=act.sha(records[progress_path])
+                records[act.PRIVATE_PATHS['private_report']]=act.encode(report)
+                complete=json.loads(records[act.PRIVATE_PATHS['private_acceptance']]);complete['independent_report_sha256']=act.sha(records[act.PRIVATE_PATHS['private_report']])
+                records[act.PRIVATE_PATHS['private_acceptance']]=act.encode(complete)
+                with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+                     self.assertRaisesRegex(act.Refusal,'owner_cohort_admission_binding'):
+                    act.private_receipts(policy)
+
+    def test_owner_packet_bytes_retained_by_later_private_input_checks(self):
+        policy,records=self.chain();host=object.__new__(act.NativeHost);host.policy=policy
+        with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]):
+            host.inputs=act.private_receipts(policy)
+            records[act.PRIVATE_OWNER_COHORT]+=b'\n'
+            with self.assertRaisesRegex(act.Refusal,'owner_cohort_hash_header_phase_binding'):host.check_private_inputs()
+
+    def test_checked_owner_API_runs_source_semantics_and_exact_public_reconstruction(self):
+        raw=b'fictional protected ciphertext';pin={'fictional':'pin'};calls=[]
+        api=SimpleNamespace(owner_overlay_public=lambda value:pin if value==raw else {},
+            configuration_helpers=lambda scope:{'owner_public_admission':lambda value:calls.append(value)})
+        self.assertEqual(act.checked_owner_cohort_api(api,pin,raw),pin);self.assertEqual(calls,[pin])
+        with self.assertRaisesRegex(act.Refusal,'checked_owner_cohort_exact_packet'):
+            act.checked_owner_cohort_api(api,pin,b'other ciphertext')
+        for candidate in (SimpleNamespace(),SimpleNamespace(owner_overlay_public=lambda value:pin,
+            configuration_helpers=lambda scope:{})):
+            with self.assertRaises(act.Refusal):act.checked_owner_cohort_api(candidate,pin,raw)
 
     def test_actual_private_phase_record_is_immutable_history_without_parent_liveness_revival(self):
         policy,records=self.chain();host=object.__new__(act.NativeHost);host.policy=policy

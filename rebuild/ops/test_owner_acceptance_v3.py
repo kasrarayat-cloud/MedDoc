@@ -175,7 +175,7 @@ class InertAndSourceTests(unittest.TestCase):
 
     def test_each_source_qualification_is_independently_required(self):
         names = ('EXECUTION_QUALIFIED', 'NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED', 'FIXED_CHILD_PROTOCOL_QUALIFIED',
-                 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED', 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED')
+                 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED', 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED')
         for name in names:
             values = dict.fromkeys(names, True); values[name] = False
             with self.subTest(name=name), patch.multiple(v3, **values), patch.dict(os.environ, {name: '1'}):
@@ -795,6 +795,7 @@ class ChildAndPrivateFileTests(unittest.TestCase):
                                  popen=lambda *args, **kwargs: None, writer=lambda *args: None)
 
 
+@patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
 @patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class NativeAdapterTests(unittest.TestCase):
     def publication_fixture(self, runtime, *, drift=None, fail_wait=False, late=False, occupied=False):
@@ -1197,8 +1198,9 @@ class PhaseAnonymousSessionTests(unittest.TestCase):
                 saved.append(packet)
             else:
                 packet = copy.deepcopy(saved[0])
-            return {'allowed_deltas': {'anonymous_sessions': packet}}
-        with patch.object(v3, 'installed_database_admission', side_effect=collection), \
+            return {'allowed_deltas': {'anonymous_sessions': packet},'owner_cohort_raw':b'fictional encrypted owner packet','owner_interactive_preservation':{'fictional':'owner packet'}}
+        with patch.object(v3, 'owner_overlay_public',return_value={'fictional':'owner packet'}), \
+             patch.object(v3, 'installed_database_admission', side_effect=collection), \
              patch.object(v3.Path, 'read_text', return_value='fictional self stat'), \
              patch.object(v3, 'process_start', return_value=42):
             host.database_admission(contract(), None, OPS, SERVED)
@@ -1210,7 +1212,7 @@ class PhaseAnonymousSessionTests(unittest.TestCase):
             self.assertIsNone(calls[1]['anonymous_cutoff'])
             self.assertEqual(host.anonymous_sessions, frozen)
             bad = copy.deepcopy(saved[0]); bad['rows'][0]['source_proof']['payload_sha256'] = 'e'*64
-            with patch.object(v3, 'installed_database_admission', return_value={'allowed_deltas': {'anonymous_sessions': bad}}), \
+            with patch.object(v3, 'installed_database_admission', return_value={'allowed_deltas': {'anonymous_sessions': bad},'owner_cohort_raw':b'fictional encrypted owner packet','owner_interactive_preservation':{'fictional':'owner packet'}}), \
                  self.assertRaisesRegex(v3.Refusal, 'population_recapture_refused'):
                 host.database_admission(contract(), None, OPS, SERVED)
             host.anonymous_sessions = None; host.own_hold_mode = None
@@ -1374,6 +1376,7 @@ class PhaseAnonymousSessionTests(unittest.TestCase):
                 self.v.validate_admitted_added_row(self.r, ANONYMOUS_TEST_COLUMNS, bad, 'fictional actor', ANONYMOUS_TEST_SECRET)
 
 
+@patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
 @patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class FinancialAndExportTests:
     """Explicit manual suite; actual pinned host inputs are not remote fixtures.
@@ -1592,6 +1595,7 @@ class FinancialAndExportTests:
                 path.unlink();path.symlink_to(campaign/'elsewhere.json')
                 with self.assertRaises((v3.Refusal,OSError)):v3.validate_doctor_final_storage(progress)
 
+    @patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', False)
     def test_actual_independent_verifier_calls_both_final_storage_checks_before_database(self):
         raw=v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
         authority=v3.derive_authority(contract(),self.common,OPS,SERVED,{})
@@ -1619,6 +1623,7 @@ class FinancialAndExportTests:
 
     @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
                     FIXED_CHILD_PROTOCOL_QUALIFIED=False)
+    @patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', False)
     def test_actual_frozen_verifier_adapter_retains_gate_and_full_verifier(self):
         raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
         authority = v3.derive_authority(contract(),self.common,OPS,SERVED,{})
@@ -1633,6 +1638,7 @@ class FinancialAndExportTests:
         with self.assertRaisesRegex(v3.Refusal,'dependency_hash'):
             v3.verifier_adapter(raw+b'\n# foreign change',self.common,authority,self.verifier,publisher_admission=publisher)
 
+    @patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', False)
     def test_final_callbacks_require_phase_authority_and_closed_anonymous_packet(self):
         raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
         authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {})
@@ -1650,7 +1656,7 @@ class FinancialAndExportTests:
             if packet is not None:
                 observation['anonymous_sessions'] = packet
             phase_raw = v3.encode(observation)
-            pinned = dict(authority, phase_preservation={'path': str(v3.PHASE_PRESERVATION_PATH),
+            pinned = dict(authority, owner_interactive_preservation=v3.owner_overlay_contract(), phase_preservation={'path': str(v3.PHASE_PRESERVATION_PATH),
                 'sha256': v3.sha(phase_raw), 'binding': observation['binding']})
             with self.subTest(packet=packet), patch.object(v3, 'protected', return_value=phase_raw), \
                  self.assertRaises(v3.PhaseAnonymousRefusal):
@@ -1811,6 +1817,7 @@ class FinancialAndExportTests:
     def test_every_installed_admission_caller_binds_the_same_checked_publisher_wrapper(self):
         host = v3.InstalledHost.__new__(v3.InstalledHost);host.inside=True
         host.contract=contract();host.availability_raw=b'fictional availability';host.availability_verifier=self.verifier
+        host.parent_lock_context={'parent_pid':os.getpid(),'parent_start_ticks':42}
         host.anonymous_sessions={'format':1,'cutoff':START.isoformat(),'rows':[]}
         host.admission_raws={};host.old=types.SimpleNamespace(service_boundary=lambda *args,**kw:
             {unit:{'MainPID':str(os.getpid())} for unit in v3.UNITS})
@@ -2275,8 +2282,8 @@ class FinancialAndExportTests:
                 arguments = {'phase': 'before-auth', 'authority': {'admissions': {'before-auth': {
                     'path': common.PREPARATION+'/admission-before-auth.json', 'sha256': v3.sha(raw)}}},
                     'receipt': receipt, 'operations': OPS, 'served': SERVED, 'availability_sha': v3.sha(v3.encode(receipt))}
-                return subprocess.run(['/usr/bin/node', '--input-type=module', '-e', javascript],
-                    input=v3.encode({'raw_hex': raw.hex(), 'receipt_raw_hex': v3.encode(receipt).hex(), 'args': arguments}), capture_output=True, timeout=15)
+                return subprocess.run(['/usr/bin/node', '--input-type=module', '-'],
+                    input=javascript.replace("JSON.parse(fs.readFileSync(0,'utf8'))",v3.encode({'raw_hex':raw.hex(),'receipt_raw_hex':v3.encode(receipt).hex(),'args':arguments}).decode()).encode(), capture_output=True, timeout=15)
             passed = javascript_check(report)
             self.assertEqual(passed.returncode, 0, passed.stderr.decode())
             self.assertEqual(json.loads(passed.stdout), report)
@@ -2339,9 +2346,8 @@ class FinancialAndExportTests:
         javascript = ("import fs from 'node:fs';import {validateV3} from " + json.dumps(uri)
             + ";console.log(JSON.stringify(validateV3('admission',JSON.parse(fs.readFileSync(0,'utf8')))));" )
         def checked(value):
-            return subprocess.run(['/usr/bin/node', '--input-type=module', '-e', javascript],
-                input=v3.encode({'raw_hex': v3.encode(value).hex(), 'receipt_raw_hex': v3.encode(receipt).hex(),
-                    'args': arguments(value)}), capture_output=True, timeout=15)
+            return subprocess.run(['/usr/bin/node', '--input-type=module', '-'],
+                input=javascript.replace("JSON.parse(fs.readFileSync(0,'utf8'))",v3.encode({'raw_hex':v3.encode(value).hex(),'receipt_raw_hex':v3.encode(receipt).hex(),'args':arguments(value)}).decode()).encode(), capture_output=True, timeout=15)
         result = checked(report)
         self.assertEqual(result.returncode, 0, result.stderr.decode()[-500:])
         self.assertEqual(json.loads(result.stdout), report)
@@ -2354,6 +2360,47 @@ class FinancialAndExportTests:
             with self.assertRaises((v3.Refusal, RuntimeError)):
                 self.common.admission(v3.encode(bad), **arguments(bad))
             self.assertNotEqual(checked(bad).returncode, 0)
+
+
+    def test_actual_common_and_node_bridge_require_same_owner_packet_and_original_files(self):
+        import re
+        verifier,old,current,keys,manifest,baseline,pins,cipher=OwnerInteractiveOverlayTests().fixture()
+        original,observation,_=phase_fixture()
+        database={'pending_jobs':0,'held':0};before={'configuration':original,'files':baseline['files'],'mail':{},'static':{},'database':database}
+        common,_,_=v3.frozen_modules();units={name:{'MainPID':'123','ExecMainStartTimestampMonotonic':'456'}for name in common.UNITS}
+        receipt={'before':before,'units_after':units,'completed_at':START.isoformat(),'admission':{'allowed_deltas':{'health_session':{}}}}
+        availability_sha=v3.sha(v3.encode(receipt));observation['binding']['availability_receipt_sha256']=availability_sha
+        binding=observation['binding'];phase_proof=v3.phase_configuration_packet(original,observation)
+        with patch.object(v3,'OWNER_ROW_PINS',pins):raw,cohort=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+        pin=v3.owner_overlay_public(raw)
+        report={'format':3,'complete':True,'phase':'before-auth','operations_revision':OPS,'served_revision':SERVED,'availability_receipt_sha256':availability_sha,'original_activation':common.ORIGINAL,'original_failed_sha256':common.ORIGINAL_SHA,'original_backup_manifest_cipher_sha256':common.BACKUP_SHA,'original_records_adjudicated':True,'provider_calls':0,'database_writes_by_verifier':0,'current_snapshot':dict(before,configuration=observation['configuration'],files=cohort[1]['files']),'current_database_fingerprint':database,'service_identities':units,'worker_running_idle':{'unit':common.UNITS[2],'pid':123,'start_monotonic_usec':'456','pending_jobs':0,'held_reservations':0,'unresolved_reaper_paths':0,'existing_job_receipt_usage_rows_unchanged':True},'allowed_deltas':{'health_session':{},'publisher':{'all_eleven_columns_accounted_for':True,'publication':{'publication_verified':True}},'original_row_transitions':[],'added_rows':[],'anonymous_sessions':observation['anonymous_sessions'],'normal_mfa':None},'started_at':START.isoformat(),'finished_at':START.isoformat(),'co_tenant_preservation_admission':phase_proof,'owner_interactive_preservation':pin}
+        # Use the actual authority derivation, which preserves the source policy,
+        # then adds only the runtime pins owned by the held native parent.
+        policy=contract();policy['owner_interactive_preservation']=v3.owner_overlay_contract()
+        def arguments(value):
+            authority=v3.derive_authority(policy,common,OPS,SERVED,{'before-auth':v3.encode(value)})
+            authority.update(phase_preservation={'path':str(v3.PHASE_PRESERVATION_PATH),'sha256':phase_proof['phase_observation_sha256'],'binding':binding},owner_interactive_cohort=pin)
+            self.assertIn('owner_interactive_preservation',authority);self.assertIn('owner_interactive_cohort',authority)
+            return {'phase':'before-auth','authority':authority,'receipt':receipt,'operations':OPS,'served':SERVED,'availability_sha':availability_sha}
+        self.assertEqual(common.admission(v3.encode(report),**arguments(report)),report)
+        blobs={name:v3.protected(v3.FROZEN/name)for name in v3.DEPENDENCIES}
+        adapted=v3.javascript_adapter(blobs,'browser',declaration(policy),arguments(report)['authority'],checked_gate_fixture('browser'))
+        uri=json.loads(re.search(rb'from ("data:text/javascript;base64,[^"]+")',adapted).group(1))
+        def node(value):
+            inputs={'raw_hex':v3.encode(value).hex(),'receipt_raw_hex':v3.encode(receipt).hex(),'args':arguments(value)}
+            code='import {validateV3} from '+json.dumps(uri)+';console.log(JSON.stringify(validateV3("admission",'+v3.encode(inputs).decode()+')));'
+            return subprocess.run(['/usr/bin/node','--input-type=module','-'],input=code.encode(),capture_output=True,timeout=3)
+        passed=node(report);self.assertEqual(passed.returncode,0,passed.stderr.decode());self.assertEqual(json.loads(passed.stdout),report)
+        for mutate in (lambda x:x.pop('owner_interactive_preservation'),lambda x:x['owner_interactive_preservation']['header']['summary'].update(comparison_sessions=212),lambda x:x['current_snapshot']['files'][next(iter(v3.OWNER_FILES))].update(sha256='0'*64)):
+            bad=copy.deepcopy(report);mutate(bad)
+            with self.subTest(mutate=mutate),self.assertRaises(RuntimeError):common.admission(v3.encode(bad),**arguments(bad))
+            self.assertNotEqual(node(bad).returncode,0)
+        # The proof branch cannot be selected off by removing its declaration
+        # policy when the immutable runtime cohort pin remains present.
+        args=arguments(report);args['authority'].pop('owner_interactive_preservation')
+        self.assertEqual(common.admission(v3.encode(report),**args),report)
+        bad=copy.deepcopy(report);bad.pop('owner_interactive_preservation');args=arguments(bad);args['authority'].pop('owner_interactive_preservation')
+        with self.assertRaises(RuntimeError):common.admission(v3.encode(bad),**args)
 
 
 class ExposureAndFilesTests(unittest.TestCase):
@@ -2384,6 +2431,9 @@ class ExposureAndFilesTests(unittest.TestCase):
         with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
 
 
+
+
+@patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
 @patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PostRestorationConfigurationTests(unittest.TestCase):
     """Exact finite boundary controls; all inputs are fictional in-memory copies."""
@@ -2533,6 +2583,7 @@ class PostRestorationConfigurationTests(unittest.TestCase):
         with self.assertRaises(v3.Refusal): v3.preserved_snapshot(before, current, before['database'])
 
 
+@patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
 @patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PostRestorationNativeTests(unittest.TestCase):
     """Disposable descriptor fixtures; no host unit, root record or authentication access."""
@@ -2843,6 +2894,7 @@ class PhasePreservationTests(unittest.TestCase):
         self.assertEqual(sum(isinstance(row, tuple) and row[0] == 'browser' for row in host.events), 1)
 
 
+@patch.object(v3, 'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED', True)
 @patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PhaseNativeObservationTests(unittest.TestCase):
     """Real disposable descriptors and fictional root/unit views; no host-native reads."""
@@ -2984,9 +3036,15 @@ class GateDiagnosticTests(unittest.TestCase):
             self.assertEqual(actual,(v3.ACTUAL_PREPARATION,v3.ADMIN,v3.CAMPAIGN,v3.ATTEMPT))
             with self.assertRaisesRegex(v3.Refusal,'selected_once'):v3.select_gate_diagnostic_profile()
 
+    @patch.object(v3,'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED',True)
     def test_actual_declaration_keeps_actual_paths_under_diagnostic_profile(self):
         raw=(v3.SOURCE/v3.DECL).read_bytes()
         host=types.SimpleNamespace(source=v3.SOURCE,read_source=lambda path:raw)
+        import re
+        with patch.object(v3,'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED',True):
+            qualified=json.loads(re.findall(rb'<!-- owner-acceptance-v3-contract -->\s*```json\s*(.*?)```',raw,re.S)[0]);qualified['owner_interactive_preservation']=v3.owner_overlay_contract()
+        raw=re.sub(rb'(<!-- owner-acceptance-v3-contract -->\s*```json\s*)(.*?)(```)',lambda m:m[1]+v3.encode(qualified)+b'\n'+m[3],raw,flags=re.S)
+        host.read_source=lambda path:raw
         expected=v3.installed_contract(host)[1]
         with patch.object(v3,'PREPARATION',v3.ACTUAL_PREPARATION),patch.object(v3,'PHASE_PRESERVATION_PATH',v3.ACTUAL_PREPARATION/'co-tenant-phase-preservation.json'):
             v3.select_gate_diagnostic_profile()
@@ -3053,6 +3111,147 @@ class GateDiagnosticTests(unittest.TestCase):
     def test_safe_frozen_labels_retain_known_predicate_and_reject_arbitrary_text(self):
         self.assertEqual(v3.failure_summary(RuntimeError('acceptance_v3_admission_pin'))['reason'],'acceptance_v3_admission_pin')
         self.assertEqual(v3.failure_summary(RuntimeError('fictional private record'))['reason'],'v3_fixed_protocol_failure')
+
+
+class OwnerInteractiveOverlayTests(unittest.TestCase):
+    def fixture(self):
+        names = ['django_session', 'core_auditevent', 'core_encounter', 'core_job', 'core_wallet', 'core_loginattempt', 'core_user']
+        names += ['fictional_table_' + str(i) for i in range(29)]
+        old = {name: {'columns': ['id', 'value'], 'rows': []} for name in names}
+        old['django_session']['rows'] = [(str(i)+'\toriginal-session\n').encode() for i in range(212)]
+        old['core_encounter']['rows'] = [b'1\toriginal-answers\n']
+        old['core_wallet']['rows'] = [b'1\t100\n']
+        old['core_loginattempt']['rows'] = [(str(i)+'\toriginal-window\n').encode() for i in range(5)]
+        old['core_user']['rows'] = [b'1\toriginal-login\n']
+        keys = {name: ['id'] for name in old}
+        current = copy.deepcopy(old)
+        current['core_auditevent']['rows'] = [(str(i)+'\towner-audit\n').encode() for i in range(41)]
+        current['django_session']['rows'] += [b'212\towner-doctor-no-MFA\n',b'213\towner-preview\n']
+        for name in ('core_encounter','core_wallet','core_loginattempt','core_user'):
+            current[name]['rows'] = [line.split(b'\t')[0] + b'\towner-value\n' for line in old[name]['rows']]
+        verifier = types.SimpleNamespace(encoded=lambda value:v3.encode(value)+b'\n')
+        def mapping(table, rows, columns, primary):
+            result={}
+            for line in rows:
+                cells=line[:-1].split(b'\t');self.assertEqual(len(cells),len(columns));row=dict(zip(columns,cells));key=tuple(row[name]for name in primary)
+                self.assertNotIn(key,result);result[key]=row
+            return result
+        verifier.row_mapping=mapping;verifier.row_digest=lambda row,columns:v3.sha(b'\t'.join(row[name]for name in columns)+b'\n')
+        pins={}
+        for name in old:
+            before=mapping(name,old[name]['rows'],old[name]['columns'],keys[name]);after=mapping(name,current[name]['rows'],old[name]['columns'],keys[name]);chosen={}
+            for key,row in after.items():
+                if key in before and row==before[key]:continue
+                digest=v3.sha(verifier.encoded([cell.decode()for cell in key]));chosen[digest]={'before':verifier.row_digest(before[key],old[name]['columns'])if key in before else None,'after':verifier.row_digest(row,old[name]['columns']),'columns':sorted(k for k in row if row[k]!=before[key][k])if key in before else None}
+            if chosen:pins[name]=chosen
+        manifest={'tables':{name:{'rows':len(value['rows']),'sha256':v3.sha(b''.join(value['rows']))}for name,value in old.items()},'files':[],'authenticated_sequence_values':{'fictional_seq':(4,True)}}
+        files={'old/'+str(i):{'sha256':v3.sha(str(i).encode()),'size':1,'mode':0o600}for i in range(74)}
+        baseline={'files':files,'database':{'tables':copy.deepcopy(manifest['tables']),'referenced_files':{name:value['sha256']for name,value in list(files.items())[:67]},'catalog':{'sequence:fictional_seq':'fixed'},'invariants':{'negative':0}},'mail':{},'configuration':{},'static':{}}
+        from cryptography.fernet import Fernet
+        return verifier,old,current,keys,manifest,baseline,pins,Fernet(Fernet.generate_key())
+
+    def test_exact_encrypted_cohort_projection_retains_original_and_nonrow_contracts(self):
+        verifier,old,current,keys,manifest,baseline,pins,cipher=self.fixture();before=copy.deepcopy((old,baseline,manifest))
+        binding=v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':1,'parent_start_ticks':2})
+        with patch.object(v3,'OWNER_ROW_PINS',pins):
+            raw,cohort=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+            packet,decoded=v3.owner_packet_decode(raw,cipher,verifier,old,baseline,manifest,keys,binding)
+            self.assertEqual(decoded,cohort);self.assertNotIn(b'owner-audit',raw)
+            effective,expected,derived,summary=cohort
+            self.assertEqual((old,baseline,manifest),before);self.assertEqual(effective,current)
+            self.assertEqual(summary['historical_original_sessions'],212);self.assertEqual(summary['comparison_sessions'],214)
+            self.assertFalse(summary['owner_MFA_certified']);self.assertEqual(len(expected['files']),77)
+            self.assertEqual(expected['database']['catalog'],baseline['database']['catalog']);self.assertEqual(expected['database']['invariants'],baseline['database']['invariants'])
+            self.assertEqual(derived['authenticated_sequence_values'],manifest['authenticated_sequence_values'])
+            self.assertEqual(len(expected['database']['referenced_files']),70)
+            self.assertEqual(set(packet),{'format','protocol','binding','evidence','summary','ciphertext'})
+
+    def test_capture_rejects_missing_changed_unlisted_pin_and_original_mutation(self):
+        verifier,old,current,keys,manifest,baseline,pins,cipher=self.fixture();binding=v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':1,'parent_start_ticks':2})
+        with patch.object(v3,'OWNER_ROW_PINS',pins):
+            for mutate in (lambda x:x['core_encounter']['rows'].clear(),lambda x:x['core_wallet']['rows'].__setitem__(0,b'1\tother-value\n'),lambda x:x['core_auditevent']['columns'].append('extra')):
+                bad=copy.deepcopy(current);mutate(bad)
+                with self.subTest(mutate=mutate),self.assertRaises(v3.Refusal):v3.owner_packet_capture(cipher,verifier,old,bad,baseline,manifest,keys,binding)
+            bad=copy.deepcopy(old);bad['core_user']['rows']=[b'1\tunapproved-old\n']
+            with self.assertRaises(v3.Refusal):v3.owner_packet_capture(cipher,verifier,bad,current,baseline,manifest,keys,binding)
+            raw,_=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+            packet=json.loads(raw)
+            for mutate in (lambda x:x['binding'].update(parent_pid=2),lambda x:x['summary'].update(owner_changed_rows=9),lambda x:x.update(format=True),lambda x:x.update(extra='unlisted')):
+                bad=copy.deepcopy(packet);mutate(bad)
+                with self.subTest(mutate=mutate),self.assertRaises(v3.Refusal):v3.owner_packet_decode(v3.encode(bad),cipher,verifier,old,baseline,manifest,keys,binding)
+            rows=json.loads(cipher.decrypt(packet['ciphertext'].encode()));rows['core_auditevent'].pop(next(iter(rows['core_auditevent'])))
+            packet['ciphertext']=cipher.encrypt(v3.encode(rows)).decode()
+            with self.assertRaises(v3.Refusal):v3.owner_packet_decode(v3.encode(packet),cipher,verifier,old,baseline,manifest,keys,binding)
+
+    def test_public_common_proof_is_mandatory_typed_and_profile_bound(self):
+        verifier,old,current,keys,manifest,baseline,pins,cipher=self.fixture();binding=v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':1,'parent_start_ticks':2})
+        with patch.object(v3,'OWNER_ROW_PINS',pins):raw,cohort=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+        pin=v3.owner_overlay_public(raw);scope=v3.configuration_helpers({'need':v3.require})
+        report={'operations_revision':OPS,'served_revision':SERVED,'availability_receipt_sha256':'4'*64,'owner_interactive_preservation':pin}
+        authority={'owner_interactive_cohort':pin,'phase_preservation':{'binding':binding}}
+        self.assertTrue(scope['owner_report_admission'](baseline['files'],cohort[1]['files'],report,authority,OPS,SERVED,'4'*64))
+        for bad_report in ({**report,'owner_interactive_preservation':None},{**report,'owner_interactive_preservation':{}},{**report,'served_revision':'5'*40}):
+            with self.subTest(report=bad_report),self.assertRaises(v3.Refusal):scope['owner_report_admission'](baseline['files'],cohort[1]['files'],bad_report,authority,OPS,SERVED,'4'*64)
+        for mutate in (lambda x:x['header']['binding'].update(parent_pid=True),lambda x:x['header']['summary'].update(owner_added_rows=True),lambda x:x.update(path=str(v3.GATE_DIAGNOSTIC/v3.OWNER_COHORT_NAME)),lambda x:x['header']['summary'].update(historical_original_sessions=214)):
+            bad=copy.deepcopy(pin);mutate(bad)
+            with self.subTest(mutate=mutate),self.assertRaises(v3.Refusal):scope['owner_public_admission'](bad)
+        for mutate in (lambda x:x.pop(next(iter(v3.OWNER_FILES))),lambda x:x[next(iter(v3.OWNER_FILES))].update(mode=0o644),lambda x:x.update({'unapproved':{'sha256':'0'*64,'mode':384,'size':1}})):
+            bad=copy.deepcopy(cohort[1]['files']);mutate(bad)
+            with self.subTest(mutate=mutate),self.assertRaises(v3.Refusal):scope['owner_report_admission'](baseline['files'],bad,report,authority,OPS,SERVED,'4'*64)
+
+    def test_diagnostic_packet_cannot_be_reused_by_actual_profile(self):
+        verifier,old,current,keys,manifest,baseline,pins,cipher=self.fixture()
+        with patch.object(v3,'PREPARATION',v3.GATE_DIAGNOSTIC),patch.object(v3,'OWNER_ROW_PINS',pins):
+            binding=v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':1,'parent_start_ticks':2})
+            raw,_=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+            self.assertEqual(v3.owner_overlay_public(raw)['path'],str(v3.GATE_DIAGNOSTIC/v3.OWNER_COHORT_NAME))
+            self.assertEqual(v3.owner_overlay_contract()['cohort_path'],str(v3.ACTUAL_PREPARATION/v3.OWNER_COHORT_NAME))
+        scope=v3.configuration_helpers({'need':v3.require})
+        with self.assertRaises(v3.Refusal):scope['owner_public_admission']({'path':str(v3.GATE_DIAGNOSTIC/v3.OWNER_COHORT_NAME),'sha256':v3.sha(raw),'header':v3.owner_packet_header(json.loads(raw))})
+        with patch.object(v3,'OWNER_ROW_PINS',pins),self.assertRaises(v3.Refusal):
+            v3.owner_packet_decode(raw,cipher,verifier,old,baseline,manifest,keys,v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':3,'parent_start_ticks':4}))
+
+    def test_qualification_refuses_new_protocol_independently(self):
+        with patch.object(v3,'OWNER_INTERACTIVE_PRESERVATION_QUALIFIED',False),self.assertRaises(v3.Refusal):v3.execution_gate()
+
+    def test_real_final_entry_projects_same_packet_and_refuses_late_packet_change(self):
+        verifier,old,current,keys,manifest,baseline,pins,cipher=self.fixture()
+        binding=v3.owner_cohort_binding(OPS,SERVED,'4'*64,{'parent_pid':1,'parent_start_ticks':2})
+        with patch.object(v3,'OWNER_ROW_PINS',pins):raw,cohort=v3.owner_packet_capture(cipher,verifier,old,current,baseline,manifest,keys,binding)
+        pin=v3.owner_overlay_public(raw);authority={'operations_revision':OPS,'served_revision':SERVED,'availability_receipt_sha256':'4'*64,'owner_interactive_cohort':pin}
+        observed=[];result={'complete':True}
+        module=types.SimpleNamespace(**vars(verifier),verify_preservation=lambda *args:(observed.append(args),dict(result))[1])
+        backup=types.SimpleNamespace(table_queries=lambda query:keys,key_at=lambda path:cipher)
+        with patch.object(v3,'protected',return_value=raw),patch.object(v3,'owner_overlay_evidence'),patch.object(v3,'OWNER_ROW_PINS',pins):
+            v3.install_owner_final_cohort(module,authority)
+            finished=module.verify_preservation(None,old,baseline,manifest,{},'actor',{},None,backup)
+            self.assertEqual(observed[0][1:4],cohort[:3]);self.assertEqual(finished['owner_interactive_preservation'],pin)
+            self.assertFalse(finished['comparison_cohort_is_original_capture'])
+            with patch.object(v3,'protected',return_value=raw+b'changed'),self.assertRaises(v3.Refusal):module.verify_preservation(None,old,baseline,manifest,{},'actor',{},None,backup)
+        with patch.object(v3,'protected',side_effect=AssertionError('missing authority must refuse before reading')),self.assertRaisesRegex(v3.Refusal,'required'):
+            v3.install_owner_final_cohort(module,{'operations_revision':OPS})
+
+    def test_actual_pinned_speech_predicate_separates_quote_and_transport(self):
+        import ast
+        tree=ast.parse(Path(v3.__file__).read_bytes());fn=next(node for node in tree.body if isinstance(node,ast.FunctionDef)and node.name=='speech_admission')
+        # Execute the authentic immutable-job predicate only; no provider request
+        # or fictional result bytes are substituted into the full financial walk.
+        prefix=ast.Module(body=copy.deepcopy(fn.body[:3]),type_ignores=[])
+        packet={'job':{'kind':'transcription','state':'succeeded','id':'job','encounter_id':'enc','user_id':'actor','config':{'transcript_review_required':True,'provider':'anthropic','model':v3.MODEL,'pricing_version':v3.PRICING}},'attempt_count':1,'timeout_seconds':90,'max_retries':0,'receipt':{'provider':'deepgram:nova-3-medical'}}
+        expected={'job_id':'job','encounter':'enc','actor':'actor'}
+        def check(value):exec(compile(ast.fix_missing_locations(prefix),'<actual-speech-profile>','exec'),{'packet':value,'expected':expected,'require':v3.require,'MODEL':v3.MODEL,'PRICING':v3.PRICING})
+        check(packet)
+        for mutate in (lambda p:p['job']['config'].update(provider='deepgram'),lambda p:p['job']['config'].update(model='nova-3-medical'),lambda p:p['job']['config'].update(pricing_version='other'),lambda p:p['receipt'].update(provider='deepgram:unknown'),lambda p:p.update(timeout_seconds=180),lambda p:p.update(max_retries=1)):
+            bad=copy.deepcopy(packet);mutate(bad)
+            with self.subTest(mutate=mutate),self.assertRaises(v3.Refusal):check(bad)
+
+
+    def test_actual_owner_evidence_is_hash_only_and_exactly_finite(self):
+        self.assertEqual(sum(pin['before']is None for pins in v3.OWNER_ROW_PINS.values()for pin in pins.values()),43)
+        self.assertEqual(sum(pin['before']is not None for pins in v3.OWNER_ROW_PINS.values()for pin in pins.values()),8)
+        self.assertEqual(len(v3.OWNER_ROW_PINS['django_session']),2);self.assertNotIn('core_servicehealth',v3.OWNER_ROW_PINS)
+        self.assertEqual(len(v3.OWNER_FILES),3)
+        self.assertTrue(all(set(value)=={'sha256','mode','size'}and value['mode']==0o600 for value in v3.OWNER_FILES.values()))
 
 
 def local_qualification_suite():
