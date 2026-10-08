@@ -90,7 +90,7 @@ class PreparationDocumentTests(unittest.TestCase):
                 candidate(p,self.root/'out.docx',inv,[a['id'] for a in inv['anchors']],{choose['id']:bad})
 
     def test_uncovered_wide_rows_cannot_hide_behind_another_manual_placement(self):
-        for row in [['','Plan',''],['x'*121,'','°C'],['Patient signature','','']]:
+        for row in [['','Plan',''],['x'*121,'','°C'],['x'*121,'',''],['Patient signature','','']]:
             p=self.make(['Name: {{Name}}'],[['Assessment','',''],row]);inv=inventory(p)
             with self.subTest(row=row):
                 self.assertTrue(inv['issues'])

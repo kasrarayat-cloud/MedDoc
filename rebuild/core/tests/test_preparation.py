@@ -115,6 +115,56 @@ class PreparationPureTests(SimpleTestCase):
         self.assertEqual(evidence['resource_id'],'response1');self.assertFalse(evidence['simulated'])
         self.assertEqual(Decimal(evidence['cost']),Decimal('0.0004008'))
 
+    def test_official_transport_schema_transform_preserves_local_exact_count_guards(self):
+        from anthropic import transform_schema
+        for role in ['proposer','checker']:
+            original=prep.role_schema(role);before=deepcopy(original);wire=transform_schema(original)
+            self.assertEqual(original,before)
+            for key in ['anchors','stories']:
+                self.assertIn('maxItems',original['properties'][key]);self.assertNotIn('maxItems',wire['properties'][key])
+                self.assertEqual(wire['properties'][key]['items']['required'],original['properties'][key]['items']['required'])
+                self.assertFalse(wire['properties'][key]['items']['additionalProperties'])
+            result,_=prep.provider_role(self.inv,role,self.config(),1)
+            result['anchors'].pop()
+            with self.assertRaises(ValueError):validate_role(self.inv,result,role)
+
+    def test_failure_diagnostic_is_closed_and_does_not_export_exception_text(self):
+        import anthropic,httpx
+        response=httpx.Response(400,request=httpx.Request('POST','https://offline.invalid'),headers={'request-id':'req_local_1'})
+        error=anthropic.BadRequestError('private-key-and-document-text',response=response,body={'error':{'type':'invalid_request_error','message':'private-note'},'secret':'private-key'})
+        evidence=prep.safe_provider_failure(error,'proposer','provider_role',12.5,False,False)
+        self.assertEqual(evidence['error_class'],'BadRequestError');self.assertEqual(evidence['http_status'],400)
+        self.assertEqual(evidence['provider_request_id'],'req_local_1');self.assertEqual(evidence['provider_error_type'],'invalid_request_error')
+        self.assertNotIn('private',str(evidence));self.assertFalse(evidence['automatic_retry'])
+        class HostileError(Exception):
+            status_code=True;request_id='private\nheader';body={'error':{'type':'private-code'}}
+        bad=prep.safe_provider_failure(HostileError('private'),'anything','anything',0,False,False)
+        self.assertIsNone(bad['http_status']);self.assertEqual(bad['provider_request_id'],'')
+        self.assertEqual(bad['error_class'],'other_exception');self.assertEqual(bad['provider_error_type'],'unestablished')
+
+    def test_role_failure_retains_separate_evidence_without_model_usage_or_retry_claim(self):
+        import anthropic,httpx,time,json
+        response=httpx.Response(400,request=httpx.Request('POST','https://offline.invalid'),headers={'request-id':'req_local_2'})
+        error=anthropic.BadRequestError('private-message',response=response,body={'error':{'type':'invalid_request_error'}})
+        p=self.packet();p.config=self.config(mode='live')
+        for after_response in [False,True]:
+            receipt=SimpleNamespace(response_path='',response_sha256='',returned_model='',provider_request_id='',provider_resource_id='',
+                computed_cost=None,usage={},failure={},failure_path='',failure_sha256='',save=Mock())
+            manager=Mock();manager.count.return_value=0;manager.values_list.return_value=[];manager.create.return_value=receipt
+            def fail(*args):
+                if after_response:args[-1]({'model':'retained-real-response-model','request_id':'response_req','resource_id':'response_id','response':{'raw':'retained'},'cost':None})
+                raise error
+            with patch.object(prep.PreparationReceipt,'objects',manager),patch('core.preparation.provider_role',side_effect=fail) as provider:
+                with self.assertRaises(anthropic.BadRequestError) as caught:prep.call_role(p,'proposer',time.monotonic()+30)
+            self.assertIs(caught.exception,error);self.assertEqual(provider.call_count,1)
+            self.assertEqual(receipt.state,'failed' if after_response else 'unknown')
+            self.assertIsNone(receipt.computed_cost);self.assertEqual(receipt.usage,{})
+            self.assertEqual(receipt.returned_model,'retained-real-response-model' if after_response else '')
+            saved=json.loads((self.root/receipt.failure_path).read_bytes());self.assertEqual(saved,receipt.failure)
+            self.assertEqual(saved['http_status'],400);self.assertNotIn('private-message',str(saved))
+            if after_response:self.assertNotEqual(receipt.failure_path,receipt.response_path)
+            else:self.assertEqual(receipt.response_path,'')
+
     def test_missing_usage_retains_raw_response_and_unknown_cost(self):
         response=SimpleNamespace(model='actual-model',id='response1',content=[],usage=None,
                                   model_dump=lambda **kw:{'model':'actual-model','usage':None})

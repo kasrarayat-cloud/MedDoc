@@ -80,7 +80,11 @@ AI_INPUT_RATE=os.getenv('QUILLMD_AI_INPUT_RATE','')
 AI_OUTPUT_RATE=os.getenv('QUILLMD_AI_OUTPUT_RATE','')
 AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
 WORD_PREPARATION_ENABLED=os.getenv('QUILLMD_WORD_PREPARATION_ENABLED','0')=='1'
-WORD_PREPARATION_MAX_RUNS=6
+# Purposeful follow-up SHA3f1f99421f07c72370a030a57174d5f5c9194ac6b3b8b7292e42a7bb4b3a3895.
+# Includes the retained first unknown request; no old attempt is reset or replayed.
+WORD_PREPARATION_MAX_RUNS=7
+WORD_PREPARATION_MAX_FORMS=6
+WORD_PREPARATION_MAX_SENDS=13
 # Reserve $0.40 of the $2 purposeful pilot for its two note requests and one ASR.
 WORD_PREPARATION_BUDGET_USD='1.60'
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')

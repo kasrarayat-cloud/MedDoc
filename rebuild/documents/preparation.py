@@ -112,6 +112,9 @@ def inventory(path, known=None):
                     raw_empty=[c for c in cells[1:] if not ''.join(c.xpath('.//w:t/text()',namespaces=NS)).strip()]
                     blanks=[(i,c) for i,c in enumerate(cells[1:],1) if not occupied(c)]
                     if blanks and all((part.filename,c.getroottree().getpath(c)) in mapped_cells for _,c in blanks):continue
+                    row_texts=[''.join(c.xpath('.//w:t/text()',namespaces=NS)).strip() for c in cells]
+                    if len(cells)>2 and any(row_texts) and any(not occupied(c) for c in cells) and (not label or len(label)>120 or not TOKEN.fullmatch('{{'+label+'}}')):
+                        issues.append({'code':'guided_layout','message':'A wide row with an unsupported question label contains an answer blank. Retain the complete question and give it a supported answer area.'});continue
                     if label and raw_empty and (len(blanks)!=len(raw_empty) or len(cells)<=2):
                         issues.append({'code':'guided_layout','message':label+': an unmapped answer region contains unsupported content.'});continue
                     if label and blanks and row.xpath('.//w:vMerge | .//w:gridSpan | .//w:tbl | ./w:trPr/w:trHeight[@w:hRule="exact"]',namespaces=NS):
