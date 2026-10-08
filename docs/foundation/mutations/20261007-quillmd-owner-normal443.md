@@ -159,7 +159,7 @@ and failure behavior are unchanged.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "e06eb464103fd7fc6f08ab74c204223101c639ec"
+  "source_base": "90e12465343a7e1655d48926772ca20c270b0bca"
 }
 ```
 
@@ -579,3 +579,13 @@ consumer controls. It now binds the separately committed operations ancestor
 Qualification records source checks only. The operations ancestor, integration
 head and actual merge still require closed citations before native operations.
 No diagnostic execution, acceptance completion or HTTPS publication is claimed.
+
+
+8 October 2026 portable-test classification repair: operations ancestor
+`90e12465343a7e1655d48926772ca20c270b0bca` moves the unchanged authentic host common/Node
+control into the existing mandatory native qualification mixin. Portable 118
+and native 156 controls passed without skips. The original failed CI logs remain
+retained; production acceptance source, declaration, budgets and checks are
+unchanged. This source binding claims no successful CI, native operation or
+publication. Closed citations on this ancestor, integration head and actual
+merge remain prerequisites for the reviewed runtime doors.

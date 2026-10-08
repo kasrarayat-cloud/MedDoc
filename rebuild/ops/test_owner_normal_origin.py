@@ -753,7 +753,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         import importlib
         acceptance=importlib.import_module(act.__package__+'.owner_acceptance_v3')
         raw=(act.SOURCE/act.DECL).read_bytes();policy=act.contract(raw)
-        self.assertEqual(act.BASE,'e06eb464103fd7fc6f08ab74c204223101c639ec')
+        self.assertEqual(act.BASE,'90e12465343a7e1655d48926772ca20c270b0bca')
         self.assertEqual(policy['source_base'],act.BASE)
         expected={'private_acceptance':acceptance.CAMPAIGN/'complete.json',
             'private_report':acceptance.CAMPAIGN/'independent-verification.json',
