@@ -21,6 +21,14 @@ class AccessMiddleware:
         # default-src fallback blocked the preview the page asks them to listen to (measured in Chromium).
         response['Content-Security-Policy']="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self' blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self' https://checkout.stripe.com; object-src 'none'"
         response['X-Frame-Options']='DENY'
+        if request.resolver_match and request.resolver_match.url_name=='docx_preview_frame' and response.status_code==200:
+            origin=request.scheme+'://'+request.get_host()
+            # Only this opaque, script-only frame may render Word's generated inline
+            # styles. It has no network, cookies/storage, forms or navigation allowance.
+            response['Content-Security-Policy']=("default-src 'none'; script-src "+origin+"; style-src "+origin+" 'unsafe-inline'; "
+                "img-src data: blob:; font-src data: blob:; connect-src 'none'; object-src 'none'; "
+                "frame-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'; sandbox allow-scripts")
+            response['X-Frame-Options']='SAMEORIGIN'
         response['Permissions-Policy']='microphone=(self), camera=(), geolocation=()'
         if not path.startswith('/static/'): response['Cache-Control']='no-store, private'
         return response

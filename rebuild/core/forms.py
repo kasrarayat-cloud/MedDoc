@@ -23,6 +23,7 @@ class ScopedForm(forms.Form):
             only=list(self.fields['department'].queryset[:2])
             if len(only)==1 and not self.is_bound: self.initial.setdefault('department',only[0].pk)
 class UploadForm(ScopedForm):
+    prepare_with_ai=forms.BooleanField(required=False,label='Prepare this blank Word form with AI',help_text='Two AI roles propose and check answer areas. You approve the layout before the form can be used.')
     name=forms.CharField(max_length=140)
     department=forms.ModelChoiceField(queryset=Department.objects.none())
     # `accept` narrows the OS picker to the two formats the adapter supports, so an

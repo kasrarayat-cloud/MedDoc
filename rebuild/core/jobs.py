@@ -210,6 +210,9 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         raise ValidationError('Source notes changed after the quote. Reload and review the current notes before submitting.')
     if kind=='generation' and not e.notes.strip():
         raise ValidationError('Type and save source notes, or review and add a transcript, before generating answers.')
+    if e.template_version.preparation_id:
+        from .template_source import source_for_version
+        source_for_version(e.template_version)
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
     key=f'{kind}:{e.pk}:{fingerprint}'
     old=Job.objects.filter(request_key=key).first()
@@ -516,6 +519,12 @@ def run_one():
         try: membership(job.user,job.encounter.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
+        if job.encounter.template_version.preparation_id:
+            try:
+                from .template_source import source_for_version
+                source_for_version(job.encounter.template_version)
+            except (ValidationError,ValueError,OSError):
+                job.state='failed';job.error='The approved form source changed before processing.';job.finished_at=timezone.now();job.request_key=ended_key(job,'failed');job.save();release(job);return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
     provider_returned=False
     try:

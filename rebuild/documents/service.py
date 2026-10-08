@@ -24,7 +24,7 @@ class DocumentError(ValueError):
 
 
 def _run(path, operation, mapping=None, answers=None, output_path=None, *,
-         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None):
+         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None):
     source = Path(path)
     try:
         fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -38,6 +38,8 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
     if len(payload) > MAX_UPLOAD:
         raise DocumentError("The upload exceeds 10 MiB.", "upload_limit")
     digest = hashlib.sha256(payload).hexdigest()
+    if expected_sha256 is not None and digest!=expected_sha256:
+        raise DocumentError('The approved document source changed before processing.', 'source_changed')
     if payload.startswith(b"PK\x03\x04"):
         suffix = ".docx"
     elif payload.startswith(b"%PDF-"):
@@ -131,18 +133,18 @@ def inspect_template(path):
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,
-                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None):
+                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None):
     """Fill only the verified original's mapped fields, writing a new private file."""
     if not isinstance(mapping, list) or not isinstance(answers, dict):
         raise DocumentError("Mapping must be a list and answers must be a dictionary.", "invalid_mapping")
     return _run(original_path, "fill", mapping, answers, output_path,
                 document_backend=document_backend, reviewed_requirements=reviewed_requirements,
-                trusted_context=trusted_context, claim_variants=claim_variants)
+                trusted_context=trusted_context, claim_variants=claim_variants,expected_sha256=expected_sha256)
 
 
-def resolve_template(original_path, document_backend: dict, answers: dict, *, claim_variants=None, trusted_context=None):
+def resolve_template(original_path, document_backend: dict, answers: dict, *, claim_variants=None, trusted_context=None,expected_sha256=None):
     """Materialize trusted template assertions for the current reviewed answers."""
     if not isinstance(document_backend, dict) or not isinstance(answers, dict):
         raise DocumentError("The Word mapping and answers are invalid.", "invalid_mapping")
     return _run(original_path, "resolve", answers=answers, document_backend=document_backend,
-                claim_variants=claim_variants, trusted_context=trusted_context)
+                claim_variants=claim_variants, trusted_context=trusted_context,expected_sha256=expected_sha256)

@@ -38,7 +38,7 @@ def fail(message, code="invalid_document"):
     raise DocumentFailure(message, code)
 
 
-def validate_docx(path):
+def validate_docx(path, *, inventory_only=False):
     try:
         with ZipFile(path) as package:
             infos = package.infolist()
@@ -86,7 +86,9 @@ def validate_docx(path):
                         local = etree.QName(node).localname
                         if local in {"vanish", "webHidden", "specVanish", "noWrap", "fitText"} and node.get(qn("w:val"), "1") not in {"0", "false", "off"}:
                             fail("Hidden text and compressed or non-wrapping text need the advanced document adapter.", "overflow_risk")
-                        if local in {"object", "altChunk", "fldSimple", "fldChar", "instrText", "sdt", "txbxContent", "del", "ins"}:
+                        if local in {"object", "altChunk"}:
+                            fail("Active and embedded document content is not supported.", "unsafe_upload")
+                        if local in {"fldSimple", "fldChar", "instrText", "del", "ins"} or (not inventory_only and local in {"sdt", "txbxContent"}):
                             fail("Word fields, content controls, text boxes, and tracked changes need the advanced document adapter.", "unsupported_structure")
     except BadZipFile:
         fail("The DOCX package is malformed.")

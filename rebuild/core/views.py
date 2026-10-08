@@ -48,7 +48,8 @@ def document_backend(info):
 def wm_resolve(encounter,actor,decisions=None):
     from documents import resolve_template
     version=encounter.template_version
-    original=private_path(version.template.original_path)
+    from .template_source import source_for_version
+    original=source_for_version(version)
     if hashlib.sha256(original.read_bytes()).hexdigest()!=version.template.sha256:
         raise ValidationError('Original integrity check failed.')
     decisions=decisions if decisions is not None else encounter.template_review.get('decisions',{})
@@ -60,7 +61,8 @@ def wm_resolve(encounter,actor,decisions=None):
              'finalized_at':(encounter.finalized_at or timezone.now()).isoformat()}
     sent=wm_review.sdk_answers(encounter,actor)
     result=resolve_template(original,version.document_backend,sent,
-                            claim_variants=variants,trusted_context=context)
+                            claim_variants=variants,trusted_context=context,
+                            expected_sha256=version.prepared_sha256 or version.template.sha256)
     if (result.get('backend')!=version.document_backend.get('backend')
             or result.get('mapping_digest')!=version.document_backend.get('mapping_digest')
             or result.get('sha256')!=version.template.sha256):
@@ -201,6 +203,9 @@ def dashboard(request):
 def template_upload(request):
     from documents import inspect_template,DocumentError
     form=UploadForm(request.POST or None,request.FILES or None,user=request.user)
+    from .preparation import feature_enabled
+    if not feature_enabled():form.fields.pop('prepare_with_ai',None)
+    elif request.method=='GET':form.initial['prepare_with_ai']=True
     if request.method=='POST' and form.is_valid():
         relative=None
         try:
@@ -209,6 +214,19 @@ def template_upload(request):
             relative=store_upload(form.cleaned_data['file'])
             if private_path(relative).read_bytes()[:8]==OLE_CONTAINER:
                 raise ValidationError('This file is password-protected, encrypted, or an old Word .doc file. Save it as an unprotected Word .docx (or a fillable PDF) and upload that.')
+            if form.cleaned_data.get('prepare_with_ai'):
+                if Path(relative).suffix!='.docx':raise ValidationError('AI preparation accepts blank Word .docx forms. Uncheck AI preparation to inspect a fillable PDF.')
+                from documents.preparation_service import inspect_preparation,read_original
+                from documents.sdk_service import WM_IOV_SHA256
+                raw_sha=hashlib.sha256(read_original(private_path(relative))).hexdigest()
+                known=inspect_template(private_path(relative)) if raw_sha==WM_IOV_SHA256 else None
+                inventory=inspect_preparation(private_path(relative),known)
+                from .preparation import create_preparation
+                with transaction.atomic():
+                    t=Template.objects.create(department=department,name=form.cleaned_data['name'],format='docx',original_name=Path(form.cleaned_data['file'].name).name[:200],original_path=relative,sha256=inventory['source_sha256'],warnings=[],created_by=request.user)
+                    prep=create_preparation(t,request.user)
+                    audit(request.user,'template.preparation_requested',prep.pk,department=department,sha256=t.sha256)
+                return redirect('template_preparation',pk=t.pk)
             info=inspect_template(private_path(relative))
             if len(info['fields'])>100:raise ValidationError('Templates support at most 100 answer fields. Split this template explicitly.')
             with transaction.atomic():
@@ -288,6 +306,7 @@ def statement_guide(version):
 def template_detail(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
     version=t.versions.order_by('-number').first()
+    if not version and hasattr(t,'preparation'):return redirect('template_preparation',pk=t.pk)
     form=MappingForm(request.POST or None,initial={'labels':{f['key']:f['label'] for f in version.fields}})
     if request.method=='POST' and form.is_valid():
         try:
@@ -311,8 +330,12 @@ def template_detail(request,pk):
                 lost=[f['label'] for f in latest.fields
                       if signature_label(f['label']) and not signature_label(labels[f['key']])]
                 if lost:raise ValidationError('A signature question keeps a signature label, because the identity check reads it: '+', '.join(sorted(lost))+'. Rename the other questions and leave this one as the form words it.')
+                if latest.preparation_id:
+                    from documents.preparation import SIGNING
+                    if any(SIGNING.search(f['label']) and f['label']!=labels[f['key']] for f in latest.fields):
+                        raise ValidationError('Prepared forms retain their exact signing, attestation and consent labels.')
                 fields=[{**f,'label':labels[f['key']]} for f in latest.fields]
-                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,created_by=request.user)
+                version=TemplateVersion.objects.create(template=t,number=latest.number+1,fields=fields,review_requirements=latest.review_requirements,document_backend=latest.document_backend,prepared_path=latest.prepared_path,prepared_sha256=latest.prepared_sha256,preparation=latest.preparation,created_by=request.user)
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
@@ -741,8 +764,8 @@ def finalize(request,pk):
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
-            original=private_path(e.template_version.template.original_path)
-            if hashlib.sha256(original.read_bytes()).hexdigest()!=e.template_version.template.sha256:raise ValidationError('Original integrity check failed.')
+            from .template_source import source_for_version
+            original=source_for_version(e.template_version)
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
             out=private_path(relative);out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
             finalized_at=timezone.now()
@@ -764,7 +787,8 @@ def finalize(request,pk):
                               document_backend=version.document_backend,
                               reviewed_requirements=reviewed['reviewed_requirements'],
                               claim_variants=reviewed['claim_variants'],
-                              trusted_context=reviewed['trusted_context'])
+                              trusted_context=reviewed['trusted_context'],
+                              expected_sha256=version.prepared_sha256 or version.template.sha256)
                 finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
             else:
                 from .tab_review import validate_identity
@@ -779,7 +803,8 @@ def finalize(request,pk):
                 # passed the fresh fields as the mapping and the two were equal by construction.
                 version=e.template_version
                 validate_identity(version.fields,e.answers,request.user)
-                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out)
+                fill_template(original,version.fields,{k:v['text'] for k,v in e.answers.items()},out,
+                              expected_sha256=version.prepared_sha256 or version.template.sha256)
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)

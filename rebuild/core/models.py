@@ -103,9 +103,61 @@ class TemplateVersion(Entity):
     fields=models.JSONField(default=list)
     review_requirements=models.JSONField(default=list,blank=True)
     document_backend=models.JSONField(default=dict,blank=True)
+    prepared_path=models.CharField(max_length=100,blank=True)
+    prepared_sha256=models.CharField(max_length=64,blank=True)
+    preparation=models.ForeignKey('TemplatePreparation',on_delete=models.PROTECT,null=True,blank=True,related_name='versions')
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
     class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
+class TemplatePreparation(Entity):
+    template=models.OneToOneField(Template,on_delete=models.PROTECT,related_name='preparation')
+    requested_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='template_preparations')
+    state=models.CharField(max_length=24,default='queued')
+    revision=models.PositiveIntegerField(default=0)
+    config=models.JSONField(default=dict)
+    inventory=models.JSONField(default=dict)
+    proposal=models.JSONField(default=dict)
+    checker=models.JSONField(default=dict)
+    corrections=models.JSONField(default=dict)
+    correction_history=models.JSONField(default=list)
+    candidate_path=models.CharField(max_length=100,blank=True)
+    candidate_sha256=models.CharField(max_length=64,blank=True)
+    candidate_info=models.JSONField(default=dict)
+    candidate_history=models.JSONField(default=list)
+    changes=models.JSONField(default=list)
+    error_code=models.CharField(max_length=60,blank=True)
+    started_at=models.DateTimeField(null=True)
+    finished_at=models.DateTimeField(null=True)
+    approved_at=models.DateTimeField(null=True)
+    approved_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True,related_name='approved_preparations')
+    approval_sha256=models.CharField(max_length=64,blank=True)
+    class Meta:
+        constraints=[models.UniqueConstraint(models.Value(1),condition=models.Q(state__in=['inventory','proposer','checker']),name='preparation_single_running')]
+class PreparationReceipt(Entity):
+    preparation=models.ForeignKey(TemplatePreparation,on_delete=models.PROTECT,related_name='receipts')
+    role=models.CharField(max_length=12)
+    state=models.CharField(max_length=20,default='reserved')
+    requested_model=models.CharField(max_length=100)
+    returned_model=models.CharField(max_length=100,blank=True)
+    provider=models.CharField(max_length=30)
+    request_sha256=models.CharField(max_length=64)
+    provider_request_id=models.CharField(max_length=140,blank=True)
+    provider_resource_id=models.CharField(max_length=140,blank=True)
+    quote_maximum=models.DecimalField(max_digits=24,decimal_places=12)
+    computed_cost=models.DecimalField(max_digits=24,decimal_places=12,null=True)
+    usage=models.JSONField(default=dict)
+    rates=models.JSONField(default=dict)
+    simulated=models.BooleanField(default=False)
+    response_path=models.CharField(max_length=100,blank=True)
+    response_sha256=models.CharField(max_length=64,blank=True)
+    error_code=models.CharField(max_length=60,blank=True)
+    started_at=models.DateTimeField(null=True)
+    finished_at=models.DateTimeField(null=True)
+    elapsed_ms=models.PositiveIntegerField(null=True)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['preparation','role'],name='preparation_role_once'),
+                     models.CheckConstraint(condition=models.Q(role__in=['proposer','checker'],quote_maximum__gte=0,quote_maximum__lte=Decimal('0.14')),name='preparation_receipt_role_cap'),
+                     models.CheckConstraint(condition=models.Q(computed_cost__isnull=True)|models.Q(computed_cost__gte=0),name='preparation_cost_nonnegative')]
 def latest_service_date():
     """The furthest ahead a real date of service can legitimately be.
 

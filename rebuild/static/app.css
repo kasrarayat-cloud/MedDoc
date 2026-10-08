@@ -461,3 +461,5 @@ td .subline { font-size: 12px; }
 .document-toolbar p { grid-column: 1/-1; margin: 0; }
 .document-action { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; }
 @media(max-width:740px) { .document-toolbar { padding: 17px; grid-template-columns: minmax(0,1fr); } }
+:root{--preparation-preview-height:540px}
+.preparation-previews{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:24px 0}.preparation-previews iframe{width:100%;height:var(--preparation-preview-height);border:1px solid var(--line);border-radius:8px;background:var(--canvas)}.hash-value{overflow-wrap:anywhere;font-size:.75rem}.preparation-labels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.approval-panel{border-color:var(--line-strong);margin:24px 0}.check-row{display:flex;align-items:flex-start;gap:10px;margin:12px 0}.check-row input{width:auto;flex:none;margin-top:4px}fieldset{border:1px solid var(--line);border-radius:8px;padding:16px;margin:20px 0}legend{font-weight:600;padding:0 8px}@media(max-width:900px){.preparation-previews,.preparation-labels{grid-template-columns:1fr}}
