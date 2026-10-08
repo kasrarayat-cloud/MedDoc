@@ -12,8 +12,10 @@ from lxml import etree
 
 if __package__:
     from .engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS
+    from .sdk_service import WM_IOV_SHA256
 else:
     from engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS
+    from sdk_service import WM_IOV_SHA256
 
 NS = {'w': W_NS}
 W = '{'+W_NS+'}'
@@ -62,10 +64,6 @@ def inventory(path, known=None):
     stories, parts, options, anchors, questions, issues = [], {}, [], [], [], []
     qualified = bool(known and known.get('backend') == 'wm-iov-foss-v2')
     if known:
-        if __package__:
-            from .sdk_service import WM_IOV_SHA256
-        else:
-            from sdk_service import WM_IOV_SHA256
         if not qualified or source_sha != WM_IOV_SHA256:
             raise DocumentFailure('Only the exact qualified WM original may use the advanced mapping.', 'stale_mapping')
     fields = deepcopy(known.get('fields', [])) if known else []

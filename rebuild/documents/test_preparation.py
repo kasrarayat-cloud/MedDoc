@@ -170,6 +170,14 @@ class PreparationDocumentTests(unittest.TestCase):
         p=self.make(['Name: ____']);sha=hashlib.sha256(p.read_bytes()).hexdigest()
         with self.assertRaises(DocumentFailure):inventory(p,{'sha256':sha,'backend':'wm-iov-foss-v2','fields':[]})
 
+    def test_networkless_worker_rejects_forged_wm_mapping_by_original_pin(self):
+        from .preparation_service import inspect_preparation
+        from .service import DocumentError
+        p=self.make(['Name: ____']);sha=hashlib.sha256(p.read_bytes()).hexdigest()
+        with self.assertRaises(DocumentError) as refused:
+            inspect_preparation(p,{'sha256':sha,'backend':'wm-iov-foss-v2','fields':[]})
+        self.assertEqual(refused.exception.code,'stale_mapping')
+
     def test_active_fields_external_links_and_altchunks_still_refuse(self):
         p=self.make(['Name: ____'])
         for tag in ['fldSimple','altChunk','instrText']:
