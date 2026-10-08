@@ -118,6 +118,67 @@ class OwnerNormalOriginTests(SimpleTestCase):
         self.assertEqual(settings.QUILLMD_APP_BASE_URL, 'https://app.quillmd.com:9443')
         self.assertEqual(settings.QUILLMD_PREVIEW_ORIGIN, 'https://app.quillmd.com:9443')
 
+    def test_only_four_frozen_renderer_assets_allow_cookie_free_read(self):
+        self.assertEqual(len(preview.OPAQUE_WORD_ASSETS), 4)
+        for method in ('GET', 'HEAD'):
+            for path in preview.OPAQUE_WORD_ASSETS:
+                with self.subTest(method=method, path=path):
+                    request = self.request(path)
+                    request.method = method
+                    request.COOKIES = {}
+                    self.assertEqual(self.respond(request).status_code, 200)
+                    self.app.assert_called_once_with(request)
+                    self.app.reset_mock()
+        self.store.assert_not_called()
+
+    def test_renderer_allowance_cannot_admit_other_assets_documents_or_writes(self):
+        paths = ('/', '/login/', '/console/services/', '/templates/preview-frame/',
+                 '/templates/example/original/', '/api/patients/', '/static/app.css',
+                 '/static/docx-frame.js', '/static/docx-frame.000000000000.js',
+                 '/static/vendor/docx-preview/docx-preview.min.js.map',
+                 '/static/docx-frame.fa120285a29f.js/extra')
+        for path in paths:
+            request = self.request(path); request.COOKIES = {}
+            self.deny(request)
+        for method in ('POST', 'PUT', 'DELETE', 'OPTIONS'):
+            request = self.request(next(iter(preview.OPAQUE_WORD_ASSETS)))
+            request.COOKIES = {}; request.method = method
+            self.deny(request)
+        self.store.assert_not_called()
+
+    def test_renderer_reads_still_require_exact_host_tls_marker_and_enablement(self):
+        path = next(iter(preview.OPAQUE_WORD_ASSETS))
+        for changes in ({'HTTP_HOST': 'app.quillmd.com:443'},
+                        {'HTTP_X_QUILLMD_PREVIEW': ''}, {'wsgi.url_scheme': 'http'},
+                        {'HTTP_HOST': 'admin.quillmd.com'}):
+            request = self.request(path, **changes); request.COOKIES = {}
+            self.deny(request)
+        for setting in ('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', 'QUILLMD_PREVIEW_AUTH_ENABLED'):
+            with override_settings(**{setting: False}):
+                request = self.request(path); request.COOKIES = {}; self.deny(request)
+        with patch.object(preview, 'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED', False):
+            request = self.request(path); request.COOKIES = {}; self.deny(request)
+        self.store.assert_not_called()
+
+    def test_renderer_allowlist_matches_reviewed_source_content_hashes(self):
+        import hashlib
+        from pathlib import Path, PurePosixPath
+        root = Path(__file__).resolve().parents[2] / 'static'
+        names = ('docx-frame.css', 'docx-frame.js', 'vendor/docx-preview/jszip.min.js',
+                 'vendor/docx-preview/docx-preview.min.js')
+        compiled = set()
+        for name in names:
+            raw = (root / name).read_bytes()
+            if name.endswith('/docx-preview.min.js'):
+                source_map = (root / 'vendor/docx-preview/docx-preview.min.js.map').read_bytes()
+                mapped = 'docx-preview.min.js.' + hashlib.md5(source_map).hexdigest()[:12] + '.map'
+                raw = raw.replace(b'sourceMappingURL=docx-preview.min.js.map',
+                                  ('sourceMappingURL=' + mapped).encode())
+            path = PurePosixPath(name)
+            compiled.add('/static/' + str(path.with_suffix('')) + '.'
+                         + hashlib.md5(raw).hexdigest()[:12] + path.suffix)
+        self.assertEqual(compiled, preview.OPAQUE_WORD_ASSETS)
+
     def test_grant_expiry_race_refuses_in_existing_only_store(self):
         @contextmanager
         def expired(request, *, existing_only=False):
