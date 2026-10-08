@@ -5,12 +5,14 @@ adapter's `conflicts` are the exact strings from WmVariants.cs / WmAdapter.cs, f
 `documents.resolve_template`, so no Word runtime and no provider is involved.
 """
 import hashlib
+import io
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, TestCase, override_settings
+from docx import Document
 
 from core.models import Encounter, TemplateVersion
 from core.security import private_path
@@ -133,7 +135,13 @@ class ThePageListsEachConflictAndTheCookieCarriesNone(SyntheticFixture, TestCase
     def setUp(self):
         directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
         override = override_settings(MEDIA_ROOT=Path(directory.name)); override.enable(); self.addCleanup(override.disable)
-        self.user, _, self.department, self.patient, self.template, self.encounter, blob = self.make_scope('wm-conflicts')
+        # The source resolver now verifies a real DOCX before the intentionally
+        # mocked offline conflict adapter. Retain every fixture question.
+        document=Document()
+        for field in FIELDS:document.add_paragraph(field['label']+': {{'+field['key']+'}}')
+        for row in REQUIREMENTS:document.add_paragraph(row['label'])
+        stream=io.BytesIO();document.save(stream)
+        self.user, _, self.department, self.patient, self.template, self.encounter, blob = self.make_scope('wm-conflicts',original_bytes=stream.getvalue())
         path = private_path(self.template.original_path); path.parent.mkdir(parents=True, exist_ok=True); path.write_bytes(blob)
         version = TemplateVersion.objects.create(template=self.template, number=2, fields=FIELDS, review_requirements=REQUIREMENTS,
                                                  document_backend={'backend': 'synthetic-qualified', 'mapping_digest': 'd' * 64},

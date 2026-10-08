@@ -111,6 +111,9 @@ class EvidenceKindMigration(PolicyFixture,TransactionTestCase):
         usage=self.settled(Decimal('0.5'))
         row=reconcile_usage(usage,Decimal('0.4'),'INV-LEGACY-UNCLASSIFIED',self.user)
         ledger_before=list(LedgerEntry.objects.order_by('pk').values_list('pk','amount','kind','key','balance_after'))
+        # The test exercises0016→0017, but later tests require the original
+        # current graph, including prepared-version columns and their guards.
+        restore_targets=MigrationExecutor(connection).loader.graph.leaf_nodes()
         before_target=[('core','0016_user_session_version')]
         after_target=[('core','0017_reconciliation_evidence_kind')]
         try:
@@ -130,4 +133,5 @@ class EvidenceKindMigration(PolicyFixture,TransactionTestCase):
             self.assertEqual(ledger_before,list(LedgerEntry.objects.order_by('pk').values_list('pk','amount','kind','key','balance_after')))
             self.assertFalse(Usage.objects.get(pk=usage.pk).reconciliation.invoice_reconciled)
         finally:
-            MigrationExecutor(connection).migrate(after_target)
+            MigrationExecutor(connection).migrate(restore_targets)
+        self.assertEqual(MigrationExecutor(connection).migration_plan(restore_targets),[])

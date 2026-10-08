@@ -453,6 +453,8 @@ class WMContinuationTests(SimpleTestCase):
             with self.subTest(raw_simulated=simulated),self.assertRaises(ValidationError):self.continuation(p,info)
             p.save.assert_not_called()
 
+    @override_settings(STORAGES={'default':{'BACKEND':'django.core.files.storage.FileSystemStorage'},
+                                'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}})
     def test_continuation_post_only_and_blocked_form_ui_has_no_correction_controls(self):
         from django.test import RequestFactory
         from django.template.loader import render_to_string
