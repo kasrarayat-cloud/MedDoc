@@ -640,6 +640,10 @@ def save_answers(request,pk):
             membership(request.user,e.department,roles=['owner','clinician'])
             withdrawn.append(key)
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
+        from documents.engine import answer_constraint_error
+        constraint_error=answer_constraint_error(field,value)
+        if constraint_error:
+            return document_refusal(request,e,'"'+field['label']+'": '+constraint_error+' Nothing was saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,

@@ -77,7 +77,7 @@ class PreparationPureTests(SimpleTestCase):
 
     def test_eighth_attempt_is_wm_only_and_ninth_never_creates(self):
         for attempts,sha,allowed in [(7,WM_IOV_SHA256,True),(7,self.inv['source_sha256'],False),(8,WM_IOV_SHA256,False)]:
-            manager=Mock();manager.count.return_value=attempts
+            manager=Mock();manager.exclude.return_value=manager;manager.count.return_value=attempts
             manager.values_list.return_value.distinct.return_value.count.return_value=1
             template=SimpleNamespace(sha256=sha)
             with self.subTest(attempts=attempts,sha=sha),override_settings(WORD_PREPARATION_MAX_RUNS=8),\
@@ -95,7 +95,7 @@ class PreparationPureTests(SimpleTestCase):
         for sends,sha,limits in [(12,self.inv['source_sha256'],(2500,Decimal('0.10'))),
                                   (13,WM_IOV_SHA256,(2500,Decimal('0.10'))),
                                   (14,WM_IOV_SHA256,(6000,Decimal('0.16')))]:
-            manager=Mock();manager.count.return_value=sends
+            manager=Mock();manager.exclude.return_value=manager;manager.count.return_value=sends
             p=self.packet();p.template.sha256=sha;p.config=self.config()
             with self.subTest(sends=sends,sha=sha),override_settings(WORD_PREPARATION_MAX_SENDS=14),\
                     patch.object(prep.PreparationReceipt,'objects',manager),patch.object(prep,'role_limits',return_value=limits),\
@@ -197,7 +197,7 @@ class PreparationPureTests(SimpleTestCase):
         for after_response in [False,True]:
             receipt=SimpleNamespace(response_path='',response_sha256='',returned_model='',provider_request_id='',provider_resource_id='',
                 computed_cost=None,usage={},failure={},failure_path='',failure_sha256='',save=Mock())
-            manager=Mock();manager.count.return_value=0;manager.values_list.return_value=[];manager.create.return_value=receipt
+            manager=Mock();manager.exclude.return_value=manager;manager.count.return_value=0;manager.values_list.return_value=[];manager.create.return_value=receipt
             def fail(*args):
                 if after_response:args[-1]({'model':'retained-real-response-model','request_id':'response_req','resource_id':'response_id','response':{'raw':'retained'},'cost':None})
                 raise error
@@ -233,11 +233,15 @@ class PreparationPureTests(SimpleTestCase):
         self.assertEqual(seen[0]['request_id'],'request1');self.assertIsNone(seen[0]['cost'])
 
     def test_candidate_keeps_exact_layout_reminder_and_blocks_unresolved_warning(self):
+        from documents import inspect_template
         advisory="DOCX answers expand and can change pagination. Review the exported document's layout."
         for extra in [None,'An unmapped clinical answer remains.',advisory+' Changed']:
             p=self.packet();p.template.original_path='original.docx';p.candidate_history=[];p.save=Mock()
-            info={'fields':p.candidate_info['fields'],'warnings':[advisory]+([extra] if extra else [])}
-            with patch('core.preparation.inspect_template',return_value=info):
+            def inspected(path):
+                info=inspect_template(path)
+                info['warnings']=[advisory]+([extra] if extra else [])
+                return info
+            with patch('core.preparation.inspect_template',side_effect=inspected):
                 if extra:
                     with self.assertRaises(prep.DocumentError):prep.build_candidate(p,{})
                 else:
