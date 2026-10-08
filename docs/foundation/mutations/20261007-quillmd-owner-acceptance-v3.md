@@ -32,6 +32,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "admin_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-admin-acceptance-v3-20261007",
   "approved_source_paths": [
     "docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md",
+    "package-lock.json",
     "rebuild/ops/owner_acceptance_v3.py",
     "rebuild/ops/test_owner_acceptance_v3.py",
     "scripts/run-owner-acceptance-v3.py"
@@ -42,6 +43,28 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "availability_receipt_sha256": "17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd",
   "browser_verifier_seconds": 1200,
   "campaign_directory": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007",
+  "ci_only_dependency_lock": {
+    "after_sha256": "a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136",
+    "before_sha256": "a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e",
+    "future_lock_changes_admitted": false,
+    "installed_artifact_modes": {
+      "apps/marketing/package.json": "0664",
+      "package-lock.json": "0600",
+      "package.json": "0664"
+    },
+    "native_dependency_installs": 0,
+    "native_marketing_builds": 0,
+    "native_marketing_service_actions": 0,
+    "next_version": "16.3.8",
+    "path": "package-lock.json",
+    "previous_next_version": "16.3.6",
+    "protocol": "marketing-ci-next-lock-correction-v1",
+    "served_runtime_dependency_changes": 0,
+    "unchanged_manifest_sha256": {
+      "apps/marketing/package.json": "e1e7848f7a9ed7e66c6a60036a36b00d7d86e53a4112b5aceee6326ed317cb7e",
+      "package.json": "b79c199a199caf1dd6b8329c64132a2660129eb2f474997cb6a27c105414c412"
+    }
+  },
   "concurrency": 1,
   "dependency_sha256": {
     "acceptance-v3-contract.mjs": "e0b41fe388c1b9c7f7ac9676e1a76294cf4a45aa2a63f6564b4a69d70ca4e38f",
@@ -63,7 +86,7 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
   "normal_443_provider_calls": 0,
   "normal_443_qualified": false,
   "operations_revision": null,
-  "operations_revision_policy": "derive_clean_canonical_worktree_head_with_exact_or_reviewed_normal_descendant_main_and_ci_v2",
+  "operations_revision_policy": "derive_clean_canonical_worktree_head_with_exact_pinned_ci_lock_and_reviewed_normal_descendant_main_and_ci_v3",
   "origin": "https://app.quillmd.com:9443",
   "original_frozen_verifier_sha256": "b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c",
   "original_policy": {
@@ -607,3 +630,64 @@ provider predicates retain their existing scope. The frozen admission adapter
 changes only its configuration predicate and requires the phase packet even if
 current configuration has reverted to the original historical value. The same
 closed proof executes natively and inside the authenticated JavaScript bridge.
+
+
+## Exact CI dependency lock correction — 7 October 2026
+
+The preserved PR1308 marketing failure is a dependency-audit refusal after the
+marketing build and TypeScript checks succeeded. Its full retained log is
+`recovery-20261007/normal-pr1308-head-marketing-failure-v1.log`, SHA-256
+`02933e198be0af3baf55633753fee4549f1defb5ac312807fb5847c575c55407`.
+The Next.js advisories identify 16.3.8 as the patched release, including
+[the published cache-fill advisory](https://github.com/advisories/GHSA-3w37-wq28-93x7).
+The audit threshold and workflow remain unchanged.
+
+The current source scope is the original four acceptance operations paths plus
+only `package-lock.json`. The raw original lock SHA-256 is
+`a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e`; the
+one reviewed replacement is
+`a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136`.
+Only the existing ten Next.js, @next/env and eight platform SWC package records
+change from 16.3.6 to 16.3.8, including their exact registry tarball/integrity fields
+and Next's internal version references. Every other package, dependency, peer and
+engine record stays unchanged. Both workspace manifests remain byte-identical;
+the marketing manifest already permits 16.3.8. The protected registry metadata
+record SHA-256 is
+`694c11c37c0ef2dafddef29343c72db53993c03acaabad8ce94b5e1e1e8db4b0`;
+the separate lock repair record is
+`2e01c6bf5a5f0ba5b7b2fc7d9b29df0f1995d75d23fbc64ce893f8674e949785`.
+Original records and both raw lock artifacts are retained.
+
+The checked source authenticates the exact original Git/installed lock, the exact
+replacement Git/operations lock, and both unchanged manifest byte populations.
+Their public source ownership, indexed modes, descriptors and traversal checks
+remain required. No other lock change or manifest change is admitted. The
+original four operations paths remain separately defined; the overall range from
+installed 4194 is exactly five paths. The separately cited normal descendant is
+exactly nine paths: its existing eight paths plus the legacy
+`rebuild/core/tests/test_preview_access.py` expectation repair. That old test
+expected 403 where the reviewed disabled normal-origin gate correctly returns
+503 maintenance; it must retain refusal, no-cookie and no-mutation checks. The
+actual PR1308 application failure log is separately retained at SHA-256
+`6e552c9961bf135fb5971fa590dcd1250c999222c99c725e95b2f29198688836`.
+
+These source artifacts do not install native dependencies, rebuild marketing,
+restart a marketing service, or change the QuillMD Python runtime, static assets,
+schema, worker, model, budgets or served revision. Installed ROOT remains 4194
+until the separately reviewed QuillMD normal transition. The eventual source
+fast-forward carries the declared CI lock artifact; it performs no npm install
+and does not assert a deployed marketing security update. Earlier four-path and
+eight-path source descriptions remain historical. Fresh exact head and merge
+citations and actual campaign/normal receipts are still required before execution.
+No authentication, provider call or deployment is established by this correction.
+
+
+The original installed CI JSON identities remain distinct from canonical
+operations source files: package-lock mode0600 and both manifest modes0664,
+all UID/GID1000 regular single-link files. A reader admits only these three fixed
+paths in their exact retained modes, with bounded descriptor reads, no-follow
+parents/leaf, xattr rejection and full meaningful identity/reopen checks. It
+changes no native mode. Operations copies require their indexed0644 modes. The
+later declared normal source fast-forward changes only the pinned lock bytes and
+its indexed0644 source file mode; unchanged manifests retain their exact bytes
+and native modes. Existing installed Node dependencies remain untouched.

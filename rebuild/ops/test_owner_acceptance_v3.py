@@ -24,11 +24,17 @@ OPS = '1' * 40
 SERVED = '2' * 40
 COMMIT = '3' * 40
 START = datetime(2026, 10, 7, 12, 0, tzinfo=timezone.utc)
+CI_BEFORE = b'{"fictional-marketing-next":"16.3.6"}\n'
+CI_AFTER = b'{"fictional-marketing-next":"16.3.8"}\n'
+CI_MANIFEST = b'{"fictional-workspace":"marketing-only"}\n'
+CI_FIXTURE_PINS = {'CI_LOCK_BEFORE_SHA': v3.sha(CI_BEFORE), 'CI_LOCK_AFTER_SHA': v3.sha(CI_AFTER),
+                  'CI_MANIFEST_PINS': {name: v3.sha(CI_MANIFEST) for name in v3.CI_MANIFEST_PINS}}
 
 
 def contract():
     return {'format': 3, 'origin': v3.ORIGIN, 'approved_source_paths': sorted(v3.ALLOWED),
             'source_base': v3.M6, 'dependency_sha256': v3.DEPENDENCIES,
+            'ci_only_dependency_lock': v3.ci_dependency_lock_contract(),
             'maximum_generations': 5, 'maximum_transcriptions': 1, 'maximum_provider_exposure': '0.70',
             'concurrency': 1, 'provider_retries': 0, 'authentication_seconds': 180,
             'browser_verifier_seconds': 1200, 'operations_revision': None,
@@ -51,8 +57,13 @@ class FakeHost:
         self.contract = contract()
 
     def canonical(self, path): return path
-    def read_source(self, path): return declaration(self.contract) if str(path).endswith(v3.DECL) else b'fictional tracked bytes'
+    def read_source(self, path):
+        if Path(path).name == v3.CI_LOCK:
+            return CI_AFTER if Path(path).is_relative_to(self.source) else CI_BEFORE
+        if Path(path).name == 'package.json': return CI_MANIFEST
+        return declaration(self.contract) if str(path).endswith(v3.DECL) else b'fictional tracked bytes'
     def readability(self, path): self.events.append(('readability', str(path)))
+    def read_ci_original(self, relative): return self.read_source(v3.ROOT / relative)
     def git(self, tree, *args):
         if args == ('rev-parse', 'HEAD'): return (self.ops if tree == self.source else self.served).encode() + b'\n'
         if args == ('rev-parse', 'origin/main'): return self.ops.encode() + b'\n'
@@ -62,7 +73,11 @@ class FakeHost:
         if args[:1] == ('diff',): return '\n'.join(self.changed).encode()
         if args[:1] == ('log',): return COMMIT.encode() + b'\n'
         if args[:1] == ('ls-files',): return b'rebuild/core/generation.py\n'
-        if args[:1] == ('show',): return declaration(self.contract) if args[1].endswith(':' + v3.DECL) else b'fictional tracked bytes'
+        if args[:1] == ('show',):
+            revision, relative = args[1].split(':', 1)
+            if relative == v3.CI_LOCK: return CI_BEFORE if revision in (v3.M6, self.served) else CI_AFTER
+            if relative in v3.CI_MANIFEST_PINS: return CI_MANIFEST
+            return declaration(self.contract) if relative == v3.DECL else b'fictional tracked bytes'
         raise AssertionError(args)
     def citation(self, revision): self.events.append(('citation', revision))
     def authenticate_dependencies(self): self.events.append('dependencies')
@@ -108,6 +123,7 @@ def docx(values):
     return stream.getvalue()
 
 
+@patch.multiple(v3, **CI_FIXTURE_PINS)
 class InertAndSourceTests(unittest.TestCase):
     @patch.multiple(v3, EXECUTION_QUALIFIED=False, NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED=False,
                     FIXED_CHILD_PROTOCOL_QUALIFIED=False)
@@ -238,6 +254,8 @@ class InertAndSourceTests(unittest.TestCase):
         self.assertFalse(result['merged_main']['private_acceptance_completed_claimed'])
         self.assertIn(('citation',target),host.events)
         changes=[lambda h:h.normal_changes.add('rebuild/core/generation.py'),
+            lambda h:h.normal_changes.add(v3.CI_LOCK),
+            lambda h:h.normal_changes.remove('rebuild/core/tests/test_preview_access.py'),
             lambda h:h.normal_changes.remove(v3.NORMAL_SELF),lambda h:setattr(h,'normal_source_drift',True),
             lambda h:setattr(h,'served',OPS),lambda h:h.normal_policy.update(source_base='6'*40),
             lambda h:h.normal_policy.update(private_accepted_revision=OPS),
@@ -281,6 +299,8 @@ class InertAndSourceTests(unittest.TestCase):
             git(root,'init','-b','main');git(root,'config','user.name','Fictional offline control')
             git(root,'config','user.email','fictional@example.invalid')
             for relative in v3.USED_SOURCE|v3.NORMAL_ALLOWED:write(root,relative,b'fictional original bytes\n')
+            write(root,v3.CI_LOCK,CI_BEFORE)
+            for relative in v3.CI_MANIFEST_PINS:write(root,relative,CI_MANIFEST)
             git(root,'add','.');git(root,'commit','-m','Fictional served baseline')
             served=git(root,'rev-parse','HEAD').strip().decode()
             source=root/'.worktrees/operations';normal=root/'.worktrees/normal'
@@ -288,6 +308,7 @@ class InertAndSourceTests(unittest.TestCase):
             host,_=self.normal_descendant_host();policy=host.normal_policy
             current=host.contract;current.update(source_base=served,served_revision=served)
             for relative in v3.ALLOWED:write(source,relative,b'fictional changed operations\n')
+            write(source,v3.CI_LOCK,CI_AFTER)
             write(source,v3.DECL,declaration(current));git(source,'add','.');git(source,'commit','-m','Fictional acceptance operations')
             operations=git(source,'rev-parse','HEAD').strip().decode()
             git(root,'worktree','add','-b','fictional-normal',str(normal),operations)
@@ -297,7 +318,7 @@ class InertAndSourceTests(unittest.TestCase):
             write(normal,v3.NORMAL_SELF,host.normal_module.replace(OPS.encode(),operations.encode()))
             write(normal,'rebuild/core/preview_access.py',b'OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED=True\n')
             write(normal,'rebuild/quillmd/settings.py',b"QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', '0') == '1'\n")
-            git(normal,'add','.');git(normal,'commit','-m','Fictional exact eight-path normal descendant')
+            git(normal,'add','.');git(normal,'commit','-m','Fictional exact nine-path normal descendant')
             target=git(normal,'rev-parse','HEAD').strip().decode();git(root,'update-ref','refs/remotes/origin/main',target)
             class GitHost(FakeHost):
                 def git(self,tree,*args):return git(tree,*args)
@@ -313,11 +334,11 @@ class InertAndSourceTests(unittest.TestCase):
                 with self.assertRaisesRegex(v3.Refusal,'clean_served_revision'):
                     v3.source_gate(actual,current,operations,served,actual.environment)
                 git(root,'update-ref','refs/heads/main',served)
-                # A genuine later Git commit with a ninth used path cannot pass.
+                # A genuine later Git commit with a tenth used path cannot pass.
                 write(normal,v3.SELF,b'changed acceptance operator in later main\n')
-                git(normal,'add',v3.SELF);git(normal,'commit','-m','Fictional forbidden ninth path')
+                git(normal,'add',v3.SELF);git(normal,'commit','-m','Fictional forbidden tenth path')
                 drift=git(normal,'rev-parse','HEAD').strip().decode();git(root,'update-ref','refs/remotes/origin/main',drift)
-                with self.assertRaisesRegex(v3.Refusal,'exact_eight_path_scope'):
+                with self.assertRaisesRegex(v3.Refusal,'exact_nine_path_scope'):
                     v3.source_gate(actual,current,operations,served,actual.environment)
                 # A real unrelated commit cannot be made an ancestor by policy claims.
                 tree=git(root,'rev-parse',served+'^{tree}').strip().decode()
@@ -398,6 +419,84 @@ class InertAndSourceTests(unittest.TestCase):
         self.assertFalse(any(isinstance(row, tuple) and row[0] in ('browser', 'verify') for row in host.events))
 
 
+@patch.multiple(v3, **CI_FIXTURE_PINS)
+class ExactCILockTests(unittest.TestCase):
+    def test_only_four_operations_and_one_exact_ci_lock_are_admitted(self):
+        self.assertEqual(v3.ALLOWED, v3.OPERATIONS_ALLOWED | {v3.CI_LOCK})
+        self.assertEqual(len(v3.OPERATIONS_ALLOWED), 4)
+        host = FakeHost()
+        with patch.object(socket, 'create_connection', side_effect=AssertionError('network')), \
+             patch.object(subprocess, 'Popen', side_effect=AssertionError('installer')):
+            proof = v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+        self.assertEqual(proof['ci_only_dependency_lock'], v3.ci_dependency_lock_contract())
+        self.assertEqual(proof['ci_only_dependency_lock']['native_dependency_installs'], 0)
+        self.assertFalse(proof['ci_only_dependency_lock']['future_lock_changes_admitted'])
+        for change in (set(v3.OPERATIONS_ALLOWED), v3.ALLOWED | {'apps/marketing/package.json'},
+                       v3.ALLOWED | {'rebuild/requirements.txt'}):
+            host = FakeHost(); host.changed = sorted(change)
+            with self.subTest(change=change), self.assertRaisesRegex(v3.Refusal, 'exact_ci_lock_scope'):
+                v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+
+    def test_lock_git_and_actual_worktree_before_after_bytes_are_each_required(self):
+        for revision in (v3.M6, SERVED, OPS):
+            host = FakeHost(); original = host.git
+            def changed(tree, *args):
+                if args == ('show', revision + ':' + v3.CI_LOCK): return b'unreviewed lock'
+                return original(tree, *args)
+            host.git = changed
+            with self.subTest(revision=revision), self.assertRaisesRegex(v3.Refusal, 'exact_ci_lock_git_artifacts'):
+                v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+        for root in (v3.ROOT, FakeHost.source):
+            host = FakeHost(); original = host.read_source
+            host.read_source = lambda path: b'unreviewed or future lock' if path == root / v3.CI_LOCK else original(path)
+            with self.subTest(root=root), self.assertRaisesRegex(v3.Refusal, 'exact_ci_lock_worktree_artifacts'):
+                v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+
+    def test_unchanged_workspace_manifests_are_bound_in_both_trees_and_git_history(self):
+        for relative in v3.CI_MANIFEST_PINS:
+            for revision in (v3.M6, SERVED, OPS):
+                host = FakeHost(); original = host.git
+                def changed(tree, *args):
+                    if args == ('show', revision + ':' + relative): return b'changed dependency manifest'
+                    return original(tree, *args)
+                host.git = changed
+                with self.subTest(relative=relative, revision=revision), \
+                     self.assertRaisesRegex(v3.Refusal, 'unchanged_ci_workspace_manifests'):
+                    v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+            for root in (v3.ROOT, FakeHost.source):
+                host = FakeHost(); original = host.read_source
+                host.read_source = lambda path: b'changed dependency manifest' if path == root / relative else original(path)
+                with self.subTest(relative=relative, root=root), \
+                     self.assertRaisesRegex(v3.Refusal, 'unchanged_ci_workspace_manifests'):
+                    v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+
+    def test_missing_extended_or_typed_mismatch_ci_declaration_refuses(self):
+        for mutate in (lambda value: value.pop('ci_only_dependency_lock'),
+                       lambda value: value['ci_only_dependency_lock'].update(after_sha256='f' * 64),
+                       lambda value: value['ci_only_dependency_lock'].update(path='another-lock.json'),
+                       lambda value: value['ci_only_dependency_lock'].update(native_dependency_installs=False),
+                       lambda value: value['ci_only_dependency_lock'].update(future_lock_changes_admitted=0),
+                       lambda value: value['ci_only_dependency_lock'].update(unreviewed_artifact='allowed')):
+            value = contract(); mutate(value)
+            with self.subTest(value=value), self.assertRaisesRegex(v3.Refusal, 'exact_declared_ci_lock_correction'):
+                v3.declaration_contract(declaration(value))
+
+    def test_added_ci_sources_require_the_same_canonical_readability(self):
+        for path in (FakeHost.source / v3.CI_LOCK,
+                     *(FakeHost.source / relative for relative in v3.CI_MANIFEST_PINS)):
+            host = FakeHost()
+            host.readability = lambda current: v3.require(current != path, 'v3_fictional_ci_source_mode')
+            with self.subTest(path=path), self.assertRaisesRegex(v3.Refusal, 'ci_source_mode'):
+                v3.source_gate(host, host.contract, OPS, SERVED, host.environment)
+
+
+class PublishedCILockPinTests(unittest.TestCase):
+    def test_current_public_lock_and_unchanged_manifests_match_reviewed_raw_pins(self):
+        self.assertEqual(v3.sha((v3.SOURCE / v3.CI_LOCK).read_bytes()), v3.CI_LOCK_AFTER_SHA)
+        for relative, expected in v3.CI_MANIFEST_PINS.items():
+            self.assertEqual(v3.sha((v3.SOURCE / relative).read_bytes()), expected)
+
+
 class FixtureOwnerOS:
     """Private fixture view; real modes/inodes/bytes are never altered by this shim."""
     def __init__(self):
@@ -411,6 +510,73 @@ class FixtureOwnerOS:
         if info.st_uid == self.creator_uid: values['st_uid'] = 1000
         if info.st_gid == self.creator_gid: values['st_gid'] = 1000
         return types.SimpleNamespace(**values)
+
+
+class OriginalCIArtifactReaderTests(unittest.TestCase):
+    def setUp(self):
+        owner = patch.object(v3, 'os', FixtureOwnerOS())
+        owner.start(); self.addCleanup(owner.stop)
+
+    def inputs(self, root):
+        for relative, mode in v3.CI_INSTALLED_MODES.items():
+            path = root / relative; path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(CI_BEFORE if relative == v3.CI_LOCK else CI_MANIFEST); path.chmod(mode)
+
+    def test_original_inert_inputs_keep_exact_existing_modes_and_closed_paths(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(v3, 'ROOT', Path(temp)):
+            self.inputs(Path(temp))
+            for relative, mode in v3.CI_INSTALLED_MODES.items():
+                before = (Path(temp) / relative).stat()
+                self.assertEqual(v3.ci_original_artifact(relative), CI_BEFORE if relative == v3.CI_LOCK else CI_MANIFEST)
+                after = (Path(temp) / relative).stat()
+                self.assertEqual((before.st_ino, stat.S_IMODE(before.st_mode)), (after.st_ino, stat.S_IMODE(after.st_mode)))
+                self.assertEqual(stat.S_IMODE(after.st_mode), mode)
+            with patch.object(v3, 'nofollow_file', side_effect=AssertionError('unknown artifact opened')):
+                for relative in ('../package-lock.json', '/package-lock.json', 'another.json', True):
+                    with self.assertRaisesRegex(v3.Refusal, 'fixed_original_ci_artifact'):
+                        v3.ci_original_artifact(relative)
+
+    def test_wrong_owner_group_mode_xattr_and_size_refuse_before_read(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(v3, 'ROOT', Path(temp)):
+            self.inputs(Path(temp)); observed = v3.os.fstat
+            for change in ({'st_uid': 1001}, {'st_gid': 1001}, {'st_size': 2 * 1024 * 1024 + 1}):
+                def altered(fd):
+                    original = observed(fd); values = vars(original).copy(); values.update(change)
+                    return types.SimpleNamespace(**values)
+                with self.subTest(change=change), patch.object(v3.os, 'fstat', side_effect=altered), \
+                     patch.object(v3.os, 'fdopen', side_effect=AssertionError('refused bytes read')), \
+                     self.assertRaisesRegex(v3.Refusal, 'original_ci_artifact_identity'):
+                    v3.ci_original_artifact(v3.CI_LOCK)
+            with patch.object(v3.os, 'listxattr', return_value=['user.unexpected']), \
+                 self.assertRaisesRegex(v3.Refusal, 'original_ci_artifact_identity'):
+                v3.ci_original_artifact(v3.CI_LOCK)
+            for relative in v3.CI_INSTALLED_MODES:
+                path = Path(temp) / relative; path.chmod(0o644)
+                with self.subTest(relative=relative), self.assertRaisesRegex(v3.Refusal, 'original_ci_artifact_identity'):
+                    v3.ci_original_artifact(relative)
+
+    def test_links_and_replaced_inode_refuse_without_changing_original_bytes(self):
+        with tempfile.TemporaryDirectory() as temp, patch.object(v3, 'ROOT', Path(temp)):
+            root = Path(temp); self.inputs(root); path = root / v3.CI_LOCK
+            os.link(path, root / 'other-link')
+            with self.assertRaisesRegex(v3.Refusal, 'original_ci_artifact_identity'):
+                v3.ci_original_artifact(v3.CI_LOCK)
+            (root / 'other-link').unlink()
+            path.rename(root / 'original'); path.symlink_to(root / 'original')
+            with self.assertRaises(OSError): v3.ci_original_artifact(v3.CI_LOCK)
+            path.unlink(); (root / 'original').rename(path)
+            actual = v3.nofollow_file; calls = []
+            @contextmanager
+            def replaced(current):
+                calls.append(current)
+                if len(calls) == 2:
+                    path.rename(root / 'retained-original')
+                    path.write_bytes(CI_BEFORE); path.chmod(v3.CI_INSTALLED_MODES[v3.CI_LOCK])
+                with actual(current) as fd: yield fd
+            with patch.object(v3, 'nofollow_file', replaced), \
+                 self.assertRaisesRegex(v3.Refusal, 'original_ci_artifact_race'):
+                v3.ci_original_artifact(v3.CI_LOCK)
+            self.assertEqual((root / 'retained-original').read_bytes(), CI_BEFORE)
 
 
 class ChildAndPrivateFileTests(unittest.TestCase):
@@ -2133,6 +2299,7 @@ class PhasePreservationTests(unittest.TestCase):
         with patch.object(v3, 'current_external_boundary', return_value=bad):
             with self.assertRaisesRegex(v3.Refusal, 'phase_preservation_drift'): host.recheck_phase_preservation()
 
+    @patch.multiple(v3, **CI_FIXTURE_PINS)
     def test_drift_during_completion_write_preserves_stop_and_blocks_success_without_replay(self):
         host = FakeHost(); checked = []
         def phase_check():
