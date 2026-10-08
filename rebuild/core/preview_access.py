@@ -35,6 +35,15 @@ FLOW_SECONDS = 900
 MAX_FLOWS = 8
 FLOW_PATTERN = re.compile(r'[a-f0-9]{32}')
 CSS_PATTERN = re.compile(r'/static/app(?:\.[a-f0-9]{12})?\.css')
+# Opaque Word frames cannot send the SameSite grant cookie. Only these four
+# reviewed, immutable public renderer assets may bootstrap them anonymously.
+# Documents, frame HTML, mutable aliases and every other asset stay gated.
+OPAQUE_WORD_ASSETS = frozenset({
+    '/static/docx-frame.9c0942447cde.css',
+    '/static/docx-frame.fa120285a29f.js',
+    '/static/vendor/docx-preview/jszip.min.b5d02b3f0bf3.js',
+    '/static/vendor/docx-preview/docx-preview.min.99992d1785b1.js',
+})
 
 
 def safe_destination(value):
@@ -169,13 +178,15 @@ class PreviewAccessMiddleware:
         marker = request.headers.get('X-QuillMD-Preview')
         enabled = settings.QUILLMD_PREVIEW_AUTH_ENABLED and not settings.ADMIN_SITE
         normal = host in {OWNER_NORMAL_HOST, OWNER_NORMAL_HOST + ':443'}
+        opaque_word_asset = normal and request.method in {'GET', 'HEAD'} and request.path in OPAQUE_WORD_ASSETS
         if host in {'admin.quillmd.com', 'admin.quillmd.com:443'}:
             return owner_maintenance(admin=True)
         if normal:
             if (host != OWNER_NORMAL_HOST or not OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED
                     or not getattr(settings, 'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', False)
                     or not enabled or marker != '1' or not request.is_secure()
-                    or request.path in {SIGN_IN, SIGN_OUT} or not existing_owner_grant(request)):
+                    or request.path in {SIGN_IN, SIGN_OUT}
+                    or (not opaque_word_asset and not existing_owner_grant(request))):
                 return owner_maintenance()
         public_origin = host == urlsplit(settings.QUILLMD_PREVIEW_ORIGIN).netloc or normal
         if not enabled:
@@ -189,7 +200,7 @@ class PreviewAccessMiddleware:
         request.quillmd_preview = True
         if not fingerprint():
             response = error(request, 'Private access configuration needs repair. Please contact your platform operator.', status=503)
-        elif CSS_PATTERN.fullmatch(request.path):
+        elif CSS_PATTERN.fullmatch(request.path) or opaque_word_asset:
             response = self.get_response(request)
         elif request.path in {SIGN_IN, SIGN_OUT}:
             response = self.get_response(request)
