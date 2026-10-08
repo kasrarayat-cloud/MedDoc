@@ -89,6 +89,10 @@ WORD_PREPARATION_MAX_FORMS=6
 WORD_PREPARATION_MAX_SENDS=14
 # Reserve $0.40 of the $2 purposeful pilot for its two note requests and one ASR.
 WORD_PREPARATION_BUDGET_USD='1.60'
+# A separately recorded finite delivery campaign. Empty defaults cannot reopen
+# the closed pilot; exact scope and actor supplement are checked in code/SQL.
+WORD_PREPARATION_CAMPAIGN=os.getenv('QUILLMD_WORD_PREPARATION_CAMPAIGN','')
+WORD_PREPARATION_CAMPAIGN_SCOPE_SHA256=os.getenv('QUILLMD_WORD_PREPARATION_CAMPAIGN_SCOPE_SHA256','')
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')
 STRIPE_WEBHOOK_SECRET=os.getenv('STRIPE_WEBHOOK_SECRET','')
 STRIPE_LIVE_ENABLED=False

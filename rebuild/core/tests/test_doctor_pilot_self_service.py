@@ -97,11 +97,25 @@ class NewDoctorPages(SyntheticFixture, TestCase):
     def test_the_upload_page_explains_supported_and_refused_forms_before_upload(self):
         page = self.client.get('/templates/upload/')
         self.assertContains(page, 'data-supported-forms')
-        for words in ('two-column question/answer tables', 'a label and an underlined Tab', 'not inside a table', 'Typed underscores', 'Fillable PDF', 'standard Helvetica font', 'not Auto',
+        for words in ('two-column question/answer tables', 'a label and an underlined Tab', 'not inside a table', 'Fillable PDF', 'standard Helvetica font', 'not Auto',
                       'qualified WM IOV form', 'exactly as you received it', 'Refused at upload',
                       '<span class="mono">{{Question}}</span> placeholders', 'web or email links or linked images', 'with links, attachments or actions'):
             self.assertContains(page, words)
         self.assertNotContains(page, 'reported before export')
+        # The upload contract differs when the separately approved AI workflow
+        # is available; neither branch can silently promise direct underscore fill.
+        for enabled in (False, True):
+            with self.subTest(preparation_enabled=enabled), override_settings(WORD_PREPARATION_ENABLED=enabled):
+                page = self.client.get('/templates/upload/')
+                if enabled:
+                    self.assertContains(page, 'supported labelled underscores')
+                    self.assertContains(page, 'explicitly approve the layout')
+                    self.assertContains(page, 'Direct inspection does not treat underscores as fields.')
+                    self.assertContains(page, 'AI preparation cannot approve unresolved regions.')
+                else:
+                    self.assertContains(page, 'Typed underscores')
+                    self.assertContains(page, 'are not fields.')
+                    self.assertNotContains(page, 'id_prepare_with_ai')
 
     def test_a_refused_content_control_says_what_the_doctor_can_do(self):
         response = self.client.post('/templates/upload/', {'name': 'Synthetic dropdown form', 'department': self.department.pk,

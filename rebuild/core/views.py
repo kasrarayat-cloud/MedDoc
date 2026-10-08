@@ -640,6 +640,10 @@ def save_answers(request,pk):
             membership(request.user,e.department,roles=['owner','clinician'])
             withdrawn.append(key)
         if len(value)>20000:return document_refusal(request,e,'Answer too long; nothing was truncated or saved.',400)
+        from documents.engine import answer_constraint_error
+        constraint_error=answer_constraint_error(field,value)
+        if constraint_error:
+            return document_refusal(request,e,'"'+field['label']+'": '+constraint_error+' Nothing was saved.',400)
         reviewed=request.POST.get('reviewed_'+key)=='on'
         if reviewed:membership(request.user,e.department,roles=['owner','clinician'])
         answers[key]={**previous,'text':value,'reviewed':reviewed,'accepted_suggestion':accepted,
@@ -764,7 +768,7 @@ def finalize(request,pk):
             governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
-            from .template_source import source_for_version
+            from .template_source import source_for_version, export_layout_for_version
             original=source_for_version(e.template_version)
             relative=f'exports/{secrets.token_hex(24)}.{e.template_version.template.format.lower()}'
             out=private_path(relative);out.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
@@ -788,7 +792,8 @@ def finalize(request,pk):
                               reviewed_requirements=reviewed['reviewed_requirements'],
                               claim_variants=reviewed['claim_variants'],
                               trusted_context=reviewed['trusted_context'],
-                              expected_sha256=version.prepared_sha256 or version.template.sha256)
+                              expected_sha256=version.prepared_sha256 or version.template.sha256,
+                              export_layout=export_layout_for_version(version))
                 finalized_at=datetime.fromisoformat(reviewed['trusted_context']['finalized_at'])
             else:
                 from .tab_review import validate_identity
@@ -808,7 +813,7 @@ def finalize(request,pk):
             out.chmod(0o600)
             e.export_path=relative;e.export_sha256=hashlib.sha256(out.read_bytes()).hexdigest();e.finalized_at=finalized_at;e.finalized_by=request.user;e.status='finalized';e.save()
             audit(request.user,'encounter.finalize',e.pk,department=e.department,export_sha256=e.export_sha256,mapping_version=e.template_version.number)
-        messages.success(request,'Finalized. The original structure is preserved in your export.')
+        messages.success(request,'Finalized. Download and inspect your reviewed document.')
     except (ValidationError,DocumentError) as exc:messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 

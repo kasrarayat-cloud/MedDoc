@@ -1,1 +1,9 @@
-html,body{margin:0;padding:0;background:#edf0eb;color:#23382d;font-family:Arial,sans-serif}body{padding:12px}a{pointer-events:none}#document-body .blank-document-wrapper{background:transparent;padding:0}#document-body section.blank-document{margin:0 auto 16px;box-shadow:0 1px 4px #0002;max-width:100%;box-sizing:border-box}#document-body{overflow-x:auto}
+html,body{margin:0;padding:0;background:#edf0eb;color:#23382d;font-family:Arial,sans-serif}body{padding:12px}a{pointer-events:none}
+.preview-tools{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 12px;font-size:13px;line-height:1.4}
+.preview-tools button{border:1px solid #a4b5a7;border-radius:4px;padding:6px 10px;background:#fff;color:inherit;font:inherit;cursor:pointer}
+.preview-tools button[aria-pressed=true]{background:#23382d;color:#fff}.preview-tools button:disabled{opacity:.5;cursor:default}.preview-tools button:focus-visible{outline:2px solid #23382d;outline-offset:2px}
+.preview-tools [role=status]{flex-basis:100%}#document-body{overflow-x:auto}
+#document-body .blank-document-wrapper{background:transparent;padding:0;align-items:stretch}
+/* Fit the whole paper after layout. A max-width on the paper changes line and table wrapping. */
+#document-body section.blank-document{margin:0;background:#fff;box-shadow:0 1px 4px #0002;max-width:none;box-sizing:border-box;overflow:visible;transform-origin:top left}
+.preview-page{position:relative;margin:0 auto 16px}.preview-page>section.blank-document{position:absolute;left:0;top:0}

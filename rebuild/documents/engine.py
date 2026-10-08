@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import datetime
+import json
 from pathlib import PurePosixPath
 import re
 import stat
@@ -26,6 +28,64 @@ MAX_FIELDS = 200
 MAX_ANSWER = 100_000
 TOKEN = re.compile(r"\{\{\s*([\w][\w .?:/()\-]{0,119}?)\s*\}\}")
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+
+PRINTED_UNITS = {'°C', '°F', 'mm', 'cm', 'm', 'ms', 's', 'mL', 'ml', 'L',
+                 'kg', 'g', 'mg', '%', 'bpm', 'mmHg', 'mm Hg', 'µm', 'μm', 'm/s'}
+PRINTED_DATE_FORMATS = {'YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY',
+                        'DD-MM-YYYY', 'MM-DD-YYYY'}
+
+
+def constraint_from_context(prefix, suffix):
+    """Only literal local form declarations establish an answer constraint.
+
+    A clinical label, an underscore length and nearby prose do not establish a
+    date format, range or unit. Ambiguous/combined declarations remain text.
+    This same reader runs before preparation and against the prepared token at
+    export, so neither a model nor mutable mapping metadata supplies authority.
+    """
+    base = {'version': 1, 'data_type': 'text'}
+    before, after = prefix.strip().rstrip(':').strip(), suffix.strip()
+    declarations = []
+    parenthetical = re.search(r'\(([^()]*)\)\s*$', before)
+    unit = after.strip('()[] ').rstrip('.')
+    if unit in PRINTED_UNITS and not (unit == 's' and after.startswith(('(', '['))):
+        declarations.append({**base, 'data_type': 'number', 'unit': unit})
+    if parenthetical:
+        declaration = parenthetical.group(1).strip()
+        explicit = re.fullmatch(r'units?\s*:\s*(.+)', declaration, re.I)
+        printed_unit = explicit.group(1).strip() if explicit else declaration
+        # (s) also denotes a grammatical plural, even when separated by a
+        # space. A label is not authority to reinterpret it as seconds. Keep
+        # that ambiguity unless the original explicitly calls it a unit.
+        if printed_unit in PRINTED_UNITS and (printed_unit != 's' or explicit):
+            declarations.append({**base, 'data_type': 'number', 'unit': printed_unit})
+    formats = [fmt for fmt in PRINTED_DATE_FORMATS
+               if after.strip('()[] ') == fmt or re.search(r'\(' + re.escape(fmt) + r'\)\s*:?$', before)]
+    if len(formats) == 1:
+        declarations.append({**base, 'data_type': 'date', 'format': formats[0]})
+    if after.lower() in {'(integer)', '[integer]'}:
+        declarations.append({**base, 'data_type': 'integer'})
+    elif after.lower() in {'(number)', '[number]'}:
+        declarations.append({**base, 'data_type': 'number'})
+    marked_prefix = re.search(r'\b(?:choose|select)\s+one\s*:?\s*([^:]+)$', before, re.I)
+    option_texts = [after.strip('()[] '), marked_prefix.group() if marked_prefix else before.rsplit(':', 1)[-1].strip()]
+    if parenthetical:
+        option_texts.append(parenthetical.group(1).strip())
+    for text in option_texts:
+        # Yes/No is an explicit binary list. Other slash-separated text is a
+        # list only when the local form explicitly says to choose/select ONE.
+        marked = re.fullmatch(r'(?:choose|select)\s+one\s*:?\s*(.+)', text, re.I)
+        source = marked.group(1) if marked else text
+        options = [part.strip() for part in source.split('/')]
+        binary = [part.casefold() for part in options] in [['yes', 'no'], ['no', 'yes']]
+        if ((binary or marked) and 2 <= len(options) <= 12
+                and len(set(options)) == len(options)
+                and all(re.fullmatch(r'[A-Za-z][A-Za-z0-9 -]{0,60}', part) for part in options)):
+            declarations.append({**base, 'data_type': 'choice', 'options': options})
+    unique = {json.dumps(item, sort_keys=True): item for item in declarations}
+    return next(iter(unique.values())) if len(unique) == 1 else base
+
 
 
 class DocumentFailure(ValueError):
@@ -554,6 +614,108 @@ def validate_mapping(fields, mapping, answers):
             fail("Each answer must be text of at most 100,000 characters. Split the document instead of truncating.", "answer_limit")
         if any(ord(character) < 32 and character not in "\n\r\t" for character in value):
             fail("An answer contains unsupported control characters.", "invalid_answer")
+    validate_answer_constraints(mapping, answers)
+
+
+def answer_constraint_error(field, value):
+    """Validate newly reviewed source constraints; legacy fields stay unchanged."""
+    constraint = field.get('answer_constraints')
+    if constraint is None:
+        return None
+    label = field.get('label', 'This answer')
+    if not isinstance(constraint, dict) or type(constraint.get('version')) is not int or constraint['version'] != 1:
+        return f'{label}: the approved answer constraint is invalid.'
+    kind = constraint.get('data_type')
+    allowed = {'text': {'version', 'data_type'}, 'number': {'version', 'data_type', 'unit'},
+               'integer': {'version', 'data_type'}, 'date': {'version', 'data_type', 'format'},
+               'choice': {'version', 'data_type', 'options'}}
+    if (not isinstance(kind, str) or kind not in allowed or set(constraint) - allowed[kind]
+            or not {'version', 'data_type'} <= set(constraint)):
+        return f'{label}: the approved answer constraint is invalid.'
+    if kind == 'choice':
+        options = constraint.get('options')
+        if (not isinstance(options, list) or not 2 <= len(options) <= 12
+                or any(not isinstance(option, str) or not option for option in options)
+                or len(set(options)) != len(options)):
+            return f'{label}: the approved original options are invalid.'
+    if kind == 'date' and (not isinstance(constraint.get('format'), str)
+                           or constraint['format'] not in PRINTED_DATE_FORMATS):
+        return f'{label}: the approved date format is invalid.'
+    if 'unit' in constraint and (not isinstance(constraint['unit'], str) or constraint['unit'] not in PRINTED_UNITS):
+        return f'{label}: the approved measurement unit is invalid.'
+    if not isinstance(value, str):
+        return f'{label}: enter a text answer.'
+    if not value.strip():
+        return None  # Held/missing answers still require their explicit review decision.
+    text = value.strip()
+    if kind == 'choice':
+        if text not in options:
+            return f'{label}: choose exactly one original option; unsupported answers cannot be finalized.'
+    elif kind in {'number', 'integer'}:
+        unit = constraint.get('unit')
+        if unit is not None:
+            if not isinstance(unit, str) or not unit:
+                return f'{label}: the approved measurement unit is invalid.'
+            if text.endswith(unit):
+                text = text[:-len(unit)].rstrip()
+        number = r'[+-]?\d+' if kind == 'integer' else r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?'
+        if not re.fullmatch(number, text):
+            return f'{label}: enter {"an integer" if kind == "integer" else "a number"}' + (f' in {unit}.' if unit else '.')
+    elif kind == 'date':
+        patterns = {'YYYY-MM-DD': (r'\d{4}-\d{2}-\d{2}', '%Y-%m-%d'),
+                    'DD/MM/YYYY': (r'\d{2}/\d{2}/\d{4}', '%d/%m/%Y'),
+                    'MM/DD/YYYY': (r'\d{2}/\d{2}/\d{4}', '%m/%d/%Y'),
+                    'DD-MM-YYYY': (r'\d{2}-\d{2}-\d{4}', '%d-%m-%Y'),
+                    'MM-DD-YYYY': (r'\d{2}-\d{2}-\d{4}', '%m-%d-%Y')}
+        fmt = constraint.get('format')
+        if fmt not in patterns:
+            return f'{label}: the approved date format is invalid.'
+        pattern, parser = patterns[fmt]
+        try:
+            if not re.fullmatch(pattern, text):
+                raise ValueError()
+            datetime.strptime(text, parser)
+        except ValueError:
+            return f'{label}: enter a valid date in the original {fmt} format.'
+    return None
+
+
+def validate_answer_constraints(mapping, answers):
+    for field in mapping:
+        error = answer_constraint_error(field, answers.get(field['key'], ''))
+        if error:
+            fail(error, 'invalid_answer_constraint')
+
+
+def constrained_answer_text(field, value):
+    error = answer_constraint_error(field, value)
+    if error:
+        fail(error, 'invalid_answer_constraint')
+    constraint = field.get('answer_constraints', {})
+    unit = constraint.get('unit')
+    # The original still prints the unit beside the blank. Retain the complete
+    # reviewed answer in records; insert its numeric portion exactly once.
+    if constraint.get('data_type') == 'number' and unit and value.strip().endswith(unit):
+        return value.strip()[:-len(unit)].rstrip()
+    return value
+
+
+def bind_answer_constraints(paragraphs, fields, mapping):
+    """Re-derive present new constraints; do not reinterpret approved old maps."""
+    stored = {field['key']: field for field in mapping}
+    for field in fields:
+        entry = stored.get(field['key'], {})
+        if 'answer_constraints' not in entry:
+            continue
+        location = field['locator']
+        if 'paragraph' not in location or 'token' not in location:
+            fail('This answer constraint is not bound to a prepared literal blank.', 'mapping_mismatch')
+        text = paragraphs[location['paragraph']].text
+        actual = constraint_from_context(text[:location['start']], text[location['end']:])
+        if entry['answer_constraints'] != actual:
+            fail('The answer constraint differs from the original printed form.', 'mapping_mismatch')
+        field['answer_constraints'] = actual
+    return fields
 
 
 def apply_cell_and_placeholder(document, paragraphs, cells, fields, answers):
@@ -564,7 +726,7 @@ def apply_cell_and_placeholder(document, paragraphs, cells, fields, answers):
     """
     changed = set()
     for field in reversed(fields):
-        answer = answers.get(field["key"], "")
+        answer = constrained_answer_text(field, answers.get(field["key"], ""))
         locator = field["locator"]
         if "cell" in locator:
             cell, part = cells[locator["cell"]]
@@ -649,6 +811,8 @@ def process(workspace, request):
     if request["operation"] != "fill":
         fail("Unsupported operation.")
     answers = request["answers"]
+    if fmt == "docx":
+        bind_answer_constraints(paragraphs, fields, request['mapping'])
     if fmt == "docx" and structure(fields) != structure(request["mapping"]):
         # ⚠️ A STORED MAPPING IS BOUND TO THE CONTRACT THAT PRODUCED IT. Mappings saved before
         # multi-column and mixed support existed hold FEWER fields for the same document, and
@@ -657,6 +821,7 @@ def process(workspace, request):
         # Exact equality is the proof: if the legacy inspection matches the stored mapping
         # field for field, it IS that mapping's contract, and filling it behaves as it always did.
         legacy = docx_inspect(path, contract=CONTRACT_V1)
+        bind_answer_constraints(legacy[1], legacy[3], request['mapping'])
         if structure(legacy[3]) == structure(request["mapping"]):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields

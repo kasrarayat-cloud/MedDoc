@@ -11,10 +11,10 @@ from zipfile import ZipFile
 from lxml import etree
 
 if __package__:
-    from .engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS
+    from .engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from .sdk_service import WM_IOV_SHA256
 else:
-    from engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS
+    from engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from sdk_service import WM_IOV_SHA256
 
 NS = {'w': W_NS}
@@ -28,6 +28,36 @@ SIGNING = re.compile(r'\b(?:signatures?|signed|signing|attest(?:ation|ed|ing)?|c
 AMBIGUOUS_SIGNING = re.compile(r'\bsign\b', re.I)
 BLANK = re.compile(r'_{3,}')
 UNSUPPORTED = {'sdt', 'txbxContent', 'fldChar', 'fldSimple', 'instrText', 'del', 'ins'}
+
+def source_bound_candidate_fields(path, value):
+    """Annotate only newly inserted literal blanks, without changing old fields."""
+    _, paragraphs, _, fields, _ = docx_inspect(path)
+    questions = {question['id']: question for question in value['questions']}
+    identities = {}
+    per_part = {}
+    for index, paragraph in enumerate(paragraphs):
+        part = str(paragraph.part.partname).lstrip('/')
+        position = per_part.get(part, 0)
+        identities[index] = (part, position)
+        per_part[part] = position + 1
+    for anchor in value['anchors']:
+        if anchor['kind'] != 'literal_blank':
+            continue
+        question = questions[anchor['question_id']]
+        location = anchor['locator']
+        matches = [field for field in fields if field['label'] == question['text']
+                   and identities.get(field['locator'].get('paragraph')) ==
+                   (location['part'], location['paragraph'])]
+        if len(matches) != 1:
+            raise DocumentFailure('A prepared constraint lost its original answer location.', 'wrong_placement')
+        field = matches[0]
+        paragraph = paragraphs[field['locator']['paragraph']].text
+        actual = constraint_from_context(paragraph[:field['locator']['start']],
+                                         paragraph[field['locator']['end']:])
+        if actual != question['answer_constraints']:
+            raise DocumentFailure('A prepared constraint differs from the original form.', 'content_changed')
+        field['answer_constraints'] = deepcopy(actual)
+    return fields
 
 def occupied(cell):
     return bool(''.join(cell.xpath('.//w:t/text()',namespaces=NS)).strip() or
@@ -171,7 +201,9 @@ def inventory(path, known=None):
                     continue
                 qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
                 questions.append({'id': qid, 'text': label, 'story': part.filename,
-                                  'protected_signing': False})
+                                  'protected_signing': False,
+                                  'answer_constraints': constraint_from_context(
+                                      complete[:match.start()], complete[match.end():])})
                 anchors.append({'id': aid, 'question_id': qid, 'kind': 'literal_blank',
                                 'protected_signing': False, 'field_key': None,
                                 'locator': {'part': part.filename, 'paragraph': p_index,
@@ -210,7 +242,8 @@ def model_inventory(value):
             'stories': [{'id': 's'+str(i+1), 'texts': row['texts'], 'choices': row['choices'],
                          'content_sha256':digest({'texts':row['texts'],'choices':row['choices']})}
                         for i, row in enumerate(value['stories'])],
-            'questions': [{k: q[k] for k in ('id', 'text', 'protected_signing')} for q in value['questions']],
+            'questions': [{k: q[k] for k in ('id', 'text', 'protected_signing', 'answer_constraints') if k in q}
+                          for q in value['questions']],
             'anchors': [{k: a[k] for k in ('id', 'question_id', 'kind', 'protected_signing')}
                         for a in value['anchors']], 'issues': [{k:issue[k] for k in ('code','message','protected_signing') if k in issue}
                                                               for issue in value['issues']]}
@@ -258,12 +291,19 @@ def validate_inventory(value):
         raise DocumentFailure('The original inventory changed.', 'stale_inventory')
     return value
 
-def validate_candidate_fields(value,fields):
+def validate_candidate_fields(value,fields,*,constraints=False):
     from collections import Counter
     questions={q['id']:q for q in value['questions']}
     expected=[questions[a['question_id']]['text'] for a in value['anchors'] if a['kind']!='protected_blank']
     if len(fields)!=len(expected) or Counter(f['label'] for f in fields)!=Counter(expected):
         raise DocumentFailure('The candidate omitted or changed an original question mapping.', 'incomplete_proposal')
+    if constraints:
+        expected_constraints = Counter((questions[a['question_id']]['text'],
+                                         digest(questions[a['question_id']].get('answer_constraints')))
+                                        for a in value['anchors'] if a['kind'] != 'protected_blank')
+        actual_constraints = Counter((field['label'], digest(field.get('answer_constraints'))) for field in fields)
+        if expected_constraints != actual_constraints:
+            raise DocumentFailure('The candidate omitted or changed an original answer constraint.', 'incomplete_proposal')
     return fields
 
 
@@ -343,6 +383,8 @@ def candidate(path, output, expected, selected,placements=None):
     reviewed={(a['locator']['part'],a['locator']['row']) for a in placeable.values()}
     if any((row['part'],row['row']) not in reviewed for row in remaining_rows):
         raise DocumentFailure('An unreviewed answer-shaped row remains in the candidate.', 'incomplete_proposal')
-    return {'changes': changes, 'source_sha256': actual['source_sha256'],
+    fields = deepcopy(actual['fields']) if known else source_bound_candidate_fields(output, actual)
+    validate_candidate_fields(actual, fields, constraints=True)
+    return {'changes': changes, 'source_sha256': actual['source_sha256'], 'prepared_fields': fields,
             'inventory_sha256': actual['inventory_sha256'], 'parts_preserved': True,
             'reviewed_multi_column_rows':remaining_rows}

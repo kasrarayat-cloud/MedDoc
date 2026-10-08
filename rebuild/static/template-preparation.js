@@ -29,7 +29,9 @@
         frame.contentWindow.postMessage({type:'blank-form-preview',token:frame.dataset.token,bytes},'*',[bytes]);
       }catch(_){label.textContent='Preview unavailable. Use the download to review the complete Word file.';}
     }else if(event.data.type==='blank-form-preview-result'){
-      label.textContent=event.data.ok?'Preview rendered. Compare every page with the original.':'Preview unavailable. Review the downloads in Word.';
+      label.textContent=event.data.ok?'Approximate HTML preview. Compare all content with the original; check final pagination in the downloaded Word file.':'Preview unavailable. Review the downloads in Word.';
+      if(event.data.ok&&Number.isInteger(event.data.page_count)&&event.data.page_count>0)label.textContent+=' '+event.data.page_count+' preview '+(event.data.page_count===1?'page.':'pages.');
+      if(event.data.ok&&Number.isInteger(event.data.expanded_page_count)&&event.data.expanded_page_count>0)label.textContent+=' '+event.data.expanded_page_count+' preview '+(event.data.expanded_page_count===1?'page extends':'pages extend')+' beyond the stored paper height; Word may paginate differently.';
       if(event.data.ok&&Number.isInteger(event.data.elapsed_ms))label.textContent+=' Render: '+event.data.elapsed_ms+' ms.';
     }
   });

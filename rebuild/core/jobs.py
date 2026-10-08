@@ -226,7 +226,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         old.reused=True
         return old
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
-    config=dict(config or generation.configuration())
+    from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
+    config=campaign_job_config(dict(config or generation.configuration()),kind)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -262,6 +263,13 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         streams=config.get('submission_streams') or ''
         if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
         if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
+    if campaign_identity(config) is not None:
+        expected_charge=(charge_limit if kind=='transcription' else
+            generation.maximum_cost(e.notes,e.template_version.fields,config,
+                context_labels=[row['label'] for row in e.template_version.review_requirements])*MULTIPLIER)
+        if expected_charge>JOB_QUOTE_LIMIT:
+            raise ValidationError('This request exceeds the delivery campaign per-request allowance. Nothing was queued.')
+        admit_campaign_job(config,kind,user,e.department_id)
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     job.reused=False
     if kind=='transcription':
@@ -510,7 +518,9 @@ def submit_transcription(job,raw,key,submitted):
     # The units carry what was SUBMITTED beside what the provider PROCESSED. They are two different measurements of two
     # different things, they are stored together on the receipt and the usage row, and the coverage statement is the
     # comparison between them — which is why neither may be inferred from the other.
-    return transcript,cost,dict(submitted,duration_seconds=str(duration)),rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
+    from .provider_models import transcription_models
+    units=dict(submitted,duration_seconds=str(duration),**transcription_models(data.get('metadata')))
+    return transcript,cost,units,rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
 def run_one():
     with transaction.atomic():
@@ -529,15 +539,18 @@ def run_one():
     provider_returned=False
     try:
         e=job.encounter
-        result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
-        provider_returned=True
-        response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
-        resource_id=getattr(response,'id','') or ''
-        # Financial evidence commits before any clinical serialization or file IO.
-        with transaction.atomic():
-            ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
-            job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
-            audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
+        from .preparation_campaign import provider_slot
+        with provider_slot(job.config):
+            result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
+            provider_returned=True
+            response=(result.get('anthropic_response') or result.get('response')) if isinstance(result,dict) else None
+            resource_id=getattr(response,'id','') or ''
+            # Hold the provider slot until its actual cost is durably visible.
+            # Financial evidence commits before clinical serialization/file IO.
+            with transaction.atomic():
+                ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':request_id,'provider_resource_id':resource_id,'actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
+                job.provider=provider;job.provider_request_id=request_id;job.provider_resource_id=resource_id;job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
+                audit(job.user,'provider.receipt',job.pk,department=e.department,provider=provider,request_id=request_id,resource_id=resource_id,actual_cost=str(cost))
         # The delivered transcript, stored and downloaded, carries the same incomplete-portion marker the notes would.
         note=coverage_note(job,units) if job.kind=='transcription' and isinstance(result,str) else ''
         if job.kind=='transcription':
@@ -558,7 +571,10 @@ def run_one():
         with transaction.atomic():
             e=Encounter.objects.select_for_update().get(pk=e.pk)
             # Output QuillMD cannot use is a platform failure whatever the user did meanwhile, so it is checked first and absorbed.
-            if job.kind=='generation': answers=generation.validated(result)
+            if job.kind=='generation':
+                answers=generation.validated(result)
+                from .answer_constraints import hold_constraint_mismatches
+                answers=hold_constraint_mismatches(e.template_version.fields,answers)
             elif not isinstance(result,str): raise PlatformFailure('Provider supplied no usable transcript.')
             # Usable output that the user's own state (finalized, edited, access revoked) declines is not a platform failure:
             # NotAdoptedByUser keeps the settled charge.
@@ -588,7 +604,8 @@ def run_one():
         known=Usage.objects.filter(job=job).exists()
         fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
         declined=known and isinstance(exc,NotAdoptedByUser)
-        unsent=not known and not provider_returned and isinstance(exc,NoProviderRequest)
+        from .preparation_campaign import CampaignProviderRefusal
+        unsent=not known and not provider_returned and isinstance(exc,(NoProviderRequest,CampaignProviderRefusal))
         job.state='failed' if known or fixture or unsent else 'reconciliation'
         # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
         if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
