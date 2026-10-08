@@ -743,3 +743,48 @@ encoding hashes, with no writes, authentication or provider calls. The initial
 new-repair comparison failure and encoding diagnosis are retained separately;
 neither modifies the original reconciliation or failure record. The pure final
 join uses the same frozen COPY fingerprint encoding for admitted row identities.
+
+## Once-only operation-start anonymous preservation — 8 October 2026
+
+The two retained execute logs `acceptance-v3-current-main-actual-campaign-v1.log`
+and `acceptance-v3-exact-session-repair-actual-campaign-v1.log` both stopped
+before preparation, authentication, provider calls or verifier database writes.
+The separately recorded read-only exception observations establish the current
+refusal as an undeclared pre-acceptance added row; they do not reconstruct an
+uncaptured exception from either earlier execute. Session-only reconciliation
+retains all 212 original rows, the previously adjudicated health row, and the two
+new expired root-flow rows. Their requester remains unestablished because no
+applicable private ingress access record is retained. No row is deleted.
+
+Replace repeated one-row source pinning at the native entry with one explicitly
+bound operation-start preservation packet. The parent captures it exactly once,
+under the existing exclusions, before authentication. Every selected added row
+must carry a verified original-secret Django signature, exactly the inert
+`quillmd-preview-v1` root-flow shape, one canonical nonce, a finite creation
+instant, coherent signer/creation/expiry times and an expiry no later than the
+fixed UTC cutoff. Authenticated users, OTPs, preview grants, unexpected fields,
+unexpired rows, non-root destinations and populations over 32 refuse. The two
+already diagnosed full COPY identities and row hashes must still be present.
+The original encrypted baseline and all prior failure/decision records remain
+unchanged; the earlier exact-row repair stays as retained offline compatibility.
+
+The mandatory packet, including an empty packet, is inside the existing
+immutable phase observation. Its raw hash is already bound into the parent,
+child, admission, attempt, completion and normal-origin authority chain. Each
+row is pinned by full COPY identity, full row hash, signed payload hash and exact
+source timing proof. Children adopt this packet; they cannot capture another.
+Second pre-auth collection, after-auth collection, independent final verification
+and normal-origin verification must retain exactly the frozen population and
+bytes. A subsequently added matching row still refuses. This is preservation of
+observed inert bytes, not approval or attribution of their original request and
+not a blanket session exclusion. The typed closed anonymous subtree alone
+permits its validated finite creation number; all existing configuration and
+metadata representation checks remain unchanged.
+
+Early failures expose only checked source refusal labels, including class-method
+labels and the exact frozen undeclared-row error mapped to a fixed safe code.
+Arbitrary exception text remains private. This amendment changes no clinical
+code, application security, source reset, migration, provider allowance, service
+state or VoiceAssistMain resource. Authenticated acceptance and the subsequent
+normal HTTPS transition remain authorized only through their existing reviewed
+ruled doors after exact source citation and affected controls.
