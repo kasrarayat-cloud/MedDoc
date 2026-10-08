@@ -40,7 +40,16 @@ def contract():
             'concurrency': 1, 'provider_retries': 0, 'authentication_seconds': 180,
             'browser_verifier_seconds': 1200, 'operations_revision': None,
             'operations_revision_policy': v3.OPERATIONS_REVISION_POLICY, 'served_revision': SERVED,
+            'native_gate_diagnostic': v3.native_gate_contract(),
             'protocol_qualified': True}
+
+
+def checked_gate_fixture(phase='normal-auth', main=OPS, fd=9):
+    raw = b'fictional checked native admission source'
+    arguments = ['--child-check-' + phase, '--operations-revision', OPS, '--served-revision', SERVED,
+                 '--parent-context-sha256', '4' * 64]
+    return {'argv': v3.checked_python_argv(v3.SOURCE, 3, raw, arguments)[1:],
+            'source_fd': fd, 'merged_main_revision': main}
 
 
 def declaration(value=None):
@@ -136,7 +145,8 @@ class InertAndSourceTests(unittest.TestCase):
                 self.assertEqual(v3.main([]), 0)
                 self.assertFalse(json.loads(stream.getvalue())['installed_state_accessed'])
             for mode in ('execute', 'preflight', 'admit-before-auth', 'admit-after-auth', 'verify',
-                         'dispatch-normal-auth', 'dispatch-browser', 'child-check-normal-auth', 'child-check-browser'):
+                         'dispatch-normal-auth', 'dispatch-browser', 'child-check-normal-auth', 'child-check-browser',
+                         'gate-preflight', 'dispatch-gate-preflight', 'child-check-gate-preflight'):
                 with self.subTest(mode=mode), self.assertRaisesRegex(v3.Refusal, 'source_protocol_unqualified'):
                     v3.main(['--' + mode, '--operations-revision', OPS, '--served-revision', SERVED])
             with self.assertRaises(v3.Refusal): v3.InstalledHost()
@@ -165,7 +175,7 @@ class InertAndSourceTests(unittest.TestCase):
 
     def test_each_source_qualification_is_independently_required(self):
         names = ('EXECUTION_QUALIFIED', 'NATIVE_AUTHORIZATION_PROTOCOL_QUALIFIED', 'FIXED_CHILD_PROTOCOL_QUALIFIED',
-                 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED')
+                 'PHASE_PRESERVATION_PROTOCOL_QUALIFIED', 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED')
         for name in names:
             values = dict.fromkeys(names, True); values[name] = False
             with self.subTest(name=name), patch.multiple(v3, **values), patch.dict(os.environ, {name: '1'}):
@@ -785,6 +795,7 @@ class ChildAndPrivateFileTests(unittest.TestCase):
                                  popen=lambda *args, **kwargs: None, writer=lambda *args: None)
 
 
+@patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class NativeAdapterTests(unittest.TestCase):
     def publication_fixture(self, runtime, *, drift=None, fail_wait=False, late=False, occupied=False):
         for relative in (*v3.LOCKS, v3.PUBLICATION_LOCK):
@@ -1363,6 +1374,7 @@ class PhaseAnonymousSessionTests(unittest.TestCase):
                 self.v.validate_admitted_added_row(self.r, ANONYMOUS_TEST_COLUMNS, bad, 'fictional actor', ANONYMOUS_TEST_SECRET)
 
 
+@patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class FinancialAndExportTests:
     """Explicit manual suite; actual pinned host inputs are not remote fixtures.
 
@@ -1377,14 +1389,24 @@ class FinancialAndExportTests:
             settings.configure(SECRET_KEY='fictional test-only key', SECRET_KEY_FALLBACKS=[])
         cls.common, cls.verifier, cls.policy = v3.frozen_modules()
 
+    def test_actual_stopped_gate_eight_originals_and_three_absences_are_authenticated(self):
+        result=v3.authenticate_stopped_gate()
+        self.assertEqual(result['original_files_preserved'],8)
+        self.assertEqual((result['known_authentication_submissions'],result['known_provider_calls']),(0,0))
+        self.assertIsNone(result['database_writes'])
+        self.assertFalse(result['old_preparation_reused'])
+        for path in v3.STOPPED_GATE_ABSENT:
+            original=os.path.lexists
+            with patch.object(os.path,'lexists',side_effect=lambda value,chosen=path:True if Path(value)==chosen else original(value)):
+                with self.subTest(path=path),self.assertRaisesRegex(v3.Refusal,'later_attempt_refused'):v3.authenticate_stopped_gate()
+
     def test_actual_frozen_javascript_adapters_parse_without_execution(self):
         blobs = {name: v3.protected(v3.FROZEN / name) for name in v3.DEPENDENCIES}
         authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {'before-auth': b'fictional report'})
         declaration_raw = declaration() + b'\n'.join((key+': '+value).encode() for key,value in v3.FIXTURE_PINS.items())
-        check = {'argv':['-B','-c','fictional checked native admission'], 'source_fd':9,
-                 'merged_main_revision': OPS}
         for phase in ('normal-auth','browser'):
             with self.subTest(phase=phase):
+                check = checked_gate_fixture(phase)
                 adapted = v3.javascript_adapter(blobs,phase,declaration_raw,authority,check)
                 result = subprocess.run(['/usr/bin/node','--check','--input-type=module'], input=adapted,
                                         capture_output=True, timeout=15)
@@ -1398,11 +1420,36 @@ class FinancialAndExportTests:
             v3.javascript_adapter(wrong,'browser',declaration_raw,authority,check)
         self.assertEqual({name:v3.sha(v3.protected(v3.FROZEN/name)) for name in v3.DEPENDENCIES},v3.DEPENDENCIES)
 
+    def test_real_node_gate_retains_private_refusal_and_measured_time_without_export(self):
+        # Host-only: real Node and sealed bootstrap are mandatory qualification,
+        # while the executed Python main is entirely fictional and has no I/O.
+        with tempfile.TemporaryDirectory() as root:
+            for phase,failed in [('normal-auth',False),('normal-auth',True),('gate-preflight',False)]:
+                parent=Path(root)/(phase+('-failed'if failed else '-passed'));parent.mkdir(mode=0o700)
+                native={'complete':True,'phase':phase,'parent_hold_verified':True}
+                failure={'format':3,'complete':False,'reason':'v3_aware_timestamp_required','installed_state_accessed':False,'provider_calls':0,'authentication_submissions':0,'database_writes':0,'phase_outcomes_require_protected_receipts':False,'automatic_retries':False,'arbitrary_exception_text_exported':False}
+                raw=(('def main():\n raise RuntimeError("fictional private exception marker")\n'if failed else 'def main():\n print('+repr(json.dumps(native))+')\n return 0\n')+'def failure_summary(error):\n return '+repr(failure)+'\n').encode()
+                with v3.sealed_buffer(raw) as fd:
+                    check=checked_gate_fixture(phase,fd=fd);check['argv']=v3.checked_python_argv(v3.SOURCE,3,raw,['--child-check-'+phase,'--operations-revision',OPS,'--served-revision',SERVED,'--parent-context-sha256','4'*64])[1:]
+                    with patch.object(v3,'PREPARATION',parent),patch.object(v3,'GATE_DIAGNOSTIC',parent if phase=='gate-preflight'else v3.GATE_DIAGNOSTIC):
+                        gate=v3.native_gate_javascript(check)
+                    script=b"import {execFileSync} from 'node:child_process';import path from 'node:path';\n"+gate+b"\ntry{console.log(JSON.stringify(executionGate()));}catch(error){console.log(JSON.stringify(error.quillmdGateSummary||{reason:'v3_native_gate_evidence_failure'}));process.exit(2);}\n"
+                    run=subprocess.run(['/usr/bin/node','--input-type=module'],input=script,pass_fds=(fd,),capture_output=True,timeout=5)
+                self.assertEqual(run.returncode,2 if failed else 0,run.stderr.decode())
+                public=json.loads(run.stdout);record=json.loads((parent/('native-gate-'+phase+'.json')).read_bytes())
+                self.assertEqual(public['complete'],not failed);self.assertEqual(record['native_summary'],failure if failed else native)
+                self.assertLessEqual(int(record['elapsed_monotonic_ns']),90_000_000_000)
+                self.assertEqual((parent/('native-gate-'+phase+'.json')).stat().st_mode&0o777,0o600)
+                self.assertNotIn(b'fictional private exception marker',run.stdout+run.stderr)
+                if failed:self.assertIn(b'fictional private exception marker',bytes.fromhex(record['raw_stderr_hex']))
+                else:self.assertEqual(v3.native_gate_record_admission(record,record['binding']),native)
+                self.assertEqual((public['authentication_submissions'],public['provider_calls'],public['database_writes']),(0,0,None))
+
     def test_normal_auth_queries_real_main_and_compares_exact_admitted_revision(self):
         blobs = {name: v3.protected(v3.FROZEN / name) for name in v3.DEPENDENCIES}
         authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {})
         for expected in (OPS, '4' * 40):
-            check = {'argv':['fictional'], 'source_fd':9, 'merged_main_revision':expected}
+            check = checked_gate_fixture(main=expected)
             adapted = v3.javascript_adapter(blobs, 'normal-auth', declaration(), authority, check)
             begin = adapted.index(b" const main=execFileSync('gh'")
             end = adapted.index(b'\n', begin)
@@ -1425,7 +1472,7 @@ class FinancialAndExportTests:
         for invalid in (None, '', '7' * 39, '7' * 40 + '\n'):
             with self.subTest(invalid=invalid), self.assertRaises(v3.Refusal):
                 v3.javascript_adapter(blobs, 'normal-auth', declaration(), authority,
-                    {'argv':['fictional'], 'source_fd':9, 'merged_main_revision':invalid})
+                    checked_gate_fixture(main=invalid))
 
     def test_native_bind_replaces_pin_only_after_successful_fresh_source_admission(self):
         host = v3.InstalledHost.__new__(v3.InstalledHost)
@@ -1488,7 +1535,7 @@ class FinancialAndExportTests:
     def test_actual_js_block_moves_after_clinical_loop_and_captures_before_context_close(self):
         blobs={name:v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
         authority=v3.derive_authority(contract(),self.common,OPS,SERVED,{})
-        adapted=v3.javascript_adapter(blobs,'browser',declaration(),authority,{'argv':['fictional'],'source_fd':9})
+        adapted=v3.javascript_adapter(blobs,'browser',declaration(),authority,checked_gate_fixture('browser'))
         beginning=b'  const adminContext=await browser.newContext({storageState:JSON.parse(adminSessionBytes)});let readback;\n'
         ending=b'  }finally{await adminContext.close();if(readback){readback.finished_at=new Date().toISOString();save();}}\n'
         self.assertGreater(adapted.index(beginning),adapted.index(b'result.clinical_workflows_completed_at='))
@@ -2217,7 +2264,7 @@ class FinancialAndExportTests:
             import re
             blobs = {name: v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
             adapted = v3.javascript_adapter(blobs, 'browser', declaration(), {},
-                {'argv': ['-B', '-c', 'fictional gate must never execute'], 'source_fd': 9})
+                checked_gate_fixture('browser'))
             match = re.search(rb'from ("data:text/javascript;base64,[^"]+")', adapted)
             self.assertIsNotNone(match)
             uri = json.loads(match.group(1))
@@ -2287,7 +2334,7 @@ class FinancialAndExportTests:
         self.assertEqual(self.common.admission(v3.encode(report), **arguments(report)), report)
         blobs = {name: v3.protected(v3.FROZEN/name) for name in v3.DEPENDENCIES}
         adapted = v3.javascript_adapter(blobs, 'browser', declaration(), {},
-            {'argv': ['-B', '-c', 'fictional gate never invoked'], 'source_fd': 9})
+            checked_gate_fixture('browser'))
         uri = json.loads(re.search(rb'from ("data:text/javascript;base64,[^"]+")', adapted).group(1))
         javascript = ("import fs from 'node:fs';import {validateV3} from " + json.dumps(uri)
             + ";console.log(JSON.stringify(validateV3('admission',JSON.parse(fs.readFileSync(0,'utf8')))));" )
@@ -2337,6 +2384,7 @@ class ExposureAndFilesTests(unittest.TestCase):
         with self.assertRaises(v3.Refusal): v3.file_catalog_admission(before, current, {'columns': 'changed'}, {'new': 'b'}, {'held': 0})
 
 
+@patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PostRestorationConfigurationTests(unittest.TestCase):
     """Exact finite boundary controls; all inputs are fictional in-memory copies."""
     def setUp(self):
@@ -2485,6 +2533,7 @@ class PostRestorationConfigurationTests(unittest.TestCase):
         with self.assertRaises(v3.Refusal): v3.preserved_snapshot(before, current, before['database'])
 
 
+@patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PostRestorationNativeTests(unittest.TestCase):
     """Disposable descriptor fixtures; no host unit, root record or authentication access."""
     @contextmanager
@@ -2794,6 +2843,7 @@ class PhasePreservationTests(unittest.TestCase):
         self.assertEqual(sum(isinstance(row, tuple) and row[0] == 'browser' for row in host.events), 1)
 
 
+@patch.object(v3, 'NATIVE_GATE_DIAGNOSTIC_QUALIFIED', True)
 class PhaseNativeObservationTests(unittest.TestCase):
     """Real disposable descriptors and fictional root/unit views; no host-native reads."""
     @contextmanager
@@ -2909,6 +2959,100 @@ class PhaseNativeObservationTests(unittest.TestCase):
         with self.fixture(final_invalid_lifecycle=True) as (recovery, _):
             with self.assertRaisesRegex(v3.Refusal, 'other_unit_population'):
                 v3.current_external_boundary(recovery, {})
+
+
+
+class GateDiagnosticTests(unittest.TestCase):
+    def record(self):
+        binding={'operations_revision':OPS,'served_revision':SERVED,'checked_source_sha256':'4'*64,'parent_context_sha256':'5'*64,'phase':'gate-preflight','preparation_directory':str(v3.GATE_DIAGNOSTIC)}
+        native={'complete':True,'phase':'gate-preflight','parent_hold_verified':True};stdout=v3.encode(native)
+        return binding,{'format':1,'complete':True,'binding':binding,'started_at':START.isoformat(),'finished_at':(START+timedelta(seconds=1)).isoformat(),'native_child_seconds':90,'elapsed_monotonic_ns':'1000000000','status':0,'signal':None,'transport':None,'native_summary':native,'raw_stdout_hex':stdout.hex(),'raw_stderr_hex':'','stdout_sha256':v3.sha(stdout),'stderr_sha256':v3.sha(b''),'authentication_submissions':0,'provider_calls':0,'database_writes':None,'automatic_retries':False}
+
+    def test_native_record_closed_typed_binding_and_actual_streams(self):
+        binding,good=self.record();self.assertEqual(v3.native_gate_record_admission(good,binding),good['native_summary'])
+        changes=[lambda v:v.update(extra=True),lambda v:v.update(format=True),lambda v:v.update(status=False),lambda v:v.update(complete=False),lambda v:v.update(native_child_seconds=180),lambda v:v.update(elapsed_monotonic_ns='90000000001'),lambda v:v.update(elapsed_monotonic_ns=1000),lambda v:v.update(authentication_submissions=False),lambda v:v.update(provider_calls=1),lambda v:v.update(database_writes=0),lambda v:v.update(automatic_retries=True),lambda v:v['binding'].update(parent_context_sha256='6'*64),lambda v:v['native_summary'].update(parent_hold_verified=1),lambda v:v.update(raw_stdout_hex='zz'),lambda v:v.update(stdout_sha256='0'*64),lambda v:v.update(raw_stderr_hex=b'fictional private exception'.hex(),stderr_sha256=v3.sha(b'fictional private exception')),lambda v:v.update(finished_at=(START-timedelta(seconds=1)).isoformat())]
+        for change in changes:
+            with self.subTest(change=change):
+                broken=copy.deepcopy(good);change(broken)
+                with self.assertRaises(v3.Refusal):v3.native_gate_record_admission(broken,binding)
+
+    def test_diagnostic_profile_changes_only_preparation_and_selects_once(self):
+        actual=(v3.ACTUAL_PREPARATION,v3.ADMIN,v3.CAMPAIGN,v3.ATTEMPT)
+        with patch.object(v3,'PREPARATION',v3.ACTUAL_PREPARATION),patch.object(v3,'PHASE_PRESERVATION_PATH',v3.ACTUAL_PREPARATION/'co-tenant-phase-preservation.json'):
+            v3.select_gate_diagnostic_profile();self.assertEqual(v3.PREPARATION,v3.GATE_DIAGNOSTIC)
+            self.assertEqual(v3.configuration_constants()['PREPARATION'],str(v3.GATE_DIAGNOSTIC))
+            self.assertEqual(actual,(v3.ACTUAL_PREPARATION,v3.ADMIN,v3.CAMPAIGN,v3.ATTEMPT))
+            with self.assertRaisesRegex(v3.Refusal,'selected_once'):v3.select_gate_diagnostic_profile()
+
+    def test_actual_declaration_keeps_actual_paths_under_diagnostic_profile(self):
+        raw=(v3.SOURCE/v3.DECL).read_bytes()
+        host=types.SimpleNamespace(source=v3.SOURCE,read_source=lambda path:raw)
+        expected=v3.installed_contract(host)[1]
+        with patch.object(v3,'PREPARATION',v3.ACTUAL_PREPARATION),patch.object(v3,'PHASE_PRESERVATION_PATH',v3.ACTUAL_PREPARATION/'co-tenant-phase-preservation.json'):
+            v3.select_gate_diagnostic_profile()
+            self.assertEqual(v3.installed_contract(host)[1],expected)
+            self.assertEqual(v3.PHASE_PRESERVATION_PATH,v3.GATE_DIAGNOSTIC/'co-tenant-phase-preservation.json')
+            for field,value in [('preparation_directory',str(v3.GATE_DIAGNOSTIC)),('phase_preservation',{**expected['phase_preservation'],'phase_observation_path':str(v3.PHASE_PRESERVATION_PATH)})]:
+                bad=copy.deepcopy(expected);bad[field]=value
+                # The committed JSON uses indentation, so replace its one exact block.
+                import re
+                modified=re.sub(rb'(<!-- owner-acceptance-v3-contract -->\s*```json\s*)(.*?)(```)',lambda m:m[1]+v3.encode(bad)+b'\n'+m[3],raw,flags=re.S)
+                broken=types.SimpleNamespace(source=v3.SOURCE,read_source=lambda path:modified)
+                with self.subTest(field=field),self.assertRaises(v3.Refusal):v3.installed_contract(broken)
+
+    def test_gate_generation_exact_checked_argv_and_fixed_profile(self):
+        check=checked_gate_fixture();code=v3.native_gate_javascript(check)
+        for token in (b'timeout:90000',b'O_EXCL',b'raw_stderr_hex',b'elapsed_monotonic_ns'):self.assertIn(token,code)
+        for key,value in [('source_fd',True),('source_fd',2),('argv',['fictional'])]:
+            with self.subTest(key=key,value=value),self.assertRaises(v3.Refusal):v3.native_gate_javascript({**check,key:value})
+        with self.assertRaisesRegex(v3.Refusal,'fixed_profile'):v3.native_gate_javascript(checked_gate_fixture('gate-preflight'))
+        with patch.object(v3,'PREPARATION',v3.GATE_DIAGNOSTIC):
+            self.assertIn(str(v3.GATE_DIAGNOSTIC).encode(),v3.native_gate_javascript(checked_gate_fixture('gate-preflight')))
+            with self.assertRaisesRegex(v3.Refusal,'fixed_profile'):v3.native_gate_javascript(check)
+
+    def stopped_fixture(self):
+        files={name:('fictional retained '+name).encode() for name in v3.STOPPED_GATE_FILES}
+        refusal={'complete':False,'provider_calls':0,'authentication_submissions':0,'installed_state_accessed':True,'reason':'acceptance_v3_execution_unqualified'}
+        files['normal-auth-stderr.log']=v3.encode(refusal);files['normal-auth-stdout.log']=b''
+        files['STOP.json']=v3.encode({'complete':False,'reason':'v3_authentication_failed_or_unknown_no_replay','operations_revision':v3.STOPPED_GATE_OPERATIONS,'served_revision':v3.M6,'unknown_outcome_blocks_replay':True,'automatic_retries':False})
+        proofs={name:('fictional proof '+name).encode()for name in v3.STOPPED_GATE_PROOFS}
+        fp={name:v3.sha(raw)for name,raw in files.items()};pp={name:v3.sha(raw)for name,raw in proofs.items()}
+        record={'kind':'stopped-authentication-first-gate-retained-evidence','format':1,'actual_exit':2,'operations_revision':v3.STOPPED_GATE_OPERATIONS,'served_revision':v3.M6,'preparation_directory':str(v3.STOPPED_V3_PREPARATION),'originals_moved_deleted_or_replaced':False,'specific_native_predicate_not_retained':True,'database_writes_counter_not_retained':True,'authentication_submissions':0,'provider_calls':0,'automatic_retries':0,'actual_child_refusal':refusal,'actual_log_sha256':pp['acceptance-v3-expiry-resolved-actual-campaign-v1.log'],'independent_source_proofs':{n:h for n,h in pp.items()if n.endswith('.json')},'absent_paths':[str(p)for p in v3.STOPPED_GATE_ABSENT],'retained_files':{str(v3.STOPPED_V3_PREPARATION/n):{'sha256':fp[n],'mode':'0600','uid':1000,'gid':1000,'nlink':1,'size':len(raw)}for n,raw in files.items()}}
+        return record,files,proofs,fp,pp
+
+    def test_stopped_history_exact_eight_no_manufactured_database_proof(self):
+        record,files,proofs,fp,pp=self.stopped_fixture()
+        with patch.object(v3,'STOPPED_GATE_FILES',fp),patch.object(v3,'STOPPED_GATE_PROOFS',pp):
+            result=v3.stopped_gate_admission(record,files,proofs);self.assertEqual(result['original_files_preserved'],8);self.assertIsNone(result['database_writes'])
+            changes=[lambda r:r.update(format=True),lambda r:r.update(actual_exit=True),lambda r:r.update(authentication_submissions=False),lambda r:r.update(provider_calls=False),lambda r:r.update(automatic_retries=False),lambda r:r['actual_child_refusal'].update(provider_calls=False),lambda r:r.update(authentication_submissions=1),lambda r:r.update(database_writes_counter_not_retained=False),lambda r:r.update(originals_moved_deleted_or_replaced=True),lambda r:r.update(absent_paths=[]),lambda r:r.update(independent_source_proofs={}),lambda r:r['retained_files'].pop(next(iter(r['retained_files'])))]
+            for change in changes:
+                with self.subTest(change=change):
+                    bad=copy.deepcopy(record);change(bad)
+                    with self.assertRaises(v3.Refusal):v3.stopped_gate_admission(bad,files,proofs)
+            for name in files:
+                with self.subTest(file=name),self.assertRaises(v3.Refusal):v3.stopped_gate_admission(record,{**files,name:files[name]+b'changed'},proofs)
+
+    def test_diagnostic_pipeline_never_enters_auth_browser_or_actual_marker(self):
+        outputs=[]
+        with patch.object(v3,'PREPARATION',v3.GATE_DIAGNOSTIC),patch.object(v3,'write_new',side_effect=lambda path,value:outputs.append(path)),patch.multiple(v3,**CI_FIXTURE_PINS):
+            host=FakeHost();host.own_hold_mode='--gate-preflight';original=host.child
+            def child(phase,*args):original(phase,*args);return {'parent_context_sha256':'4'*64}
+            host.child=child;host.gate_diagnostic_evidence=lambda context:{'complete':True,'authentication_submissions':0,'provider_calls':0,'database_writes':None}
+            self.assertTrue(v3.gate_preflight_pipeline(host,host.contract,OPS,SERVED)['complete'])
+        self.assertEqual(outputs,[v3.GATE_DIAGNOSTIC/'complete.json']);self.assertNotIn('attempt',host.events);self.assertNotIn('after-auth',host.events)
+        self.assertEqual([e[0]for e in host.events if isinstance(e,tuple) and e[0]in v3.PARENT_PHASES],['gate-preflight'])
+
+    def test_diagnostic_stop_never_writes_into_an_unexpected_actual_campaign(self):
+        host=v3.InstalledHost.__new__(v3.InstalledHost);host.operations=OPS;host.served=SERVED;outputs=[]
+        with patch.object(v3,'PREPARATION',v3.GATE_DIAGNOSTIC),patch.object(os.path,'lexists',return_value=True),patch.object(v3,'write_new',side_effect=lambda path,value:outputs.append((path,value))):
+            host.write_stop('v3_readonly_native_gate_failed_no_authentication_or_replay')
+        self.assertEqual([path for path,_ in outputs],[v3.GATE_DIAGNOSTIC/'STOP.json'])
+        self.assertTrue(outputs[0][1]['unknown_outcome_blocks_replay'])
+        self.assertFalse(outputs[0][1]['automatic_retries'])
+
+    def test_safe_frozen_labels_retain_known_predicate_and_reject_arbitrary_text(self):
+        self.assertEqual(v3.failure_summary(RuntimeError('acceptance_v3_admission_pin'))['reason'],'acceptance_v3_admission_pin')
+        self.assertEqual(v3.failure_summary(RuntimeError('fictional private record'))['reason'],'v3_fixed_protocol_failure')
 
 
 def local_qualification_suite():
