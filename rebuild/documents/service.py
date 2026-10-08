@@ -129,8 +129,10 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 if not 0 < export.stat().st_size <= MAX_OUTPUT:
                     raise DocumentError("The document export is invalid.", "invalid_export")
             elif layout_policy is not None:
+                from .layout import restore_original_wm_signing_property
+                signing=restore_original_wm_signing_property(export,payload)
                 response['layout']={'policy':layout_policy['protocol'],'original_geometry_preserved':True,
-                                    'native_pagination_verified':False}
+                                    'native_pagination_verified':False,**signing}
             # O_EXCL also protects against a concurrent export or symlink swap.
             try:
                 out_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)

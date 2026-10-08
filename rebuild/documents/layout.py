@@ -16,6 +16,9 @@ requires opening the real application exports; XML checks are not that evidence.
 import re
 import shutil
 import zipfile
+import hashlib
+from io import BytesIO
+from lxml import etree
 
 DOCUMENT = 'word/document.xml'
 ROW = re.compile(r'<w:tr(?:\s[^>]*)?>.*?</w:tr>', re.S)
@@ -36,6 +39,63 @@ WM_NUMERIC_ROWS = ['GSV at the SFJ', 'GSV at the Proximal Thigh', 'GSV at the Kn
 # is inserted; one point of spacing is the only new document body paragraph.
 TABLE_SEPARATOR = ('<w:p><w:pPr><w:spacing w:before="0" w:after="0" '
                    'w:line="20" w:lineRule="exact"/></w:pPr></w:p>')
+
+
+def restore_original_wm_signing_property(path, source_bytes):
+    """Remove only the frozen SDK's added timestamp keepNext on new WM exports.
+
+    All other signing properties must equal the pinned original. Rewrite a single
+    literal XML leaf, preserving every other document byte and package part.
+    This does not calculate or certify native Word pagination.
+    """
+    from .sdk_service import WM_IOV_SHA256
+    from .service import DocumentError
+    def require(value):
+        if not value:raise DocumentError('The original signing layout could not be preserved.', 'stale_layout')
+    require(hashlib.sha256(source_bytes).hexdigest()==WM_IOV_SHA256)
+    parser=etree.XMLParser(resolve_entities=False,no_network=True,load_dtd=False)
+    with zipfile.ZipFile(BytesIO(source_bytes)) as original:
+        original_xml=original.read(DOCUMENT)
+    with zipfile.ZipFile(path) as exported:
+        require(len(exported.namelist())==len(set(exported.namelist())))
+        entries=[(info,exported.read(info.filename)) for info in exported.infolist()]
+        raw=exported.read(DOCUMENT)
+    source=etree.fromstring(original_xml,parser);output=etree.fromstring(raw,parser)
+    require(not source.getroottree().docinfo.doctype and not output.getroottree().docinfo.doctype)
+    ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}
+    original_paragraphs=source.xpath('./w:body/w:p',namespaces=ns)
+    output_paragraphs=output.xpath('./w:body/w:p',namespaces=ns)
+    require(len(original_paragraphs)==len(output_paragraphs)==48)
+    tables=output.xpath('./w:body/w:tbl',namespaces=ns)
+    require(len(tables)==1 and len(tables[0].findall('w:tr',ns))==28)
+    expected_groups=original_paragraphs[45].findall('w:pPr',ns)
+    observed_groups=output_paragraphs[45].findall('w:pPr',ns)
+    require(len(expected_groups)==len(observed_groups)==1)
+    expected=expected_groups[0];observed=observed_groups[0]
+    require(expected.find('w:keepNext',ns) is None)
+    all_paragraphs=list(output.iter('{'+ns['w']+'}p'))
+    matches=list(PARAGRAPH.finditer(raw.decode('utf-8')))
+    require(len(matches)==len(all_paragraphs)==133)
+    def properties(node):
+        return (node.tag,tuple(sorted(node.attrib.items())),node.text or '',node.tail or '',tuple(properties(c) for c in node))
+    flags=observed.findall('w:keepNext',ns)
+    if not flags:
+        require(properties(observed)==properties(expected))
+        return {'timestamp_keep_next_restored':False}
+    require(len(flags)==1 and not flags[0].attrib and not len(flags[0]) and not flags[0].text and not flags[0].tail)
+    observed.remove(flags[0]);require(properties(observed)==properties(expected))
+    selected=matches[all_paragraphs.index(output_paragraphs[45])]
+    fragment=selected.group(0)
+    leaves=[literal for literal in ('<w:keepNext/>','<w:keepNext />') if literal in fragment]
+    require(len(leaves)==1 and fragment.count(leaves[0])==1)
+    text=raw.decode('utf-8')
+    repaired=(text[:selected.start()]+fragment.replace(leaves[0],'',1)+text[selected.end():]).encode('utf-8')
+    # A unique, private workspace output; existing files cannot be overwritten.
+    temporary=path.with_name(path.name+'.original-signing')
+    with temporary.open('xb') as stream,zipfile.ZipFile(stream,'w',zipfile.ZIP_DEFLATED) as archive:
+        for info,payload in entries:archive.writestr(info,repaired if info.filename==DOCUMENT else payload)
+    shutil.move(str(temporary),str(path))
+    return {'timestamp_keep_next_restored':True}
 
 
 def _text(fragment):

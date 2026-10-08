@@ -171,10 +171,15 @@ class EnvironmentTests(unittest.TestCase):
         from types import SimpleNamespace
         for available,admitted in ((delivery.MINIMUM_SPACE-1,False),(delivery.MINIMUM_SPACE,True)):
             value=SimpleNamespace(f_bavail=available,f_frsize=1,f_favail=400)
-            with patch.object(delivery.os,'statvfs',return_value=value):
-                if admitted:self.assertEqual(delivery.admission_space('control')['available_bytes'],available)
+            with tempfile.TemporaryDirectory() as directory,patch.object(delivery,'ROOT',Path(directory)),\
+                    patch.object(delivery.os,'statvfs',return_value=value) as measure:
+                if admitted:
+                    observation=delivery.admission_space('control')
+                    self.assertEqual(observation['available_bytes'],available)
+                    self.assertEqual(observation['filesystem_device'],Path(directory).stat().st_dev)
                 else:
                     with self.assertRaisesRegex(delivery.Refusal,'storage_28gib'):delivery.admission_space('control')
+                measure.assert_called_once_with(Path(directory))
 
 
 class PreservationTests(unittest.TestCase):

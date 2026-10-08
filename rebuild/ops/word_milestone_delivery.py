@@ -64,7 +64,7 @@ REPAIR_PATHS=frozenset({'rebuild/core/jobs.py','rebuild/core/preparation.py','re
     'rebuild/core/tests/test_preparation_export_layout.py',
     'rebuild/core/tests/test_doctor_pilot_self_service.py',
     'rebuild/documents/engine.py','rebuild/documents/preparation.py','rebuild/documents/test_preparation.py',
-    'rebuild/documents/service.py','rebuild/documents/test_export_layout.py',
+    'rebuild/documents/service.py','rebuild/documents/test_export_layout.py','rebuild/documents/layout.py',
     'rebuild/quillmd/settings.py','rebuild/core/migrations/0023_delivery_campaign.py',
     'rebuild/documents/test_preparation_constraints.py',
     'rebuild/static/docx-frame.js','rebuild/static/docx-frame.css','rebuild/static/template-preparation.js',

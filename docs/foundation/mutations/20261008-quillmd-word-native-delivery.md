@@ -192,3 +192,23 @@ dependency-qualified Python interpreter so its fault controls execute in CI.
 The native entry and reviewed installation primitives retain their existing
 interpreter and access restrictions. Exact descendant CI and a renewed finished
 diff refutation are required before installation.
+
+Stricter signing comparison then established one additional frozen SDK change:
+an empty keep-with-next property added to the timestamp paragraph at original
+body index 45. New original-layout exports restore only this exact property,
+after checking the pinned original, single-table/paragraph population and every
+other timestamp paragraph property. A changed, duplicated or nonempty property
+refuses export. Every other XML byte and package part is retained. Both SDK
+empty-leaf serialization spellings are covered; the original counterexample and
+first serialization refusal remain protected. Legacy exports are unchanged.
+Renewed strict actual-export inspection and descendant CI are required; prior
+structural-only results do not certify this correction's native Word appearance.
+
+The final signing refutation's three malformed cases are rejected: paragraph
+population is checked even when no flag needs removal, duplicate property groups
+refuse, and mixed property text is preserved as a mismatch rather than dropped.
+The resumed eight independent controls, 51 affected controls and 28 actual SDK
+export inspections passed on the repaired source bytes; original failures remain.
+The storage fault test now measures a disposable test filesystem's device
+metadata, avoiding a nonexistent native host path in CI. Native admission still
+measures the fixed QuillMD filesystem against the unchanged 28 GiB requirement.
