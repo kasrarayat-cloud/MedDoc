@@ -8,6 +8,7 @@ import copy
 import fcntl
 import io
 import json
+import math
 import os
 import socket
 import subprocess
@@ -1123,6 +1124,245 @@ class ExactExpiredSessionTests(unittest.TestCase):
                 v3.validate_expired_session(verifier, row, columns, secret)
 
 
+# Portable controls for the source-owned pure helper; no retained support file
+# or installed session is read by unittest discovery.
+ANONYMOUS_TEST_SECRET = 'fictional synthetic signature key'
+ANONYMOUS_TEST_CUTOFF = '2026-10-08T03:00:00+00:00'
+ANONYMOUS_TEST_CREATED = datetime(2026, 10, 8, 1, 36, 3, 861530, tzinfo=timezone.utc).timestamp()
+ANONYMOUS_TEST_SIGNED = int(ANONYMOUS_TEST_CREATED)
+ANONYMOUS_TEST_EXPIRY = datetime.fromtimestamp(ANONYMOUS_TEST_SIGNED, timezone.utc) + timedelta(seconds=1800, microseconds=885947)
+ANONYMOUS_TEST_COLUMNS = ['session_key', 'session_data', 'expire_date']
+
+def anonymous_test_verifier():
+    from django.core import signing
+    return types.SimpleNamespace(encoded=lambda value: (json.dumps(value, sort_keys=True, separators=(',', ':'), default=str) + '\n').encode(), row_digest=lambda row, columns: v3.sha(b'\t'.join((row[name] for name in columns)) + b'\n'), copy_value=lambda value: value, normal_session=lambda raw, secret: signing.loads(raw.decode(), key=secret, salt='django.contrib.sessions.SessionStore', fallback_keys=[], max_age=None), validate_admitted_added_row=unittest.mock.Mock(return_value='delegated original result'))
+
+def anonymous_test_payload():
+    return {'kind': 'quillmd-preview-v1', 'flows': {'f' * 32: {'created': ANONYMOUS_TEST_CREATED, 'destination': '/'}}, '_session_expiry': 1800}
+
+def anonymous_test_row(key='z' * 32, value=None, signed=ANONYMOUS_TEST_SIGNED, expiry=ANONYMOUS_TEST_EXPIRY):
+    from django.core import signing
+    value = anonymous_test_payload() if value is None else value
+    with patch('django.core.signing.time.time', return_value=signed):
+        data = signing.dumps(value, key=ANONYMOUS_TEST_SECRET, salt='django.contrib.sessions.SessionStore').encode()
+    text = expiry.isoformat(sep=' ').replace('+00:00', '+00')
+    return {'session_key': key.encode(), 'session_data': data, 'expire_date': text.encode()}
+
+def anonymous_test_descriptor(v, r, cutoff=ANONYMOUS_TEST_CUTOFF):
+    return v3.phase_anonymous_descriptor(v, r, ANONYMOUS_TEST_COLUMNS, ANONYMOUS_TEST_SECRET, cutoff)
+
+def anonymous_test_evidence(d):
+    p = d['source_proof']
+    return {'table': 'django_session', 'primary_key_sha256': p['primary_key_sha256'], 'row_sha256': p['row_sha256'], 'descriptor': copy.deepcopy(d)}
+
+def anonymous_test_packet(ds, cutoff=ANONYMOUS_TEST_CUTOFF):
+    return {'format': 1, 'cutoff': cutoff, 'rows': sorted(copy.deepcopy(ds), key=lambda d: d['source_proof']['primary_key_sha256'])}
+
+class PhaseAnonymousSessionTests(unittest.TestCase):
+    def test_native_parent_captures_once_then_reuses_exact_packet_and_child_cannot_capture(self):
+        host = v3.InstalledHost.__new__(v3.InstalledHost)
+        host.inside = True; host.own_hold_mode = '--execute'
+        host.parent_lock_context = {'parent_pid': os.getpid(), 'parent_start_ticks': 42}
+        host.co_tenant_phase_observation = None; host.admission_raws = {}; host.anonymous_sessions = None
+        host.check_publication_hold = lambda: True
+        host.availability_raw = b'fictional availability'; host.old = object(); host.backup = object()
+        host.availability_verifier = anonymous_test_verifier()
+        known = {
+            '4046d064ab7eddfec87e24a438a27c64253fe60039b2269fa8d53c8a05ea9178':
+                '48a98693b7f15e39dbb1b24c910c688cb0aaeda4acfa53bb6f911cad1136679a',
+            '91428d15663e00b25cbfeded8faa675957d9c9bb36e791d8beb3ebfe931b496e':
+                '3a06261d2ae0181e156992156d00f451ac7a0d1838488ede5db37b8b37ea1499'}
+        calls = []; saved = []
+        def collection(*args, **kwargs):
+            calls.append(kwargs)
+            if kwargs['anonymous_cutoff'] is not None:
+                rows = []
+                for key, digest in known.items():
+                    item = copy.deepcopy(self.d)
+                    item['source_proof'].update(primary_key_sha256=key, row_sha256=digest,
+                                                cutoff=kwargs['anonymous_cutoff'])
+                    rows.append(item)
+                packet = anonymous_test_packet(rows, kwargs['anonymous_cutoff'])
+                saved.append(packet)
+            else:
+                packet = copy.deepcopy(saved[0])
+            return {'allowed_deltas': {'anonymous_sessions': packet}}
+        with patch.object(v3, 'installed_database_admission', side_effect=collection), \
+             patch.object(v3.Path, 'read_text', return_value='fictional self stat'), \
+             patch.object(v3, 'process_start', return_value=42):
+            host.database_admission(contract(), None, OPS, SERVED)
+            self.assertIsNone(calls[0]['anonymous_packet'])
+            self.assertIs(type(calls[0]['anonymous_cutoff']), str)
+            frozen = copy.deepcopy(host.anonymous_sessions)
+            host.database_admission(contract(), None, OPS, SERVED)
+            self.assertIs(calls[1]['anonymous_packet'], host.anonymous_sessions)
+            self.assertIsNone(calls[1]['anonymous_cutoff'])
+            self.assertEqual(host.anonymous_sessions, frozen)
+            bad = copy.deepcopy(saved[0]); bad['rows'][0]['source_proof']['payload_sha256'] = 'e'*64
+            with patch.object(v3, 'installed_database_admission', return_value={'allowed_deltas': {'anonymous_sessions': bad}}), \
+                 self.assertRaisesRegex(v3.Refusal, 'population_recapture_refused'):
+                host.database_admission(contract(), None, OPS, SERVED)
+            host.anonymous_sessions = None; host.own_hold_mode = None
+            with patch.object(v3, 'installed_database_admission', side_effect=AssertionError('child cannot collect')) as collect, \
+                 self.assertRaisesRegex(v3.Refusal, 'child_cannot_capture_anonymous_population'):
+                host.database_admission(contract(), None, OPS, SERVED)
+            collect.assert_not_called()
+
+    def test_known_refusals_are_reported_without_private_exception_text(self):
+        clean = {'installed_state_accessed': False, 'authentication_possible': False, 'provider_possible': False}
+        with patch.dict(v3.ENTRY_OBSERVATIONS, clean, clear=True):
+            for error, expected in (
+                (v3.Refusal('v3_child_cannot_capture_anonymous_population'), 'v3_child_cannot_capture_anonymous_population'),
+                (v3.PhaseAnonymousRefusal('v3_phase_anonymous_retained_row_changed'), 'v3_phase_anonymous_retained_row_changed'),
+                (RuntimeError('Undeclared pre-acceptance table row added'), 'v3_undeclared_preacceptance_added_row'),
+                (RuntimeError('private signed session or key detail'), 'v3_fixed_protocol_failure'),
+                (v3.Refusal('private signed session or key detail'), 'v3_fixed_protocol_failure'),
+                (RuntimeError('v3_phase_anonymous_retained_row_changed'), 'v3_fixed_protocol_failure')):
+                with self.subTest(error=type(error).__name__, expected=expected):
+                    report = v3.failure_summary(error)
+                    self.assertEqual(report['reason'], expected)
+                    self.assertNotIn('private signed session or key detail', v3.encode(report).decode())
+                    self.assertEqual(report['provider_calls'], 0)
+                    self.assertEqual(report['authentication_submissions'], 0)
+
+
+    def setUp(self):
+        from django.conf import settings
+        if not settings.configured:
+            settings.configure(SECRET_KEY='fictional offline session-control secret', SECRET_KEY_FALLBACKS=[])
+        self.v = anonymous_test_verifier()
+        self.r = anonymous_test_row()
+        self.d = anonymous_test_descriptor(self.v, self.r)
+        self.p = anonymous_test_packet([self.d])
+
+    def test_capture_then_exact_retention_and_encoding(self):
+        self.assertEqual(v3.phase_anonymous_descriptor(self.v, self.r, ANONYMOUS_TEST_COLUMNS, ANONYMOUS_TEST_SECRET, ANONYMOUS_TEST_CUTOFF, pin=self.d), self.d)
+        self.assertEqual(v3.anonymous_packet_admission(self.p), self.p)
+        self.assertEqual(v3.anonymous_packet_admission(json.loads(json.dumps(self.p))), self.p)
+        self.assertEqual(v3.phase_anonymous_count([anonymous_test_evidence(self.d)], self.p), 1)
+        proof = self.d['source_proof']
+        self.assertEqual(proof['primary_key_sha256'], v3.anonymous_sha(self.v.encoded(['z' * 32])))
+        self.assertNotEqual(proof['primary_key_sha256'], v3.anonymous_sha(v3.anonymous_encode(['z' * 32])))
+        self.assertEqual(proof['payload_sha256'], v3.anonymous_sha(v3.anonymous_encode(anonymous_test_payload())))
+        self.assertNotEqual(proof['payload_sha256'], v3.anonymous_sha(self.v.encoded(anonymous_test_payload())))
+
+    def test_empty_population_is_still_mandatory(self):
+        empty = anonymous_test_packet([])
+        self.assertEqual(v3.phase_anonymous_count([], empty), 0)
+        for bad in (None, {}, [], False):
+            with self.subTest(packet=bad), self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.anonymous_packet_admission(bad)
+        with self.assertRaises(v3.PhaseAnonymousRefusal):
+            v3.phase_anonymous_count([anonymous_test_evidence(self.d)], empty)
+
+    def test_new_similarly_valid_row_after_capture_refuses(self):
+        fresh = anonymous_test_descriptor(self.v, anonymous_test_row('y' * 32))
+        self.assertNotEqual(fresh, self.d)
+        with self.assertRaisesRegex(v3.PhaseAnonymousRefusal, 'unlisted_or_duplicate'):
+            v3.phase_anonymous_count([anonymous_test_evidence(self.d), anonymous_test_evidence(fresh)], self.p)
+        with self.assertRaisesRegex(v3.PhaseAnonymousRefusal, 'retained_row_changed'):
+            v3.phase_anonymous_descriptor(self.v, anonymous_test_row('y' * 32), ANONYMOUS_TEST_COLUMNS, ANONYMOUS_TEST_SECRET, ANONYMOUS_TEST_CUTOFF, pin=self.d)
+
+    def test_delete_duplicate_and_changed_evidence_refuse(self):
+        prior = anonymous_test_evidence(self.d)
+        cases = [[], [prior, copy.deepcopy(prior)]]
+        for field, value in (('table', 'core_user'), ('primary_key_sha256', 'a' * 64), ('row_sha256', 'a' * 64), ('extra', True)):
+            bad = copy.deepcopy(prior)
+            bad[field] = value
+            cases.append([bad])
+        bad = copy.deepcopy(prior)
+        bad['descriptor']['source_proof']['created'] = int(ANONYMOUS_TEST_CREATED)
+        cases.append([bad])
+        for rows in cases:
+            with self.subTest(rows=rows), self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.phase_anonymous_count(rows, self.p)
+
+    def test_changed_bytes_or_signature_refuse(self):
+        from django.core import signing
+        for field, value in (('session_key', b'y' * 32), ('session_data', self.r['session_data'] + b'x'), ('expire_date', b'2026-10-08 02:06:04+00')):
+            bad = dict(self.r)
+            bad[field] = value
+            with self.subTest(field=field), self.assertRaises(Exception):
+                v3.phase_anonymous_descriptor(self.v, bad, ANONYMOUS_TEST_COLUMNS, ANONYMOUS_TEST_SECRET, ANONYMOUS_TEST_CUTOFF, pin=self.d)
+        with self.assertRaises(signing.BadSignature):
+            v3.phase_anonymous_descriptor(self.v, self.r, ANONYMOUS_TEST_COLUMNS, 'wrong fictional secret', ANONYMOUS_TEST_CUTOFF)
+        with self.assertRaises(v3.PhaseAnonymousRefusal):
+            v3.phase_anonymous_descriptor(self.v, self.r, list(reversed(ANONYMOUS_TEST_COLUMNS)), ANONYMOUS_TEST_SECRET, ANONYMOUS_TEST_CUTOFF)
+        for key in (b'a' * 31, b'A' * 32, b'/' * 32):
+            with self.subTest(key=key), self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.phase_anonymous_descriptor(self.v, dict(self.r, session_key=key), ANONYMOUS_TEST_COLUMNS, ANONYMOUS_TEST_SECRET, ANONYMOUS_TEST_CUTOFF)
+
+    def test_signed_privileges_other_destinations_and_payloads_refuse(self):
+        mutations = [lambda p: p.update(_auth_user_id='synthetic staff'), lambda p: p.update(otp_device_id='fictional OTP'), lambda p: p.update(grant={}), lambda p: p.update(_session_expiry=True), lambda p: p.update(_session_expiry=7200), lambda p: p['flows']['f' * 32].update(destination='/health/'), lambda p: p['flows']['f' * 32].update(destination='/?x=1'), lambda p: p['flows']['f' * 32].update(destination='https://example.test/'), lambda p: p['flows']['f' * 32].update(extra=True), lambda p: p.update(flows={}), lambda p: p['flows'].update({'e' * 32: {'created': ANONYMOUS_TEST_CREATED, 'destination': '/'}}), lambda p: p.update(flows={'invalid': next(iter(p['flows'].values()))}), lambda p: p.update(kind='other'), lambda p: p['flows']['f' * 32].update(created=True), lambda p: p['flows']['f' * 32].update(created=float('nan')), lambda p: p['flows']['f' * 32].update(created=float('inf')), lambda p: p['flows']['f' * 32].update(created=-1)]
+        for mutate in mutations:
+            p = anonymous_test_payload()
+            mutate(p)
+            with self.subTest(mutation=mutate), self.assertRaises(v3.PhaseAnonymousRefusal):
+                anonymous_test_descriptor(self.v, anonymous_test_row(value=p))
+
+    def test_expiry_cutoff_and_signer_order_refuse_without_delay_cap(self):
+        from django.core import signing
+        cutoff = ANONYMOUS_TEST_EXPIRY.isoformat()
+        self.assertEqual(anonymous_test_descriptor(self.v, self.r, cutoff)['source_proof']['cutoff'], cutoff)
+        for expiry, signed in ((ANONYMOUS_TEST_EXPIRY - timedelta(seconds=1), ANONYMOUS_TEST_SIGNED), (ANONYMOUS_TEST_EXPIRY, ANONYMOUS_TEST_SIGNED - 1), (ANONYMOUS_TEST_EXPIRY, ANONYMOUS_TEST_SIGNED + 1), (ANONYMOUS_TEST_EXPIRY + timedelta(hours=1), ANONYMOUS_TEST_SIGNED)):
+            with self.subTest(expiry=expiry, signed=signed), self.assertRaises(v3.PhaseAnonymousRefusal):
+                anonymous_test_descriptor(self.v, anonymous_test_row(signed=signed, expiry=expiry))
+        delayed = anonymous_test_row(expiry=ANONYMOUS_TEST_EXPIRY + timedelta(hours=1))
+        d = anonymous_test_descriptor(self.v, delayed, '2026-10-08T05:00:00+00:00')
+        self.assertEqual(d['source_proof']['created'], ANONYMOUS_TEST_CREATED)
+        with patch.object(signing.TimestampSigner, 'timestamp', return_value='0' + signing.b62_encode(ANONYMOUS_TEST_SIGNED)):
+            noncanonical = anonymous_test_row()
+        with self.assertRaisesRegex(v3.PhaseAnonymousRefusal, 'canonical_signer_timestamp'):
+            anonymous_test_descriptor(self.v, noncanonical)
+
+    def test_packet_closed_types_cutoff_and_proof(self):
+        mutations = [lambda p: p.update(format=True), lambda p: p.update(extra=0), lambda p: p.update(cutoff='2026-10-08T03:00:00Z'), lambda p: p.update(cutoff='2026-10-08T04:00:00+01:00'), lambda p: p.update(rows=()), lambda p: p['rows'][0].update(kind='retained_expired_anonymous_preview'), lambda p: p['rows'][0]['source_proof'].update(cutoff='2026-10-08T04:00:00+00:00'), lambda p: p['rows'][0]['source_proof'].update(created=True), lambda p: p['rows'][0]['source_proof'].update(extra=0), lambda p: p['rows'][0]['source_proof'].update(primary_key_sha256='a' * 63), lambda p: p['rows'][0]['source_proof'].update(signed_at='2026-10-08T01:36:03.100000+00:00')]
+        for mutate in mutations:
+            p = copy.deepcopy(self.p)
+            mutate(p)
+            with self.subTest(mutation=mutate), self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.anonymous_packet_admission(p)
+
+    def test_sorted_unique_and_explicit_32_row_limit(self):
+        ds = [anonymous_test_descriptor(self.v, anonymous_test_row(f'{i:032x}')) for i in range(33)]
+        full = anonymous_test_packet(ds[:32])
+        self.assertEqual(len(v3.anonymous_packet_admission(full)['rows']), 32)
+        for bad in (anonymous_test_packet(ds), anonymous_test_packet(ds[:2] + [ds[0]]), dict(full, rows=list(reversed(full['rows'])))):
+            with self.subTest(packet=bad), self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.anonymous_packet_admission(bad)
+
+    def test_validator_only_handles_captured_class_and_retains_original_dispatch(self):
+        original = self.v.validate_admitted_added_row
+        supplied = copy.deepcopy(self.p)
+        self.assertIs(v3.adapt_phase_anonymous_validator(self.v, supplied), self.v)
+        supplied['rows'].clear()
+        self.v.validate_admitted_added_row(self.r, ANONYMOUS_TEST_COLUMNS, anonymous_test_evidence(self.d), 'fictional actor', ANONYMOUS_TEST_SECRET)
+        original.assert_not_called()
+        unknown = {'table': 'django_session', 'primary_key_sha256': 'a' * 64, 'descriptor': {'kind': 'normal_admin_session'}}
+        args = (self.r, ANONYMOUS_TEST_COLUMNS, unknown, 'fictional actor', ANONYMOUS_TEST_SECRET, 'unchanged context')
+        self.assertEqual(self.v.validate_admitted_added_row(*args, extra='unchanged keyword'), 'delegated original result')
+        original.assert_called_once_with(*args, extra='unchanged keyword')
+        new = anonymous_test_evidence(anonymous_test_descriptor(self.v, anonymous_test_row('y' * 32)))
+        with self.assertRaises(v3.PhaseAnonymousRefusal):
+            self.v.validate_admitted_added_row(anonymous_test_row('y' * 32), ANONYMOUS_TEST_COLUMNS, new, 'fictional actor', ANONYMOUS_TEST_SECRET)
+        bad = anonymous_test_evidence(self.d)
+        bad['descriptor'] = {'kind': 'normal_admin_session'}
+        with self.assertRaises(v3.PhaseAnonymousRefusal):
+            self.v.validate_admitted_added_row(self.r, ANONYMOUS_TEST_COLUMNS, bad, 'fictional actor', ANONYMOUS_TEST_SECRET)
+
+    def test_unrelated_unhashable_identity_delegates_and_phase_kind_refuses(self):
+        original = self.v.validate_admitted_added_row
+        v3.adapt_phase_anonymous_validator(self.v, self.p)
+        for identity in ([], {}, ['unexpected']):
+            prior = {'table': 'django_session', 'primary_key_sha256': identity, 'descriptor': {'kind': 'other'}}
+            args = (self.r, ANONYMOUS_TEST_COLUMNS, prior, 'fictional actor', ANONYMOUS_TEST_SECRET)
+            self.assertEqual(self.v.validate_admitted_added_row(*args), 'delegated original result')
+            original.assert_called_with(*args)
+            bad = dict(prior, descriptor=copy.deepcopy(self.d))
+            with self.assertRaises(v3.PhaseAnonymousRefusal):
+                self.v.validate_admitted_added_row(self.r, ANONYMOUS_TEST_COLUMNS, bad, 'fictional actor', ANONYMOUS_TEST_SECRET)
+
+
 class FinancialAndExportTests:
     """Explicit manual suite; actual pinned host inputs are not remote fixtures.
 
@@ -1346,6 +1586,30 @@ class FinancialAndExportTests:
         with self.assertRaisesRegex(v3.Refusal,'dependency_hash'):
             v3.verifier_adapter(raw+b'\n# foreign change',self.common,authority,self.verifier,publisher_admission=publisher)
 
+    def test_final_callbacks_require_phase_authority_and_closed_anonymous_packet(self):
+        raw = v3.protected(v3.FROZEN/'verify_installed_acceptance_v3.py')
+        authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {})
+        authority.pop('phase_preservation', None)
+        for arguments in ({'completion_check': lambda *args: None},
+                          {'phase_preservation': lambda: {}},
+                          {'completion_check': lambda *args: None, 'phase_preservation': lambda: {}}):
+            with self.subTest(arguments=sorted(arguments)), \
+                 patch.object(v3, 'protected', side_effect=AssertionError('missing authority cannot read a packet')), \
+                 self.assertRaisesRegex(v3.Refusal, 'final_phase_packet_required'):
+                v3.verifier_adapter(raw, self.common, authority, self.verifier,
+                                    publisher_admission=lambda *args: None, **arguments)
+        for packet in (None, {'format': True, 'cutoff': START.isoformat(), 'rows': []}):
+            observation = {'binding': {'operations_revision': OPS, 'served_revision': SERVED}}
+            if packet is not None:
+                observation['anonymous_sessions'] = packet
+            phase_raw = v3.encode(observation)
+            pinned = dict(authority, phase_preservation={'path': str(v3.PHASE_PRESERVATION_PATH),
+                'sha256': v3.sha(phase_raw), 'binding': observation['binding']})
+            with self.subTest(packet=packet), patch.object(v3, 'protected', return_value=phase_raw), \
+                 self.assertRaises(v3.PhaseAnonymousRefusal):
+                v3.verifier_adapter(raw, self.common, pinned, self.verifier,
+                                    completion_check=lambda *args: None, publisher_admission=lambda *args: None)
+
     def publication_proof_fixture(self, workspace, deferred=False):
         from ops import publisher_verification
         root = workspace/'source'
@@ -1500,6 +1764,7 @@ class FinancialAndExportTests:
     def test_every_installed_admission_caller_binds_the_same_checked_publisher_wrapper(self):
         host = v3.InstalledHost.__new__(v3.InstalledHost);host.inside=True
         host.contract=contract();host.availability_raw=b'fictional availability';host.availability_verifier=self.verifier
+        host.anonymous_sessions={'format':1,'cutoff':START.isoformat(),'rows':[]}
         host.admission_raws={};host.old=types.SimpleNamespace(service_boundary=lambda *args,**kw:
             {unit:{'MainPID':str(os.getpid())} for unit in v3.UNITS})
         host.backup=object();host.storage=object();host.native=types.SimpleNamespace(worker_configuration=lambda *args:{})
@@ -1534,8 +1799,9 @@ class FinancialAndExportTests:
         calls=[];proof={'full':'source proof'}
         def publisher(actual,old,policy):
             self.assertIs(actual,conn);self.assertEqual(old['id'],row['id']);calls.append('checked');return proof
-        def semantic(*args):
-            self.assertIs(args[-2],proof);return {'publisher':proof}
+        def semantic(actual_verifier, old, current, keys, policy, secret, fingerprint,
+                     auth, publisher, edge_ip=None, anonymous_packet=None, anonymous_cutoff=None):
+            self.assertIs(publisher,proof);return {'publisher':proof}
         with patch.object(v3,'readonly_connection_flags'),patch.object(v3,'authenticated_rows_admission',side_effect=semantic):
             result=v3.readonly_copy_admission(conn,verifier,{},original,{}, {'tables':{}},{},'fictional key','fingerprint',
                                                publisher_admission=publisher)
@@ -1750,6 +2016,47 @@ class FinancialAndExportTests:
                         'fictional fingerprint', None, {})
                     v3.preserved_expired_session_count(proof['added_rows'], required=True)
 
+    def test_actual_B77_captures_once_preserves_212_originals_and_refuses_later_additions(self):
+        from django.core import signing
+        old, current, keys, policy, secret = self.no_auth_fixture()
+        retained = [('q'+format(i, '031x')).encode()+b'\tunaltered original retained bytes\t2026-01-01 00:00:00+00\n'
+                    for i in range(212)]
+        old['django_session']['rows'] = retained
+        current['django_session']['rows'] = retained + current['django_session']['rows']
+        policy['original_tables']['django_session'] = {'rows': 212, 'sha256': v3.sha(b''.join(retained))}
+        created = START.timestamp()-3600+0.25
+        value = {'kind': 'quillmd-preview-v1', '_session_expiry': 1800,
+            'flows': {'f'*32: {'created': created, 'destination': '/'}}}
+        with patch('django.core.signing.time.time', return_value=int(created)):
+            data = signing.dumps(value, key=secret, salt='django.contrib.sessions.SessionStore').encode()
+        expiry = (START-timedelta(seconds=1800)+timedelta(microseconds=885947)).isoformat(sep=' ').replace('+00:00', '+00').encode()
+        lines = [key+b'\t'+data+b'\t'+expiry+b'\n' for key in (b'z'*32, b'y'*32)]
+        current['django_session']['rows'].extend(lines)
+        cutoff = (START-timedelta(seconds=1)).isoformat()
+        with patch.object(socket, 'create_connection', side_effect=AssertionError('pure COPY cannot make a socket')):
+            captured = v3.authenticated_rows_admission(self.verifier, old, current, keys, policy,
+                secret, 'fictional fingerprint', None, {}, anonymous_cutoff=cutoff)
+            packet = captured['anonymous_sessions']
+            self.assertEqual(len(packet['rows']), 2)
+            self.assertEqual(v3.phase_anonymous_count(captured['added_rows'], packet), 2)
+            following = v3.authenticated_rows_admission(self.verifier, old, current, keys, policy,
+                secret, 'fictional fingerprint', None, {}, anonymous_packet=packet)
+            self.assertEqual(following, captured)
+            for fault in ('new-valid-row', 'deleted-pin', 'changed-pin', 'changed-original', 'deleted-original', 'other-table'):
+                bad = copy.deepcopy(current)
+                if fault == 'new-valid-row': bad['django_session']['rows'].append(lines[0].replace(b'z'*32, b'w'*32))
+                elif fault == 'deleted-pin': bad['django_session']['rows'].pop()
+                elif fault == 'changed-pin': bad['django_session']['rows'][-1] = lines[-1].replace(expiry, b'2026-10-07 11:30:01+00')
+                elif fault == 'changed-original': bad['django_session']['rows'][0] = retained[0].replace(b'unaltered', b'changed')
+                elif fault == 'deleted-original': bad['django_session']['rows'].pop(0)
+                else: bad['core_encounter']['rows'].append(b'unlisted\tunlisted clinical row\n')
+                with self.subTest(fault=fault), self.assertRaises((RuntimeError, v3.Refusal, v3.PhaseAnonymousRefusal)):
+                    v3.authenticated_rows_admission(self.verifier, old, bad, keys, policy,
+                        secret, 'fictional fingerprint', None, {}, anonymous_packet=packet)
+        with self.assertRaisesRegex(v3.Refusal, 'capture_before_auth_only'):
+            v3.authenticated_rows_admission(self.verifier, old, current, keys, policy,
+                secret, 'fictional fingerprint', {}, {}, anonymous_cutoff=cutoff)
+
     def test_actual_noauth_copy_admission_historical_signature_and_original_bytes(self):
         args = self.no_auth_fixture()
         with patch.object(socket, 'create_connection', side_effect=AssertionError('socket')) as sock:
@@ -1935,6 +2242,17 @@ class FinancialAndExportTests:
     def test_actual_frozen_phase_admission_and_embedded_bridge_require_lossless_exact_packet(self):
         import re
         original, observation, _ = phase_fixture()
+        # Nonempty fractional created time exercises the actual raw-JSON Python
+        # bridge; the generic configuration/ns predicate still excludes floats.
+        anonymous_descriptor = {'kind': v3.ANONYMOUS_PHASE_KIND, 'source_proof': {
+            'primary_key_sha256': 'a'*64, 'row_sha256': 'b'*64, 'payload_sha256': 'c'*64,
+            'expire_date': (START-timedelta(seconds=1800)+timedelta(microseconds=750000)).isoformat(sep=' ').replace('+00:00', '+00'),
+            'created': START.timestamp()-3600+0.25,
+            'signed_at': (START-timedelta(seconds=3600)).isoformat(),
+            'cutoff': observation['anonymous_sessions']['cutoff']}}
+        observation['anonymous_sessions']['rows'] = [anonymous_descriptor]
+        anonymous_evidence = {'table': 'django_session', 'primary_key_sha256': 'a'*64,
+            'row_sha256': 'b'*64, 'descriptor': anonymous_descriptor}
         database = {'pending_jobs': 0, 'held': 0}
         before = {'configuration': original, 'files': {}, 'mail': {}, 'static': {}, 'database': database}
         units = {name: {'MainPID': '123', 'ExecMainStartTimestampMonotonic': '456'} for name in self.common.UNITS}
@@ -1954,7 +2272,8 @@ class FinancialAndExportTests:
                 'pending_jobs': 0, 'held_reservations': 0, 'unresolved_reaper_paths': 0,
                 'existing_job_receipt_usage_rows_unchanged': True},
             'allowed_deltas': {'health_session': {}, 'publisher': {'all_eleven_columns_accounted_for': True,
-                'publication': {'publication_verified': True}}, 'original_row_transitions': [], 'added_rows': [],
+                'publication': {'publication_verified': True}}, 'original_row_transitions': [],
+                'added_rows': [anonymous_evidence], 'anonymous_sessions': observation['anonymous_sessions'],
                 'normal_mfa': None}, 'started_at': START.isoformat(), 'finished_at': START.isoformat(),
             'co_tenant_preservation_admission': proof}
         phase_authority = {'path': str(v3.PHASE_PRESERVATION_PATH),
@@ -1981,7 +2300,9 @@ class FinancialAndExportTests:
         self.assertEqual(json.loads(result.stdout), report)
         for mutate in (lambda row: row.pop('co_tenant_preservation_admission'),
             lambda row: row.__setitem__('co_tenant_preservation_admission', {'protocol':'post-restoration-exact-owner-preservation-v1'}),
-            lambda row: row['co_tenant_preservation_admission']['phase_observation']['binding'].__setitem__('parent_pid', 999)):
+            lambda row: row['co_tenant_preservation_admission']['phase_observation']['binding'].__setitem__('parent_pid', 999),
+            lambda row: row['allowed_deltas'].pop('anonymous_sessions'),
+            lambda row: row['allowed_deltas']['added_rows'].clear()):
             bad = copy.deepcopy(report); bad['current_snapshot']['configuration'] = original; mutate(bad)
             with self.assertRaises((v3.Refusal, RuntimeError)):
                 self.common.admission(v3.encode(bad), **arguments(bad))
@@ -2312,6 +2633,7 @@ def phase_fixture(availability_sha='c' * 64):
         'historical_original_configuration_sha256': v3.sha(v3.encode(original)),
         'configuration': current, 'external_boundary': boundary,
         'captured_at': (START-timedelta(seconds=1)).isoformat(),
+        'anonymous_sessions': {'format': 1, 'cutoff': (START-timedelta(seconds=1)).isoformat(), 'rows': []},
         'binding': {'operations_revision': OPS, 'served_revision': SERVED,
             'availability_receipt_sha256': availability_sha, 'parent_pid': 123, 'parent_start_ticks': 456,
             'preparation_directory': str(v3.PREPARATION)}}
@@ -2376,6 +2698,7 @@ class PhasePreservationTests(unittest.TestCase):
         report = {'operations_revision': OPS, 'served_revision': SERVED, 'availability_receipt_sha256': 'c'*64,
             'started_at': START.isoformat(), 'finished_at': START.isoformat(),
             'current_snapshot': {'configuration': self.observation['configuration']},
+            'allowed_deltas': {'anonymous_sessions': self.observation['anonymous_sessions'], 'added_rows': []},
             'co_tenant_preservation_admission': self.proof}
         receipt = {'before': {'configuration': self.original}}
         check = lambda value: scope['admission'](v3.encode(value), 'before-auth', authority, receipt, OPS, SERVED, 'c'*64)
@@ -2391,6 +2714,7 @@ class PhasePreservationTests(unittest.TestCase):
         raw = v3.encode(self.observation)
         host = types.SimpleNamespace(co_tenant_phase_observation=None, co_tenant_phase_raw=None,
             operations=OPS, served=SERVED, availability_raw=b'fictional availability',
+            anonymous_sessions=None, availability_verifier=types.SimpleNamespace(validate_admitted_added_row=lambda *args: None),
             receipt={'before': {'configuration': self.original}}, admission_raws={})
         observation = copy.deepcopy(self.observation)
         observation['binding']['availability_receipt_sha256'] = v3.sha(host.availability_raw)
@@ -2431,6 +2755,7 @@ class PhasePreservationTests(unittest.TestCase):
         host.old = types.SimpleNamespace(snapshot=lambda *args: {'configuration': copy.deepcopy(self.observation['configuration'])})
         host.co_tenant_phase_observation = observation
         host.co_tenant_phase_raw = v3.encode(observation) if observation else None
+        host.anonymous_sessions = copy.deepcopy(self.observation['anonymous_sessions'])
         return host
 
     def test_self_owned_parent_captures_once_and_child_cannot_recapture(self):
