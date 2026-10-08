@@ -127,6 +127,17 @@ class FakeHost:
         return {'complete':True,'served_revision':actual,'feature_campaign_normal_origin_off':actual!=delivery.BASE}
 
 
+class PortableMetadataTests(unittest.TestCase):
+    def test_source_metadata_does_not_require_native_host_interpreter(self):
+        delivery.migration_model_metadata.cache_clear()
+        try:
+            with patch.object(delivery, 'APP', Path('/nonexistent-native-host/rebuild')):
+                columns=delivery.migration_model_metadata()['columns']
+            self.assertEqual(set(columns), set(delivery.NEW_TABLES)|{'core_templateversion'})
+        finally:
+            delivery.migration_model_metadata.cache_clear()
+
+
 class EnvironmentTests(unittest.TestCase):
     original=(b'# retain bytes\nQUILLMD_DATA_MODE=synthetic\nQUILLMD_PREVIEW_AUTH_ENABLED=1\n'
         b'QUILLMD_APP_BASE_URL=https://app.quillmd.com:9443\nQUILLMD_AI_MODE=live\nQUILLMD_AI_PROVIDER=anthropic\n'

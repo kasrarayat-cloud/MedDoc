@@ -36,6 +36,7 @@ LAYOUT_ADVISORIES = frozenset([
     *TAB_LAYOUT_ADVISORIES,
 ])
 WM_MAPPING_DIGEST = '0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072'
+WM_EXPORT_LAYOUT_POLICY = {'protocol':'quillmd-preserve-original-layout-v1','source_sha256':WM_IOV_SHA256}
 # These are the complete, ordered warnings of the unchanged qualified WM original.
 # They are admitted only with its byte identity and full original mapping proof.
 WM_LAYOUT_ADVISORIES = (
@@ -317,7 +318,8 @@ def build_candidate(prep,placements):
                                    'revision':prep.revision,'placements':placements})
     prep.candidate_path=relative; prep.candidate_sha256=result['prepared_sha256']; prep.changes=result['changes']
     prep.save(update_fields=['candidate_path','candidate_sha256','changes','candidate_history'])
-    prep.candidate_info=candidate_inspection(prep,inspect_template(target),result,placements)
+    prep.candidate_info=candidate_inspection(prep,inspect_template(target),result,placements,
+        preserve_original_export_layout=True)
 
 
 def wm_inspection_admission(prep,info):
@@ -341,7 +343,7 @@ def wm_inspection_admission(prep,info):
             'warnings_sha256':digest(list(WM_LAYOUT_ADVISORIES))}
 
 
-def candidate_inspection(prep,info,result,placements):
+def candidate_inspection(prep,info,result,placements,*,preserve_original_export_layout=False):
     # Only the isolated candidate writer may add source constraints. The
     # ordinary inspector remains compatible with already sealed old versions.
     if 'prepared_fields' in result:
@@ -372,8 +374,32 @@ def candidate_inspection(prep,info,result,placements):
     candidate_info={'fields':info['fields'],'warnings':list(warnings),'reviewed_multi_column_rows':rows,'review_requirements':info.get('review_requirements',[]),
                          'document_backend':{k:info[k] for k in ('backend','source_sha256','mapping_digest')}
                                               if info.get('backend') else {}}
-    if wm_proof:candidate_info['qualified_warning_baseline']=wm_proof
+    if wm_proof:
+        candidate_info['qualified_warning_baseline']=wm_proof
+        # An explicit policy for this new candidate is sealed with its doctor
+        # approval. Historical inspection continuations keep their old policy;
+        # ordinary forms and old approved versions acquire no export override.
+        if preserve_original_export_layout:
+            candidate_info['export_layout']=dict(WM_EXPORT_LAYOUT_POLICY)
     return candidate_info
+
+
+def validate_export_layout_policy(prep):
+    """Present policies must describe this fully qualified unchanged WM source."""
+    if 'export_layout' not in prep.candidate_info:return None
+    policy=prep.candidate_info['export_layout']
+    if type(policy) is not dict or digest(policy)!=digest(WM_EXPORT_LAYOUT_POLICY):
+        raise ValidationError('The prepared export layout policy is unsupported or changed.')
+    backend=prep.candidate_info.get('document_backend',{})
+    try:
+        proof=wm_inspection_admission(prep,{'sha256':prep.candidate_sha256,'format':prep.template.format,
+            **backend,'fields':prep.candidate_info['fields'],'warnings':prep.candidate_info['warnings'],
+            'review_requirements':prep.candidate_info['review_requirements']})
+    except (KeyError,TypeError,ValueError) as exc:
+        raise ValidationError('The export layout policy is not bound to this complete unchanged WM form.') from exc
+    if digest(proof)!=digest(prep.candidate_info.get('qualified_warning_baseline')):
+        raise ValidationError('The export layout policy differs from its source-qualified inspection.')
+    return dict(policy)
 
 
 def can_continue_wm_review(prep):
@@ -546,6 +572,7 @@ def approve(prep_id, actor, revision, candidate_sha, approved_changes, original_
             or not original_seen or not prepared_seen or set(approved_changes)!={r['anchor_id'] for r in prep.changes}):
         raise ValidationError('Review the current original and candidate and approve every exact change.')
     validate_inventory(prep.inventory)
+    validate_export_layout_policy(prep)
     validate_role(prep.inventory,prep.proposal,'proposer');validate_role(prep.inventory,prep.checker,'checker')
     if prep.inventory['issues'] or (not prep.corrections and (any(r['decision']!='map' for r in prep.proposal['anchors'])
             or any(r['verdict']!='pass' for r in prep.checker['anchors'])

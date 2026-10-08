@@ -23,8 +23,23 @@ class DocumentError(ValueError):
         self.code = code
 
 
+def validate_export_layout(policy, source_sha256, document_backend):
+    """Only a source-bound new WM approval can request the original geometry."""
+    if policy is None:
+        return None
+    from .sdk_service import WM_IOV_SHA256
+    expected={'protocol':'quillmd-preserve-original-layout-v1','source_sha256':WM_IOV_SHA256}
+    backend={'backend':'wm-iov-foss-v2','source_sha256':WM_IOV_SHA256,
+             'mapping_digest':'0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072'}
+    if (type(policy) is not dict or policy!=expected or source_sha256!=WM_IOV_SHA256
+            or document_backend!=backend):
+        raise DocumentError('The approved export layout does not match this original.', 'stale_layout')
+    return dict(expected)
+
+
 def _run(path, operation, mapping=None, answers=None, output_path=None, *,
-         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None):
+         document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None,
+         export_layout=None):
     source = Path(path)
     try:
         fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
@@ -40,6 +55,7 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
     digest = hashlib.sha256(payload).hexdigest()
     if expected_sha256 is not None and digest!=expected_sha256:
         raise DocumentError('The approved document source changed before processing.', 'source_changed')
+    layout_policy=validate_export_layout(export_layout,digest,document_backend)
     if payload.startswith(b"PK\x03\x04"):
         suffix = ".docx"
     elif payload.startswith(b"%PDF-"):
@@ -104,7 +120,7 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
             export = workspace / ("output" + suffix)
             if not export.is_file() or export.is_symlink() or not 0 < export.stat().st_size <= MAX_OUTPUT:
                 raise DocumentError("The document export is invalid.", "invalid_export")
-            if suffix == ".docx":
+            if suffix == ".docx" and layout_policy is None:
                 # Output-only WM pagination: each limb repeats its own heading/units; long location
                 # rows may flow across pages. Applied before hashing, so the recorded export_sha256
                 # describes the stored bytes and the uploaded original is never rewritten.
@@ -112,6 +128,9 @@ def _run(path, operation, mapping=None, answers=None, output_path=None, *,
                 response["layout"] = repair_export(export)
                 if not 0 < export.stat().st_size <= MAX_OUTPUT:
                     raise DocumentError("The document export is invalid.", "invalid_export")
+            elif layout_policy is not None:
+                response['layout']={'policy':layout_policy['protocol'],'original_geometry_preserved':True,
+                                    'native_pagination_verified':False}
             # O_EXCL also protects against a concurrent export or symlink swap.
             try:
                 out_fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
@@ -133,13 +152,15 @@ def inspect_template(path):
 
 
 def fill_template(original_path, mapping: list, answers: dict, output_path, *,
-                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None):
+                  document_backend=None, reviewed_requirements=None, trusted_context=None, claim_variants=None,expected_sha256=None,
+                  export_layout=None):
     """Fill only the verified original's mapped fields, writing a new private file."""
     if not isinstance(mapping, list) or not isinstance(answers, dict):
         raise DocumentError("Mapping must be a list and answers must be a dictionary.", "invalid_mapping")
     return _run(original_path, "fill", mapping, answers, output_path,
                 document_backend=document_backend, reviewed_requirements=reviewed_requirements,
-                trusted_context=trusted_context, claim_variants=claim_variants,expected_sha256=expected_sha256)
+                trusted_context=trusted_context, claim_variants=claim_variants,expected_sha256=expected_sha256,
+                export_layout=export_layout)
 
 
 def resolve_template(original_path, document_backend: dict, answers: dict, *, claim_variants=None, trusted_context=None,expected_sha256=None):

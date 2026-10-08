@@ -46,3 +46,17 @@ def source_for_version(version):
     if hashlib.sha256(read_original(prepared)).hexdigest() != version.prepared_sha256:
         raise ValidationError('Prepared form integrity check failed.')
     return prepared
+
+
+def export_layout_for_version(version):
+    """Read only the exact layout policy sealed by an immutable preparation."""
+    source_for_version(version)
+    if not version.preparation_id:
+        return None
+    info=version.preparation.candidate_info
+    if 'export_layout' not in info:
+        return None  # Existing approvals keep their existing export behavior.
+    if info['export_layout'] is None:
+        raise ValidationError('The prepared export layout policy is invalid.')
+    from documents.service import validate_export_layout
+    return validate_export_layout(info['export_layout'],version.prepared_sha256,version.document_backend)

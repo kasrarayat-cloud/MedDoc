@@ -20,6 +20,7 @@ from pathlib import Path, PurePosixPath
 import re
 import stat
 import subprocess
+import sys
 import tarfile
 import time
 from types import SimpleNamespace
@@ -60,8 +61,10 @@ REPAIR_PATHS=frozenset({'rebuild/core/jobs.py','rebuild/core/preparation.py','re
     'rebuild/core/tests/test_preparation.py','rebuild/core/tests/test_preparation_campaign.py',
     'rebuild/core/tests/test_preparation_campaign_pg.py','rebuild/core/tests/test_answer_constraints.py',
     'rebuild/core/tests/test_provider_models.py','rebuild/core/tests/test_preparation_constraints.py',
+    'rebuild/core/tests/test_preparation_export_layout.py',
     'rebuild/core/tests/test_doctor_pilot_self_service.py',
     'rebuild/documents/engine.py','rebuild/documents/preparation.py','rebuild/documents/test_preparation.py',
+    'rebuild/documents/service.py','rebuild/documents/test_export_layout.py',
     'rebuild/quillmd/settings.py','rebuild/core/migrations/0023_delivery_campaign.py',
     'rebuild/documents/test_preparation_constraints.py',
     'rebuild/static/docx-frame.js','rebuild/static/docx-frame.css','rebuild/static/template-preparation.js',
@@ -459,7 +462,9 @@ for name in ('TemplatePreparation','PreparationReceipt','TemplateVersion'):
  result['columns'][model._meta.db_table]=values
 print(json.dumps(result,sort_keys=True))
 '''
-    result=subprocess.run([str(APP/'.venv/bin/python'),'-B','-c',code],cwd=SOURCE/'rebuild',
+    # This pure migration-state inspection uses the invoking, dependency-qualified
+    # interpreter. The native execution door still pins its installed interpreter.
+    result=subprocess.run([sys.executable,'-B','-c',code],cwd=SOURCE/'rebuild',
         env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8','PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,timeout=30)
     require(result.returncode==0 and len(result.stdout)<=65536,'source_migration_model_contract')
     contract=json.loads(result.stdout)

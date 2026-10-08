@@ -174,3 +174,21 @@ The actual isolated PostgreSQL schema, rollback and source-bound static checks
 remain separate from native execution. This qualification enables explicit
 prospective planning only; exact candidate/merged CI, fresh input admission,
 ruled execution and authenticated HTTPS acceptance remain required.
+
+Focused correction, 2026-10-08: the finished export comparison established that
+the existing application pagination postprocessor, rather than the frozen Word
+SDK, splits the WM table and adds a separator paragraph. Newly prepared WM
+versions now seal an explicit source-bound original-layout policy in their
+approval metadata. Their export preserves the original single measurement
+table, row order and signing positions; the canonical SDK mapping and all
+review requirements remain unchanged. Older approved versions and retained
+continuations keep their recorded export behavior. The preview discloses that
+HTML does not calculate native Word pagination. Original failure packages and
+the exact raw/application-stage reproduction remain retained. This is not a
+blanket layout-check exception or a native Word rendering claim.
+
+The isolated, database-free migration-model inspection now uses the invoking
+dependency-qualified Python interpreter so its fault controls execute in CI.
+The native entry and reviewed installation primitives retain their existing
+interpreter and access restrictions. Exact descendant CI and a renewed finished
+diff refutation are required before installation.
