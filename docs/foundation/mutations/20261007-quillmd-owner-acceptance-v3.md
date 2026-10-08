@@ -20,6 +20,16 @@ VoiceAssistMain, MFA settings, original captures, failed continuations, immutabl
 frozen dependencies and historical deployment-approval uncertainty are preserved.
 Push, merge and every installed action remain governed by their reviewed gates.
 
+8 October correction: the sealed normal-authentication helper retains its real
+GitHub main-reference query and compares that response with the full revision
+admitted by the fresh native child source gate. That revision can be the reviewed
+normal-origin descendant of the separately cited operational ancestor. It is
+never inferred from the configured operational revision or supplied by an
+environment override. An unknown or changed main reference still refuses before
+authentication. Each native bind clears the previous pin before validating the
+current exact source, ancestry, used dependencies and citations. The original
+frozen helper and the demonstrated premature equality refusal remain retained.
+
 acceptance_admin_preparation_sha256: c8fa9d63de993fca8aacb33a0ce5f295b3a1bfdc7c685bce598acf841453e90f
 acceptance_browser_sha256: d58204d839ecf150bb918f34899f0d7784f312a2e3f55008248df01916667aa0
 acceptance_options_sha256: 748ae77377f867255a75d6717a2119f176378bd8fe02714cfbff043464ff84bc

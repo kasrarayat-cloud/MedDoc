@@ -1058,7 +1058,8 @@ class FinancialAndExportTests:
         blobs = {name: v3.protected(v3.FROZEN / name) for name in v3.DEPENDENCIES}
         authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {'before-auth': b'fictional report'})
         declaration_raw = declaration() + b'\n'.join((key+': '+value).encode() for key,value in v3.FIXTURE_PINS.items())
-        check = {'argv':['-B','-c','fictional checked native admission'], 'source_fd':9}
+        check = {'argv':['-B','-c','fictional checked native admission'], 'source_fd':9,
+                 'merged_main_revision': OPS}
         for phase in ('normal-auth','browser'):
             with self.subTest(phase=phase):
                 adapted = v3.javascript_adapter(blobs,phase,declaration_raw,authority,check)
@@ -1073,6 +1074,48 @@ class FinancialAndExportTests:
         with self.assertRaisesRegex(v3.Refusal,'dependency_drift'):
             v3.javascript_adapter(wrong,'browser',declaration_raw,authority,check)
         self.assertEqual({name:v3.sha(v3.protected(v3.FROZEN/name)) for name in v3.DEPENDENCIES},v3.DEPENDENCIES)
+
+    def test_normal_auth_queries_real_main_and_compares_exact_admitted_revision(self):
+        blobs = {name: v3.protected(v3.FROZEN / name) for name in v3.DEPENDENCIES}
+        authority = v3.derive_authority(contract(), self.common, OPS, SERVED, {})
+        for expected in (OPS, '4' * 40):
+            check = {'argv':['fictional'], 'source_fd':9, 'merged_main_revision':expected}
+            adapted = v3.javascript_adapter(blobs, 'normal-auth', declaration(), authority, check)
+            begin = adapted.index(b" const main=execFileSync('gh'")
+            end = adapted.index(b'\n', begin)
+            statement = adapted[begin:end]
+            for observed in (expected, '5' * 40, OPS if expected != OPS else '6' * 40):
+                with self.subTest(expected=expected, observed=observed):
+                    source = (b"const repository='fictional/repository',operations=" + v3.encode(OPS)
+                        + b";let calls=[];function must(v,m){if(!v)throw new Error(m);};"
+                        + b"function execFileSync(command,args,options){calls.push({command,args,options});return "
+                        + v3.encode(observed + '\n') + b";}try{" + statement
+                        + b"console.log(JSON.stringify({accepted:true,calls}));}catch(error){"
+                        + b"console.log(JSON.stringify({accepted:false,calls}));}")
+                    run = subprocess.run(['/usr/bin/node','--input-type=module'], input=source,
+                                         cwd=v3.SOURCE, capture_output=True, timeout=15, check=True)
+                    result = json.loads(run.stdout)
+                    self.assertEqual(result['accepted'], observed == expected)
+                    self.assertEqual(result['calls'], [{'command':'gh',
+                        'args':['api','repos/fictional/repository/git/ref/heads/main','--jq','.object.sha'],
+                        'options':{'cwd':str(v3.SOURCE),'encoding':'utf8','timeout':30000}}])
+        for invalid in (None, '', '7' * 39, '7' * 40 + '\n'):
+            with self.subTest(invalid=invalid), self.assertRaises(v3.Refusal):
+                v3.javascript_adapter(blobs, 'normal-auth', declaration(), authority,
+                    {'argv':['fictional'], 'source_fd':9, 'merged_main_revision':invalid})
+
+    def test_native_bind_replaces_pin_only_after_successful_fresh_source_admission(self):
+        host = v3.InstalledHost.__new__(v3.InstalledHost)
+        host.environment = {}
+        proof = {'merged_main':{'revision':'4' * 40}}
+        with patch.object(v3, 'source_gate', return_value=proof) as gate:
+            self.assertIs(host.bind(contract(), OPS, SERVED), proof)
+            self.assertEqual(host.admitted_main_revision, '4' * 40)
+            gate.assert_called_once_with(host, contract(), OPS, SERVED, {})
+        with patch.object(v3, 'source_gate', side_effect=v3.Refusal('fresh_source_failed')):
+            with self.assertRaisesRegex(v3.Refusal, 'fresh_source_failed'):
+                host.bind(contract(), OPS, SERVED)
+        self.assertIsNone(host.admitted_main_revision)
 
     def final_admin_storage_fixture(self, root):
         admin=root/'admin';campaign=root/'campaign';admin.mkdir(mode=0o700);campaign.mkdir(mode=0o700)

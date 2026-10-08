@@ -2350,6 +2350,11 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
     result = replace_once(result, b'fs.readFileSync(path.join(process.cwd(),DECLARATION))',
                           ('Buffer.from(' + json.dumps(base64.b64encode(declaration).decode()) + ",'base64')").encode(), 'declaration_buffer')
     if phase == 'normal-auth':
+        main_revision = full_revision(child_check.get('merged_main_revision'))
+        result = replace_once(result,
+            b"must(main===operations,'Operations revision is not exact merged main');",
+            ("must(main===" + json.dumps(main_revision)
+             + ",'Current main differs from exact admitted release');").encode(), 'admitted_merged_main')
         result = replace_once(result, b'const contract=JSON.parse(contractJSON[1]);',
                               ('const contract=' + encode(authority).decode() + ';').encode(), 'runtime_authority')
         old_citation = b"execFileSync('bash',[path.join(process.cwd(),'scripts/check-citation.sh'),revision],{cwd:process.cwd(),encoding:'utf8',maxBuffer:1024*1024,timeout:360000})"
@@ -2487,6 +2492,7 @@ class InstalledHost:
         self.publication_alignment = None
         self.parent_lock_context = None
         self.own_hold_mode = None
+        self.admitted_main_revision = None
         self.co_tenant_phase_observation = None
         self.co_tenant_phase_raw = None
 
@@ -2540,7 +2546,10 @@ class InstalledHost:
 
     def bind(self, contract, operations, served):
         self.contract, self.operations, self.served = contract, full_revision(operations), full_revision(served)
-        return source_gate(self, contract, operations, served, self.environment)
+        self.admitted_main_revision = None
+        proof = source_gate(self, contract, operations, served, self.environment)
+        self.admitted_main_revision = full_revision(proof['merged_main']['revision'])
+        return proof
 
     def authenticate_dependencies(self):
         self.blobs = {name: protected(FROZEN / name) for name in DEPENDENCIES}
@@ -3050,7 +3059,8 @@ def dispatch_javascript(host, phase, context_sha, declaration):
     require(raw == host.git(host.source, 'show', host.operations + ':' + SELF), 'v3_dispatch_checked_git_source')
     args = ['--child-check-' + phase, '--operations-revision', host.operations,
             '--served-revision', host.served, '--parent-context-sha256', context_sha]
-    check = {'argv': checked_python_argv(host.source, 3, raw, args)[1:], 'source_fd': fd}
+    check = {'argv': checked_python_argv(host.source, 3, raw, args)[1:], 'source_fd': fd,
+             'merged_main_revision': full_revision(host.admitted_main_revision)}
     javascript = javascript_adapter(host.blobs, phase, declaration, host.authority(), check)
     # Replace this one process in the parent's owned session. A new independent
     # child group would escape its timeout/unknown-outcome drain.
