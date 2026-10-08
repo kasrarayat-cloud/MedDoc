@@ -14,10 +14,12 @@ its full citation and the exact normal target citation remain execution gates. T
 accepted served revision is the actual recovery release in its genuine receipt,
 never a remembered or fabricated SHA. The intermediate accepted-operations
 revision must differ from that served release on exactly the four established
-acceptance operator/declaration/test/entry paths. This operator adds exactly the
-eight declared paths; application changes are limited to preview access and its
-explicit default-disabled setting. Clinical generation, Word, dependencies,
-static assets, schemas and original captures remain byte-identical.
+acceptance operator/declaration/test/entry paths and the one pinned marketing CI
+lockfile correction. This operator adds exactly the nine declared paths;
+application changes are limited to preview access and its explicit default-disabled
+setting, plus the legacy disabled-origin refusal test. Clinical generation, Word,
+Python dependencies, installed Node dependencies, static assets, schemas and
+original captures remain byte-identical.
 
 <!-- owner-normal443-contract -->
 ```json
@@ -27,6 +29,7 @@ static assets, schemas and original captures remain byte-identical.
     "docs/foundation/mutations/20261007-quillmd-owner-normal443.md",
     "rebuild/core/preview_access.py",
     "rebuild/core/tests/test_owner_normal_origin.py",
+    "rebuild/core/tests/test_preview_access.py",
     "rebuild/deploy/owner-normal-https.conf",
     "rebuild/ops/owner_normal_origin.py",
     "rebuild/ops/test_owner_normal_origin.py",
@@ -40,6 +43,28 @@ static assets, schemas and original captures remain byte-identical.
     "sha256": "17200fa1c565af7040033d5c34e99955976a18bc7e79c44d7be2f75690ed83bd"
   },
   "caddy_sha256": "bf0c14729a4ae86ecf2e8ff34d9b5e68aeba55a0bb0c06879580bc73e3a23c87",
+  "ci_only_dependency_lock": {
+    "after_sha256": "a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136",
+    "before_sha256": "a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e",
+    "future_lock_changes_admitted": false,
+    "installed_artifact_modes": {
+      "apps/marketing/package.json": "0664",
+      "package-lock.json": "0600",
+      "package.json": "0664"
+    },
+    "native_dependency_installs": 0,
+    "native_marketing_builds": 0,
+    "native_marketing_service_actions": 0,
+    "next_version": "16.3.8",
+    "path": "package-lock.json",
+    "previous_next_version": "16.3.6",
+    "protocol": "marketing-ci-next-lock-correction-v1",
+    "served_runtime_dependency_changes": 0,
+    "unchanged_manifest_sha256": {
+      "apps/marketing/package.json": "e1e7848f7a9ed7e66c6a60036a36b00d7d86e53a4112b5aceee6326ed317cb7e",
+      "package.json": "b79c199a199caf1dd6b8329c64132a2660129eb2f474997cb6a27c105414c412"
+    }
+  },
   "database_writes": 0,
   "format": 1,
   "ingress_path": "/etc/nginx/sites-available/quillmd",
@@ -142,6 +167,33 @@ full independent read-only clinical, Word and financial verifier.
 Qualification also checks the fourth, separately committed application gate and
 the exact default-zero environment setting. A qualified operator with a still
 disabled application gate cannot produce a successful publication receipt.
+
+The prospective precursor also admits only the exact root lockfile bytes
+`a442ffcb…` to `a910fe0c…` for the published Next 16.3.8 CI correction. Both
+workspace manifests stay pinned. This does not install dependencies, build
+marketing, or change its service. Before the normal transition, the authenticated
+acceptance API reads the three inert installed JSON files in their retained
+0600/0664 modes. The normal controller records and compares their full meaningful
+metadata (device, inode, owner, group, mode, link count, size, modification and
+change nanoseconds) and byte hashes around every population guard. The reviewed
+Git fast-forward admits only the pinned lock replacement in its indexed 0644
+mode; it captures that post-lock identity once, while both manifest identities
+must remain exactly the original observations. All later transition checks and
+the separately authenticated served-verification controller compare that saved
+completion identity. They never recapture a changed source as a new expected
+boundary. Completion evidence I/O is followed by a held artifact recheck; a
+mismatch retains the failed/STOP record and invalidates the completion.
+If the already-started Git forward times out after it actually completes, recovery
+retains that original failure. It admits a post-lock observation only after
+establishing the exact clean target on main, the saved original pre-forward
+identity, the one pinned replacement lock, and unchanged full manifest metadata.
+Once admitted, later checks compare that same post-lock identity; they cannot
+recapture a later replacement. An unknown target, dirty source, unsaved forward
+or manifest drift refuses. No forward is retried or reset.
+
+The source base remains the earlier actual phase merge in this preparation.
+Execution awaits rebinding to the actual cited five-path precursor merge; neither
+the prospective CI-artifact API nor a pending citation is a completed campaign.
 
 The operator holds the same four existing input exclusions, selects a genuinely
 advancing natural publication, then drains and holds the fifth publication lock.

@@ -52,13 +52,21 @@ VERIFY_ATTEMPT = EVIDENCE / 'owner-normal443-served-verification-attempt-v1.json
 ACCEPTANCE = 'rebuild/ops/owner_acceptance_v3.py'
 RECOVERY_DECL = 'docs/foundation/mutations/20261007-quillmd-private-availability-recovery.md'
 PRIVATE_OPS = frozenset((ACCEPTANCE, 'rebuild/ops/test_owner_acceptance_v3.py', 'scripts/run-owner-acceptance-v3.py', 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md'))
+CI_LOCK = 'package-lock.json'
+CI_LOCK_BEFORE_SHA = 'a442ffcb0a3215509a9ffc92c5a5ddce23a5941713c1a5a634fdeb590e27259e'
+CI_LOCK_AFTER_SHA = 'a910fe0c6760d031496d73e2aa534372be166014e0bb4abcc594f7bfe1801136'
+CI_MANIFEST_PINS = {
+    'package.json': 'b79c199a199caf1dd6b8329c64132a2660129eb2f474997cb6a27c105414c412',
+    'apps/marketing/package.json': 'e1e7848f7a9ed7e66c6a60036a36b00d7d86e53a4112b5aceee6326ed317cb7e',
+}
+CI_ORIGINAL_MODES = {CI_LOCK: 0o600, 'package.json': 0o664, 'apps/marketing/package.json': 0o664}
 FROZEN_V3 = '34d4d3bf0b9641a2f642717b33833beb7a7f49a0c043bc095e592c41a78b0023'
 NATIVE = tuple('rebuild/ops/' + name + '.py' for name in (
     'managed_helper', 'private_storage', 'backup_restore', 'email_activation',
     'activation_exclusion', 'legacy_model_activation', 'repair_source_permissions',
     'publisher_verification', 'private_availability_recovery'))
 ALLOWED = frozenset((DECL, TEMPLATE, 'rebuild/quillmd/settings.py', 'rebuild/core/preview_access.py',
-    'rebuild/core/tests/test_owner_normal_origin.py', SELF, TEST, ENTRY))
+    'rebuild/core/tests/test_owner_normal_origin.py', 'rebuild/core/tests/test_preview_access.py', SELF, TEST, ENTRY))
 SHARED_NAMES = b'    server_name quillmd.com www.quillmd.com app.quillmd.com admin.quillmd.com;'
 RESTRICTED_NAMES = b'    server_name quillmd.com www.quillmd.com admin.quillmd.com;'
 ACTIVE_PROTOCOL_QUALIFIED = True
@@ -98,6 +106,99 @@ def require(condition, label):
 def sha(raw): return hashlib.sha256(raw).hexdigest()
 def encode(value): return json.dumps(value, sort_keys=True, separators=(',', ':')).encode()
 def qualified(): return ACTIVE_PROTOCOL_QUALIFIED and PRIVATE_ACCEPTANCE_PROTOCOL_QUALIFIED and INGRESS_PUBLICATION_QUALIFIED
+
+def ci_dependency_contract():
+    return {'protocol':'marketing-ci-next-lock-correction-v1','path':CI_LOCK,
+        'before_sha256':CI_LOCK_BEFORE_SHA,'after_sha256':CI_LOCK_AFTER_SHA,
+        'previous_next_version':'16.3.6','next_version':'16.3.8',
+        'unchanged_manifest_sha256':dict(CI_MANIFEST_PINS),
+        'installed_artifact_modes':{path:format(mode,'04o') for path,mode in CI_ORIGINAL_MODES.items()},
+        'native_dependency_installs':0,'native_marketing_builds':0,
+        'native_marketing_service_actions':0,'served_runtime_dependency_changes':0,
+        'future_lock_changes_admitted':False}
+
+def checked_ci_api(acceptance):
+    require(callable(getattr(acceptance,'ci_original_artifact',None))
+        and callable(getattr(acceptance,'ci_dependency_lock_contract',None))
+        and callable(getattr(acceptance,'configuration_helpers',None)), 'normal443_checked_exact_ci_artifact_api')
+    require(ci_same(acceptance,acceptance.ci_dependency_lock_contract(),ci_dependency_contract()),
+            'normal443_exact_acceptance_ci_artifact_protocol')
+    return acceptance
+
+def ci_same(acceptance,left,right):
+    helpers=acceptance.configuration_helpers({'need':require})
+    require(callable(helpers.get('configuration_same')),'normal443_checked_ci_typed_comparison')
+    return helpers['configuration_same'](left,right)
+
+def ci_source_gate(buffers,target,served):
+    acceptance=types.ModuleType('_quillmd_normal443_ci_source_'+target)
+    acceptance.__file__=str(SOURCE/ACCEPTANCE)
+    exec(compile(buffers[ACCEPTANCE],acceptance.__file__,'exec'),acceptance.__dict__)
+    checked_ci_api(acceptance)
+    require(set(old.git(SOURCE,'diff','--name-only',served,BASE).decode().splitlines())
+        == PRIVATE_OPS | {CI_LOCK}, 'normal443_intermediate_four_ops_and_exact_ci_lock')
+    before=old.git(SOURCE,'show',served+':'+CI_LOCK)
+    require(sha(before)==CI_LOCK_BEFORE_SHA
+        and buffers[CI_LOCK]==old.git(SOURCE,'show',BASE+':'+CI_LOCK)
+        and sha(buffers[CI_LOCK])==CI_LOCK_AFTER_SHA, 'normal443_exact_ci_lock_source_pins')
+    for relative,pin in CI_MANIFEST_PINS.items():
+        require(sha(buffers[relative])==pin
+            and buffers[relative]==old.git(SOURCE,'show',served+':'+relative)
+            ==old.git(SOURCE,'show',BASE+':'+relative), 'normal443_unchanged_ci_manifest_sources')
+    return ci_dependency_contract()
+
+def ci_artifact_observation(acceptance,*,post_lock=False):
+    """Three fixed inert JSON artifacts; preserve full meaningful identity."""
+    checked_ci_api(acceptance)
+    require(type(post_lock) is bool,'normal443_closed_ci_artifact_stage')
+    expected_sha={CI_LOCK:CI_LOCK_AFTER_SHA if post_lock else CI_LOCK_BEFORE_SHA,**CI_MANIFEST_PINS}
+    expected_modes={**CI_ORIGINAL_MODES,CI_LOCK:0o644 if post_lock else CI_ORIGINAL_MODES[CI_LOCK]}
+    fields=('device','inode','uid','gid','mode','nlink','size','mtime_ns','ctime_ns','sha256')
+    def observed(relative):
+        path=ROOT/relative
+        with acceptance.nofollow_file(path) as fd:
+            info=os.fstat(fd)
+            require(stat.S_ISREG(info.st_mode) and info.st_uid==info.st_gid==1000
+                and stat.S_IMODE(info.st_mode)==expected_modes[relative] and info.st_nlink==1
+                and 0<=info.st_size<=2*1024*1024 and not os.listxattr(fd), 'normal443_ci_artifact_identity')
+            raw=source_files.bytes_at(fd,2*1024*1024)
+            identity=lambda row:(row.st_dev,row.st_ino,row.st_mode,row.st_uid,row.st_gid,
+                row.st_nlink,row.st_size,row.st_mtime_ns,row.st_ctime_ns)
+            with acceptance.nofollow_file(path) as attached:
+                require(identity(info)==identity(os.fstat(fd))==identity(os.fstat(attached))
+                    and len(raw)==info.st_size and not os.listxattr(fd) and not os.listxattr(attached),
+                    'normal443_ci_artifact_read_race')
+            require(sha(raw)==expected_sha[relative],'normal443_ci_artifact_bytes')
+            return dict(zip(fields,(info.st_dev,info.st_ino,info.st_uid,info.st_gid,stat.S_IMODE(info.st_mode),
+                info.st_nlink,info.st_size,str(info.st_mtime_ns),str(info.st_ctime_ns),sha(raw))))
+    result={}
+    for relative in CI_ORIGINAL_MODES:
+        if not post_lock or relative!=CI_LOCK:
+            require(sha(acceptance.ci_original_artifact(relative))==expected_sha[relative],
+                    'normal443_original_ci_artifact_api_bytes')
+        result[relative]=observed(relative)
+    require(all(ci_same(acceptance,result[relative],observed(relative)) for relative in result),
+            'normal443_ci_artifact_population_race')
+    return result
+
+def ci_forward_admission(acceptance,before,after):
+    fields={'device','inode','uid','gid','mode','nlink','size','mtime_ns','ctime_ns','sha256'}
+    require(type(before) is dict and type(after) is dict
+        and set(before)==set(after)==set(CI_ORIGINAL_MODES),'normal443_exact_ci_artifact_population')
+    for population,post in ((before,False),(after,True)):
+        for relative,row in population.items():
+            expected_sha=CI_LOCK_AFTER_SHA if post and relative==CI_LOCK else (
+                CI_LOCK_BEFORE_SHA if relative==CI_LOCK else CI_MANIFEST_PINS[relative])
+            expected_mode=0o644 if post and relative==CI_LOCK else CI_ORIGINAL_MODES[relative]
+            require(type(row) is dict and set(row)==fields
+                and all(type(row[name]) is int and row[name]>=0 for name in fields-{'mtime_ns','ctime_ns','sha256'})
+                and row['uid']==row['gid']==1000 and row['nlink']==1 and row['size']<=2*1024*1024
+                and row['mode']==expected_mode and row['sha256']==expected_sha
+                and all(type(row[name]) is str and re.fullmatch('[0-9]+',row[name]) for name in ('mtime_ns','ctime_ns')),
+                'normal443_closed_ci_artifact_metadata')
+    require(all(ci_same(acceptance,before[relative],after[relative]) for relative in CI_MANIFEST_PINS),
+            'normal443_ci_manifests_full_metadata_preserved')
+    return True
 
 def application_gate(preview, settings):
     tree = ast.parse(preview)
@@ -146,6 +247,9 @@ def contract(raw):
     require(result.get('served_verification_policy') == SERVED_VERIFICATION_POLICY
         and result.get('served_verification_protocol_qualified') is SERVED_VERIFICATION_PROTOCOL_QUALIFIED,
         'normal443_exact_separate_served_verification_policy')
+    require(type(result.get('ci_only_dependency_lock')) is dict
+        and encode(result['ci_only_dependency_lock'])==encode(ci_dependency_contract()),
+        'normal443_declared_exact_ci_lock_transition')
     return result
 
 def source_gate(target):
@@ -161,7 +265,7 @@ def source_gate(target):
     require(set(old.git(SOURCE, 'diff', '--name-only', BASE, target).decode().splitlines()) == ALLOWED,
             'normal443_exact_source_scope')
     buffers = {}
-    dependencies = (*NATIVE, ACCEPTANCE, RECOVERY_DECL, 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md',
+    dependencies = (*NATIVE, ACCEPTANCE, CI_LOCK, *CI_MANIFEST_PINS, RECOVERY_DECL, 'docs/foundation/mutations/20261007-quillmd-owner-acceptance-v3.md',
                     'scripts/check-citation.sh', 'scripts/lib/runs-api.sh')
     with source_files.open_root(SOURCE) as fd:
         for relative in dict.fromkeys((*sorted(ALLOWED), *dependencies)):
@@ -174,7 +278,8 @@ def source_gate(target):
             buffers[relative] = raw
     result = contract(buffers[DECL])
     application_gate(buffers['rebuild/core/preview_access.py'], buffers['rebuild/quillmd/settings.py'])
-    require(set(old.git(SOURCE, 'diff', '--name-only', result['private_accepted_revision'], BASE).decode().splitlines()) == PRIVATE_OPS, 'normal443_intermediate_four_operational_paths')
+    require(ci_source_gate(buffers,target,result['private_accepted_revision'])==result['ci_only_dependency_lock'],
+            'normal443_exact_ci_source_contract')
     require(all(result.get(key) is True for key in ('active_protocol_qualified', 'private_acceptance_protocol_qualified',
                 'ingress_publication_qualified')), 'normal443_committed_qualification')
     commit = os.environ.get('RULED_MUTATION_DECL_COMMIT', '')
@@ -645,6 +750,9 @@ class NativeHost:
         self.acceptance.__file__ = str(SOURCE / ACCEPTANCE)
         exec(compile(buffers[ACCEPTANCE], self.acceptance.__file__, 'exec'), self.acceptance.__dict__)
         self.acceptance.execution_gate()
+        checked_ci_api(self.acceptance)
+        self.ci_expected=None; self.ci_original=None; self.ci_post_lock=False
+        self.ci_forward_started=False; self.ci_forward_before=None
         package = self.acceptance.checked_native_modules(self)
         self.old, self.recovery = package.legacy_model_activation, package.private_availability_recovery
         self.exclusion, self.backup, self.env_writer, self.managed, self.storage = self.old.modules()
@@ -749,9 +857,36 @@ class NativeHost:
         return result
     def snapshot(self):
         self.check_hold()
+        self.ci_identity()
         result = self.old.snapshot(self.native, self.backup, self.storage)
+        self.ci_identity()
         self.check_hold()
         return result
+    def ci_identity(self):
+        self.check_hold()
+        if self.ci_expected is None:
+            require(self.mode in ('--execute','--preflight') and not self.ci_post_lock
+                and self.git(ROOT,'rev-parse','HEAD').strip().decode()==self.served,
+                'normal443_ci_initial_capture_only_prior_transition')
+        observed=ci_artifact_observation(self.acceptance,post_lock=self.ci_post_lock)
+        if self.ci_expected is None:
+            self.ci_original=copy.deepcopy(observed); self.ci_expected=copy.deepcopy(observed)
+        require(ci_same(self.acceptance,observed,self.ci_expected),
+                'normal443_ci_current_identity_preserved')
+        self.check_hold()
+        return copy.deepcopy(observed)
+    def adopt_ci_completion(self,completion):
+        self.check_hold()
+        require(self.mode=='--verify-served' and self.ci_expected is None
+            and self.git(ROOT,'rev-parse','HEAD').strip().decode()==self.operations,
+            'normal443_ci_adopt_only_actual_completed_transition')
+        before=completion.get('ci_source_before'); after=completion.get('ci_source_after')
+        ci_forward_admission(self.acceptance,before,after)
+        observed=ci_artifact_observation(self.acceptance,post_lock=True)
+        require(ci_same(self.acceptance,observed,after),
+                'normal443_ci_completed_identity_unchanged')
+        self.ci_original=copy.deepcopy(before); self.ci_expected=copy.deepcopy(after); self.ci_post_lock=True
+        self.check_hold()
     def service(self, action, unit):
         require(action in ('start', 'stop') and unit in self.old.UNITS, 'normal443_own_service_scope')
         self.check_hold()
@@ -1000,10 +1135,38 @@ print(json.dumps(m,sort_keys=True))
         return result
     def forward(self, target):
         self.check_hold()
+        require(target==self.operations and not self.ci_post_lock and not self.ci_forward_started,
+                'normal443_ci_single_known_source_forward')
+        before=self.ci_identity()
+        require(self.git(ROOT,'rev-parse','HEAD').strip().decode()==self.served
+            and self.git(ROOT,'branch','--show-current').strip()==b'main'
+            and not self.git(ROOT,'status','--porcelain','--untracked-files=no').strip(),
+            'normal443_ci_exact_prior_source_before_forward')
+        self.ci_forward_before=copy.deepcopy(before); self.ci_forward_started=True
         result = subprocess.run(['git', '-C', str(ROOT), 'merge', '--ff-only', target], capture_output=True, timeout=30, umask=0o022)
         require(result.returncode == 0 and self.git(ROOT, 'rev-parse', 'HEAD').strip().decode() == target
             and not self.git(ROOT, 'status', '--porcelain', '--untracked-files=no').strip(), 'normal443_source_fast_forward')
+        self.reconcile_ci_forward(target)
+        self.ci_identity()
+    def reconcile_ci_forward(self,target):
+        """Admit one already-started own forward even when its return is unknown."""
+        self.check_hold()
+        require(target==self.operations and self.ci_forward_started
+            and self.git(ROOT,'rev-parse','HEAD').strip().decode()==target
+            and self.git(ROOT,'branch','--show-current').strip()==b'main'
+            and not self.git(ROOT,'status','--porcelain','--untracked-files=no').strip(),
+            'normal443_ci_exact_known_forward_target')
+        if self.ci_post_lock:
+            self.recovery.source_readability(ROOT)
+            return self.ci_identity()
+        require(ci_same(self.acceptance,self.ci_expected,self.ci_forward_before)
+            and ci_same(self.acceptance,self.ci_original,self.ci_forward_before),
+            'normal443_ci_saved_original_forward_identity')
+        after=ci_artifact_observation(self.acceptance,post_lock=True)
+        ci_forward_admission(self.acceptance,self.ci_forward_before,after)
+        self.ci_expected=copy.deepcopy(after); self.ci_post_lock=True
         self.recovery.source_readability(ROOT)
+        return self.ci_identity()
     def write(self, name, value):
         raw = value if isinstance(value, bytes) else encode(value)+b'\n'
         path = ATTEMPT if name == 'attempt' else OUTPUT / name
@@ -1165,6 +1328,7 @@ def _verify_served(host,policy,target,completion,completion_raw):
         require(host.git(ROOT,'rev-parse','HEAD').strip().decode()==target
             and host.git(ROOT,'branch','--show-current').strip()==b'main'
             and not host.git(ROOT,'status','--porcelain','--untracked-files=no').strip(), 'normal443_exact_installed_normal_source')
+        host.adopt_ci_completion(completion)
         require(host.boundary(target)==completion['units_after'],'normal443_actual_normal_completion_native_identity')
         original=host.cipher.decrypt(source_files.protected(OUTPUT/'environment-before.fernet'))
         enabled=host.cipher.decrypt(source_files.protected(OUTPUT/'environment-enabled.fernet'))
@@ -1242,7 +1406,8 @@ def _verify_served(host,policy,target,completion,completion_raw):
             'post_GET_full_original_and_private_campaign_proof':full_after,
             'session_admission_projection':'Only independently admitted four renewals and one audit addition projected to the actual pre-GET population; original capture and campaign intervals unchanged.',
             'live_session_admission_after':live_after,'completion_valid_only_without_STOP':True}
-        host.verify_write('complete.json',report);host.check_hold()
+        report['ci_source_identity_preserved']=host.ci_identity()
+        host.verify_write('complete.json',report);host.ci_identity();host.check_hold()
         return {'complete':True,'application_url':'https://app.quillmd.com/',
             'admin_url':'https://app.quillmd.com/console/services/','served_revision':target,
             'private_workflow_revision':policy['private_accepted_revision'],'authenticated_GETs':2,
@@ -1279,6 +1444,7 @@ def transition(host, policy, target, buffers, *, execute=False):
         own = host.boundary(prior)
         compare_guard(before, host.snapshot())
         require(host.foreign() == foreign, 'normal443_foreign_initial_race')
+        ci_before=host.ci_identity()
         if not execute:
             return {'complete':True,'read_only_preflight':True,'execution_performed':False,
                 'candidate_sha256':sha(candidate),'full_original_and_new_acceptance_population_reverified':True,
@@ -1292,6 +1458,7 @@ def transition(host, policy, target, buffers, *, execute=False):
             'private_acceptance_admitted':True,'live_session_admission_before':sessions,
             'candidate_sha256':sha(candidate),'original_ingress_metadata':metadata,'provider_calls':0,
             'authentication_submissions':0,'database_writes':0,'original_capture_replaced':False,'automatic_retries':False}
+        prepared['ci_source_before']=ci_before
         forwarded = False; ingress_helper_completed = False; mutation_started = False
         try:
             host.write('environment-before.fernet',host.cipher.encrypt(host.original_environment))
@@ -1333,13 +1500,14 @@ def transition(host, policy, target, buffers, *, execute=False):
                 'normal_origin':'https://app.quillmd.com','full_original_and_new_acceptance_population_preserved':True,
                 'actual_provider_model_reverified_by_this_transition':False,'workflow_byte_identity_inherited_from_private_acceptance':True}
             completed['live_session_admission_after'] = final_sessions
+            completed['ci_source_after']=host.ci_identity()
             completed['session_renewal_performed'] = False
             completed['completion_valid_only_without_failed_receipt'] = True
             host.write('complete.json',completed)
             # Durable evidence I/O also consumes the forward interval. An I/O
             # stall must enter the measured failure/rollback path rather than
             # returning success with expired grants. Preserve both receipts.
-            host.check_hold()
+            host.ci_identity();host.check_hold()
             return {'complete':True,'application_url':'https://app.quillmd.com/','private_origin':'https://app.quillmd.com:9443',
                 'served_revision':target,'restricted_to_existing_owner_grants':True,'provider_calls':0,'authentication_submissions':0,'database_writes':0}
         except BaseException as error:
@@ -1361,6 +1529,7 @@ def transition(host, policy, target, buffers, *, execute=False):
                 # or interrupted return. Decide from actual HEAD, never from
                 # whether the forward method happened to return to this caller.
                 forwarded = actual_revision == target
+                if forwarded:host.reconcile_ci_forward(target)
                 current, current_metadata = host.ingress()
                 rollback['ingress_observed_before_rollback'] = current_metadata
                 if sha(current) == sha(candidate):

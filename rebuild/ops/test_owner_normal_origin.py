@@ -59,11 +59,13 @@ class FictionalHost:
         if args[0]=='status':return b''
         raise AssertionError(args)
     def snapshot(self):return deepcopy(self.guard)
+    def ci_identity(self):return {'fictional-ci-source':'unchanged-after-reviewed-forward'}
     def foreign(self):return {'exact-seven':'unchanged'}
     def ingress(self):return self.raw,dict(self.meta)
     def boundary(self,release):return {'source':release,'invocations':'fictional-measured'}
     def service(self,action,unit):self.events.append(action+':'+unit)
     def forward(self,target):self.events.append('fast-forward');self.revision=target
+    def reconcile_ci_forward(self,target):assert self.revision==target
     def replace_env(self,path,before,after):
         assert self.environment==before;self.environment=after;self.events.append('environment')
     def replace_ingress(self,before,after,meta):
@@ -284,7 +286,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
     @patch.object(act,'SOURCE',Path('/opt/meddoc-pro/.worktrees/fictional-normal443'))
     @patch.multiple(act.os,getuid=lambda:1000,geteuid=lambda:1000,getgid=lambda:1000,getegid=lambda:1000)
     def test_source_gate_authenticates_each_dependency_and_exact_intermediate_operations_scope(self):
-        policy={'private_accepted_revision':PRIOR,**{key:True for key in (
+        policy={'private_accepted_revision':PRIOR,'ci_only_dependency_lock':act.ci_dependency_contract(),**{key:True for key in (
             'active_protocol_qualified','private_acceptance_protocol_qualified','ingress_publication_qualified')}}
         def run(bad=None):
             def raw(relative):
@@ -295,7 +297,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
                 if args[0]=='rev-parse':return (TARGET+'\n').encode()
                 if args[0]=='status' or args[0]=='merge-base':return b''
                 if args[0]=='diff':
-                    paths=set(act.ALLOWED if args[2]==act.BASE else act.PRIVATE_OPS)
+                    paths=set(act.ALLOWED if args[2]==act.BASE else act.PRIVATE_OPS|{act.CI_LOCK})
                     if bad=='intermediate' and args[2]==PRIOR:paths.add('rebuild/core/views.py')
                     return ('\n'.join(sorted(paths))+'\n').encode()
                 if args[0]=='ls-files':return ('100644 '+'a'*40+' 0 '+args[-1]+'\n').encode()
@@ -309,6 +311,9 @@ class NormalOriginOperatorTests(unittest.TestCase):
                  patch.object(act.source_files,'open_root') as opened, \
                  patch.object(act.source_files,'operator_bytes',side_effect=lambda relative,*_:raw(relative)), \
                  patch.object(act,'contract',return_value=policy),patch.object(act.source_files,'sealed_citation') as citation, \
+                 patch.object(act,'ci_source_gate',side_effect=lambda buffers,target,served:(
+                     act.require(bad!='intermediate','normal443_intermediate_four_ops_and_exact_ci_lock')
+                     or act.ci_dependency_contract())), \
                  patch.dict(os.environ,{'RULED_MUTATION_DECLARATION':act.DECL,'RULED_MUTATION_DECL_COMMIT':TARGET,
                                        'RULED_ACT_MAX_SECS':str(act.OUTER_SECONDS)}):
                 opened.return_value.__enter__.return_value=42
@@ -317,7 +322,7 @@ class NormalOriginOperatorTests(unittest.TestCase):
                 self.assertTrue(set(act.NATIVE).issubset(buffers));self.assertIn(act.ACCEPTANCE,buffers)
                 self.assertEqual({call.args[-1] for call in citation.call_args_list},{act.BASE,TARGET,PRIOR})
         run()
-        for bad,label in (('dependency','unchanged_operational_dependency'),('intermediate','intermediate_four_operational_paths')):
+        for bad,label in (('dependency','unchanged_operational_dependency'),('intermediate','intermediate_four_ops_and_exact_ci_lock')):
             with self.subTest(bad=bad),self.assertRaisesRegex(act.Refusal,label):run(bad)
     def test_source_gate_requires_exact_native_identity_before_git_access(self):
         with patch.object(act,'qualified',return_value=True), \
@@ -374,6 +379,223 @@ class NormalOriginOperatorTests(unittest.TestCase):
         self.assertFalse(result['original_capture_replaced']);host.publisher_admission.assert_called_once()
         self.assertEqual(host.check_private_inputs.call_count,2)
 
+
+class ExactCiArtifactTests(unittest.TestCase):
+    def test_actual_source_owned_configuration_helpers_is_the_ci_comparator(self):
+        import types
+        path=act.SOURCE/act.ACCEPTANCE;raw=path.read_bytes()
+        module=types.ModuleType('_fictional_ci_actual_configuration_export');module.__file__=str(path)
+        exec(compile(raw,str(path),'exec'),module.__dict__)
+        self.assertTrue(act.ci_same(module,{'uid':1000,'stamp':'1790000000000000001'},
+                                   {'uid':1000,'stamp':'1790000000000000001'}))
+        self.assertFalse(act.ci_same(module,{'uid':0},{'uid':False}))
+        self.assertFalse(act.ci_same(module,{1:'same'},{True:'same'}))
+        self.assertFalse(act.ci_same(module,{'old':None},{}))
+        self.assertFalse(act.ci_same(module,act.ci_dependency_contract(),
+                                   dict(act.ci_dependency_contract(),native_dependency_installs=False)))
+    def fixture(self):
+        before=b'original fictional lock';after=b'reviewed fictional CI lock'
+        manifests={'package.json':b'root fictional manifest','apps/marketing/package.json':b'marketing fictional manifest'}
+        return before,after,manifests
+    @contextmanager
+    def pins(self):
+        before,after,manifests=self.fixture()
+        with patch.object(act,'CI_LOCK_BEFORE_SHA',act.sha(before)), \
+             patch.object(act,'CI_LOCK_AFTER_SHA',act.sha(after)), \
+             patch.object(act,'CI_MANIFEST_PINS',{path:act.sha(raw) for path,raw in manifests.items()}):
+            yield before,after,manifests
+    def api(self,root=None):
+        @contextmanager
+        def nofollow(path):
+            with act.source_files.open_root(path.parent) as parent:
+                fd=os.open(path.name,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent)
+                try:yield fd
+                finally:os.close(fd)
+        return SimpleNamespace(configuration_helpers=lambda scope:dict(scope,
+            configuration_same=lambda a,b:act.encode(a)==act.encode(b)),
+            ci_dependency_lock_contract=act.ci_dependency_contract,
+            ci_original_artifact=lambda relative:(root/relative).read_bytes(),nofollow_file=nofollow)
+    def rows(self,after=False):
+        return {relative:{'device':1,'inode':3 if relative==act.CI_LOCK and after else index+2,
+            'uid':1000,'gid':1000,'mode':0o644 if relative==act.CI_LOCK and after else mode,
+            'nlink':1,'size':40,'mtime_ns':'1790000000000000001','ctime_ns':'1790000000000000002',
+            'sha256':act.CI_LOCK_AFTER_SHA if relative==act.CI_LOCK and after else
+                act.CI_LOCK_BEFORE_SHA if relative==act.CI_LOCK else act.CI_MANIFEST_PINS[relative]}
+            for index,(relative,mode) in enumerate(act.CI_ORIGINAL_MODES.items())}
+    def test_exact_CI_API_contract_and_extra_or_typed_field_refuse(self):
+        api=self.api();self.assertIs(act.checked_ci_api(api),api)
+        for field,value in (('future_lock_changes_admitted',0),('native_dependency_installs',False),('path','other-lock.json')):
+            bad=deepcopy(act.ci_dependency_contract());bad[field]=value
+            with self.subTest(field=field),self.assertRaises(act.Refusal):
+                act.checked_ci_api(SimpleNamespace(configuration_helpers=api.configuration_helpers,
+                    ci_original_artifact=api.ci_original_artifact,ci_dependency_lock_contract=lambda:bad))
+        with self.assertRaisesRegex(act.Refusal,'checked_exact_ci_artifact_api'):
+            act.checked_ci_api(SimpleNamespace())
+    def test_intermediate_exact_five_paths_and_all_git_artifact_pins(self):
+        with self.pins() as (before,after,manifests):
+            raw=('import json\ndef ci_original_artifact(relative):raise AssertionError("installed read")\n'
+                 'def configuration_helpers(scope):return dict(scope,configuration_same=lambda a,b:json.dumps(a,sort_keys=True)==json.dumps(b,sort_keys=True))\n'
+                 'def ci_dependency_lock_contract():return '+repr(act.ci_dependency_contract())+'\n').encode()
+            buffers={act.ACCEPTANCE:raw,act.CI_LOCK:after,**manifests}
+            def run(fault=None):
+                def git(tree,*args):
+                    if args[0]=='diff':
+                        paths=set(act.PRIVATE_OPS|{act.CI_LOCK})
+                        if fault=='missing-lock':paths.remove(act.CI_LOCK)
+                        if fault=='other-path':paths.add('rebuild/requirements.txt')
+                        return '\n'.join(sorted(paths)).encode()
+                    revision,path=args[1].split(':',1)
+                    value=(before if revision==PRIOR else after) if path==act.CI_LOCK else manifests[path]
+                    if fault==(revision,path):value+=b'foreign bytes'
+                    return value
+                with patch.object(act.old,'git',side_effect=git):
+                    return act.ci_source_gate(buffers,TARGET,PRIOR)
+            self.assertEqual(run(),act.ci_dependency_contract())
+            for fault in ('missing-lock','other-path',(PRIOR,act.CI_LOCK),(act.BASE,act.CI_LOCK),
+                          (PRIOR,'package.json'),(act.BASE,'apps/marketing/package.json')):
+                with self.subTest(fault=fault),self.assertRaises(act.Refusal):run(fault)
+    def test_forward_only_lock_replacement_and_full_manifest_metadata(self):
+        before,after=self.rows(),self.rows(True);api=self.api()
+        self.assertTrue(act.ci_forward_admission(api,before,after))
+        for path in act.CI_ORIGINAL_MODES:
+            for field,value in (('uid',False),('mode',0o600),('sha256','c'*64),('inode',99),('ctime_ns','1790000000000000003')):
+                bad=deepcopy(after);bad[path][field]=value
+                if path==act.CI_LOCK and field in ('inode','ctime_ns'):continue
+                with self.subTest(path=path,field=field),self.assertRaises(act.Refusal):
+                    act.ci_forward_admission(api,before,bad)
+        for bad in ({},dict(after,unknown=after[act.CI_LOCK])):
+            with self.assertRaises(act.Refusal):act.ci_forward_admission(api,before,bad)
+    def test_actual_disposable_identity_is_held_and_source_modes_are_separate(self):
+        with tempfile.TemporaryDirectory() as directory,self.pins() as (before,after,manifests):
+            root=Path(directory);(root/'apps/marketing').mkdir(parents=True)
+            for relative,raw in {act.CI_LOCK:before,**manifests}.items():
+                path=root/relative;path.write_bytes(raw);path.chmod(act.CI_ORIGINAL_MODES[relative])
+            api=self.api(root);actual_fstat=os.fstat
+            def owned(fd):
+                info=actual_fstat(fd)
+                if not __import__('stat').S_ISREG(info.st_mode):return info
+                return SimpleNamespace(**{name:getattr(info,name) for name in
+                    ('st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns')},st_uid=1000,st_gid=1000)
+            with patch.object(act,'ROOT',root),patch.object(act.os,'fstat',side_effect=owned):
+                original=act.ci_artifact_observation(api)
+                self.assertEqual(original[act.CI_LOCK]['mode'],0o600)
+                path=root/act.CI_LOCK;path.unlink();path.write_bytes(after);path.chmod(0o644)
+                following=act.ci_artifact_observation(api,post_lock=True)
+                self.assertTrue(act.ci_forward_admission(api,original,following))
+                self.assertEqual(following[act.CI_LOCK]['mode'],0o644)
+                with self.assertRaises(act.Refusal):act.ci_artifact_observation(api)
+                path=root/'package.json';path.chmod(0o644)
+                with self.assertRaisesRegex(act.Refusal,'ci_artifact_identity'):
+                    act.ci_artifact_observation(api,post_lock=True)
+    def test_saved_identity_and_separate_served_adoption_cannot_recapture_drift(self):
+        host=object.__new__(act.NativeHost);host.check_hold=MagicMock();host.mode='--execute'
+        host.served=PRIOR;host.operations=TARGET;host.git=MagicMock(return_value=PRIOR.encode())
+        host.acceptance=self.api();host.ci_expected=None;host.ci_original=None;host.ci_post_lock=False
+        before,after=self.rows(),self.rows(True)
+        with patch.object(act,'ci_artifact_observation',return_value=before):self.assertEqual(host.ci_identity(),before)
+        changed=deepcopy(before);changed['package.json']['inode']+=1
+        with patch.object(act,'ci_artifact_observation',return_value=changed),self.assertRaises(act.Refusal):host.ci_identity()
+        self.assertEqual(host.ci_expected,before)
+        host.mode='--verify-served';host.git.return_value=TARGET.encode();host.ci_expected=None
+        complete={'ci_source_before':before,'ci_source_after':after}
+        with patch.object(act,'ci_artifact_observation',return_value=after):host.adopt_ci_completion(complete)
+        self.assertEqual(host.ci_identity.__self__.ci_expected,after)
+        changed=deepcopy(after);changed[act.CI_LOCK]['inode']+=1
+        with patch.object(act,'ci_artifact_observation',return_value=changed),self.assertRaises(act.Refusal):host.ci_identity()
+        host.ci_expected=None
+        with patch.object(act,'ci_artifact_observation',return_value=changed),self.assertRaises(act.Refusal):
+            host.adopt_ci_completion(complete)
+        self.assertIsNone(host.ci_expected)
+        with patch.object(act,'ci_artifact_observation',side_effect=AssertionError('premature recapture')), \
+             self.assertRaisesRegex(act.Refusal,'ci_initial_capture_only_prior_transition'):
+            host.ci_identity()
+    def test_reviewed_git_forward_captures_only_one_new_lock_identity(self):
+        host=object.__new__(act.NativeHost);host.check_hold=MagicMock();host.mode='--execute'
+        host.served=PRIOR;host.operations=TARGET;host.acceptance=self.api()
+        before,after=self.rows(),self.rows(True)
+        host.ci_expected=deepcopy(before);host.ci_original=deepcopy(before);host.ci_post_lock=False
+        host.ci_forward_started=False;host.ci_forward_before=None
+        revision=[PRIOR]
+        host.git=lambda _,*args:revision[0].encode() if args==('rev-parse','HEAD') else b'main' if args==('branch','--show-current') else b''
+        host.recovery=SimpleNamespace(source_readability=MagicMock())
+        def forward(*args,**kwargs):revision[0]=TARGET;return SimpleNamespace(returncode=0)
+        with patch.object(act.subprocess,'run',side_effect=forward) as run, \
+             patch.object(act,'ci_artifact_observation',side_effect=[before,after,after,after]) as observation:
+            host.forward(TARGET)
+        self.assertEqual(host.ci_original,before);self.assertEqual(host.ci_expected,after);self.assertTrue(host.ci_post_lock)
+        run.assert_called_once_with(['git','-C',str(act.ROOT),'merge','--ff-only',TARGET],
+            capture_output=True,timeout=30,umask=0o022)
+        self.assertEqual([call.kwargs['post_lock'] for call in observation.call_args_list],[False,True,True,True])
+        host.recovery.source_readability.assert_called_once_with(act.ROOT)
+        with patch.object(act.subprocess,'run',side_effect=AssertionError('repeat forward')),self.assertRaises(act.Refusal):
+            host.forward(TARGET)
+        host.ci_expected=deepcopy(before);host.ci_post_lock=False;host.ci_forward_started=False;revision[0]=PRIOR
+        drift=deepcopy(after);drift['package.json']['inode']+=1
+        with patch.object(act.subprocess,'run',side_effect=forward), \
+             patch.object(act,'ci_artifact_observation',side_effect=[before,drift]),self.assertRaises(act.Refusal):
+            host.forward(TARGET)
+        self.assertEqual(host.ci_expected,before);self.assertFalse(host.ci_post_lock)
+    def test_unknown_forward_return_with_exact_target_restores_private_without_recapture(self):
+        import subprocess
+        for drift in (False,True):
+            with self.subTest(manifest_drift=drift),tempfile.TemporaryDirectory() as directory:
+                root=Path(directory);host=FictionalHost();host.mode='--execute';host.served=PRIOR;host.operations=TARGET
+                host.acceptance=self.api();host.ci_expected=None;host.ci_original=None;host.ci_post_lock=False
+                host.ci_forward_started=False;host.ci_forward_before=None
+                host.recovery=SimpleNamespace(source_readability=MagicMock())
+                host.old.snapshot=lambda *_:deepcopy(host.guard);host.backup=object();host.storage=object()
+                host.snapshot=act.NativeHost.snapshot.__get__(host)
+                host.ci_identity=act.NativeHost.ci_identity.__get__(host)
+                host.forward=act.NativeHost.forward.__get__(host)
+                host.reconcile_ci_forward=act.NativeHost.reconcile_ci_forward.__get__(host)
+                before,after=self.rows(),self.rows(True)
+                if drift:after['package.json']['inode']+=1
+                def unknown(*args,**kwargs):
+                    host.revision=TARGET;raise subprocess.TimeoutExpired(args[0],30)
+                policy={'private_accepted_revision':PRIOR,'original_ingress_metadata':metadata(ORIGINAL)}
+                with patch.object(act,'OUTPUT',root/'output'),patch.object(act,'ATTEMPT',root/'attempt'), \
+                     patch.object(act,'OLD_INGRESS_SHA',act.sha(ORIGINAL)), \
+                     patch.object(act,'ci_artifact_observation',side_effect=lambda *_,**__:deepcopy(
+                         before if host.revision==PRIOR else after)), \
+                     patch.object(act.subprocess,'run',side_effect=unknown) as run, \
+                     self.assertRaisesRegex(act.Refusal,'failed_with_preserved_evidence'):
+                    act.transition(host,policy,TARGET,{act.TEMPLATE:TEMPLATE},execute=True)
+                run.assert_called_once();failure=host.records['failed.json']
+                self.assertEqual(failure['failure_kind'],'TimeoutExpired');self.assertNotIn('complete.json',host.records)
+                self.assertEqual(host.revision,TARGET);self.assertEqual(host.ci_original,before)
+                if drift:
+                    self.assertFalse(failure['rollback']['complete']);self.assertIn('fail_stop',failure['rollback'])
+                    self.assertFalse(host.ci_post_lock);self.assertEqual(host.ci_expected,before)
+                else:
+                    self.assertTrue(failure['rollback']['complete']);self.assertTrue(failure['rollback']['private_availability_preserved'])
+                    self.assertFalse(failure['rollback']['owner_normal_origin_enabled'])
+                    self.assertEqual(failure['rollback']['served_revision'],TARGET)
+                    self.assertTrue(host.ci_post_lock);self.assertEqual(host.ci_expected,after)
+    def test_unknown_return_reconciliation_requires_saved_own_attempt_and_exact_clean_target(self):
+        host=object.__new__(act.NativeHost);host.check_hold=MagicMock();host.mode='--execute'
+        host.operations=TARGET;host.acceptance=self.api();before,after=self.rows(),self.rows(True)
+        host.recovery=SimpleNamespace(source_readability=MagicMock())
+        host.ci_expected=deepcopy(before);host.ci_original=deepcopy(before);host.ci_forward_before=deepcopy(before)
+        host.ci_post_lock=False;host.ci_forward_started=True
+        def run(fault=None):
+            host.ci_forward_started=fault!='not-started'
+            host.git=lambda _,*args:((PRIOR if fault=='wrong-target' else TARGET).encode() if args==('rev-parse','HEAD')
+                else b'foreign-branch' if fault=='wrong-branch' else b'main' if args==('branch','--show-current')
+                else b' M package-lock.json\n' if fault=='dirty' else b'')
+            observed=deepcopy(after)
+            if fault=='manifest':observed['apps/marketing/package.json']['ctime_ns']='1790000000000000003'
+            with patch.object(act,'ci_artifact_observation',return_value=observed) as observation:
+                try:return host.reconcile_ci_forward(TARGET)
+                finally:
+                    if fault in ('not-started','wrong-target','wrong-branch','dirty'):observation.assert_not_called()
+        for fault in ('not-started','wrong-target','wrong-branch','dirty','manifest'):
+            with self.subTest(fault=fault),self.assertRaises(act.Refusal):run(fault)
+            self.assertEqual(host.ci_expected,before);self.assertFalse(host.ci_post_lock)
+        self.assertEqual(run(),after);self.assertTrue(host.ci_post_lock)
+        changed=deepcopy(after);changed[act.CI_LOCK]['inode']+=1
+        with patch.object(act,'ci_artifact_observation',return_value=changed),self.assertRaises(act.Refusal):
+            host.reconcile_ci_forward(TARGET)
+        self.assertEqual(host.ci_expected,after)
 
 class ActualRetainedVerifierTests(unittest.TestCase):
     @unittest.skipUnless((act.EVIDENCE/'recovery-20261007/acceptance-v3-preparation-v2-20261007/verify_installed_acceptance_v3.py').exists(),
@@ -1162,6 +1384,8 @@ class ServedVerificationControllerTests(unittest.TestCase):
         host.check_hold=checked
         host.git=lambda _,*args:(TARGET.encode() if args==('rev-parse','HEAD') else b'main' if args==('branch','--show-current') else b'')
         host.boundary=lambda _:deepcopy(units);host.foreign=lambda:{'same-current-external-boundary':True}
+        host.adopt_ci_completion=lambda value:self.assertEqual(value,completion)
+        host.ci_identity=lambda:{'fictional-ci-source':'preserved-completed-identity'}
         host.ingress=lambda:(ingress,metadata(ingress))
         def snapshot():
             checked();result=population()

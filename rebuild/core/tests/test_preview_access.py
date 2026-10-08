@@ -166,9 +166,18 @@ class PreviewAccessTests(TestCase):
 
     def test_marker_host_tls_and_disabled_gate_fail_closed(self):
         for extra in ({'HTTP_X_QUILLMD_PREVIEW': ''}, {'HTTP_HOST': 'localhost:9130'},
-                      {'HTTP_HOST': 'app.quillmd.com'}, {'secure': False}):
+                      {'secure': False}):
             with self.subTest(extra=extra):
                 self.assertEqual(self.get('/health/', **extra).status_code, 403)
+        with override_settings(QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=False):
+            sessions = list(Session.objects.order_by('pk').values())
+            audits = list(AuditEvent.objects.order_by('pk').values())
+            response = self.get('/health/', HTTP_HOST='app.quillmd.com')
+            self.assertEqual(response.status_code, 503)
+            self.assertEqual(response['Cache-Control'], 'no-store')
+            self.assertFalse(response.cookies)
+            self.assertEqual(list(Session.objects.order_by('pk').values()), sessions)
+            self.assertEqual(list(AuditEvent.objects.order_by('pk').values()), audits)
         self.assertEqual(self.client.get('/health/', HTTP_HOST='app.quillmd.com:9443', secure=True).status_code, 403)
         with override_settings(QUILLMD_PREVIEW_AUTH_ENABLED=False):
             self.assertEqual(self.get('/health/').status_code, 503)
