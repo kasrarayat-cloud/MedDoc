@@ -69,6 +69,7 @@ QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME=os.getenv('QUILLMD_EMAIL_PRIVATE_ACCESS_US
 QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD=os.getenv('QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD','')
 QUILLMD_PREVIEW_AUTH_ENABLED=os.getenv('QUILLMD_PREVIEW_AUTH_ENABLED','0')=='1' and not ADMIN_SITE
 QUILLMD_PREVIEW_ORIGIN='https://app.quillmd.com:9443'  # Fixed edge; isolated tests may override this setting.
+QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED','0')=='1'
 CSRF_FAILURE_VIEW='core.preview_access.csrf_failure'
 RESEND_API_KEY=os.getenv('RESEND_API_KEY','')
 # API keys remain in the private environment; application logs omit payloads.
