@@ -18,5 +18,8 @@ class Command(BaseCommand):
             if time.monotonic()-reaped_at>=60:
                 reap_abandoned_voice_uploads(); reaped_at=time.monotonic()
             worked=run_one()
+            if not worked:
+                from core.preparation import run_one as prepare_one
+                worked=prepare_one()
             if options['once']:return
             if not worked:time.sleep(2)

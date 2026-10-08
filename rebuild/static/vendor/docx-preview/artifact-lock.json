@@ -1,0 +1,274 @@
+{
+  "format": "quillmd-browser-docx-vendor-v1",
+  "observed_at": "2026-10-08T08:07:18.670958+00:00",
+  "delivery": "same-origin static assets; no CDN or runtime npm dependency resolution",
+  "acquisition": "downloaded exact official npm registry tarballs; no install scripts, npm install, or build executed",
+  "packages": [
+    {
+      "name": "docx-preview",
+      "version": "0.4.1",
+      "license": "Apache-2.0",
+      "dependencies": {
+        "jszip": ">=3.0.0"
+      },
+      "tarball_url": "https://registry.npmjs.org/docx-preview/-/docx-preview-0.4.1.tgz",
+      "tarball_bytes": 213924,
+      "tarball_sha256": "b5c34d9fb04b3d70ba8cde8a71e2d361325993652ea917817654ed9431750432",
+      "integrity": "sha512-Dv4g+LeE0swHpPvNC0lAT0YsR5Zq5pAxw7d3vHQ8EChBLgIrqqe9VPL5nVt2HBJap8bEZbXUI0TJob7kBeNU9w==",
+      "metadata_sha256": "324180d42cdba1dc52e732e9539534893382dc6a30fa5c34db4b7c7edb409178",
+      "entry_names": [
+        "package/LICENSE",
+        "package/dist/docx-preview.js",
+        "package/dist/docx-preview.min.js",
+        "package/dist/docx-preview.js.map",
+        "package/dist/docx-preview.min.js.map",
+        "package/dist/docx-preview.min.mjs.map",
+        "package/dist/docx-preview.mjs.map",
+        "package/dist/docx-preview.min.mjs",
+        "package/dist/docx-preview.mjs",
+        "package/dist/docx-preview.d.ts"
+      ]
+    },
+    {
+      "name": "jszip",
+      "version": "3.10.1",
+      "license": "(MIT OR GPL-3.0-or-later)",
+      "dependencies": {
+        "lie": "~3.3.0",
+        "pako": "~1.0.2",
+        "setimmediate": "^1.0.5",
+        "readable-stream": "~2.3.6"
+      },
+      "tarball_url": "https://registry.npmjs.org/jszip/-/jszip-3.10.1.tgz",
+      "tarball_bytes": 195083,
+      "tarball_sha256": "5117f4a2a645aeb307bf3b829c575ad58135cc97e75291e594532ab5b5b21b23",
+      "integrity": "sha512-xXDvecyTpGLrqFrvkrUSoxxfJI5AH7U8zxxtVclpsUtMCq4JQ290LY8AW5c7Ggnr/Y/oK+bQMbqK2qmtk3pN4g==",
+      "metadata_sha256": "1d8e97602ee9f4fc4c0c792040dfc421f3017ee2d94c13126a697f48ed178092",
+      "entry_names": [
+        "package/dist/jszip.js",
+        "package/dist/jszip.min.js",
+        "package/LICENSE.markdown"
+      ]
+    }
+  ],
+  "files": {
+    "docx-preview.min.js": {
+      "bytes": 75527,
+      "sha256": "c4a133c65a112799e35b143c572dfff9e923a3bf39b5fd3b07a06aa0f8f530c2"
+    },
+    "jszip.min.js": {
+      "bytes": 97630,
+      "sha256": "acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e"
+    },
+    "LICENSE.docx-preview": {
+      "bytes": 11558,
+      "sha256": "8668bf4417d161e4eb4d47d6044526e4914d9eb3c748573d9bb7e87708c1253f"
+    },
+    "LICENSE.jszip": {
+      "bytes": 33753,
+      "sha256": "566c953c6090b1218ca6217dd7359d45dde46581968586dc607d59a78af6a9c4"
+    },
+    "THIRD_PARTY_NOTICES.txt": {
+      "bytes": 4941,
+      "sha256": "fd2c53cd54d03ede2f579efa3dedcb76c0aa214c853a2a7b2c0e59350fa12cfe"
+    },
+    "docx-preview.min.js.map": {
+      "bytes": 97967,
+      "sha256": "64c2b5a53182ea86d962c058c4fcdb7f87ebed118509533af77b717e0cb30c96"
+    }
+  },
+  "licensing": {
+    "docx-preview": "Apache-2.0; exact LICENSE and minified copyright header retained",
+    "jszip": "MIT selected from MIT OR GPL-3.0-or-later; exact full LICENSE retained",
+    "bundled_dependencies": "unchanged upstream bundle; notices retained for pako MIT/Zlib and lie/immediate/setimmediate MIT"
+  },
+  "advisory_checks": {
+    "direct": {
+      "timestamp": "2026-10-08T08:04:22.142611+00:00",
+      "url": "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+      "requested_packages": {
+        "docx-preview": [
+          "0.4.1"
+        ],
+        "jszip": [
+          "3.10.1"
+        ]
+      },
+      "status": 200,
+      "response": {},
+      "scope": "two exact direct npm package versions; bundled dependency versions not yet audited"
+    },
+    "bundled_candidate_versions": {
+      "timestamp": "2026-10-08T08:06:06.865584+00:00",
+      "scope": "candidate exact bundled source dependency versions, to be matched against official JSZip distribution before using as audit inventory",
+      "packages": [
+        {
+          "name": "pako",
+          "version": "1.0.11",
+          "license": "(MIT AND Zlib)",
+          "tarball": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
+          "sha256": "0d4028dc0352a740c30cbfd772917f2744986d42bfa0b06ec7642bffe7ad3941",
+          "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
+          "license_names": [
+            "package/LICENSE"
+          ]
+        },
+        {
+          "name": "lie",
+          "version": "3.3.0",
+          "license": "MIT",
+          "tarball": "https://registry.npmjs.org/lie/-/lie-3.3.0.tgz",
+          "sha256": "2db8461cd4a10e2fc3588c8c55da34d33465ff81cc19c72416bbcaec7ee6a36e",
+          "integrity": "sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==",
+          "license_names": [
+            "package/license.md"
+          ]
+        },
+        {
+          "name": "immediate",
+          "version": "3.0.6",
+          "license": "MIT",
+          "tarball": "https://registry.npmjs.org/immediate/-/immediate-3.0.6.tgz",
+          "sha256": "98c792f39650b00818c05dcc407902034dc4092f368596b37658d44f28739d11",
+          "integrity": "sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==",
+          "license_names": [
+            "package/LICENSE.txt"
+          ]
+        },
+        {
+          "name": "setimmediate",
+          "version": "1.0.5",
+          "license": "MIT",
+          "tarball": "https://registry.npmjs.org/setimmediate/-/setimmediate-1.0.5.tgz",
+          "sha256": "5cb9fc22698364ed42c02d6aa3dc50ffeafa68452ae84699672e3dfd74922c9e",
+          "integrity": "sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==",
+          "license_names": [
+            "package/LICENSE.txt"
+          ]
+        }
+      ],
+      "advisory_endpoint": "https://registry.npmjs.org/-/npm/v1/security/advisories/bulk",
+      "status": 200,
+      "response": {}
+    },
+    "bundled_source_equivalence": {
+      "official_bundle": "jszip3.10.1 package/dist/jszip.js",
+      "method": "normalized CRLF and trimmed edge whitespace; exact contiguous source bodies in authenticated official unminified bundle",
+      "version_limit": "source match proves code equivalence for listed files; common code across releases may not uniquely identify version",
+      "packages": [
+        {
+          "name": "pako",
+          "candidate_version": "1.0.11",
+          "exact_contiguous_source_matches": [
+            {
+              "source": "package/lib/zlib/constants.js",
+              "source_sha256": "e0c4148ed267a27f03aba9f9a34cba4bade2090c0f12905907539e38c842abbc",
+              "source_bytes": 2312
+            },
+            {
+              "source": "package/lib/zlib/crc32.js",
+              "source_sha256": "213f85e8b2e52e2cf6f7634897197400f7ddaed587274f160045f0b548ec21da",
+              "source_bytes": 1750
+            },
+            {
+              "source": "package/lib/zlib/gzheader.js",
+              "source_sha256": "8fa0b4995cea477be96b8783a7d6c7cf5fec96765c2108c3bd52e77104bfdbd3",
+              "source_bytes": 2240
+            },
+            {
+              "source": "package/index.js",
+              "source_sha256": "e7ec4e35d94d01a2e4ee5dca62b8fb08ac7411596edb54b398651f4eb563561d",
+              "source_bytes": 347
+            },
+            {
+              "source": "package/lib/zlib/inftrees.js",
+              "source_sha256": "75f75d8ae4a7bed86f90a4a38f70c5d95e807515e9326801f9a073a7f2bf8bc7",
+              "source_bytes": 12500
+            },
+            {
+              "source": "package/lib/zlib/messages.js",
+              "source_sha256": "eec5f5d6b8120ada9cd48a3ca0a253c64777906e835477b090e053434d38cf6c",
+              "source_bytes": 1538
+            },
+            {
+              "source": "package/lib/zlib/zstream.js",
+              "source_sha256": "5fa10c7a59ca99113cf92d1260e56cbd6282e15afa85dc8a0eb8e8d6d2321298",
+              "source_bytes": 1811
+            }
+          ]
+        },
+        {
+          "name": "lie",
+          "candidate_version": "3.3.0",
+          "exact_contiguous_source_matches": [
+            {
+              "source": "package/lib/browser.js",
+              "source_sha256": "512e8898e512d2029d12067b8e059a9733fe7e43d0ea98f532522d34582e3e59",
+              "source_bytes": 6362
+            }
+          ]
+        },
+        {
+          "name": "immediate",
+          "candidate_version": "3.0.6",
+          "exact_contiguous_source_matches": [
+            {
+              "source": "package/lib/browser.js",
+              "source_sha256": "a736ab3e296a0637d040603df55a5943d1f850e51c94f8595965c4875e307512",
+              "source_bytes": 1883
+            }
+          ]
+        },
+        {
+          "name": "setimmediate",
+          "candidate_version": "1.0.5",
+          "exact_contiguous_source_matches": [
+            {
+              "source": "package/setImmediate.js",
+              "source_sha256": "9dc2eb8ff83f16f42fa5d9721bc15ac5a0b12eca91d185b7840dacf3381b3cd7",
+              "source_bytes": 6475
+            }
+          ]
+        }
+      ]
+    },
+    "limit": "An empty advisory response covers only the exact queried versions at the recorded time. Partial source matches do not uniquely establish every bundled dependency version; no blanket dependency or security qualification is asserted."
+  },
+  "integration_advisory": {
+    "url": "https://github.com/open-webui/open-webui/security/advisories/GHSA-f9xp-mfmq-x6cg",
+    "affected_application": "Open WebUI 0.11.1 through 0.11.3; not a direct npm docx-preview version advisory",
+    "required_controls": [
+      "preserve package validation rejecting active/embedded HTML and external relationships",
+      "renderAltChunks:false",
+      "remove or disable document-supplied link navigation",
+      "render uploaded content in an opaque-origin sandboxed frame without allow-same-origin"
+    ],
+    "status": "consumer integration must establish these controls; vendoring does not establish them"
+  },
+  "preview_limits": [
+    "HTML layout approximation, not native Microsoft Word acceptance",
+    "no realtime page-size repagination",
+    "SDT visible contents render without exposing the original dropdown choices",
+    "tab-stop calculation experimental; use explicit retained field/choice list beside preview"
+  ],
+  "sourcemap_repair": {
+    "observed_at": "2026-10-08T09:26:55.951220+00:00",
+    "cause": "Whitenoise collectstatic requires the exact referenced released sourcemap.",
+    "original_lock_sha256": "7495a09cf28c356768591f409f0fc842b6952670c455f670ce10784b7d4e3159",
+    "acquisition": "existing exact SHA512-qualified npm tarball; no redownload/build/comment stripping",
+    "archive_sha256": "b5c34d9fb04b3d70ba8cde8a71e2d361325993652ea917817654ed9431750432",
+    "checks": [
+      {
+        "name": "docx-preview.min.js",
+        "source_map_refs": [
+          "docx-preview.min.js.map"
+        ]
+      },
+      {
+        "name": "jszip.min.js",
+        "source_map_refs": []
+      }
+    ],
+    "minified_assets_unchanged": true
+  }
+}

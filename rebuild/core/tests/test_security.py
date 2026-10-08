@@ -27,13 +27,13 @@ from core.security import private_path
 
 
 class SyntheticFixture:
-    def make_scope(self, label="xray", organization=None):
+    def make_scope(self, label="xray", organization=None, original_bytes=None):
         user = User.objects.create_user(username=label, email=f"{label}@synthetic.invalid", verified_at=timezone.now())
         org = organization or Organization.objects.create(name=f"Synthetic {label}")
         department = Department.objects.create(organization=org, name=label)
         Membership.objects.create(user=user, department=department, role="clinician")
         patient = Patient.objects.create(department=department, display_name=f"SYNTHETIC {label}", reference=label, created_by=user)
-        blob = f"synthetic {label} original".encode()
+        blob = f"synthetic {label} original".encode() if original_bytes is None else original_bytes
         template = Template.objects.create(department=department, name=label, format="docx", original_name="synthetic.docx", original_path=f"originals/{label}.docx", sha256=hashlib.sha256(blob).hexdigest(), created_by=user)
         version = TemplateVersion.objects.create(template=template, number=1, fields=[{"key": "symptoms", "label": "Symptoms", "kind": "text", "locator": {"cell": 0}}], created_by=user)
         encounter = Encounter.objects.create(department=department, patient=patient, template_version=version, created_by=user, service_date=timezone.localdate(), notes="Symptoms: no chest pain", answers={"symptoms": {"text": "no chest pain", "status": "supported", "reviewed": True, "evidence": []}})
