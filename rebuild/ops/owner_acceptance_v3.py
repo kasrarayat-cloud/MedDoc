@@ -85,6 +85,15 @@ FROZEN_B77 = 'b77a1c48f2a08c8a0a73df6fc945da850bdc5f558254d32a526913409f17683c'
 EXPIRED_SESSION_KIND = 'retained_expired_anonymous_preview'
 EXPIRED_SESSION_EVIDENCE = BASE / 'recovery-20261007/before-auth-added-row-bounded-reconciliation-v1.json'
 EXPIRED_SESSION_EVIDENCE_SHA = '9e07eb0cdb7baa7770ae3c4f15f71d13a0ccf3bf7c3c17445597830b465468a8'
+ANONYMOUS_FAILURE_RECORD_PINS = {
+    BASE / 'recovery-20261007/second-refusal-session-only-reconciliation-v1.json':
+        'df887cb36dcfdf4c10cafe66f998ff47c511a420d19b61e565be5fdc42cb21e7',
+    BASE / 'recovery-20261007/acceptance-v3-current-main-actual-campaign-v1.log':
+        'e05db89631f5ec04368ecd95ee800d2f1920660e4eadda5ad3ecaaf59833144f',
+    BASE / 'recovery-20261007/acceptance-v3-exact-session-repair-actual-campaign-v1.log':
+        'ec66a3d4278ad784e2dfe25708719b11359c1c4d90b1dce0da19bd64845106a3',
+}
+
 EXPIRED_SESSION_PIN = {
     'primary_key_sha256': 'bef13f296c1336c397fafd1cf6d5b6292d5c6bf64bba02ea8d20bbde48310366',
     'copy_primary_key_sha256': '4046d064ab7eddfec87e24a438a27c64253fe60039b2269fa8d53c8a05ea9178',
@@ -328,21 +337,234 @@ def execution_gate():
             'v3_execution_source_protocol_unqualified')
 
 
+ANONYMOUS_PURE_SOURCE = r'''"""Pure once-captured anonymous-session preservation helpers.
+
+No filesystem, database, network, service, or authentication operation occurs.
+The caller authenticates the verifier bytes, observes the initial rows under
+its native exclusions, and binds the packet to its existing immutable phase
+proof. These helpers prove semantics and exact subsequent retention only.
+"""
+import copy
+import hashlib
+import json
+import math
+import re
+from datetime import datetime, timedelta, timezone
+
+ANONYMOUS_PHASE_KIND = 'phase_retained_expired_anonymous_preview'
+ANONYMOUS_PHASE_MAX_ROWS = 32
+ANONYMOUS_PHASE_PROOF_KEYS = frozenset((
+    'primary_key_sha256', 'row_sha256', 'payload_sha256', 'expire_date',
+    'created', 'signed_at', 'cutoff'))
+
+
+class PhaseAnonymousRefusal(RuntimeError):
+    pass
+
+
+def anonymous_need(value, label):
+    if not value:
+        raise PhaseAnonymousRefusal(label)
+
+
+def anonymous_encode(value):
+    return json.dumps(value, sort_keys=True, separators=(',', ':'),
+                      ensure_ascii=True, allow_nan=False).encode()
+
+
+def anonymous_sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+
+
+def anonymous_same(left, right):
+    if type(left) is not type(right):
+        return False
+    if type(left) is dict:
+        return (all(type(key) is str for key in left)
+                and all(type(key) is str for key in right)
+                and left.keys() == right.keys()
+                and all(anonymous_same(left[key], right[key]) for key in left))
+    if type(left) is list:
+        return len(left) == len(right) and all(anonymous_same(a, b) for a, b in zip(left, right))
+    return left == right
+
+
+def anonymous_utc(text):
+    anonymous_need(type(text) is str, 'v3_phase_anonymous_utc_type')
+    try:
+        value = datetime.fromisoformat(text)
+    except (ValueError, OverflowError):
+        raise PhaseAnonymousRefusal('v3_phase_anonymous_utc_parse') from None
+    anonymous_need(value.tzinfo is not None and value.utcoffset() == timedelta(0)
+                   and value.astimezone(timezone.utc).isoformat() == text,
+                   'v3_phase_anonymous_canonical_utc')
+    return value
+
+
+def anonymous_copy_expiry(text):
+    anonymous_need(type(text) is str and re.fullmatch(
+        r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00', text),
+        'v3_phase_anonymous_copy_expiry_shape')
+    try:
+        value = datetime.fromisoformat(text.replace(' ', 'T'))
+    except (ValueError, OverflowError):
+        raise PhaseAnonymousRefusal('v3_phase_anonymous_copy_expiry_parse') from None
+    anonymous_need(value.tzinfo is not None and value.utcoffset() == timedelta(0),
+                   'v3_phase_anonymous_copy_expiry_utc')
+    return value
+
+
+def anonymous_descriptor_admission(descriptor, cutoff):
+    anonymous_need(type(descriptor) is dict and set(descriptor) == {'kind', 'source_proof'}
+                   and descriptor['kind'] == ANONYMOUS_PHASE_KIND,
+                   'v3_phase_anonymous_descriptor_shape')
+    proof = descriptor['source_proof']
+    anonymous_need(type(proof) is dict and set(proof) == ANONYMOUS_PHASE_PROOF_KEYS,
+                   'v3_phase_anonymous_proof_shape')
+    for name in ('primary_key_sha256', 'row_sha256', 'payload_sha256'):
+        anonymous_need(type(proof[name]) is str and re.fullmatch('[a-f0-9]{64}', proof[name]),
+                       'v3_phase_anonymous_hash_shape')
+    anonymous_need(type(proof['cutoff']) is str and proof['cutoff'] == cutoff,
+                   'v3_phase_anonymous_fixed_cutoff')
+    end = anonymous_utc(cutoff)
+    signed = anonymous_utc(proof['signed_at'])
+    anonymous_need(signed.microsecond == 0, 'v3_phase_anonymous_integer_signer_time')
+    expiry = anonymous_copy_expiry(proof['expire_date'])
+    created = proof['created']
+    anonymous_need(type(created) in (int, float) and math.isfinite(created) and created >= 0,
+                   'v3_phase_anonymous_created_type')
+    try:
+        created_at = datetime.fromtimestamp(created, timezone.utc)
+        created_floor = datetime.fromtimestamp(math.floor(created), timezone.utc)
+        saved = expiry - timedelta(seconds=1800)
+    except (ValueError, OverflowError, OSError):
+        raise PhaseAnonymousRefusal('v3_phase_anonymous_source_time_range') from None
+    anonymous_need(created_floor <= signed <= saved and created_at <= saved
+                   and expiry <= end, 'v3_phase_anonymous_expired_source_times')
+    return descriptor
+
+
+def anonymous_packet_admission(packet):
+    anonymous_need(type(packet) is dict and set(packet) == {'format', 'cutoff', 'rows'}
+                   and type(packet['format']) is int and packet['format'] == 1,
+                   'v3_phase_anonymous_packet_shape')
+    anonymous_utc(packet['cutoff'])
+    rows = packet['rows']
+    anonymous_need(type(rows) is list and len(rows) <= ANONYMOUS_PHASE_MAX_ROWS,
+                   'v3_phase_anonymous_packet_population_bound')
+    keys = []
+    for descriptor in rows:
+        anonymous_descriptor_admission(descriptor, packet['cutoff'])
+        keys.append(descriptor['source_proof']['primary_key_sha256'])
+    anonymous_need(keys == sorted(keys) and len(set(keys)) == len(keys),
+                   'v3_phase_anonymous_sorted_unique_population')
+    return copy.deepcopy(packet)
+
+
+def phase_anonymous_descriptor(verifier, row, columns, secret, cutoff, pin=None):
+    anonymous_utc(cutoff)
+    anonymous_need(columns == ['session_key', 'session_data', 'expire_date']
+                   and type(row) is dict and set(row) == set(columns)
+                   and all(type(row[name]) is bytes for name in columns)
+                   and re.fullmatch(rb'[a-z0-9]{32}', row['session_key']),
+                   'v3_phase_anonymous_COPY_row_shape')
+    value = verifier.normal_session(row['session_data'], secret)
+    anonymous_need(type(value) is dict and set(value) == {'kind', 'flows', '_session_expiry'}
+                   and value['kind'] == 'quillmd-preview-v1'
+                   and type(value['_session_expiry']) is int and value['_session_expiry'] == 1800
+                   and type(value['flows']) is dict and len(value['flows']) == 1,
+                   'v3_phase_anonymous_signed_payload_shape')
+    nonce, flow = next(iter(value['flows'].items()))
+    anonymous_need(type(nonce) is str and re.fullmatch('[a-f0-9]{32}', nonce)
+                   and type(flow) is dict and set(flow) == {'created', 'destination'}
+                   and flow['destination'] == '/' and type(flow['destination']) is str
+                   and type(flow['created']) in (int, float) and math.isfinite(flow['created'])
+                   and flow['created'] >= 0, 'v3_phase_anonymous_root_flow_shape')
+    from django.core import signing
+    try:
+        stamp_text = verifier.copy_value(row['session_data']).decode().rsplit(':', 2)[1]
+        seconds = signing.b62_decode(stamp_text)
+        anonymous_need(signing.b62_encode(seconds) == stamp_text,
+                       'v3_phase_anonymous_canonical_signer_timestamp')
+        signed_at = datetime.fromtimestamp(seconds, timezone.utc).isoformat()
+        expiry_text = row['expire_date'].decode()
+    except (ValueError, OverflowError, OSError, UnicodeError, IndexError):
+        raise PhaseAnonymousRefusal('v3_phase_anonymous_authenticated_time_parse') from None
+    descriptor = {'kind': ANONYMOUS_PHASE_KIND, 'source_proof': {
+        'primary_key_sha256': anonymous_sha(verifier.encoded([row['session_key'].decode()])),
+        'row_sha256': verifier.row_digest(row, columns),
+        'payload_sha256': anonymous_sha(anonymous_encode(value)),
+        'expire_date': expiry_text, 'created': flow['created'],
+        'signed_at': signed_at, 'cutoff': cutoff}}
+    anonymous_descriptor_admission(descriptor, cutoff)
+    if pin is not None:
+        anonymous_descriptor_admission(pin, cutoff)
+        anonymous_need(anonymous_same(descriptor, pin), 'v3_phase_anonymous_retained_row_changed')
+    return descriptor
+
+
+def phase_anonymous_count(rows, packet, required=True):
+    packet = anonymous_packet_admission(packet)
+    anonymous_need(type(required) is bool, 'v3_phase_anonymous_required_type')
+    expected = {item['source_proof']['primary_key_sha256']: item for item in packet['rows']}
+    seen = set()
+    for row in rows:
+        anonymous_need(type(row) is dict, 'v3_phase_anonymous_evidence_row_type')
+        descriptor = row.get('descriptor')
+        kind = descriptor.get('kind') if type(descriptor) is dict else None
+        key = row.get('primary_key_sha256')
+        if kind != ANONYMOUS_PHASE_KIND and not (type(key) is str and key in expected):
+            continue
+        anonymous_need(type(key) is str and key in expected and key not in seen,
+                       'v3_phase_anonymous_unlisted_or_duplicate_row')
+        wanted = {'table': 'django_session', 'primary_key_sha256': key,
+                  'row_sha256': expected[key]['source_proof']['row_sha256'],
+                  'descriptor': expected[key]}
+        anonymous_need(anonymous_same(row, wanted), 'v3_phase_anonymous_evidence_changed')
+        seen.add(key)
+    anonymous_need(not required or seen == set(expected), 'v3_phase_anonymous_retained_population_missing')
+    return len(seen)
+
+
+def adapt_phase_anonymous_validator(verifier, packet):
+    packet = anonymous_packet_admission(packet)
+    expected = {item['source_proof']['primary_key_sha256']: item for item in packet['rows']}
+    original = verifier.validate_admitted_added_row
+    def checked(row, columns, prior, admin_actor, secret, *args, **kwargs):
+        descriptor = prior.get('descriptor') if type(prior) is dict else None
+        kind = descriptor.get('kind') if type(descriptor) is dict else None
+        key = prior.get('primary_key_sha256') if type(prior) is dict else None
+        if kind == ANONYMOUS_PHASE_KIND or (type(key) is str and key in expected):
+            phase_anonymous_count([prior], packet, required=False)
+            phase_anonymous_descriptor(verifier, row, columns, secret, packet['cutoff'], pin=expected[key])
+            return
+        return original(row, columns, prior, admin_actor, secret, *args, **kwargs)
+    verifier.validate_admitted_added_row = checked
+    return verifier
+'''
+exec(compile(ANONYMOUS_PURE_SOURCE, "<reviewed-phase-anonymous-helpers>", "exec"), globals())
+
+
 def failure_summary(error):
     """Known early zeros differ from an entered phase with an unknown outcome."""
     def constants(code):
         for value in code.co_consts:
             if isinstance(value, types.CodeType): yield from constants(value)
             elif isinstance(value, str) and re.fullmatch('v3_[a-z0-9_]{1,96}', value): yield value
-    labels = {value for function in globals().values() if isinstance(function, types.FunctionType)
-              for value in constants(function.__code__)}
+    functions = [value for value in globals().values() if isinstance(value, types.FunctionType)]
+    functions.extend(value for cls in globals().values() if isinstance(cls, type)
+                     for value in vars(cls).values() if isinstance(value, types.FunctionType))
+    labels = {value for function in functions for value in constants(function.__code__)}
     labels.update(node.value for node in ast.walk(ast.parse(CONFIGURATION_ADMISSION_SOURCE))
                   if isinstance(node, ast.Constant) and isinstance(node.value, str)
                   and re.fullmatch('v3_[a-z0-9_]{1,96}', node.value))
     labels.update('v3_preserved_' + name for name in ('mail', 'static', 'configuration', 'old_files'))
     labels.update('v3_fixed_adapter_' + name for name in ('native_child_gate', 'contract_import',
         'declaration_buffer', 'runtime_authority', 'closed_citation', 'initial_gate_report'))
-    label = str(error) if isinstance(error, Refusal) and str(error) in labels else 'v3_fixed_protocol_failure'
+    if type(error) is RuntimeError and str(error) == 'Undeclared pre-acceptance table row added':
+        label = 'v3_undeclared_preacceptance_added_row'
+    else:
+        label = str(error) if isinstance(error, (Refusal, PhaseAnonymousRefusal)) and str(error) in labels else 'v3_fixed_protocol_failure'
     return {'format': 3, 'complete': False, 'reason': label,
         'installed_state_accessed': ENTRY_OBSERVATIONS['installed_state_accessed'],
         'provider_calls': None if ENTRY_OBSERVATIONS['provider_possible'] else 0,
@@ -521,7 +743,7 @@ def phase_configuration_proof(expected, current, proof):
          'v3_phase_configuration_no_foreign_authority')
     observation = proof['phase_observation']
     need(type(observation) is dict and set(observation) == {'format', 'protocol', 'owner_scope_reply_sha256',
-        'historical_original_configuration_sha256', 'configuration', 'external_boundary', 'captured_at', 'binding'},
+        'historical_original_configuration_sha256', 'configuration', 'external_boundary', 'captured_at', 'binding', 'anonymous_sessions'},
         'v3_phase_observation_schema')
     need(type(observation['format']) is int and observation['format'] == 1
          and observation['protocol'] == PHASE_PRESERVATION_PROTOCOL
@@ -550,7 +772,11 @@ def phase_configuration_proof(expected, current, proof):
         if type(value) is dict: return all(safe_json(item) for item in value.values())
         if type(value) is list: return all(safe_json(item) for item in value)
         return type(value) in (str, bool, type(None))
-    need(safe_json(observation), 'v3_phase_lossless_browser_representation')
+    anonymous_packet_admission(observation['anonymous_sessions'])
+    need(configuration_date(observation['anonymous_sessions']['cutoff']) <= configuration_date(observation['captured_at']),
+         'v3_phase_anonymous_capture_precedes_observation')
+    need(safe_json({key: value for key, value in observation.items() if key != 'anonymous_sessions'}),
+         'v3_phase_lossless_browser_representation')
     need(all(type(path) is str for path in expected) and all(type(path) is str for path in current),
          'v3_phase_configuration_string_paths')
     allowed = set(PHASE_CONFIGURATION_PATHS)
@@ -654,6 +880,9 @@ def phase_report_admission(expected, current, proof, report, authority, operatio
         and configuration_same(authority.get('phase_preservation'), {
             'path': PHASE_PRESERVATION_PATH, 'sha256': proof['phase_observation_sha256'], 'binding': binding}),
         'v3_phase_report_authority_binding')
+    need(anonymous_same(report.get('allowed_deltas', {}).get('anonymous_sessions'), observation['anonymous_sessions']),
+         'v3_phase_anonymous_admission_binding')
+    phase_anonymous_count(report.get('allowed_deltas', {}).get('added_rows', []), observation['anonymous_sessions'])
     need(configuration_date(observation['captured_at']) <= configuration_date(report['started_at']) <= configuration_date(report['finished_at']),
          'v3_phase_admission_interval')
     return True
@@ -708,6 +937,7 @@ def configuration_constants():
 
 def configuration_helpers(scope):
     scope.update(configuration_constants())
+    exec(compile(ANONYMOUS_PURE_SOURCE, '<reviewed-phase-anonymous-helpers>', 'exec'), scope)
     exec(compile(CONFIGURATION_ADMISSION_SOURCE, '<reviewed-configuration-proof>', 'exec'), scope)
     return scope
 
@@ -1435,14 +1665,35 @@ def adapt_expired_session_validator(verifier):
     verifier.validate_admitted_added_row = checked
 
 
-def authenticated_rows_admission(verifier, old, current, keys, policy, secret, fingerprint, auth, publisher, edge_ip=None):
+def authenticated_rows_admission(verifier, old, current, keys, policy, secret, fingerprint, auth, publisher, edge_ip=None,
+                                 anonymous_packet=None, anonymous_cutoff=None):
     """Use the qualified COPY algorithm, with explicit route input instead of I/O.
 
-    The TCP route statement is replaced and one exact expired row is admitted.
+    The TCP route statement is replaced. A once-captured packet retains exact
+    expired anonymous rows, with no recapture during or after authentication.
     All original comparisons and unknown-row refusals remain. The caller
     supplies a route address observed by the qualified native collector under
     the same hold. This helper itself has no socket or installed-state access.
     """
+    require(not (anonymous_packet is not None and anonymous_cutoff is not None), 'v3_phase_anonymous_capture_or_retain')
+    phase_mode = anonymous_packet is not None or anonymous_cutoff is not None
+    capture = anonymous_cutoff is not None
+    require(not capture or auth is None, 'v3_phase_anonymous_capture_before_auth_only')
+    packet = ({'format': 1, 'cutoff': anonymous_cutoff, 'rows': []} if capture
+              else anonymous_packet_admission(anonymous_packet) if phase_mode else None)
+    if phase_mode:
+        anonymous_packet_admission(packet)
+    selected = {item['source_proof']['primary_key_sha256']: item for item in packet['rows']} if phase_mode else {}
+    def phase_descriptor(row, columns, secret):
+        key = sha(verifier.encoded([row['session_key'].decode()]))
+        value = phase_anonymous_descriptor(verifier, row, columns, secret, packet['cutoff'],
+                                            pin=None if capture else selected[key])
+        if capture:
+            require(len(packet['rows']) < ANONYMOUS_PHASE_MAX_ROWS, 'v3_phase_anonymous_population_bound')
+            packet['rows'].append(value)
+        return value
+    def retained_count(rows):
+        return phase_anonymous_count(rows, packet) if phase_mode else preserved_expired_session_count(rows)
     require(isinstance(getattr(verifier, '__authenticated_source', None), bytes), 'v3_authenticated_copy_source_required')
     definitions = [node for node in ast.parse(verifier.__authenticated_source).body
                    if isinstance(node, ast.FunctionDef) and node.name == 'continuation_rows_admission']
@@ -1463,16 +1714,18 @@ def authenticated_rows_admission(verifier, old, current, keys, policy, secret, f
             require(str(ipaddress.ip_address(edge_ip)) == edge_ip, 'v3_canonical_native_edge_address')
         except (ValueError, TypeError):
             raise Refusal('v3_canonical_native_edge_address') from None
-    # Insert one branch before generic authentication-cookie handling. Count
-    # the actual retained row; do not filter it or replace the original capture.
+    # Preserve the old health-row branch; insert closed capture/retention before
+    # authentication-cookie handling. Keep every original row and all additions.
     branches = [node for node in ast.walk(function) if isinstance(node, ast.If)
                 and ast.unparse(node.test) == "auth and table == 'django_session'"]
     require(len(branches) == 1, 'v3_exact_expired_session_branch')
     target = branches[0]
-    added = ast.parse("""if table == 'django_session' and sha(encoded([row['session_key'].decode()])) == expired_pin['copy_primary_key_sha256']:
+    added = ast.parse("""if phase_mode and table == 'django_session' and (capture_phase or sha(encoded([row['session_key'].decode()])) in phase_selected):
+    descriptor = phase_descriptor(row, columns, secret)
+elif not phase_mode and table == 'django_session' and sha(encoded([row['session_key'].decode()])) == expired_pin['copy_primary_key_sha256']:
     descriptor = validate_retained_session(row, columns, secret)
 """).body[0]
-    added.orelse = [target]
+    added.orelse[0].orelse = [target]
     class Insert(ast.NodeTransformer):
         def visit_If(self, node):
             return added if node is target else self.generic_visit(node)
@@ -1485,9 +1738,21 @@ def authenticated_rows_admission(verifier, old, current, keys, policy, secret, f
     raw = ast.Module(body=[function], type_ignores=[])
     namespace = dict(verifier.__dict__, supplied_edge_ip=edge_ip, expired_pin=EXPIRED_SESSION_PIN,
                      validate_retained_session=lambda row, columns, secret: validate_expired_session(verifier, row, columns, secret),
-                     retained_count=preserved_expired_session_count)
+                     retained_count=retained_count, phase_mode=phase_mode, capture_phase=capture,
+                     phase_selected=selected, phase_descriptor=phase_descriptor)
     exec(compile(ast.fix_missing_locations(raw), '<qualified-v3-pure-copy-adapter>', 'exec'), namespace)
-    return namespace['continuation_rows_admission'](old, current, keys, policy, secret, fingerprint, auth, publisher)
+    # The COPY population order need not match the canonical packet order.
+    if capture:
+        original_count = retained_count
+        def sorted_count(rows):
+            packet['rows'].sort(key=lambda item: item['source_proof']['primary_key_sha256'])
+            return original_count(rows)
+        namespace['retained_count'] = sorted_count
+    result = namespace['continuation_rows_admission'](old, current, keys, policy, secret, fingerprint, auth, publisher)
+    if phase_mode:
+        result['anonymous_sessions'] = anonymous_packet_admission(packet)
+        phase_anonymous_count(result['added_rows'], packet)
+    return result
 
 
 def authenticated_admin(verifier, packet, original, operations, served, availability_sha):
@@ -1639,6 +1904,11 @@ def old_and_added_rows_admission(verifier, original, current, keys, manifest, af
                       for row in after_auth['allowed_deltas']['added_rows']}
     require(len(transitions) == len(after_auth['allowed_deltas']['original_row_transitions'])
             and len(admitted_added) == len(after_auth['allowed_deltas']['added_rows']), 'v3_unique_admitted_lifecycle_rows')
+    packet = after_auth['allowed_deltas'].get('anonymous_sessions')
+    if packet is not None:
+        anonymous_packet_admission(packet)
+        adapt_phase_anonymous_validator(verifier, packet)
+    retained_count = (lambda rows: phase_anonymous_count(rows, packet)) if packet is not None else preserved_expired_session_count
     auth = context['authentication']; auth['publisher'] = after_auth['allowed_deltas']['publisher']
     auth['allowed_login_keys'] = context['allowed_login_keys']
     seen_added = set(); counts = {}; exceptions = []
@@ -1683,7 +1953,7 @@ def old_and_added_rows_admission(verifier, original, current, keys, manifest, af
     require(counts.get('core_encounter') == 5 and counts.get('core_job') == 6
             and counts.get('core_usage') == counts.get('core_providerreceipt') == 6
             and counts.get('core_template') == counts.get('core_templateversion') == 1
-            and counts.get('django_session') == 5 + preserved_expired_session_count(admitted_added.values())
+            and counts.get('django_session') == 5 + retained_count(admitted_added.values())
             and counts.get('otp_totp_totpdevice') == 0,
             'v3_exact_new_case_auth_population')
     return {'all_original_tables_rows_columns_compared': True, 'original_capture_replaced': False,
@@ -1770,7 +2040,8 @@ def readonly_connection_flags(conn):
 
 
 def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest, policy, secret, fingerprint,
-                            auth=None, edge_ip=None, publisher_admission=None):
+                            auth=None, edge_ip=None, publisher_admission=None,
+                            anonymous_packet=None, anonymous_cutoff=None):
     """Source-faithful admission on an explicitly supplied read-only connection.
 
     The caller owns all five exclusions. No auth/migrations/writes occur here;
@@ -1786,7 +2057,8 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
     require(callable(publisher_admission), 'v3_checked_publisher_admission_required')
     publisher = publisher_admission(conn, health[0], policy)
     semantics = authenticated_rows_admission(verifier, original, current, keys,
-        dict(policy, original_tables=manifest['tables']), secret, fingerprint, auth, publisher, edge_ip)
+        dict(policy, original_tables=manifest['tables']), secret, fingerprint, auth, publisher, edge_ip,
+        anonymous_packet, anonymous_cutoff)
     database = verifier.continuation_database_fingerprint(conn, tables, baseline, backup)
     conn.rollback()
     return {'complete': True, 'current_database_fingerprint': database, 'allowed_deltas': semantics,
@@ -1796,9 +2068,11 @@ def readonly_copy_admission(conn, verifier, backup, original, baseline, manifest
 
 def installed_database_admission(contract, *, auth_packet=None, operations=None, served=None,
                                  availability_sha=None, verifier_override=None, native_modules=None,
-                                 publisher_admission=None):
-    """Future fixed collection path; gate precedes key/role/socket/DB access."""
+                                 publisher_admission=None, anonymous_packet=None, anonymous_cutoff=None):
+    """Fixed native collection; one parent capture, exact retained packet thereafter."""
     execution_gate()
+    require((anonymous_packet is None) != (anonymous_cutoff is None),
+            'v3_native_anonymous_packet_or_initial_cutoff_required')
     import psycopg
     from psycopg.rows import dict_row
     from django.utils.crypto import salted_hmac
@@ -1838,10 +2112,13 @@ def installed_database_admission(contract, *, auth_packet=None, operations=None,
     options = backup.source_options(APP, legacy.ROLES)
     with psycopg.connect(**options, row_factory=dict_row) as conn:
         result = readonly_copy_admission(conn, verifier, backup, original, baseline, manifest,
-                                         policy, secret, fingerprint, auth, edge_ip, publisher_admission)
+                                         policy, secret, fingerprint, auth, edge_ip, publisher_admission,
+                                         anonymous_packet, anonymous_cutoff)
     require(sha(protected(EXPIRED_SESSION_EVIDENCE)) == EXPIRED_SESSION_EVIDENCE_SHA,
             'v3_retained_expired_session_evidence_pin')
-    preserved_expired_session_count(result['allowed_deltas']['added_rows'], required=True)
+    for path, digest in ANONYMOUS_FAILURE_RECORD_PINS.items():
+        require(sha(protected(path)) == digest, 'v3_anonymous_failure_record_changed')
+    phase_anonymous_count(result['allowed_deltas']['added_rows'], result['allowed_deltas']['anonymous_sessions'])
     return result
 
 
@@ -2401,6 +2678,8 @@ def javascript_adapter(blobs, phase, declaration, authority, child_check):
           + repr(base64.b64encode(blobs['acceptance_v3_contract.py']).decode())
           + "),'<authenticated-v3-contract>','exec'),scope);"
           + "scope.update(json.loads(" + repr(encode(configuration_constants()).decode()) + "));"
+          + "exec(compile(" + repr(ANONYMOUS_PURE_SOURCE)
+          + ",'<reviewed-phase-anonymous-helpers>','exec'),scope);"
           + "exec(compile(" + repr(CONFIGURATION_ADMISSION_SOURCE)
           + ",'<reviewed-configuration-proof>','exec'),scope);"
           + "scope['adapt_configuration_admission'](scope,base64.b64decode("
@@ -2483,6 +2762,20 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
                      publisher_admission=None, phase_preservation=None):
     """Use the full frozen independent DB/files/SDK/Word verifier, not browser flags."""
     require(sha(raw) == DEPENDENCIES['verify_installed_acceptance_v3.py'], 'v3_frozen_dependency_hash')
+    require((completion_check is None and phase_preservation is None) or 'phase_preservation' in authority,
+            'v3_final_phase_packet_required')
+    packet = None
+    if 'phase_preservation' in authority:
+        pin = authority['phase_preservation']
+        phase_raw = protected(PHASE_PRESERVATION_PATH)
+        observation = json.loads(phase_raw)
+        require(type(pin) is dict and pin == {'path': str(PHASE_PRESERVATION_PATH),
+                'sha256': sha(phase_raw), 'binding': observation.get('binding')}, 'v3_final_phase_packet_authority')
+        binding = observation.get('binding', {})
+        require(binding.get('operations_revision') == authority['operations_revision']
+                and binding.get('served_revision') == authority['served_revision'], 'v3_final_phase_packet_revision')
+        packet = anonymous_packet_admission(observation.get('anonymous_sessions'))
+    retained_count = (lambda rows, required=True: phase_anonymous_count(rows, packet, required)) if packet is not None else preserved_expired_session_count
     tree = ast.parse(raw)
     imports = [node for node in tree.body if isinstance(node, ast.ImportFrom) and node.module == 'acceptance_v3_contract']
     require(len(imports) == 2, 'v3_fixed_verifier_contract_imports')
@@ -2533,10 +2826,13 @@ def verifier_adapter(raw, common, authority, availability_verifier, completion_c
         validate_v3_admission=common.admission, validate_v3_auth_sequence=common.auth_sequence,
         validate_admin_final_storage=validate_admin_final_storage,
         validate_doctor_final_storage=validate_doctor_final_storage,
-        phase_preservation=phase_preservation, preserved_expired_session_count=preserved_expired_session_count,
+        phase_preservation=phase_preservation, preserved_expired_session_count=retained_count,
         AVAILABILITY=str(AVAILABILITY), PREPARATION=str(PREPARATION), ADMIN=str(ADMIN), CAMPAIGN=str(CAMPAIGN))
     exec(compile(ast.fix_missing_locations(tree), module.__file__, 'exec'), module.__dict__)
-    adapt_expired_session_validator(module)
+    if packet is not None:
+        adapt_phase_anonymous_validator(module, packet)
+    else:
+        adapt_expired_session_validator(module)
     module.load_v3_authority = lambda operations, served: copy.deepcopy(authority) if (
         operations == authority['operations_revision'] and served == authority['served_revision']) else require(False, 'v3_verifier_authority_revision')
     # The operational descendant's reviewed publisher closure handles native
@@ -2597,6 +2893,7 @@ class InstalledHost:
         self.admitted_main_revision = None
         self.co_tenant_phase_observation = None
         self.co_tenant_phase_raw = None
+        self.anonymous_sessions = None
 
     def canonical(self, path):
         return Path(path).resolve(strict=True)
@@ -2812,6 +3109,35 @@ class InstalledHost:
         proof['parent_hold'] = copy.deepcopy(self.publication_alignment['hold'])
         return proof
 
+    def database_admission(self, contract, auth_packet, operations, served):
+        cutoff = None
+        if self.anonymous_sessions is None:
+            require(self.inside and self.own_hold_mode in ('--execute', '--preflight')
+                    and self.parent_lock_context['parent_pid'] == os.getpid()
+                    and self.parent_lock_context['parent_start_ticks'] == process_start(Path('/proc/self/stat').read_text())
+                    and self.co_tenant_phase_observation is None and not self.admission_raws and auth_packet is None,
+                    'v3_child_cannot_capture_anonymous_population')
+            self.check_publication_hold()
+            cutoff = datetime.now(timezone.utc).isoformat()
+        result = installed_database_admission(contract, auth_packet=auth_packet, operations=operations, served=served,
+            availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
+            native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission,
+            anonymous_packet=self.anonymous_sessions, anonymous_cutoff=cutoff)
+        observed = anonymous_packet_admission(result['allowed_deltas']['anonymous_sessions'])
+        if self.anonymous_sessions is None:
+            known = {
+                '4046d064ab7eddfec87e24a438a27c64253fe60039b2269fa8d53c8a05ea9178':
+                    '48a98693b7f15e39dbb1b24c910c688cb0aaeda4acfa53bb6f911cad1136679a',
+                '91428d15663e00b25cbfeded8faa675957d9c9bb36e791d8beb3ebfe931b496e':
+                    '3a06261d2ae0181e156992156d00f451ac7a0d1838488ede5db37b8b37ea1499'}
+            actual = {item['source_proof']['primary_key_sha256']: item['source_proof']['row_sha256'] for item in observed['rows']}
+            require(all(actual.get(key) == value for key, value in known.items()), 'v3_known_anonymous_failure_rows_preserved')
+            self.anonymous_sessions = observed
+            adapt_phase_anonymous_validator(self.availability_verifier, observed)
+        else:
+            require(anonymous_same(observed, self.anonymous_sessions), 'v3_anonymous_population_recapture_refused')
+        return result
+
     def snapshot(self):
         acknowledgement = self.recovery.contract_from_bytes(
             self.read_source(self.source / self.recovery.DECL))['external_configuration_ack']
@@ -2830,6 +3156,7 @@ class InstalledHost:
                 'owner_scope_reply_sha256': PRESERVATION_SCOPE_REPLY_SHA,
                 'historical_original_configuration_sha256': sha(encode(self.receipt['before']['configuration'])),
                 'configuration': copy.deepcopy(snapshot['configuration']), 'external_boundary': before,
+                'anonymous_sessions': anonymous_packet_admission(self.anonymous_sessions),
                 'captured_at': captured_at, 'binding': {'operations_revision': self.operations,
                     'served_revision': self.served, 'availability_receipt_sha256': sha(self.availability_raw),
                     'parent_pid': os.getpid(), 'parent_start_ticks': process_start(Path('/proc/self/stat').read_text()),
@@ -2882,9 +3209,7 @@ class InstalledHost:
         env = protected(APP / '.env', 65536)
         proof = self.native.worker_configuration(env, served, boundary)
         packet = installed_auth_packet() if 'after-auth' in self.admission_raws else None
-        admitted = installed_database_admission(self.contract, auth_packet=packet, operations=operations, served=served,
-            availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
-            native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission)
+        admitted = self.database_admission(self.contract, packet, operations, served)
         snapshot = self.snapshot()
         require(snapshot['database'] == admitted['current_database_fingerprint'], 'v3_idle_database_race')
         self.old.reaper_admission(lambda sql: self._readonly_query(sql), snapshot['files'])
@@ -2949,9 +3274,7 @@ class InstalledHost:
         require(self.inside and phase in ('before-auth', 'after-auth'), 'v3_parent_admission_hold')
         started = datetime.now(timezone.utc).isoformat()
         packet = installed_auth_packet() if phase == 'after-auth' else None
-        admission = installed_database_admission(contract, auth_packet=packet, operations=operations, served=served,
-            availability_sha=sha(self.availability_raw), verifier_override=self.availability_verifier,
-            native_modules=(self.old, self.backup), publisher_admission=self.publisher_admission)
+        admission = self.database_admission(contract, packet, operations, served)
         require(isinstance(self.publication_alignment, dict)
                 and admission['allowed_deltas']['publisher']['current_full_row']
                     == self.publication_alignment['selected']['row'], 'v3_admitted_selected_publication')
@@ -3102,6 +3425,9 @@ def adopt_phase_observation(host, raw, context):
     require(all(configuration_helpers({'need': require})['configuration_same'](
         json.loads(report)['co_tenant_preservation_admission'], proof)
         for report in host.admission_raws.values()), 'v3_child_phase_admission_cross_hash')
+    require(host.anonymous_sessions is None, 'v3_child_anonymous_packet_already_set')
+    host.anonymous_sessions = anonymous_packet_admission(observation['anonymous_sessions'])
+    adapt_phase_anonymous_validator(host.availability_verifier, host.anonymous_sessions)
     host.co_tenant_phase_observation, host.co_tenant_phase_raw = observation, raw
     return proof
 
