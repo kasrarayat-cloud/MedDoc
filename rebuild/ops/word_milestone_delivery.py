@@ -345,14 +345,17 @@ SCHEDULED_RETENTION = {
 }
 
 
-def scheduled_retention_observation(unit, configuration, observed, state):
+def scheduled_retention_observation(unit, configuration, observed, state, *, deadline=None):
     """Bound the two reviewed background schedules, without certifying dispatch history."""
     timer=unit.removesuffix('.service')+'.timer'
+    def remaining():
+        value=10 if deadline is None else min(10,deadline-time.monotonic())
+        require(value>0,'scheduled_read_deadline');return value
     for name,digest in zip((unit,timer),SCHEDULED_RETENTION[unit]):
         require(configuration.get('/etc/systemd/system/'+name,{}).get('sha256')==digest,
             'scheduled_retention_reviewed_file')
     def properties(name,names):
-        raw=old.command(['systemctl','show',name,'--property='+','.join(names)],timeout=10)
+        raw=old.command(['systemctl','show',name,'--property='+','.join(names)],timeout=remaining())
         lines=raw.decode().splitlines();require(all('=' in line for line in lines),'scheduled_property_line')
         pairs=[line.split('=',1) for line in lines]
         require(len(pairs)==len(names) and {key for key,_ in pairs}==set(names),'scheduled_property_population')
@@ -371,7 +374,7 @@ def scheduled_retention_observation(unit, configuration, observed, state):
     identity=properties(timer,('Id','LoadState','ActiveState','SubState','FragmentPath','DropInPaths','UnitFileState',
         'Unit','InvocationID','ActiveEnterTimestampMonotonic','InactiveExitTimestampMonotonic'))
     path_record=bus_record(old.command(['busctl','--json=short','call','org.freedesktop.systemd1',
-        '/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',timer],timeout=10))
+        '/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',timer],timeout=remaining()))
     require(path_record.get('type')=='o' and isinstance(path_record.get('data'),list)
         and len(path_record['data'])==1,'scheduled_timer_bus_identity')
     bus_path=path_record['data'][0]
@@ -379,33 +382,49 @@ def scheduled_retention_observation(unit, configuration, observed, state):
     require(bus_path==expected_path,'scheduled_timer_bus_path')
     values=[bus_record(line) for line in old.command(['busctl','--json=short','get-property',
         'org.freedesktop.systemd1',bus_path,'org.freedesktop.systemd1.Timer',
-        'LastTriggerUSecMonotonic','TimersMonotonic','AccuracyUSec','RandomizedDelayUSec','Persistent'],timeout=10).decode().splitlines()]
+        'LastTriggerUSecMonotonic','TimersMonotonic','AccuracyUSec','RandomizedDelayUSec','Persistent'],timeout=remaining()).decode().splitlines()]
     require(len(values)==5 and [row.get('type') for row in values]==['t','a(stt)','t','t','b'],
         'scheduled_timer_bus_properties')
-    require(state(unit)==observed,'scheduled_service_observation_race')
+    repeated=state(unit)
     result={'runtime':runtime,'timer_identity':identity,'timer_values':[row['data'] for row in values],
         'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
         'observed_monotonic_us':time.monotonic_ns()//1000,
         'attribution':'prospectively expected timer-correlated transition; dispatch history unverified'}
-    validate_scheduled_retention(unit,observed,result)
+    try:
+        require(repeated==observed,'scheduled_service_observation_race')
+        validate_scheduled_retention(unit,observed,result)
+    except Refusal as error:
+        if str(error) in ('word_delivery_scheduled_service_observation_race','word_delivery_scheduled_inactive_endpoint'):
+            error.retention_frame={'initial':copy.deepcopy(observed),'repeated':repeated,'context':result,'reason':str(error)}
+        raise
+    remaining()
     return result
 
 
-def validate_scheduled_retention(unit, observed, context):
+def validate_scheduled_retention(unit, observed, context, *, pending=False):
+    context=copy.deepcopy(context);coherence=context.pop('read_coherence',None)
+    if coherence is not None:validate_retention_coherence(unit,observed,context,coherence)
     timer=unit.removesuffix('.service')+'.timer';runtime=context['runtime'];identity=context['timer_identity']
     require(set(context)=={'runtime','timer_identity','timer_values','boot_id','observed_monotonic_us','attribution'}
         and set(runtime)=={'Type','TriggeredBy','Result','ExecMainCode','ExecMainStatus',
             'ExecMainExitTimestampMonotonic','InactiveExitTimestampMonotonic'}
         and type(context['observed_monotonic_us']) is int,'scheduled_context_population')
-    require(observed['ActiveState']=='inactive' and observed['SubState']=='dead' and observed['MainPID']=='0'
+    state_ok=(observed['ActiveState']=='inactive' and observed['SubState']=='dead' and observed['MainPID']=='0')
+    if pending:state_ok=state_ok or (observed['ActiveState']=='activating' and observed['SubState']=='start'
+        and observed['MainPID'].isdigit() and int(observed['MainPID'])>0)
+    require(state_ok
         and observed['LoadState']=='loaded' and observed['DropInPaths']=='', 'scheduled_inactive_endpoint')
-    require({key:runtime[key] for key in ('Type','TriggeredBy','Result','ExecMainCode','ExecMainStatus')}
-        =={'Type':'oneshot','TriggeredBy':timer,'Result':'success','ExecMainCode':'1','ExecMainStatus':'0'},
+    require({key:runtime[key] for key in ('Type','TriggeredBy','Result','ExecMainStatus')}
+        =={'Type':'oneshot','TriggeredBy':timer,'Result':'success','ExecMainStatus':'0'}
+        and runtime['ExecMainCode'] in (('0','1') if pending else ('1',)),
         'scheduled_successful_oneshot')
     stable=copy.deepcopy(identity)
     require(re.fullmatch('[a-f0-9]{32}',stable.pop('InvocationID',''))
         and all(stable.pop(name,'').isdigit() for name in ('ActiveEnterTimestampMonotonic','InactiveExitTimestampMonotonic')),
         'scheduled_timer_invocation_identity')
+    if pending:
+        require(stable['SubState'] in ('waiting','running'),'scheduled_pending_timer_state')
+        stable['SubState']='waiting'
     require(stable=={'Id':timer,'LoadState':'loaded','ActiveState':'active','SubState':'waiting',
         'FragmentPath':'/etc/systemd/system/'+timer,'DropInPaths':'','UnitFileState':'enabled','Unit':unit},
         'scheduled_timer_identity')
@@ -419,14 +438,113 @@ def validate_scheduled_retention(unit, observed, context):
         'scheduled_exact_timer_profile')
     start=int(observed['ExecMainStartTimestampMonotonic']);exit_time=int(runtime['ExecMainExitTimestampMonotonic'])
     activation=int(runtime['InactiveExitTimestampMonotonic'])
+    require(context['attribution']=='prospectively expected timer-correlated transition; dispatch history unverified',
+        'scheduled_attribution_limit')
+    if pending:
+        require(start>0 and exit_time>=0 and activation>=0 and re.fullmatch('[a-f0-9]{32}',observed['InvocationID'])
+            and re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',context['boot_id']),
+            'scheduled_pending_numeric_context')
+        return
     require({row[0]:row[2] for row in monotonic}=={'OnBootUSec':30000000,'OnUnitActiveUSec':activation+60000000},
         'scheduled_next_tick_binding')
     require(re.fullmatch('[a-f0-9]{32}',observed['InvocationID']) and 0<=start-trigger<=250000
         and start<=exit_time<=context['observed_monotonic_us']
         and start<=activation<=min(start+250000,exit_time)
         and re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',context['boot_id']), 'scheduled_trigger_endpoint_binding')
-    require(context['attribution']=='prospectively expected timer-correlated transition; dispatch history unverified',
-        'scheduled_attribution_limit')
+
+
+def retention_stable_state(row):
+    return {key:value for key,value in row.items() if key not in
+        {'ActiveState','SubState','MainPID','InvocationID','ExecMainStartTimestampMonotonic'}}
+
+
+def retention_stable_timer(row):
+    return {key:value for key,value in row.items() if key!='SubState'}
+
+
+def validate_retention_coherence(unit, observed, context, coherence):
+    require(set(coherence)=={'protocol','budget_us','elapsed_us','attempts','failed_reads','configuration_reread'}
+        and coherence['protocol']=='quillmd-retention-read-coherence-v1' and coherence['budget_us']==3000000
+        and type(coherence['elapsed_us']) is int and 0<=coherence['elapsed_us']<=3000000
+        and type(coherence['attempts']) is int and 1<=coherence['attempts']<=4
+        and len(coherence['failed_reads'])==coherence['attempts']-1,'scheduled_coherence_record')
+    expected_names=('/etc/systemd/system/'+unit,'/etc/systemd/system/'+unit.removesuffix('.service')+'.timer')
+    require(set(coherence['configuration_reread'])==set(expected_names)
+        and all(coherence['configuration_reread'][name]['sha256']==digest for name,digest
+            in zip(expected_names,SCHEDULED_RETENTION[unit])),'scheduled_coherence_files')
+    for frame in coherence['failed_reads']:
+        require(set(frame)=={'initial','repeated','context','reason'} and frame['reason'] in
+            {'word_delivery_scheduled_service_observation_race','word_delivery_scheduled_inactive_endpoint'},
+            'scheduled_coherence_reason')
+        for endpoint in (frame['initial'],frame['repeated']):
+            validate_scheduled_retention(unit,endpoint,frame['context'],pending=True)
+            require(retention_stable_state(endpoint)==retention_stable_state(observed),'scheduled_coherence_stable_service')
+        require(frame['context']['boot_id']==context['boot_id']
+            and retention_stable_timer(frame['context']['timer_identity'])==retention_stable_timer(context['timer_identity'])
+            and frame['context']['observed_monotonic_us']<=context['observed_monotonic_us'],
+            'scheduled_coherence_timer_identity')
+
+
+def settled_retention_observation(unit, configuration, state):
+    """Bound read-coherence retries; never re-run an operation or a foreign service."""
+    began=time.monotonic()
+    trace={'unit':unit,'budget_us':3000000,'attempts':0,'failed_reads':[],
+        'latest_context':None,'configuration_reread':{}}
+    try:return _settled_retention_capture(unit,configuration,state,began,trace)
+    except BaseException as error:
+        trace['elapsed_us']=int((time.monotonic()-began)*1000000)
+        trace['reason']=str(error) if isinstance(error,Refusal) else type(error).__name__
+        error.retention_read_failure=copy.deepcopy(trace)
+        raise
+
+
+def _settled_retention_capture(unit, configuration, state, began, trace):
+    deadline=began+3;frames=trace['failed_reads'];initial=None
+    def remaining():
+        value=deadline-time.monotonic();require(value>0,'scheduled_read_deadline');return value
+    def read_state(name):return state(name,timeout=remaining())
+    for attempt in range(1,5):
+        trace['attempts']=attempt
+        observed=read_state(unit)
+        if initial is None:initial=copy.deepcopy(observed)
+        require(retention_stable_state(initial)==retention_stable_state(observed),'scheduled_read_stable_service')
+        try:context=scheduled_retention_observation(unit,configuration,observed,read_state,deadline=deadline)
+        except Refusal as error:
+            frame=getattr(error,'retention_frame',None)
+            if frame is None:raise
+            frames.append(copy.deepcopy(frame))
+            require(set(frame)=={'initial','repeated','context','reason'} and frame['reason']==str(error)
+                and frame['reason'] in {'word_delivery_scheduled_service_observation_race',
+                    'word_delivery_scheduled_inactive_endpoint'},'scheduled_read_reason')
+            for endpoint in (frame['initial'],frame['repeated']):
+                validate_scheduled_retention(unit,endpoint,frame['context'],pending=True)
+                require(retention_stable_state(initial)==retention_stable_state(endpoint),'scheduled_read_stable_service')
+            if len(frames)>1:require(retention_stable_timer(frame['context']['timer_identity'])==retention_stable_timer(frames[0]['context']['timer_identity'])
+                and frame['context']['boot_id']==frames[0]['context']['boot_id'],'scheduled_read_timer_restart')
+            require(attempt<4,'scheduled_read_attempt_limit')
+            time.sleep(min(0.5,remaining()));continue
+        trace['latest_context']=copy.deepcopy(context);reread=trace['configuration_reread']
+        for name in (unit,unit.removesuffix('.service')+'.timer'):
+            remaining();filename='/etc/systemd/system/'+name
+            fd=os.open(filename,os.O_RDONLY|os.O_NOFOLLOW)
+            try:
+                a=os.fstat(fd);require(stat.S_ISREG(a.st_mode) and a.st_nlink==1 and a.st_size<=65536,
+                    'scheduled_read_file_shape')
+                raw=os.read(fd,65537);b=os.fstat(fd)
+                require(len(raw)==a.st_size and (a.st_ino,a.st_mtime_ns,a.st_ctime_ns)==(b.st_ino,b.st_mtime_ns,b.st_ctime_ns),
+                    'scheduled_read_file_race')
+                row={'device':a.st_dev,'gid':a.st_gid,'inode':a.st_ino,'mode':stat.S_IMODE(a.st_mode),
+                    'sha256':sha(raw),'uid':a.st_uid}
+                reread[filename]=row
+                require(row==configuration[filename],'scheduled_read_file_drift');reread[filename]=row
+            finally:os.close(fd)
+        remaining()
+        context['read_coherence']={'protocol':'quillmd-retention-read-coherence-v1','budget_us':3000000,
+            'elapsed_us':int((time.monotonic()-began)*1000000),'attempts':attempt,'failed_reads':frames,
+            'configuration_reread':reread}
+        validate_scheduled_retention(unit,observed,context)
+        remaining();return {**observed,'scheduled_retention':context}
+    raise Refusal('word_delivery_scheduled_read_attempt_limit')
 
 
 def foreign_service_preservation(before,after):
@@ -471,8 +589,8 @@ def foreign_service_observation(configuration):
             require(key not in row,'foreign_duplicate_property');row[key]=value
         return row
     def parsed(raw):return json.loads(raw,object_pairs_hook=unique)
-    def state(unit):
-        raw=old.command(['systemctl','show',unit,'--property='+properties],timeout=10)
+    def state(unit,timeout=10):
+        raw=old.command(['systemctl','show',unit,'--property='+properties],timeout=timeout)
         lines=raw.decode().splitlines();require(all('=' in line for line in lines),'foreign_property_line')
         row=unique(line.split('=',1) for line in lines)
         require(set(row)==set(properties.split(',')) and row['MainPID'].isdigit()
@@ -487,7 +605,7 @@ def foreign_service_observation(configuration):
     result={name:state(name) for name in foreign if name not in templates}
     for unit in SCHEDULED_RETENTION:
         if unit in result:
-            result[unit]['scheduled_retention']=scheduled_retention_observation(unit,configuration,result[unit],state)
+            result[unit]=settled_retention_observation(unit,configuration,state)
     if not templates:return result
     records=parsed(old.command(['systemctl','list-unit-files',*templates,'--type=service',
         '--output=json','--no-pager'],timeout=10))
@@ -846,6 +964,8 @@ def execute(plan,host):
     except BaseException as error:
         report['complete']=False;report['failure_kind']=type(error).__name__
         report['reason']=str(error) if isinstance(error,Refusal) else 'word_delivery_dependency_failure'
+        if getattr(error,'retention_read_failure',None) is not None:
+            report['retention_read_failure']=copy.deepcopy(error.retention_read_failure)
         report['stopped']=stopped;report['source_advance_acknowledged']=advanced;report['forward_attempt_started']=forward_started
         # Preserve the original failure before any narrowly scoped recovery.
         try:host.record('first-failure',report)
@@ -882,6 +1002,8 @@ def execute(plan,host):
             except BaseException as recovery_error:
                 report['recovery']={'complete':False,'failure_kind':type(recovery_error).__name__,
                     'reason':str(recovery_error) if isinstance(recovery_error,Refusal) else 'word_delivery_recovery_dependency'}
+                if getattr(recovery_error,'retention_read_failure',None) is not None:
+                    report['recovery']['retention_read_failure']=copy.deepcopy(recovery_error.retention_read_failure)
         try:host.record('failed',report)
         except BaseException:report['failure_record_write_failed']=True
         raise Refusal('word_delivery_installation_failed') from None

@@ -4,6 +4,8 @@ from contextlib import contextmanager,redirect_stdout
 import hashlib
 from io import StringIO
 import json
+import os
+import stat
 from pathlib import Path,PurePosixPath
 import tempfile
 import unittest
@@ -209,6 +211,93 @@ class ScheduledRetentionTests(unittest.TestCase):
                 if fault:
                     with self.assertRaises(delivery.Refusal):delivery.scheduled_retention_observation(self.unit,config,endpoint,lambda _:endpoint)
                 else:self.assertEqual(delivery.scheduled_retention_observation(self.unit,config,endpoint,lambda _:endpoint)['timer_values'],context['timer_values'])
+    def settling(self,behavior):
+        endpoint=self.endpoint();context=endpoint.pop('scheduled_retention');clock=[0.0];calls=[]
+        with tempfile.TemporaryDirectory() as name:
+            root=Path(name);timer=self.unit.removesuffix('.service')+'.timer';config={};digests=[]
+            for unit in (self.unit,timer):
+                path=root/unit;path.write_bytes(unit.encode());os.chmod(path,0o600);info=path.stat()
+                digest=hashlib.sha256(path.read_bytes()).hexdigest();digests.append(digest)
+                config['/etc/systemd/system/'+unit]={'device':info.st_dev,'gid':info.st_gid,'inode':info.st_ino,
+                    'mode':stat.S_IMODE(info.st_mode),'sha256':digest,'uid':info.st_uid}
+            original_open=os.open
+            def opening(path,flags):return original_open(root/Path(path).name,flags)
+            def state(unit,timeout):
+                self.assertGreater(timeout,0);self.assertLessEqual(timeout,3);return copy.deepcopy(endpoint)
+            def collect(unit,configuration,observed,read_state,deadline=None):
+                calls.append(len(calls)+1)
+                return behavior(calls[-1],observed,copy.deepcopy(context),clock)
+            with patch.object(delivery.time,'monotonic',side_effect=lambda:clock[0]),\
+                patch.object(delivery.time,'sleep',side_effect=lambda duration:clock.__setitem__(0,clock[0]+duration)),\
+                patch.object(delivery.os,'open',side_effect=opening),\
+                patch.dict(delivery.SCHEDULED_RETENTION,{self.unit:tuple(digests)}),\
+                patch.object(delivery,'scheduled_retention_observation',side_effect=collect):
+                return delivery.settled_retention_observation(self.unit,config,state),calls
+    def frame_refusal(self,observed,context,reason='word_delivery_scheduled_service_observation_race'):
+        error=delivery.Refusal(reason)
+        error.retention_frame={'initial':copy.deepcopy(observed),'repeated':copy.deepcopy(observed),
+            'context':context,'reason':reason}
+        return error
+    def test_bounded_coherent_reread_retains_every_failed_frame(self):
+        def behavior(attempt,observed,context,clock):
+            if attempt==1:raise self.frame_refusal(observed,context)
+            return context
+        result,calls=self.settling(behavior);record=result['scheduled_retention']['read_coherence']
+        self.assertEqual(calls,[1,2]);self.assertEqual(record['attempts'],2)
+        self.assertEqual(len(record['failed_reads']),1);self.assertEqual(record['elapsed_us'],500000)
+    def test_actual_short_oneshot_lifecycle_is_settled_and_retained(self):
+        def behavior(attempt,observed,context,clock):
+            if attempt==1:
+                repeated=copy.deepcopy(observed);repeated.update(ActiveState='activating',SubState='start',MainPID='123')
+                context['timer_identity']['SubState']='running';context['runtime']['ExecMainCode']='0'
+                context['runtime']['ExecMainExitTimestampMonotonic']='0'
+                error=self.frame_refusal(observed,context);error.retention_frame['repeated']=repeated;raise error
+            return context
+        result,calls=self.settling(behavior)
+        self.assertEqual(result['ActiveState'],'inactive');self.assertEqual(result['MainPID'],'0')
+        frame=result['scheduled_retention']['read_coherence']['failed_reads'][0]
+        self.assertEqual(frame['repeated']['ActiveState'],'activating')
+        self.assertEqual(frame['context']['timer_identity']['SubState'],'running')
+    def test_over_budget_success_refuses_and_preserves_trace(self):
+        def behavior(attempt,observed,context,clock):clock[0]=3.01;return context
+        with self.assertRaises(delivery.Refusal) as caught:self.settling(behavior)
+        self.assertEqual(caught.exception.retention_read_failure['attempts'],1)
+        self.assertGreater(caught.exception.retention_read_failure['elapsed_us'],3000000)
+    def test_exhausted_read_attempts_retain_all_frames(self):
+        def behavior(attempt,observed,context,clock):raise self.frame_refusal(observed,context)
+        with self.assertRaises(delivery.Refusal) as caught:self.settling(behavior)
+        trace=caught.exception.retention_read_failure
+        self.assertEqual(trace['attempts'],4);self.assertEqual(len(trace['failed_reads']),4)
+    def test_failed_or_unreviewed_frames_are_not_retried(self):
+        for reason in ('word_delivery_scheduled_timer_values','word_delivery_unreviewed'):
+            def behavior(attempt,observed,context,clock):raise self.frame_refusal(observed,context,reason)
+            with self.assertRaises(delivery.Refusal) as caught:self.settling(behavior)
+            self.assertEqual(caught.exception.retention_read_failure['attempts'],1)
+        def failed(attempt,observed,context,clock):
+            context['runtime']['Result']='exit-code';raise self.frame_refusal(observed,context)
+        with self.assertRaises(delivery.Refusal) as caught:self.settling(failed)
+        self.assertEqual(caught.exception.retention_read_failure['attempts'],1)
+    def test_native_first_failure_records_trace_before_recovery(self):
+        host=FakeHost();trace={'unit':self.unit,'budget_us':3000000,'attempts':4,'failed_reads':[{'raw':'retained'}],
+            'elapsed_us':1500000,'reason':'word_delivery_scheduled_read_attempt_limit'}
+        def capture(before):
+            error=delivery.Refusal(trace['reason']);error.retention_read_failure=copy.deepcopy(trace);raise error
+        host.capture_backup=capture
+        with self.assertRaises(delivery.Refusal):delivery.execute(plan(),host)
+        self.assertFalse(host.records['first-failure']['complete']);self.assertTrue(host.recovered)
+        self.assertEqual(host.records['first-failure']['retention_read_failure'],trace)
+    def test_recovery_read_failure_has_its_own_retained_trace(self):
+        host=FakeHost();original_snapshot=host.snapshot;attempt=[0]
+        def snapshot(before=None):
+            attempt[0]+=1
+            if attempt[0]>=2:
+                error=delivery.Refusal('word_delivery_scheduled_read_deadline')
+                error.retention_read_failure={'separate_read_attempt':attempt[0]};raise error
+            return original_snapshot(before)
+        host.snapshot=snapshot
+        with self.assertRaises(delivery.Refusal):delivery.execute(plan(),host)
+        self.assertEqual(host.records['first-failure']['retention_read_failure'],{'separate_read_attempt':2})
+        self.assertEqual(host.records['failed']['recovery']['retention_read_failure'],{'separate_read_attempt':3})
 
 
 class ForeignTemplateTests(unittest.TestCase):

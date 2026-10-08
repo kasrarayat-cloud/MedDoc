@@ -271,3 +271,23 @@ historical deployment approval or dispatch causation: the accessible journal
 cannot exclude a coincident manual start. It introduces no future release or
 configuration approval, timer exclusion or foreign service action. Fresh exact
 descendant CI, finished-diff controls and a new protected plan remain required.
+
+The fresh AFD attempt then caught an actual retention read race before backup or
+forward effects. Its first failure remains retained; automatic reviewed recovery
+proved the full original database and restarted only the compatible QuillMD
+units. The observer previously held the pair's initial state while collecting
+the other concrete units, allowing a scheduled tick between that state and its
+timer read. Each reviewed pair is now captured immediately before its context.
+Only a demonstrated read-race or the short `activating/start` oneshot lifecycle
+may receive up to four read attempts within a three-second budget. Each command
+uses the remaining budget and final acceptance checks elapsed time again. The
+failed raw frames, reasons, attempt count and elapsed time are retained on both
+success and refusal; native first-failure recording precedes recovery. Malformed,
+failed, changed-profile, restarted-timer, changed-boot or changed-stable-service
+observations are not retried. The final endpoint must still satisfy the original
+successful inactive/dead/PID-zero checks, and all four frozen service/timer files
+are reread with exact bytes, inode, owner and mode metadata. This bounded read
+settling is not a service, provider or installation retry and never replaces the
+original failure or operation baseline. Accepted before/after operation
+observations retain the existing strict preservation comparison. Another fresh
+protected installation plan and exact descendant CI are required.
