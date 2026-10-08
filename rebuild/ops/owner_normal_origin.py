@@ -34,7 +34,7 @@ APP = ROOT / 'rebuild'
 PYTHON = APP / '.venv/bin/python'
 RUNTIME = APP / '.runtime'
 EVIDENCE = RUNTIME / 'owner-demo-20261006'
-BASE = '8f7709c9c654d33e6eb104658c1d70389fab5c11'
+BASE = '8b5aec69f8545fbfa5f2acb17f97f646f6ee241b'
 SELF = 'rebuild/ops/owner_normal_origin.py'
 TEST = 'rebuild/ops/test_owner_normal_origin.py'
 ENTRY = 'scripts/prepare-owner-normal-origin.py'
@@ -1008,8 +1008,9 @@ class NativeHost:
         require(actual == receipt['completion_unit_provenance'] and sha(self.old.protected(APP/'.env',65536)) == receipt['environment_after_sha256'], 'normal443_same_private_completion_identity')
         return actual
     def installed_inventory(self, name, expected):
-        """Admit only the two cited application paths after genuine publication."""
-        paths = {'rebuild/core/preview_access.py', 'rebuild/quillmd/settings.py'}
+        """Admit two application paths and their one approved TEST correction."""
+        paths = {'rebuild/core/preview_access.py', 'rebuild/quillmd/settings.py',
+                 'rebuild/core/tests/test_preview_access.py'}
         if name not in paths: return sha((APP.parent / name).read_bytes()) == expected
         self.check_hold()
         require(expected == sha(self.git(ROOT,'show',self.served+':'+name)),
@@ -1017,7 +1018,7 @@ class NativeHost:
         with source_files.open_root(ROOT) as root:
             actual = source_files.operator_bytes(name,0o644,root)
         require(actual == self.buffers[name] == self.git(ROOT,'show',self.operations+':'+name),
-                'normal443_actual_cited_normal_application_path')
+                'normal443_actual_cited_normal_inventory_path')
         self.check_hold(); return True
     def full_preservation(self, *, completion=None, projection=None):
         import psycopg

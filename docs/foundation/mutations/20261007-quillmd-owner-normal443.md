@@ -140,7 +140,7 @@ original captures remain byte-identical.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "8f7709c9c654d33e6eb104658c1d70389fab5c11"
+  "source_base": "8b5aec69f8545fbfa5f2acb17f97f646f6ee241b"
 }
 ```
 
@@ -191,9 +191,13 @@ Once admitted, later checks compare that same post-lock identity; they cannot
 recapture a later replacement. An unknown target, dirty source, unsaved forward
 or manifest drift refuses. No forward is retried or reset.
 
-The source base remains the earlier actual phase merge in this preparation.
-Execution awaits rebinding to the actual cited five-path precursor merge; neither
-the prospective CI-artifact API nor a pending citation is a completed campaign.
+This controller is bound to the actual five-path PR1309 qualification merge
+`8b5aec69f8545fbfa5f2acb17f97f646f6ee241b`. Its full merge citation and the eventual
+exact normal target citation remain execution gates. The earlier `8f7709` merge
+and its cancelled merge-CI attempt remain preserved historical evidence; they
+establish no completed merge citation. The three-artifact API and pinned Next
+16.3.8 CI lock correction change no installed dependencies; private campaign
+completion remains a separately authenticated runtime prerequisite.
 
 The operator holds the same four existing input exclusions, selects a genuinely
 advancing natural publication, then drains and holds the fifth publication lock.
@@ -445,6 +449,27 @@ immutable observation proves preservation across QuillMD's own acceptance phase;
 the normal consumer independently binds its actual retained raw bytes and all
 completion/report/admission hashes, then measures its own operations. Neither
 procedure approves unrelated deployment changes or replaces the original baseline.
+
+## Exact CI precursor and legacy inventory correction — 8 October 2026
+
+The current source BASE is the actual guarded PR1309 merge
+`8b5aec69f8545fbfa5f2acb17f97f646f6ee241b`. It supersedes the earlier `8f7709`
+BASE description above. The installed `4194f58` to current BASE range is exactly
+the four acceptance operational paths and the one pinned root CI lockfile.
+The normal descendant has exactly nine declared paths. Both workspace manifests,
+installed dependencies and every unrelated source remain unchanged. The actual
+merge citation and exact normal head/merge citations remain required; this source
+does not state that a pending citation or private campaign completed.
+
+The frozen enforcement inventory includes the legacy preview-access regression
+test. Its necessary test-only 403 to maintenance503 expectation correction is
+the ninth reviewed source path. The post-publication inventory adapter therefore
+admits exactly the two application paths and that one test path, each only after
+the original served Git hash, checked target bytes, indexed0644 metadata and
+genuine normal completion are independently established. All other inventory
+comparisons retain the original byte expectation. This changes no additional
+application path, schema, clinical generation, stored record or provider budget.
+The original callback refusal and both CI failures remain preserved evidence.
 
 The focused portable test fixtures explicitly represent native identity and the
 ownership of five actual disposable lock descriptors. Wrong identities and owners,

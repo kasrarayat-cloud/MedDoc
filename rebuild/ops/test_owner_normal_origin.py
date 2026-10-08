@@ -381,6 +381,42 @@ class NormalOriginOperatorTests(unittest.TestCase):
 
 
 class ExactCiArtifactTests(unittest.TestCase):
+    def test_only_two_apps_and_approved_legacy_test_have_exact_inventory_admission(self):
+        import stat
+        names=('rebuild/core/preview_access.py','rebuild/quillmd/settings.py','rebuild/core/tests/test_preview_access.py')
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);old=b'original qualified source';current=b'approved current source'
+            for name in names:
+                path=root/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(current);path.chmod(0o644)
+            owned={str(root/name) for name in names};real_fstat=os.fstat
+            def metadata(fd,uid=1000,gid=1000):
+                info=real_fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or os.readlink('/proc/self/fd/'+str(fd)) not in owned:return info
+                return SimpleNamespace(**{field:getattr(info,field) for field in
+                    ('st_dev','st_ino','st_mode','st_nlink','st_size','st_mtime_ns','st_ctime_ns')},st_uid=uid,st_gid=gid)
+            host=object.__new__(act.NativeHost);host.served=PRIOR;host.operations=TARGET;host.check_hold=MagicMock()
+            host.buffers={name:current for name in names}
+            host.git=lambda _,operation,pin:old if pin.startswith(PRIOR+':') else current
+            with patch.object(act,'ROOT',root),patch.object(act,'APP',root/'rebuild'), \
+                 patch.object(act.os,'fstat',side_effect=metadata):
+                for name in names:
+                    with self.subTest(name=name):
+                        self.assertTrue(host.installed_inventory(name,act.sha(old)))
+                        with self.assertRaisesRegex(act.Refusal,'immutable_private_inventory_path'):
+                            host.installed_inventory(name,act.sha(current))
+                        (root/name).write_bytes(b'unapproved replacement')
+                        with self.assertRaisesRegex(act.Refusal,'actual_cited_normal_inventory_path'):
+                            host.installed_inventory(name,act.sha(old))
+                        (root/name).write_bytes(current)
+                        for owner in ({'uid':1001},{'gid':1001}):
+                            with patch.object(act.os,'fstat',side_effect=lambda fd:metadata(fd,**owner)), \
+                                 self.assertRaisesRegex(act.source_files.Refusal,'operator_file_identity'):
+                                host.installed_inventory(name,act.sha(old))
+                other='rebuild/core/tests/test_owner_normal_origin.py';path=root/other;path.write_bytes(current)
+                host.buffers[other]=current
+                self.assertIn(other,act.ALLOWED)
+                self.assertFalse(host.installed_inventory(other,act.sha(old)))
+                self.assertTrue(host.installed_inventory(other,act.sha(current)))
     def test_actual_source_owned_configuration_helpers_is_the_ci_comparator(self):
         import types
         path=act.SOURCE/act.ACCEPTANCE;raw=path.read_bytes()
@@ -1695,7 +1731,7 @@ process.on('exit',()=>console.error(JSON.stringify(trace)));
                 self.assertTrue(host.installed_inventory(name,act.sha(old)))
                 with self.assertRaisesRegex(act.Refusal,'immutable_private_inventory_path'):host.installed_inventory(name,act.sha(current))
                 path.write_bytes(b'foreign changed bytes')
-                with self.assertRaisesRegex(act.Refusal,'actual_cited_normal_application_path'):host.installed_inventory(name,act.sha(old))
+                with self.assertRaisesRegex(act.Refusal,'actual_cited_normal_inventory_path'):host.installed_inventory(name,act.sha(old))
                 path.write_bytes(current);path.chmod(0o664)
                 with self.assertRaisesRegex(act.source_files.Refusal,'operator_file_identity'):host.installed_inventory(name,act.sha(old))
                 other=root/'rebuild/core/unchanged.py';other.write_bytes(b'unchanged')
