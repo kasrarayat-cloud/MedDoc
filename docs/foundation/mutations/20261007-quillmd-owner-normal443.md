@@ -154,7 +154,7 @@ and failure behavior are unchanged.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "d780b9b037d7c7360d0e581ff41cea4874006547"
+  "source_base": "554d4508c5072fef75c705087ef993663598e1fe"
 }
 ```
 
@@ -502,3 +502,20 @@ normal revision must independently be main, merged and exactly cited. Earlier
 base references are historical. All nine normal source paths and all original
 routing, MFA, synthetic-only, record, co-tenant, budget and lifetime checks remain.
 This binding establishes no execution, authentication or provider receipt.
+
+
+## Once-captured anonymous session integration — 8 October 2026
+
+The private acceptance source base is the exact operational ancestor
+`554d4508c5072fef75c705087ef993663598e1fe`. Its mandatory anonymous-session
+preservation packet is frozen by the private parent before authentication and
+bound through the existing phase authority/admission/completion chain. The
+normal procedure adopts that same protected raw packet through private_receipts
+and the checked independent verifier; it cannot recapture a population or use
+legacy static-row mode. Full original row/file/configuration checks, the original
+baseline and earlier refusal records remain. Neither prior execute submitted
+authentication or called a provider. This integration expands no allowance and
+authorizes no VoiceAssistMain action or historical deployment certification.
+All prior source bases and qualifications above are retained historical records.
+The exact ancestor, integration head and actual merge each require their own
+complete citation before the existing reviewed ruled operations proceed.
