@@ -127,6 +127,78 @@ class FakeHost:
         return {'complete':True,'served_revision':actual,'feature_campaign_normal_origin_off':actual!=delivery.BASE}
 
 
+class ForeignTemplateTests(unittest.TestCase):
+    template='external-task@.service'
+    instance='external-task@one.service'
+    def observation(self,*,files=None,instances=None,active='active',second=None,extra='',load='loaded'):
+        config={'/etc/systemd/system/'+self.template:{'sha256':'a'*64,'inode':100}}
+        rows=[{'unit_file':self.template,'state':'static','preset':None}] if files is None else files
+        units=[] if instances is None else instances
+        calls=[]
+        def command(argv,**kwargs):
+            calls.append(argv)
+            if argv[1]=='list-unit-files':return json.dumps(rows).encode()
+            if argv[1]=='list-units':return json.dumps(second if second is not None and
+                sum(row[1]=='list-units' for row in calls)>1 else units).encode()
+            self.assertNotEqual(argv[2],self.template)
+            return ('LoadState='+load+'\nActiveState='+active+'\nSubState=running\nMainPID=123\n'
+                'InvocationID='+'a'*32+'\nFragmentPath=/etc/systemd/system/'+self.template+'\n'
+                'DropInPaths=\nUnitFileState=static\nWorkingDirectory=/external\n'
+                'ExecMainStartTimestampMonotonic=100\n'+extra).encode()
+        with patch.object(delivery.old,'command',side_effect=command):
+            value=delivery.foreign_service_observation(config)
+        return value,calls
+    def test_uninstantiated_template_has_file_state_and_no_invented_process(self):
+        value,calls=self.observation()
+        self.assertEqual(value[self.template],{'template_file':True,'UnitFileState':'static',
+            'UnitFilePreset':None,'instances':{}})
+        self.assertEqual([row[1] for row in calls],['list-unit-files','list-units','list-units'])
+        self.assertIn('external-task@*.service',calls[1])
+    def test_loaded_instances_preserve_pid_invocation_and_template_state(self):
+        units=[{'unit':self.instance,'load':'loaded','active':'active','sub':'running'}]
+        value,_=self.observation(instances=units)
+        self.assertEqual(value[self.template]['instances'][self.instance]['MainPID'],'123')
+        host=FakeHost()
+        with host.hold():before=host.snapshot()
+        before['foreign_services']=value
+        for target,key,new in ((value[self.template],'UnitFileState','enabled'),
+                (value[self.template]['instances'][self.instance],'MainPID','124'),
+                (value[self.template]['instances'][self.instance],'InvocationID','changed')):
+            after=copy.deepcopy(before)
+            if key=='UnitFileState':after['foreign_services'][self.template][key]=new
+            else:after['foreign_services'][self.template]['instances'][self.instance][key]=new
+            with self.assertRaises(delivery.Refusal):delivery.preservation(before,after)
+        after=copy.deepcopy(before);after['foreign_services'][self.template]['instances']={}
+        with self.assertRaises(delivery.Refusal):delivery.preservation(before,after)
+    def test_missing_duplicate_or_unrelated_file_states_refuse(self):
+        row={'unit_file':self.template,'state':'static','preset':None}
+        for rows in ([],[row,row],[{**row,'unit_file':'other@.service'}],[{**row,'state':''}]):
+            with self.subTest(rows=rows),self.assertRaises(delivery.Refusal):self.observation(files=rows)
+    def test_wrong_duplicate_or_racing_instances_refuse(self):
+        row={'unit':self.instance,'load':'loaded','active':'active','sub':'running'}
+        for rows in ([{**row,'unit':'other@one.service'}],[row,row],[{**row,'active':'inactive'}],
+                     [{**row,'unit':self.template}]):
+            with self.subTest(rows=rows),self.assertRaises(delivery.Refusal):self.observation(instances=rows)
+    def test_concrete_unit_read_failure_is_never_suppressed(self):
+        with patch.object(delivery.old,'command',side_effect=delivery.old.Refusal('bounded_command_failed')):
+            with self.assertRaises(delivery.old.Refusal):delivery.foreign_service_observation(
+                {'/etc/systemd/system/external.service':{'sha256':'a'*64}})
+    def test_malformed_properties_enums_and_missing_preset_refuse(self):
+        unit={'unit':self.instance,'load':'loaded','active':'active','sub':'running'}
+        for kwargs in ({'extra':'MainPID=456\n'}, {'active':'invented'}, {'load':'invented'}):
+            with self.subTest(kwargs=kwargs),self.assertRaises(delivery.Refusal):self.observation(instances=[unit],**kwargs)
+        for row in ({'unit_file':self.template,'state':'static'},
+                {'unit_file':self.template,'state':'invented','preset':None}):
+            with self.subTest(row=row),self.assertRaises(delivery.Refusal):self.observation(files=[row])
+    def test_instance_arrival_disappearance_and_state_race_refuse(self):
+        first={'unit':self.instance,'load':'loaded','active':'active','sub':'running'}
+        for second in ([],[first,{**first,'unit':'external-task@two.service'}],
+                       [{**first,'active':'inactive','sub':'dead'}]):
+            with self.subTest(second=second),self.assertRaises(delivery.Refusal):
+                self.observation(instances=[first],second=second)
+        with self.assertRaises(delivery.Refusal):self.observation(instances=[],second=[first])
+
+
 class PortableMetadataTests(unittest.TestCase):
     def test_source_metadata_does_not_require_native_host_interpreter(self):
         delivery.migration_model_metadata.cache_clear()
@@ -136,6 +208,24 @@ class PortableMetadataTests(unittest.TestCase):
             self.assertEqual(set(columns), set(delivery.NEW_TABLES)|{'core_templateversion'})
         finally:
             delivery.migration_model_metadata.cache_clear()
+
+    def test_native_admission_requires_exact_qualified_engine(self):
+        from types import SimpleNamespace
+        host=delivery.NativeHost.__new__(delivery.NativeHost)
+        host.source_revision=lambda:delivery.BASE
+        host.native=SimpleNamespace(state=lambda unit:{'ActiveState':'inactive','MainPID':'0'})
+        host.storage=None;host.no_pending_work=lambda:None
+        before={'database':{'tables':dict.fromkeys(delivery.old.TABLES),
+            'applied_core_migrations':['0018_servicehealth'],'schema':{'default_acl':[]},
+            'postgresql_server_version_num':delivery.SCHEMA_CONTRACT['postgresql_server_version_num']}}
+        with patch.object(delivery.old,'service_boundary') as check:
+            host.native_admission(before);check.assert_called_once()
+        for engine in ('160015','170010','180000'):
+            changed=copy.deepcopy(before);changed['database']['postgresql_server_version_num']=engine
+            with patch.object(delivery.old,'service_boundary') as check,self.assertRaisesRegex(
+                    delivery.Refusal,'native_canonical_schema_engine_version'):
+                host.native_admission(changed)
+            check.assert_not_called()
 
 
 class EnvironmentTests(unittest.TestCase):

@@ -212,3 +212,34 @@ export inspections passed on the repaired source bytes; original failures remain
 The storage fault test now measures a disposable test filesystem's device
 metadata, avoiding a nonexistent native host path in CI. Native admission still
 measures the fixed QuillMD filesystem against the unchanged 28 GiB requirement.
+
+The first native attempt stopped before admission or service/source/schema/ingress
+effects because the preservation observer asked systemd for a process state of
+uninstantiated `@.service` templates. Its protected attempt and component-level
+diagnostic remain retained. The observer now records each template's exact unit
+file state and preset, enumerates its bounded loaded instances (including inactive
+ones), and checks each concrete instance's load, active/substate, PID, invocation,
+fragment/drop-ins, enablement and working directory. Configuration contents,
+inodes, permissions and enablement links remain independently compared. Missing,
+duplicate, unrelated, racing or unreadable observations refuse; templates are
+not excluded or assigned an invented process state. A fresh prospective plan and
+exact descendant CI are required for a new attempt; the failed plan is not replayed.
+
+Bounded native admission then established engine `170011`; the retained original
+canonical qualification was `160015`. A new isolated, tmpfs-backed QuillMD-only
+PostgreSQL 17.11 database qualified the unchanged five migration bytes from a
+pristine pre-0019 schema. Its actual 13 constraints and nine index definitions
+match the retained PostgreSQL 16 definitions; this equality was measured. All 13
+new functions, 11 triggers and complete columns were retained, and a forced
+rollback preserved every original row/schema definition with exact 5/2/8
+metadata sequence consumption. Only that verified new container was removed.
+The new canonical receipt is SHA-256
+`008c7e53a5d1b0503faf2b99ad3af22e61abb5ec57b7b15e2a500689b4e93e7c`;
+the rollback proof is
+`d46e9881e8b1004cce89bb375f4a725a77c3e36605db3f5f48fd830ea0652f1c`.
+Native planning binds these exact protected receipts and migration hashes, and
+continues to require exact engine `170011`. Original PostgreSQL 16 evidence is
+preserved; no native or preserved private database was altered by qualification.
+The repeated instance population read also refuses arrivals, disappearances and
+state drift during collection. Malformed duplicate/missing/unknown metadata
+refuses explicitly; no atomic-snapshot or ABA-detection claim is made.
