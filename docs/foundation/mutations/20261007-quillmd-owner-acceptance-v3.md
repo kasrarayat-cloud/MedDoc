@@ -211,6 +211,36 @@ acceptance_allergy_form_sha256: ebc2189d113cc95a2289e0a65d66f07a011e91c0ef019245
     "resume_output": "/opt/meddoc-pro/rebuild/.runtime/legacy-model-continuation-20261007"
   },
   "outer_ceiling_seconds": 1680,
+  "owner_interactive_preservation": {
+    "cohort_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/owner-interactive-comparison-cohort.json",
+    "comparison_referenced_files": 70,
+    "comparison_sessions": 214,
+    "diagnostic_cohort_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-native-gate-diagnostic-20261008/owner-interactive-comparison-cohort.json",
+    "diagnostic_packet_not_campaign_authority": true,
+    "file_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-interactive-files-difference-v1.json",
+      "sha256": "4668a40e961800d785f21a01b88dd699b17582456ccadca6b77801fa8201b2b5"
+    },
+    "future_changes_automatically_approved": false,
+    "original_capture_replaced": false,
+    "original_referenced_files": 67,
+    "original_sessions": 212,
+    "owner_MFA_certified": false,
+    "owner_added_rows": 43,
+    "owner_changed_rows": 8,
+    "owner_reply": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-interactive-use-confirmation-20261008-v1.json",
+      "sha256": "dbf768d8b9d0a066764bfbda7c0c740a989f1844be4d471860d84e80c6cd87f7"
+    },
+    "protocol": "exact-owner-interactive-comparison-cohort-v1",
+    "row_evidence": {
+      "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/readonly-added-row-copy-reconciliation-v1.json",
+      "sha256": "388656791d04af7b1b3cdd609837a04c80b1a03f50841c3ac71880d1c9c94c66"
+    },
+    "source_qualified": true,
+    "task_generations": 5,
+    "task_transcriptions": 1
+  },
   "phase_preservation": {
     "b3_authorized_history": {
       "owner_reply_path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/recovery-20261007/owner-additional-preservation-message-b3df-v1.json",
@@ -885,3 +915,47 @@ This source qualification supersedes the draft qualification statement above.
 Native gate success, exact failure predicate and timing, authenticated access,
 worker model, clinical workflows and normal HTTPS remain runtime facts to prove
 through their reviewed procedures. Source qualification does not assert them.
+
+
+2026-10-08 — Exact owner interactive preservation comparison cohort (unqualified draft)
+
+The owner confirmed their 06:02–06:06 interactive login, transcription and
+generation. Its retained hash-only COPY reconciliation and file inventory are
+source-pinned independently of the original encrypted capture and every failed
+acceptance attempt. This protocol does not certify historical deployment
+approval or owner MFA, and grants no future-row exception.
+
+Under the existing parent holds, a separate private encrypted packet retains
+only the 43 specifically recorded owner additions and eight recorded changes
+to original rows. It never overwrites or recaptures the historical baseline.
+The original 36 tables, 212 sessions, 74 files and 67 references are first
+authenticated, then an explicitly named in-memory comparison cohort adds only
+the two owner sessions and three recorded files (214 sessions, 77 files, 70
+references). Catalog, sequences, invariants, mail, static and configuration
+remain governed by their original preservation checks. Publisher and expired
+anonymous-session adjudication remain separate.
+
+Before/after authentication, embedded browser admission, final independent
+verification and normal HTTPS verification share the immutable packet hash and
+its actual operation/profile/parent binding. The real final preservation entry
+projects this finite cohort, so the existing financial and full-row algorithms
+compare subsequent task changes against the recorded owner state. Exact owner
+file SHA, size and mode join the expected inventory; existing file ownership,
+type and race checks remain. Diagnostic and actual campaign packets use
+separate physical profiles and cannot substitute for one another. Task budget
+and synthetic/MFA requirements remain five generations and one transcription.
+
+The speech admission predicate separately checks the stored generation quote
+profile (Anthropic/Sonnet and the pinned pricing revision) and the actual fixed
+Deepgram Nova transport receipt. Transcript-only receipts establish no
+provider-returned ASR model. No clinical application or worker behavior changes.
+
+The new owner-cohort source flag is false until finished checks and independent
+refutation qualify this exact source. No installed acceptance or normal
+transition is claimed by this prospective declaration.
+
+8 October source qualification: the exact unqualified three-path repair passed
+156 affected controls with no skips and an independent 37-control finished-diff
+refutation. The preserved source patch and both reports bind those observations.
+The owner-cohort source qualification is now true; native admission, new task
+authentication, provider workflows and normal publication remain unobserved.
