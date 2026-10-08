@@ -154,7 +154,7 @@ and failure behavior are unchanged.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "4a1d0c141262fd096571f2af22c31e864c0bad15"
+  "source_base": "d780b9b037d7c7360d0e581ff41cea4874006547"
 }
 ```
 
@@ -490,3 +490,15 @@ ownership of five actual disposable lock descriptors. Wrong identities and owner
 released locks and replaced paths still refuse. Production predicates are unchanged.
 No authentication, provider call, normal publication or served verification has
 occurred as a result of this source binding correction.
+
+
+## Exact retained session integration — 8 October 2026
+
+The current private operational base includes the exact expired, unprivileged
+session-preservation repair and its retained failure/reconciliation evidence.
+The normal transition inherits that checked validator and final row-population
+proof. Its operational base remains a separately cited ancestor; the final
+normal revision must independently be main, merged and exactly cited. Earlier
+base references are historical. All nine normal source paths and all original
+routing, MFA, synthetic-only, record, co-tenant, budget and lifetime checks remain.
+This binding establishes no execution, authentication or provider receipt.
