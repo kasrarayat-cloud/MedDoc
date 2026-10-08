@@ -13,7 +13,10 @@ import tempfile
 import time
 import unittest
 from unittest.mock import MagicMock, patch
-from . import owner_normal_origin as act
+if __package__:
+    from . import owner_normal_origin as act
+else:
+    from ops import owner_normal_origin as act
 
 PRIOR='a'*40
 TARGET='b'*40
