@@ -82,9 +82,11 @@ AI_CACHED_RATE=os.getenv('QUILLMD_AI_CACHED_RATE','')
 WORD_PREPARATION_ENABLED=os.getenv('QUILLMD_WORD_PREPARATION_ENABLED','0')=='1'
 # Purposeful follow-up SHA3f1f99421f07c72370a030a57174d5f5c9194ac6b3b8b7292e42a7bb4b3a3895.
 # Includes the retained first unknown request; no old attempt is reset or replayed.
-WORD_PREPARATION_MAX_RUNS=7
+# Exact WM output follow-up SHA812817c06f8b5d686e4aa93a1662409e7d48d56d08870659a3d0d9851b4b5add.
+# The eighth attempt/final two sends belong only to the pinned WM original.
+WORD_PREPARATION_MAX_RUNS=8
 WORD_PREPARATION_MAX_FORMS=6
-WORD_PREPARATION_MAX_SENDS=13
+WORD_PREPARATION_MAX_SENDS=14
 # Reserve $0.40 of the $2 purposeful pilot for its two note requests and one ASR.
 WORD_PREPARATION_BUDGET_USD='1.60'
 STRIPE_SECRET_KEY=os.getenv('STRIPE_SECRET_KEY','')

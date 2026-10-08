@@ -56,6 +56,53 @@ class PreparationPureTests(SimpleTestCase):
             value['inventory_sha256']=digest({k:v for k,v in value.items() if k!='inventory_sha256'})
             self.assertEqual(prep.role_limits(value),(2500,Decimal('0.10')))
 
+    def test_wm_cost_classification_requires_every_pinned_shape_property(self):
+        # Classifier fixture only: genuine WM bytes are checked separately by
+        # the actual networkless-worker qualification, not asserted here.
+        value=deepcopy(self.inv);value['source_sha256']=WM_IOV_SHA256
+        value['anchors']=[{**value['anchors'][0],'kind':'existing'} for _ in range(90)]
+        value['fields']=[{} for _ in range(90)];value['stories']=[value['stories'][0] for _ in range(16)]
+        value['document_backend']={'backend':'wm-iov-foss-v2','source_sha256':WM_IOV_SHA256}
+        value['inventory_sha256']=digest({k:v for k,v in value.items() if k!='inventory_sha256'})
+        self.assertEqual(prep.role_limits(value),(6000,Decimal('0.16')))
+        for changed in ['source','anchors','fields','stories','backend','backend_source','kind']:
+            bad=deepcopy(value)
+            if changed=='source':bad['source_sha256']='0'*64
+            elif changed in {'anchors','fields','stories'}:bad[changed].pop()
+            elif changed=='backend':bad['document_backend']['backend']='other'
+            elif changed=='backend_source':bad['document_backend']['source_sha256']='0'*64
+            elif changed=='kind':bad['anchors'][0]['kind']='literal_blank'
+            bad['inventory_sha256']=digest({k:v for k,v in bad.items() if k!='inventory_sha256'})
+            with self.subTest(changed=changed):self.assertEqual(prep.role_limits(bad),(2500,Decimal('0.10')))
+
+    def test_eighth_attempt_is_wm_only_and_ninth_never_creates(self):
+        for attempts,sha,allowed in [(7,WM_IOV_SHA256,True),(7,self.inv['source_sha256'],False),(8,WM_IOV_SHA256,False)]:
+            manager=Mock();manager.count.return_value=attempts
+            manager.values_list.return_value.distinct.return_value.count.return_value=1
+            template=SimpleNamespace(sha256=sha)
+            with self.subTest(attempts=attempts,sha=sha),override_settings(WORD_PREPARATION_MAX_RUNS=8),\
+                    patch.object(prep.TemplatePreparation,'objects',manager),patch.object(prep,'configuration',return_value=self.config()):
+                if allowed:
+                    self.assertIs(prep.create_preparation(template,'doctor'),manager.create.return_value)
+                    manager.create.assert_called_once()
+                else:
+                    with self.assertRaises(ValidationError):prep.create_preparation(template,'doctor')
+                    manager.create.assert_not_called()
+
+    def test_final_two_sends_require_wm_and_fifteenth_has_no_effect(self):
+        import time
+        from documents.service import DocumentError
+        for sends,sha,limits in [(12,self.inv['source_sha256'],(2500,Decimal('0.10'))),
+                                  (13,WM_IOV_SHA256,(2500,Decimal('0.10'))),
+                                  (14,WM_IOV_SHA256,(6000,Decimal('0.16')))]:
+            manager=Mock();manager.count.return_value=sends
+            p=self.packet();p.template.sha256=sha;p.config=self.config()
+            with self.subTest(sends=sends,sha=sha),override_settings(WORD_PREPARATION_MAX_SENDS=14),\
+                    patch.object(prep.PreparationReceipt,'objects',manager),patch.object(prep,'role_limits',return_value=limits),\
+                    patch.object(prep,'provider_role') as provider:
+                with self.assertRaises(DocumentError) as refused:prep.call_role(p,'proposer',time.monotonic()+10)
+                self.assertEqual(refused.exception.code,'budget_limit');manager.create.assert_not_called();provider.assert_not_called()
+
     def test_approval_seal_catches_proposal_checker_correction_placement_revision_and_candidate_drift(self):
         p=self.packet();sealed=approval_binding(p)
         for name in ['proposal','checker','corrections','revision','candidate_sha256','candidate_info','changes']:

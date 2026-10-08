@@ -13,6 +13,7 @@ from django.utils import timezone
 from documents import inspect_template, DocumentError
 from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields
 from documents.preparation_service import inspect_preparation, prepare_candidate
+from documents.sdk_service import WM_IOV_SHA256
 from .models import TemplatePreparation, PreparationReceipt, TemplateVersion
 from .security import private_path, membership, audit
 from .generation import configuration, rates
@@ -23,6 +24,9 @@ ROLE_LIMIT = Decimal('0.10')
 TOTAL_SECONDS = 180
 ROLE_SECONDS = 60
 WM90_SCOPE_SHA256='32032defd48ab9da6f9ccbe539679958e72367f11dfaea566f28796496cbd5cf'
+# The earlier max-token failure stays billable and immutable. One new exact WM
+# attempt is prospectively bounded by this separately retained purpose scope.
+WM_OUTPUT_FOLLOWUP_SCOPE_SHA256='812817c06f8b5d686e4aa93a1662409e7d48d56d08870659a3d0d9851b4b5add'
 # Exact unconditional layout advisories from the source-qualified inspectors.
 # They remain visible and sealed; every unknown/structural warning still blocks.
 from documents.tab_form import WARNINGS as TAB_LAYOUT_ADVISORIES
@@ -46,7 +50,7 @@ def role_limits(inventory):
             and inventory['document_backend'].get('backend')=='wm-iov-foss-v2'
             and inventory['document_backend'].get('source_sha256')==WM_IOV_SHA256
             and all(a['kind']=='existing' for a in inventory['anchors'])):
-        return 3500,Decimal('0.14')
+        return 6000,Decimal('0.16')
     return MAX_OUTPUT,ROLE_LIMIT
 
 def role_schema(role):
@@ -171,8 +175,11 @@ def call_role(prep, role, deadline, proposal=None):
     if quoted > limit: raise DocumentError('This form exceeds the per-role preparation budget.', 'budget_limit')
     remaining = deadline-time.monotonic()
     if remaining < 3: raise DocumentError('Preparation reached its time limit.', 'deadline')
-    if PreparationReceipt.objects.count()>=settings.WORD_PREPARATION_MAX_SENDS:
+    sends=PreparationReceipt.objects.count()
+    if sends>=settings.WORD_PREPARATION_MAX_SENDS:
         raise DocumentError('The bounded preparation send count is exhausted; no retry was created.', 'budget_limit')
+    if sends>=12 and (prep.template.sha256!=WM_IOV_SHA256 or (max_output,limit)!=(6000,Decimal('0.16'))):
+        raise DocumentError('The final two preparation sends are reserved for the exact qualified WM follow-up.', 'budget_limit')
     if prep.config['mode']=='live':
         exposure=sum((max(quoted_cap,actual if actual is not None else quoted_cap)
                       for quoted_cap,actual in PreparationReceipt.objects.values_list('quote_maximum','computed_cost')),Decimal('0'))
@@ -228,8 +235,11 @@ def call_role(prep, role, deadline, proposal=None):
 
 def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
-    if TemplatePreparation.objects.count()>=settings.WORD_PREPARATION_MAX_RUNS:
-        raise ValidationError('The bounded form-preparation pilot has reached its seven recorded attempts. No retry was created.')
+    attempts=TemplatePreparation.objects.count()
+    if attempts>=settings.WORD_PREPARATION_MAX_RUNS:
+        raise ValidationError('The bounded form-preparation pilot has reached its eight recorded attempts. No retry was created.')
+    if attempts>=7 and template.sha256!=WM_IOV_SHA256:
+        raise ValidationError('The eighth preparation attempt is reserved for the exact WM blank original.')
     originals=TemplatePreparation.objects.values_list('template__sha256',flat=True).distinct()
     if originals.count()>=settings.WORD_PREPARATION_MAX_FORMS and template.sha256 not in originals:
         raise ValidationError('The bounded preparation pilot is limited to six unique blank originals.')

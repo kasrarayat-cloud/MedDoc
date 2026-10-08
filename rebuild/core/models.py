@@ -159,7 +159,7 @@ class PreparationReceipt(Entity):
     elapsed_ms=models.PositiveIntegerField(null=True)
     class Meta:
         constraints=[models.UniqueConstraint(fields=['preparation','role'],name='preparation_role_once'),
-                     models.CheckConstraint(condition=models.Q(role__in=['proposer','checker'],quote_maximum__gte=0,quote_maximum__lte=Decimal('0.14')),name='preparation_receipt_role_cap'),
+                     models.CheckConstraint(condition=models.Q(role__in=['proposer','checker'],quote_maximum__gte=0,quote_maximum__lte=Decimal('0.16')),name='preparation_receipt_role_cap'),
                      models.CheckConstraint(condition=models.Q(computed_cost__isnull=True)|models.Q(computed_cost__gte=0),name='preparation_cost_nonnegative')]
 def latest_service_date():
     """The furthest ahead a real date of service can legitimately be.
