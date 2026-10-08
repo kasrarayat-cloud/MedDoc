@@ -127,6 +127,90 @@ class FakeHost:
         return {'complete':True,'served_revision':actual,'feature_campaign_normal_origin_off':actual!=delivery.BASE}
 
 
+class ScheduledRetentionTests(unittest.TestCase):
+    unit='founder-receptionist-quality-retention.service'
+    def endpoint(self,start=1000000,invocation='a'*32):
+        timer=self.unit.removesuffix('.service')+'.timer'
+        return {'LoadState':'loaded','ActiveState':'inactive','SubState':'dead','MainPID':'0',
+            'InvocationID':invocation,'FragmentPath':'/etc/systemd/system/'+self.unit,
+            'DropInPaths':'','UnitFileState':'static','WorkingDirectory':'/home/voiceassistmain/VoiceAssistMain',
+            'ExecMainStartTimestampMonotonic':str(start),
+            'scheduled_retention':{'runtime':{'Type':'oneshot','TriggeredBy':timer,'Result':'success',
+                'ExecMainCode':'1','ExecMainStatus':'0','ExecMainExitTimestampMonotonic':str(start+500000),
+                'InactiveExitTimestampMonotonic':str(start)},
+                'timer_identity':{'Id':timer,'LoadState':'loaded','ActiveState':'active','SubState':'waiting',
+                    'FragmentPath':'/etc/systemd/system/'+timer,'DropInPaths':'','UnitFileState':'enabled','Unit':self.unit,
+                    'InvocationID':'c'*32,'ActiveEnterTimestampMonotonic':'500000','InactiveExitTimestampMonotonic':'500000'},
+                'timer_values':[start-25000,[['OnUnitActiveUSec',60000000,start+60000000],['OnBootUSec',30000000,30000000]],1000000,0,False],
+                'boot_id':'12345678-1234-1234-1234-123456789abc','observed_monotonic_us':start+1000000,
+                'attribution':'prospectively expected timer-correlated transition; dispatch history unverified'}}
+    def pair(self):return {self.unit:self.endpoint()},{self.unit:self.endpoint(61000000,'b'*32)}
+    def test_exact_scheduled_transition_and_unchanged_endpoint(self):
+        before,after=self.pair()
+        self.assertTrue(delivery.foreign_service_preservation(before,after))
+        self.assertTrue(delivery.foreign_service_preservation(before,copy.deepcopy(before)))
+    def test_unexplained_other_unit_invocation_refused(self):
+        before,after=self.pair()
+        before['other.service']={'InvocationID':'a'};after['other.service']={'InvocationID':'b'}
+        with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+    def test_stable_service_changes_refused(self):
+        for key,value in [('MainPID','123'),('WorkingDirectory','/changed'),('DropInPaths','/changed'),
+            ('UnitFileState','disabled'),('FragmentPath','/changed'),('ActiveState','active'),('SubState','running')]:
+            with self.subTest(key=key):
+                before,after=self.pair();after[self.unit][key]=value
+                with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+    def test_timer_binding_failures_refused(self):
+        cases=[('runtime','Type','simple'),('runtime','TriggeredBy','other.timer'),('runtime','Result','exit-code'),
+            ('runtime','ExecMainCode','2'),('runtime','ExecMainStatus','1'),('timer_identity','ActiveState','inactive'),
+            ('timer_identity','Unit','other.service'),('timer_identity','DropInPaths','/changed')]
+        for group,key,value in cases:
+            with self.subTest(group=group,key=key):
+                before,after=self.pair();after[self.unit]['scheduled_retention'][group][key]=value
+                with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+    def test_wrong_trigger_profile_boot_and_sequence_refused(self):
+        for mutate in [lambda c:c['timer_values'].__setitem__(0,1),
+            lambda c:c['timer_values'].__setitem__(2,2000000),lambda c:c['timer_values'].__setitem__(3,1),
+            lambda c:c['timer_values'].__setitem__(4,True),lambda c:c['timer_values'][1][0].__setitem__(1,120000000),
+            lambda c:c.__setitem__('boot_id','87654321-1234-1234-1234-123456789abc'),
+            lambda c:c['runtime'].__setitem__('ExecMainExitTimestampMonotonic','1'),
+            lambda c:c.__setitem__('observed_monotonic_us',1)]:
+            before,after=self.pair();mutate(after[self.unit]['scheduled_retention'])
+            with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+        before,after=self.pair();after[self.unit]['InvocationID']=before[self.unit]['InvocationID']
+        with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+        before,after=self.pair();after[self.unit]['scheduled_retention']['timer_identity']['InvocationID']='d'*32
+        with self.assertRaises(delivery.Refusal):delivery.foreign_service_preservation(before,after)
+    def test_expected_timer_run_never_waives_configuration_or_inode(self):
+        before,after=self.pair()
+        baseline={'files':{},'mail':{},'foreign_services':before,'configuration':{'/foreign':{'inode':1}}}
+        changed=copy.deepcopy(baseline);changed['foreign_services']=after;changed['configuration']['/foreign']['inode']=2
+        with self.assertRaises(delivery.Refusal):delivery.preservation(baseline,changed)
+    def test_duplicate_and_extra_bus_metadata_refused_before_comparison(self):
+        endpoint=self.endpoint();context=endpoint.pop('scheduled_retention')
+        timer=self.unit.removesuffix('.service')+'.timer'
+        config={'/etc/systemd/system/'+name:{'sha256':digest} for name,digest in
+            zip((self.unit,timer),delivery.SCHEDULED_RETENTION[self.unit])}
+        bus_path='/org/freedesktop/systemd1/unit/'+''.join(c if c.isalnum() else '_'+format(ord(c),'02x') for c in timer)
+        for fault in (None,'duplicate_path','duplicate_trigger','extra'):
+            def command(argv,**kwargs):
+                if argv[0]=='systemctl':
+                    source=context['runtime'] if argv[2]==self.unit else context['timer_identity']
+                    names=argv[3].removeprefix('--property=').split(',')
+                    return ('\n'.join(name+'='+source[name] for name in names)+'\n').encode()
+                if argv[2]=='call':
+                    if fault=='duplicate_path':return ('{"type":"s","type":"o","data":'+json.dumps([bus_path])+'}').encode()
+                    return json.dumps({'type':'o','data':[bus_path]}).encode()
+                rows=[{'type':kind,'data':value} for kind,value in zip(['t','a(stt)','t','t','b'],context['timer_values'])]
+                if fault=='extra':rows[0]['unreviewed']='extra'
+                lines=[json.dumps(row) for row in rows]
+                if fault=='duplicate_trigger':lines[0]='{"type":"s","type":"t","data":'+str(context['timer_values'][0])+'}'
+                return ('\n'.join(lines)+'\n').encode()
+            with patch.object(delivery.old,'command',side_effect=command),patch.object(Path,'read_text',return_value=context['boot_id']):
+                if fault:
+                    with self.assertRaises(delivery.Refusal):delivery.scheduled_retention_observation(self.unit,config,endpoint,lambda _:endpoint)
+                else:self.assertEqual(delivery.scheduled_retention_observation(self.unit,config,endpoint,lambda _:endpoint)['timer_values'],context['timer_values'])
+
+
 class ForeignTemplateTests(unittest.TestCase):
     template='external-task@.service'
     instance='external-task@one.service'
