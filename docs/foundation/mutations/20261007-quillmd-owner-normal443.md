@@ -96,24 +96,24 @@ and failure behavior are unchanged.
   "outer_ceiling_seconds": 2400,
   "private_acceptance": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/complete.json"
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-20261008/complete.json"
   },
   "private_acceptance_completed": false,
   "private_acceptance_protocol_qualified": true,
   "private_accepted_revision": "4194f58cb37b13e179810db486b54bf2fe7a42a8",
   "private_authority": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/parent-phase-verify.json"
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/parent-phase-verify.json"
   },
   "private_ingress_sha256": "cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a",
   "private_origin": "https://app.quillmd.com:9443",
   "private_phase_preservation": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json"
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/co-tenant-phase-preservation.json"
   },
   "private_report": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
-    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v3-20261007/independent-verification.json"
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-20261008/independent-verification.json"
   },
   "provider_calls": 0,
   "runtime_receipt_binding_protocol": "private-acceptance-completion-cross-hashes-v1",
@@ -154,7 +154,7 @@ and failure behavior are unchanged.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "554d4508c5072fef75c705087ef993663598e1fe"
+  "source_base": "4b037b171c2a732ff74c65fc8a276ca5abd60169"
 }
 ```
 
@@ -519,3 +519,29 @@ authorizes no VoiceAssistMain action or historical deployment certification.
 All prior source bases and qualifications above are retained historical records.
 The exact ancestor, integration head and actual merge each require their own
 complete citation before the existing reviewed ruled operations proceed.
+
+
+## Read-only native gate and fresh v4 acceptance integration — 8 October 2026
+
+The current private operations ancestor is
+`4b037b171c2a732ff74c65fc8a276ca5abd60169`, a separately prepared operations
+head. Its head citation and the normal integration head and actual merge
+citations remain required before execution. This reference does not describe
+that operations head as a standalone main merge.
+
+The normal controller now binds only the fresh v4 campaign completion,
+independent report, verify authority, immutable phase packet and both admissions
+under the fixed 8 October paths. The stopped v3 preparation and its eight
+original files remain preserved historical evidence. Its diagnosed first gate
+refused before credential submission or provider sends; the missing underlying
+native predicate and unrecorded database-write counter are retained as unknown.
+The new read-only diagnostic has its own fixed directory and cannot stand in
+for a completed v4 campaign. Old v3 receipt paths cannot substitute for these
+new paths, and a STOP in either v4 parent prevents normal publication.
+
+Normal transition and served-verification output and attempt paths, the nine
+normal source paths, frozen v3 module names and algorithms, the once-captured
+anonymous packet, all original 36-table and 67-file checks, MFA and session
+lifetime checks, budget and actual model admission remain unchanged. This
+source integration records no diagnostic execution, completed private campaign,
+normal publication, authenticated GET or provider response.

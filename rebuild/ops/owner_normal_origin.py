@@ -34,7 +34,7 @@ APP = ROOT / 'rebuild'
 PYTHON = APP / '.venv/bin/python'
 RUNTIME = APP / '.runtime'
 EVIDENCE = RUNTIME / 'owner-demo-20261006'
-BASE = '554d4508c5072fef75c705087ef993663598e1fe'
+BASE = '4b037b171c2a732ff74c65fc8a276ca5abd60169'
 SELF = 'rebuild/ops/owner_normal_origin.py'
 TEST = 'rebuild/ops/test_owner_normal_origin.py'
 ENTRY = 'scripts/prepare-owner-normal-origin.py'
@@ -90,11 +90,11 @@ RUNTIME_BINDING = 'private-acceptance-completion-cross-hashes-v1'
 SESSION_FORWARD_RESERVE = 600
 SESSION_COMPLETION_RESERVE = 60
 PRIVATE_PATHS = {
-    'private_acceptance': EVIDENCE / 'installed-acceptance-v3-20261007/complete.json',
-    'private_report': EVIDENCE / 'installed-acceptance-v3-20261007/independent-verification.json',
-    'private_authority': EVIDENCE / 'installed-acceptance-v3-preparation-20261007/parent-phase-verify.json',
+    'private_acceptance': EVIDENCE / 'installed-acceptance-v4-20261008/complete.json',
+    'private_report': EVIDENCE / 'installed-acceptance-v4-20261008/independent-verification.json',
+    'private_authority': EVIDENCE / 'installed-acceptance-v4-preparation-20261008/parent-phase-verify.json',
     'availability': RUNTIME / 'private-availability-recovery-20261007/complete.json'}
-PRIVATE_PHASE = EVIDENCE / 'installed-acceptance-v3-preparation-20261007/co-tenant-phase-preservation.json'
+PRIVATE_PHASE = EVIDENCE / 'installed-acceptance-v4-preparation-20261008/co-tenant-phase-preservation.json'
 PRIVATE_PHASE_PROTOCOL = 'quill-only-phase-preservation-v1'
 
 class Refusal(RuntimeError):
@@ -377,7 +377,7 @@ def private_receipts(policy):
         'normal443_retained_private_phase_proof_binding')
     for phase in ('before-auth', 'after-auth'):
         path = Path(authority['authority']['admissions'][phase]['path'])
-        require(path == EVIDENCE / 'installed-acceptance-v3-preparation-20261007' / ('admission-' + phase + '.json'),
+        require(path == EVIDENCE / 'installed-acceptance-v4-preparation-20261008' / ('admission-' + phase + '.json'),
                 'normal443_fixed_private_admission')
         packet, packet_raw = pinned_receipt(authority['authority']['admissions'][phase],
                                              'normal443_final_admission_hash', path)

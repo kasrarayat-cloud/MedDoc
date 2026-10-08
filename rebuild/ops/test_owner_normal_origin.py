@@ -645,7 +645,7 @@ class ActualRetainedVerifierTests(unittest.TestCase):
         raw=act.source_files.protected(path)
         module=types.ModuleType('_fictional_normal443_memory_verifier')
         module.__file__=str(path);module.__dict__['__authenticated_source']=raw
-        module.CAMPAIGN=str(act.EVIDENCE/'installed-acceptance-v3-20261007')
+        module.CAMPAIGN=str(act.PRIVATE_PATHS['private_acceptance'].parent)
         def gate():raise act.Refusal('source_protocol_unqualified')
         module.v3_execution_gate=gate
         module.validate_admin_final_storage=lambda *_:(_ for _ in ()).throw(AssertionError('installed read'))
@@ -703,7 +703,7 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
         admissions={phase:{'format':3,'operations_revision':act.BASE,'served_revision':PRIOR,'phase':phase}
                     for phase in ('before-auth','after-auth')}
         for packet in admissions.values():packet['co_tenant_preservation_admission']=deepcopy(phase_proof)
-        admission_paths={phase:act.EVIDENCE/'installed-acceptance-v3-preparation-20261007'/('admission-'+phase+'.json')
+        admission_paths={phase:act.PRIVATE_PHASE.parent/('admission-'+phase+'.json')
                          for phase in admissions}
         admission_items={phase:{'path':str(admission_paths[phase]),'sha256':act.sha(act.encode(packet))}
                          for phase,packet in admissions.items()}
@@ -737,6 +737,53 @@ class RuntimeReceiptAndSessionAdmissionTests(unittest.TestCase):
                  **{admission_paths[phase]:act.encode(packet) for phase,packet in admissions.items()}}
         policy['private_accepted_revision']=PRIOR
         return policy,records
+    def test_current_v4_declaration_matches_checked_acceptance_fixed_paths(self):
+        import importlib
+        acceptance=importlib.import_module(act.__package__+'.owner_acceptance_v3')
+        raw=(act.SOURCE/act.DECL).read_bytes();policy=act.contract(raw)
+        self.assertEqual(act.BASE,'4b037b171c2a732ff74c65fc8a276ca5abd60169')
+        self.assertEqual(policy['source_base'],act.BASE)
+        expected={'private_acceptance':acceptance.CAMPAIGN/'complete.json',
+            'private_report':acceptance.CAMPAIGN/'independent-verification.json',
+            'private_authority':acceptance.ACTUAL_PREPARATION/'parent-phase-verify.json'}
+        for key,path in expected.items():
+            self.assertEqual(act.PRIVATE_PATHS[key],path)
+            self.assertEqual(policy[key],{'path':str(path),'binding':act.RUNTIME_BINDING})
+        self.assertEqual(act.PRIVATE_PHASE,acceptance.ACTUAL_PREPARATION/'co-tenant-phase-preservation.json')
+        self.assertEqual(policy['private_phase_preservation'],{'path':str(act.PRIVATE_PHASE),'binding':act.RUNTIME_BINDING})
+        self.assertFalse(policy['private_acceptance_completed'])
+        self.assertEqual((policy['authentication_submissions'],policy['provider_calls'],policy['database_writes']),(0,0,0))
+
+    def test_old_v3_runtime_paths_cannot_substitute_for_new_v4_receipts(self):
+        old_campaign=act.EVIDENCE/'installed-acceptance-v3-20261007'
+        old_preparation=act.EVIDENCE/'installed-acceptance-v3-preparation-20261007'
+        old_paths={'private_acceptance':old_campaign/'complete.json',
+            'private_report':old_campaign/'independent-verification.json',
+            'private_authority':old_preparation/'parent-phase-verify.json'}
+        for key,old_path in old_paths.items():
+            policy,records=self.chain();policy[key]['path']=str(old_path)
+            with self.subTest(key=key),patch.object(act.os.path,'lexists',return_value=False), \
+                 patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)])as reader:
+                with self.assertRaisesRegex(act.Refusal,'normal443_'+key+'_pin'):act.private_receipts(policy)
+                self.assertNotIn(old_path,[Path(call.args[0])for call in reader.call_args_list])
+        policy,records=self.chain();path=act.PRIVATE_PATHS['private_authority']
+        authority=json.loads(records[path]);authority['authority']['admissions']['before-auth']['path']=str(old_preparation/'admission-before-auth.json')
+        records[path]=act.encode(authority)
+        with patch.object(act.os.path,'lexists',return_value=False),patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]), \
+             self.assertRaisesRegex(act.Refusal,'fixed_private_admission'):act.private_receipts(policy)
+
+    def test_retained_old_v3_stop_is_history_and_new_v4_stop_still_refuses(self):
+        policy,records=self.chain();old_stop=act.EVIDENCE/'installed-acceptance-v3-preparation-20261007/STOP.json'
+        with patch.object(act.os.path,'lexists',side_effect=lambda path:Path(path)==old_stop)as exists, \
+             patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]):
+            self.assertEqual(act.private_receipts(policy)['phase_preservation'][1],records[act.PRIVATE_PHASE])
+        checked={Path(call.args[0])for call in exists.call_args_list}
+        self.assertEqual(checked,{act.PRIVATE_PHASE.parent/'STOP.json',act.PRIVATE_PATHS['private_acceptance'].parent/'STOP.json'})
+        for stop in checked:
+            with self.subTest(stop=stop),patch.object(act.os.path,'lexists',side_effect=lambda path:Path(path)==stop), \
+                 patch.object(act.source_files,'protected',side_effect=AssertionError('stopped candidate read')), \
+                 self.assertRaisesRegex(act.Refusal,'private_campaign_stop_record_absent'):act.private_receipts(policy)
+
     def test_runtime_completion_is_causally_bound_without_future_hash_constants(self):
         policy,records=self.chain()
         with patch.object(act.source_files,'protected',side_effect=lambda path:records[Path(path)]):
