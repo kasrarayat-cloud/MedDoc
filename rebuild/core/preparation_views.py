@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from .models import Template, TemplatePreparation
 from .security import scoped, membership, private_path, audit
-from .preparation import approve, correct, corrected_fields
+from .preparation import approve, correct, corrected_fields, can_continue_wm_review, continue_wm_review
 from documents.preparation_service import read_original
 from documents import DocumentError
 
@@ -38,7 +38,8 @@ def detail(request,pk):
         'protected_rows':[r for r in rows if r['protected_signing']],
         'stories':prep.inventory.get('stories',[]),
         'options':prep.inventory.get('options',[]),'receipts':prep.receipts.order_by('created_at'),
-        'preview_token':secrets.token_hex(24)})
+        'can_continue_wm_review':can_continue_wm_review(prep),
+        'can_correct':prep.state in {'review','guided'},'preview_token':secrets.token_hex(24)})
 
 @require_GET
 def status(request,pk):
@@ -56,6 +57,15 @@ def corrections(request,pk):
     placements={a['id']:request.POST.get('placement_'+a['id'],'') for a in prep.inventory.get('anchors',[]) if a['kind']=='choose_cell'}
     try:
         correct(prep.pk,request.user,revision(request),labels,request.POST.getlist('reviewed_anchor'),request.POST.get('correction_reason',''),placements)
+    except (ValidationError,DocumentError) as exc:
+        return HttpResponse('; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc),status=409,content_type='text/plain')
+    return redirect('template_preparation',pk=pk)
+
+@require_POST
+def continue_review(request,pk):
+    _,prep=selected(request,pk)
+    try:
+        continue_wm_review(prep.pk,request.user,revision(request),request.POST.get('candidate_sha256',''))
     except (ValidationError,DocumentError) as exc:
         return HttpResponse('; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc),status=409,content_type='text/plain')
     return redirect('template_preparation',pk=pk)

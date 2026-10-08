@@ -4,6 +4,7 @@ import json
 import os
 import re
 import secrets
+import stat
 import time
 from decimal import Decimal
 from django.conf import settings
@@ -34,6 +35,16 @@ LAYOUT_ADVISORIES = frozenset([
     "DOCX answers expand and can change pagination. Review the exported document's layout.",
     *TAB_LAYOUT_ADVISORIES,
 ])
+WM_MAPPING_DIGEST = '0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072'
+# These are the complete, ordered warnings of the unchanged qualified WM original.
+# They are admitted only with its byte identity and full original mapping proof.
+WM_LAYOUT_ADVISORIES = (
+    'This mapping applies to this unchanged original form.',
+    'Review all prewritten findings, changed statements and the actual clinician signer before export.',
+    'Missing information is left blank; it is never replaced with a normal finding.',
+    'Unmapped blank paragraphs are preserved. Export is available in Word format.',
+)
+
 SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'preparation_limit',
                'source_changed', 'source_unavailable', 'parser_timeout', 'parser_failed',
                'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
@@ -295,7 +306,31 @@ def build_candidate(prep,placements):
                                    'revision':prep.revision,'placements':placements})
     prep.candidate_path=relative; prep.candidate_sha256=result['prepared_sha256']; prep.changes=result['changes']
     prep.save(update_fields=['candidate_path','candidate_sha256','changes','candidate_history'])
-    info=inspect_template(target)
+    prep.candidate_info=candidate_inspection(prep,inspect_template(target),result,placements)
+
+
+def wm_inspection_admission(prep,info):
+    inv=prep.inventory
+    validate_inventory(inv)
+    expected_backend={'backend':'wm-iov-foss-v2','source_sha256':WM_IOV_SHA256,'mapping_digest':WM_MAPPING_DIGEST}
+    if (prep.template.sha256!=WM_IOV_SHA256 or prep.candidate_sha256!=WM_IOV_SHA256
+            or inv['source_sha256']!=WM_IOV_SHA256 or inv['document_backend']!=expected_backend
+            or len(inv['anchors'])!=90 or len(inv['fields'])!=90 or len(inv['stories'])!=16
+            or len(inv['review_requirements'])!=14 or inv['issues']
+            or any(a['kind']!='existing' for a in inv['anchors'])
+            or info.get('sha256')!=WM_IOV_SHA256 or info.get('format')!='docx'
+            or {k:info.get(k) for k in expected_backend}!=expected_backend
+            or digest(info.get('fields'))!=digest(inv['fields'])
+            or digest(info.get('review_requirements'))!=digest(inv['review_requirements'])
+            or info.get('warnings')!=list(WM_LAYOUT_ADVISORIES)):
+        raise DocumentError('The WM layout inspection differs from its unchanged qualified original.', 'guided_layout')
+    return {'protocol':'qualified-wm-original-warnings-v1','source_sha256':WM_IOV_SHA256,
+            'inventory_sha256':inv['inventory_sha256'],'mapping_digest':WM_MAPPING_DIGEST,
+            'fields_sha256':digest(inv['fields']),'review_requirements_sha256':digest(inv['review_requirements']),
+            'warnings_sha256':digest(list(WM_LAYOUT_ADVISORIES))}
+
+
+def candidate_inspection(prep,info,result,placements):
     validate_candidate_fields(prep.inventory,info['fields'])
     warnings=info.get('warnings',[])
     if not isinstance(warnings,list) or any(not isinstance(warning,str) for warning in warnings):
@@ -309,12 +344,138 @@ def build_candidate(prep,placements):
         raise DocumentError('The candidate row review is not bound to the original placement decisions.', 'guided_layout')
     from documents.engine import UNMAPPED_NOTES
     reviewed_warning=UNMAPPED_NOTES['multi_column'].format(count=len(rows)) if rows else None
-    unresolved=[warning for warning in warnings if warning not in LAYOUT_ADVISORIES and warning!=reviewed_warning]
+    wm_proof=wm_inspection_admission(prep,info) if prep.inventory.get('document_backend') else None
+    unresolved=[] if wm_proof else [warning for warning in warnings if warning not in LAYOUT_ADVISORIES and warning!=reviewed_warning]
     if len(info['fields'])>100 or unresolved:
         raise DocumentError('The candidate still contains unresolved answer areas.', 'guided_layout')
-    prep.candidate_info={'fields':info['fields'],'warnings':list(warnings),'reviewed_multi_column_rows':rows,'review_requirements':info.get('review_requirements',[]),
+    candidate_info={'fields':info['fields'],'warnings':list(warnings),'reviewed_multi_column_rows':rows,'review_requirements':info.get('review_requirements',[]),
                          'document_backend':{k:info[k] for k in ('backend','source_sha256','mapping_digest')}
                                               if info.get('backend') else {}}
+    if wm_proof:candidate_info['qualified_warning_baseline']=wm_proof
+    return candidate_info
+
+
+def can_continue_wm_review(prep):
+    try:
+        inv=prep.inventory
+        validate_inventory(inv)
+        return (feature_enabled() and prep.state=='blocked' and prep.error_code=='guided_layout'
+                and prep.finished_at is not None and prep.started_at is not None
+                and prep.template.sha256==prep.candidate_sha256==inv['source_sha256']==WM_IOV_SHA256
+                and bool(prep.candidate_path) and not prep.candidate_info and not prep.changes
+                and not prep.corrections and not prep.correction_history
+                and inv['document_backend']=={'backend':'wm-iov-foss-v2','source_sha256':WM_IOV_SHA256,
+                                              'mapping_digest':WM_MAPPING_DIGEST}
+                and len(inv['anchors'])==len(inv['fields'])==90 and len(inv['stories'])==16
+                and len(inv['review_requirements'])==14 and not inv['issues']
+                and all(a['kind']=='existing' for a in inv['anchors'])
+                and bool(prep.candidate_history)
+                and prep.candidate_history[-1]=={'path':prep.candidate_path,'sha256':WM_IOV_SHA256,
+                                                 'revision':prep.revision,'placements':{}})
+    except (ValueError,KeyError,TypeError):
+        return False
+
+
+def read_retained_role(receipt,mode):
+    if type(mode) is not str or mode not in {'live','fixture'} or type(receipt.simulated) is not bool or receipt.simulated!=(mode=='fixture'):
+        raise ValidationError('The retained role simulation state differs from its immutable preparation mode.')
+    try:return _read_retained_role(receipt)
+    except OSError:raise ValidationError('The retained role evidence is unavailable.') from None
+
+
+def _read_retained_role(receipt):
+    # Read bounded raw evidence without a provider request, following no final link.
+    if not re.fullmatch(r'preparation-receipts/[0-9a-f]{48}\.json',receipt.response_path):
+        raise ValidationError('The retained role evidence path is invalid.')
+    parent=settings.MEDIA_ROOT.resolve()/'preparation-receipts'
+    identity=lambda value:(value.st_dev,value.st_ino,value.st_mode,value.st_nlink,value.st_uid,value.st_gid,
+                           value.st_size,value.st_mtime_ns,value.st_ctime_ns)
+    parent_fd=os.open(parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        parent_before=os.fstat(parent_fd)
+        if parent_before.st_uid!=os.getuid() or stat.S_IMODE(parent_before.st_mode)!=0o700:
+            raise ValidationError('The retained role evidence directory is unsafe.')
+        fd=os.open(receipt.response_path.rsplit('/',1)[1],os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK,dir_fd=parent_fd)
+        with os.fdopen(fd,'rb') as stream:
+            before=os.fstat(stream.fileno())
+            if (not stat.S_ISREG(before.st_mode) or before.st_nlink!=1 or before.st_uid!=os.getuid()
+                    or stat.S_IMODE(before.st_mode)!=0o600 or not 0<before.st_size<=2*1024*1024):
+                raise ValidationError('The retained role evidence is unavailable.')
+            raw=stream.read(2*1024*1024+1);after=os.fstat(stream.fileno())
+        public=os.stat(receipt.response_path.rsplit('/',1)[1],dir_fd=parent_fd,follow_symlinks=False)
+        if (identity(before)!=identity(after) or identity(before)!=identity(public)
+                or identity(parent_before)!=identity(os.fstat(parent_fd))
+                or identity(parent_before)!=identity(parent.lstat())
+                or len(raw)!=before.st_size or hashlib.sha256(raw).hexdigest()!=receipt.response_sha256):
+            raise ValidationError('The retained role evidence changed.')
+    finally:os.close(parent_fd)
+    try:evidence=json.loads(raw)
+    except (ValueError,UnicodeError):raise ValidationError('The retained role evidence is invalid.') from None
+    if (not isinstance(evidence,dict) or type(evidence.get('simulated')) is not bool
+            or evidence['simulated'] is not receipt.simulated or evidence.get('model')!=receipt.returned_model
+            or evidence.get('request_id')!=receipt.provider_request_id
+            or evidence.get('resource_id')!=receipt.provider_resource_id):
+        raise ValidationError('The retained role identity differs from its receipt.')
+    response=evidence.get('response')
+    if receipt.simulated:
+        return response
+    if (not isinstance(response,dict) or response.get('model')!=receipt.returned_model
+            or response.get('id')!=receipt.provider_resource_id or response.get('stop_reason')!='end_turn'
+            or not isinstance(response.get('content'),list)
+            or any(not isinstance(block,dict) for block in response['content'])):
+        raise ValidationError('The retained provider response is incomplete.')
+    try:
+        text=''.join(block['text'] for block in response['content'] if block.get('type')=='text')
+        return json.loads(text)
+    except (KeyError,TypeError,ValueError):
+        raise ValidationError('The retained provider result is invalid.') from None
+
+
+@transaction.atomic
+def continue_wm_review(prep_id,actor,revision,candidate_sha):
+    prep=TemplatePreparation.objects.select_for_update().select_related('template').get(pk=prep_id)
+    membership(actor,prep.template.department,roles=['owner','clinician'])
+    if not can_continue_wm_review(prep) or prep.revision!=revision or candidate_sha!=prep.candidate_sha256:
+        raise ValidationError('Only the unchanged retained WM candidate can continue from this stopped revision.')
+    validate_role(prep.inventory,prep.proposal,'proposer');validate_role(prep.inventory,prep.checker,'checker')
+    receipts=list(prep.receipts.order_by('role'))
+    if len(receipts)!=2 or {r.role for r in receipts}!={'proposer','checker'}:
+        raise ValidationError('Both completed role receipts are required.')
+    for receipt in receipts:
+        expected=prep.proposal if receipt.role=='proposer' else prep.checker
+        payload=role_payload(prep.inventory,receipt.role,prep.proposal if receipt.role=='checker' else None)
+        if (receipt.state!='succeeded' or receipt.finished_at is None or not receipt.response_path
+                or receipt.request_sha256!=digest(payload) or receipt.provider!=prep.config['provider']
+                or receipt.requested_model!=prep.config['model'] or not receipt.returned_model
+                or receipt.computed_cost is None or digest(read_retained_role(receipt,prep.config['mode']))!=digest(expected)):
+            raise ValidationError('The retained role evidence does not establish this complete proposal and check.')
+    from documents.preparation_service import read_original
+    original=private_path(prep.template.original_path);candidate=private_path(prep.candidate_path)
+    def check_sources():
+        if any(hashlib.sha256(read_original(path)).hexdigest()!=WM_IOV_SHA256 for path in (original,candidate)):
+            raise ValidationError('The retained original or candidate changed.')
+    check_sources()
+    info=inspect_template(candidate)
+    if digest(inspect_preparation(original,info))!=digest(prep.inventory):
+        raise ValidationError('The current WM inventory differs from its immutable role input.')
+    candidate_info=candidate_inspection(prep,info,{'reviewed_multi_column_rows':[]},{})
+    check_sources()
+    for receipt in receipts:
+        expected=prep.proposal if receipt.role=='proposer' else prep.checker
+        if digest(read_retained_role(receipt,prep.config['mode']))!=digest(expected):
+            raise ValidationError('The retained role evidence changed during inspection.')
+    now=timezone.now()
+    prep.candidate_history.append({'event':'qualified_wm_inspection_continued','revision':prep.revision+1,
+        'path':prep.candidate_path,'sha256':prep.candidate_sha256,'actor_id':str(actor.pk),'at':now.isoformat(),
+        'prior_state':prep.state,'prior_error_code':prep.error_code,'prior_finished_at':prep.finished_at.isoformat(),
+        'inspection_sha256':digest(candidate_info),
+        'receipts':{r.role:{'id':str(r.pk),'response_sha256':r.response_sha256} for r in receipts}})
+    prep.candidate_info=candidate_info;prep.revision+=1;prep.state='guided'
+    # No attempt timestamps, failure code, AI result, receipt or source is replaced.
+    prep.save(update_fields=['candidate_info','candidate_history','revision','state'])
+    audit(actor,'template.preparation_inspection_continued',prep.pk,department=prep.template.department,
+          revision=prep.revision,candidate_sha256=prep.candidate_sha256,provider_calls=0)
+    return prep
 
 def corrected_fields(prep):
     fields=prep.candidate_info.get('fields', [])

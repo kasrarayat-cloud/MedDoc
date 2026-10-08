@@ -272,3 +272,198 @@ class PreparationPureTests(SimpleTestCase):
         with patch('documents.service.subprocess.run') as process:
             with self.assertRaises(DocumentError):_run(self.root/'original.docx','fill',expected_sha256='0'*64)
         process.assert_not_called()
+
+
+class WMContinuationTests(SimpleTestCase):
+    setUp=PreparationPureTests.setUp
+    config=PreparationPureTests.config
+    packet=PreparationPureTests.packet
+    # Classifier fixtures; the genuine unchanged WM mapping is independently
+    # checked with its retained baseline and real networkless processor.
+    def wm_packet(self):
+        import hashlib,json
+        from django.utils import timezone
+        p=self.packet();p.pk='prep1';p.config=self.config();p.template.department='department1'
+        p.template.original_path='original.docx';p.template.sha256=WM_IOV_SHA256
+        raw=(Path(__file__).resolve().parents[3]/'WM IOV Template.docx').read_bytes()
+        self.assertEqual(hashlib.sha256(raw).hexdigest(),WM_IOV_SHA256)
+        (self.root/'original.docx').write_bytes(raw);(self.root/'candidate.docx').write_bytes(raw)
+        inv=p.inventory;inv['source_sha256']=WM_IOV_SHA256
+        inv['fields']=[{'key':'q'+str(i),'label':'Question '+str(i),'kind':'text','locator':{'index':i}} for i in range(90)]
+        inv['questions']=[{'id':'q'+str(i),'text':'Question '+str(i),'protected_signing':False} for i in range(90)]
+        inv['anchors']=[{'id':'a'+str(i),'question_id':'q'+str(i),'kind':'existing','locator':None,'protected_signing':False} for i in range(90)]
+        inv['stories']=[{**inv['stories'][0],'part':'word/story'+str(i)+'.xml'} for i in range(16)]
+        inv['review_requirements']=[{'id':'r'+str(i)} for i in range(14)]
+        inv['document_backend']={'backend':'wm-iov-foss-v2','source_sha256':WM_IOV_SHA256,'mapping_digest':prep.WM_MAPPING_DIGEST}
+        inv['inventory_sha256']=digest({k:v for k,v in inv.items() if k!='inventory_sha256'})
+        p.proposal,_=prep.provider_role(inv,'proposer',self.config(),1)
+        p.checker,_=prep.provider_role(inv,'checker',self.config(),1,p.proposal)
+        p.checker['anchors'][0]['verdict']='unresolved'
+        p.candidate_path='candidate.docx';p.candidate_sha256=WM_IOV_SHA256;p.candidate_info={}
+        p.state='blocked';p.error_code='guided_layout';p.started_at=p.finished_at=timezone.now()
+        p.correction_history=[];p.candidate_history=[{'path':p.candidate_path,'sha256':WM_IOV_SHA256,'revision':0,'placements':{}}]
+        p.save=Mock();directory=self.root/'preparation-receipts';directory.mkdir(mode=0o700,exist_ok=True)
+        receipts=[]
+        for i,role in enumerate(['proposer','checker']):
+            value=p.proposal if role=='proposer' else p.checker
+            evidence={'model':'fixture-returned-'+role,'request_id':'','resource_id':'','simulated':True,'response':value}
+            raw=json.dumps(evidence).encode();relative='preparation-receipts/'+str(i)*48+'.json'
+            target=self.root/relative;target.write_bytes(raw);target.chmod(0o600)
+            receipts.append(SimpleNamespace(pk=role,role=role,state='succeeded',finished_at=timezone.now(),
+                response_path=relative,response_sha256=hashlib.sha256(raw).hexdigest(),returned_model=evidence['model'],
+                provider_request_id='',provider_resource_id='',simulated=True,computed_cost=Decimal('0'),
+                provider=p.config['provider'],requested_model=p.config['model'],
+                request_sha256=digest(prep.role_payload(inv,role,p.proposal if role=='checker' else None))))
+        p.receipts=Mock();p.receipts.order_by.return_value=receipts
+        info={'fields':deepcopy(inv['fields']),'review_requirements':deepcopy(inv['review_requirements']),
+              'warnings':list(prep.WM_LAYOUT_ADVISORIES),'sha256':WM_IOV_SHA256,'format':'docx',**inv['document_backend']}
+        return p,info,receipts
+
+    def test_exact_wm_warning_proof_keeps_full_visible_baseline_and_rejects_substitution(self):
+        p,info,_=self.wm_packet()
+        result=prep.candidate_inspection(p,info,{'reviewed_multi_column_rows':[]},{})
+        self.assertEqual(result['warnings'],list(prep.WM_LAYOUT_ADVISORIES))
+        self.assertEqual(result['fields'],p.inventory['fields'])
+        self.assertEqual(result['qualified_warning_baseline']['inventory_sha256'],p.inventory['inventory_sha256'])
+        for change in ['missing','extra','text','order','backend','mapping','source','format','fields','requirements','candidate','generic']:
+            bad=deepcopy(info);q=deepcopy(p)
+            if change=='missing':bad['warnings'].pop()
+            elif change=='extra':bad['warnings'].append('Unmapped answer area.')
+            elif change=='text':bad['warnings'][0]+=' changed'
+            elif change=='order':bad['warnings'].reverse()
+            elif change=='backend':bad['backend']='other'
+            elif change=='mapping':bad['mapping_digest']='0'*64
+            elif change=='source':bad['sha256']='0'*64
+            elif change=='format':bad['format']='pdf'
+            elif change=='fields':bad['fields'][0]['locator']['index']=True
+            elif change=='requirements':bad['review_requirements'][0]['id']='changed'
+            elif change=='candidate':q.candidate_sha256='0'*64
+            elif change=='generic':q.inventory['document_backend']={};q.inventory['inventory_sha256']=digest({k:v for k,v in q.inventory.items() if k!='inventory_sha256'})
+            with self.subTest(change=change),self.assertRaises((prep.DocumentError,ValueError)):
+                prep.candidate_inspection(q,bad,{'reviewed_multi_column_rows':[]},{})
+
+    def continuation(self,p,info):
+        manager=Mock();manager.select_for_update.return_value.select_related.return_value.get.return_value=p
+        actor=SimpleNamespace(pk='doctor1')
+        with patch.object(prep.TemplatePreparation,'objects',manager),patch.object(prep,'membership'),\
+                patch.object(prep,'inspect_template',return_value=info),patch.object(prep,'inspect_preparation',return_value=p.inventory),\
+                patch.object(prep,'audit'),patch.object(prep,'provider_role',side_effect=AssertionError('No provider call')):
+            return prep.continue_wm_review.__wrapped__(p.pk,actor,p.revision,p.candidate_sha256)
+
+    def test_continuation_preserves_blocked_history_raw_roles_and_returns_guided_only(self):
+        p,info,receipts=self.wm_packet()
+        original={k:deepcopy(getattr(p,k)) for k in ['proposal','checker','error_code','started_at','finished_at','changes','candidate_path','candidate_sha256']}
+        old_history=deepcopy(p.candidate_history);raw=[(self.root/r.response_path).read_bytes() for r in receipts]
+        self.assertIs(self.continuation(p,info),p)
+        self.assertEqual(p.state,'guided');self.assertEqual(p.revision,1);self.assertEqual(p.corrections,{})
+        for key,value in original.items():self.assertEqual(getattr(p,key),value)
+        self.assertEqual(p.candidate_history[:-1],old_history)
+        self.assertEqual(p.candidate_history[-1]['prior_error_code'],'guided_layout')
+        self.assertEqual(raw,[(self.root/r.response_path).read_bytes() for r in receipts])
+        p.save.assert_called_once_with(update_fields=['candidate_info','candidate_history','revision','state'])
+        self.assertFalse(prep.can_continue_wm_review(p))
+        with self.assertRaises(ValidationError):self.continuation(p,info)
+
+    def test_stale_revision_wrong_hash_unfinished_role_and_source_drift_refuse_without_save(self):
+        for change in ['stale','hash','state','error','candidate_info','history','membership','receipt','request','raw','inventory','source']:
+            p,info,receipts=self.wm_packet();manager=Mock()
+            manager.select_for_update.return_value.select_related.return_value.get.return_value=p
+            expected_revision=p.revision;expected_sha=p.candidate_sha256
+            if change=='stale':expected_revision+=1
+            elif change=='hash':expected_sha='0'*64
+            elif change=='state':p.state='review'
+            elif change=='error':p.error_code='provider_unknown'
+            elif change=='candidate_info':p.candidate_info={'fields':[]}
+            elif change=='history':p.candidate_history=[]
+            elif change=='receipt':receipts[0].state='failed'
+            elif change=='request':receipts[1].request_sha256='0'*64
+            elif change=='raw':(self.root/receipts[0].response_path).write_bytes(b'{}')
+            elif change=='source':(self.root/p.candidate_path).write_bytes(b'PK\x03\x04changed')
+            membership=Mock(side_effect=ValidationError('Denied') if change=='membership' else None)
+            rederived=deepcopy(p.inventory)
+            if change=='inventory':rederived['issues'].append({'code':'changed'})
+            with self.subTest(change=change),patch.object(prep.TemplatePreparation,'objects',manager),\
+                    patch.object(prep,'membership',membership),patch.object(prep,'inspect_template',return_value=info),\
+                    patch.object(prep,'inspect_preparation',return_value=rederived),patch.object(prep,'audit') as audit,\
+                    patch.object(prep,'provider_role') as provider:
+                with self.assertRaises((ValidationError,prep.DocumentError)):
+                    prep.continue_wm_review.__wrapped__(p.pk,SimpleNamespace(pk='doctor1'),expected_revision,expected_sha)
+                p.save.assert_not_called();audit.assert_not_called();provider.assert_not_called()
+
+    def test_retained_role_reader_refuses_unsafe_file_and_incomplete_provider_result(self):
+        import json,hashlib
+        for change in ['fifo','symlink','mode','hardlink','path','hash','model','request','truncated','raw_simulated','raw_simulated_type','raw_simulated_missing']:
+            p,_,receipts=self.wm_packet();r=receipts[0];path=self.root/r.response_path
+            if change=='fifo':path.unlink();__import__('os').mkfifo(path)
+            elif change=='symlink':path.unlink();path.symlink_to(self.root/receipts[1].response_path)
+            elif change=='mode':path.chmod(0o644)
+            elif change=='hardlink':__import__('os').link(path,self.root/'linked.json')
+            elif change=='path':r.response_path='../original.docx'
+            elif change=='hash':r.response_sha256='0'*64
+            else:
+                value=json.loads(path.read_bytes())
+                if change=='model':value['model']='other'
+                elif change=='request':value['request_id']='other'
+                elif change=='raw_simulated':value['simulated']=False
+                elif change=='raw_simulated_type':value['simulated']=1
+                elif change=='raw_simulated_missing':value.pop('simulated')
+                else:r.simulated=False;value['simulated']=False;value['response']={'model':r.returned_model,'id':'','stop_reason':'max_tokens','content':[]}
+                raw=json.dumps(value).encode();path.write_bytes(raw);r.response_sha256=hashlib.sha256(raw).hexdigest()
+            with self.subTest(change=change),self.assertRaises(ValidationError):prep.read_retained_role(r,'live' if change=='truncated' else 'fixture')
+            if path.is_fifo() or path.is_symlink():path.unlink()
+            if change=='hardlink':(self.root/'linked.json').unlink()
+
+    def test_live_and_fixture_receipts_require_typed_mode_match_before_raw_evidence_reads(self):
+        import json,hashlib
+        for mode,simulated,allowed in [('fixture',True,True),('live',False,True),('live',True,False),
+                ('fixture',False,False),('live',1,False),('fixture',0,False),('live','false',False),
+                ('fixture',None,False),('unknown',True,False)]:
+            p,info,receipts=self.wm_packet();p.config['mode']=mode
+            for r in receipts:
+                r.simulated=simulated
+                # Both forms have otherwise valid complete original role JSON;
+                # a simulated envelope cannot establish a live provider result.
+                if simulated is False:
+                    role_result=p.proposal if r.role=='proposer' else p.checker
+                    value={'model':r.returned_model,'request_id':'','resource_id':'',
+                           'simulated':False,'response':{'model':r.returned_model,'id':'','stop_reason':'end_turn',
+                                       'content':[{'type':'text','text':json.dumps(role_result)}]}}
+                    raw=json.dumps(value).encode();(self.root/r.response_path).write_bytes(raw)
+                    r.response_sha256=hashlib.sha256(raw).hexdigest()
+            with self.subTest(mode=mode,simulated=simulated):
+                if allowed:self.assertEqual(self.continuation(p,info).state,'guided')
+                else:
+                    with self.assertRaises(ValidationError):self.continuation(p,info)
+                    p.save.assert_not_called()
+                    with patch.object(prep,'_read_retained_role') as read:
+                        with self.assertRaises(ValidationError):prep.read_retained_role(receipts[0],mode)
+                        read.assert_not_called()
+
+    def test_live_envelope_cannot_disagree_with_its_raw_simulation_provenance(self):
+        import json,hashlib
+        for simulated in [True,1,None,'false']:
+            p,info,receipts=self.wm_packet();p.config['mode']='live'
+            for r in receipts:
+                r.simulated=False;role_result=p.proposal if r.role=='proposer' else p.checker
+                value={'model':r.returned_model,'request_id':'','resource_id':'','simulated':simulated,
+                       'response':{'model':r.returned_model,'id':'','stop_reason':'end_turn',
+                                   'content':[{'type':'text','text':json.dumps(role_result)}]}}
+                raw=json.dumps(value).encode();(self.root/r.response_path).write_bytes(raw)
+                r.response_sha256=hashlib.sha256(raw).hexdigest()
+            with self.subTest(raw_simulated=simulated),self.assertRaises(ValidationError):self.continuation(p,info)
+            p.save.assert_not_called()
+
+    def test_continuation_post_only_and_blocked_form_ui_has_no_correction_controls(self):
+        from django.test import RequestFactory
+        from django.template.loader import render_to_string
+        from core import preparation_views
+        request=RequestFactory().get('/templates/unused/preparation/continue-review/')
+        with patch.object(preparation_views,'selected') as selected:
+            self.assertEqual(preparation_views.continue_review(request,'unused').status_code,405);selected.assert_not_called()
+        p,_,_=self.wm_packet();p.template.pk='00000000-0000-0000-0000-000000000001';p.template.name='Blank form'
+        html=render_to_string('template_preparation.html',{'user':SimpleNamespace(username='synthetic-doctor',email='',is_staff=False),'preparation':p,'template':p.template,'can_correct':False,
+            'can_continue_wm_review':False,'anchor_rows':p.inventory['anchors'],'preview_token':'a'*48})
+        self.assertNotIn('Save doctor corrections',html);self.assertNotIn('Recheck retained layout · no AI request',html)
+        html=render_to_string('template_preparation.html',{'user':SimpleNamespace(username='synthetic-doctor',email='',is_staff=False),'preparation':p,'template':p.template,'can_correct':False,
+            'can_continue_wm_review':True,'preview_token':'a'*48})
+        self.assertIn('Recheck retained layout · no AI request',html);self.assertNotIn('Save doctor corrections',html)

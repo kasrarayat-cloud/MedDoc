@@ -11,6 +11,7 @@ urlpatterns += [
     path('templates/<uuid:pk>/preparation/',preparation.detail,name='template_preparation'),
     path('templates/<uuid:pk>/preparation/status/',preparation.status,name='template_preparation_status'),
     path('templates/<uuid:pk>/preparation/corrections/',preparation.corrections,name='template_preparation_correct'),
+    path('templates/<uuid:pk>/preparation/continue-review/',preparation.continue_review,name='template_preparation_continue'),
     path('templates/<uuid:pk>/preparation/approve/',preparation.approval,name='template_preparation_approve'),
     path('templates/<uuid:pk>/preparation/preview/<str:kind>/',preparation.preview_bytes,name='template_preparation_preview'),
     path('templates/<uuid:pk>/preparation/download/',preparation.prepared_download,name='template_preparation_download'),
