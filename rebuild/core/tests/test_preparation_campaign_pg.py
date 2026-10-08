@@ -13,9 +13,11 @@ from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.db import DatabaseError, close_old_connections, connection, connections, transaction
+from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase, override_settings
 from django.utils import timezone
 from psycopg.types.json import Jsonb
+from psycopg import sql
 
 from core import preparation_campaign as campaign
 from core.models import (Department, Encounter, Job, Membership, Organization, Patient,
@@ -336,3 +338,40 @@ class DeliveryCampaignPostgresTests(TransactionTestCase):
         with self.assertRaises(campaign.CampaignProviderRefusal):
             with campaign.provider_slot(queued.config):
                 self.fail('A queued request entered after the actual overrun was committed.')
+
+    def test_actual_native_schema_default_policy_supports_restricted_runtime_trigger_calls(self):
+        # Replay the ACTUAL schema-scoped policy, not an invented global default
+        # revocation. PostgreSQL global PUBLIC EXECUTE and schema ACLs differ.
+        # This entire reversible role/schema probe is rolled back in this DB.
+        role = 'quillmd_guard_runtime_' + uuid.uuid4().hex[:12]
+        with transaction.atomic():
+            executor = MigrationExecutor(connection)
+            executor.migrate([('core', '0022_wm_output_followup')])
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT current_user')
+                owner = cursor.fetchone()[0]
+                cursor.execute(sql.SQL('CREATE ROLE {} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE').format(sql.Identifier(role)))
+                cursor.execute('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC')
+                cursor.execute(sql.SQL('ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC').format(sql.Identifier(owner)))
+            MigrationExecutor(connection).migrate([('core', '0023_delivery_campaign')])
+            with connection.cursor() as cursor:
+                cursor.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(sql.Identifier(role)))
+                cursor.execute(sql.SQL('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO {}').format(sql.Identifier(role)))
+                cursor.execute(sql.SQL('GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA public TO {}').format(sql.Identifier(role)))
+                cursor.execute("SELECT has_function_privilege(%s,'quillmd_delivery_config(jsonb)','EXECUTE'),has_function_privilege(%s,'quillmd_delivery_actor(uuid,uuid)','EXECUTE'),has_function_privilege(%s,'quillmd_delivery_exposure()','EXECUTE')", [role] * 3)
+                self.assertEqual(cursor.fetchone(), (True, True, True))
+                cursor.execute(sql.SQL('SET LOCAL ROLE {}').format(sql.Identifier(role)))
+                cursor.execute('SELECT current_user,rolsuper,rolcreaterole FROM pg_roles WHERE rolname=current_user')
+                self.assertEqual(cursor.fetchone(), (role, False, False))
+                prep = self.preparation(SHORT)
+                self.receipt(prep)
+                self.job()
+                self.refusal(lambda: self.preparation(SHORT), 'one attempt per original')
+                cursor.execute('RESET ROLE')
+            self.assertEqual(TemplatePreparation.objects.count(), 1)
+            self.assertEqual(PreparationReceipt.objects.count(), 1)
+            self.assertEqual(Job.objects.count(), 1)
+            transaction.set_rollback(True)
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT count(*) FROM pg_roles WHERE rolname=%s', [role])
+            self.assertEqual(cursor.fetchone()[0], 0)
