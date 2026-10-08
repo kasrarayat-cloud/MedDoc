@@ -335,6 +335,126 @@ def admission_space(phase):
             'filesystem_device':ROOT.stat().st_dev,'available_inodes':observed.f_favail}
 
 
+SCHEDULED_RETENTION = {
+    'founder-receptionist-quality-retention.service': (
+        '6cbacd7e7deaa3739d09b619e87a1146b51a4dd926efafd0adc4121b6d8b72f8',
+        '90676b4a9518372a0ce1ccdd54b3221e09ea3865ba0bc492943c960705053c2b'),
+    'founder-telephone-capture-retention.service': (
+        '9f81c98e952b2090fab9617218a0d4ba54675515fcde6068a7dd490d63634ac8',
+        '7e62dc13717f39a4cee958e433f488bf994ffdf096d49486d7e208f0cc18ffa6'),
+}
+
+
+def scheduled_retention_observation(unit, configuration, observed, state):
+    """Bound the two reviewed background schedules, without certifying dispatch history."""
+    timer=unit.removesuffix('.service')+'.timer'
+    for name,digest in zip((unit,timer),SCHEDULED_RETENTION[unit]):
+        require(configuration.get('/etc/systemd/system/'+name,{}).get('sha256')==digest,
+            'scheduled_retention_reviewed_file')
+    def properties(name,names):
+        raw=old.command(['systemctl','show',name,'--property='+','.join(names)],timeout=10)
+        lines=raw.decode().splitlines();require(all('=' in line for line in lines),'scheduled_property_line')
+        pairs=[line.split('=',1) for line in lines]
+        require(len(pairs)==len(names) and {key for key,_ in pairs}==set(names),'scheduled_property_population')
+        return dict(pairs)
+    def bus_record(raw):
+        def unique(pairs):
+            row={}
+            for key,value in pairs:
+                require(key not in row,'scheduled_duplicate_bus_property');row[key]=value
+            return row
+        row=json.loads(raw,object_pairs_hook=unique)
+        require(isinstance(row,dict) and set(row)=={'type','data'},'scheduled_bus_record_population')
+        return row
+    runtime=properties(unit,('Type','TriggeredBy','Result','ExecMainCode','ExecMainStatus',
+        'ExecMainExitTimestampMonotonic','InactiveExitTimestampMonotonic'))
+    identity=properties(timer,('Id','LoadState','ActiveState','SubState','FragmentPath','DropInPaths','UnitFileState',
+        'Unit','InvocationID','ActiveEnterTimestampMonotonic','InactiveExitTimestampMonotonic'))
+    path_record=bus_record(old.command(['busctl','--json=short','call','org.freedesktop.systemd1',
+        '/org/freedesktop/systemd1','org.freedesktop.systemd1.Manager','GetUnit','s',timer],timeout=10))
+    require(path_record.get('type')=='o' and isinstance(path_record.get('data'),list)
+        and len(path_record['data'])==1,'scheduled_timer_bus_identity')
+    bus_path=path_record['data'][0]
+    expected_path='/org/freedesktop/systemd1/unit/'+''.join(c if c.isalnum() else '_'+format(ord(c),'02x') for c in timer)
+    require(bus_path==expected_path,'scheduled_timer_bus_path')
+    values=[bus_record(line) for line in old.command(['busctl','--json=short','get-property',
+        'org.freedesktop.systemd1',bus_path,'org.freedesktop.systemd1.Timer',
+        'LastTriggerUSecMonotonic','TimersMonotonic','AccuracyUSec','RandomizedDelayUSec','Persistent'],timeout=10).decode().splitlines()]
+    require(len(values)==5 and [row.get('type') for row in values]==['t','a(stt)','t','t','b'],
+        'scheduled_timer_bus_properties')
+    require(state(unit)==observed,'scheduled_service_observation_race')
+    result={'runtime':runtime,'timer_identity':identity,'timer_values':[row['data'] for row in values],
+        'boot_id':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+        'observed_monotonic_us':time.monotonic_ns()//1000,
+        'attribution':'prospectively expected timer-correlated transition; dispatch history unverified'}
+    validate_scheduled_retention(unit,observed,result)
+    return result
+
+
+def validate_scheduled_retention(unit, observed, context):
+    timer=unit.removesuffix('.service')+'.timer';runtime=context['runtime'];identity=context['timer_identity']
+    require(set(context)=={'runtime','timer_identity','timer_values','boot_id','observed_monotonic_us','attribution'}
+        and set(runtime)=={'Type','TriggeredBy','Result','ExecMainCode','ExecMainStatus',
+            'ExecMainExitTimestampMonotonic','InactiveExitTimestampMonotonic'}
+        and type(context['observed_monotonic_us']) is int,'scheduled_context_population')
+    require(observed['ActiveState']=='inactive' and observed['SubState']=='dead' and observed['MainPID']=='0'
+        and observed['LoadState']=='loaded' and observed['DropInPaths']=='', 'scheduled_inactive_endpoint')
+    require({key:runtime[key] for key in ('Type','TriggeredBy','Result','ExecMainCode','ExecMainStatus')}
+        =={'Type':'oneshot','TriggeredBy':timer,'Result':'success','ExecMainCode':'1','ExecMainStatus':'0'},
+        'scheduled_successful_oneshot')
+    stable=copy.deepcopy(identity)
+    require(re.fullmatch('[a-f0-9]{32}',stable.pop('InvocationID',''))
+        and all(stable.pop(name,'').isdigit() for name in ('ActiveEnterTimestampMonotonic','InactiveExitTimestampMonotonic')),
+        'scheduled_timer_invocation_identity')
+    require(stable=={'Id':timer,'LoadState':'loaded','ActiveState':'active','SubState':'waiting',
+        'FragmentPath':'/etc/systemd/system/'+timer,'DropInPaths':'','UnitFileState':'enabled','Unit':unit},
+        'scheduled_timer_identity')
+    trigger,monotonic,accuracy,randomized,persistent=context['timer_values']
+    require(type(trigger) is int and trigger>0 and type(accuracy) is int and accuracy==1000000
+        and type(randomized) is int and randomized==0 and persistent is False,
+        'scheduled_timer_values')
+    require(isinstance(monotonic,list) and len(monotonic)==2 and all(isinstance(row,list) and len(row)==3
+        and type(row[1]) is int and type(row[2]) is int for row in monotonic)
+        and sorted((row[0],row[1]) for row in monotonic)==[('OnBootUSec',30000000),('OnUnitActiveUSec',60000000)],
+        'scheduled_exact_timer_profile')
+    start=int(observed['ExecMainStartTimestampMonotonic']);exit_time=int(runtime['ExecMainExitTimestampMonotonic'])
+    activation=int(runtime['InactiveExitTimestampMonotonic'])
+    require({row[0]:row[2] for row in monotonic}=={'OnBootUSec':30000000,'OnUnitActiveUSec':activation+60000000},
+        'scheduled_next_tick_binding')
+    require(re.fullmatch('[a-f0-9]{32}',observed['InvocationID']) and 0<=start-trigger<=250000
+        and start<=exit_time<=context['observed_monotonic_us']
+        and start<=activation<=min(start+250000,exit_time)
+        and re.fullmatch('[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',context['boot_id']), 'scheduled_trigger_endpoint_binding')
+    require(context['attribution']=='prospectively expected timer-correlated transition; dispatch history unverified',
+        'scheduled_attribution_limit')
+
+
+def foreign_service_preservation(before,after):
+    require(set(before)==set(after),'operation_foreign_service_population')
+    for unit,original in before.items():
+        current=after[unit]
+        if unit not in SCHEDULED_RETENTION:
+            require(current==original,'operation_preservation_foreign_services');continue
+        a=copy.deepcopy(original);b=copy.deepcopy(current)
+        old_context=a.pop('scheduled_retention',None);new_context=b.pop('scheduled_retention',None)
+        require(isinstance(old_context,dict) and isinstance(new_context,dict),'scheduled_endpoint_context')
+        validate_scheduled_retention(unit,a,old_context);validate_scheduled_retention(unit,b,new_context)
+        require(old_context['boot_id']==new_context['boot_id']
+            and new_context['observed_monotonic_us']>=old_context['observed_monotonic_us'], 'scheduled_same_boot_order')
+        require(new_context['timer_identity']==old_context['timer_identity'],'scheduled_timer_not_restarted')
+        changed=a['InvocationID']!=b['InvocationID']
+        old_start=int(a.pop('ExecMainStartTimestampMonotonic'));new_start=int(b.pop('ExecMainStartTimestampMonotonic'))
+        a.pop('InvocationID');b.pop('InvocationID')
+        require(a==b,'scheduled_stable_service_properties')
+        old_trigger=old_context['timer_values'][0];new_trigger=new_context['timer_values'][0]
+        if changed:
+            require(new_start>old_start and new_trigger>old_trigger,'scheduled_forward_invocation')
+        else:
+            require(new_start==old_start and new_trigger==old_trigger
+                and new_context['runtime']==old_context['runtime'],'scheduled_unchanged_invocation')
+    return True
+
+
 def foreign_service_observation(configuration):
     """Observe template files and concrete instances without inventing a template PID."""
     foreign=sorted(Path(name).name for name,row in configuration.items()
@@ -365,6 +485,9 @@ def foreign_service_observation(configuration):
         return row
     templates=[name for name in foreign if name.endswith('@.service')]
     result={name:state(name) for name in foreign if name not in templates}
+    for unit in SCHEDULED_RETENTION:
+        if unit in result:
+            result[unit]['scheduled_retention']=scheduled_retention_observation(unit,configuration,result[unit],state)
     if not templates:return result
     records=parsed(old.command(['systemctl','list-unit-files',*templates,'--type=service',
         '--output=json','--no-pager'],timeout=10))
@@ -663,8 +786,9 @@ def schema_preservation(before,after,functions,triggers,*,metadata_sequence_befo
 
 def preservation(before,after,*,ingress=None):
     """Fresh act-local observation; never substitutes for historical approval."""
-    for name in ('files','mail','foreign_services'):
+    for name in ('files','mail'):
         require(after[name]==before[name],'operation_preservation_'+name)
+    foreign_service_preservation(before['foreign_services'],after['foreign_services'])
     expected=copy.deepcopy(before['configuration'])
     if ingress is not None:
         require(normal.INGRESS in expected,'declared_ingress_present')

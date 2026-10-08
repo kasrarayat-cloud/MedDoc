@@ -243,3 +243,31 @@ preserved; no native or preserved private database was altered by qualification.
 The repeated instance population read also refuses arrivals, disappearances and
 state drift during collection. Malformed duplicate/missing/unknown metadata
 refuses explicitly; no atomic-snapshot or ABA-detection claim is made.
+
+The fresh BA9 attempt admitted 231.6 GiB, then refused before backup, source,
+static, environment, schema or ingress changes when two independently scheduled
+retention services acquired new invocation IDs. Its original failure and exact
+before/after observations remain retained. A separately recorded short recovery
+proved the full original database, files, mail and configuration unchanged and
+restored only the three compatible M6 QuillMD units. No foreign service was acted
+on. The two unchanged timers run every minute, making an unconditional invocation
+ID comparison unsuitable for a longer QuillMD installation interval.
+
+The preservation check now prospectively recognizes only timer-correlated runs of
+`founder-receptionist-quality-retention.service` and
+`founder-telephone-capture-retention.service`, bound to the four reviewed service
+and timer content hashes. Configuration contents, inodes, owners, permissions,
+links and all other service properties remain exact. Both endpoints must be
+successful inactive oneshots with PID zero and their exact enabled timer. Numeric
+systemd timer readback must establish the recorded 30-second boot/60-second active
+schedule, one-second accuracy, zero random delay, the same boot, current service
+start within 250 ms after its last timer trigger, a completed successful exit and
+the exact next scheduled tick. A repeated service observation refuses a race.
+Only the two invocation IDs and corresponding monotonic starts may advance;
+other units, missing evidence, changed files or unexplained transitions refuse.
+Raw endpoint and timer observations remain in each operation record. This is a
+bounded expectation of concurrent background activity, not certification of
+historical deployment approval or dispatch causation: the accessible journal
+cannot exclude a coincident manual start. It introduces no future release or
+configuration approval, timer exclusion or foreign service action. Fresh exact
+descendant CI, finished-diff controls and a new protected plan remain required.
