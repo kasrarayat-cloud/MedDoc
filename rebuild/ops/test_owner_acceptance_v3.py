@@ -1040,6 +1040,89 @@ class NativeAdapterTests(unittest.TestCase):
             with self.subTest(key=key),self.assertRaises(v3.Refusal):v3.live_identity(receipt,bad,SERVED)
 
 
+class ExactExpiredSessionTests(unittest.TestCase):
+    def fixture(self, payload=None):
+        from django.conf import settings
+        from django.core import signing
+        if not settings.configured:
+            settings.configure(SECRET_KEY='fictional test-only key', SECRET_KEY_FALLBACKS=[])
+        secret = 'fictional retained session key'
+        value = payload or {'kind': 'quillmd-preview-v1', '_session_expiry': 1800,
+            'flows': {'f' * 32: {'created': 1791421563.8615303, 'destination': '/'}}}
+        data = signing.dumps(value, key=secret, salt='django.contrib.sessions.SessionStore').encode()
+        columns = ['session_key', 'session_data', 'expire_date']
+        row = dict(zip(columns, (b'z' * 32, data, b'2026-10-08 01:36:03.885947+00')))
+        verifier = types.SimpleNamespace(
+            encoded=lambda value: v3.encode(value) + b'\n',
+            row_digest=lambda row, columns: v3.sha(b'\t'.join(row[name] for name in columns) + b'\n'),
+            normal_session=lambda raw, key: signing.loads(raw.decode(), key=key,
+                salt='django.contrib.sessions.SessionStore', fallback_keys=[], max_age=None))
+        pin = dict(v3.EXPIRED_SESSION_PIN, primary_key_sha256=v3.sha(v3.encode([row['session_key'].decode()])),
+            copy_primary_key_sha256=v3.sha(verifier.encoded([row['session_key'].decode()])),
+            row_sha256=verifier.row_digest(row, columns), payload_sha256=v3.sha(v3.encode(value)))
+        return verifier, row, columns, secret, pin
+
+    def test_exact_signed_expired_row_and_descriptor_retained(self):
+        verifier, row, columns, secret, pin = self.fixture()
+        with patch.object(v3, 'EXPIRED_SESSION_PIN', pin):
+            descriptor = v3.validate_expired_session(verifier, row, columns, secret)
+            prior = {'table': 'django_session', 'primary_key_sha256': pin['copy_primary_key_sha256'],
+                'row_sha256': pin['row_sha256'], 'descriptor': descriptor}
+            self.assertEqual(v3.preserved_expired_session_count([prior], required=True), 1)
+            original = unittest.mock.Mock()
+            verifier.validate_admitted_added_row = original
+            v3.adapt_expired_session_validator(verifier)
+            verifier.validate_admitted_added_row(row, columns, prior, 'fictional staff', secret)
+            original.assert_not_called()
+            unlisted = {'table': 'django_session', 'primary_key_sha256': 'a' * 64,
+                'descriptor': {'kind': 'normal_admin_session'}}
+            verifier.validate_admitted_added_row(row, columns, unlisted, 'fictional staff', secret, 'unchanged context')
+            original.assert_called_once_with(row, columns, unlisted, 'fictional staff', secret, 'unchanged context')
+            for fault in ('missing', 'duplicate', 'table', 'key', 'row', 'kind', 'proof', 'extra-field'):
+                bad = copy.deepcopy(prior); rows = [bad]
+                if fault == 'missing': rows = []
+                elif fault == 'duplicate': rows.append(copy.deepcopy(bad))
+                elif fault == 'table': bad['table'] = 'core_user'
+                elif fault == 'key': bad['primary_key_sha256'] = 'a' * 64
+                elif fault == 'row': bad['row_sha256'] = 'a' * 64
+                elif fault == 'kind': bad['descriptor']['kind'] = 'normal_admin_session'
+                elif fault == 'proof': bad['descriptor']['source_proof']['requester_identified'] = True
+                else: bad['ignored'] = True
+                with self.subTest(fault=fault), self.assertRaises(v3.Refusal):
+                    v3.preserved_expired_session_count(rows, required=True)
+            altered = dict(row, session_data=row['session_data'] + b'x')
+            with self.assertRaises(v3.Refusal):
+                verifier.validate_admitted_added_row(altered, columns, prior, 'fictional staff', secret)
+
+    def test_changed_row_columns_signature_and_payload_refuse(self):
+        verifier, row, columns, secret, pin = self.fixture()
+        for fault in ('key', 'data', 'expiry', 'columns', 'secret'):
+            bad = dict(row); names = list(columns); key = secret
+            if fault == 'key': bad['session_key'] = b'y' * 32
+            elif fault == 'data': bad['session_data'] += b'x'
+            elif fault == 'expiry': bad['expire_date'] = b'2126-10-08 01:36:03+00'
+            elif fault == 'columns': names.reverse()
+            else: key = 'other fictional key'
+            with patch.object(v3, 'EXPIRED_SESSION_PIN', pin), self.subTest(fault=fault), self.assertRaises(Exception):
+                v3.validate_expired_session(verifier, bad, names, key)
+        # Even a newly pinned signed payload cannot grant account/MFA access or
+        # change the source-policy shape. Production pins are never changed.
+        for fault in ('auth', 'otp', 'grant', 'destination', 'created', 'expiry', 'flow-count', 'nonce'):
+            value = {'kind': 'quillmd-preview-v1', '_session_expiry': 1800,
+                'flows': {'f' * 32: {'created': 1791421563.8615303, 'destination': '/'}}}
+            if fault == 'auth': value['_auth_user_id'] = 'fictional staff'
+            elif fault == 'otp': value['otp_device_id'] = 'fictional device'
+            elif fault == 'grant': value['grant'] = {'seen': 1}
+            elif fault == 'destination': value['flows']['f' * 32]['destination'] = '/console/'
+            elif fault == 'created': value['flows']['f' * 32]['created'] = 1.0
+            elif fault == 'expiry': value['_session_expiry'] = True
+            elif fault == 'flow-count': value['flows'] = {}
+            else: value['flows'] = {'bad-nonce': next(iter(value['flows'].values()))}
+            verifier, row, columns, secret, pin = self.fixture(value)
+            with patch.object(v3, 'EXPIRED_SESSION_PIN', pin), self.subTest(fault=fault), self.assertRaises(v3.Refusal):
+                v3.validate_expired_session(verifier, row, columns, secret)
+
+
 class FinancialAndExportTests:
     """Explicit manual suite; actual pinned host inputs are not remote fixtures.
 
@@ -1636,6 +1719,36 @@ class FinancialAndExportTests:
                     'no_grant_no_account_auth': True, 'destination': '/health/', 'created_at': START.isoformat(),
                     'signed_at': START.isoformat()}}
         return old, current, keys, policy, secret
+
+    def test_frozen_copy_explicit_extra_row_before_auth_and_strict_retention(self):
+        old, current, keys, policy, secret = self.no_auth_fixture()
+        from django.core import signing
+        columns = current['django_session']['columns']
+        value = {'kind': 'quillmd-preview-v1', '_session_expiry': 1800,
+            'flows': {'f' * 32: {'created': 1791421563.8615303, 'destination': '/'}}}
+        row = {'session_key': b'z' * 32,
+            'session_data': signing.dumps(value, key=secret, salt='django.contrib.sessions.SessionStore').encode(),
+            'expire_date': b'2026-10-08 01:36:03.885947+00'}
+        line = b'\t'.join(row[name] for name in columns) + b'\n'
+        current['django_session']['rows'].append(line)
+        pin = dict(v3.EXPIRED_SESSION_PIN,
+            primary_key_sha256=v3.sha(v3.encode([row['session_key'].decode()])),
+            copy_primary_key_sha256=v3.sha(self.verifier.encoded([row['session_key'].decode()])),
+            row_sha256=self.verifier.row_digest(row, columns), payload_sha256=v3.sha(v3.encode(value)))
+        with patch.object(v3, 'EXPIRED_SESSION_PIN', pin):
+            result = v3.authenticated_rows_admission(self.verifier, old, current, keys, policy, secret,
+                'fictional fingerprint', None, {})
+            self.assertEqual(len(result['added_rows']), 2)
+            self.assertEqual(v3.preserved_expired_session_count(result['added_rows'], required=True), 1)
+            for fault in ('changed', 'unknown', 'deleted'):
+                bad = copy.deepcopy(current)
+                if fault == 'changed': bad['django_session']['rows'][-1] = line.replace(b'z' * 32, b'y' * 32)
+                elif fault == 'unknown': bad['django_session']['rows'].append(line.replace(b'z' * 32, b'y' * 32))
+                else: bad['django_session']['rows'].pop()
+                with self.subTest(fault=fault), self.assertRaises(RuntimeError):
+                    proof = v3.authenticated_rows_admission(self.verifier, old, bad, keys, policy, secret,
+                        'fictional fingerprint', None, {})
+                    v3.preserved_expired_session_count(proof['added_rows'], required=True)
 
     def test_actual_noauth_copy_admission_historical_signature_and_original_bytes(self):
         args = self.no_auth_fixture()
