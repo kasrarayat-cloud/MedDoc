@@ -94,6 +94,7 @@ and failure behavior are unchanged.
   },
   "original_ingress_sha256": "ff7320480fe823cbc1564e3c104ee41bac1dd5e1336f8772274af36a541a7a0a",
   "outer_ceiling_seconds": 2400,
+  "owner_interactive_protocol_qualified": true,
   "private_acceptance": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-20261008/complete.json"
@@ -107,6 +108,10 @@ and failure behavior are unchanged.
   },
   "private_ingress_sha256": "cbc81159b1505fd566625062517bb18dd8d4706cd30b0e334e7fdceec659f21a",
   "private_origin": "https://app.quillmd.com:9443",
+  "private_owner_interactive_cohort": {
+    "binding": "private-acceptance-completion-cross-hashes-v1",
+    "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/owner-interactive-comparison-cohort.json"
+  },
   "private_phase_preservation": {
     "binding": "private-acceptance-completion-cross-hashes-v1",
     "path": "/opt/meddoc-pro/rebuild/.runtime/owner-demo-20261006/installed-acceptance-v4-preparation-20261008/co-tenant-phase-preservation.json"
@@ -154,7 +159,7 @@ and failure behavior are unchanged.
   "served_verification_protocol_qualified": true,
   "session_completion_reserve_seconds": 60,
   "session_forward_reserve_seconds": 600,
-  "source_base": "4b037b171c2a732ff74c65fc8a276ca5abd60169"
+  "source_base": "e06eb464103fd7fc6f08ab74c204223101c639ec"
 }
 ```
 
@@ -545,3 +550,32 @@ anonymous packet, all original 36-table and 67-file checks, MFA and session
 lifetime checks, budget and actual model admission remain unchanged. This
 source integration records no diagnostic execution, completed private campaign,
 normal publication, authenticated GET or provider response.
+
+8 October owner-use reconciliation: the owner's recorded confirmation identifies
+the 06:02–06:06 interactive use separately from this acceptance campaign. The
+original encrypted capture and failure records remain intact. Acceptance derives
+a named comparison cohort containing only the exact 43 added rows, eight changed
+rows and three added files bound to that confirmation and retained hash evidence.
+It independently authenticates the historical 212 sessions and 67 references;
+the comparison cohort has 214 sessions and 70 references. This does not certify
+the owner's session as MFA or authorize additional future differences.
+
+Normal publication now retains the exact encrypted cohort packet as an immutable
+private input. Its full byte hash, closed header and original acceptance phase
+binding must agree with final authority, both admissions, the independent report
+and completion. The source-authenticated acceptance API validates its public
+scope, and the existing final verifier decrypts and reconstructs the exact cohort
+before source or service actions. Every later private-input check rereads those
+same packet bytes. No fresh baseline is captured, historical evidence is not
+renamed, and no additional authentication, provider call, retry, migration or
+VoiceAssistMain action is introduced. The new normal qualification is false
+until affected controls and finished-diff refutation pass.
+
+
+8 October 2026 source qualification: the finished owner comparison integration
+passed 93 affected controls and independent 30 binding and seven actual memory
+consumer controls. It now binds the separately committed operations ancestor
+`e06eb464103fd7fc6f08ab74c204223101c639ec`; all earlier source references remain historical.
+Qualification records source checks only. The operations ancestor, integration
+head and actual merge still require closed citations before native operations.
+No diagnostic execution, acceptance completion or HTTPS publication is claimed.
