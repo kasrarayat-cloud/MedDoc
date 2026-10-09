@@ -1,6 +1,7 @@
 """Product role protocol and historical evidence compatibility; no live calls."""
 from copy import deepcopy
 from decimal import Decimal
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -132,6 +133,99 @@ class TypedRoleProductTests(SimpleTestCase):
             validate_role(value, json.loads(raw), role)
             observed.assert_called_once()
             self.assertEqual(evidence['model'], 'offline-stub-returned-model')
+
+    def underscore_source(self):
+        document=Document()
+        for text in ['Synthetic underscore form',
+                'Choose one listed option for Fever. Preserve °C. Patient signature must remain blank.',
+                'Patient name: ____________________','Date of birth: __________',
+                'Temperature: ______ °C','Fever: Yes / No ______','Patient signature: ____________________']:
+            document.add_paragraph(text)
+        document.save(self.path)
+        return inventory(self.path,protocol=TYPED_PROTOCOL)
+
+    def test_canonical_text_and_dob_uncertainty_refuse_the_retained_failure_counterexample(self):
+        # Actual failed response is retained unchanged under its SHA-256:
+        # 6ff0708d23b08c2a5d994caa78bd323b8b06a7f4507f25b91a918fa105e773f7.
+        # Reproduce its two wrong uncertainty values against equivalent source;
+        # this is not a rewrite or successful replay of that paid response.
+        value=self.underscore_source()
+        self.assertEqual(value['questions'][0]['answer_constraints'],{'version':1,'data_type':'text'})
+        self.assertEqual(value['questions'][1]['answer_constraints'],{'version':1,'data_type':'text'})
+        for role in ['proposer','checker']:
+            result,_=preparation.provider_role(value,role,self.config,1)
+            validate_role(value,result,role)
+            for index in [0,1]:
+                metadata=result['anchors'][index]['metadata']
+                self.assertEqual(metadata,{'label':'Patient name' if index==0 else 'Date of birth',
+                    'data_type':'text','unit':None,'choices':[],'destination':'a'+str(index+1),
+                    'uncertainty':'constraints_unstated'})
+                wrong=deepcopy(result);wrong['anchors'][index]['metadata']['uncertainty']='none'
+                with self.subTest(role=role,index=index),self.assertRaisesMessage(ValueError,
+                        'The proposed field metadata differs from the original question, constraints or protection.'):
+                    validate_role(value,wrong,role)
+            self.assertEqual(result['anchors'][2]['metadata']['data_type'],'number')
+            self.assertEqual(result['anchors'][2]['metadata']['unit'],'°C')
+            self.assertEqual(result['anchors'][2]['metadata']['uncertainty'],'none')
+            self.assertEqual(result['anchors'][3]['metadata']['choices'],['Yes','No'])
+            self.assertEqual(result['anchors'][3]['metadata']['uncertainty'],'none')
+            self.assertEqual(result['anchors'][4]['metadata']['uncertainty'],'signing_protected')
+            for index,change in [(1,{'data_type':'date'}),(2,{'unit':'°F'}),
+                    (3,{'choices':['Yes','No','Unknown']}),(4,{'uncertainty':'constraints_unstated'})]:
+                wrong=deepcopy(result);wrong['anchors'][index]['metadata'].update(change)
+                with self.subTest(role=role,index=index,change=change),self.assertRaises(ValueError):
+                    validate_role(value,wrong,role)
+
+    def test_actual_sdk_requests_explain_text_uncertainty_to_both_roles_and_preserve_v1(self):
+        import httpx
+        from anthropic import Anthropic
+        value=self.underscore_source()
+        proposal,_=preparation.provider_role(value,'proposer',self.config,1)
+        historical=inventory(self.path)
+        for source in [value,historical]:
+            for role in ['proposer','checker']:
+                fixture,_=preparation.provider_role(source,role,self.config,1)
+                sent=[]
+                def handle(request):
+                    self.assertEqual(request.url.host,'synthetic-provider.invalid')
+                    self.assertEqual(request.url.path,'/v1/messages')
+                    sent.append(json.loads(request.content))
+                    return httpx.Response(200,headers={'request-id':'offline-request'},json={
+                        'id':'offline-response','type':'message','role':'assistant','model':'offline-returned-model',
+                        'content':[{'type':'text','text':json.dumps(fixture)}],'stop_reason':'end_turn',
+                        'stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':20}})
+                with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+                    client=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
+                        http_client=http,timeout=7,max_retries=0)
+                    with patch('anthropic.Anthropic',return_value=client) as constructor:
+                        raw,evidence=preparation.provider_role(source,role,{**self.config,'mode':'live'},7,
+                            proposal if role=='checker' and source is value else None)
+                constructor.assert_called_once_with(timeout=7,max_retries=0)
+                self.assertEqual(len(sent),1)
+                body=sent[0];payload=json.loads(body['messages'][0]['content'])
+                self.assertEqual(body['model'],self.config['model'])
+                self.assertEqual(payload['original'],preparation.model_inventory(source))
+                self.assertEqual(payload['role'],role)
+                validate_role(source,json.loads(raw),role)
+                self.assertFalse(evidence['simulated'])
+                self.assertEqual(evidence['model'],'offline-returned-model')
+                if source is value:
+                    prompt=body['system']
+                    self.assertIn('version 1 and data_type text',prompt)
+                    self.assertIn('does not justify uncertainty none',prompt)
+                    self.assertIn('Date of birth label without a printed format remains text with constraints_unstated',prompt)
+                    self.assertLess(prompt.index('(1) Signing'),prompt.index('(2) Ambiguous'))
+                    self.assertLess(prompt.index('(2) Ambiguous'),prompt.index('(3) If the original inventory has issues'))
+                    self.assertLess(prompt.index('(3) If the original inventory has issues'),prompt.index('(4) Otherwise every source text'))
+                    self.assertIn('use uncertainty none',prompt)
+                    self.assertEqual(payload['original']['questions'][1]['answer_constraints'],
+                        {'version':1,'data_type':'text'})
+                    self.assertNotIn('format',payload['original']['questions'][1]['answer_constraints'])
+                    self.assertTrue(payload['original']['anchors'][4]['protected_signing'])
+                    if role=='checker':self.assertEqual(payload['proposal'],proposal)
+                else:
+                    self.assertNotIn('Apply uncertainty in this exact priority order',body['system'])
+                    self.assertFalse(any('metadata' in row for row in json.loads(raw)['anchors']))
 
     def test_metadata_display_escapes_untrusted_original_and_shows_uncertainty(self):
         metadata = {'label': '<script>original text</script>', 'data_type': 'number', 'unit': '°C',
