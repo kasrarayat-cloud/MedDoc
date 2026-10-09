@@ -68,9 +68,12 @@ class StandingBackupPostgresTests(TransactionTestCase):
         job.refresh_from_db()
         actual = Decimal('0') if simulated else Decimal('0.10')
         provider = 'deepgram:returned-asr-model' if kind == 'transcription' else 'anthropic:returned-model'
-        units = {'seconds':'10.060'} if kind == 'transcription' else {'input_tokens':100, 'output_tokens':20}
-        rates = {'per_minute':'0.0043'} if kind == 'transcription' else {'input_per_million':'3', 'output_per_million':'15'}
+        units = {'duration_seconds':'10.060'} if kind == 'transcription' else {'input_tokens':100, 'output_tokens':20}
+        rates = {'usd_per_minute':'0.0043'} if kind == 'transcription' else {'input_per_million':'3', 'output_per_million':'15'}
         request_id, resource_id = 'req-'+str(job.pk), 'resource-'+str(job.pk)
+        if simulated:
+            # Actual extractive fixture return shape (generation.generate).
+            units,rates,provider,request_id,resource_id={}, {},'synthetic-extractive-fixture','',''
         ProviderReceipt.objects.create(job=job, provider=provider, provider_request_id=request_id,
             provider_resource_id=resource_id, units=units, rates=rates, actual_cost=actual, simulated=simulated)
         usage = billing.settle(job, actual, units, rates, provider, request_id, simulated, resource_id)
@@ -261,4 +264,71 @@ class StandingBackupPostgresTests(TransactionTestCase):
         self.assertEqual(after,before)
         self.assertEqual(after['state'],'unknown')
         self.assertEqual(after['quote_maximum'],Decimal('0.10'))
+
+    def corrupt_metering(self, field, value):
+        with self.shadow('core_usage','core_providerreceipt'):
+            with connection.cursor() as cursor:
+                for table in ['core_usage','core_providerreceipt']:
+                    cast='::jsonb' if field in ('units','rates') else ''
+                    parameter=json.dumps(value) if cast else value
+                    cursor.execute(f'UPDATE {table} SET {field}=%s{cast}',(parameter,))
+            self.assertEqual(self.query(backup._STANDING_USAGE_INVARIANT)[0][0],1)
+            with self.assertRaisesMessage(RuntimeError,'Database invariants failed'):
+                backup.invariant_counts(self.query)
+        self.assert_clean()
+
+    def test_matching_absent_or_invalid_live_metering_is_still_refused(self):
+        self.sponsored()
+        for field in ['units','rates']:
+            for value in [None,[],{},'not an object']:
+                with self.subTest(field=field,value=value):
+                    self.corrupt_metering(field,value)
+        for value in ['', '   ', '\t\n', 'anthropic:', 'deepgram:wrong-kind']:
+            self.corrupt_metering('provider',value)
+        for value in [None,True,-1,1.5,'NaN','Infinity','1e1000','1'*21,{},[]]:
+            self.corrupt_metering('units',{'input_tokens':value,'output_tokens':20})
+        for value in [None,True,-1,'-0.1','NaN','Infinity','1e1000','1'*101,{},[]]:
+            self.corrupt_metering('rates',{'input_per_million':value,'output_per_million':'15'})
+        self.corrupt_metering('units',{'input_tokens':100,'output_tokens':20,'cached_input_tokens':-1})
+        self.corrupt_metering('rates',{'input_per_million':'3','output_per_million':'15','cached_per_million':None})
+        self.corrupt_metering('actual_cost',Decimal('NaN'))
+
+    def test_asr_requires_duration_and_rate_but_provider_identifiers_may_be_absent(self):
+        self.sponsored('transcription')
+        for field,key in [('units','duration_seconds'),('rates','usd_per_minute')]:
+            for value in [None,True,-1,'-0.1','NaN','Infinity','1e1000','1'*101,{},[]]:
+                with self.subTest(field=field,value=value):
+                    self.corrupt_metering(field,{key:value})
+        self.corrupt_metering('units',{'seconds':'10.060'})
+        self.corrupt_metering('rates',{'per_minute':'0.0043'})
+        with self.shadow('core_usage','core_providerreceipt'):
+            with connection.cursor() as cursor:
+                for table in ['core_usage','core_providerreceipt']:
+                    cursor.execute(f"UPDATE {table} SET provider_request_id='',provider_resource_id=''")
+            self.assert_clean()
+        # Finite scientific notation and nonnegative zero are real Decimal
+        # representations; these are evidence bounds, not a funding ceiling.
+        with self.shadow('core_usage','core_providerreceipt'):
+            with connection.cursor() as cursor:
+                for table in ['core_usage','core_providerreceipt']:
+                    cursor.execute(f'''UPDATE {table} SET units='{{"duration_seconds":"-0"}}'::jsonb,
+                        rates='{{"usd_per_minute":"4.3E-3"}}'::jsonb''')
+            self.assert_clean()
+
+    def test_zero_cost_fixture_needs_objects_and_nonblank_label_but_no_live_meters(self):
+        self.sponsored(simulated=True)
+        self.assert_clean()
+        for field in ['units','rates']:
+            for value in [None,[],False]:
+                self.corrupt_metering(field,value)
+        self.corrupt_metering('provider',' \t\n')
+
+    def test_whitespace_only_reconciliation_evidence_is_refused(self):
+        _,usage=self.sponsored()
+        billing.reconcile_usage(usage,Decimal('0.15'),'synthetic-unclassified',self.doctor)
+        self.assert_clean()
+        for value in ['   ','\t\n',' \r\n\t ']:
+            self.corrupt('core_costreconciliation','UPDATE core_costreconciliation SET evidence_reference=%s',(value,))
+        for field in ['reconciled_cost','provider_credit_applied','discount_applied']:
+            self.corrupt('core_costreconciliation',f'UPDATE core_costreconciliation SET {field}=%s',(Decimal('NaN'),))
 

@@ -70,15 +70,41 @@ _STANDING_USAGE_VALID = r"""
     AND u.user_id=j.user_id AND e.created_by_id=j.user_id
     AND u.department_id=e.department_id AND u.organization_id=d.organization_id
     AND j.payer='standing:quillmd-standing-testing-20261009-v1' AND u.payer=j.payer
-    AND u.actual_cost>=0 AND u.charged_cost=0
+    AND u.actual_cost>=0 AND u.actual_cost<'Infinity'::numeric AND u.charged_cost=0
     AND p.provider=u.provider AND p.provider_request_id=u.provider_request_id AND p.provider_resource_id=u.provider_resource_id
     AND p.units=u.units AND p.rates=u.rates AND p.actual_cost=u.actual_cost AND p.simulated=u.simulated
+    AND u.provider ~ '[^[:space:]]'
+    AND jsonb_typeof(u.units)='object' AND jsonb_typeof(u.rates)='object'
+    AND (u.simulated OR (
+      ((j.kind='generation' AND u.provider ~ '^(anthropic|openai):[^[:space:]]'
+        AND u.units ?& ARRAY['input_tokens','output_tokens']
+        AND u.rates ?& ARRAY['input_per_million','output_per_million'])
+       OR (j.kind='transcription' AND u.provider ~ '^deepgram:[^[:space:]]'
+        AND u.units ? 'duration_seconds' AND u.rates ? 'usd_per_minute'))
+      AND NOT EXISTS(SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(u.units)='object' THEN u.units ELSE '{}'::jsonb END) meter
+        WHERE j.kind='generation' AND meter.key IN ('input_tokens','output_tokens','cached_input_tokens','cache_creation_tokens')
+          AND (jsonb_typeof(meter.value) IN ('number','string')
+            AND length(meter.value#>>'{}') BETWEEN 1 AND 20
+            AND meter.value#>>'{}' ~ '^[+]?[0-9]+$') IS NOT TRUE)
+      AND NOT EXISTS(SELECT 1 FROM (
+          SELECT meter.value FROM jsonb_each(CASE WHEN jsonb_typeof(u.rates)='object' THEN u.rates ELSE '{}'::jsonb END) meter
+            WHERE (j.kind='generation' AND meter.key IN ('input_per_million','output_per_million','cached_per_million'))
+               OR (j.kind='transcription' AND meter.key='usd_per_minute')
+          UNION ALL
+          SELECT u.units->'duration_seconds' WHERE j.kind='transcription'
+        ) meter WHERE (CASE WHEN jsonb_typeof(meter.value) IN ('number','string')
+          AND length(meter.value#>>'{}') BETWEEN 1 AND 100
+          AND meter.value#>>'{}' ~ '^[+-]?[0-9]+([.][0-9]+)?([eE][+-]?[0-9]{1,3})?$'
+          THEN (meter.value#>>'{}')::numeric>=0 ELSE false END) IS NOT TRUE)
+    ))
     AND u.simulated=(j.config->>'mode'='fixture')
     AND (NOT u.simulated OR (u.actual_cost=0 AND r.quoted_provider_cost=0))
     AND NOT EXISTS(SELECT 1 FROM core_reservation w WHERE w.job_id=u.job_id)
     AND NOT EXISTS(SELECT 1 FROM core_ledgerentry l WHERE l.job_id=u.job_id)
-    AND (c.id IS NULL OR (c.reconciled_cost>=0 AND c.provider_credit_applied>=0 AND c.discount_applied>=0
-      AND c.evidence_kind IN ('unclassified','provider_report','invoice') AND c.evidence_reference<>''
+    AND (c.id IS NULL OR (c.reconciled_cost>=0 AND c.reconciled_cost<'Infinity'::numeric
+      AND c.provider_credit_applied>=0 AND c.provider_credit_applied<'Infinity'::numeric
+      AND c.discount_applied>=0 AND c.discount_applied<'Infinity'::numeric
+      AND c.evidence_kind IN ('unclassified','provider_report','invoice') AND c.evidence_reference ~ '[^[:space:]]'
       AND c.charge_delta=0 AND c.over_limit_delta=0
       AND (c.ledger_status='applied' OR (c.ledger_status='absorbed'
         AND EXISTS(SELECT 1 FROM core_platformcost a WHERE a.job_id=u.job_id AND a.kind='absorbed_failure')))))
