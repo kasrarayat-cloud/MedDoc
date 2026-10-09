@@ -16,6 +16,25 @@ the concrete migration/functions/tables/grants against the finished candidate
 before applying only the observed unapplied node. No replay, reset or change to
 historical row contents. No old finite approval becomes new authority.
 
+Concrete schema delta: apply only `0024_standing_testing_authority` through
+MigrationExecutor in one transaction, with no manual post-migrate signals. Add
+the initially empty `core_testingreservation` table, its declared constraints and
+indexes, five standing-authority guard functions and five enabled triggers.
+Replace only the three named preparation admission function bodies and the
+`preparation_receipt_role_cap` constraint; the retained finite branches keep their
+original limits. All 38 original tables retain their rows and ACLs, except one
+new `django_migrations` row and one corresponding sequence advance. No new
+content-type or permission rows are expected. Compare the complete definitions,
+trigger bindings, columns and grants against the independently qualified actual
+PostgreSQL 17 catalog before starting services.
+
+After stopping and draining the three QuillMD units, take the fresh encrypted
+backup and unchanged-data baseline. Compare through migration while services
+remain stopped. After starts, verify installed controls and serving identity;
+ordinary authorized browser-session refreshes are outside the drained comparison
+window. This sequencing retains meaningful checks without treating an owner's
+independent page view as a migration's data change.
+
 Capture a fresh authenticated encrypted backup and an operation-local baseline
 under the existing activation exclusion. Preserve original baselines, failures,
 accounting, all existing data/schema grants except the specifically declared

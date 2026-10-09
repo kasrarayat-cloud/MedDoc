@@ -51,7 +51,10 @@ def campaign_identity(config):
 
 def active_campaign_config(base, source_sha256=None):
     """Explicit opt-in only; forms and authority are fixed, never env-provided caps."""
-    result = dict(base)
+    from . import testing_authority
+    result = testing_authority.active_config(dict(base), 'preparation')
+    if testing_authority.identity(result):
+        return result
     campaign_identity(result)
     name = getattr(settings, 'WORD_PREPARATION_CAMPAIGN', '')
     scope = getattr(settings, 'WORD_PREPARATION_CAMPAIGN_SCOPE_SHA256', '')
@@ -72,13 +75,15 @@ def active_campaign_config(base, source_sha256=None):
 
 def legacy_preparations(queryset):
     """Preserve the legacy 8/14 limits without counting the separate campaign."""
-    for key in DISCRIMINATORS:
+    from .testing_authority import KEYS
+    for key in DISCRIMINATORS | KEYS:
         queryset = queryset.exclude(**{'config__has_key': key})
     return queryset
 
 
 def legacy_receipts(queryset):
-    for key in DISCRIMINATORS:
+    from .testing_authority import KEYS
+    for key in DISCRIMINATORS | KEYS:
         queryset = queryset.exclude(**{'preparation__config__has_key': key})
     return queryset
 
@@ -172,6 +177,10 @@ def _job_quote(config):
 def campaign_job_config(base, kind):
     if kind not in JOB_LIMITS:
         raise ValidationError('This job kind is outside the delivery campaign.')
+    from . import testing_authority
+    result = testing_authority.active_config(base, kind)
+    if testing_authority.identity(result):
+        return result
     result = active_campaign_config(base)
     if campaign_identity(result) is not None:
         result['campaign_quote_usd'] = str(JOB_QUOTE_LIMIT)
@@ -211,6 +220,11 @@ def provider_slot(config):
     Session advisory locks cover the actual request, not just the reservation.
     Failure to acquire refuses immediately; it cannot silently retry a send.
     """
+    from . import testing_authority
+    if testing_authority.identity(config):
+        with testing_authority.provider_slot(config):
+            yield
+        return
     if campaign_identity(config) is None:
         yield
         return

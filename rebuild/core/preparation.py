@@ -201,11 +201,15 @@ def call_role(prep, role, deadline, proposal=None):
     payload = role_payload(prep.inventory, role, proposal)
     max_output,limit=role_limits(prep.inventory)
     quoted = maximum_cost(payload, prep.config,max_output)
-    if quoted > limit: raise DocumentError('This form exceeds the per-role preparation budget.', 'budget_limit')
+    from . import testing_authority
+    standing = testing_authority.identity(prep.config) is not None
+    if not standing and quoted > limit: raise DocumentError('This form exceeds the per-role preparation budget.', 'budget_limit')
     remaining = deadline-time.monotonic()
     if remaining < 3: raise DocumentError('Preparation reached its time limit.', 'deadline')
     from .preparation_campaign import campaign_identity,legacy_receipts,reserve_campaign_role,provider_slot
-    if campaign_identity(prep.config) is not None:
+    if standing:
+        receipt=testing_authority.reserve_role(prep,role,digest(payload),quoted)
+    elif campaign_identity(prep.config) is not None:
         receipt=reserve_campaign_role(prep,role,digest(payload),limit)
     else:
         legacy=legacy_receipts(PreparationReceipt.objects)
@@ -244,7 +248,7 @@ def call_role(prep, role, deadline, proposal=None):
             receipt.provider_resource_id=evidence['resource_id']; receipt.usage=evidence['usage']
             receipt.rates=evidence['rates']; receipt.computed_cost=Decimal(evidence['cost']); receipt.simulated=evidence['simulated']
             receipt.state='responded'; receipt.save()
-        if receipt.computed_cost > limit: raise DocumentError('The returned usage exceeds its reserved cap.', 'budget_limit')
+        if not standing and receipt.computed_cost > limit: raise DocumentError('The returned usage exceeds its reserved cap.', 'budget_limit')
         if isinstance(response, str): response=json.loads(response)
         stage='proposal_validation'
         validate_role(prep.inventory, response, role)
@@ -273,6 +277,9 @@ def create_preparation(template, actor):
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
     config={**config, 'word_preparation_protocol': TYPED_PROTOCOL}
+    from . import testing_authority
+    if testing_authority.identity(config):
+        return testing_authority.create_preparation(template,actor,config)
     if campaign_identity(config) is not None:
         return create_campaign_preparation(template,actor,config)
     legacy=legacy_preparations(TemplatePreparation.objects)

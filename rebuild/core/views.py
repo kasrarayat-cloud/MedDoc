@@ -460,6 +460,14 @@ def encounter_detail(request,pk):
     from .generation import maximum_cost,configuration
     try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
     except ValidationError:maximum_charge=None
+    from . import testing_authority
+    standing_testing=False
+    try:
+        if testing_authority.enabled():
+            testing_authority.admit_actor(request.user,e.department_id)
+            standing_testing=True
+    except (ValidationError,PermissionDenied):
+        pass
     audit(request.user,'encounter.view',e.pk,department=e.department)
     # Billing boundary: earlier charged requests (successes, and successes the user's own state declined) stay charged, so a
     # further request is disclosed as separately billable. The doctor reads the classification in words, is offered cancel only
@@ -482,7 +490,8 @@ def encounter_detail(request,pk):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
     return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':VoiceForm(),'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
-        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split())})
+        'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
+        'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None})
 
 @require_POST
 def generate_view(request,pk):
@@ -862,7 +871,11 @@ def voice(request,pk):
             # removed above. Nothing was sent to the provider and nothing was charged again.
             messages.info(request,'This recording was already transcribed for this document. No new request was made and nothing was charged. Its transcript is below in Document record.')
         else:
-            messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
+            from .testing_authority import identity
+            if identity(job.config):
+                messages.success(request,f"Sponsored test transcription queued. Estimated provider cost: ${job.config['testing_quote_usd']}; account charge: $0. Review the transcript before generating answers.")
+            else:
+                messages.success(request,f"Transcription queued with a limit of ${Decimal(job.config.get('charge_limit','0'))}. Review the transcript before generating answers.")
     except ValidationError as exc:
         if relative:private_path(relative).unlink(missing_ok=True)
         messages.error(request,error_message(exc))

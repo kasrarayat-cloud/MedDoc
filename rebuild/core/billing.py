@@ -71,6 +71,10 @@ def reserve(job,maximum_cost=None,*,charge_limit=None):
     job=Job.objects.select_for_update().get(pk=job.pk)
     maximum_charge=exact(charge_limit) if charge_limit is not None else exact(maximum_cost)*MULTIPLIER
     if maximum_charge<0: raise ValidationError('A charge limit cannot be negative.')
+    from . import testing_authority
+    if testing_authority.identity(job.config):
+        testing_authority.reserve_job(job, maximum_charge/MULTIPLIER)
+        return
     if Reservation.objects.filter(job=job).exists(): return
     department=job.encounter.department
     promo,payer=payer_wallets(job.user,department)
@@ -101,6 +105,9 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
     if existing: return existing
     actual=exact(actual_cost)
     if simulated and actual!=0: raise ValidationError('Simulated integrations cannot create billable cost.')
+    from . import testing_authority
+    if testing_authority.identity(job.config):
+        return testing_authority.settle_job(job,actual,units,rates,provider,provider_request_id,simulated,provider_resource_id)
     uncapped=exact(actual*MULTIPLIER)
     reservations=list(Reservation.objects.select_for_update().filter(job=job,state='held').select_related('wallet').order_by('wallet_id'))
     held=sum((r.amount for r in reservations),ZERO)
@@ -135,7 +142,11 @@ def settle(job,actual_cost,units,rates,provider,provider_request_id='',simulated
 @transaction.atomic
 def release(job):
     from .models import Job
-    Job.objects.select_for_update().get(pk=job.pk)
+    job=Job.objects.select_for_update().get(pk=job.pk)
+    from . import testing_authority
+    if testing_authority.identity(job.config):
+        testing_authority.release_job(job)
+        return
     reservations=list(Reservation.objects.select_for_update().filter(job=job,state='held').order_by('wallet_id'))
     wallets={w.pk:w for w in Wallet.objects.select_for_update().filter(pk__in=[r.wallet_id for r in reservations]).order_by('pk')}
     for r in reservations:
@@ -253,11 +264,13 @@ def reconcile_usage(usage,reconciled_cost,evidence_reference,actor,provider_cred
     if len(note)>240: raise ValidationError('Note is limited to 240 characters.')
     # The customer's total never exceeds the limit they approved (the settled holds): evidence of a higher provider cost raises the
     # customer charge only up to that limit, and moves the absorbed amount for the rest. Rows without a hold keep plain 1.5×.
-    limit=customer_limit(usage)
+    from .testing_authority import identity
+    standing=identity(usage.job.config) is not None
+    limit=ZERO if standing else customer_limit(usage)
     uncapped_before=signed_exact(usage.actual_cost*MULTIPLIER); uncapped_after=signed_exact(reconciled*MULTIPLIER)
     customer_after=min(uncapped_after,limit) if limit is not None else uncapped_after
     delta=customer_after-usage.charged_cost
-    over_limit_delta=(uncapped_after-customer_after)-(uncapped_before-usage.charged_cost)
+    over_limit_delta=ZERO if standing else (uncapped_after-customer_after)-(uncapped_before-usage.charged_cost)
     row=CostReconciliation(usage=usage,evidence_kind=evidence_kind,reconciled_cost=reconciled,provider_credit_applied=credit,discount_applied=discount,evidence_reference=evidence_reference,evidence_sha256=evidence_sha256,recorded_by=actor,note=note,charge_delta=delta,over_limit_delta=over_limit_delta,ledger_status='applied')
     absorbed=LedgerEntry.objects.filter(job_id=usage.job_id,kind='absorbed').exists() or PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_failure').exists()
     if absorbed:
