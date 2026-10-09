@@ -63,7 +63,10 @@ def role_limits(inventory):
             and inventory['document_backend'].get('source_sha256')==WM_IOV_SHA256
             and all(a['kind']=='existing' for a in inventory['anchors'])):
         if inventory['protocol'] == TYPED_PROTOCOL:
-            return 12000,Decimal('0.30')
+            # The complete typed WM response exhausted 12,000 tokens with all
+            # 90 fields but only four of 16 story checks. Scope the measured
+            # output allowance to the same fully qualified deadline profile.
+            return (16000 if timing_limits(inventory)==(120,360) else 12000),Decimal('0.30')
         return 6000,Decimal('0.16')
     return MAX_OUTPUT,ROLE_LIMIT
 
