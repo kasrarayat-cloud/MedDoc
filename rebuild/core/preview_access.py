@@ -179,14 +179,21 @@ class PreviewAccessMiddleware:
         enabled = settings.QUILLMD_PREVIEW_AUTH_ENABLED and not settings.ADMIN_SITE
         normal = host in {OWNER_NORMAL_HOST, OWNER_NORMAL_HOST + ':443'}
         opaque_word_asset = normal and request.method in {'GET', 'HEAD'} and request.path in OPAQUE_WORD_ASSETS
+        normal_browser_entry = False
         if host in {'admin.quillmd.com', 'admin.quillmd.com:443'}:
             return owner_maintenance(admin=True)
         if normal:
             if (host != OWNER_NORMAL_HOST or not OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED
                     or not getattr(settings, 'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', False)
-                    or not enabled or marker != '1' or not request.is_secure()
-                    or request.path in {SIGN_IN, SIGN_OUT}
-                    or (not opaque_word_asset and not existing_owner_grant(request))):
+                    or not enabled or marker != '1' or not request.is_secure()):
+                return owner_maintenance()
+            gate_route = request.path in {SIGN_IN, SIGN_OUT}
+            gate_style = request.method in {'GET', 'HEAD'} and CSS_PATTERN.fullmatch(request.path)
+            existing_grant = not (gate_route or gate_style or opaque_word_asset) and existing_owner_grant(request)
+            normal_browser_entry = (not existing_grant and not gate_route and not gate_style
+                                    and not opaque_word_asset and request.method in {'GET', 'HEAD'}
+                                    and not api_request(request) and not request.path.startswith('/static/'))
+            if not (gate_route or gate_style or opaque_word_asset or existing_grant or normal_browser_entry):
                 return owner_maintenance()
         public_origin = host == urlsplit(settings.QUILLMD_PREVIEW_ORIGIN).netloc or normal
         if not enabled:
@@ -205,14 +212,18 @@ class PreviewAccessMiddleware:
         elif request.path in {SIGN_IN, SIGN_OUT}:
             response = self.get_response(request)
         else:
-            with preview_store(request, existing_only=normal) as store:
+            with preview_store(request, existing_only=normal and not normal_browser_entry) as store:
                 now = time.time()
                 granted = store is not None and valid_grant(store, now)
                 if granted:
                     store['grant'] = {**store['grant'], 'seen': now}
-                elif normal:
+                elif normal and not normal_browser_entry:
+                    # A grant may expire between the read and locked store. A
+                    # fresh browser can sign in again; never replay a mutation.
+                    if request.method in {'GET', 'HEAD'} and not api_request(request):
+                        return redirect(SIGN_IN)
                     return owner_maintenance()
-                elif request.method == 'GET' and not api_request(request):
+                elif (request.method == 'GET' or (normal and request.method == 'HEAD')) and not api_request(request):
                     destination = request.get_full_path()
                     if not safe_destination(destination):
                         response = error(request, 'This address cannot be resumed. Open the original link again.', status=400)
@@ -255,7 +266,7 @@ class PreviewForm(forms.Form):
     flow = forms.RegexField(regex=r'^[a-f0-9]{32}$', required=False, widget=forms.HiddenInput)
 
 
-@require_http_methods(['GET', 'POST'])
+@require_http_methods(['GET', 'HEAD', 'POST'])
 def sign_in(request):
     if not getattr(request, 'quillmd_preview', False):
         return HttpResponseForbidden('Private preview sign-in is available only at its approved HTTPS address.')
