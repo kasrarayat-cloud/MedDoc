@@ -87,12 +87,12 @@ class OwnerNormalOriginTests(SimpleTestCase):
     def test_missing_malformed_and_unknown_cookie_never_create_a_session(self):
         for cookie in (None, '', 'malformed', 'A' * 32, 'a' * 33):
             with self.subTest(cookie=cookie):
-                request = self.request()
+                request = self.request('/api/patients/')
                 request.COOKIES = {} if cookie is None else {preview.COOKIE: cookie}
                 self.deny(request)
         self.store.assert_not_called()
         self.store.return_value.load.return_value = {}
-        self.deny(self.request())
+        self.deny(self.request('/api/patients/'))
         self.store.assert_called_once_with(session_key='a' * 32)
 
     def test_expired_foreign_rotated_and_corrupted_grants_only_read(self):
@@ -104,11 +104,13 @@ class OwnerNormalOriginTests(SimpleTestCase):
         for value in variants:
             with self.subTest(value=value):
                 self.store.return_value.load.return_value = value
-                self.deny(self.request())
+                self.deny(self.request('/api/patients/'))
 
-    def test_private_entry_and_signout_are_not_public_grant_issuers(self):
+    def test_private_entry_and_signout_reach_the_existing_guarded_views(self):
         for path in (preview.SIGN_IN, preview.SIGN_OUT):
-            self.deny(self.request(path))
+            self.assertEqual(self.respond(self.request(path)).status_code, 200)
+            self.app.assert_called_once()
+            self.app.reset_mock()
         self.store.assert_not_called()
 
     def test_valid_static_read_reaches_same_application_without_store_write(self):
@@ -132,13 +134,16 @@ class OwnerNormalOriginTests(SimpleTestCase):
         self.store.assert_not_called()
 
     def test_renderer_allowance_cannot_admit_other_assets_documents_or_writes(self):
-        paths = ('/', '/login/', '/console/services/', '/templates/preview-frame/',
-                 '/templates/example/original/', '/api/patients/', '/static/app.css',
+        paths = ('/api/patients/',
                  '/static/docx-frame.js', '/static/docx-frame.000000000000.js',
                  '/static/vendor/docx-preview/docx-preview.min.js.map',
                  '/static/docx-frame.fa120285a29f.js/extra')
         for path in paths:
             request = self.request(path); request.COOKIES = {}
+            self.deny(request)
+        for path in ('/', '/login/', '/console/services/', '/templates/preview-frame/',
+                     '/templates/example/original/', '/static/app.css'):
+            request = self.request(path); request.COOKIES = {}; request.method = 'POST'
             self.deny(request)
         for method in ('POST', 'PUT', 'DELETE', 'OPTIONS'):
             request = self.request(next(iter(preview.OPAQUE_WORD_ASSETS)))
@@ -185,7 +190,11 @@ class OwnerNormalOriginTests(SimpleTestCase):
             self.assertTrue(existing_only)
             yield None
         with patch.object(preview, 'preview_store', expired):
-            self.deny(self.request('/login/'))
+            response = self.respond(self.request('/login/'))
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response['Location'], preview.SIGN_IN)
+            self.app.assert_not_called()
+            self.store.return_value.save.assert_not_called()
 
     def test_existing_only_real_context_never_saves_or_replaces_expired_store(self):
         current = MagicMock(); current.get.side_effect = lambda key, default=None: {
