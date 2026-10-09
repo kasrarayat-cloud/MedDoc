@@ -268,7 +268,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
         value=self.wm_inventory()
         before=deepcopy(value)
         self.assertEqual(preparation.timing_limits(value),(120,360))
-        self.assertEqual(preparation.role_limits(value),(12000,Decimal('0.30')))
+        self.assertEqual(preparation.role_limits(value),(16000,Decimal('0.30')))
         self.assertEqual(value,before)
         self.assertEqual(preparation.timing_limits(inventory(self.path,protocol=TYPED_PROTOCOL)),(60,180))
         for changed in ['protocol','source','backend','backend_source','mapping','backend_extra',
@@ -286,6 +286,9 @@ class TypedWMDeadlineTests(SimpleTestCase):
             self.seal(bad)
             with self.subTest(changed=changed):
                 self.assertEqual(preparation.timing_limits(bad),(60,180))
+                old_limit=(6000 if changed=='protocol' else 12000 if changed in {
+                    'mapping','backend_extra','questions','review_requirements','issues'} else 2500)
+                self.assertEqual(preparation.role_limits(bad)[0],old_limit)
         historical=deepcopy(value);historical['protocol']='blank-word-preparation-v1';self.seal(historical)
         self.assertEqual(preparation.role_limits(historical),(6000,Decimal('0.16')))
         bad=deepcopy(value);bad['source_sha256']='0'*64
@@ -327,7 +330,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
                     result=preparation.call_role(packet,role,100+remaining)
                 self.assertEqual(result,fixture);self.assertEqual(len(sent),1)
                 self.assertEqual(clients[0].max_retries,0)
-                self.assertEqual(sent[0]['max_tokens'],12000 if value is wm else 2500)
+                self.assertEqual(sent[0]['max_tokens'],16000 if value is wm else 2500)
                 self.assertEqual(sent[0]['output_config']['format']['schema'],
                     transform_schema(preparation.role_schema(role,TYPED_PROTOCOL)))
                 prompts.append((role,sent[0]['system']))
@@ -335,6 +338,78 @@ class TypedWMDeadlineTests(SimpleTestCase):
                 self.assertEqual(value,before)
         for role in ['proposer','checker']:
             self.assertEqual(len({prompt for item,prompt in prompts if item==role}),1)
+
+    def test_complete_wm_output_still_requires_every_source_metadata_row_and_story(self):
+        value=self.wm_inventory()
+        for role in ['proposer','checker']:
+            response,_=preparation.provider_role(value,role,self.config,1)
+            self.assertEqual(len(response['anchors']),90);self.assertEqual(len(response['stories']),16)
+            self.assertEqual(validate_role(value,response,role),response)
+            for mutation in ['missing_anchor','duplicate_anchor','missing_story','duplicate_story',
+                    'label','destination','invented_unit','invented_choice','invented_type','lost_uncertainty']:
+                bad=deepcopy(response)
+                if mutation=='missing_anchor':bad['anchors'].pop()
+                elif mutation=='duplicate_anchor':bad['anchors'][1]=deepcopy(bad['anchors'][0])
+                elif mutation=='missing_story':bad['stories'].pop()
+                elif mutation=='duplicate_story':bad['stories'][1]=deepcopy(bad['stories'][0])
+                else:
+                    key,changed={'label':('label','Different question'),'destination':('destination','other'),
+                        'invented_unit':('unit','°C'),'invented_choice':('choices',['Yes','No']),
+                        'invented_type':('data_type','date'),'lost_uncertainty':('uncertainty','none')}[mutation]
+                    bad['anchors'][0]['metadata'][key]=changed
+                with self.subTest(role=role,mutation=mutation),self.assertRaises(ValueError):
+                    validate_role(value,bad,role)
+
+    def test_actual_sdk_truncated_output_retains_known_response_usage_and_failure(self):
+        import httpx
+        from anthropic import Anthropic
+        from django.core.exceptions import ValidationError
+        value=self.wm_inventory();fixture,_=preparation.provider_role(value,'proposer',self.config,1)
+        text=json.dumps(fixture,separators=(',',':'))
+        # A synthetic equivalent of the retained live failure: all90 complete
+        # anchors, four complete stories, then an unterminated fifth digest.
+        needle='"content_sha256":"'+fixture['stories'][4]['content_sha256']
+        fifth=text.index('"story_id":"'+fixture['stories'][4]['story_id']+'"')
+        cut=text.index(needle,fifth)+len('"content_sha256":"')+14
+        truncated=text[:cut]
+        with self.assertRaises(json.JSONDecodeError):json.loads(truncated)
+        receipt=self.receipt();packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
+        receipt.quote_maximum=preparation.maximum_cost(preparation.role_payload(value,'proposer'),packet.config,16000)
+        quote=receipt.quote_maximum;sent=[];retained=[]
+        def handle(request):
+            self.assertEqual(json.loads(request.content)['max_tokens'],16000);sent.append(request)
+            return httpx.Response(200,headers={'request-id':'offline-truncated-request'},json={
+                'id':'offline-truncated-response','type':'message','role':'assistant','model':'offline-returned-model',
+                'content':[{'type':'text','text':truncated}],'stop_reason':'max_tokens','stop_sequence':None,
+                'usage':{'input_tokens':20566,'output_tokens':16000,
+                         'output_tokens_details':{'thinking_tokens':1937}}})
+        def retain(*args):
+            retained.append(deepcopy(args[-1]));return 'offline-retained.json','c'*64
+        with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+            client=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
+                http_client=http,timeout=120,max_retries=0)
+            with patch('anthropic.Anthropic',return_value=client), \
+                    patch('core.testing_authority.identity',return_value=True), \
+                    patch('core.testing_authority.reserve_role',side_effect=[receipt,ValidationError('Role already reserved')]) as reserve, \
+                    patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
+                    patch.object(preparation,'retain_response',side_effect=retain), \
+                    patch.object(preparation.time,'monotonic',return_value=100):
+                with self.assertRaises(json.JSONDecodeError):preparation.call_role(packet,'proposer',460)
+                frozen=(receipt.state,receipt.quote_maximum,receipt.computed_cost,deepcopy(receipt.failure))
+                with self.assertRaises(ValidationError):preparation.call_role(packet,'proposer',460)
+        self.assertEqual(len(sent),1);self.assertEqual(reserve.call_args_list[0].args[-1],quote)
+        self.assertEqual(receipt.state,'failed');self.assertEqual(receipt.quote_maximum,quote)
+        self.assertEqual(receipt.computed_cost,(Decimal(20566)*3+Decimal(16000)*15)/1000000)
+        self.assertEqual(receipt.returned_model,'offline-returned-model')
+        self.assertEqual(receipt.provider_request_id,'offline-truncated-request')
+        self.assertEqual(receipt.provider_resource_id,'offline-truncated-response')
+        self.assertEqual(receipt.failure['error_class'],'JSONDecodeError')
+        self.assertTrue(receipt.failure['provider_invoked']);self.assertTrue(receipt.failure['response_retained'])
+        self.assertTrue(receipt.failure['usage_established']);self.assertFalse(receipt.failure['automatic_retry'])
+        self.assertEqual(retained[0]['response']['stop_reason'],'max_tokens')
+        self.assertEqual(retained[0]['response']['content'][0]['text'],truncated)
+        self.assertEqual(retained[-1],receipt.failure)
+        self.assertEqual((receipt.state,receipt.quote_maximum,receipt.computed_cost,receipt.failure),frozen)
 
     def test_reservation_and_slot_delay_recheck_the_actual_send_window(self):
         import httpx
