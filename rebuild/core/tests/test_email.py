@@ -120,19 +120,21 @@ class AccountDeliveryTests(TestCase):
         self.addCleanup(self.override.disable)
         self.addCleanup(self.directory.cleanup)
 
-    def registration(self):
-        return self.client.post("/register/", {"email": "newemail@synthetic.invalid", "first_name": "Synthetic", "last_name": "Email", "password1": "Synthetic-Only-4821!private", "password2": "Synthetic-Only-4821!private", "synthetic_only": "on"})
+    def verification_request(self):
+        # Controlled fixture provisioning is distinct from public signup.
+        user = User.objects.create_user(username="newemail", email="newemail@synthetic.invalid",
+            password="Synthetic-Only-4821!private", first_name="Synthetic", last_name="Email")
+        return user, self.client.post("/verification/resend/", {"email": user.email})
 
     @patch("core.email_backend.httpx.post", return_value=httpx.Response(503, json={"message": "synthetic unavailable"}))
-    def test_signup_delivery_failure_keeps_unverified_account_without_500(self, post):
-        response = self.registration()
-        self.assertEqual(response.status_code, 302)
-        user = User.objects.get(email="newemail@synthetic.invalid")
+    def test_verification_delivery_failure_keeps_provisioned_account_without_500(self, post):
+        user, response = self.verification_request()
+        self.assertEqual(response.status_code, 200)
         self.assertIsNone(user.verified_at)
         self.assertEqual(Verification.objects.filter(user=user).count(), 1)
         self.assertFalse(Wallet.objects.filter(user=user).exists())
-        messages = [str(message) for message in get_messages(response.wsgi_request)]
-        self.assertTrue(any("could not be confirmed" in message for message in messages))
+        self.assertContains(response, "If this address is eligible")
+        self.assertNotContains(response, user.email)
         audit = AuditEvent.objects.get(action="email.failed")
         self.assertTrue(audit.details["recovery_staged"])
         self.assertNotIn(user.email, str(audit.details))
@@ -142,12 +144,11 @@ class AccountDeliveryTests(TestCase):
         self.assertEqual(post.call_count, 1)
 
     @patch("core.email_backend.httpx.post", return_value=accepted())
-    def test_signup_acceptance_is_recorded_without_claiming_inbox_delivery(self, post):
-        response = self.registration()
-        self.assertEqual(response.status_code, 302)
-        messages = [str(message) for message in get_messages(response.wsgi_request)]
-        self.assertTrue(any("submitted to the email provider" in message for message in messages))
-        self.assertTrue(any("not yet confirmed" in message for message in messages))
+    def test_verification_acceptance_is_recorded_without_claiming_inbox_delivery(self, post):
+        user, response = self.verification_request()
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "If this address is eligible")
+        self.assertNotContains(response, user.email)
         self.assertEqual(AuditEvent.objects.get(action="email.accepted").details["provider_message_id"], "synthetic-provider-message-id")
         self.assertFalse(Wallet.objects.exists())
 
@@ -168,8 +169,8 @@ class AccountDeliveryTests(TestCase):
 
     @patch("core.email_delivery.PrivateFileEmailBackend", side_effect=OSError("synthetic local storage unavailable"))
     @patch("core.email_backend.httpx.post", side_effect=httpx.ReadTimeout("synthetic provider timeout"))
-    def test_signup_survives_transport_and_recovery_storage_failure(self, post, private_backend):
-        response = self.registration()
-        self.assertEqual(response.status_code, 302)
+    def test_provisioned_account_survives_transport_and_recovery_storage_failure(self, post, private_backend):
+        user, response = self.verification_request()
+        self.assertEqual(response.status_code, 200)
         self.assertFalse(AuditEvent.objects.get(action="email.failed").details["recovery_staged"])
         self.assertEqual(User.objects.filter(email="newemail@synthetic.invalid").count(), 1)

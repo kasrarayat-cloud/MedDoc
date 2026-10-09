@@ -29,7 +29,7 @@ SETTINGS = {
     "QUILLMD_EMAIL_FROM": "QuillMD <verification@synthetic.invalid>",
     "QUILLMD_EMAIL_VERIFIED_DOMAIN": "synthetic.invalid",
     "QUILLMD_RESEND_ENV_FILE": "",
-    "QUILLMD_APP_BASE_URL": "https://app.quillmd.com:9443",
+    "QUILLMD_APP_BASE_URL": "https://app.quillmd.com",
     "QUILLMD_EMAIL_ALLOWED_RECIPIENTS": RECIPIENT,
     "QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME": GATE_USER,
     "QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": GATE_PASSWORD,
@@ -66,15 +66,9 @@ class ControlledPrivateEmailTests(SimpleTestCase):
         post.assert_not_called()
 
     @patch("core.email_backend.httpx.post")
-    def test_partial_or_ambiguous_gate_configuration_never_sends(self, post):
+    def test_malformed_recipient_configuration_never_sends(self, post):
         cases = (
-            {"QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME": ""},
-            {"QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": ""},
-            {"QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME": "bad:username"},
-            {"QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": "short"},
-            {"QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": GATE_PASSWORD + "\n"},
-            {"QUILLMD_EMAIL_ALLOWED_RECIPIENTS": ""},
-            {"QUILLMD_EMAIL_ALLOWED_RECIPIENTS": RECIPIENT + ",another@synthetic.invalid"},
+            {"QUILLMD_EMAIL_ALLOWED_RECIPIENTS": "bad-address"},
             {"QUILLMD_EMAIL_ALLOWED_RECIPIENTS": RECIPIENT + ","},
         )
         for configuration in cases:
@@ -86,12 +80,12 @@ class ControlledPrivateEmailTests(SimpleTestCase):
         post.assert_not_called()
 
     @patch("core.email_backend.httpx.post")
-    def test_private_gate_requires_same_valid_https_application_origin(self, post):
+    def test_email_requires_normal_valid_https_application_origin(self, post):
         for origin in (
             "http://app.quillmd.com:9443", "https://localhost:9443",
             "https://attacker.invalid:9443", "https://user:password@app.quillmd.com:9443",
             "https://app.quillmd.com:wrong", "https://app.quillmd.com:70000",
-            "https://app.quillmd.com:9443/path", "https://app.quillmd.com:9443\n",
+            "https://app.quillmd.com:9443", "https://app.quillmd.com:9443/path", "https://app.quillmd.com:9443\n",
         ):
             with self.subTest(origin=origin), override_settings(QUILLMD_APP_BASE_URL=origin):
                 with self.assertRaises(ImproperlyConfigured):
@@ -100,16 +94,18 @@ class ControlledPrivateEmailTests(SimpleTestCase):
 
     @patch("core.email_delivery.audit")
     @patch("core.email_backend.httpx.post", return_value=accepted())
-    def test_invitation_and_recovery_include_gate_without_rewriting_token_url(self, post, audit):
+    def test_invitation_and_recovery_use_individual_signin_without_shared_credentials(self, post, audit):
         for purpose, route in (("invitation", "invite"), ("recovery", "recovery/confirm")):
             with self.subTest(purpose=purpose):
                 result = deliver_account_email(None, "synthetic-target", RECIPIENT, purpose, "synthetic-token")
                 self.assertEqual(result.status, "accepted")
                 body = post.call_args.kwargs["json"]["text"]
-                self.assertIn(f"https://app.quillmd.com:9443/{route}/synthetic-token/", body)
-                self.assertIn("Username: " + GATE_USER, body)
-                self.assertIn("Password: " + GATE_PASSWORD, body)
-                self.assertIn("separate from your QuillMD account password", body)
+                self.assertIn(f"https://app.quillmd.com/{route}/synthetic-token/", body)
+                self.assertIn("https://app.quillmd.com/login/", body)
+                self.assertIn("account email and password", body)
+                self.assertNotIn(GATE_USER, body)
+                self.assertNotIn(GATE_PASSWORD, body)
+                self.assertNotIn("Private preview", body)
                 self.assertNotIn(GATE_USER + ":" + GATE_PASSWORD + "@", body)
                 details = str(audit.call_args)
                 for sensitive in (GATE_PASSWORD, GATE_USER, "synthetic-token", RECIPIENT):
@@ -138,10 +134,10 @@ class ControlledPrivateEmailTests(SimpleTestCase):
         self.assertNotIn(GATE_USER, contents)
         self.assertNotIn(GATE_PASSWORD, contents)
 
-    @override_settings(QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME="")
+    @override_settings(QUILLMD_APP_BASE_URL="https://app.quillmd.com:9443")
     @patch("core.email_delivery.audit")
     @patch("core.email_backend.httpx.post")
-    def test_partial_gate_is_safe_failure_with_token_recovery_and_redacted_audit(self, post, audit):
+    def test_obsolete_origin_is_safe_failure_with_token_recovery_and_redacted_audit(self, post, audit):
         result = deliver_account_email(None, "synthetic-target", RECIPIENT, "invitation", "synthetic-token")
         self.assertEqual(result.status, "failed")
         self.assertTrue(result.recovery_staged)
@@ -170,7 +166,7 @@ class ControlledPrivateEmailTests(SimpleTestCase):
     @override_settings(QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME="", QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD="")
     @patch("core.email_backend.httpx.post", return_value=accepted())
     def test_allowlist_can_apply_without_private_credentials(self, post):
-        self.assertEqual(private_access_instructions(RECIPIENT, "invitation"), "")
+        self.assertIn("account email and password", private_access_instructions(RECIPIENT, "invitation"))
         self.assertEqual(ResendEmailBackend().send_messages([self.message()]), 1)
         with self.assertRaises(EmailDeliveryError):
             ResendEmailBackend().send_messages([self.message("another@synthetic.invalid")])
@@ -179,14 +175,31 @@ class ControlledPrivateEmailTests(SimpleTestCase):
     @override_settings(QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME="", QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD="", QUILLMD_EMAIL_ALLOWED_RECIPIENTS="")
     @patch("core.email_delivery.audit")
     @patch("core.email_backend.httpx.post", return_value=accepted())
-    def test_normal_resend_without_private_configuration_preserves_original_body(self, post, audit):
+    def test_normal_resend_without_shared_configuration_preserves_token_and_account_instructions(self, post, audit):
         result = deliver_account_email(None, "synthetic-target", "another@synthetic.invalid", "invitation", "synthetic-token")
         self.assertEqual(result.status, "accepted")
-        self.assertEqual(post.call_args.kwargs["json"]["text"],
-                         "Accept your QuillMD department invitation at https://app.quillmd.com:9443/invite/synthetic-token/")
+        self.assertTrue(post.call_args.kwargs["json"]["text"].startswith(
+                         "Accept your QuillMD department invitation at https://app.quillmd.com/invite/synthetic-token/"))
+        self.assertIn("https://app.quillmd.com/login/", post.call_args.kwargs["json"]["text"])
 
     def test_origin_never_embeds_gate_credentials(self):
-        self.assertEqual(application_origin(), "https://app.quillmd.com:9443")
+        self.assertEqual(application_origin(), "https://app.quillmd.com")
+
+    @patch("core.email_delivery.audit")
+    @patch("core.email_backend.httpx.post", return_value=accepted())
+    def test_invalid_retired_shared_values_cannot_block_or_leak_to_account_email(self, post, audit):
+        for configuration in (
+            {"QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME": ""},
+            {"QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": ""},
+            {"QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME": "bad:username"},
+            {"QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD": "short\n"},
+        ):
+            with self.subTest(configuration_names=list(configuration)), override_settings(**configuration):
+                result = deliver_account_email(None, "synthetic-target", RECIPIENT, "invitation", "synthetic-token")
+                self.assertEqual(result.status, "accepted")
+                body = post.call_args.kwargs["json"]["text"]
+                for obsolete in (GATE_USER, GATE_PASSWORD, "bad:username", "short\n"):
+                    self.assertNotIn(obsolete, body)
 
 
 class PrivateProxySettingTests(SimpleTestCase):

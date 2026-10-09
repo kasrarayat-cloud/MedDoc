@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import stat
 from urllib.parse import urlsplit
 
@@ -54,6 +53,8 @@ def application_origin():
             or parsed.username or parsed.password or parsed.query or parsed.fragment
             or parsed.path not in {"", "/"} or any(character.isspace() for character in origin)):
         raise ImproperlyConfigured("Configure a valid QuillMD application origin for email links.")
+    if parsed.hostname == 'app.quillmd.com' and origin != 'https://app.quillmd.com':
+        raise ImproperlyConfigured("QuillMD account links require the normal HTTPS origin without a special port.")
     if settings.QUILLMD_EMAIL_MODE == "resend":
         if parsed.scheme != "https" or parsed.hostname in {"localhost", "127.0.0.1", "::1"}:
             raise ImproperlyConfigured("Resend email requires an HTTPS application origin reachable by recipients.")
@@ -77,29 +78,23 @@ def validate_resend_recipient(recipient):
             allowed.append(address.casefold())
         if recipient.casefold() not in allowed:
             raise EmailDeliveryError("The account email recipient is outside the controlled allowlist.")
-    username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
-    password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if username or password:
-        if (len(allowed) != 1 or not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", username)
-                or not re.fullmatch(r"[!-~]{20,128}", password)):
-            raise ImproperlyConfigured("Private email access requires complete credentials and exactly one approved recipient.")
-        application_origin()
 
 
-def private_access_instructions(recipient, purpose):
-    """Only the approved Resend recipient receives the private browser gate login."""
+def account_access_instructions(recipient, purpose):
+    """Account instructions contain no shared credentials or preview prerequisite."""
     if settings.QUILLMD_EMAIL_MODE != "resend":
         return ""
     validate_resend_recipient(recipient)
-    username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
-    password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if purpose not in {"invitation", "recovery"} or not username:
+    if purpose not in {"invitation", "recovery"}:
         return ""
     origin = application_origin()
-    return (f"\n\nPrivate synthetic preview: first sign in on the private preview access page at {origin}."
-            f"\nUsername: {username}\nPassword: {password}"
-            "\nThis private-preview login is separate from your QuillMD account password."
-            " Do not forward this message. Use only synthetic information.")
+    return (f"\n\nSign in to your individual QuillMD account at {origin}/login/."
+            " Use your account email and password. Access is by invitation."
+            " Use only synthetic information.")
+
+
+# Retained callers cannot recover or send a retired shared credential.
+private_access_instructions = account_access_instructions
 
 
 def resend_configuration():

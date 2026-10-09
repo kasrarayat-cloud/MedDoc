@@ -224,10 +224,12 @@ class VerifiedWelcomeWorkflow(TestCase):
         self.assertEqual(Wallet.objects.get(user=user, kind="paid").balance, 0)
         self.assertFalse(Wallet.objects.filter(user=user, organization__isnull=False).exists())
 
-    def test_registration_verification_grants_once_and_duplicate_verification_is_rejected(self):
-        response = self.client.post("/register/", self.registration_payload("new@synthetic.invalid"))
-        self.assertEqual(response.status_code, 302, getattr(response, "context", None))
-        user = User.objects.get(email="new@synthetic.invalid")
+    def test_provisioned_account_verification_grants_once_and_duplicate_is_rejected(self):
+        # Existing, controlled accounts retain verification; no public signup.
+        user = User.objects.create_user(username="new", email="new@synthetic.invalid",
+            password="Synthetic-Only-4821!private", first_name="Synthetic", last_name="Tester")
+        response = self.client.post("/verification/resend/", {"email": user.email})
+        self.assertEqual(response.status_code, 200, getattr(response, "context", None))
         self.assertIsNone(user.verified_at)
         self.assertFalse(Wallet.objects.filter(user=user).exists())
         self.assertEqual(len(mail.outbox), 1)

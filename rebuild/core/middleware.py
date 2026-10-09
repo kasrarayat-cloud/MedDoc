@@ -11,7 +11,7 @@ class AccessMiddleware:
         if not public:
             if not request.user.is_authenticated:
                 # Restore only the page location. Never replay an expired form submission.
-                return redirect_to_login(path if request.method == 'GET' else '/', '/login/')
+                return redirect_to_login(path if request.method in ('GET','HEAD') else '/', '/login/')
             if not request.user.verified_at: return HttpResponseForbidden('Verify your email before accessing the application.')
             admin_surface=settings.ADMIN_SITE or path.startswith('/console/')
             if admin_surface and not request.user.is_staff: return HttpResponseNotFound()

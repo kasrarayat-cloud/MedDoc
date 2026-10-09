@@ -91,6 +91,8 @@ def main():
     parser.add_argument('--target', required=True)
     parser.add_argument('--attempt', required=True)
     args = parser.parse_args()
+    from ops.direct_account_access import refuse_legacy_operation
+    refuse_legacy_operation()
     require(os.environ.get('RULED_MUTATION_DECLARATION') == DECL, 'Committed mutation declaration is required.')
     require(Path.cwd() == ROOT and text(['git', 'branch', '--show-current']) == 'main', 'Use permanent main.')
     require(re.fullmatch('[a-f0-9]{40}', args.target) and text(['git', 'rev-parse', 'HEAD']) == args.target,

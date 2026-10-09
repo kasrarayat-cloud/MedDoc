@@ -1,4 +1,4 @@
-"""Loopback-only TLS proxy for isolated preview browser qualification.
+"""Loopback-only TLS proxy for isolated account browser qualification.
 
 Only the two exact certificate files are mounted read-only. No shared ingress,
 DNS, certificate store, application service or real database is modified.
@@ -33,8 +33,10 @@ class Proxy(BaseHTTPRequestHandler):
             return
         body = self.rfile.read(length) if length else None
         headers = {key: value for key, value in self.headers.items() if key.lower() not in {
-            'host', 'connection', 'x-real-ip', 'authorization', 'proxy-authorization', 'x-forwarded-for', 'x-forwarded-proto', 'x-quillmd-preview'}}
-        headers.update({'Host': ORIGIN_HOST, 'X-Forwarded-Proto': 'https', 'X-QuillMD-Preview': '1', 'X-Real-IP': '127.0.0.1', 'Connection': 'close'})
+            'host', 'connection', 'x-real-ip', 'authorization', 'proxy-authorization', 'x-forwarded-for', 'x-forwarded-proto', 'x-quillmd-preview', 'x-quillmd-account'}}
+        # The port belongs only to this isolated TLS harness. The application's
+        # trusted transport is the same exact normal hostname/header as native.
+        headers.update({'Host': 'app.quillmd.com', 'X-Forwarded-Proto': 'https', 'X-QuillMD-Account': '1', 'X-Real-IP': '127.0.0.1', 'Connection': 'close'})
         upstream = http.client.HTTPConnection('127.0.0.1', 19430, timeout=30)
         try:
             upstream.request(self.command, self.path, body=body, headers=headers)

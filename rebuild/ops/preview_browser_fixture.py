@@ -4,7 +4,6 @@ Sensitive test values travel in protected files and captured stdin/stdout pipes,
 never process arguments or browser reports. This is not inbox-delivery evidence.
 """
 import argparse
-from datetime import timedelta
 import hashlib
 import json
 import os
@@ -13,7 +12,6 @@ import re
 import secrets
 import stat
 import sys
-import time
 
 
 def require(value, message):
@@ -55,10 +53,9 @@ def prepare(settings, state):
     from django.utils import timezone
     from docx import Document
     require(User.objects.count() == 0, 'Prepare only a new empty isolated fixture database.')
-    control = {'origin': settings.QUILLMD_PREVIEW_ORIGIN, 'state': str(state),
+    control = {'origin': settings.QUILLMD_BROWSER_TEST_ORIGIN,
+               'account_email_origin': settings.QUILLMD_APP_BASE_URL, 'state': str(state),
                'mail_evidence': 'isolated file outbox; no provider request or inbox receipt',
-               'gate': {'username': settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME,
-                        'password': settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD},
                'owner': {'email': 'preview-owner@synthetic.quillmd.invalid', 'password': secrets.token_urlsafe(28)},
                'invitees': {}, 'fixtures': {}}
     for browser in ('chrome', 'edge'):
@@ -102,7 +99,7 @@ def prepare(settings, state):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--action', required=True, choices=['prepare', 'mail', 'state', 'expire-preview', 'expire-flow', 'reset-limits'])
+    parser.add_argument('--action', required=True, choices=['prepare', 'mail', 'state', 'reset-limits'])
     args = parser.parse_args()
     payload = json.loads(sys.stdin.read() or '{}')
     settings, state = context()
@@ -110,8 +107,6 @@ def main():
         result = prepare(settings, state)
     else:
         from core.models import User, Membership, Wallet, LedgerEntry, AuditEvent, LoginAttempt
-        from django.contrib.sessions.backends.db import SessionStore
-        from core.preview_access import KIND
         control = json.loads((state / 'control.json').read_text())
         if args.action == 'mail':
             actor = payload['browser']
@@ -129,11 +124,16 @@ def main():
                     if str(message.get('To', '')).strip() != recipient:
                         continue
                     content = message.get_content()
-                    match = re.search(re.escape(control['origin']) + '/' + route + r'/[A-Za-z0-9_/-]+/', content)
+                    match = re.search(re.escape(control['account_email_origin']) + '/' + route + r'/[A-Za-z0-9_/-]+/', content)
                     if match:
                         links.append(match.group(0))
             require(len(links) == 1, 'Expected exactly one isolated account email for this browser and purpose.')
-            result = {'url': links[0], 'source': 'isolated-private-file-outbox', 'provider_calls': 0, 'inbox_receipt': False}
+            # Account email links use the real canonical origin. Browser
+            # navigation maps only that known path to this isolated listener;
+            # neither a delivery receipt nor public-route proof is inferred.
+            result = {'url': control['origin'] + links[0][len(control['account_email_origin']):],
+                      'canonical_account_url': links[0], 'source': 'isolated-private-file-outbox',
+                      'isolated_listener_mapping': True, 'provider_calls': 0, 'inbox_receipt': False}
         elif args.action == 'state':
             actor = payload['browser']
             require(actor in control['invitees'], 'Unknown isolated browser recipient.')
@@ -152,28 +152,6 @@ def main():
             result['provider_jobs'] = Job.objects.count()
             result['provider_usage'] = Usage.objects.count()
             result['provider_receipts'] = ProviderReceipt.objects.count()
-        elif args.action in ('expire-preview', 'expire-flow'):
-            key = payload['cookie']
-            require(re.fullmatch('[a-z0-9]{32}', key) is not None, 'Invalid isolated preview session identifier.')
-            store = SessionStore(session_key=key)
-            require(store.get('kind') == KIND, 'Only an existing isolated preview session may be aged.')
-            if args.action == 'expire-preview':
-                grant = store['grant']
-                if payload['kind'] == 'idle':
-                    grant['seen'] = time.time() - 1801
-                else:
-                    require(payload['kind'] == 'absolute', 'Unsupported synthetic expiry case.')
-                    grant['issued'] = time.time() - 7201
-                    grant['seen'] = time.time()
-                store['grant'] = grant
-            else:
-                handle = payload['flow']
-                require(re.fullmatch('[a-f0-9]{32}', handle) is not None and handle in store['flows'], 'Unknown isolated flow.')
-                pending = store['flows']
-                pending[handle]['created'] = time.time() - 901
-                store['flows'] = pending
-            store.save()
-            result = {'fixture_clock_transition_applied': True, 'real_elapsed_time_claim': False}
         else:
             # Each ordinary browser gets an independent limiter fixture. The
             # dedicated limiter unit tests establish actual throttling behavior.

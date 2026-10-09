@@ -636,6 +636,13 @@ def live_session_admission(states, rows, actors, secret, fingerprint, decoder, a
         'authentication_submissions': 0, 'provider_calls': 0, 'database_writes': 0}
 
 def controlled_environment(original, previous, target, *, enabled):
+    from .direct_account_access import reject_legacy_environment
+    try:
+        reject_legacy_environment(original)
+    except ValueError as error:
+        reason = str(error)
+        raise Refusal(reason if re.fullmatch('[a-z0-9_]{1,100}', reason)
+                      else 'normal443_invalid_direct_account_environment') from None
     values = dotenv_values(stream=StringIO(original.decode()), interpolate=False)
     require(values.get('QUILLMD_RELEASE_SHA') == previous and values.get('QUILLMD_APP_BASE_URL') == 'https://app.quillmd.com:9443'
         and values.get('QUILLMD_PREVIEW_AUTH_ENABLED') == '1'
@@ -1616,6 +1623,9 @@ def main(argv=None, *, host=None):
             'provider_calls':0,'authentication_submissions':0,'database_writes':0,'automatic_retries':False},sort_keys=True));return 0
     if args.verify_served:require(SERVED_VERIFICATION_PROTOCOL_QUALIFIED,'normal443_served_verification_protocol_unqualified')
     started=time.monotonic();policy,buffers=source_gate(args.operations_revision)
+    if args.execute and host is None:
+        from .direct_account_access import refuse_legacy_operation
+        refuse_legacy_operation()
     host=host if host is not None else NativeHost(policy,args.operations_revision,buffers,started,
                                                 mode='--verify-served' if args.verify_served else ('--execute' if args.execute else '--preflight'))
     result=verify_served(host,policy,args.operations_revision) if args.verify_served else transition(host,policy,args.operations_revision,buffers,execute=args.execute)

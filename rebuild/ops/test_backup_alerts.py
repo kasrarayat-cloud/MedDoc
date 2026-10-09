@@ -41,7 +41,7 @@ class BackupAlertsTests(unittest.TestCase):
             'QUILLMD_EMAIL_FROM=QuillMD <noreply@quillmd.com>\n'
             'QUILLMD_EMAIL_VERIFIED_DOMAIN=quillmd.com\n'
             f'QUILLMD_EMAIL_ALLOWED_RECIPIENTS={a.RECIPIENT}\n'
-            'QUILLMD_APP_BASE_URL=https://app.quillmd.com:9443\n'
+            'QUILLMD_APP_BASE_URL=https://app.quillmd.com\n'
             'RESEND_API_KEY=re_synthetic_not_a_real_key\n'
             'QUILLMD_DB_PASSWORD=DO_NOT_COPY_DATABASE_SECRET\n'
             'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD=DO_NOT_COPY_PREVIEW_SECRET\n').encode())
@@ -232,7 +232,8 @@ class BackupAlertsTests(unittest.TestCase):
     def test_invalid_sender_origin_and_recipient_allowlist_fail_before_send(self):
         original = self.env.read_text()
         replacements = [('noreply@quillmd.com', 'noreply@unapproved.invalid'),
-                        ('https://app.quillmd.com:9443', 'http://app.quillmd.com:9443'),
+                        ('https://app.quillmd.com', 'http://app.quillmd.com'),
+                        ('https://app.quillmd.com', 'https://app.quillmd.com:9443'),
                         (a.RECIPIENT, a.RECIPIENT + ',somebody@example.invalid')]
         for old, new in replacements:
             with self.subTest(old=old):
@@ -680,7 +681,7 @@ class HealthConditionsTests(unittest.TestCase):
 
 class ExistingResendTransportTests(unittest.TestCase):
     def test_real_backend_called_with_fixture_http_and_no_private_preview_fields(self):
-        values = dict(QUILLMD_EMAIL_MODE='resend', QUILLMD_APP_BASE_URL='https://app.quillmd.com:9443',
+        values = dict(QUILLMD_EMAIL_MODE='resend', QUILLMD_APP_BASE_URL='https://app.quillmd.com',
                       ALLOWED_HOSTS=['app.quillmd.com'], RESEND_API_KEY='re_fixture_never_live',
                       QUILLMD_EMAIL_FROM='QuillMD <noreply@quillmd.com>',
                       QUILLMD_RESEND_ENV_FILE='', QUILLMD_EMAIL_VERIFIED_DOMAIN='quillmd.com',

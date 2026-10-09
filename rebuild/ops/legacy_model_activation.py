@@ -1595,6 +1595,8 @@ def main(argv=None):
             'continuation_cli_scope')
     info = source_gate(args.operator_commit, contract, executing=True, recovering=args.rollback,
                        resuming=args.resume_pre_acceptance)
+    from .direct_account_access import refuse_legacy_operation
+    refuse_legacy_operation()
     exclusion, backup, env_writer, managed, storage = modules()
     if args.resume_pre_acceptance:
         require(args.qualification and args.acceptance_v2, 'continuation_qualification_and_acceptance_required')

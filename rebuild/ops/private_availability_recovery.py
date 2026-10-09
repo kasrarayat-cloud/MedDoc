@@ -1235,6 +1235,8 @@ def main(argv=None):
     if args.execute:
         require(INSTALLATION_QUALIFIED and (NATIVE_APPROVAL_PROTOCOL_QUALIFIED or CURRENT_OWNER_BOUNDARY_PROTOCOL_QUALIFIED),
                 'availability_native_authorization_protocol_unqualified')
+        from .direct_account_access import refuse_legacy_operation
+        refuse_legacy_operation()
     started = time.monotonic()
     contract = load_contract()
     budget = RuledBudget(contract)

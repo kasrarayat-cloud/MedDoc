@@ -27,6 +27,16 @@ class RenewalBudgetTests(TestCase):
         self.addCleanup(guard.stop)
         return transport
 
+    def shorten_active_response_deadline(self, budget):
+        # Keep the production handler and real SIGALRM. Start the short fixture
+        # window at the phase under test, after setup and durable reservation.
+        remaining, interval = signal.getitimer(signal.ITIMER_REAL)
+        self.assertGreater(remaining, 0)
+        self.assertEqual(interval, 0)
+        seconds = min(remaining, 0.08)
+        budget.deadline = budget.monotonic() + seconds
+        signal.setitimer(signal.ITIMER_REAL, seconds)
+
     def test_known_spend_cannot_be_refunded_to_fit_another_inventory(self):
         original = {'version': 1, 'day': '2026-09-20', 'requests': 422, 'download_bytes': 98_474_544}
         auto.atomic(self.state / 'budget.json', original)
@@ -45,10 +55,11 @@ class RenewalBudgetTests(TestCase):
 
     def test_slow_headers_stop_at_total_deadline_and_failed_reservation_survives(self):
         budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
-        budget.deadline = time.monotonic() + 0.08
+        budget.deadline = time.monotonic() + 30
         transport = self.transport(budget)
         received = []
         def slow_headers(*args, **kwargs):
+            self.shorten_active_response_deadline(budget)
             time.sleep(0.5)
             received.append('late response')
             return Mock()
@@ -64,23 +75,52 @@ class RenewalBudgetTests(TestCase):
 
     def test_slow_trickle_body_is_interrupted_before_generator_yields_late_bytes(self):
         budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
-        budget.deadline = time.monotonic() + 0.08
+        budget.deadline = time.monotonic() + 30
         transport = self.transport(budget)
-        delivered = []
+        entered, delivered = [], []
         response = Mock(status_code=200)
         response.__enter__ = Mock(return_value=response)
         response.__exit__ = Mock(return_value=False)
         def trickle(_size):
+            entered.append(True)
+            self.shorten_active_response_deadline(budget)
             time.sleep(0.5)
             delivered.append('late bytes')
             yield b'late bytes'
         response.iter_content = trickle
-        with patch.object(transport.session, 'request', return_value=response):
+        with patch.object(transport.session, 'request', return_value=response) as request:
             with self.assertRaisesRegex(auto.Refusal, '^deadline$'):
                 transport.request('GET', 'https://api.backblazeb2.com/fixture', limit=200)
+        self.assertEqual(entered, [True])
         self.assertEqual(delivered, [])
+        request.assert_called_once()
+        response.__enter__.assert_called_once()
         response.__exit__.assert_called_once()
         self.assertEqual(json.loads((self.state / 'budget.json').read_bytes())['requests'], 1)
+
+    def test_pre_body_deadline_retains_reservation_without_acquiring_a_response(self):
+        budget = auto.Budget(self.state, self.policy, clock=lambda: self.at)
+        budget.deadline = time.monotonic() + 30
+        transport = self.transport(budget)
+        response = Mock()
+        response.__enter__ = Mock(return_value=response)
+        response.__exit__ = Mock(return_value=False)
+        original_debit = budget.debit
+        def slow_reservation(download):
+            original_debit(download)
+            self.shorten_active_response_deadline(budget)
+            time.sleep(0.5)
+            self.fail('pre-body deadline did not interrupt the reservation')
+        with patch.object(budget, 'debit', side_effect=slow_reservation), \
+                patch.object(transport.session, 'request', return_value=response) as request:
+            with self.assertRaisesRegex(auto.Refusal, '^deadline$'):
+                transport.request('GET', 'https://api.backblazeb2.com/fixture', limit=200)
+        request.assert_not_called()
+        response.__enter__.assert_not_called()
+        response.__exit__.assert_not_called()
+        ledger = json.loads((self.state / 'budget.json').read_bytes())
+        self.assertEqual(ledger['requests'], 1)
+        self.assertEqual(ledger['download_bytes'], 65736)
 
     def test_outer_manual_recovery_alarm_handler_and_remaining_time_survive_http(self):
         original_handler = signal.getsignal(signal.SIGALRM)
