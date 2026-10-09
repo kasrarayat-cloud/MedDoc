@@ -67,7 +67,9 @@ class StandingBackupPostgresTests(TransactionTestCase):
         billing.reserve(job, quote)
         job.refresh_from_db()
         actual = Decimal('0') if simulated else Decimal('0.10')
-        provider = 'deepgram:returned-asr-model' if kind == 'transcription' else 'anthropic:returned-model'
+        # These are the adapter's configured usage labels. Provider-returned
+        # model metadata is separate and may be unavailable.
+        provider = 'deepgram:nova-3-medical' if kind == 'transcription' else 'anthropic:'+config['model']
         units = {'duration_seconds':'10.060'} if kind == 'transcription' else {'input_tokens':100, 'output_tokens':20}
         rates = {'usd_per_minute':'0.0043'} if kind == 'transcription' else {'input_per_million':'3', 'output_per_million':'15'}
         request_id, resource_id = 'req-'+str(job.pk), 'resource-'+str(job.pk)
@@ -283,7 +285,8 @@ class StandingBackupPostgresTests(TransactionTestCase):
             for value in [None,[],{},'not an object']:
                 with self.subTest(field=field,value=value):
                     self.corrupt_metering(field,value)
-        for value in ['', '   ', '\t\n', 'anthropic:', 'deepgram:wrong-kind']:
+        for value in ['', '   ', '\t\n', 'anthropic:', 'deepgram:wrong-kind',
+                'openai:'+SETTINGS['AI_MODEL'], 'anthropic:wrong-configured-model']:
             self.corrupt_metering('provider',value)
         for value in [None,True,-1,1.5,'NaN','Infinity','1e1000','1'*21,{},[]]:
             self.corrupt_metering('units',{'input_tokens':value,'output_tokens':20})
@@ -301,6 +304,7 @@ class StandingBackupPostgresTests(TransactionTestCase):
                     self.corrupt_metering(field,{key:value})
         self.corrupt_metering('units',{'seconds':'10.060'})
         self.corrupt_metering('rates',{'per_minute':'0.0043'})
+        self.corrupt_metering('provider','deepgram:wrong-configured-model')
         with self.shadow('core_usage','core_providerreceipt'):
             with connection.cursor() as cursor:
                 for table in ['core_usage','core_providerreceipt']:

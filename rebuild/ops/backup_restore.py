@@ -76,10 +76,10 @@ _STANDING_USAGE_VALID = r"""
     AND u.provider ~ '[^[:space:]]'
     AND jsonb_typeof(u.units)='object' AND jsonb_typeof(u.rates)='object'
     AND (u.simulated OR (
-      ((j.kind='generation' AND u.provider ~ '^(anthropic|openai):[^[:space:]]'
+      ((j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')
         AND u.units ?& ARRAY['input_tokens','output_tokens']
         AND u.rates ?& ARRAY['input_per_million','output_per_million'])
-       OR (j.kind='transcription' AND u.provider ~ '^deepgram:[^[:space:]]'
+       OR (j.kind='transcription' AND u.provider='deepgram:nova-3-medical'
         AND u.units ? 'duration_seconds' AND u.rates ? 'usd_per_minute'))
       AND NOT EXISTS(SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(u.units)='object' THEN u.units ELSE '{}'::jsonb END) meter
         WHERE j.kind='generation' AND meter.key IN ('input_tokens','output_tokens','cached_input_tokens','cache_creation_tokens')
