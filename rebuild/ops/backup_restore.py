@@ -22,13 +22,35 @@ SOURCE_CONTAINER = 'quillmd-fresh-postgres'
 SOURCE_DATABASE = 'quillmd_fresh'
 MAX_OBJECT_BYTES = 256 * 1024 * 1024
 LABEL = 'quillmd.restore-run'
+
+
+def hashed_reference_query(kind, table, path, digest_column):
+    # Both empty means this optional artifact has not been written. A partial
+    # pair is an invalid reference, including for callers that inspect these
+    # queries outside backup(). Never silently omit a hash without its file.
+    return kind, (f"SELECT CASE WHEN {path}<>'' AND {digest_column} ~ '^[a-f0-9]{{64}}$' "
+                  f"THEN {path} ELSE '../invalid-preparation-reference' END,{digest_column} "
+                  f"FROM {table} WHERE {path}<>'' OR {digest_column}<>''")
+
+
 FILE_QUERIES = [
     ('original', 'SELECT original_path,sha256 FROM core_template'),
     ('export', "SELECT export_path,export_sha256 FROM core_encounter WHERE export_path<>''"),
     ('audio', "SELECT input_path,'' FROM core_job WHERE input_path<>''"),
     ('receipt', "SELECT result_path,result_sha256 FROM core_job WHERE result_path<>''"),
     ('receipt', "SELECT result_path,result_sha256 FROM core_providerreceipt WHERE result_path<>''"),
+    hashed_reference_query('approved_prepared', 'core_templateversion', 'prepared_path', 'prepared_sha256'),
+    hashed_reference_query('candidate', 'core_templatepreparation', 'candidate_path', 'candidate_sha256'),
+    ('candidate_history', "SELECT CASE WHEN jsonb_typeof(h)='object' "
+     "AND jsonb_typeof(h->'path')='string' AND h->>'path'<>'' "
+     "AND jsonb_typeof(h->'sha256')='string' AND h->>'sha256' ~ '^[a-f0-9]{64}$' "
+     "THEN h->>'path' ELSE '../invalid-candidate-history' END,h->>'sha256' "
+     "FROM core_templatepreparation p CROSS JOIN LATERAL jsonb_array_elements(p.candidate_history) h"),
+    hashed_reference_query('preparation_response', 'core_preparationreceipt', 'response_path', 'response_sha256'),
+    hashed_reference_query('preparation_failure', 'core_preparationreceipt', 'failure_path', 'failure_sha256'),
 ]
+PREPARATION_FILE_KINDS = {'approved_prepared', 'candidate', 'candidate_history',
+                          'preparation_response', 'preparation_failure'}
 INVARIANTS = {
     'wallet_bounds': 'SELECT count(*) FROM core_wallet WHERE balance<0 OR reserved<0 OR reserved>balance',
     # The charge rule audit_billing checks: 1.5 x cost, capped at the approved limit the settled holds record, and anything above
@@ -194,6 +216,24 @@ def safe_relative(value):
     return p
 
 
+def file_references(query):
+    """Collect every DB-snapshot reference, refusing incomplete/conflicting pairs."""
+    references = {}
+    for kind, statement in FILE_QUERIES:
+        for relative, expected in query(statement):
+            safe_relative(relative)
+            if kind in PREPARATION_FILE_KINDS:
+                require(isinstance(expected, str) and re.fullmatch('[a-f0-9]{64}', expected),
+                        'Preparation file reference needs its recorded integrity hash.')
+            old = references.setdefault(relative, {'kinds': [], 'expected_sha256': expected})
+            require(not (old['expected_sha256'] and expected and old['expected_sha256'] != expected),
+                    'Conflicting database file hashes.')
+            old['kinds'].append(kind)
+            if expected:
+                old['expected_sha256'] = expected
+    return references
+
+
 def file_data(root, relative):
     safe_relative(relative)
     if root == Path('/var/lib/quillmd/files'):
@@ -310,16 +350,7 @@ def backup(args):
                 return h.hexdigest()
             manifest['tables'] = fingerprint(query, copy_hash)
             manifest['invariants'] = invariant_counts(query)
-            references = {}
-            for kind, statement in FILE_QUERIES:
-                for relative, expected in query(statement):
-                    safe_relative(relative)
-                    old = references.setdefault(relative, {'kinds': [], 'expected_sha256': expected})
-                    require(not (old['expected_sha256'] and expected and old['expected_sha256'] != expected),
-                            'Conflicting database file hashes.')
-                    old['kinds'].append(kind)
-                    if expected:
-                        old['expected_sha256'] = expected
+            references = file_references(query)
             # Copy files referenced by this exact DB snapshot. New uncommitted or
             # unreferenced scratch files are deliberately outside the backup.
             for relative, reference in sorted(references.items()):

@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from documents import inspect_template, DocumentError
-from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields, TYPED_PROTOCOL
+from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields, TYPED_PROTOCOL, WM_SOURCE_REVIEW_CONTEXT
 from documents.preparation_service import inspect_preparation, prepare_candidate
 from documents.sdk_service import WM_IOV_SHA256
 from .models import TemplatePreparation, PreparationReceipt, TemplateVersion
@@ -102,10 +102,21 @@ def role_schema(role, protocol=None):
                                  'anchor_id': {'type': 'string'}, 'question_id': {'type': 'string'},
                                  decision: {'type': 'string', 'enum': choices}}}}}}
 
-def role_payload(inventory, role, proposal=None):
-    result = {'original': model_inventory(inventory), 'role': role}
+def role_payload(inventory, role, proposal=None, *, source_review_context=None):
+    result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
     if role == 'checker': result['proposal'] = proposal
     return result
+
+
+def source_review_mode(config):
+    # Missing means historical payload identity. Explicit null/unknown is a
+    # broken prospective configuration, never permission to silently downgrade.
+    if 'word_source_review_context' not in config:
+        return None
+    mode = config['word_source_review_context']
+    if type(mode) is not str or mode != WM_SOURCE_REVIEW_CONTEXT:
+        raise DocumentError('Unsupported explicit original source-review context.', 'invalid_proposal')
+    return mode
 
 def maximum_cost(payload, config,max_output=MAX_OUTPUT):
     if config['mode'] != 'live': return Decimal('0')
@@ -115,7 +126,8 @@ def maximum_cost(payload, config,max_output=MAX_OUTPUT):
     return (Decimal(input_bound)*r['input_per_million'] + Decimal(max_output)*r['output_per_million'])/1000000
 
 def provider_role(inventory, role, config, timeout, proposal=None,on_response=None):
-    payload = role_payload(inventory, role, proposal)
+    payload = role_payload(inventory, role, proposal,
+                           source_review_context=source_review_mode(config))
     if config['mode'] != 'live':
         field = 'decision' if role == 'proposer' else 'verdict'
         value = 'map' if role == 'proposer' else 'pass'
@@ -139,6 +151,17 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
         'Use only the finite original anchor and associated question IDs. Include every anchor exactly once. '
         'Signing protection is mandatory and cannot be converted to a new writable area. ')
     instructions += 'Explicitly acknowledge the content digest of EVERY original story; use unresolved if any question, option, unit, instruction, or assertion is uncovered. '
+    if 'source_review_context' in payload['original']:
+        instructions += (' The source_review_context is application-validated structural evidence for this exact original, '
+            'not clinical facts or approval. Check all finite original answer associations and all fourteen preserved '
+            'review requirements against the complete story text. Original preprinted assertions are retained for '
+            'separate explicit clinician evidence/review on EVERY use; signer identity and signature time come only '
+            'from the authenticated clinician and actual finalization. They must not become AI answer destinations '
+            'or assumed true findings. The glossary story contains only the original twenty-eight placeholder '
+            'definitions, each linked to one body dropdown; retain them unchanged, not as extra clinical questions. '
+            'Use retain only when all original content is preserved with these controls; retain NEVER means the '
+            'doctor has approved the template or a clinical assertion. Keep unresolved for any remaining omission, '
+            'wrong association, unsupported structure or uncertainty. ')
     instructions += ('Propose map only for an exact known answer location. Otherwise needs_review.' if role == 'proposer'
                      else 'Independently check the proposal against the COMPLETE original inventory. Check all stories, '
                           'question/option/unit/instruction preservation and placement. Use unresolved for any uncertainty; '
@@ -223,7 +246,8 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
 
 
 def call_role(prep, role, deadline, proposal=None):
-    payload = role_payload(prep.inventory, role, proposal)
+    payload = role_payload(prep.inventory, role, proposal,
+                           source_review_context=source_review_mode(prep.config))
     max_output,limit=role_limits(prep.inventory)
     role_seconds,_=timing_limits(prep.inventory)
     quoted = maximum_cost(payload, prep.config,max_output)
@@ -309,6 +333,8 @@ def create_preparation(template, actor):
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
     config={**config, 'word_preparation_protocol': TYPED_PROTOCOL}
+    if template.sha256 == WM_IOV_SHA256:
+        config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     from . import testing_authority
     if testing_authority.identity(config):
         return testing_authority.create_preparation(template,actor,config)
@@ -553,7 +579,8 @@ def continue_wm_review(prep_id,actor,revision,candidate_sha):
         raise ValidationError('Both completed role receipts are required.')
     for receipt in receipts:
         expected=prep.proposal if receipt.role=='proposer' else prep.checker
-        payload=role_payload(prep.inventory,receipt.role,prep.proposal if receipt.role=='checker' else None)
+        payload=role_payload(prep.inventory,receipt.role,prep.proposal if receipt.role=='checker' else None,
+                             source_review_context=source_review_mode(prep.config))
         if (receipt.state!='succeeded' or receipt.finished_at is None or not receipt.response_path
                 or receipt.request_sha256!=digest(payload) or receipt.provider!=prep.config['provider']
                 or receipt.requested_model!=prep.config['model'] or not receipt.returned_model
