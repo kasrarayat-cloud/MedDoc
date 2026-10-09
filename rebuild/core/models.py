@@ -159,7 +159,7 @@ class PreparationReceipt(Entity):
     elapsed_ms=models.PositiveIntegerField(null=True)
     class Meta:
         constraints=[models.UniqueConstraint(fields=['preparation','role'],name='preparation_role_once'),
-                     models.CheckConstraint(condition=models.Q(role__in=['proposer','checker'],quote_maximum__gte=0,quote_maximum__lte=Decimal('0.16')),name='preparation_receipt_role_cap'),
+                     models.CheckConstraint(condition=models.Q(role__in=['proposer','checker'],quote_maximum__gte=0),name='preparation_receipt_role_cap'),
                      models.CheckConstraint(condition=models.Q(computed_cost__isnull=True)|models.Q(computed_cost__gte=0),name='preparation_cost_nonnegative')]
 def latest_service_date():
     """The furthest ahead a real date of service can legitimately be.
@@ -241,6 +241,16 @@ class Reservation(Entity):
     amount=models.DecimalField(max_digits=24,decimal_places=12)
     state=models.CharField(max_length=12,default='held')
     class Meta: constraints=[models.UniqueConstraint(fields=['job','wallet'],name='reservation_unique')]
+class TestingReservation(Entity):
+    """Owner-sponsored test estimate; no wallet money or artificial balance."""
+    job=models.OneToOneField(Job,on_delete=models.PROTECT,related_name='testing_reservation')
+    authority_id=models.CharField(max_length=100)
+    quoted_provider_cost=models.DecimalField(max_digits=24,decimal_places=12)
+    state=models.CharField(max_length=12,default='held')
+    class Meta:
+        constraints=[models.CheckConstraint(condition=models.Q(quoted_provider_cost__gte=0),name='testing_quote_nonnegative'),
+                     models.CheckConstraint(condition=models.Q(state__in=['held','settled','released']),name='testing_reservation_state_known')]
+
 class Usage(ProviderIdentifiers,Entity):
     job=models.OneToOneField(Job,on_delete=models.PROTECT)
     user=models.ForeignKey(User,on_delete=models.PROTECT)

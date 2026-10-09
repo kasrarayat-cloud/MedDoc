@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Sum
 from django.utils import timezone
-from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet
+from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet, TestingReservation
 from core.security import private_path
 
 
@@ -45,16 +45,24 @@ def audit_report(file_reader=None):
         # Recording charge limit: the customer charge is exactly 1.5 × cost up to the approved limit (the settled holds); anything
         # above the limit must appear, exactly, as one 'absorbed_over_limit' platform cost and never in the customer's ledger.
         settled_holds=sum((r.amount for r in Reservation.objects.filter(job_id=usage.job_id,state='settled')),Decimal(0))
-        limit=settled_holds if settled_holds>0 else None
+        from core.testing_authority import identity, AUTHORITY_ID
+        standing=identity(usage.job.config) is not None
+        sponsored=TestingReservation.objects.filter(job_id=usage.job_id).first() if standing else None
+        limit=Decimal(0) if standing else (settled_holds if settled_holds>0 else None)
         uncapped=usage.actual_cost*Decimal('1.5')
         over_rows=list(PlatformCost.objects.filter(job_id=usage.job_id,kind='absorbed_over_limit').values_list('amount',flat=True))
         checks={'recomputed_defined_cost_matches':calculated==usage.actual_cost,
                 'exact_1_5_multiplier':usage.charged_cost==(min(uncapped,limit) if limit is not None else uncapped),
-                'over_limit_absorbed_exactly':sum(over_rows,Decimal(0))==uncapped-usage.charged_cost and len(over_rows)==(1 if uncapped>usage.charged_cost else 0),
+                'over_limit_absorbed_exactly':(not over_rows) if standing else (sum(over_rows,Decimal(0))==uncapped-usage.charged_cost and len(over_rows)==(1 if uncapped>usage.charged_cost else 0)),
                 'ledger_debit_matches':-sum((entry['amount'] for entry in entries),Decimal(0))==usage.charged_cost,
                 'no_held_reservation':not Reservation.objects.filter(job_id=usage.job_id,state='held').exists(),
                 'usage_scope_matches_job':usage.user_id==usage.job.user_id and usage.department_id==usage.job.encounter.department_id and usage.organization_id==usage.job.encounter.department.organization_id,
                 'payer_matches_authorized_snapshot':not usage.job.payer or usage.payer==usage.job.payer}
+        if standing:
+            checks['standing_sponsor_reservation_matches']=(sponsored is not None and sponsored.authority_id==AUTHORITY_ID
+                and sponsored.state=='settled' and sponsored.quoted_provider_cost==Decimal(usage.job.config['testing_quote_usd'])
+                and usage.payer=='standing:'+AUTHORITY_ID and not Reservation.objects.filter(job_id=usage.job_id).exists()
+                and not LedgerEntry.objects.filter(job_id=usage.job_id).exists() and usage.charged_cost==0)
         if receipt:checks['durable_receipt_matches']=all(getattr(receipt,k)==getattr(usage,k) for k in ['provider','provider_request_id','provider_resource_id','units','rates','actual_cost','simulated'])
         if 'list_cost_usd' in usage.rates:
             try:checks['recorded_list_cost_matches']=recompute_list_cost(usage.provider,usage.units,usage.rates)==Decimal(usage.rates['list_cost_usd'])
@@ -100,7 +108,7 @@ def audit_report(file_reader=None):
             reconciled_uncapped=reconciliation.reconciled_cost*Decimal('1.5')
             customer_after=min(reconciled_uncapped,limit) if limit is not None else reconciled_uncapped
             arithmetic=(reconciliation.charge_delta==customer_after-usage.charged_cost
-                        and reconciliation.over_limit_delta==(reconciled_uncapped-customer_after)-(uncapped-usage.charged_cost))
+                        and reconciliation.over_limit_delta==(Decimal(0) if standing else (reconciled_uncapped-customer_after)-(uncapped-usage.charged_cost)))
             if reconciliation.ledger_status=='applied':ledger_ok=applied==-reconciliation.charge_delta
             elif reconciliation.ledger_status=='absorbed':ledger_ok=absorbed and not reconciliation_entries
             else:ledger_ok=reconciliation.charge_delta>0 and not reconciliation_entries
@@ -120,6 +128,8 @@ def audit_report(file_reader=None):
             'cost_evidence':usage.cost_evidence,'reconciliation_recorded':bool(reconciliation),'provider_evidence_reconciled':bool(reconciliation and reconciliation.provider_evidence_reconciled),'invoice_reconciled':bool(reconciliation and reconciliation.invoice_reconciled),'enqueue_config_recorded':bool(usage.job.config),
             'discount_rate':str(usage.rates.get('discount_rate','0') or '0'),'configured_list_cost_usd':usage.rates.get('list_cost_usd'),
             'reconciliation':{'evidence_kind':reconciliation.evidence_kind,'evidence_status':reconciliation.evidence_status,'reconciled_cost':str(reconciliation.reconciled_cost),'charge_delta':str(reconciliation.charge_delta),'ledger_status':reconciliation.ledger_status,'evidence_reference':reconciliation.evidence_reference,'evidence_sha256':reconciliation.evidence_sha256,'provider_credit_applied':str(reconciliation.provider_credit_applied),'discount_applied':str(reconciliation.discount_applied),'over_limit_delta':str(reconciliation.over_limit_delta),'recorded_at':reconciliation.created_at.isoformat()} if reconciliation else None,
+            'funding_authority':usage.job.config.get('testing_authority_id'),
+            'sponsor_quote_usd':str(sponsored.quoted_provider_cost) if sponsored else None,
             'customer_limit_usd':str(limit) if limit is not None else None,'absorbed_over_limit_usd':str(sum(over_rows,Decimal(0))),
             'reconciliation_ledger':reconciliation_entries,
             'absorbed':absorbed,'absorbed_reversal_usd':str(absorbed_reversal),'absorbed_platform_cost_usd':str(absorbed_cost.amount) if absorbed_cost else None,'absorbed_ledger':absorbed_entries,
@@ -133,10 +143,15 @@ def audit_report(file_reader=None):
         'cancelled_jobs_have_no_usage':not Usage.objects.filter(job__in=cancelled).exists(),
         'cancelled_jobs_have_no_provider_receipt':not ProviderReceipt.objects.filter(job__in=cancelled).exists(),
         'cancelled_jobs_have_no_ledger_entries':not LedgerEntry.objects.filter(job__in=cancelled).exists(),
-        'cancelled_jobs_hold_no_funds':not Reservation.objects.filter(job__in=cancelled,state='held').exists()}}
+        'cancelled_jobs_hold_no_funds':not Reservation.objects.filter(job__in=cancelled,state='held').exists(),
+        'cancelled_jobs_hold_no_sponsor_reservation':not TestingReservation.objects.filter(job__in=cancelled,state='held').exists()}}
     # A job that has ended (succeeded, failed or cancelled) holds nothing: every reservation was settled or released.
     ended_holding=Reservation.objects.filter(job__state__in=['succeeded','failed','cancelled'],state='held').values_list('job_id',flat=True).distinct()
-    hold_policy={'ended_jobs_holding_funds':[str(job_id) for job_id in ended_holding],'checks':{'ended_jobs_hold_no_funds':not ended_holding.exists()}}
+    ended_sponsor=TestingReservation.objects.filter(job__state__in=['succeeded','failed','cancelled'],state='held')
+    hold_policy={'ended_jobs_holding_funds':[str(job_id) for job_id in ended_holding],
+        'ended_jobs_holding_sponsor_reservations':[str(pk) for pk in ended_sponsor.values_list('job_id',flat=True)],
+        'checks':{'ended_jobs_hold_no_funds':not ended_holding.exists(),
+                  'ended_jobs_hold_no_sponsor_reservations':not ended_sponsor.exists()}}
     unbound_over_limit=PlatformCost.objects.filter(kind='absorbed_over_limit').exclude(job__usage__isnull=False).count()
     ledger_policy={'orphan_policy_entries':orphan,'checks':{'policy_ledger_entries_bound_to_jobs':orphan==0,
                                                          'over_limit_absorptions_bound_to_settled_usage':unbound_over_limit==0}}
@@ -154,7 +169,7 @@ def audit_report(file_reader=None):
     reconciliation_summary={'evidence_kinds':evidence_counts,'reconciled_rows':CostReconciliation.objects.count(),'unreconciled_rows':Usage.objects.filter(costreconciliation__isnull=True).count(),
         'pending_funds':CostReconciliation.objects.filter(ledger_status='pending_funds').count(),'absorbed_rows':sum(row['absorbed'] for row in rows)}
     return {'checked_at':timezone.now().isoformat(),'scope':'Read-only fresh application records; no external requests; no clinical text or credentials exported.',
-        'charge_policy':'User charge is exactly 1.5 × the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.',
+        'charge_policy':'Standing-authority synthetic testing is owner-sponsored with zero user charge, no wallet credits and separately retained provider-cost estimates. Other user charge is exactly 1.5 × the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.',
         'platform_costs':platform_costs,'reconciliation_summary':reconciliation_summary,
         'cost_basis':'Original usage is provider-metered units priced at configured USD rates; reservations are estimates. Classified reconciliation evidence and adjustments are reported separately.',
         'fingerprint_limit':'A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.',

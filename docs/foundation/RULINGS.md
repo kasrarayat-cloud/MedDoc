@@ -487,3 +487,5 @@ index above, every body in `docs/foundation/rulings/`.
 **4 archives · 369,216 chars · largest 106,835.**
 
 <!-- ARCHIVE-INDEX-END -->
+
+| 2026-10-09 | QuillMD testing authority | OWNER-RULING | **STANDING** — necessary purposeful paid QuillMD testing has no monetary or cumulative call ceiling; explicit standing-authority mode, immutable purpose/accounting, existing synthetic/provider/access safeguards; historical finite approvals and unknown $0.10 hold preserved. | [`2026-10-09-quillmd-standing-testing-authority.md`](rulings/2026-10-09-quillmd-standing-testing-authority.md) |

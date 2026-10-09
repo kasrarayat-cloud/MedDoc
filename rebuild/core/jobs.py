@@ -189,6 +189,12 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
         raise ValidationError(f'This recording is {seconds_text(seconds)} long; the longest recording accepted is {seconds_text(max_recording_seconds())}. '
                               'Upload a shorter segment. Nothing was sent for transcription.')
     limit=Decimal(quote['charge_limit'])
+    from . import testing_authority
+    if testing_authority.identity(config):
+        # This remains a conservative estimate, not a sponsor funding limit.
+        # Duration and structural/stream checks still precede any provider send.
+        testing_authority.validate_config(config,'transcription')
+        return bounds,limit,quote
     if approved_limit is None:
         if not quote['within_standard']:
             raise RecordingOverLimit(f'This recording is {seconds_text(seconds)} long. Transcribing it could cost up to ${limit}, above the '
@@ -228,6 +234,9 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
     from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
     config=campaign_job_config(dict(config or generation.configuration()),kind)
+    from . import testing_authority
+    if testing_authority.identity(config):
+        testing_authority.admit_actor(user,e.department_id)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
@@ -263,6 +272,12 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         streams=config.get('submission_streams') or ''
         if streams.isdigit() and int(streams)>1: raise ValidationError(AMBIGUOUS_STREAMS.format(count=int(streams)))
         if streams.isdigit() and int(streams)==0: raise ValidationError(NO_AUDIO_TRACK)
+    from . import testing_authority
+    if testing_authority.identity(config):
+        estimated_cost=(charge_limit/MULTIPLIER if kind=='transcription' else
+            generation.maximum_cost(e.notes,e.template_version.fields,config,
+                context_labels=[row['label'] for row in e.template_version.review_requirements]))
+        config=testing_authority.job_config(config,kind,user,e.department_id,estimated_cost)
     if campaign_identity(config) is not None:
         expected_charge=(charge_limit if kind=='transcription' else
             generation.maximum_cost(e.notes,e.template_version.fields,config,
@@ -540,6 +555,12 @@ def run_one():
     try:
         e=job.encounter
         from .preparation_campaign import provider_slot
+        from . import testing_authority
+        if testing_authority.identity(job.config):
+            try:
+                testing_authority.admit_job_send(job)
+            except (ValidationError,PermissionDenied) as exc:
+                raise testing_authority.TestingProviderRefusal('Standing request authority or synthetic access changed; nothing was sent.') from exc
         with provider_slot(job.config):
             result,cost,units,rates,provider,request_id,simulated=generation.generate(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements]) if job.kind=='generation' else transcribe(job)
             provider_returned=True
@@ -605,7 +626,8 @@ def run_one():
         fixture=job.kind=='generation' and job.config.get('mode',settings.AI_MODE)!='live'
         declined=known and isinstance(exc,NotAdoptedByUser)
         from .preparation_campaign import CampaignProviderRefusal
-        unsent=not known and not provider_returned and isinstance(exc,(NoProviderRequest,CampaignProviderRefusal))
+        from .testing_authority import TestingProviderRefusal
+        unsent=not known and not provider_returned and isinstance(exc,(NoProviderRequest,CampaignProviderRefusal,TestingProviderRefusal))
         job.state='failed' if known or fixture or unsent else 'reconciliation'
         # After settlement the error prefix is the billing classification audit_billing reads: not_adopted stays charged, platform_failure is absorbed.
         if known: job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
