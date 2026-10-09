@@ -1,7 +1,9 @@
 from types import SimpleNamespace
+import re
 from unittest.mock import patch
 from django.test import RequestFactory, SimpleTestCase, override_settings
 from django.http import Http404
+from django.template.loader import get_template
 from core.doctor_guide import doctor_guide
 from core.middleware import AccessMiddleware
 
@@ -37,6 +39,27 @@ class DoctorGuideTests(SimpleTestCase):
         self.assertIn(b'actual browser microphone', response.content)
         self.assertIn(b'native Microsoft Word', response.content)
         self.assertIn(b'Jordan Example', response.content)
+
+    @override_settings(ADMIN_SITE=False, SYNTHETIC_ONLY=True)
+    def test_soap_walkthrough_matches_accepted_four_section_form_and_dashboard(self):
+        # Accepted blank SOAP fixture SHA-256 4af367765a10367aca0f09872360445eedb1c69bc79ed7c4c4bfadd1387efdf6.
+        # The private runtime fixture is independently qualified; CI checks the
+        # same four-label contract without requiring private runtime files.
+        expected = ['Subjective', 'Objective', 'Assessment', 'Plan']
+        response = doctor_guide(self.request())
+        self.assertEqual(response.status_code, 200)
+        case = re.search(r'<h2>Fictional typed SOAP case</h2>(.*?)</section>',
+                         response.content.decode(), re.S)
+        self.assertIsNotNone(case)
+        example = re.search(r'<pre[^>]*>(.*?)</pre>', case.group(1), re.S)
+        self.assertIsNotNone(example)
+        lines = [line.strip() for line in example.group(1).splitlines() if line.strip()]
+        self.assertEqual([line.partition(':')[0] for line in lines], expected)
+        self.assertTrue(all(line.partition(':')[2].strip() for line in lines))
+        dashboard = get_template('dashboard.html').template.source
+        self.assertEqual(re.findall(r'<span class="mono">([^<]+):</span>', dashboard), expected)
+        self.assertNotIn('eight-field', case.group(1))
+        self.assertIn('own authorized department', case.group(1))
 
     def test_admin_site_or_non_synthetic_activation_cannot_expose_guide(self):
         for admin, synthetic in [(True, True), (False, False)]:
