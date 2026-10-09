@@ -13,6 +13,182 @@ except ImportError:
     import backup_restore as b
 
 
+class PreparationReferenceTests(unittest.TestCase):
+    def references(self, rows):
+        return b.file_references(lambda statement: rows.get(
+            next(kind for kind, text in b.FILE_QUERIES if text == statement), []))
+
+    def test_all_preparation_artifacts_are_included_alongside_legacy_files(self):
+        kinds = b.PREPARATION_FILE_KINDS | {'original', 'export', 'audio', 'receipt'}
+        rows = {kind: [(kind + '/synthetic.bin', 'a' * 64)] for kind in kinds}
+        seen = []
+        def query(statement):
+            seen.append(statement)
+            return next(rows[kind] for kind, text in b.FILE_QUERIES if statement == text)
+        references = b.file_references(query)
+        self.assertEqual(seen, [statement for _, statement in b.FILE_QUERIES])
+        self.assertEqual(set(references), {kind + '/synthetic.bin' for kind in kinds})
+        for kind in b.PREPARATION_FILE_KINDS:
+            self.assertEqual(references[kind + '/synthetic.bin']['expected_sha256'], 'a' * 64)
+
+    def test_current_approved_and_historical_refs_share_bytes_without_losing_provenance(self):
+        row = ('prepared/synthetic.docx', 'a' * 64)
+        references = self.references({'approved_prepared': [row], 'candidate': [row],
+                                      'candidate_history': [row, row]})
+        self.assertEqual(set(references), {row[0]})
+        self.assertEqual(references[row[0]]['kinds'],
+                         ['approved_prepared', 'candidate', 'candidate_history', 'candidate_history'])
+
+    def test_conflicting_current_and_historical_hashes_are_not_deduplicated_away(self):
+        with self.assertRaisesRegex(RuntimeError, 'Conflicting database file hashes'):
+            self.references({'candidate': [('prepared/synthetic.docx', 'a' * 64)],
+                             'candidate_history': [('prepared/synthetic.docx', 'b' * 64)]})
+
+    def test_unhashed_legacy_audio_keeps_its_semantics_and_gains_any_known_hash(self):
+        path = 'synthetic/shared.bin'
+        self.assertEqual(self.references({'audio': [(path, '')]})[path]['expected_sha256'], '')
+        self.assertEqual(self.references({'audio': [(path, '')],
+            'preparation_response': [(path, 'b' * 64)]})[path]['expected_sha256'], 'b' * 64)
+
+    def test_every_new_reference_needs_a_complete_canonical_hash(self):
+        for kind in b.PREPARATION_FILE_KINDS:
+            for value in ('', None, 'a' * 63, 'A' * 64, 'a' * 65, 'x' * 64, 123):
+                with self.subTest(kind=kind, digest=value), self.assertRaises(RuntimeError):
+                    self.references({kind: [('prepared/synthetic.docx', value)]})
+
+    def test_invalid_history_or_partial_pair_sentinels_cannot_be_copied(self):
+        for kind in b.PREPARATION_FILE_KINDS:
+            for path in ('../invalid-preparation-reference', '../invalid-candidate-history',
+                         '../secret', '/secret', 'a//b', 'a\\b', ''):
+                with self.subTest(kind=kind, path=path), self.assertRaises(RuntimeError):
+                    self.references({kind: [(path, 'a' * 64)]})
+
+    def test_no_file_for_unwritten_or_unknown_responses_is_invented(self):
+        self.assertEqual(self.references({}), {})
+
+
+class PreparationCaptureTests(unittest.TestCase):
+    """Real encrypted files with a DB-snapshot/pg_dump fixture, never a live DB."""
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.source = self.root / 'source'
+        (self.source / 'core').mkdir(parents=True)
+        (self.source / 'core/models.py').write_text('# synthetic source\n')
+        (self.source / '.runtime').mkdir(mode=0o700)
+        self.media = self.root / 'state/files'
+        self.media.mkdir(parents=True)
+        self.destination = self.root / 'backups'
+        self.key = self.root / 'key'
+        b.write_private(self.key, Fernet.generate_key())
+        self.cipher = b.key_at(self.key)
+        self.args = SimpleNamespace(source=self.source, output=self.destination, key_file=self.key)
+        self.statements = []
+        self.rows = {}
+        self.snapshot_exported = False
+        self.committed = False
+        owner = self
+        class Connection:
+            def __enter__(self): return self
+            def __exit__(self, *args): pass
+            def execute(self, statement):
+                owner.statements.append(statement)
+                if statement == 'SELECT pg_export_snapshot()':
+                    owner.snapshot_exported = True
+                    return SimpleNamespace(fetchone=lambda: ('synthetic-snapshot',))
+                if statement == 'COMMIT': owner.committed = True
+                if statement in {text for _, text in b.FILE_QUERIES}:
+                    if not owner.snapshot_exported:
+                        raise AssertionError('References queried outside exported snapshot')
+                    return SimpleNamespace(fetchall=lambda: owner.rows.get(statement, []))
+                return SimpleNamespace(fetchall=lambda: [])
+        try:
+            from . import private_storage
+        except ImportError:
+            import private_storage
+        for target, name, options in [
+                (b.psycopg, 'connect', {'return_value': Connection()}),
+                (b, 'source_options', {'return_value': {'password': 'synthetic-only', 'user': 'synthetic-backup'}}),
+                (b, 'inspect_container', {'return_value': {'Id': 'synthetic-container', 'Image': 'sha256:'+'a'*64,
+                    'State': {'Running': True}, 'HostConfig': {'PortBindings':
+                        {'5432/tcp': [{'HostIp': '127.0.0.1', 'HostPort': '55438'}]}}}}),
+                (b, 'fingerprint', {'return_value': {'synthetic': {'rows': 1, 'sha256': 'b'*64}}}),
+                (b, 'invariant_counts', {'return_value': {'wallet_bounds': 0}}),
+                (private_storage, 'state_root', {'return_value': self.media.parent})]:
+            patcher = patch.object(target, name, **options)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        def run(args, **kwargs):
+            if args[0] == 'git': return b'c' * 40 + b'\n'
+            self.assertIn('--snapshot=synthetic-snapshot', args)
+            return b'synthetic encrypted database snapshot'
+        runner = patch.object(b, 'run', side_effect=run)
+        self.run = runner.start()
+        self.addCleanup(runner.stop)
+
+    def add_reference(self, kind, path, data):
+        target = self.media / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        statement = next(text for row_kind, text in b.FILE_QUERIES if kind == row_kind)
+        self.rows.setdefault(statement, []).append((path, b.digest(data)))
+
+    def backup_directory(self):
+        return next(self.destination.iterdir())
+
+    def test_capture_authenticates_each_new_kind_from_the_same_readonly_snapshot(self):
+        from contextlib import redirect_stdout
+        from io import StringIO
+        for kind in b.PREPARATION_FILE_KINDS:
+            self.add_reference(kind, kind + '/synthetic.bin', ('synthetic ' + kind).encode())
+        with redirect_stdout(StringIO()): b.backup(self.args)
+        root, manifest = b.load_backup(self.backup_directory(), self.cipher)
+        self.assertTrue(self.committed)
+        self.assertLess(self.statements.index('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'),
+                        self.statements.index('SELECT pg_export_snapshot()'))
+        self.assertEqual({kind for row in manifest['files'] for kind in row['kinds']}, b.PREPARATION_FILE_KINDS)
+        self.assertEqual(len(manifest['files']), 5)
+        for row in manifest['files']:
+            self.assertEqual(b.decrypt_checked(root / row['object'], row, self.cipher),
+                             (self.media / row['path']).read_bytes())
+        self.assertEqual(b.decrypt_checked(root / 'database.dump.fernet', manifest['dump'], self.cipher),
+                         b'synthetic encrypted database snapshot')
+
+    def test_missing_historical_file_leaves_incomplete_capture_without_dump_or_commit(self):
+        self.add_reference('candidate_history', 'prepared/history.docx', b'synthetic historical bytes')
+        (self.media / 'prepared/history.docx').unlink()
+        with self.assertRaises(FileNotFoundError): b.backup(self.args)
+        folder = self.backup_directory()
+        self.assertTrue((folder / 'INCOMPLETE').exists())
+        self.assertFalse((folder / 'manifest.json.fernet').exists())
+        self.assertFalse((folder / 'database.dump.fernet').exists())
+        self.assertFalse(self.committed)
+        self.assertFalse(any('pg_dump' in call.args[0] for call in self.run.call_args_list))
+
+    def test_tampered_prepared_file_is_rejected_before_dump_and_completion(self):
+        self.add_reference('approved_prepared', 'prepared/approved.docx', b'approved synthetic bytes')
+        (self.media / 'prepared/approved.docx').write_bytes(b'tampered synthetic bytes')
+        with self.assertRaisesRegex(RuntimeError, 'database integrity hash'): b.backup(self.args)
+        self.assertTrue((self.backup_directory() / 'INCOMPLETE').exists())
+        self.assertFalse(self.committed)
+
+    def test_late_response_change_keeps_capture_incomplete_even_after_dump(self):
+        self.add_reference('preparation_response', 'preparation-receipts/response.json', b'synthetic response')
+        original = b.file_data
+        calls = []
+        def changing(root, path):
+            calls.append(path)
+            return original(root, path) if len(calls) == 1 else b'changed after encryption'
+        with patch.object(b, 'file_data', side_effect=changing):
+            with self.assertRaisesRegex(RuntimeError, 'changed during snapshot'): b.backup(self.args)
+        folder = self.backup_directory()
+        self.assertTrue((folder / 'database.dump.fernet').exists())
+        self.assertTrue((folder / 'INCOMPLETE').exists())
+        self.assertFalse((folder / 'manifest.json.fernet').exists())
+        self.assertFalse(self.committed)
+
+
 class BackupSecurityTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

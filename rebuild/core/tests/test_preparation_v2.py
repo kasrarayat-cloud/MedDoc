@@ -238,6 +238,117 @@ class TypedRoleProductTests(SimpleTestCase):
         self.assertIn('Printed constraint verified', html)
 
 
+class WMOriginalStoryContextProductTests(SimpleTestCase):
+    """Real pinned SDK transport, mocked network; no paid/model acceptance claim."""
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        from documents.test_preparation_wm_context import original_xml_inventory
+        cls.value, _, _, _ = original_xml_inventory()
+
+    def setUp(self):
+        self.config = {'mode': 'fixture', 'provider': 'anthropic', 'model': 'configured-label',
+                       'input_rate': '3', 'output_rate': '15', 'cached_rate': '0.3'}
+
+    def test_only_new_exact_original_preparations_receive_prospective_context_mode(self):
+        original_config = deepcopy(self.config)
+        for sha, expected in [(preparation.WM_IOV_SHA256, True), ('0'*64, False)]:
+            with self.subTest(sha=sha), patch.object(preparation, 'feature_enabled', return_value=True), \
+                    patch.object(preparation, 'configuration', return_value=original_config), \
+                    patch('core.preparation_campaign.active_campaign_config', side_effect=lambda config, _: config), \
+                    patch('core.testing_authority.identity', return_value={'mode': 'standing_authority'}), \
+                    patch('core.testing_authority.create_preparation') as create:
+                preparation.create_preparation(SimpleNamespace(sha256=sha), 'synthetic-doctor')
+            config = create.call_args.args[2]
+            self.assertEqual('word_source_review_context' in config, expected)
+            if expected:
+                self.assertEqual(config['word_source_review_context'], preparation.WM_SOURCE_REVIEW_CONTEXT)
+            self.assertEqual(original_config, self.config)
+
+    def test_old_payload_digest_and_both_retained_role_results_are_unchanged_by_new_context(self):
+        before = deepcopy(self.value)
+        proposal, _ = preparation.provider_role(self.value, 'proposer', self.config, 1)
+        checker, _ = preparation.provider_role(self.value, 'checker', self.config, 1, proposal)
+        for role, response in [('proposer', proposal), ('checker', checker)]:
+            # Historical unresolved findings remain original evidence.
+            response['stories'][0]['verdict'] = 'unresolved'
+            response['stories'][7]['verdict'] = 'unresolved'
+            proposal_arg = proposal if role == 'checker' else None
+            expected = {'original': preparation.model_inventory(before), 'role': role}
+            if role == 'checker':
+                expected['proposal'] = proposal
+            actual = preparation.role_payload(self.value, role, proposal_arg)
+            self.assertEqual(actual, expected)
+            self.assertEqual(digest(actual), digest(expected))
+            new = preparation.role_payload(self.value, role, proposal_arg,
+                                           source_review_context=preparation.WM_SOURCE_REVIEW_CONTEXT)
+            self.assertNotEqual(digest(new), digest(actual))
+            validate_role(self.value, response, role)
+            self.assertEqual([s['story_id'] for s in response['stories'] if s['verdict'] == 'unresolved'], ['s1', 's8'])
+        self.assertEqual(self.value, before)
+
+    def test_both_actual_sdk_requests_receive_original_context_and_unknown_results_stay_unresolved(self):
+        import httpx
+        from anthropic import Anthropic
+        sent = []
+        config = {**self.config, 'mode': 'live',
+                  'word_source_review_context': preparation.WM_SOURCE_REVIEW_CONTEXT}
+        proposer, _ = preparation.provider_role(self.value, 'proposer', self.config, 1)
+        for role in ['proposer', 'checker']:
+            output, _ = preparation.provider_role(self.value, role, self.config, 1)
+            output['stories'][0]['verdict'] = 'unresolved'
+            output['stories'][7]['verdict'] = 'unresolved'
+            def handle(request):
+                self.assertEqual(request.url.host, 'synthetic-provider.invalid')
+                sent.append(json.loads(request.content))
+                return httpx.Response(200, headers={'request-id': 'offline-wm-context-request'}, json={
+                    'id': 'offline-wm-context-response', 'type': 'message', 'role': 'assistant',
+                    'model': 'offline-returned-model', 'stop_reason': 'end_turn', 'stop_sequence': None,
+                    'content': [{'type': 'text', 'text': json.dumps(output)}],
+                    'usage': {'input_tokens': 100, 'output_tokens': 100}})
+            with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+                client = Anthropic(api_key='synthetic-not-a-credential', base_url='https://synthetic-provider.invalid',
+                                   http_client=http, timeout=7, max_retries=0)
+                with patch('anthropic.Anthropic', return_value=client) as constructor:
+                    raw, evidence = preparation.provider_role(self.value, role, config, 7,
+                                                               proposer if role == 'checker' else None)
+            constructor.assert_called_once_with(timeout=7, max_retries=0)
+            wire = sent[-1]
+            payload = json.loads(wire['messages'][0]['content'])
+            context = payload['original']['source_review_context']
+            self.assertEqual(len(context['body']['answer_destinations']), 90)
+            self.assertEqual(len(context['body']['preserved_review_requirements']), 14)
+            self.assertEqual(len(context['glossary']['definitions']), 28)
+            self.assertIn('retain NEVER means the doctor has approved', wire['system'])
+            self.assertIn('Keep unresolved for any remaining omission', wire['system'])
+            self.assertIn('actual finalization', wire['system'])
+            if role == 'checker':
+                self.assertEqual(payload['proposal'], proposer)
+            response = json.loads(raw)
+            self.assertEqual(response, output)
+            validate_role(self.value, response, role)
+            self.assertEqual(evidence['model'], 'offline-returned-model')
+            self.assertFalse(evidence['simulated'])  # Mock transport; never counted as a live model check.
+        self.assertEqual(len(sent), 2)
+
+    def test_explicit_invalid_modes_and_wrong_original_fail_before_provider_or_reservation(self):
+        for mode in [None, '', False, {}, 'universal-word']:
+            with self.subTest(mode=mode), patch('anthropic.Anthropic') as constructor, self.assertRaises(ValueError):
+                preparation.provider_role(self.value, 'proposer',
+                    {**self.config, 'mode': 'live', 'word_source_review_context': mode}, 7)
+            constructor.assert_not_called()
+        bad = deepcopy(self.value)
+        bad['source_sha256'] = '0'*64
+        bad['inventory_sha256'] = digest({k: v for k, v in bad.items() if k != 'inventory_sha256'})
+        packet = SimpleNamespace(inventory=bad, config={**self.config, 'mode': 'live',
+            'word_source_review_context': preparation.WM_SOURCE_REVIEW_CONTEXT})
+        with patch('core.testing_authority.reserve_role') as reserve, \
+                patch('anthropic.Anthropic') as constructor, self.assertRaises(ValueError):
+            preparation.call_role(packet, 'proposer', 999999999)
+        reserve.assert_not_called()
+        constructor.assert_not_called()
+
+
 class TypedWMDeadlineTests(SimpleTestCase):
     """Deadline classifier/queue controls; synthetic SDK transport, no live API."""
     setUp=TypedRoleProductTests.setUp

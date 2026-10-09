@@ -21,6 +21,14 @@ NS = {'w': W_NS}
 W = '{'+W_NS+'}'
 PROTOCOL = 'blank-word-preparation-v1'
 TYPED_PROTOCOL = 'blank-word-preparation-v2'
+WM_SOURCE_REVIEW_CONTEXT = 'qualified-wm-stories-v1'
+# This projection binds the complete original package, canonical answer
+# destinations and original assertion/signing associations. It excludes only
+# the separately enforced clinical variant definitions and historical state.
+WM_SOURCE_REVIEW_SHA256 = 'dd2b10ebca490f30dd7b4814c7d30205d5e4349034b650dcac15a2ecce9d9e1b'
+WM_REQUIREMENT_SOURCE_KEYS = ('key', 'label', 'kind', 'body_paragraph', 'text',
+                              'text_sha256', 'control_keys', 'original_text',
+                              'original_text_sha256')
 SIGNING = re.compile(r'\b(?:signatures?|signed|signing|attest(?:ation|ed|ing)?|certif(?:ication|ied|y)|consent(?:ed|ing)?)\b'
                      r'|\bsign\s+(?:here|below|above|by|and\s+date)\b'
                      r'|\b(?:please|patient|clinician|physician|doctor|provider)\s+sign\b', re.I)
@@ -274,9 +282,73 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
     return result
 
 
-def model_inventory(value):
+def wm_source_review_context(value, mode):
+    """Finite source evidence, never a verdict or permission to write/approve.
+
+    This is explicitly opted into by a NEW preparation's immutable config.
+    Original inventories and old role payloads are not upgraded in place.
+    The exact package/mapping projection was independently checked against the
+    tracked blank original, including its 28 linked glossary definitions.
+    """
+    validate_inventory(value)
+    try:
+        projection = {key: value[key] for key in ('protocol', 'source_sha256',
+            'document_backend', 'parts', 'stories', 'fields', 'questions',
+            'anchors', 'issues', 'manual_rows')}
+        projection['review_requirements'] = [{key: row[key] for key in WM_REQUIREMENT_SOURCE_KEYS}
+                                             for row in value['review_requirements']]
+        valid = (type(mode) is str and mode == WM_SOURCE_REVIEW_CONTEXT
+                 and value['protocol'] == TYPED_PROTOCOL
+                 and value['source_sha256'] == WM_IOV_SHA256
+                 and value['document_backend'] == {'backend': 'wm-iov-foss-v2',
+                     'source_sha256': WM_IOV_SHA256,
+                     'mapping_digest': '0fcc5e36dfe589a190a726f059c45b10364f3d02f312aea5fc8935d16ea05072'}
+                 and digest(projection) == WM_SOURCE_REVIEW_SHA256)
+    except (KeyError, TypeError):
+        valid = False
+    if not valid:
+        raise DocumentFailure('The explicit WM source-review context is not bound to the qualified original.',
+                              'stale_inventory')
+    stories = {row['part']: 's'+str(index+1) for index, row in enumerate(value['stories'])}
+    body_story, glossary_story = stories['word/document.xml'], stories['word/glossary/document.xml']
+    by_key = {field['key']: anchor['id'] for field, anchor in zip(value['fields'], value['anchors'])}
+    destinations, placeholders = [], []
+    for field, anchor in zip(value['fields'], value['anchors']):
+        locator = field['locator']
+        if field['kind'] == 'choice':
+            area = {'kind': 'original_dropdown', 'placeholder_definition': 'g'+str(len(placeholders)+1)}
+            placeholders.append({'id': area['placeholder_definition'], 'body_anchor_id': anchor['id'],
+                                 'original_text': 'Choose an item.'})
+        elif 'body_paragraph' in locator:
+            area = {'kind': 'original_labelled_body_blank'}
+        elif field['kind'] == 'measurement':
+            area = {'kind': 'original_measurement_cell', 'printed_unit': locator['unit']}
+        else:
+            area = {'kind': 'original_location_marker', 'printed_marker': locator['marker']}
+        destinations.append({'anchor_id': anchor['id'], 'question_id': anchor['question_id'],
+                             'original_label': field['label'], 'source_area': area})
+    requirements = [{'id': 'r'+str(index+1), 'label': row['label'], 'kind': row['kind'],
+                     'original_text': row['original_text'],
+                     'original_text_sha256': row['original_text_sha256'],
+                     'answer_anchor_ids': [by_key[key] for key in row['control_keys']],
+                     'handling': ('explicit_clinician_evidence_and_review_each_use' if row['kind'] == 'assertion'
+                                  else 'actual_finalization_time_only' if row['kind'] == 'signature'
+                                  else 'actual_authenticated_signer_only')}
+                    for index, row in enumerate(value['review_requirements'])]
+    return {'protocol': mode, 'source_sha256': value['source_sha256'],
+            'source_context_sha256': digest(projection),
+            'body': {'story_id': body_story, 'answer_destinations': destinations,
+                     'preserved_review_requirements': requirements},
+            'glossary': {'story_id': glossary_story, 'kind': 'referenced_dropdown_placeholder_definitions',
+                         'definitions': placeholders, 'operation': 'retain_unchanged'},
+            'approval_policy': {'explicit_doctor_template_approval_required': True,
+                                'clinical_statement_review_required_each_use': True,
+                                'models_cannot_approve_or_write_documents': True}}
+
+
+def model_inventory(value, *, source_review_context=None):
     """Closed public schema: paths, XML and internal locators never reach a model."""
-    return {'protocol': value['protocol'], 'inventory_sha256': value['inventory_sha256'],
+    result = {'protocol': value['protocol'], 'inventory_sha256': value['inventory_sha256'],
             'stories': [{'id': 's'+str(i+1), 'texts': row['texts'], 'choices': row['choices'],
                          'content_sha256':digest({'texts':row['texts'],'choices':row['choices']})}
                         for i, row in enumerate(value['stories'])],
@@ -288,6 +360,9 @@ def model_inventory(value):
                             if value['protocol'] == TYPED_PROTOCOL and a['kind'] == 'choose_cell' else {})}
                         for a in value['anchors']], 'issues': [{k:issue[k] for k in ('code','message','protected_signing') if k in issue}
                                                               for issue in value['issues']]}
+    if source_review_context is not None:
+        result['source_review_context'] = wm_source_review_context(value, source_review_context)
+    return result
 
 
 def validate_role(value, response, role):
