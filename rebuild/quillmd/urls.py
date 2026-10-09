@@ -4,7 +4,9 @@ from core import views as v
 from core import recovery
 from core import preview_access
 from core import preparation_views as preparation
-urlpatterns=[path('preview/sign-in/',preview_access.sign_in,name='preview_sign_in'),path('preview/sign-out/',preview_access.sign_out,name='preview_sign_out')]
+from core.doctor_guide import doctor_guide
+urlpatterns=[path('doctor-guide/',doctor_guide,name='doctor_guide')]
+urlpatterns+=[path('preview/sign-in/',preview_access.sign_in,name='preview_sign_in'),path('preview/sign-out/',preview_access.sign_out,name='preview_sign_out')]
 urlpatterns+=[path('recovery/',recovery.recovery_request,name='recovery_request'),path('recovery/confirm/<uidb64>/<token>/',recovery.RecoveryConfirmView.as_view(),name='recovery_confirm'),path('recovery/complete/',recovery.recovery_complete,name='recovery_complete'),path('verification/resend/',recovery.verification_resend,name='verification_resend')]
 urlpatterns += [
     path('templates/preview-frame/',preparation.preview_frame,name='docx_preview_frame'),

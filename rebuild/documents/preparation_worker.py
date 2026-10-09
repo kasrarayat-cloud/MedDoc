@@ -5,7 +5,11 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sandbox import isolate
 from engine import DocumentFailure
-from preparation import inventory, candidate
+from preparation import inventory, candidate, PROTOCOL
+# Load trusted source modules before Landlock restricts file access to this
+# disposable document workspace. The sandbox remains networkless and intact.
+import table_constraints
+import preparation_roles
 
 def main():
     workspace = Path(sys.argv[1]).resolve()
@@ -17,7 +21,7 @@ def main():
     try:
         request = json.loads((workspace/'request.json').read_text())
         if request['operation'] == 'inventory':
-            result = inventory(workspace/'input.docx', request.get('known'))
+            result = inventory(workspace/'input.docx', request.get('known'), protocol=request.get('protocol', PROTOCOL))
         elif request['operation'] == 'candidate':
             result = candidate(workspace/'input.docx', workspace/'output.docx',
                                request['inventory'], request['selected'],request.get('placements'))

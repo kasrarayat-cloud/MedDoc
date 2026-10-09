@@ -28,10 +28,18 @@ def revision(request):
 def detail(request,pk):
     template,prep=selected(request,pk)
     questions={q['id']:q for q in prep.inventory.get('questions',[])}
-    proposed={r['anchor_id']:r['decision'] for r in prep.proposal.get('anchors',[])}
-    checked={r['anchor_id']:r['verdict'] for r in prep.checker.get('anchors',[])}
-    rows=[{**a,'question':questions[a['question_id']]['text'],'proposal':proposed.get(a['id'],'pending'),
-           'checker':checked.get(a['id'],'pending')} for a in prep.inventory.get('anchors',[])]
+    proposed={r['anchor_id']:r for r in prep.proposal.get('anchors',[])}
+    checked={r['anchor_id']:r for r in prep.checker.get('anchors',[])}
+    uncertainty_labels={'none':'Printed constraint verified', 'constraints_unstated':'Type, unit or choices not specified by the form',
+        'placement_requires_review':'Doctor must choose the answer location', 'signing_protected':'Signing area protected',
+        'unsupported_structure':'Assisted setup required'}
+    def metadata(result):
+        value=result.get('metadata')
+        return {**value, 'uncertainty_label':uncertainty_labels.get(value.get('uncertainty'),'Requires review')} if value else None
+    rows=[{**a,'question':questions[a['question_id']]['text'],'proposal':proposed.get(a['id'],{}).get('decision','pending'),
+           'checker':checked.get(a['id'],{}).get('verdict','pending'),
+           'proposal_metadata':metadata(proposed.get(a['id'],{})),
+           'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
     return render(request,'template_preparation.html',{'template':template,'preparation':prep,
         'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
         'placement_rows':[r for r in rows if r['kind']=='choose_cell'],

@@ -3,7 +3,7 @@
 {% block content %}
 <div class="page-heading">
   <div><div class="eyebrow">Your workspace</div><h1>A little less paperwork.</h1><p>Add documented notes to a supported form, then review each answer before export.</p></div>
-  <div class="actions"><a class="button" href="{% url 'encounter_new' %}">New document <span aria-hidden="true">＋</span></a></div>
+  <div class="actions"><a href="{% url 'doctor_guide' %}">Synthetic doctor walkthrough</a><a class="button" href="{% url 'encounter_new' %}">New document <span aria-hidden="true">＋</span></a></div>
 </div>
 <section class="start-grid" aria-label="Start a document">
   <a class="start-card start-card-primary" href="{% url 'encounter_new' %}">

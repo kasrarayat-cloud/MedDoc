@@ -1,0 +1,7 @@
+{% if metadata %}<details class="small"><summary>Field proposal</summary>
+<p>{{ metadata.label }}</p>
+<p>Type: {{ metadata.data_type }} · Unit: {{ metadata.unit|default:'Not specified' }}<br>
+Choices: {% for choice in metadata.choices %}{{ choice }}{% if not forloop.last %} / {% endif %}{% empty %}Not specified{% endfor %}<br>
+Answer location: {{ metadata.destination }}</p>
+<p>{{ metadata.uncertainty_label }}</p>
+</details>{% endif %}

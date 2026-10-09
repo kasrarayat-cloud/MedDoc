@@ -7,6 +7,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from engine import DocumentFailure, process  # noqa: E402
 from sandbox import isolate  # noqa: E402
+import preparation  # noqa: E402 -- trusted source loaded before Landlock
+import table_constraints  # noqa: E402
 
 
 def main():
