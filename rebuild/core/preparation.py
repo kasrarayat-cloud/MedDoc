@@ -250,7 +250,7 @@ def call_role(prep, role, deadline, proposal=None):
         receipt = PreparationReceipt.objects.create(preparation=prep, role=role,
             provider=prep.config['provider'], requested_model=prep.config['model'], request_sha256=digest(payload),
             quote_maximum=limit if prep.config['mode']=='live' else Decimal('0'), state='running', started_at=timezone.now())
-    began = time.monotonic();stage='provider_role'
+    began = time.monotonic();stage='provider_role';provider_invoked=False
     try:
         def observed(evidence):
             nonlocal stage
@@ -261,6 +261,11 @@ def call_role(prep, role, deadline, proposal=None):
             receipt.save(update_fields=['response_path','response_sha256','returned_model','provider_request_id','provider_resource_id'])
             stage='response_retained'
         with provider_slot(prep.config):
+            # Reservation and provider-lock admission can consume the earlier
+            # window. Never start a request using a timeout from before them.
+            remaining=deadline-time.monotonic()
+            if remaining<3:raise DocumentError('Preparation reached its time limit before a provider request started.', 'deadline')
+            provider_invoked=True
             response, evidence = provider_role(prep.inventory, role, prep.config, min(role_seconds, remaining), proposal,observed)
             stage='response_validation'
             if (not isinstance(evidence['model'],str) or not 0<len(evidence['model'])<=100
@@ -278,10 +283,11 @@ def call_role(prep, role, deadline, proposal=None):
         receipt.state='succeeded'; receipt.save(update_fields=['state'])
         return response
     except BaseException as exc:
-        receipt.state='failed' if receipt.response_path else 'unknown'
+        receipt.state='failed' if receipt.response_path or not provider_invoked else 'unknown'
         receipt.error_code=getattr(exc, 'code', 'provider_unknown') if getattr(exc, 'code', '') in SAFE_ERRORS else 'provider_unknown'
         receipt.failure=safe_provider_failure(exc,role,stage,(time.monotonic()-began)*1000,
                                              bool(receipt.response_path),receipt.computed_cost is not None)
+        receipt.failure['provider_invoked']=provider_invoked
         # This closed metadata is retained before private-file I/O. File-retention
         # failure cannot erase the original diagnostic or imply free usage.
         receipt.save(update_fields=['state','error_code','failure'])

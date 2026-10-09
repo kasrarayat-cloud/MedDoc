@@ -1,6 +1,6 @@
 """Product role protocol and historical evidence compatibility; no live calls."""
 from copy import deepcopy
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -336,6 +336,98 @@ class TypedWMDeadlineTests(SimpleTestCase):
         for role in ['proposer','checker']:
             self.assertEqual(len({prompt for item,prompt in prompts if item==role}),1)
 
+    def test_reservation_and_slot_delay_recheck_the_actual_send_window(self):
+        import httpx
+        from anthropic import Anthropic
+        from django.core.exceptions import ValidationError
+        value=inventory(self.path,protocol=TYPED_PROTOCOL)
+        fixture,_=preparation.provider_role(value,'proposer',self.config,1)
+        for delayed_at in ['reservation','slot']:
+            for delay in [1,2,5]:
+                with self.subTest(delayed_at=delayed_at,delay=delay):
+                    clock={'now':100.0};receipt=self.receipt();sent=[];retained=[]
+                    def reserve(*args):
+                        if delayed_at=='reservation':clock['now']+=delay
+                        return receipt
+                    @contextmanager
+                    def slot(*args):
+                        if delayed_at=='slot':clock['now']+=delay
+                        yield
+                    def handle(request):
+                        sent.append(request)
+                        self.assertEqual(clock['now'],101)
+                        self.assertEqual(request.extensions['timeout']['read'],3)
+                        return httpx.Response(200,headers={'request-id':'offline-request'},json={
+                            'id':'offline-response','type':'message','role':'assistant','model':'offline-returned-model',
+                            'content':[{'type':'text','text':json.dumps(fixture)}],'stop_reason':'end_turn',
+                            'stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':20}})
+                    def retain(*args):
+                        retained.append(deepcopy(args[-1]));return 'offline-evidence.json','a'*64
+                    packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
+                    with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+                        def client(**kwargs):
+                            self.assertEqual(kwargs,{'timeout':3,'max_retries':0})
+                            return Anthropic(api_key='synthetic-offline-only',
+                                base_url='https://synthetic-provider.invalid',http_client=http,**kwargs)
+                        with patch('anthropic.Anthropic',side_effect=client) as constructed, \
+                                patch('core.testing_authority.identity',return_value=True), \
+                                patch('core.testing_authority.reserve_role',side_effect=reserve) as reserved, \
+                                patch('core.preparation_campaign.provider_slot',side_effect=slot), \
+                                patch.object(preparation,'retain_response',side_effect=retain), \
+                                patch.object(preparation.time,'monotonic',side_effect=lambda:clock['now']):
+                            if delay==1:
+                                self.assertEqual(preparation.call_role(packet,'proposer',104),fixture)
+                                self.assertEqual(receipt.state,'succeeded');self.assertEqual(len(sent),1)
+                            else:
+                                with self.assertRaises(preparation.DocumentError) as error:
+                                    preparation.call_role(packet,'proposer',104)
+                                self.assertEqual(error.exception.code,'deadline')
+                                self.assertEqual(sent,[]);constructed.assert_not_called()
+                                self.assertEqual(receipt.state,'failed')
+                                self.assertEqual(receipt.error_code,'deadline')
+                                self.assertFalse(receipt.failure['provider_invoked'])
+                                self.assertFalse(receipt.failure['response_retained'])
+                                self.assertFalse(receipt.failure['usage_established'])
+                                self.assertFalse(receipt.failure['automatic_retry'])
+                                self.assertEqual(receipt.response_path,'');self.assertIsNone(receipt.computed_cost)
+                                self.assertEqual(retained,[receipt.failure])
+                                frozen=(receipt.state,receipt.quote_maximum,deepcopy(receipt.failure))
+                                reserved.side_effect=ValidationError('Role already reserved')
+                                with self.assertRaises(ValidationError):
+                                    preparation.call_role(packet,'proposer',clock['now']+180)
+                                self.assertEqual((receipt.state,receipt.quote_maximum,receipt.failure),frozen)
+                                constructed.assert_not_called()
+                    self.assertEqual(receipt.quote_maximum,Decimal('0.220432'))
+
+    def test_reserved_deadline_failure_stops_worker_before_checker_and_candidate(self):
+        value=inventory(self.path,protocol=TYPED_PROTOCOL);clock={'now':100.0};receipt=self.receipt()
+        packet=SimpleNamespace(inventory={},config={**self.config,'mode':'live',
+            'word_preparation_protocol':TYPED_PROTOCOL},
+            template=SimpleNamespace(sha256=value['source_sha256'],department='synthetic-department',original_path='original.docx'),
+            requested_by='synthetic-doctor',state='queued',pk='synthetic-prep',save=Mock(),error_code='')
+        manager=Mock();manager.select_for_update.return_value.filter.return_value.order_by.return_value.first.return_value=packet
+        manager.filter.return_value.exists.return_value=False
+        def inspect(*args,**kwargs):clock['now']=276;return deepcopy(value)
+        def reserve(*args):clock['now']+=5;return receipt
+        with patch.object(preparation,'feature_enabled',return_value=True), \
+                patch.object(preparation.transaction,'atomic',side_effect=nullcontext), \
+                patch.object(preparation.TemplatePreparation,'objects',manager), \
+                patch.object(preparation,'membership'),patch.object(preparation,'private_path',return_value=self.path), \
+                patch.object(preparation,'inspect_preparation',side_effect=inspect), \
+                patch('core.testing_authority.identity',return_value=True), \
+                patch('core.testing_authority.reserve_role',side_effect=reserve) as reserved, \
+                patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
+                patch.object(preparation,'retain_response',return_value=('offline-failure.json','b'*64)), \
+                patch.object(preparation,'provider_role') as provider, \
+                patch.object(preparation,'build_candidate') as build,patch.object(preparation,'audit'), \
+                patch.object(preparation.time,'monotonic',side_effect=lambda:clock['now']):
+            self.assertTrue(preparation.run_one())
+        self.assertEqual(reserved.call_count,1);self.assertEqual(reserved.call_args.args[1],'proposer')
+        provider.assert_not_called();build.assert_not_called()
+        self.assertEqual(packet.state,'blocked');self.assertEqual(packet.error_code,'deadline')
+        self.assertEqual(receipt.state,'failed');self.assertFalse(receipt.failure['provider_invoked'])
+        self.assertEqual(receipt.quote_maximum,Decimal('0.220432'));self.assertIsNone(receipt.computed_cost)
+
     def worker_fixture(self,value,inspection_seconds,role_seconds,candidate_seconds):
         clock={'now':100.0};packet=SimpleNamespace(inventory={},config={'word_preparation_protocol':value['protocol']},
             template=SimpleNamespace(sha256=value['source_sha256'],department='synthetic-department',original_path='original.docx'),
@@ -404,6 +496,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
         self.assertEqual(receipt.state,'unknown');self.assertIsNone(receipt.computed_cost)
         self.assertEqual(receipt.quote_maximum,Decimal('0.220432'))
         self.assertFalse(receipt.failure['automatic_retry']);self.assertFalse(receipt.failure['response_retained'])
+        self.assertTrue(receipt.failure['provider_invoked'])
         self.assertEqual(receipt.failure['error_class'],'APITimeoutError')
         self.assertEqual((receipt.state,receipt.quote_maximum,receipt.computed_cost,receipt.failure),frozen)
 
