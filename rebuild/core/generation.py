@@ -123,8 +123,11 @@ def maximum_cost(notes,fields,config=None,*,context_labels=()):
     config=config or configuration()
     if config['mode']!='live': return Decimal('0')
     r=rates(config)
-    # UTF-8 bytes bound text token count conservatively; include schema/instruction overhead.
-    return Decimal(len(json.dumps({'notes':notes,'fields':fields,'context_labels':list(context_labels),
+    # Price the questions sent by generate(), not unused document locators,
+    # option inventories or approval metadata. Keep the conservative UTF-8
+    # byte bound, schema/instruction allowance and full output-token ceiling.
+    questions=[{'key':f['key'],'label':f['label'],'answer_policy':f.get('answer_policy','documented_source_only')} for f in fields]
+    return Decimal(len(json.dumps({'notes':notes,'questions':questions,'context_labels':list(context_labels),
         'source_units':source_units(notes,fields,context_labels=context_labels)[0] if tab_evidence_contract(fields) else []}).encode())+12000)*r['input_per_million']/1000000+Decimal(6000)*r['output_per_million']/1000000
 
 class Labels(dict):
