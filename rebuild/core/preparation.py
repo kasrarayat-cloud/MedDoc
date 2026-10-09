@@ -129,11 +129,18 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
         instructions += (' For EVERY answer area, independently propose or verify its exact original label, '
             'data_type, printed unit, ordered choices, finite destination ID and uncertainty. '
             'Canonical original answer_constraints are source evidence: never infer a unit, clinical range '
-            'or date format from a label alone. Where constraints are unstated, use text, null unit, '
-            'empty choices and constraints_unstated. Signing areas use text, null unit, empty choices '
-            'and signing_protected, and cannot become a new writable destination. '
-            'Ambiguous answer cells use a finite choice ID and placement_requires_review; the doctor must '
-            'explicitly select the destination. Model agreement never authorizes document writing.')
+            'or date format from a label alone. Apply uncertainty in this exact priority order: '
+            '(1) Signing areas use text, null unit, empty choices and signing_protected, and cannot '
+            'become a new writable destination. (2) Ambiguous answer cells use a finite choice ID '
+            'and placement_requires_review; the doctor must explicitly select the destination. '
+            '(3) If the original inventory has issues, other answer areas use unsupported_structure. '
+            '(4) Otherwise every source text field uses text, null unit, empty choices and '
+            'constraints_unstated, INCLUDING an explicit canonical answer_constraints object with '
+            'version 1 and data_type text. That canonical text fallback does not establish a date '
+            'format, number, unit or choice constraint; it does not justify uncertainty none. '
+            'A Date of birth label without a printed format remains text with constraints_unstated. '
+            '(5) Otherwise retain the exact established number, integer, date or choice metadata '
+            'and use uncertainty none. Model agreement never authorizes document writing.')
     client = Anthropic(timeout=timeout, max_retries=0)
     response = client.messages.create(model=config['model'], max_tokens=role_limits(inventory)[0], system=instructions,
         messages=[{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
