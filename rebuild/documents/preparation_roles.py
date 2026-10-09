@@ -31,7 +31,9 @@ def role_schema(role):
                 'required': sorted(METADATA_KEYS), 'properties': {
                     'label': {'type': 'string', 'minLength': 1, 'maxLength': 2000},
                     'data_type': {'type': 'string', 'enum': list(TYPES)},
-                    'unit': {'type': ['string', 'null'], 'maxLength': 80},
+                    # The pinned SDK accepts nullable scalars through anyOf;
+                    # its schema transformer rejects a list-valued type.
+                    'unit': {'anyOf': [{'type': 'string', 'maxLength': 80}, {'type': 'null'}]},
                     'choices': {'type': 'array', 'maxItems': 200,
                                 'items': {'type': 'string', 'minLength': 1, 'maxLength': 2000}},
                     'destination': {'type': 'string', 'minLength': 1, 'maxLength': 128},
