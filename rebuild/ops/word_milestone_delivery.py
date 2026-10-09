@@ -644,7 +644,12 @@ def foreign_service_observation(configuration):
 
 def render_environment(original,candidate,*,recovery=False):
     from .direct_account_access import reject_legacy_environment
-    reject_legacy_environment(original)
+    try:
+        reject_legacy_environment(original)
+    except ValueError as error:
+        reason = str(error)
+        raise Refusal(reason if re.fullmatch('[a-z0-9_]{1,100}', reason)
+                      else 'word_delivery_invalid_direct_account_environment') from None
     require(type(original) is bytes and original.endswith(b'\n'),'environment_bytes')
     require(re.fullmatch('[a-f0-9]{40}',candidate or ''),'candidate_sha')
     parsed=dotenv_values(stream=StringIO(original.decode()),interpolate=False)

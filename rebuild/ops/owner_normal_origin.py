@@ -637,7 +637,12 @@ def live_session_admission(states, rows, actors, secret, fingerprint, decoder, a
 
 def controlled_environment(original, previous, target, *, enabled):
     from .direct_account_access import reject_legacy_environment
-    reject_legacy_environment(original)
+    try:
+        reject_legacy_environment(original)
+    except ValueError as error:
+        reason = str(error)
+        raise Refusal(reason if re.fullmatch('[a-z0-9_]{1,100}', reason)
+                      else 'normal443_invalid_direct_account_environment') from None
     values = dotenv_values(stream=StringIO(original.decode()), interpolate=False)
     require(values.get('QUILLMD_RELEASE_SHA') == previous and values.get('QUILLMD_APP_BASE_URL') == 'https://app.quillmd.com:9443'
         and values.get('QUILLMD_PREVIEW_AUTH_ENABLED') == '1'

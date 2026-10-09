@@ -89,6 +89,28 @@ class DirectAccountEnvironmentTests(unittest.TestCase):
                     'owner_direct_account_decision_supersedes_shared_preview_gate'):
                 control()
 
+    def test_historical_operator_renderers_keep_refusal_type_and_exact_safe_reason(self):
+        installed = act.environment(ENV, PRIOR, TARGET)
+        cases = ((installed, 'owner_direct_account_decision_supersedes_shared_preview_gate'),
+                 (ENV + b'QUILLMD_RELEASE_SHA="' + TARGET.encode() + b'"\n',
+                  'direct_account_ambiguous_controlled_assignment'))
+        for raw, reason in cases:
+            with self.subTest(operator='normal_origin', reason=reason), \
+                    self.assertRaisesRegex(owner_normal_origin.Refusal, '^' + reason + '$'):
+                owner_normal_origin.controlled_environment(raw, PRIOR, TARGET, enabled=True)
+            with self.subTest(operator='word_delivery', reason=reason), \
+                    self.assertRaisesRegex(word_milestone_delivery.Refusal, '^' + reason + '$'):
+                word_milestone_delivery.render_environment(raw, TARGET)
+
+    def test_historical_operator_invalid_encoding_does_not_expose_input_in_refusal(self):
+        raw = ENV + b'UNRELATED="synthetic-private-' + bytes([255]) + b'"\n'
+        with self.assertRaisesRegex(owner_normal_origin.Refusal,
+                '^normal443_invalid_direct_account_environment$'):
+            owner_normal_origin.controlled_environment(raw, PRIOR, TARGET, enabled=True)
+        with self.assertRaisesRegex(word_milestone_delivery.Refusal,
+                '^word_delivery_invalid_direct_account_environment$'):
+            word_milestone_delivery.render_environment(raw, TARGET)
+
     def test_missing_marker_keeps_only_historical_uninstalled_fixture_compatible(self):
         self.assertIsNone(act.reject_legacy_environment(ENV))
         with self.assertRaisesRegex(ValueError, 'supersedes_shared_preview_gate'):
