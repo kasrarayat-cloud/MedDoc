@@ -20,6 +20,7 @@ else:
 NS = {'w': W_NS}
 W = '{'+W_NS+'}'
 PROTOCOL = 'blank-word-preparation-v1'
+TYPED_PROTOCOL = 'blank-word-preparation-v2'
 SIGNING = re.compile(r'\b(?:signatures?|signed|signing|attest(?:ation|ed|ing)?|certif(?:ication|ied|y)|consent(?:ed|ing)?)\b'
                      r'|\bsign\s+(?:here|below|above|by|and\s+date)\b'
                      r'|\b(?:please|patient|clinician|physician|doctor|provider)\s+sign\b', re.I)
@@ -59,6 +60,29 @@ def source_bound_candidate_fields(path, value):
         field['answer_constraints'] = deepcopy(actual)
     return fields
 
+
+def typed_source_fields(path, fields):
+    """Opt-in semantics for a new preparation; existing approvals are untouched."""
+    if __package__:
+        from .table_constraints import with_table_constraints
+    else:
+        from table_constraints import with_table_constraints
+    result = with_table_constraints(path, fields)
+    _, paragraphs, _, inspected, _ = docx_inspect(path)
+    source = {field['key']: field for field in inspected}
+    for field in result:
+        location = source[field['key']]['locator']
+        if SIGNING.search(source[field['key']]['label']):
+            continue
+        if 'paragraph' in location and 'token' in location:
+            text = paragraphs[location['paragraph']].text
+            constraint = constraint_from_context(text[:location['start']], text[location['end']:])
+            if constraint['data_type'] != 'text' or 'answer_constraints' in field:
+                if field.get('answer_constraints', constraint) != constraint:
+                    raise DocumentFailure('The paragraph constraint differs from its source.', 'content_changed')
+                field['answer_constraints'] = deepcopy(constraint)
+    return result
+
 def occupied(cell):
     return bool(''.join(cell.xpath('.//w:t/text()',namespaces=NS)).strip() or
                 cell.xpath('.//w:drawing | .//w:pict | .//w:br | .//w:sym | .//w:object | .//w:fldChar | .//w:fldSimple | .//w:sdt',namespaces=NS))
@@ -86,7 +110,9 @@ def unmapped_multi_column_rows(path):
     return result
 
 
-def inventory(path, known=None):
+def inventory(path, known=None, *, protocol=PROTOCOL):
+    if protocol not in {PROTOCOL, TYPED_PROTOCOL}:
+        raise DocumentFailure('Unsupported preparation protocol.', 'invalid_proposal')
     validate_docx(path, inventory_only=True)
     source_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     if known and known.get('sha256') != source_sha:
@@ -108,12 +134,24 @@ def inventory(path, known=None):
                 raise
             if exc.code != 'no_fields':
                 issues.append({'code': exc.code, 'message': str(exc)})
+    if protocol == TYPED_PROTOCOL and not known and fields:
+        fields = typed_source_fields(path, fields)
     for field in fields:
         if AMBIGUOUS_SIGNING.search(field['label']) and not SIGNING.search(field['label']):
             issues.append({'code':'guided_signing','message':field['label']+': clarify whether this is a clinical answer or a signing area before preparation.'})
         qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
         questions.append({'id': qid, 'text': field['label'], 'story': 'mapped',
                           'protected_signing': bool(SIGNING.search(field['label']))})
+        if protocol == TYPED_PROTOCOL and not questions[-1]['protected_signing']:
+            constraint = field.get('answer_constraints')
+            # Qualified WM metadata is bound to the exact original and its
+            # existing controlled inspector, rather than a model inference.
+            if known and field.get('kind') == 'choice':
+                constraint = {'version': 1, 'data_type': 'choice', 'options': deepcopy(field['options'])}
+            elif known and field.get('locator', {}).get('unit'):
+                constraint = {'version': 1, 'data_type': 'number', 'unit': field['locator']['unit']}
+            if constraint is not None:
+                questions[-1]['answer_constraints'] = deepcopy(constraint)
         anchors.append({'id': aid, 'question_id': qid, 'kind': 'existing',
                         'protected_signing': bool(SIGNING.search(field['label'])),
                         'field_key': field['key'], 'locator': None})
@@ -226,7 +264,7 @@ def inventory(path, known=None):
         exact=UNMAPPED_NOTES['multi_column'].format(count=len(manual_rows))
         warnings=[w for w in warnings if w!=exact]
     issues.extend({'code': 'mapping_warning', 'message': w} for w in warnings)
-    result = {'protocol': PROTOCOL, 'source_sha256': source_sha, 'parts': parts,
+    result = {'protocol': protocol, 'source_sha256': source_sha, 'parts': parts,
               'stories': stories, 'options': options, 'questions': questions, 'anchors': anchors,
               'issues': issues, 'fields': fields, 'manual_rows':manual_rows,
               'review_requirements': deepcopy(known.get('review_requirements', [])) if known else [],
@@ -238,18 +276,22 @@ def inventory(path, known=None):
 
 def model_inventory(value):
     """Closed public schema: paths, XML and internal locators never reach a model."""
-    return {'protocol': PROTOCOL, 'inventory_sha256': value['inventory_sha256'],
+    return {'protocol': value['protocol'], 'inventory_sha256': value['inventory_sha256'],
             'stories': [{'id': 's'+str(i+1), 'texts': row['texts'], 'choices': row['choices'],
                          'content_sha256':digest({'texts':row['texts'],'choices':row['choices']})}
                         for i, row in enumerate(value['stories'])],
             'questions': [{k: q[k] for k in ('id', 'text', 'protected_signing', 'answer_constraints') if k in q}
                           for q in value['questions']],
-            'anchors': [{k: a[k] for k in ('id', 'question_id', 'kind', 'protected_signing')}
+            'anchors': [{**{k: a[k] for k in ('id', 'question_id', 'kind', 'protected_signing')},
+                         **({'destinations': [{'id': item['id'], 'description': item['description']}
+                                             for item in a['choices']]}
+                            if value['protocol'] == TYPED_PROTOCOL and a['kind'] == 'choose_cell' else {})}
                         for a in value['anchors']], 'issues': [{k:issue[k] for k in ('code','message','protected_signing') if k in issue}
                                                               for issue in value['issues']]}
 
 
 def validate_role(value, response, role):
+    validate_inventory(value)
     if role not in {'proposer','checker'}:
         raise DocumentFailure('Unsupported preparation role.', 'invalid_proposal')
     required = {'inventory_sha256', 'anchors','stories'}
@@ -262,6 +304,8 @@ def validate_role(value, response, role):
     seen = set()
     for row in rows:
         keys = {'anchor_id', 'question_id', 'decision'} if role == 'proposer' else {'anchor_id', 'question_id', 'verdict'}
+        if value['protocol'] == TYPED_PROTOCOL:
+            keys.add('metadata')
         if not isinstance(row, dict) or set(row) != keys or row.get('anchor_id') not in expected or row['anchor_id'] in seen:
             raise DocumentFailure('The AI returned an unknown or duplicate answer area.', 'invalid_proposal')
         anchor = expected[row['anchor_id']]
@@ -270,6 +314,12 @@ def validate_role(value, response, role):
         choice = row.get('decision') if role == 'proposer' else row.get('verdict')
         if choice not in ({'map', 'needs_review'} if role == 'proposer' else {'pass', 'unresolved'}):
             raise DocumentFailure('The AI result has an unsupported state.', 'invalid_proposal')
+        if value['protocol'] == TYPED_PROTOCOL:
+            if __package__:
+                from .preparation_roles import validate_metadata_row
+            else:
+                from preparation_roles import validate_metadata_row
+            validate_metadata_row(value, anchor, row)
         seen.add(row['anchor_id'])
     story_rows=response['stories']
     expected_stories=model_inventory(value)['stories']
@@ -286,7 +336,7 @@ def validate_role(value, response, role):
     return response
 
 def validate_inventory(value):
-    if (not isinstance(value,dict) or value.get('protocol')!=PROTOCOL
+    if (not isinstance(value,dict) or value.get('protocol') not in {PROTOCOL, TYPED_PROTOCOL}
             or value.get('inventory_sha256')!=digest({k:v for k,v in value.items() if k!='inventory_sha256'})):
         raise DocumentFailure('The original inventory changed.', 'stale_inventory')
     return value
@@ -314,7 +364,7 @@ def candidate(path, output, expected, selected,placements=None):
     if expected.get('document_backend'):
         known = {**expected['document_backend'], 'sha256': expected['source_sha256'],
                  'fields': expected['fields'], 'review_requirements': expected['review_requirements']}
-    actual = inventory(path, known)
+    actual = inventory(path, known, protocol=expected['protocol'])
     if actual != expected or not isinstance(selected, list) or len(set(selected)) != len(selected):
         raise DocumentFailure('The candidate request uses a stale inventory.', 'stale_inventory')
     if actual['issues']:
@@ -384,7 +434,11 @@ def candidate(path, output, expected, selected,placements=None):
     if any((row['part'],row['row']) not in reviewed for row in remaining_rows):
         raise DocumentFailure('An unreviewed answer-shaped row remains in the candidate.', 'incomplete_proposal')
     fields = deepcopy(actual['fields']) if known else source_bound_candidate_fields(output, actual)
-    validate_candidate_fields(actual, fields, constraints=True)
+    if actual['protocol'] == TYPED_PROTOCOL and not known:
+        fields = typed_source_fields(output, fields)
+    # The qualified WM writer already enforces its pinned choices and units.
+    # Its original mapping stays byte-for-byte compatible with older approvals.
+    validate_candidate_fields(actual, fields, constraints=not (known and actual['protocol'] == TYPED_PROTOCOL))
     return {'changes': changes, 'source_sha256': actual['source_sha256'], 'prepared_fields': fields,
             'inventory_sha256': actual['inventory_sha256'], 'parts_preserved': True,
             'reviewed_multi_column_rows':remaining_rows}

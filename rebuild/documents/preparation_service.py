@@ -55,8 +55,11 @@ def run(path, request, output=None):
             response['prepared_sha256'] = hashlib.sha256(prepared).hexdigest()
         return response
 
-def inspect_preparation(path, known=None):
-    return run(path, {'operation': 'inventory', 'known': known})
+def inspect_preparation(path, known=None, *, protocol=None):
+    request = {'operation': 'inventory', 'known': known}
+    if protocol is not None:
+        request['protocol'] = protocol
+    return run(path, request)
 
 def prepare_candidate(path, inventory, selected, output,placements=None):
     return run(path, {'operation': 'candidate', 'inventory': inventory, 'selected': selected,'placements':placements}, output)

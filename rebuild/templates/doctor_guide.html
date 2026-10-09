@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Synthetic doctor walkthrough{% endblock %}
+{% block content %}
+<div class="page-heading"><div><div class="eyebrow">Private demonstration</div><h1>Try the complete document review.</h1><p>Use fictional information and permission-cleared blank forms. Keep real patient information out of this demonstration.</p></div><a href="{% url 'dashboard' %}">Back to workspace</a></div>
+<section class="notice"><h2>Prepare once, then reuse</h2><p>AI proposes and independently checks the original. You correct and approve the exact template version. Reusing an approved version does not repeat preparation.</p><p>Submit each authorized AI request once after checking its quote. A stopped or unknown request needs reconciliation before a retry.</p></section>
+<section class="section"><h2>Your walkthrough</h2><ol>
+<li><a href="{% url 'template_upload' %}">Upload an unchanged blank Word form</a> with AI preparation selected. Measure upload until both previews are visible; keep machine preparation and your active review time separate.</li>
+<li>Compare every question, choice, unit, instruction and answer location. Inspect both roles’ results and any uncertainty. The original remains unchanged.</li>
+<li>Record automatic errors before corrections. Save corrections with a reason, then explicitly approve each layout change and both documents. This creates an immutable version; later changes need a separately reviewed version.</li>
+<li>Use the approved version for a fictional document. Reuse it for a second document and confirm that preparation does not run again.</li>
+<li>Type exact labelled notes, save and generate once. Review each answer against its source. Missing information stays blank; conflicting or wrong-unit answers need your explicit resolution.</li>
+<li>For voice, use your actual browser microphone, then listen before submitting. Preserve the returned transcript, correct labels, numerals and units, and explicitly choose append or replace before saving it as notes.</li>
+<li>Generate from the reviewed transcript. Resolve held answers, review every answer and signing statement, finalize and download Word. Check the finalized document and its immutable mapping record.</li>
+</ol></section>
+<section class="section"><h2>Fictional typed SOAP case</h2><p>Choose the reviewed eight-field SOAP form for fictional patient Jordan Example. The example uses its exact labels. For another form, use that form’s labels and keep the source facts unchanged.</p><pre class="source-notes">Symptoms: Left ankle soreness after twisting the left ankle yesterday.
+Pertinent negatives: Denies fever, numbness and right ankle pain.
+Pain score: Recorded as both 6/10 and 3/10; resolve this conflict explicitly.
+Examination: Mild left lateral ankle swelling. No open wound.
+Assessment: The clinician explicitly documents a left ankle sprain.
+Plan: Rest, ice wrapped in cloth for fifteen minutes at a time, and follow-up in three days. No medication prescribed.</pre><p>Allergies and Vital signs are undocumented; leave them blank. Record the intended pain score through an explicit correction before finalization. Do not infer additional examination findings.</p></section>
+<section class="section"><h2>Fictional microphone and unit check</h2><p>On the approved underscore form, dictate the following once using your hardware microphone. The deliberately conflicting answers test review; they are not instructions to infer a clinical value.</p><pre class="source-notes">Patient name: Jordan Example, fictional test only.
+Temperature: 98.6 degrees Fahrenheit.
+Fever: Yes. Fever: No.
+Date of birth: Not documented.</pre><p>The form’s Celsius unit and competing Fever choices need explicit resolution. Correct the transcript first, then review the generated answers. Leave Date of birth and the patient signing area blank. Count corrections as human decisions.</p></section>
+<section class="panel"><h2>Check the actual Word download</h2><p>HTML previews are approximate: they retain supported paper dimensions and stored breaks but do not calculate Microsoft Word pagination. Open the unchanged original, prepared candidate and final download in your native Microsoft Word. Compare page counts, letterhead, tables, long answers, questions, choices, units and signing placement.</p><p>For the difficult WM form, reuse its approved mapping and inspect its guided decisions, measurements, prewritten statements and signer. Selected-template success does not establish compatibility with arbitrary Word documents or real-patient release readiness.</p></section>
+{% endblock %}

@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from documents import inspect_template, DocumentError
-from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields
+from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields, TYPED_PROTOCOL
 from documents.preparation_service import inspect_preparation, prepare_candidate
 from documents.sdk_service import WM_IOV_SHA256
 from .models import TemplatePreparation, PreparationReceipt, TemplateVersion
@@ -62,10 +62,15 @@ def role_limits(inventory):
             and inventory['document_backend'].get('backend')=='wm-iov-foss-v2'
             and inventory['document_backend'].get('source_sha256')==WM_IOV_SHA256
             and all(a['kind']=='existing' for a in inventory['anchors'])):
+        if inventory['protocol'] == TYPED_PROTOCOL:
+            return 12000,Decimal('0.30')
         return 6000,Decimal('0.16')
     return MAX_OUTPUT,ROLE_LIMIT
 
-def role_schema(role):
+def role_schema(role, protocol=None):
+    if protocol == TYPED_PROTOCOL:
+        from documents.preparation_roles import role_schema as typed_role_schema
+        return typed_role_schema(role)
     decision = 'decision' if role == 'proposer' else 'verdict'
     choices = ['map', 'needs_review'] if role == 'proposer' else ['pass', 'unresolved']
     return {'type': 'object', 'additionalProperties': False,
@@ -100,6 +105,9 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
                     {'anchor_id': a['id'], 'question_id': a['question_id'], field: value}
                     for a in inventory['anchors']], 'stories':[{'story_id':s['id'],
                         'content_sha256':s['content_sha256'],'verdict':'retain'} for s in model_inventory(inventory)['stories']]}
+        if inventory['protocol'] == TYPED_PROTOCOL:
+            from documents.preparation_roles import role_rows
+            response['anchors'] = role_rows(inventory, role)
         evidence={'model': 'synthetic-blank-preparation-'+role, 'request_id': '', 'resource_id': '',
                   'usage': {}, 'rates': {}, 'cost': '0', 'simulated': True, 'response': response}
         if on_response:on_response(evidence)
@@ -117,10 +125,19 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
                      else 'Independently check the proposal against the COMPLETE original inventory. Check all stories, '
                           'question/option/unit/instruction preservation and placement. Use unresolved for any uncertainty; '
                           'a proposer decision is not evidence that it is correct.')
+    if inventory['protocol'] == TYPED_PROTOCOL:
+        instructions += (' For EVERY answer area, independently propose or verify its exact original label, '
+            'data_type, printed unit, ordered choices, finite destination ID and uncertainty. '
+            'Canonical original answer_constraints are source evidence: never infer a unit, clinical range '
+            'or date format from a label alone. Where constraints are unstated, use text, null unit, '
+            'empty choices and constraints_unstated. Signing areas use text, null unit, empty choices '
+            'and signing_protected, and cannot become a new writable destination. '
+            'Ambiguous answer cells use a finite choice ID and placement_requires_review; the doctor must '
+            'explicitly select the destination. Model agreement never authorizes document writing.')
     client = Anthropic(timeout=timeout, max_retries=0)
     response = client.messages.create(model=config['model'], max_tokens=role_limits(inventory)[0], system=instructions,
         messages=[{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
-        output_config={'format': {'type': 'json_schema', 'schema': transform_schema(role_schema(role))}})
+        output_config={'format': {'type': 'json_schema', 'schema': transform_schema(role_schema(role, inventory['protocol']))}})
     raw = response.model_dump(mode='json')
     original_evidence={'model':getattr(response,'model',None),'request_id':getattr(response,'_request_id','') or '',
                        'resource_id':getattr(response,'id',''),'usage':raw.get('usage'),
@@ -255,6 +272,7 @@ def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
+    config={**config, 'word_preparation_protocol': TYPED_PROTOCOL}
     if campaign_identity(config) is not None:
         return create_campaign_preparation(template,actor,config)
     legacy=legacy_preparations(TemplatePreparation.objects)
@@ -283,7 +301,9 @@ def run_one():
         known=None
         from documents.sdk_service import WM_IOV_SHA256
         if prep.template.sha256 == WM_IOV_SHA256: known=inspect_template(original)
-        prep.inventory=inspect_preparation(original, known)
+        protocol=prep.config.get('word_preparation_protocol')
+        prep.inventory=(inspect_preparation(original, known, protocol=protocol)
+                        if protocol is not None else inspect_preparation(original, known))
         if prep.inventory['source_sha256'] != prep.template.sha256: raise DocumentError('Original changed.', 'source_changed')
         prep.state='proposer'; prep.save(update_fields=['inventory','state'])
         prep.proposal=call_role(prep, 'proposer', deadline)
@@ -354,7 +374,8 @@ def candidate_inspection(prep,info,result,placements,*,preserve_original_export_
                               for field in prepared_fields]) != structure(info['fields'])):
             raise DocumentError('Prepared constraints changed an answer location.', 'wrong_placement')
         info = {**info, 'fields': prepared_fields}
-    validate_candidate_fields(prep.inventory,info['fields'],constraints=True)
+    validate_candidate_fields(prep.inventory,info['fields'],constraints=not (
+        prep.inventory['protocol'] == TYPED_PROTOCOL and prep.inventory.get('document_backend')))
     warnings=info.get('warnings',[])
     if not isinstance(warnings,list) or any(not isinstance(warning,str) for warning in warnings):
         raise DocumentError('The candidate inspection returned an invalid warning record.', 'guided_layout')

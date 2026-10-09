@@ -700,14 +700,29 @@ def constrained_answer_text(field, value):
     return value
 
 
-def bind_answer_constraints(paragraphs, fields, mapping):
+def bind_answer_constraints(paragraphs, fields, mapping, source=None):
     """Re-derive present new constraints; do not reinterpret approved old maps."""
     stored = {field['key']: field for field in mapping}
+    table_fields = None
     for field in fields:
         entry = stored.get(field['key'], {})
         if 'answer_constraints' not in entry:
             continue
         location = field['locator']
+        if 'cell' in location:
+            if source is None:
+                fail('The table answer constraint has no source binding.', 'mapping_mismatch')
+            if table_fields is None:
+                if __package__:
+                    from .table_constraints import with_table_constraints
+                else:
+                    from table_constraints import with_table_constraints
+                table_fields = {item['key']: item for item in with_table_constraints(source, fields)}
+            actual = table_fields[field['key']].get('answer_constraints')
+            if actual is None or entry['answer_constraints'] != actual:
+                fail('The table answer constraint differs from the original printed question.', 'mapping_mismatch')
+            field['answer_constraints'] = actual
+            continue
         if 'paragraph' not in location or 'token' not in location:
             fail('This answer constraint is not bound to a prepared literal blank.', 'mapping_mismatch')
         text = paragraphs[location['paragraph']].text
@@ -812,7 +827,7 @@ def process(workspace, request):
         fail("Unsupported operation.")
     answers = request["answers"]
     if fmt == "docx":
-        bind_answer_constraints(paragraphs, fields, request['mapping'])
+        bind_answer_constraints(paragraphs, fields, request['mapping'], path)
     if fmt == "docx" and structure(fields) != structure(request["mapping"]):
         # ⚠️ A STORED MAPPING IS BOUND TO THE CONTRACT THAT PRODUCED IT. Mappings saved before
         # multi-column and mixed support existed hold FEWER fields for the same document, and
@@ -821,7 +836,7 @@ def process(workspace, request):
         # Exact equality is the proof: if the legacy inspection matches the stored mapping
         # field for field, it IS that mapping's contract, and filling it behaves as it always did.
         legacy = docx_inspect(path, contract=CONTRACT_V1)
-        bind_answer_constraints(legacy[1], legacy[3], request['mapping'])
+        bind_answer_constraints(legacy[1], legacy[3], request['mapping'], path)
         if structure(legacy[3]) == structure(request["mapping"]):
             document, paragraphs, cells, fields, _ = legacy
             result["fields"] = fields
