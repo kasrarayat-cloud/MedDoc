@@ -67,6 +67,21 @@ def role_limits(inventory):
         return 6000,Decimal('0.16')
     return MAX_OUTPUT,ROLE_LIMIT
 
+def timing_limits(inventory):
+    """Allow complete typed WM checks within a separately bounded deadline."""
+    validate_inventory(inventory)
+    if (inventory['protocol'] == TYPED_PROTOCOL
+            and inventory['source_sha256'] == WM_IOV_SHA256
+            and inventory['document_backend'] == {
+                'backend': 'wm-iov-foss-v2', 'source_sha256': WM_IOV_SHA256,
+                'mapping_digest': WM_MAPPING_DIGEST}
+            and len(inventory['fields']) == len(inventory['anchors']) == len(inventory['questions']) == 90
+            and len(inventory['stories']) == 16 and len(inventory['review_requirements']) == 14
+            and not inventory['issues']
+            and all(a['kind'] == 'existing' for a in inventory['anchors'])):
+        return 120,360
+    return ROLE_SECONDS,TOTAL_SECONDS
+
 def role_schema(role, protocol=None):
     if protocol == TYPED_PROTOCOL:
         from documents.preparation_roles import role_schema as typed_role_schema
@@ -207,6 +222,7 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
 def call_role(prep, role, deadline, proposal=None):
     payload = role_payload(prep.inventory, role, proposal)
     max_output,limit=role_limits(prep.inventory)
+    role_seconds,_=timing_limits(prep.inventory)
     quoted = maximum_cost(payload, prep.config,max_output)
     from . import testing_authority
     standing = testing_authority.identity(prep.config) is not None
@@ -245,7 +261,7 @@ def call_role(prep, role, deadline, proposal=None):
             receipt.save(update_fields=['response_path','response_sha256','returned_model','provider_request_id','provider_resource_id'])
             stage='response_retained'
         with provider_slot(prep.config):
-            response, evidence = provider_role(prep.inventory, role, prep.config, min(ROLE_SECONDS, remaining), proposal,observed)
+            response, evidence = provider_role(prep.inventory, role, prep.config, min(role_seconds, remaining), proposal,observed)
             stage='response_validation'
             if (not isinstance(evidence['model'],str) or not 0<len(evidence['model'])<=100
                     or any(not isinstance(evidence[k],str) or len(evidence[k])>140 for k in ('request_id','resource_id'))
@@ -308,7 +324,8 @@ def run_one():
         # Global single preparation call stream; running states are never replayed automatically.
         if TemplatePreparation.objects.filter(state__in=['inventory','proposer','checker']).exists(): return False
         prep.state='inventory'; prep.started_at=timezone.now(); prep.save(update_fields=['state','started_at'])
-    deadline=time.monotonic()+TOTAL_SECONDS
+    began=time.monotonic()
+    deadline=began+TOTAL_SECONDS
     try:
         membership(prep.requested_by, prep.template.department, roles=['owner','clinician','manager'])
         original=private_path(prep.template.original_path)
@@ -319,6 +336,8 @@ def run_one():
         prep.inventory=(inspect_preparation(original, known, protocol=protocol)
                         if protocol is not None else inspect_preparation(original, known))
         if prep.inventory['source_sha256'] != prep.template.sha256: raise DocumentError('Original changed.', 'source_changed')
+        _,total_seconds=timing_limits(prep.inventory)
+        deadline=began+total_seconds
         prep.state='proposer'; prep.save(update_fields=['inventory','state'])
         prep.proposal=call_role(prep, 'proposer', deadline)
         prep.state='checker'; prep.save(update_fields=['proposal','state'])

@@ -1,5 +1,6 @@
 """Product role protocol and historical evidence compatibility; no live calls."""
 from copy import deepcopy
+from contextlib import nullcontext
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -11,7 +12,7 @@ from docx import Document
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
-from documents.preparation import inventory, TYPED_PROTOCOL, validate_role
+from documents.preparation import inventory, TYPED_PROTOCOL, validate_role, digest
 from core import preparation
 
 
@@ -235,4 +236,174 @@ class TypedRoleProductTests(SimpleTestCase):
         self.assertNotIn('<script>', html)
         self.assertIn('Unit: °C', html)
         self.assertIn('Printed constraint verified', html)
+
+
+class TypedWMDeadlineTests(SimpleTestCase):
+    """Deadline classifier/queue controls; synthetic SDK transport, no live API."""
+    setUp=TypedRoleProductTests.setUp
+
+    def wm_inventory(self):
+        # A classifier fixture, not a claim that these synthetic questions were
+        # discovered in WM. Actual WM source/mapping qualification is separate.
+        value=inventory(self.path,protocol=TYPED_PROTOCOL)
+        value['source_sha256']=preparation.WM_IOV_SHA256
+        value['fields']=[{'key':'field_'+str(i),'label':'Synthetic question '+str(i),
+            'kind':'text','locator':{'index':i}} for i in range(90)]
+        value['questions']=[{'id':'q'+str(i),'text':'Synthetic question '+str(i),
+            'protected_signing':False} for i in range(90)]
+        value['anchors']=[{'id':'a'+str(i),'question_id':'q'+str(i),'kind':'existing',
+            'field_key':'field_'+str(i),'locator':None,'protected_signing':False} for i in range(90)]
+        value['stories']=[{**value['stories'][0],'part':'word/story'+str(i)+'.xml'} for i in range(16)]
+        value['review_requirements']=[{'key':'claim_'+str(i)} for i in range(14)]
+        value['document_backend']={'backend':'wm-iov-foss-v2','source_sha256':preparation.WM_IOV_SHA256,
+            'mapping_digest':preparation.WM_MAPPING_DIGEST}
+        value['issues']=[]
+        self.seal(value)
+        return value
+
+    def seal(self,value):
+        value['inventory_sha256']=digest({k:v for k,v in value.items() if k!='inventory_sha256'})
+
+    def test_only_complete_source_qualified_typed_wm_gets_the_longer_deadline(self):
+        value=self.wm_inventory()
+        before=deepcopy(value)
+        self.assertEqual(preparation.timing_limits(value),(120,360))
+        self.assertEqual(preparation.role_limits(value),(12000,Decimal('0.30')))
+        self.assertEqual(value,before)
+        self.assertEqual(preparation.timing_limits(inventory(self.path,protocol=TYPED_PROTOCOL)),(60,180))
+        for changed in ['protocol','source','backend','backend_source','mapping','backend_extra',
+                'fields','anchors','questions','stories','review_requirements','kind','issues']:
+            bad=deepcopy(value)
+            if changed=='protocol':bad['protocol']='blank-word-preparation-v1'
+            elif changed=='source':bad['source_sha256']='0'*64
+            elif changed=='backend':bad['document_backend']['backend']='other'
+            elif changed=='backend_source':bad['document_backend']['source_sha256']='0'*64
+            elif changed=='mapping':bad['document_backend']['mapping_digest']='0'*64
+            elif changed=='backend_extra':bad['document_backend']['unapproved']=True
+            elif changed=='kind':bad['anchors'][0]['kind']='literal_blank'
+            elif changed=='issues':bad['issues']=[{'code':'unsupported_structure','message':'Synthetic issue'}]
+            else:bad[changed].pop()
+            self.seal(bad)
+            with self.subTest(changed=changed):
+                self.assertEqual(preparation.timing_limits(bad),(60,180))
+        historical=deepcopy(value);historical['protocol']='blank-word-preparation-v1';self.seal(historical)
+        self.assertEqual(preparation.role_limits(historical),(6000,Decimal('0.16')))
+        bad=deepcopy(value);bad['source_sha256']='0'*64
+        with self.assertRaises(ValueError):preparation.timing_limits(bad)
+
+    def receipt(self):
+        return SimpleNamespace(response_path='',computed_cost=None,quote_maximum=Decimal('0.220432'),
+            state='running',save=Mock())
+
+    def test_actual_sdk_timeout_is_scoped_clamped_and_never_retries(self):
+        import httpx
+        from anthropic import Anthropic,transform_schema
+        prompts=[]
+        wm=self.wm_inventory();ordinary=inventory(self.path,protocol=TYPED_PROTOCOL)
+        for value,remaining,expected_timeout in [(wm,300,120),(wm,43,43),(ordinary,170,60)]:
+            for role in ['proposer','checker']:
+                fixture,_=preparation.provider_role(value,role,self.config,1)
+                before=deepcopy(value);sent=[];clients=[]
+                def handle(request):
+                    self.assertEqual(request.url.host,'synthetic-provider.invalid')
+                    self.assertEqual(request.extensions['timeout']['read'],expected_timeout)
+                    sent.append(json.loads(request.content))
+                    return httpx.Response(200,headers={'request-id':'offline-request'},json={
+                        'id':'offline-response','type':'message','role':'assistant','model':'offline-returned-model',
+                        'content':[{'type':'text','text':json.dumps(fixture)}],'stop_reason':'end_turn',
+                        'stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':20}})
+                def client(**kwargs):
+                    self.assertEqual(kwargs,{'timeout':expected_timeout,'max_retries':0})
+                    result=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
+                        http_client=http,**kwargs);clients.append(result);return result
+                packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
+                with httpx.Client(transport=httpx.MockTransport(handle)) as http, \
+                        patch('anthropic.Anthropic',side_effect=client), \
+                        patch('core.testing_authority.identity',return_value=True), \
+                        patch('core.testing_authority.reserve_role',return_value=self.receipt()), \
+                        patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
+                        patch.object(preparation,'retain_response',return_value=('offline.json','a'*64)), \
+                        patch.object(preparation.time,'monotonic',return_value=100):
+                    result=preparation.call_role(packet,role,100+remaining)
+                self.assertEqual(result,fixture);self.assertEqual(len(sent),1)
+                self.assertEqual(clients[0].max_retries,0)
+                self.assertEqual(sent[0]['max_tokens'],12000 if value is wm else 2500)
+                self.assertEqual(sent[0]['output_config']['format']['schema'],
+                    transform_schema(preparation.role_schema(role,TYPED_PROTOCOL)))
+                prompts.append((role,sent[0]['system']))
+                self.assertEqual(packet.config,{**self.config,'mode':'live'})
+                self.assertEqual(value,before)
+        for role in ['proposer','checker']:
+            self.assertEqual(len({prompt for item,prompt in prompts if item==role}),1)
+
+    def worker_fixture(self,value,inspection_seconds,role_seconds,candidate_seconds):
+        clock={'now':100.0};packet=SimpleNamespace(inventory={},config={'word_preparation_protocol':value['protocol']},
+            template=SimpleNamespace(sha256=value['source_sha256'],department='synthetic-department',original_path='original.docx'),
+            requested_by='synthetic-doctor',state='queued',pk='synthetic-prep',save=Mock(),error_code='')
+        manager=Mock();manager.select_for_update.return_value.filter.return_value.order_by.return_value.first.return_value=packet
+        manager.filter.return_value.exists.return_value=False
+        def inspect(*args,**kwargs):clock['now']+=inspection_seconds;return deepcopy(value)
+        calls=[]
+        def role(prep,which,deadline,proposal=None):
+            calls.append((which,deadline));clock['now']+=role_seconds
+            return preparation.provider_role(value,which,self.config,1)[0]
+        def candidate(*args):clock['now']+=candidate_seconds
+        with patch.object(preparation,'feature_enabled',return_value=True), \
+                patch.object(preparation.transaction,'atomic',side_effect=nullcontext), \
+                patch.object(preparation.TemplatePreparation,'objects',manager), \
+                patch.object(preparation,'membership'),patch.object(preparation,'private_path',return_value=self.path), \
+                patch.object(preparation,'inspect_template'),patch.object(preparation,'inspect_preparation',side_effect=inspect), \
+                patch.object(preparation,'call_role',side_effect=role), \
+                patch.object(preparation,'build_candidate',side_effect=candidate) as build, \
+                patch.object(preparation,'audit'),patch.object(preparation.time,'monotonic',side_effect=lambda:clock['now']):
+            self.assertTrue(preparation.run_one())
+        return packet,calls,build
+
+    def test_worker_total_clock_includes_inventory_and_preserves_default_profile(self):
+        for value,total in [(self.wm_inventory(),360),(inventory(self.path,protocol=TYPED_PROTOCOL),180),
+                (inventory(self.path),180)]:
+            before=deepcopy(value)
+            packet,calls,build=self.worker_fixture(value,20,20,10)
+            self.assertEqual(calls,[('proposer',100+total),('checker',100+total)])
+            self.assertIn(packet.state,['review','guided']);build.assert_called_once()
+            self.assertEqual(value,before)
+            self.assertEqual(packet.config,{'word_preparation_protocol':value['protocol']})
+
+    def test_inventory_time_cannot_buy_a_fresh_total_deadline_or_skip_candidate_reserve(self):
+        packet,calls,build=self.worker_fixture(self.wm_inventory(),110,100,1)
+        self.assertEqual(calls,[('proposer',460),('checker',460)])
+        self.assertEqual(packet.state,'blocked');self.assertEqual(packet.error_code,'deadline')
+        build.assert_not_called()  # Only50s remain; the existing60s reserve is mandatory.
+
+    def test_candidate_completion_is_checked_against_the_original_total_deadline(self):
+        packet,_,build=self.worker_fixture(self.wm_inventory(),20,100,141)
+        build.assert_called_once()
+        self.assertEqual(packet.state,'blocked');self.assertEqual(packet.error_code,'deadline')
+
+    def test_timed_out_role_retains_unknown_quote_and_cannot_buy_a_replay(self):
+        import httpx
+        from anthropic import Anthropic,APITimeoutError
+        from django.core.exceptions import ValidationError
+        value=self.wm_inventory();receipt=self.receipt();sent=[]
+        def handle(request):
+            sent.append(request);raise httpx.ReadTimeout('synthetic timeout',request=request)
+        packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
+        with httpx.Client(transport=httpx.MockTransport(handle)) as http:
+            client=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
+                http_client=http,timeout=120,max_retries=0)
+            with patch('anthropic.Anthropic',return_value=client), \
+                    patch('core.testing_authority.identity',return_value=True), \
+                    patch('core.testing_authority.reserve_role',side_effect=[receipt,ValidationError('Role already reserved')]), \
+                    patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
+                    patch.object(preparation,'retain_response',return_value=('offline-failure.json','b'*64)), \
+                    patch.object(preparation.time,'monotonic',return_value=100):
+                with self.assertRaises(APITimeoutError):preparation.call_role(packet,'proposer',460)
+                frozen=(receipt.state,receipt.quote_maximum,receipt.computed_cost,deepcopy(receipt.failure))
+                with self.assertRaises(ValidationError):preparation.call_role(packet,'proposer',460)
+        self.assertEqual(len(sent),1)
+        self.assertEqual(receipt.state,'unknown');self.assertIsNone(receipt.computed_cost)
+        self.assertEqual(receipt.quote_maximum,Decimal('0.220432'))
+        self.assertFalse(receipt.failure['automatic_retry']);self.assertFalse(receipt.failure['response_retained'])
+        self.assertEqual(receipt.failure['error_class'],'APITimeoutError')
+        self.assertEqual((receipt.state,receipt.quote_maximum,receipt.computed_cost,receipt.failure),frozen)
 
