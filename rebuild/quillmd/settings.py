@@ -16,7 +16,7 @@ ADMIN_SITE = os.getenv('QUILLMD_ADMIN_SITE', '0') == '1'
 SYNTHETIC_ONLY = True  # Deliberate release gate; requires verified processing controls to change.
 RELEASE_SHA = os.getenv('QUILLMD_RELEASE_SHA', 'development-unrecorded')
 INSTALLED_APPS = ['django.contrib.auth','django.contrib.contenttypes','django.contrib.sessions','django.contrib.messages','django.contrib.staticfiles','django_otp','django_otp.plugins.otp_totp','core']
-MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.preview_access.PreviewAccessMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
+MIDDLEWARE = ['django.middleware.security.SecurityMiddleware','django.middleware.clickjacking.XFrameOptionsMiddleware','core.preview_access.AccountOriginMiddleware','whitenoise.middleware.WhiteNoiseMiddleware','django.contrib.sessions.middleware.SessionMiddleware','django.middleware.common.CommonMiddleware','django.middleware.csrf.CsrfViewMiddleware','django.contrib.auth.middleware.AuthenticationMiddleware','django_otp.middleware.OTPMiddleware','django.contrib.messages.middleware.MessageMiddleware','core.middleware.AccessMiddleware']
 ROOT_URLCONF = 'quillmd.urls'
 TEMPLATES = [{'BACKEND':'django.template.backends.django.DjangoTemplates','DIRS':[BASE_DIR/'templates'],'APP_DIRS':True,'OPTIONS':{'context_processors':['django.template.context_processors.request','django.contrib.auth.context_processors.auth','django.contrib.messages.context_processors.messages','core.context.common']}}]
 WSGI_APPLICATION = 'quillmd.wsgi.application'
@@ -47,7 +47,8 @@ SESSION_COOKIE_SECURE=os.getenv('QUILLMD_HTTPS','0')=='1'
 CSRF_COOKIE_SECURE=SESSION_COOKIE_SECURE
 SECURE_SSL_REDIRECT=SESSION_COOKIE_SECURE
 # Only enable behind the approved loopback proxy, which overwrites this header.
-SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https') if os.getenv('QUILLMD_TRUST_PROXY','0')=='1' and not ADMIN_SITE else None
+QUILLMD_TRUST_PROXY=os.getenv('QUILLMD_TRUST_PROXY','0')=='1'
+SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https') if QUILLMD_TRUST_PROXY and not ADMIN_SITE else None
 SESSION_COOKIE_AGE=1800
 PASSWORD_RESET_TIMEOUT=1800
 SESSION_SAVE_EVERY_REQUEST=True
@@ -65,11 +66,8 @@ QUILLMD_EMAIL_FROM=os.getenv('QUILLMD_EMAIL_FROM','')
 QUILLMD_EMAIL_VERIFIED_DOMAIN=os.getenv('QUILLMD_EMAIL_VERIFIED_DOMAIN','')
 QUILLMD_RESEND_ENV_FILE=os.getenv('QUILLMD_RESEND_ENV_FILE','')
 QUILLMD_EMAIL_ALLOWED_RECIPIENTS=os.getenv('QUILLMD_EMAIL_ALLOWED_RECIPIENTS','')
-QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME=os.getenv('QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME','')
-QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD=os.getenv('QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD','')
-QUILLMD_PREVIEW_AUTH_ENABLED=os.getenv('QUILLMD_PREVIEW_AUTH_ENABLED','0')=='1' and not ADMIN_SITE
-QUILLMD_PREVIEW_ORIGIN='https://app.quillmd.com:9443'  # Fixed edge; isolated tests may override this setting.
 QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=os.getenv('QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED','0')=='1'
+QUILLMD_DIRECT_ACCOUNT_ACCESS_ENABLED=os.getenv('QUILLMD_DIRECT_ACCOUNT_ACCESS_ENABLED','0')=='1'
 CSRF_FAILURE_VIEW='core.preview_access.csrf_failure'
 RESEND_API_KEY=os.getenv('RESEND_API_KEY','')
 # API keys remain in the private environment; application logs omit payloads.
@@ -105,7 +103,7 @@ CPT_LICENSE_ID=os.getenv('CPT_LICENSE_ID','')
 CPT_LICENSE_EXPIRY=os.getenv('CPT_LICENSE_EXPIRY','')
 LOGGING={'version':1,'disable_existing_loggers':False,'handlers':{'console':{'class':'logging.StreamHandler'}},'root':{'handlers':['console'],'level':'WARNING'},'loggers':{'django.request':{'handlers':['console'],'level':'CRITICAL','propagate':False}}}
 
-LOGGING['filters'] = {'preview_csrf_redaction': {'()': 'core.preview_logging.PreviewCSRFLogFilter'}}
-LOGGING['loggers']['django.security.csrf'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False, 'filters': ['preview_csrf_redaction']}
+LOGGING['filters'] = {'account_csrf_redaction': {'()': 'core.preview_logging.AccountCSRFLogFilter'}}
+LOGGING['loggers']['django.security.csrf'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False, 'filters': ['account_csrf_redaction']}
 
 SECURE_HSTS_SECONDS=31536000 if SESSION_COOKIE_SECURE else 0

@@ -18,6 +18,8 @@ KEYS = frozenset({
 
 def updated_environment(original, values):
     """Preserve every unrelated line; refuse duplicates or unsafe serialization."""
+    from .direct_account_access import reject_legacy_environment
+    reject_legacy_environment(original)
     if set(values) != KEYS:
         raise ValueError('Email configuration key set differs from the declared scope.')
     if (not re.fullmatch(r'[a-f0-9]{40}', values['QUILLMD_RELEASE_SHA'])

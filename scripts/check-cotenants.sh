@@ -37,7 +37,7 @@ set -uo pipefail
 EXPECTED=(
   "quillmd.com|200|the marketing site serves"
   "www.quillmd.com|200|the same site on the www host. MASTER.md STEP 0.6 names FIVE hosts and this table shipped with FOUR — the watched-set failure INSIDE the check written to cure watched-set failures. Keep every entry on ONE line: the floor is derived by cutting field 2, and a wrapped reason is parsed as extra expected codes."
-  "app.quillmd.com|503|fresh rebuild: public application deliberately in maintenance; preview stays private"
+  "app.quillmd.com|302|owner-authorized normal HTTPS account login; protected application requires an invited account"
   "admin.quillmd.com|503|fresh rebuild: public administration deliberately in maintenance; MFA preview stays private"
   "pro.quillmd.com|410|DELIBERATELY RETIRED. The meddoc-pro CRM container was stopped (SIGTERM) on ~2026-08-04 and Caddy answers Gone. A change AWAY from 410 is the finding: either it started serving again, or a 502 is wearing its place."
 )

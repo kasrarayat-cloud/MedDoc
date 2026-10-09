@@ -1,49 +1,32 @@
-"""Independent private-preview access; account login and MFA are unchanged."""
-from contextlib import contextmanager
-import ipaddress
+"""Account-only HTTPS transport and safe redirects for retired preview links.
+
+The shared preview gate is retired. Historical preview cookies and session rows
+have no authority and are never loaded, renewed or deleted by this module.
+"""
 import re
-import secrets
-import time
 import unicodedata
 from urllib.parse import unquote, urlsplit
 
-from django import forms
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.contrib.sessions.backends.db import SessionStore
-from django.contrib.sessions.models import Session
-from django.db import DatabaseError, transaction
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import redirect, render
-from django.utils.crypto import constant_time_compare, salted_hmac
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from django.views.csrf import csrf_failure as default_csrf_failure
-from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.http import require_http_methods
 
-from .security import audit, rate_limit
 
+# Kept as inert identifiers for retained evidence and historical fixtures.
 COOKIE = '__Host-quillmd_preview'
-# Reviewed source qualification and an explicit setting are both required. A
-# declaration, environment variable or ingress change alone cannot enable 443.
-OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED = True
-OWNER_NORMAL_HOST = 'app.quillmd.com'
-SIGN_IN = '/preview/sign-in/'
-SIGN_OUT = '/preview/sign-out/'
 KIND = 'quillmd-preview-v1'
 IDLE_SECONDS = 1800
 ABSOLUTE_SECONDS = 7200
 FLOW_SECONDS = 900
-MAX_FLOWS = 8
-FLOW_PATTERN = re.compile(r'[a-f0-9]{32}')
-CSS_PATTERN = re.compile(r'/static/app(?:\.[a-f0-9]{12})?\.css')
-# Opaque Word frames cannot send the SameSite grant cookie. Only these four
-# reviewed, immutable public renderer assets may bootstrap them anonymously.
-# Documents, frame HTML, mutable aliases and every other asset stay gated.
-OPAQUE_WORD_ASSETS = frozenset({
-    '/static/docx-frame.9c0942447cde.css',
-    '/static/docx-frame.fa120285a29f.js',
-    '/static/vendor/docx-preview/jszip.min.b5d02b3f0bf3.js',
-    '/static/vendor/docx-preview/docx-preview.min.99992d1785b1.js',
-})
+SIGN_IN = '/preview/sign-in/'
+SIGN_OUT = '/preview/sign-out/'
+OWNER_NORMAL_HOST = 'app.quillmd.com'
+OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED = True
+DIRECT_ACCOUNT_ORIGIN_PROTOCOL_QUALIFIED = True
+ACCOUNT_LOGIN = '/login/'
 
 
 def safe_destination(value):
@@ -64,8 +47,6 @@ def safe_destination(value):
         if parsed.scheme or parsed.netloc or parsed.fragment or any(part in {'.', '..'} for part in parsed.path.split('/')):
             return False
         if ' ' in decoded and (decoding_pass == 0 or ' ' in parsed.path):
-            # A normal encoded search-query space is safe; raw spaces and path
-            # whitespace remain refused. Return the original encoded location.
             return False
         next_value = unquote(decoded)
         if next_value == decoded:
@@ -74,63 +55,16 @@ def safe_destination(value):
     return False
 
 
-def fingerprint():
-    username = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME
-    password = settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD
-    if (settings.QUILLMD_APP_BASE_URL != settings.QUILLMD_PREVIEW_ORIGIN or not re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', username)
-            or not re.fullmatch(r'[!-~]{20,128}', password)):
-        return None
-    return salted_hmac(KIND, username + '\0' + password).hexdigest()
-
-
-def valid_grant(store, now):
-    grant = store.get('grant', {})
-    try:
-        return (isinstance(grant, dict) and bool(fingerprint())
-                and constant_time_compare(grant.get('fingerprint', ''), fingerprint())
-                and 0 <= now - grant['issued'] < ABSOLUTE_SECONDS
-                and 0 <= now - grant['seen'] < IDLE_SECONDS)
-    except (KeyError, TypeError, ValueError):
-        return False
-
-
-@contextmanager
-def preview_store(request, *, existing_only=False):
-    """Serialize per-browser updates; never modify another kind of session."""
-    with transaction.atomic():
-        key = request.COOKIES.get(COOKIE)
-        if not isinstance(key, str) or not re.fullmatch(r'[a-z0-9]{32}', key):
-            key = None
-        if key:
-            Session.objects.select_for_update().filter(session_key=key).exists()
-        store = SessionStore(session_key=key)
-        if existing_only and (store.get('kind') != KIND or not valid_grant(store, time.time())):
-            # An expired/deleted/replaced grant may race the earlier read. Do
-            # not create, renew, delete or save a session on the public route.
-            yield None
-            return
-        if store.get('kind') != KIND:
-            # A copied account-session cookie must not be changed or deleted.
-            store = SessionStore()
-            store['kind'] = KIND
-        yield store
-        if getattr(request, '_preview_delete_cookie', False):
-            return
-        if store.modified or not store.session_key:
-            remaining = IDLE_SECONDS
-            if valid_grant(store, time.time()):
-                remaining = max(1, min(IDLE_SECONDS, int(store['grant']['issued'] + ABSOLUTE_SECONDS - time.time())))
-            store.set_expiry(remaining)
-            store.save()
-            request._preview_set_cookie = (store.session_key, remaining)
-
-
-def flows(store, now):
-    return {key: value for key, value in store.get('flows', {}).items()
-            if FLOW_PATTERN.fullmatch(key) and isinstance(value, dict)
-            and isinstance(value.get('created'), (int, float))
-            and 0 <= now - value['created'] < FLOW_SECONDS
-            and safe_destination(value.get('destination'))}
+def account_destination(value):
+    """Reject authentication loops while preserving safe protected GET pages."""
+    if not safe_destination(value):
+        return ''
+    path = urlsplit(value).path
+    for _ in range(4):
+        path = unquote(path)
+    if path in {ACCOUNT_LOGIN, '/logout/', '/register/', SIGN_IN, SIGN_OUT}:
+        return ''
+    return value
 
 
 def api_request(request):
@@ -138,202 +72,99 @@ def api_request(request):
             or 'application/json' in request.headers.get('Accept', ''))
 
 
-def owner_maintenance(*, admin=False):
-    message = ('QuillMD administration is temporarily unavailable while the new application is privately tested.'
-               if admin else 'QuillMD is being rebuilt. The doctor application is temporarily unavailable. Please contact your organization administrator.')
-    response = HttpResponse(message, status=503, content_type='text/plain; charset=utf-8')
-    response['Cache-Control'] = 'no-store'
-    response['Retry-After'] = '3600'
-    response['X-Robots-Tag'] = 'noindex, nofollow'
+def local_transport_host(host):
+    """Only explicit isolated hosts may omit the trusted public selector."""
+    try:
+        parsed = urlsplit('//' + host)
+        port = parsed.port
+    except ValueError:
+        return False
+    return (parsed.hostname in {'localhost', '127.0.0.1', '::1', 'testserver'}
+            and not parsed.username and not parsed.password
+            and (port is None or 1 <= port <= 65535))
+
+
+def account_redirect(*, canonical=False):
+    """Retired links cannot carry tokens, restore submissions or alter sessions."""
+    response = HttpResponse(status=303)
+    response['Location'] = ('https://' + OWNER_NORMAL_HOST if canonical else '') + ACCOUNT_LOGIN
     return response
 
 
-def existing_owner_grant(request):
-    """Read an existing signed preview grant; never create or save a session."""
-    key = request.COOKIES.get(COOKIE)
-    if not isinstance(key, str) or not re.fullmatch(r'[a-z0-9]{32}', key):
-        return False
-    try:
-        value = SessionStore(session_key=key).load()
-    except DatabaseError:
-        return False
-    return isinstance(value, dict) and value.get('kind') == KIND and valid_grant(value, time.time())
-
-
-def error(request, message, *, status=403, heading='Private preview access required', continue_url=None):
+def error(request, message, *, status=403, heading='Account access unavailable', continue_url=None):
     request.user = getattr(request, 'user', AnonymousUser())
     if api_request(request):
-        return JsonResponse({'error': 'private_preview_access_required', 'message': message,
-                             'sign_in_url': SIGN_IN}, status=status)
-    return render(request, 'preview_error.html', {'heading': heading, 'message': message, 'continue_url': continue_url}, status=status)
+        return JsonResponse({'error': 'account_access_unavailable', 'message': message,
+                             'sign_in_url': ACCOUNT_LOGIN}, status=status)
+    return render(request, 'preview_error.html', {
+        'heading': heading, 'message': message, 'continue_url': continue_url,
+        'continue_label': 'Account sign-in'}, status=status)
 
 
-class PreviewAccessMiddleware:
-    """Enforce the gate before static serving and the account-session middleware."""
+class AccountOriginMiddleware:
+    """Validate the trusted public transport; account auth owns authorization.
+
+    The edge overwrites X-QuillMD-Account and X-Forwarded-Proto before forwarding
+    to the loopback service. No shared secret, preview flag or cookie is read.
+    Local development/QA retain their separately isolated HTTP transport.
+    """
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
         host = request.get_host()
-        marker = request.headers.get('X-QuillMD-Preview')
-        enabled = settings.QUILLMD_PREVIEW_AUTH_ENABLED and not settings.ADMIN_SITE
-        normal = host in {OWNER_NORMAL_HOST, OWNER_NORMAL_HOST + ':443'}
-        opaque_word_asset = normal and request.method in {'GET', 'HEAD'} and request.path in OPAQUE_WORD_ASSETS
-        normal_browser_entry = False
-        if host in {'admin.quillmd.com', 'admin.quillmd.com:443'}:
-            return owner_maintenance(admin=True)
-        if normal:
-            if (host != OWNER_NORMAL_HOST or not OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED
+        marker = request.headers.get('X-QuillMD-Account')
+        if host in {OWNER_NORMAL_HOST + ':9443', OWNER_NORMAL_HOST + ':443'}:
+            response = account_redirect(canonical=True)
+        elif host in {'admin.quillmd.com', 'admin.quillmd.com:443'}:
+            response = error(request, 'Use the normal QuillMD account address.')
+        elif host == OWNER_NORMAL_HOST:
+            if (settings.ADMIN_SITE or not OWNER_NORMAL_ORIGIN_PROTOCOL_QUALIFIED
+                    or not DIRECT_ACCOUNT_ORIGIN_PROTOCOL_QUALIFIED
                     or not getattr(settings, 'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED', False)
-                    or not enabled or marker != '1' or not request.is_secure()):
-                return owner_maintenance()
-            gate_route = request.path in {SIGN_IN, SIGN_OUT}
-            gate_style = request.method in {'GET', 'HEAD'} and CSS_PATTERN.fullmatch(request.path)
-            existing_grant = not (gate_route or gate_style or opaque_word_asset) and existing_owner_grant(request)
-            normal_browser_entry = (not existing_grant and not gate_route and not gate_style
-                                    and not opaque_word_asset and request.method in {'GET', 'HEAD'}
-                                    and not api_request(request) and not request.path.startswith('/static/'))
-            if not (gate_route or gate_style or opaque_word_asset or existing_grant or normal_browser_entry):
-                return owner_maintenance()
-        public_origin = host == urlsplit(settings.QUILLMD_PREVIEW_ORIGIN).netloc or normal
-        if not enabled:
-            if marker is not None:
-                return error(request, 'Private preview access is not available. Please contact your platform operator.', status=503)
-            return self.get_response(request)
-        if host in {'127.0.0.1:9130', 'localhost:9130', '[::1]:9130'} and marker is None:
-            return self.get_response(request)
-        if not public_origin or marker != '1' or not request.is_secure():
-            return error(request, 'Open the original private HTTPS address to continue.')
-        request.quillmd_preview = True
-        if not fingerprint():
-            response = error(request, 'Private access configuration needs repair. Please contact your platform operator.', status=503)
-        elif CSS_PATTERN.fullmatch(request.path) or opaque_word_asset:
-            response = self.get_response(request)
-        elif request.path in {SIGN_IN, SIGN_OUT}:
-            response = self.get_response(request)
+                    or not getattr(settings, 'QUILLMD_DIRECT_ACCOUNT_ACCESS_ENABLED', False)
+                    or not getattr(settings, 'QUILLMD_TRUST_PROXY', False)
+                    or marker != '1' or not request.is_secure()):
+                response = error(request, 'The HTTPS account transport could not be verified.')
+            else:
+                request.quillmd_account_origin = True
+                response = (account_redirect() if request.path in {SIGN_IN, SIGN_OUT}
+                            else self.get_response(request))
+        elif marker is not None or not local_transport_host(host):
+            response = error(request, 'The account request has an unexpected application origin.')
         else:
-            with preview_store(request, existing_only=normal and not normal_browser_entry) as store:
-                now = time.time()
-                granted = store is not None and valid_grant(store, now)
-                if granted:
-                    store['grant'] = {**store['grant'], 'seen': now}
-                elif normal and not normal_browser_entry:
-                    # A grant may expire between the read and locked store. A
-                    # fresh browser can sign in again; never replay a mutation.
-                    if request.method in {'GET', 'HEAD'} and not api_request(request):
-                        return redirect(SIGN_IN)
-                    return owner_maintenance()
-                elif (request.method == 'GET' or (normal and request.method == 'HEAD')) and not api_request(request):
-                    destination = request.get_full_path()
-                    if not safe_destination(destination):
-                        response = error(request, 'This address cannot be resumed. Open the original link again.', status=400)
-                    else:
-                        pending = flows(store, now)
-                        if len(pending) >= MAX_FLOWS:
-                            pending.pop(min(pending, key=lambda key: pending[key]['created']))
-                        handle = secrets.token_hex(16)
-                        pending[handle] = {'destination': destination, 'created': now}
-                        store['flows'] = pending
-                        response = redirect(SIGN_IN + '?flow=' + handle)
-                else:
-                    response = error(request, 'Your private preview access has expired or is missing. Sign in, then reopen the page. Your submission was not repeated.')
-            if granted:
-                response = self.get_response(request)
-                if response.status_code == 404 and request.path.startswith('/invite/'):
-                    response = render(request, 'preview_error.html', {
-                        'heading': 'Invitation link unavailable',
-                        'message': 'This invitation may have expired or already been accepted. If you accepted it, sign in to your QuillMD account. Otherwise contact your department owner.',
-                        'continue_url': '/login/', 'continue_label': 'Account sign-in'}, status=404)
-        if getattr(request, '_preview_delete_cookie', False):
+            response = self.get_response(request)
+
+        # Retire only the browser cookie; an account cookie copied into its old
+        # name must not load, flush or change the underlying account session.
+        if COOKIE in request.COOKIES:
             response.delete_cookie(COOKIE, path='/', samesite='Lax')
-        elif hasattr(request, '_preview_set_cookie'):
-            key, age = request._preview_set_cookie
-            response.set_cookie(COOKIE, key, max_age=age, secure=True, httponly=True, samesite='Lax', path='/')
-        response['Cache-Control'] = 'no-store, private'
-        # Ordinary browser form POSTs need an origin for Django's CSRF check.
-        # Send only that origin, never invitation/recovery paths or query tokens.
+        if not request.path.startswith('/static/'):
+            response['Cache-Control'] = 'no-store, private'
         response['Referrer-Policy'] = 'strict-origin'
         response['X-Robots-Tag'] = 'noindex, nofollow'
         response.setdefault('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
         return response
 
 
-class PreviewForm(forms.Form):
-    username = forms.CharField(label='Private preview username', max_length=64,
-                               widget=forms.TextInput(attrs={'autocomplete': 'username', 'autofocus': True}))
-    password = forms.CharField(label='Private preview password', max_length=128, strip=False,
-                               widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}))
-    flow = forms.RegexField(regex=r'^[a-f0-9]{32}$', required=False, widget=forms.HiddenInput)
+# Compatibility for retained deployment readers; the implementation is account
+# transport only, and contains no preview-grant verifier or credentials.
+PreviewAccessMiddleware = AccountOriginMiddleware
 
 
 @require_http_methods(['GET', 'HEAD', 'POST'])
 def sign_in(request):
-    if not getattr(request, 'quillmd_preview', False):
-        return HttpResponseForbidden('Private preview sign-in is available only at its approved HTTPS address.')
-    handle = request.POST.get('flow', '') if request.method == 'POST' else request.GET.get('flow', '')
-    if handle and not FLOW_PATTERN.fullmatch(handle):
-        return error(request, 'This access request is invalid. Reopen your original email link.', status=400)
-    form = PreviewForm(request.POST if request.method == 'POST' else None, initial={'flow': handle})
-    status = 200
-    with preview_store(request) as store:
-        now = time.time()
-        pending = flows(store, now)
-        if handle and handle not in pending:
-            return error(request, 'This access request expired or was already used. Reopen your original email link.', status=400, heading='Open your original link again')
-        if request.method == 'POST' and form.is_valid():
-            try:
-                # Only this verified proxy context may trust the edge-overwritten
-                # header. The loopback application never reaches this view.
-                client_ip = str(ipaddress.ip_address(request.headers.get('X-Real-IP', request.META.get('REMOTE_ADDR', ''))))
-            except ValueError:
-                return error(request, 'The private access request could not be verified.', status=400)
-            allowed = rate_limit('preview-ip:' + client_ip, limit=8, seconds=600)
-            global_allowed = rate_limit('preview-shared-gate', limit=60, seconds=600)
-            if not allowed or not global_allowed:
-                form.add_error(None, 'Too many attempts. Wait ten minutes before trying again.')
-                status = 429
-                audit(None, 'preview.rate_limited')
-            else:
-                username_ok = constant_time_compare(form.cleaned_data['username'], settings.QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME)
-                password_ok = constant_time_compare(form.cleaned_data['password'], settings.QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD)
-                if username_ok & password_ok:
-                    destination = pending.pop(handle)['destination'] if handle else '/login/'
-                    store.cycle_key()
-                    store['kind'] = KIND
-                    store['grant'] = {'fingerprint': fingerprint(), 'issued': now, 'seen': now}
-                    store['flows'] = pending
-                    audit(None, 'preview.login')
-                    return redirect(destination)
-                form.add_error(None, 'The private preview username or password is incorrect. Use the access details provided for this preview.')
-                audit(None, 'preview.login_failed')
-        response = render(request, 'preview_signin.html', {'form': form, 'resuming': bool(handle)}, status=status)
-        if status == 429:
-            response['Retry-After'] = '600'
-        return response
+    return account_redirect()
 
 
-@require_POST
+@require_http_methods(['GET', 'HEAD', 'POST'])
 def sign_out(request):
-    if not getattr(request, 'quillmd_preview', False):
-        return HttpResponseForbidden('Use the approved private preview address.')
-    with preview_store(request) as store:
-        store.flush()
-        request._preview_delete_cookie = True
-        audit(None, 'preview.logout')
-    return redirect(SIGN_IN)
+    return account_redirect()
 
 
 def csrf_failure(request, reason=''):
-    if getattr(request, 'quillmd_preview', False):
-        continuation = None
-        if request.path == SIGN_IN:
-            handle = request.POST.get('flow', '')
-            key = request.COOKIES.get(COOKIE, '')
-            if FLOW_PATTERN.fullmatch(handle) and re.fullmatch(r'[a-z0-9]{32}', key):
-                store = SessionStore(session_key=key)
-                if store.get('kind') == KIND and handle in flows(store, time.time()):
-                    # Only a live flow bound to this browser may enter the retry
-                    # link. Its original capability remains solely server-side.
-                    continuation = SIGN_IN + '?flow=' + handle
-        return error(request, 'This form expired or could not be verified. Reload the page and try again. Your submission was not processed.', heading='Reload the form to continue', continue_url=continuation)
+    if getattr(request, 'quillmd_account_origin', False):
+        return error(request,
+                     'This form expired or could not be verified. Reload the page and try again. Your submission was not processed.',
+                     heading='Reload the form to continue', continue_url=ACCOUNT_LOGIN)
     return default_csrf_failure(request, reason=reason)

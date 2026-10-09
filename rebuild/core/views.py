@@ -16,7 +16,6 @@ from django.db import transaction,IntegrityError
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST,require_http_methods
 from django_otp import login as otp_login
@@ -30,6 +29,7 @@ from .context import integration_status
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
 from . import wm_review
+from .preview_access import account_destination
 
 
 def error_message(exc):
@@ -119,7 +119,7 @@ def health(request): return JsonResponse({'status':'ok','data_mode':'synthetic-o
 def login_view(request):
     form=LoginForm(request.POST or None)
     next_url=request.POST.get('next',request.GET.get('next',''))
-    if not next_url.startswith('/') or not url_has_allowed_host_and_scheme(next_url,allowed_hosts=set()):next_url=''
+    next_url=account_destination(next_url)
     if request.method=='POST' and form.is_valid():
         email=form.cleaned_data['email'].lower()
         if not rate_limit('login-ip:'+request.META.get('REMOTE_ADDR',''),limit=40) or not rate_limit('login-email:'+email):
@@ -151,20 +151,9 @@ def verification_mail(user,raw,verification):
 
 @require_http_methods(['GET','POST'])
 def register(request):
-    if settings.ADMIN_SITE: raise Http404
-    form=RegisterForm(request.POST or None)
-    if request.method=='POST' and form.is_valid():
-        if not rate_limit('register:'+request.META.get('REMOTE_ADDR',''),limit=5):return HttpResponse('Try again later.',status=429)
-        with transaction.atomic():
-            user=form.save(commit=False);user.username=form.cleaned_data['email'];user.save()
-            raw=token();verification=Verification.objects.create(user=user,token_hash=digest(raw),expires_at=timezone.now()+timedelta(hours=24))
-            audit(user,'account.register')
-        delivery=verification_mail(user,raw,verification)
-        if delivery.status=='outbox':messages.success(request,'Verification created in the private development outbox. Email delivery is not live yet.')
-        elif delivery.status=='accepted':messages.success(request,'Verification submitted to the email provider. Check your inbox; inbox delivery is not yet confirmed.')
-        else:messages.warning(request,'Account created, but verification email delivery could not be confirmed. Ask your administrator to recover the verification link or retry delivery. No welcome credit has been granted yet.')
-        return redirect('login')
-    return render(request,'register.html',{'form':form})
+    # Creation requires a live organization invitation. Retained verification
+    # and recovery links for existing accounts continue to work unchanged.
+    raise Http404
 
 @require_http_methods(['GET','POST'])
 def verify(request,raw):

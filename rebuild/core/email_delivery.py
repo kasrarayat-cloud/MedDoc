@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from django.conf import settings
 from django.core.mail import EmailMessage
-from .email_backend import PrivateFileEmailBackend, application_origin, private_access_instructions
+from .email_backend import PrivateFileEmailBackend, application_origin, account_access_instructions
 from .security import audit
 
 
@@ -27,7 +27,7 @@ def deliver_account_email(actor, target, recipient, purpose, raw_token, departme
                 'invitation': f'Accept your QuillMD department invitation at {link}',
                 'recovery': f'Recover your QuillMD test account at {link}. This link expires in 30 minutes. Administrators also need their enrolled authenticator.'}[purpose]
         recovery_body = body
-        body += private_access_instructions(recipient, purpose)
+        body += account_access_instructions(recipient, purpose)
         message = EmailMessage(subject, body, settings.DEFAULT_FROM_EMAIL, [recipient])
         if message.send(fail_silently=False) != 1:
             raise RuntimeError("Email transport did not acknowledge the message")

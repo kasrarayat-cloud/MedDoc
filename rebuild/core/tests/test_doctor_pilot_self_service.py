@@ -4,6 +4,7 @@ Isolated synthetic database, fixture AI, no provider request. Each test names th
 catch if it were removed.
 """
 from io import BytesIO
+from datetime import timedelta
 import hashlib
 import os
 from pathlib import Path
@@ -24,8 +25,8 @@ from reportlab.pdfgen import canvas
 
 from core.generation import configuration
 from core.jobs import enqueue, run_one
-from core.models import Department, Encounter, Job, Membership, Organization, Patient, Template, TemplateVersion, User
-from core.security import private_path
+from core.models import Department, Encounter, Invitation, Job, Membership, Organization, Patient, Template, TemplateVersion, User
+from core.security import digest, private_path
 from core.views import UPLOAD_REFUSAL_HINTS, VOICE_DOCUMENT_CHANGED, VOICE_QUOTE_EXPIRED, VOICE_QUOTE_SECONDS, mpeg_frame_sync
 from documents import DocumentError
 from core.tests.audio_fixtures import wav_bytes
@@ -285,7 +286,19 @@ class PilotSafeguards(SyntheticFixture, TestCase):
         self.client.logout()
         account = {'first_name': 'Un', 'last_name': 'Attested', 'password1': 'synthetic-Passw0rd-long', 'password2': 'synthetic-Passw0rd-long'}
         self.assertEqual(attempt(User, '/register/', {**account, 'email': 'unattested@synthetic.invalid'}, None), 0)
-        self.assertEqual(attempt(User, '/register/', {**account, 'email': 'attested@synthetic.invalid'}, {'synthetic_only': 'on'}), 1)
+        self.assertEqual(attempt(User, '/register/', {**account, 'email': 'attested@synthetic.invalid'}, {'synthetic_only': 'on'}), 0)
+        self.assertEqual(self.client.get('/register/').status_code, 404)
+        issuer = User.objects.create_user(username='synthetic-attestation-inviter',
+            email='attestation-inviter@synthetic.invalid', verified_at=timezone.now())
+        Membership.objects.create(user=issuer, department=self.department, role='owner')
+        raw = 'synthetic-attestation-invitation-token'
+        invite = Invitation.objects.create(email='attested-invited@synthetic.invalid', department=self.department,
+            role='clinician', token_hash=digest(raw), expires_at=timezone.now()+timedelta(hours=1), invited_by=issuer)
+        invite_payload = {**account, 'email': invite.email}
+        self.assertEqual(attempt(User, '/invite/'+raw+'/', invite_payload, None), 0)
+        self.assertEqual(attempt(User, '/invite/'+raw+'/', invite_payload, {'synthetic_only': 'on'}), 1)
+        invite.refresh_from_db()
+        self.assertIsNotNone(invite.accepted_at)
 
     def test_a_patient_and_form_from_different_departments_cannot_make_a_document(self):
         other = self.make_scope('pilot-sibling', self.scope[1])

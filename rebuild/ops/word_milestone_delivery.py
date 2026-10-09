@@ -643,6 +643,8 @@ def foreign_service_observation(configuration):
 
 
 def render_environment(original,candidate,*,recovery=False):
+    from .direct_account_access import reject_legacy_environment
+    reject_legacy_environment(original)
     require(type(original) is bytes and original.endswith(b'\n'),'environment_bytes')
     require(re.fullmatch('[a-f0-9]{40}',candidate or ''),'candidate_sha')
     parsed=dotenv_values(stream=StringIO(original.decode()),interpolate=False)
@@ -1471,6 +1473,9 @@ def main(argv=None):
         print(json.dumps({'qualified':QUALIFIED,'installed_state_accessed':False,'execution_performed':False,
             'minimum_available_bytes':MINIMUM_SPACE,'provider_calls':0,'historical_approval_inferred':False}));return 0
     require(QUALIFIED,'finished_diff_qualification_required')
+    if args.execute:
+        from .direct_account_access import refuse_legacy_operation
+        refuse_legacy_operation()
     require(os.getuid()==os.geteuid()==1000,'native_operator_identity')
     if args.prepare:
         plan=prepare_plan(args.candidate,args.directory);print(json.dumps({'prepared':True,'candidate':plan['candidate'],'directory':args.directory,'provider_calls':0}));return 0

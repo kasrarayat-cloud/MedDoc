@@ -16,7 +16,7 @@
     <form method="post" data-submit-once>{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next|default:'' }}"><button type="submit">Sign in{% if is_admin_site %} to administration{% endif %}</button></form>
     <div class="auth-footer">
       <p><a href="{% url 'recovery_request' %}">Forgot your password?</a>{% if not is_admin_site %} · <a href="{% url 'verification_resend' %}">Resend verification</a>{% endif %}</p>
-      {% if not is_admin_site %}<p>New to QuillMD? <a href="{% url 'register' %}">Create an account</a></p>{% endif %}
+      {% if not is_admin_site %}<p>Access is by invitation. Use your existing account, or ask your organization administrator for an invitation.</p>{% endif %}
       <p class="small">Private testing environment. Use synthetic patient information.</p>
     </div>
   </div></main>

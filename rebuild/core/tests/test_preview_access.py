@@ -1,37 +1,45 @@
-"""Private preview boundary tests; isolated database and synthetic values only."""
+"""Account-only HTTPS boundary; isolated database and synthetic credentials."""
 import re
-import time
+from datetime import timedelta
+from pathlib import Path
+import tempfile
 from unittest.mock import patch
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 
+from django.conf import settings
 from django.contrib.sessions.backends.db import SessionStore
 from django.contrib.sessions.models import Session
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
+from django_otp.oath import totp
+from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from core.models import AuditEvent, User
-from core.preview_access import ABSOLUTE_SECONDS, COOKIE, FLOW_SECONDS, IDLE_SECONDS, KIND, safe_destination
+from core.models import AuditEvent, Membership, User
+from core.preview_access import COOKIE, KIND, safe_destination
 
-
-GATE_USER = 'synthetic-preview'
-GATE_PASSWORD = 'Synthetic-preview-only-8492!'
+GATE_USER = 'obsolete-synthetic-preview'
+GATE_PASSWORD = 'Obsolete-synthetic-gate-only-8492!'
 SETTINGS = {
-    'ADMIN_SITE': False,
-    'QUILLMD_PREVIEW_AUTH_ENABLED': True,
+    'ADMIN_SITE': False, 'QUILLMD_TRUST_PROXY': True,
+    'QUILLMD_DIRECT_ACCOUNT_ACCESS_ENABLED': True,
+    'QUILLMD_PREVIEW_AUTH_ENABLED': True,  # Obsolete configuration cannot restore the gate.
+    'QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED': True,
     'QUILLMD_PREVIEW_ORIGIN': 'https://app.quillmd.com:9443',
-    'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com:9443',
+    'QUILLMD_APP_BASE_URL': 'https://app.quillmd.com',
     'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME': GATE_USER,
     'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': GATE_PASSWORD,
     'SECURE_PROXY_SSL_HEADER': ('HTTP_X_FORWARDED_PROTO', 'https'),
+    'SESSION_COOKIE_SECURE': True, 'CSRF_COOKIE_SECURE': True, 'CSRF_TRUSTED_ORIGINS': [],
     'STORAGES': {'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
                  'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}},
 }
-EDGE = {'HTTP_HOST': 'app.quillmd.com:9443', 'HTTP_X_QUILLMD_PREVIEW': '1', 'secure': True}
+EDGE = {'HTTP_HOST': 'app.quillmd.com', 'HTTP_X_QUILLMD_ACCOUNT': '1', 'secure': True}
 
 
-class SafePreviewDestinationTests(SimpleTestCase):
+class SafeAccountDestinationTests(SimpleTestCase):
     def test_only_local_application_locations_can_resume(self):
-        for path in ('/', '/invite/synthetic-token/', '/recovery/confirm/abc/123-xyz/', '/encounters/abc/?tab=coding', '/patients/?q=Synthetic%20Patient'):
+        for path in ('/', '/invite/synthetic-token/', '/recovery/confirm/abc/123-xyz/',
+                     '/encounters/abc/?tab=coding', '/patients/?q=Synthetic%20Patient'):
             with self.subTest(path=path):
                 self.assertTrue(safe_destination(path))
         for path in ('https://outside.invalid/', '//outside.invalid/', '/\\outside.invalid/',
@@ -45,237 +53,247 @@ class SafePreviewDestinationTests(SimpleTestCase):
 
 
 @override_settings(**SETTINGS)
-class PreviewAccessTests(TestCase):
+class DirectAccountAccessTests(TestCase):
+    password = 'Synthetic-individual-account-8492!'
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='synthetic-individual',
+            email='synthetic-individual@example.invalid', password=self.password,
+            verified_at=timezone.now())
+
     def get(self, path, client=None, **extra):
         return (client or self.client).get(path, **{**EDGE, **extra})
 
     def post(self, path, data, client=None, **extra):
         return (client or self.client).post(path, data, **{**EDGE, **extra})
 
-    def start(self, path='/health/', client=None):
-        response = self.get(path, client=client)
+    def login(self, client=None, **data):
+        return self.post('/login/', {'email': self.user.email, 'password': self.password, **data}, client=client)
+
+    def test_fresh_browser_enters_account_login_and_password_is_unchanged(self):
+        original_hash = self.user.password
+        response = self.get('/')
         self.assertEqual(response.status_code, 302)
-        parsed = urlsplit(response['Location'])
-        self.assertEqual(parsed.path, '/preview/sign-in/')
-        handle = parse_qs(parsed.query)['flow'][0]
-        self.assertRegex(handle, r'^[a-f0-9]{32}$')
-        return handle
+        self.assertEqual(urlsplit(response['Location']).path, '/login/')
+        page = self.get(response['Location'])
+        for expected in ('name="email"', 'name="password"'):
+            self.assertContains(page, expected)
+        for forbidden in ('Private preview', 'name="username"', GATE_USER, GATE_PASSWORD, 'name="flow"'):
+            self.assertNotContains(page, forbidden)
+        self.assertNotIn(COOKIE, self.client.cookies)
+        self.assertEqual(self.login()['Location'], '/')
+        self.assertEqual(self.get('/').status_code, 200)
+        self.assertNotIn(COOKIE, self.client.cookies)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.password, original_hash)
+        self.assertEqual(AuditEvent.objects.filter(action='auth.login').count(), 1)
+        self.assertFalse(AuditEvent.objects.filter(action__startswith='preview.').exists())
 
-    def login(self, flow='', client=None):
-        return self.post('/preview/sign-in/', {'username': GATE_USER, 'password': GATE_PASSWORD, 'flow': flow}, client=client)
+    def test_empty_invalid_or_disabled_shared_configuration_cannot_block_account_login(self):
+        for config in (
+            {'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME': '', 'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': ''},
+            {'QUILLMD_EMAIL_PRIVATE_ACCESS_USERNAME': 'invalid:old-name', 'QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD': 'short\n'},
+            {'QUILLMD_PREVIEW_AUTH_ENABLED': False},
+            {'QUILLMD_PREVIEW_ORIGIN': 'https://obsolete.invalid:9443'},
+        ):
+            browser = Client()
+            with self.subTest(config_names=sorted(config)), override_settings(**config):
+                self.assertEqual(self.get('/login/', browser).status_code, 200)
+                self.assertEqual(self.login(browser).status_code, 302)
+                self.assertEqual(self.get('/', browser).status_code, 200)
+                self.assertNotIn(COOKIE, browser.cookies)
 
-    def store(self, client=None):
-        return SessionStore(session_key=(client or self.client).cookies[COOKIE].value)
+    def test_wrong_unknown_inactive_and_unverified_accounts_cannot_authenticate(self):
+        unverified = User.objects.create_user(username='synthetic-unverified',
+            email='unverified@example.invalid', password=self.password)
+        disabled = User.objects.create_user(username='synthetic-disabled',
+            email='disabled@example.invalid', password=self.password, verified_at=timezone.now(), is_active=False)
+        for email, password in ((self.user.email, 'Wrong-synthetic-only-value!'),
+                 ('absent@example.invalid', self.password),
+                 (unverified.email, self.password), (disabled.email, self.password)):
+            browser = Client()
+            with self.subTest(email=email):
+                response = self.post('/login/', {'email': email, 'password': password}, browser)
+                self.assertContains(response, 'Sign-in failed')
+                self.assertNotContains(response, password)
+                self.assertNotIn('_auth_user_id', browser.session)
+                self.assertEqual(urlsplit(self.get('/', browser)['Location']).path, '/login/')
+        self.assertEqual(AuditEvent.objects.filter(action='auth.login_failed').count(), 4)
+        self.assertNotIn(self.password, str(list(AuditEvent.objects.values('action', 'target', 'details'))))
 
-    def test_original_capability_is_server_side_and_resumes_after_form_login(self):
-        destination = '/invite/synthetic-capability-original/'
-        handle = self.start(destination)
-        original_key = self.client.cookies[COOKIE].value
-        page = self.get('/preview/sign-in/?flow=' + handle)
-        self.assertEqual(page.status_code, 200)
-        self.assertNotContains(page, 'synthetic-capability-original')
-        self.assertNotContains(page, destination)
-        self.assertContains(page, 'name="flow"')
-        response = self.login(handle)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], destination)
-        self.assertNotEqual(self.client.cookies[COOKIE].value, original_key)
-        self.assertFalse(Session.objects.filter(session_key=original_key).exists())
-        cookie = response.cookies[COOKIE]
-        self.assertTrue(cookie['secure'])
-        self.assertTrue(cookie['httponly'])
-        self.assertEqual(cookie['samesite'], 'Lax')
-        self.assertEqual(cookie['path'], '/')
-        self.assertFalse(cookie['domain'])
-        self.assertEqual(self.get('/health/').status_code, 200)
-        # Gate access grants no individual application session.
-        self.assertNotIn('quillmd_doctor_session', self.client.cookies)
-        self.assertEqual(self.get('/').status_code, 302)
-        audit = str(list(AuditEvent.objects.values('action', 'target', 'details')))
-        for secret in (GATE_USER, GATE_PASSWORD, destination, handle, original_key):
-            self.assertNotIn(secret, audit)
-
-    def test_tabs_keep_distinct_destinations_and_used_handle_cannot_repeat(self):
-        first = self.start('/invite/synthetic-first/')
-        second = self.start('/recovery/confirm/synthetic/second/')
-        self.assertNotEqual(first, second)
-        self.assertEqual(self.login(second)['Location'], '/recovery/confirm/synthetic/second/')
-        self.assertEqual(self.login(first)['Location'], '/invite/synthetic-first/')
-        self.assertEqual(self.login(first).status_code, 400)
-
-    def test_flow_is_bound_to_original_preview_cookie(self):
-        handle = self.start('/invite/synthetic-bound/')
-        stranger = Client()
-        response = self.login(handle, client=stranger)
-        self.assertEqual(response.status_code, 400)
-        self.assertNotIn('grant', self.store(stranger))
-
-    def test_pending_flows_are_bounded_and_expire(self):
-        handles = [self.start('/invite/synthetic-' + str(i) + '/') for i in range(9)]
-        self.assertEqual(len(self.store()['flows']), 8)
-        self.assertEqual(self.login(handles[0]).status_code, 400)
-        store = self.store()
-        pending = store['flows']
-        pending[handles[-1]]['created'] -= FLOW_SECONDS + 1
-        store['flows'] = pending
-        store.save()
-        self.assertEqual(self.login(handles[-1]).status_code, 400)
-
-    def test_wrong_credentials_do_not_create_grant_and_do_not_reflect_password(self):
-        handle = self.start()
-        response = self.post('/preview/sign-in/', {'username': GATE_USER, 'password': 'synthetic-wrong-value', 'flow': handle})
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'username or password is incorrect')
-        self.assertNotContains(response, 'synthetic-wrong-value')
-        self.assertNotIn('grant', self.store())
-        self.assertEqual(AuditEvent.objects.filter(action='preview.login_failed').count(), 1)
-
-    def test_signin_and_error_pages_preserve_origin_only_referrers_for_browser_forms(self):
-        handle = self.start('/invite/synthetic-referrer-capability/')
-        responses = (
-            self.get('/preview/sign-in/?flow=' + handle),
-            self.post('/preview/sign-in/', {'username': GATE_USER, 'password': 'synthetic-wrong-value', 'flow': handle}),
-            self.get('/preview/sign-in/?flow=' + '0' * 32),
-        )
-        for response in responses:
-            self.assertEqual(response['Referrer-Policy'], 'strict-origin')
-            self.assertNotContains(response, 'synthetic-referrer-capability', status_code=response.status_code)
-
-    def test_actual_atomic_rate_limit_refuses_ninth_attempt_and_separates_verified_client_ips(self):
-        handle = self.start()
+    def test_existing_atomic_account_throttle_refuses_ninth_attempt(self):
         for _ in range(8):
-            response = self.post('/preview/sign-in/', {'username': GATE_USER, 'password': 'synthetic-wrong-value', 'flow': handle}, HTTP_X_REAL_IP='192.0.2.1')
-            self.assertEqual(response.status_code, 200)
-        response = self.post('/preview/sign-in/', {'username': GATE_USER, 'password': GATE_PASSWORD, 'flow': handle}, HTTP_X_REAL_IP='192.0.2.1')
-        self.assertEqual(response.status_code, 429)
-        self.assertEqual(response['Retry-After'], '600')
-        self.assertNotIn('grant', self.store())
-        response = self.post('/preview/sign-in/', {'username': GATE_USER, 'password': GATE_PASSWORD, 'flow': handle}, HTTP_X_REAL_IP='192.0.2.2')
-        self.assertEqual(response.status_code, 302)
+            self.assertContains(self.post('/login/', {'email': self.user.email,
+                'password': 'Wrong-synthetic-only-value!'}), 'Sign-in failed')
+        self.assertContains(self.login(), 'Too many sign-in attempts')
+        self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertFalse(AuditEvent.objects.filter(action='auth.login').exists())
 
-    def test_credential_rotation_idle_and_absolute_expiry_revoke_gate_only(self):
+    def test_old_preview_cookie_neither_grants_access_nor_changes_retained_session(self):
+        obsolete = SessionStore()
+        obsolete['kind'] = KIND
+        obsolete['grant'] = {'fingerprint': 'obsolete', 'issued': 1, 'seen': 1}
+        obsolete.save()
+        original = Session.objects.get(pk=obsolete.session_key).session_data
+        self.client.cookies[COOKIE] = obsolete.session_key
+        response = self.get('/')
+        self.assertEqual(urlsplit(response['Location']).path, '/login/')
+        self.assertEqual(response.cookies[COOKIE]['max-age'], 0)
+        self.assertEqual(Session.objects.get(pk=obsolete.session_key).session_data, original)
+        self.assertEqual(self.login()['Location'], '/')
+        self.assertEqual(self.get('/').status_code, 200)
+        self.assertEqual(Session.objects.get(pk=obsolete.session_key).session_data, original)
+
+    def test_copied_account_cookie_in_obsolete_cookie_cannot_revoke_or_grant_authority(self):
+        account_browser = Client()
+        account_browser.force_login(self.user)
+        key = account_browser.cookies[settings.SESSION_COOKIE_NAME].value
+        original = Session.objects.get(pk=key).get_decoded()
+        outsider = Client()
+        outsider.cookies[COOKIE] = key
+        self.assertEqual(urlsplit(self.get('/', outsider)['Location']).path, '/login/')
+        for path in ('/preview/sign-in/', '/preview/sign-out/'):
+            self.assertEqual(self.get(path, outsider)['Location'], '/login/')
+        self.assertEqual(Session.objects.get(pk=key).get_decoded(), original)
+        account_browser.cookies[COOKIE] = key
+        self.assertEqual(self.get('/preview/sign-out/', account_browser)['Location'], '/login/')
+        self.assertEqual(self.get('/', account_browser).status_code, 200)
+        self.assertEqual(Session.objects.get(pk=key).get_decoded(), original)
+
+    def test_legacy_links_ignore_flow_next_credentials_and_never_loop(self):
+        for path in ('/preview/sign-in/', '/preview/sign-out/'):
+            for query in ('', '?flow=' + 'f' * 32, '?next=https://outside.invalid/',
+                          '?next=/preview/sign-in/&flow=%0d%0aLocation:https://outside.invalid'):
+                with self.subTest(path=path, query=query):
+                    response = self.get(path + query)
+                    self.assertEqual(response.status_code, 303)
+                    self.assertEqual(response['Location'], '/login/')
+                    self.assertEqual(self.get(response['Location']).status_code, 200)
+            response = self.post(path, {'username': GATE_USER, 'password': GATE_PASSWORD,
+                'next': 'https://outside.invalid/', 'flow': 'f' * 32})
+            self.assertEqual(response.status_code, 303)
+            self.assertEqual(response['Location'], '/login/')
+            self.assertNotIn('_auth_user_id', self.client.session)
+        self.assertFalse(AuditEvent.objects.filter(action__startswith='preview.').exists())
+
+    def test_anonymous_pages_apis_and_downloads_are_account_protected(self):
+        identifier = '00000000-0000-0000-0000-000000000001'
+        for path in ('/', '/doctor-guide/', '/api/patients/', f'/api/encounters/{identifier}/',
+                 f'/templates/{identifier}/original/', f'/templates/{identifier}/preparation/',
+                 f'/templates/{identifier}/preparation/preview/original/',
+                 f'/encounters/{identifier}/export/', '/console/services/'):
+            with self.subTest(path=path):
+                response = self.get(path)
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(urlsplit(response['Location']).path, '/login/')
+        response = self.post(f'/encounters/{identifier}/finalize/', {'reviewed': 'on'})
+        self.assertEqual(response['Location'], '/login/?next=/')
+
+    def test_doctor_cannot_use_admin_console_and_signup_creates_nothing(self):
         self.login()
-        with override_settings(QUILLMD_EMAIL_PRIVATE_ACCESS_PASSWORD='Rotated-synthetic-only-12345!'):
-            self.assertEqual(self.get('/health/').status_code, 302)
-        self.login()
-        for field, age in (('seen', IDLE_SECONDS + 1), ('issued', ABSOLUTE_SECONDS + 1)):
-            store = self.store()
-            grant = store['grant']; grant[field] -= age; store['grant'] = grant; store.save()
-            self.assertEqual(self.get('/health/').status_code, 302)
-            self.login()
+        self.assertEqual(self.get('/console/services/').status_code, 404)
+        count = User.objects.count()
+        for browser in (self.client, Client()):
+            self.assertEqual(self.get('/register/', browser).status_code, 404)
+            self.assertEqual(self.post('/register/', {'email': 'new@example.invalid',
+                'password1': self.password, 'password2': self.password, 'synthetic_only': 'on'}, browser).status_code, 404)
+        self.assertEqual(User.objects.count(), count)
+        self.assertEqual(self.client.get('/register/', HTTP_HOST='localhost:9130').status_code, 404)
 
-    def test_marker_host_tls_and_disabled_gate_fail_closed(self):
-        for extra in ({'HTTP_X_QUILLMD_PREVIEW': ''}, {'HTTP_HOST': 'localhost:9130'},
-                      {'secure': False}):
-            with self.subTest(extra=extra):
-                self.assertEqual(self.get('/health/', **extra).status_code, 403)
-        with override_settings(QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=False):
-            sessions = list(Session.objects.order_by('pk').values())
-            audits = list(AuditEvent.objects.order_by('pk').values())
-            response = self.get('/health/', HTTP_HOST='app.quillmd.com')
-            self.assertEqual(response.status_code, 503)
-            self.assertEqual(response['Cache-Control'], 'no-store')
-            self.assertFalse(response.cookies)
-            self.assertEqual(list(Session.objects.order_by('pk').values()), sessions)
-            self.assertEqual(list(AuditEvent.objects.order_by('pk').values()), audits)
-        self.assertEqual(self.client.get('/health/', HTTP_HOST='app.quillmd.com:9443', secure=True).status_code, 403)
-        with override_settings(QUILLMD_PREVIEW_AUTH_ENABLED=False):
-            self.assertEqual(self.get('/health/').status_code, 503)
-            # Rollback restores the independent Basic edge before disabling this
-            # form gate; that edge has no form marker and retains app behavior.
-            self.assertEqual(self.client.get('/health/', HTTP_HOST='app.quillmd.com:9443', secure=True).status_code, 200)
+    def test_known_files_apis_and_revoked_membership_remain_tenant_protected_on_normal_https(self):
+        from core.tests.test_security import SyntheticFixture
+        from core.security import private_path
+        factory = SyntheticFixture()
+        own = factory.make_scope('direct-visible')
+        sibling = factory.make_scope('direct-sibling', organization=own[1])
+        foreign = factory.make_scope('direct-foreign')
+        Membership.objects.create(user=self.user, department=own[2], role='clinician')
+        with tempfile.TemporaryDirectory() as directory, override_settings(MEDIA_ROOT=Path(directory)):
+            for scope in (own, sibling, foreign):
+                template, encounter, blob = scope[4], scope[5], scope[-1]
+                original = private_path(template.original_path)
+                original.parent.mkdir(parents=True, exist_ok=True)
+                original.write_bytes(blob)
+                encounter.status = 'finalized'
+                encounter.export_path = template.original_path
+                encounter.export_sha256 = template.sha256
+                encounter.save()
+                for path in (f'/templates/{template.pk}/original/', f'/encounters/{encounter.pk}/export/'):
+                    self.assertEqual(urlsplit(self.get(path, Client())['Location']).path, '/login/')
+            self.assertEqual(self.login().status_code, 302)
+            patients = self.get('/api/patients/').json()['patients']
+            self.assertEqual([item['id'] for item in patients], [str(own[3].pk)])
+            for path in (f'/templates/{own[4].pk}/original/', f'/encounters/{own[5].pk}/export/'):
+                response = self.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(b''.join(response.streaming_content), own[-1])
+            for scope in (sibling, foreign):
+                for path in (f'/templates/{scope[4].pk}/original/',
+                             f'/encounters/{scope[5].pk}/export/', f'/api/encounters/{scope[5].pk}/'):
+                    self.assertEqual(self.get(path).status_code, 404)
+            Membership.objects.filter(user=self.user, department=own[2]).update(active=False)
+            self.assertEqual(self.get('/api/patients/').json()['patients'], [])
+            self.assertEqual(self.get(f'/encounters/{own[5].pk}/export/').status_code, 404)
 
-    def test_loopback_behavior_is_unchanged_and_preview_routes_do_not_work_there(self):
-        self.assertEqual(self.client.get('/health/', HTTP_HOST='127.0.0.1:9130').status_code, 200)
-        self.assertEqual(self.client.get('/preview/sign-in/', HTTP_HOST='127.0.0.1:9130').status_code, 403)
-        with override_settings(ADMIN_SITE=True):
-            self.assertEqual(self.client.get('/health/', HTTP_HOST='127.0.0.1:9131').status_code, 200)
-            self.assertEqual(self.get('/health/').status_code, 503)
+    def test_administrator_requires_current_mfa_and_cannot_replay_code(self):
+        self.user.is_staff = True
+        self.user.save(update_fields=['is_staff'])
+        device = TOTPDevice.objects.create(user=self.user, confirmed=True, name='Synthetic authenticator')
+        for otp in ('', 'bad'):
+            self.assertContains(self.login(otp=otp), 'Sign-in failed')
+            self.assertNotIn('_auth_user_id', self.client.session)
+        # The real TOTP cooldown remains active after failed codes. Advance
+        # its clock rather than disabling the limiter or resetting the device.
+        elapsed = timezone.now() + timedelta(seconds=5)
+        with patch('django_otp.models.timezone.now', return_value=elapsed), \
+             patch('django_otp.plugins.otp_totp.models.time.time', return_value=elapsed.timestamp()):
+            code = str(totp(device.bin_key, step=device.step, t0=device.t0, digits=device.digits)).zfill(6)
+            self.assertEqual(self.login(otp=code)['Location'], '/')
+        self.assertEqual(self.get('/console/services/').status_code, 200)
+        other = Client()
+        with patch('django_otp.models.timezone.now', return_value=elapsed), \
+             patch('django_otp.plugins.otp_totp.models.time.time', return_value=elapsed.timestamp()):
+            self.assertContains(self.login(other, otp=code), 'Sign-in failed')
+        self.assertNotIn('_auth_user_id', other.session)
 
-    def test_api_files_webhook_and_unsafe_requests_cannot_skip_gate(self):
-        response = self.get('/api/patients/')
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()['error'], 'private_preview_access_required')
-        self.assertEqual(self.post('/billing/webhook/', {}).status_code, 403)
-        self.assertEqual(self.post('/recovery/', {'email': 'synthetic-only@invalid.example'}).status_code, 403)
-        response = self.get('/templates/00000000-0000-0000-0000-000000000001/original/')
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.get('/static/app.js').status_code, 302)
-
-    def test_copied_account_cookie_is_not_modified_or_deleted_by_preview_login_logout(self):
-        user = User.objects.create_user(username='synthetic-account', email='synthetic-account@example.invalid', verified_at=timezone.now())
-        self.client.force_login(user)
-        app_key = self.client.cookies['quillmd_doctor_session'].value
-        original = Session.objects.get(pk=app_key).get_decoded()
-        self.assertEqual(original['_auth_user_id'], str(user.pk))
-        self.client.cookies[COOKIE] = app_key
-        # SESSION_SAVE_EVERY_REQUEST legitimately re-signs the same payload.
-        # Cross a signing timestamp boundary deliberately; compare authority,
-        # not the time-dependent signature bytes of an ordinary refresh.
-        with patch('django.core.signing.time.time', return_value=time.time() + 2):
-            self.login()
-        self.assertNotEqual(self.client.cookies[COOKIE].value, app_key)
-        self.assertEqual(Session.objects.get(pk=app_key).get_decoded(), original)
-        response = self.post('/preview/sign-out/', {})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(self.client.cookies['quillmd_doctor_session'].value, app_key)
-        self.assertEqual(Session.objects.get(pk=app_key).get_decoded(), original)
-
-    def test_logout_invalidates_copied_preview_cookie(self):
-        self.login()
-        copied = self.client.cookies[COOKIE].value
-        self.assertEqual(self.post('/preview/sign-out/', {}).status_code, 302)
-        self.client.cookies[COOKIE] = copied
-        self.assertEqual(self.get('/health/').status_code, 302)
-
-    def test_csrf_is_real_and_wrong_origin_or_missing_token_is_refused(self):
-        checked = Client(enforce_csrf_checks=True)
-        handle = self.start(client=checked)
-        page = self.get('/preview/sign-in/?flow=' + handle, client=checked)
+    def test_login_and_logout_require_real_csrf_and_canonical_origin(self):
+        browser = Client(enforce_csrf_checks=True)
+        page = self.get('/login/', browser)
         token = re.search(r'name="csrfmiddlewaretoken" value="([A-Za-z0-9]+)"', page.content.decode()).group(1)
-        data = {'username': GATE_USER, 'password': GATE_PASSWORD, 'flow': handle}
-        response = self.post('/preview/sign-in/', data, client=checked, HTTP_ORIGIN='https://app.quillmd.com:9443')
-        self.assertEqual(response.status_code, 403)
-        self.assertContains(response, 'This form expired', status_code=403)
-        response = self.post('/preview/sign-in/', {**data, 'csrfmiddlewaretoken': token}, client=checked, HTTP_ORIGIN='https://outside.invalid')
-        self.assertEqual(response.status_code, 403)
-        response = self.post('/preview/sign-in/', {**data, 'csrfmiddlewaretoken': token}, client=checked, HTTP_ORIGIN='https://app.quillmd.com:9443')
-        self.assertEqual(response.status_code, 302)
+        data = {'email': self.user.email, 'password': self.password}
+        self.assertEqual(self.post('/login/', data, browser).status_code, 403)
+        for origin in ('https://outside.invalid', 'https://app.quillmd.com:9443'):
+            self.assertEqual(self.post('/login/', {**data, 'csrfmiddlewaretoken': token}, browser,
+                HTTP_ORIGIN=origin).status_code, 403)
+        self.assertEqual(self.post('/login/', {**data, 'csrfmiddlewaretoken': token}, browser,
+            HTTP_ORIGIN='https://app.quillmd.com').status_code, 302)
+        self.assertEqual(self.get('/logout/', browser).status_code, 405)
+        self.assertEqual(self.post('/logout/', {}, browser).status_code, 403)
+        logout_page = self.get('/', browser)
+        logout_token = re.search(r'name="csrfmiddlewaretoken" value="([A-Za-z0-9]+)"', logout_page.content.decode()).group(1)
+        response = self.post('/logout/', {'csrfmiddlewaretoken': logout_token}, browser,
+            HTTP_ORIGIN='https://app.quillmd.com')
+        self.assertEqual(response['Location'], '/login/')
+        self.assertEqual(self.get('/login/', browser).status_code, 200)
+        self.assertEqual(urlsplit(self.get('/', browser)['Location']).path, '/login/')
+        self.assertEqual(AuditEvent.objects.filter(action='auth.logout').count(), 1)
 
-    def test_expired_or_unknown_invitation_is_friendly_but_still_404(self):
-        self.login()
-        response = self.get('/invite/used-or-expired-synthetic-token/')
-        self.assertEqual(response.status_code, 404)
-        self.assertContains(response, 'Invitation link unavailable', status_code=404)
-        self.assertContains(response, 'Account sign-in', status_code=404)
+    def test_login_next_cannot_reintroduce_legacy_gate_or_open_redirect(self):
+        for destination in ('https://outside.invalid/', '//outside.invalid/', '/\\outside.invalid/',
+                            '/%2foutside.invalid/', '/%5coutside.invalid/', '/preview/sign-in/',
+                            '/preview/sign-in/?flow=' + 'f' * 32, '/preview/sign-out/'):
+            with self.subTest(destination=destination):
+                browser = Client()
+                response = self.login(browser, next=destination)
+                self.assertEqual(response['Location'], '/')
 
-    def test_csrf_warning_does_not_log_original_capability(self):
-        self.login()
+    def test_expired_invitation_and_csrf_failure_do_not_disclose_capability(self):
+        raw = 'synthetic-secret-capability-not-for-logs'
+        self.assertEqual(self.get('/invite/' + raw + '/').status_code, 404)
         checked = Client(enforce_csrf_checks=True)
-        checked.cookies = self.client.cookies.copy()
         with self.assertLogs('django.security.csrf', level='WARNING') as captured:
-            response = self.post('/invite/synthetic-secret-capability-not-for-logs/', {}, client=checked)
+            response = self.post('/invite/' + raw + '/', {}, checked)
         self.assertEqual(response.status_code, 403)
-        self.assertNotIn('synthetic-secret-capability-not-for-logs', '\n'.join(captured.output))
+        self.assertNotIn(raw, '\n'.join(captured.output))
+        self.assertNotContains(response, raw, status_code=403)
         self.assertIsNone(captured.records[0].request)
-        self.assertIsNone(captured.records[0].exc_info)
-
-    def test_csrf_retry_preserves_only_the_bound_opaque_flow(self):
-        checked = Client(enforce_csrf_checks=True)
-        destination = '/invite/synthetic-csrf-retry-capability/'
-        handle = self.start(destination, client=checked)
-        self.get('/preview/sign-in/?flow=' + handle, client=checked)
-        data = {'username': GATE_USER, 'password': GATE_PASSWORD, 'flow': handle}
-        failed = self.post('/preview/sign-in/', data, client=checked, HTTP_ORIGIN='https://app.quillmd.com:9443')
-        self.assertEqual(failed.status_code, 403)
-        self.assertContains(failed, 'href="/preview/sign-in/?flow=' + handle + '"', status_code=403)
-        self.assertNotContains(failed, 'synthetic-csrf-retry-capability', status_code=403)
-        retry = self.get('/preview/sign-in/?flow=' + handle, client=checked)
-        token = re.search(r'name="csrfmiddlewaretoken" value="([A-Za-z0-9]+)"', retry.content.decode()).group(1)
-        succeeded = self.post('/preview/sign-in/', {**data, 'csrfmiddlewaretoken': token}, client=checked, HTTP_ORIGIN='https://app.quillmd.com:9443')
-        self.assertEqual(succeeded.status_code, 302)
-        self.assertEqual(succeeded['Location'], destination)
-        unbound = 'f' * 32
-        failed = self.post('/preview/sign-in/', {**data, 'flow': unbound}, client=checked, HTTP_ORIGIN='https://app.quillmd.com:9443')
-        self.assertEqual(failed.status_code, 403)
-        self.assertNotContains(failed, unbound, status_code=403)

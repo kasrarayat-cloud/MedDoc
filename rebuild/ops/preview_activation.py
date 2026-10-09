@@ -8,6 +8,8 @@ KEYS = {'QUILLMD_RELEASE_SHA', 'QUILLMD_PREVIEW_AUTH_ENABLED'}
 
 
 def environment(original, expected_release, target_release, enabled):
+    from .direct_account_access import reject_legacy_environment
+    reject_legacy_environment(original)
     if not all(re.fullmatch(r'[a-f0-9]{40}', value or '') for value in (expected_release, target_release)):
         raise ValueError('Use exact recorded source revisions.')
     if not isinstance(enabled, bool):
