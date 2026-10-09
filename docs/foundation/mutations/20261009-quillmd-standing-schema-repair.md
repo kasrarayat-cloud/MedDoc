@@ -22,15 +22,37 @@ metadata and source-grounding validation, and prove both proposer/checker
 transforms and stubbed live branches offline. This reproduction does not rewrite
 the historical attempt's insufficient diagnostic evidence.
 
+The first fresh sponsored SOAP generation succeeded and exposed an independent
+backup predicate incompatibility: the legacy multiplier correctly governs wallet
+usage but rejects an authorized standing test's zero wallet charge. Preserve that
+failure evidence and repair qualification, rather than suppressing the mismatch.
+Retain the four existing invariant names and original legacy predicates. Only
+when the standing-reservation table exists, qualify sponsored rows against their
+immutable authority, purpose, actor, tenant, settled reservation, quote, provider
+receipt and usage identity. Require zero wallet charges and no wallet reservation,
+ledger charge or absorbed-over-limit entry. Admit an absorbed-failure record only
+for the exact legitimately failed platform job with its applicable reconciled
+cost; reject inconsistent records. Historical validity must not depend on current
+authority activation or account membership. Exercise legacy, sponsored, ASR and
+failed-job counterexamples against PostgreSQL before installation.
+
 Expected source delta: `rebuild/documents/preparation_roles.py`, focused regression
-coverage in `rebuild/core/tests/test_preparation_v2.py`, and this declaration.
+coverage in `rebuild/core/tests/test_preparation_v2.py`,
+`rebuild/ops/backup_restore.py`,
+`rebuild/core/tests/test_testing_authority_backup.py`, and this declaration.
 Pin the exact merged descendant, complete delta and successful required CI.
 No prompt, provider, credentials, subscriptions, clinical generation policy,
 database schema, migration, authority settings, account or wallet changes.
 
 Use the reviewed native installation route. Capture an operation-local baseline,
 drain only QuillMD's doctor/admin/worker services, and take a fresh verified
-encrypted backup. Preserve all 39 table populations, every function/trigger/grant,
+encrypted backup. Before source publication, use the reviewed candidate's exact
+hash-pinned backup qualification module against the unchanged installed base.
+Verify its unchanged encryption, file collection, database fingerprint and restore
+functions and three other invariant predicates; the narrower standing-aware
+usage predicate is the only qualification difference. This prospective exception
+does not replace prior backup results or declare a failed legacy check passed.
+Preserve all 39 table populations, every function/trigger/grant,
 sequences, original templates, approved versions, records, unique evidence,
 static files, ingress, original private demo, unrelated resources and rollback
 material. Only the exact source fast-forward and release environment value change.

@@ -43,6 +43,69 @@ INVARIANTS = {
         COALESCE((SELECT sum(r.amount) FROM core_reservation r WHERE r.wallet_id=w.id AND r.state='held'),0)''',
 }
 
+# Backup qualification is historical: use the immutable grant captured on the
+# request, not today's activation settings or account membership. Keep the old
+# multiplier query intact for pre-0024 restores and every non-sponsored row.
+_STANDING_USAGE_VALID = r"""
+    jsonb_typeof(j.config)='object'
+    AND j.config ?& ARRAY['testing_authority_mode','testing_authority_id','testing_authority_sha256','testing_purpose','testing_quote_usd']
+    AND NOT (j.config ?| ARRAY['campaign','campaign_scope_sha256','campaign_actor_scope_sha256','campaign_quote_usd'])
+    AND j.config->>'testing_authority_mode'='standing_authority'
+    AND j.config->>'testing_authority_id'='quillmd-standing-testing-20261009-v1'
+    AND j.config->>'testing_authority_sha256'='eb04bade3d212ebdc06dfc44095f0ba56fecfacd0d3d1dbcec97279865d0a7a5'
+    AND ((j.kind='generation' AND j.config->>'testing_purpose'='typed-or-reviewed-voice-generation')
+      OR (j.kind='transcription' AND j.config->>'testing_purpose'='reviewed-synthetic-voice-transcription'))
+    AND j.config->>'mode' IN ('live','fixture')
+    AND j.config->>'provider' IN ('anthropic','openai')
+    AND jsonb_typeof(j.config->'model')='string' AND length(j.config->>'model') BETWEEN 1 AND 100
+    AND CASE WHEN jsonb_typeof(j.config->'testing_quote_usd')='string'
+      AND j.config->>'testing_quote_usd' ~ '^[0-9]+([.][0-9]{1,12})?$'
+      AND length(split_part(j.config->>'testing_quote_usd','.',1))<=12
+      THEN r.quoted_provider_cost=(j.config->>'testing_quote_usd')::numeric
+      ELSE false END
+    AND r.authority_id='quillmd-standing-testing-20261009-v1' AND r.state='settled'
+    AND r.quoted_provider_cost>=0
+    AND ((j.user_id='71dc60e3-ca1e-40c7-ad49-4a2612ed8d1a' AND e.department_id='d41ad441-987c-4e68-bb0e-b885ec4b642a')
+      OR (j.user_id='2247e403-a830-4807-9a34-6903b95a0f50' AND e.department_id='46a5abdd-36f1-41f0-968f-8c09c39d9daa'))
+    AND u.user_id=j.user_id AND e.created_by_id=j.user_id
+    AND u.department_id=e.department_id AND u.organization_id=d.organization_id
+    AND j.payer='standing:quillmd-standing-testing-20261009-v1' AND u.payer=j.payer
+    AND u.actual_cost>=0 AND u.charged_cost=0
+    AND p.provider=u.provider AND p.provider_request_id=u.provider_request_id AND p.provider_resource_id=u.provider_resource_id
+    AND p.units=u.units AND p.rates=u.rates AND p.actual_cost=u.actual_cost AND p.simulated=u.simulated
+    AND u.simulated=(j.config->>'mode'='fixture')
+    AND (NOT u.simulated OR (u.actual_cost=0 AND r.quoted_provider_cost=0))
+    AND NOT EXISTS(SELECT 1 FROM core_reservation w WHERE w.job_id=u.job_id)
+    AND NOT EXISTS(SELECT 1 FROM core_ledgerentry l WHERE l.job_id=u.job_id)
+    AND (c.id IS NULL OR (c.reconciled_cost>=0 AND c.provider_credit_applied>=0 AND c.discount_applied>=0
+      AND c.evidence_kind IN ('unclassified','provider_report','invoice') AND c.evidence_reference<>''
+      AND c.charge_delta=0 AND c.over_limit_delta=0
+      AND (c.ledger_status='applied' OR (c.ledger_status='absorbed'
+        AND EXISTS(SELECT 1 FROM core_platformcost a WHERE a.job_id=u.job_id AND a.kind='absorbed_failure')))))
+    AND (NOT EXISTS(SELECT 1 FROM core_platformcost a WHERE a.job_id=u.job_id)
+      OR (j.state='failed' AND j.error LIKE 'platform_failure:%' AND NOT u.simulated
+        AND (SELECT count(*) FROM core_platformcost a WHERE a.job_id=u.job_id)=1
+        AND EXISTS(SELECT 1 FROM core_platformcost a
+          CROSS JOIN LATERAL (SELECT left('usage:'||u.id::text||
+            CASE WHEN c.created_at<a.created_at THEN ' reconciliation:'||c.evidence_reference ELSE '' END,240) AS prefix) evidence
+          WHERE a.job_id=u.job_id
+          AND a.kind='absorbed_failure' AND a.created_at>=u.created_at
+          AND a.amount=CASE WHEN c.created_at<a.created_at THEN c.reconciled_cost ELSE u.actual_cost END
+          AND (a.evidence_reference=evidence.prefix
+            OR left(a.evidence_reference,length(evidence.prefix)+6)=evidence.prefix||' note:'))))
+"""
+_STANDING_USAGE_INVARIANT = '''SELECT count(*) FROM core_usage u
+    LEFT JOIN core_job j ON j.id=u.job_id
+    LEFT JOIN core_encounter e ON e.id=j.encounter_id
+    LEFT JOIN core_department d ON d.id=e.department_id
+    LEFT JOIN core_testingreservation r ON r.job_id=u.job_id
+    LEFT JOIN core_providerreceipt p ON p.job_id=u.job_id
+    LEFT JOIN core_costreconciliation c ON c.usage_id=u.id
+    WHERE CASE WHEN j.config ?| ARRAY['testing_authority_mode','testing_authority_id','testing_authority_sha256','testing_purpose','testing_quote_usd']
+        OR j.payer LIKE 'standing:%' OR u.payer LIKE 'standing:%' OR r.id IS NOT NULL
+      THEN (''' + _STANDING_USAGE_VALID + ''') IS NOT TRUE
+      ELSE ''' + INVARIANTS['usage_multiplier'].split(' WHERE ', 1)[1] + ''' END'''
+
 
 def require(value, message):
     if not value:
@@ -151,7 +214,10 @@ def fingerprint(query, copy_hash):
 
 
 def invariant_counts(query):
-    result = {name: query(statement)[0][0] for name, statement in INVARIANTS.items()}
+    statements = dict(INVARIANTS)
+    if query("SELECT to_regclass('public.core_testingreservation')")[0][0] is not None:
+        statements['usage_multiplier'] = _STANDING_USAGE_INVARIANT
+    result = {name: query(statement)[0][0] for name, statement in statements.items()}
     require(not any(result.values()), 'Database invariants failed; backup/restore qualification stopped.')
     return result
 
