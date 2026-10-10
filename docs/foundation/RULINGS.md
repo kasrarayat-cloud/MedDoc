@@ -489,3 +489,4 @@ index above, every body in `docs/foundation/rulings/`.
 <!-- ARCHIVE-INDEX-END -->
 
 | 2026-10-09 | QuillMD testing authority | OWNER-RULING | **STANDING** — necessary purposeful paid QuillMD testing has no monetary or cumulative call ceiling; explicit standing-authority mode, immutable purpose/accounting, existing synthetic/provider/access safeguards; historical finite approvals and unknown $0.10 hold preserved. | [`2026-10-09-quillmd-standing-testing-authority.md`](rulings/2026-10-09-quillmd-standing-testing-authority.md) |
+| 2026-10-10 | QuillMD account recovery | OWNER-RULING | Recover the actual existing account or provision a separate synthetic doctor if recovery cannot promptly complete; secure usable credential delivery, canonical fresh-browser proof and demonstrated recovery-flow repair; preserve records, permissions and MFA. | [`2026-10-10-quillmd-account-recovery.md`](rulings/2026-10-10-quillmd-account-recovery.md) |
