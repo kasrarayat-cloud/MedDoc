@@ -54,6 +54,7 @@ rebuild/templates/encounter_detail.html
 rebuild/templates/encounter_form.html
 rebuild/templates/encounter_input.html
 rebuild/live-results-browser.mjs
+rebuild/browser-tests.mjs
 ```
 
 Only `app.js` changes and `encounter-live.js` is added among public static source
