@@ -17,7 +17,9 @@ def exported_text(data):
 
 
 class LeaveBlankReviewed(DocumentWorkflow):
-    NOTES = ('Fictional software test only.\n'
+    # This pointer genuinely leaves source scope unresolved under current v7;
+    # a complete harmless synthetic disclaimer no longer does.
+    NOTES = ('See the findings listed in the report.\n'
              'Symptoms: no chest pain\n'
              'Examination: normal gait')
 

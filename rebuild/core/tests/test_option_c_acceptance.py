@@ -18,7 +18,9 @@ from core.tests.test_workflow import DocumentWorkflow
 
 
 class OptionCAcceptance(DocumentWorkflow):
-    NOTES = ('Fictional software test only.\n'
+    # Current sentence evidence treats a harmless synthetic disclaimer as its
+    # own complete unit. Exercise an actual unresolved source pointer instead.
+    NOTES = ('See the findings listed in the report.\n'
              'Symptoms: no chest pain\n'
              'Examination: normal gait')
     SUGGESTION = 'no chest pain'

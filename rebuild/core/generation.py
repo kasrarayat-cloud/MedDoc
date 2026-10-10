@@ -300,6 +300,10 @@ def generation_evidence_contract(fields, config):
     return 'legacy'
 
 
+def source_line_is_complete(stripped,parsed):
+    return bool(re.search(r'[.!?]["\')\]]?$',stripped) or (parsed and parsed[1]))
+
+
 def source_units(notes, fields, *, context_labels=()):
     """Offer complete source sentences with exact offsets, never word fragments.
 
@@ -317,7 +321,7 @@ def source_units(notes, fields, *, context_labels=()):
         start=offset+line.index(stripped)
         parsed=labelled_value(stripped,labels)
         if ends_in_colon(stripped) or INHERITED_SCOPE.search(stripped): inherited=True
-        if not re.search(r'[.!?]["\')\]]?$',stripped) and not (parsed and parsed[1]):
+        if not source_line_is_complete(stripped,parsed):
             # A lone unpunctuated statement is still complete under the old
             # contract; multiple fragments can inherit an omitted heading.
             inherited=inherited or multiline
@@ -1361,13 +1365,20 @@ def judged_context(governance, notes, index, label, evidence):
     return None if found is None else list(found)
 
 
+def custom_source_governance(notes,governance):
+    """Current custom scope uses every visible reading to withhold an offer."""
+    withheld=governance[8] or any(not _plain_pointer_only(reading) for reading in readings(notes))
+    return (*governance[:8],withheld,*governance[9:])
+
+
 def governance_for(notes, fields, context_labels=(), *, answers=None):
     """The note's governance for this form, computed once: on the qualified Word form labelled lines never govern,
     and the answered-question exception reads answers the way this form's validator does. Its last element is the
     occurrence index, so the page judges a stored answer over every occurrence exactly as generation does."""
     labels = recognized_labels(fields, context_labels)
-    per_sentence = tab_evidence_contract(fields) or (not qualified_word_form(fields) and any(
-        answer.get('evidence_contract') == CUSTOM_CONTRACT for answer in (answers or {}).values()))
+    custom = not qualified_word_form(fields) and any(
+        answer.get('evidence_contract') == CUSTOM_CONTRACT for answer in (answers or {}).values())
+    per_sentence = tab_evidence_contract(fields) or custom
     units = None
     if per_sentence:
         try:
@@ -1377,6 +1388,8 @@ def governance_for(notes, fields, context_labels=(), *, answers=None):
     word_form = qualified_word_form(fields)
     governance = heading_governance(notes, labels, lexical=not word_form, per_sentence=per_sentence,
                                     questions=question_labels(fields) if word_form else frozenset())
+    if custom:
+        governance=custom_source_governance(notes,governance)
     return (*governance, occurrence_index(notes, labels, units))
 
 
@@ -1406,7 +1419,11 @@ def governed_supported(governance, notes, answer, label=None):
     writes `supported` (a clinician's answer is `edited`), so this is a draft from before this rule."""
     if answer.get('status') != 'supported' or not answer.get('evidence'):
         return None
-    return page_context(governance, notes, label, answer['evidence'])
+    context=page_context(governance, notes, label, answer['evidence'])
+    if (context is None and answer.get('evidence_contract')==CUSTOM_CONTRACT
+            and withheld_note_wide(governance,notes)):
+        return []
+    return context
 
 
 def own_evidence(answer, notes, per_sentence=True):
@@ -1522,6 +1539,26 @@ def validate_tab_selections(notes,fields,selections,*,context_labels=(),custom=F
     units,inherited=source_units(notes,fields,context_labels=context_labels)
     labels=recognized_labels(fields,context_labels)
     governance=heading_governance(notes,labels)
+    if custom:
+        # Above/below inside a complete sentence can locate anatomy. Keep the
+        # positional reader authoritative: a real heading or an ending pointer
+        # still governs. All other pointer words, reframers and quotations keep
+        # their existing conservative scope. A denial or an unfinished source
+        # line may govern another sentence, so neither gets this exemption.
+        scope_words={match.group().casefold() for reading in readings(notes)
+                     for match in INHERITED_SCOPE.finditer(reading)}
+        quoted=any(QUOTED_SOURCE.search(reading) for reading in readings(notes))
+        governance=custom_source_governance(notes,governance)
+        inherited=inherited or bool(scope_words) or quoted or negative_heading(notes) or governance[8]
+        lines=[line.strip() for line in notes.splitlines() if line.strip()]
+        if (scope_words and scope_words<={'above','below'} and not quoted
+                and not governance[3] and not governance[4]
+                and not governance[8]
+                and not any(UNSCOPED_NEGATIVE_HEADING.search(unit['quote']) for unit in units)
+                and not negative_heading(notes)
+                and (len(lines)==1 or all(source_line_is_complete(line,labelled_value(line,labels))
+                                         for line in lines))):
+            inherited=False
     index=occurrence_index(notes,labels,units)
     injection=bool(INJECTION.search(notes) or any(INJECTION.search(f['label']) for f in fields))
     from .tab_review import clinician_identity

@@ -35,26 +35,36 @@ the foundation ruling index, `.github/workflows/test.yml`, and these runtime or
 regression paths:
 
 ```
+rebuild/browser-tests.mjs
 rebuild/core/generation.py
 rebuild/core/jobs.py
 rebuild/core/live_results.py
-rebuild/core/views.py
 rebuild/core/tests/test_billing_boundary.py
+rebuild/core/tests/test_billing_boundary_regressions.py
+rebuild/core/tests/test_billing_lifecycle.py
+rebuild/core/tests/test_billing_policy.py
 rebuild/core/tests/test_candidate_suggestion.py
 rebuild/core/tests/test_custom_narrative_generation.py
 rebuild/core/tests/test_denial_heading_governance.py
+rebuild/core/tests/test_doctor_guide.py
+rebuild/core/tests/test_doctor_pilot_self_service.py
+rebuild/core/tests/test_leave_blank_reviewed.py
 rebuild/core/tests/test_live_results.py
+rebuild/core/tests/test_option_c_acceptance.py
+rebuild/core/tests/test_pilot_navigation.py
+rebuild/core/tests/test_refutation.py
 rebuild/core/tests/test_tab_independent_sections.py
 rebuild/core/tests/test_unlabelled_source_scope.py
+rebuild/core/views.py
+rebuild/live-results-browser.mjs
 rebuild/quillmd/urls.py
 rebuild/static/app.js
 rebuild/static/encounter-live.js
 rebuild/templates/dashboard.html
+rebuild/templates/doctor_guide.html
 rebuild/templates/encounter_detail.html
 rebuild/templates/encounter_form.html
 rebuild/templates/encounter_input.html
-rebuild/live-results-browser.mjs
-rebuild/browser-tests.mjs
 ```
 
 Only `app.js` changes and `encounter-live.js` is added among public static source
@@ -64,7 +74,10 @@ and publish the manifest last. No migration or dependency installation occurs.
 The only environment delta is `QUILLMD_RELEASE_SHA`. Stop/start only
 `quillmd-fresh-doctor.service`, `quillmd-fresh-admin.service`, and `quillmd-fresh-worker.service`
 using the reviewed native adapter's actual unit pins; no ingress or co-tenant
-change. Strict quiescent preservation covers all 39 tables, 24 functions,
+change. Between the pre-stop observation and stopped baseline, only
+`django_session` row fingerprints may change while HTTP drains; all other rows
+and every schema, function, trigger, sequence, grant, invariant and reference
+field must remain identical. Strict quiescent preservation covers all 39 tables, 24 functions,
 25 triggers, sequences, grants and all referenced private files, including
 unknown provider outcomes and the original owner's failed attempt.
 

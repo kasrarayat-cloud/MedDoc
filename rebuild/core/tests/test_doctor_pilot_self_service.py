@@ -17,12 +17,13 @@ from django.contrib.messages import get_messages
 from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from docx import Document
 from pypdf import PdfReader
 from reportlab.pdfgen import canvas
 
+from core import generation
 from core.generation import configuration
 from core.jobs import enqueue, run_one
 from core.models import Department, Encounter, Invitation, Job, Membership, Organization, Patient, Template, TemplateVersion, User
@@ -485,12 +486,163 @@ class BrowserLineBreaksReachTheDocumentOnce(DocumentWorkflow):
 
 
 class ALabelledNoteWithAnatomyFinalizes(DocumentWorkflow):
-    """Round 5, end to end: a vein note's ordinary `below the knee` must not stop a labelled note."""
+    """Retained v6: a vein note's `below the knee` must keep its historical behaviour.
+
+    Current v7 deliberately holds denial plus directional references: there is
+    no structural proof distinguishing negated anatomy from a denial governing
+    later fields. The current-contract controls below preserve that safety gate.
+    """
 
     def test_no_reflux_below_the_knee_is_an_answer_and_the_document_finalizes(self):
         template, mapping = self.upload(self.make_docx(), 'docx')
         encounter = self.create_encounter(mapping, 'Symptoms: No reflux below the knee.\nExamination: Normal venous study.')
-        self.generate(encounter)          # asserts every answer came back supported
+        config={**configuration(),'prompt_version':'extractive-v6-source-scope-attestation'}
+        with patch.object(generation,'configuration',return_value=config):
+            self.generate(encounter)      # asserts every historical answer stayed supported
         self.review(encounter)
         exported = self.finalize(encounter)
         self.assertEqual(Document(BytesIO(exported)).tables[0].cell(0, 1).text, 'Normal venous study.')
+
+
+class CustomAnatomyKeepsSourceScope(SimpleTestCase):
+    FIELDS = [{'key': 'symptoms', 'label': 'Symptoms', 'locator': {'cell': 0}},
+              {'key': 'examination', 'label': 'Examination', 'locator': {'cell': 1}}]
+
+    def judged(self, notes, choices, *, contract=None):
+        selected = generation.UnitSelections(fields=[generation.UnitSelection(
+            key=field['key'], unit_ids=choices.get(field['key'], []), conflict=False)
+            for field in self.FIELDS])
+        return generation.validate_selections(notes, self.FIELDS, selected,
+            evidence_contract=contract or generation.CUSTOM_CONTRACT)
+
+    def test_current_negated_anatomy_keeps_complete_source_and_requires_a_clinician_decision(self):
+        notes = 'Symptoms: No reflux below the knee.\nExamination: Normal venous study.'
+        answers = self.judged(notes, {'symptoms': [1], 'examination': [2]})
+        for key, value in (('symptoms', 'No reflux below the knee.'),
+                           ('examination', 'Normal venous study.')):
+            answer = answers[key]
+            self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+            self.assertFalse(answer['reviewed'])
+            self.assertNotIn('suggestion',answer)
+            self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+            self.assertIn(value,answer['held_candidate']['text'])
+            for span in answer['evidence']:
+                self.assertEqual(notes[span['start']:span['end']], span['quote'])
+
+    def test_ordinary_anatomical_prose_needs_no_labels(self):
+        for notes in ('Examination shows swelling below the left knee.',
+                      'Pain is above the ankle.',
+                      'Pain is above the ankle. Examination shows swelling below the left knee.'):
+            units, _ = generation.source_units(notes, self.FIELDS)
+            answers = self.judged(notes, {'examination': list(range(1, len(units) + 1))})
+            with self.subTest(notes=notes):
+                self.assertEqual(answers['examination']['status'], 'supported')
+                self.assertEqual(answers['examination']['text'], '\n'.join(unit['quote'] for unit in units))
+                self.assertFalse(answers['examination']['reviewed'])
+                self.assertEqual(answers['symptoms']['status'], 'missing')
+
+    def test_forward_pointers_denial_frames_and_other_scope_stay_held(self):
+        notes_cases = (
+            'Review the findings below.\nSymptoms: chest pain\nExamination: normal gait',
+            'The findings below are denied.\nSymptoms: chest pain\nExamination: normal gait',
+            'The following findings are denied.\nSymptoms: chest pain\nExamination: normal gait',
+            'Family history: pain above the ankle.\nSymptoms: chest pain\nExamination: normal gait',
+            '"Pain is above the ankle."\nSymptoms: chest pain\nExamination: normal gait',
+            'Symptoms: pain above the ankle\nExamination: negative for the following:',
+        )
+        for notes in notes_cases:
+            units, _ = generation.source_units(notes, self.FIELDS)
+            chosen = next(unit['id'] for unit in units if unit['quote'].startswith('Symptoms:'))
+            with self.subTest(notes=notes):
+                answer = self.judged(notes, {'symptoms': [chosen]})['symptoms']
+                self.assertEqual((answer['status'], answer['text']), ('conflict', ''))
+                self.assertNotIn('suggestion', answer)
+
+    def test_a_recognized_denial_label_still_governs_later_answers(self):
+        fields=[{'key':'ros','label':'Review of systems','locator':{'cell':0}},self.FIELDS[0]]
+        notes='Review of systems: The findings below are denied.\nSymptoms: chest pain'
+        selected=generation.UnitSelections(fields=[
+            generation.UnitSelection(key='ros',unit_ids=[],conflict=False),
+            generation.UnitSelection(key='symptoms',unit_ids=[2],conflict=False)])
+        answer=generation.validate_selections(notes,fields,selected,
+            evidence_contract=generation.CUSTOM_CONTRACT)['symptoms']
+        self.assertEqual((answer['status'],answer['text']),('conflict',''))
+        self.assertNotIn('suggestion',answer)
+        self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+
+    def test_directional_words_do_not_erase_unfinished_multiline_context(self):
+        for notes in ('Family hx\nPain is below the knee.',
+                      'Examination shows swelling below the knee\nOther finding'):
+            units,_=generation.source_units(notes,self.FIELDS)
+            answer=self.judged(notes,{'symptoms':[units[-1]['id']]})['symptoms']
+            with self.subTest(notes=notes):
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+                self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+
+    def test_directional_words_do_not_hide_scope_split_by_invisible_characters(self):
+        for notes in ('Family hi\u200bstory is documented here.\nPain is below the knee.',
+                      'The fo\u200bllowing findings are below the knee.\nSymptoms: chest pain'):
+            units,_=generation.source_units(notes,self.FIELDS)
+            answer=self.judged(notes,{'symptoms':[units[-1]['id']]})['symptoms']
+            with self.subTest(notes=notes):
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+                self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+
+    def test_visible_reframers_are_held_without_a_directional_word_and_never_offered(self):
+        for notes in ('Family hi\u200bstory is documented here.\nThe patient has diabetes.',
+                      'The fo\u200bllowing symptoms are hypothe\u200btical.\nThe patient has diabetes.'):
+            units,_=generation.source_units(notes,self.FIELDS)
+            answers=self.judged(notes,{'symptoms':[units[-1]['id']]})
+            answer=answers['symptoms']
+            with self.subTest(notes=notes):
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+                self.assertNotIn('suggestion',answer)
+                self.assertEqual(answer['held_candidate']['text'],'The patient has diabetes.')
+                self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+                # The page and finalization also refuse an older one-click
+                # offer, even if it was explicitly accepted before this fix.
+                stale={**answer,'suggestion':'The patient has diabetes.',
+                       'suggestion_evidence':answer['own_evidence'],
+                       'accepted_suggestion':True,'status':'edited'}
+                stored={**answers,'symptoms':stale}
+                governance=generation.governance_for(notes,self.FIELDS,answers=stored)
+                self.assertEqual(generation.offer_context(governance,notes,stale,'Symptoms'),[])
+                self.assertIn('Symptoms',generation.governed_decisions(notes,self.FIELDS,stored))
+                stale_supported={**answer,'status':'supported','text':'The patient has diabetes.',
+                                 'evidence':answer['own_evidence']}
+                stored={**answers,'symptoms':stale_supported}
+                governance=generation.governance_for(notes,self.FIELDS,answers=stored)
+                self.assertEqual(generation.governed_supported(governance,notes,stale_supported,'Symptoms'),[])
+                self.assertIn('Symptoms',generation.governed_decisions(notes,self.FIELDS,stored))
+
+    def test_note_wide_correction_holds_generated_and_stale_supported_answers(self):
+        for last,key,label in (('Examination: Normal gait.','examination','Examination'),
+                               ('Pain is below the knee.','symptoms','Symptoms')):
+            notes='Correction of a previous finding is required.\n'+last
+            units,_=generation.source_units(notes,self.FIELDS)
+            answers=self.judged(notes,{key:[units[-1]['id']]})
+            answer=answers[key]
+            with self.subTest(notes=notes):
+                self.assertEqual((answer['status'],answer['text']),('conflict',''))
+                self.assertNotIn('suggestion',answer)
+                self.assertEqual(answer['evidence'],[{'quote':notes,'start':0,'end':len(notes)}])
+                stale={**answer,'status':'supported','text':answer['held_candidate']['text'],
+                       'evidence':answer['own_evidence']}
+                stored={**answers,key:stale}
+                governance=generation.governance_for(notes,self.FIELDS,answers=stored)
+                self.assertEqual(generation.governed_supported(governance,notes,stale,label),[])
+                self.assertIn(label,generation.governed_decisions(notes,self.FIELDS,stored))
+
+    def test_harmless_synthetic_disclaimer_does_not_create_a_current_conflict(self):
+        notes = 'Fictional software test only.\nSymptoms: no chest pain\nExamination: normal gait'
+        answers = self.judged(notes, {'symptoms': [2], 'examination': [3]})
+        self.assertEqual({answer['status'] for answer in answers.values()}, {'supported'})
+        self.assertTrue(all(not answer['reviewed'] for answer in answers.values()))
+
+    def test_tab_anatomy_scope_behavior_is_unchanged(self):
+        notes = 'Symptoms: No reflux below the knee.\nExamination: Normal venous study.'
+        selected = generation.UnitSelections(fields=[generation.UnitSelection(
+            key=field['key'], unit_ids=[index + 1], conflict=False)
+            for index, field in enumerate(self.FIELDS)])
+        answers = generation.validate_tab_selections(notes, self.FIELDS, selected)
+        self.assertEqual({answer['status'] for answer in answers.values()}, {'conflict'})

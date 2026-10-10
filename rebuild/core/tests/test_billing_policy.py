@@ -93,7 +93,7 @@ class ConfiguredEstimateDiscount(PolicyFixture,TestCase):
     def test_discount_rate_reduces_the_configured_estimate_and_is_recorded_for_audit(self):
         response=SimpleNamespace(id='msg_discount',_request_id='req_discount',
             usage=SimpleNamespace(input_tokens=100,output_tokens=10,cache_read_input_tokens=0,cache_creation_input_tokens=0),
-            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','quotes':['no chest pain'],'conflict':False}]}))],
+            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','unit_ids':[1],'conflict':False}]}))],
             model_dump=lambda **kwargs:{'id':'msg_discount'})
         with patch.dict(os.environ,{'QUILLMD_PROVIDER_DISCOUNT_RATE':'0.2'}),patch('anthropic.Anthropic') as client:
             client.return_value.messages.create.return_value=response

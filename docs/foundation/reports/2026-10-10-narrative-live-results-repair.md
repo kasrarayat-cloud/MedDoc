@@ -61,6 +61,21 @@ financial record preservation and existing review/export governance. Legacy
 workflow fixtures explicitly pin their retained v6 contract; prospective v7
 has separate real Word review/export coverage.
 
+The full suite also exposed stale mocked provider schemas, retry assumptions and
+conflict fixtures. Current fixtures use complete-unit IDs, require an explicit
+source save before retry, and exercise genuine unresolved pointers rather than
+harmless synthetic disclaimers. Financial assertions remain intact. A custom
+directional-word exception was refuted when it erased unfinished multiline
+context and a labelled denial; those counterexamples are retained as regressions.
+Only complete positive directional prose is eligible for the narrow exception.
+Ambiguous negated directional notes remain held for an explicit clinician decision;
+the retained historical anatomy workflow test explicitly exercises its original
+v6 contract. Refutation also found hidden family-history/hypothetical markers and
+note-wide corrections; the custom validator and stored-answer reader now share
+the existing visible readings and note-wide withholding rule. Stale supported
+answers and accepted candidates cannot evade that review gate. No anatomical
+word dictionary or scope bypass was introduced.
+
 These checks do not constitute installation or public-browser completion.
 Exact CI, code-only native preservation, encrypted backup, installed release,
 public browser outcome and downloaded Word verification must be read from the
