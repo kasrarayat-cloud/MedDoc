@@ -202,11 +202,17 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import enqueue, run_one
         self.job.state = "failed"
         self.job.save(update_fields=["state"])
+        # A new saved source revision explicitly authorizes a distinct request.
+        encounter = self.job.encounter
+        encounter.revision += 1
+        encounter.save(update_fields=["revision"])
         with override_settings(AI_MODE="fixture", AI_PROVIDER="anthropic", AI_MODEL="synthetic-original", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
-            job = enqueue(self.job.encounter, self.user)
+            job = enqueue(encounter, self.user)
+        self.assertNotEqual(job.pk, self.job.pk)
         expected = job.config.copy()
         with override_settings(AI_MODE="live", AI_PROVIDER="openai", AI_MODEL="synthetic-changed", AI_INPUT_RATE="100", AI_OUTPUT_RATE="500", AI_CACHED_RATE="10"), patch("core.jobs.generation.generate", wraps=generation.generate) as provider:
-            run_one()
+            self.assertTrue(run_one())
+        provider.assert_called_once()
         self.assertEqual(provider.call_args.args[2], expected)
         job.refresh_from_db()
         self.assertEqual(job.config, expected)
@@ -217,11 +223,17 @@ class AuthorizationAndPayerRefutation(TestCase):
         from core.jobs import enqueue, run_one
         self.job.state = "failed"
         self.job.save(update_fields=["state"])
+        # A replay of the failed revision is observation, not a new paid request.
+        encounter = self.job.encounter
+        encounter.revision += 1
+        encounter.save(update_fields=["revision"])
         with override_settings(AI_MODE="live", AI_PROVIDER="anthropic", AI_MODEL="synthetic-original", AI_INPUT_RATE="1", AI_OUTPUT_RATE="5", AI_CACHED_RATE="0.1"):
-            job = enqueue(self.job.encounter, self.user)
+            job = enqueue(encounter, self.user)
+        self.assertNotEqual(job.pk, self.job.pk)
         reserved_before = Wallet.objects.get(user=self.user, kind="promo").reserved
-        with override_settings(AI_MODE="fixture"), patch("core.jobs.generation.generate", side_effect=TimeoutError("synthetic unknown live request")):
-            run_one()
+        with override_settings(AI_MODE="fixture"), patch("core.jobs.generation.generate", side_effect=TimeoutError("synthetic unknown live request")) as provider:
+            self.assertTrue(run_one())
+        provider.assert_called_once()
         job.refresh_from_db()
         self.assertEqual(job.state, "reconciliation")
         self.assertEqual(Wallet.objects.get(user=self.user, kind="promo").reserved, reserved_before)

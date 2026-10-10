@@ -20,7 +20,8 @@ def selected_option(page, name):
 
 
 class PilotNavigation(DocumentWorkflow):
-    NOTES = 'Fictional software test only.\nSymptoms: no chest pain\nExamination: normal gait'
+    # Refusal messages must be tested with a real current-contract conflict.
+    NOTES = 'See the findings listed in the report.\nSymptoms: no chest pain\nExamination: normal gait'
 
     def test_use_this_form_preselects_the_current_mapping_version(self):
         template, first = self.upload(self.make_docx(), 'docx')

@@ -214,7 +214,14 @@ class QueuedRequestCancellation(BoundaryFixture,TestCase):
         page=self.client.get(f'/encounters/{self.encounter.pk}/');self.assertNotContains(page,CANCEL_BUTTON)
         self.assertContains(page,'Cancelled before any provider request; nothing was charged.');self.assertNotContains(page,CANCELLED_ERROR)
         self.assertEqual(self.client.post(self.cancel_url(job)).status_code,409)
-        # The cancelled row no longer holds the key: a fresh request for the same revision reserves again.
+        # A lost response/repeated click reuses the persisted ended generation.
+        again=enqueue(self.encounter,self.user)
+        self.assertEqual(again.pk,job.pk);self.assertTrue(again.reused)
+        self.assertFalse(Reservation.objects.filter(state='held').exists())
+        # An explicit source save advances the revision and authorizes a new attempt.
+        notes=self.client.post(f'/encounters/{self.encounter.pk}/notes/',{'revision':self.encounter.revision,'notes':self.encounter.notes})
+        self.assertEqual(notes.status_code,302);self.encounter.refresh_from_db()
+        key=f'generation:{self.encounter.pk}:{self.encounter.revision}'
         again=enqueue(self.encounter,self.user)
         self.assertNotEqual(again.pk,job.pk);self.assertEqual(again.state,'queued');self.assertEqual(again.request_key,key)
         self.assertEqual(Reservation.objects.filter(state='held').count(),1);self.assertEqual(Reservation.objects.filter(job=again).count(),1)

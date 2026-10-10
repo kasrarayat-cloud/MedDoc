@@ -137,8 +137,9 @@ CANCEL_REFUSALS={'running':'Processing already started; the outcome will be bill
 
 
 def ended_key(job,label):
-    """Free the request key of a job that ended without success so a fresh request for the same revision is accepted; the ended
-    row keeps its history under a key only it can hold. Longest key today is transcription (115 chars) + 43 = 158 of 160."""
+    """Retain an ended attempt under its own key. Generation still deduplicates by
+    persisted source revision; transcription retains its existing retry policy.
+    Longest key today is transcription (115 chars) + 43 = 158 of 160."""
     return f'{job.request_key}:{label}:{job.pk.hex}'
 
 
@@ -222,6 +223,11 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     fingerprint=hashlib.sha256(private_path(input_path).read_bytes()).hexdigest() if kind=='transcription' else str(e.revision)
     key=f'{kind}:{e.pk}:{fingerprint}'
     old=Job.objects.filter(request_key=key).first()
+    if old is None and kind=='generation':
+        # A failed/cancelled job releases its active request key, but retains its
+        # source revision. Replaying a browser submission must still resolve to
+        # that exact attempt. Saving source notes is the explicit new-request act.
+        old=Job.objects.filter(encounter=e,kind=kind,revision=e.revision).order_by('-created_at','-pk').first()
     # Idempotency is the point: the same revision, or the same audio bytes, must never buy a
     # second provider call. But the CALLER has to be able to tell, because a generation does not
     # renumber the revision, so a stale page's re-POST lands here holding a key a SUCCEEDED job

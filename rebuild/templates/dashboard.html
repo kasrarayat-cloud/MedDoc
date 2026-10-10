@@ -8,7 +8,7 @@
 <section class="start-grid" aria-label="Start a document">
   <a class="start-card start-card-primary" href="{% url 'encounter_new' %}">
     <span class="start-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><path d="m15 4 5 5M4 20l4-1L20 7a2 2 0 0 0-5-5L3 14z"/></svg></span><span class="start-arrow" aria-hidden="true">↗</span>
-    <h2>Start with your notes</h2><p>Choose a form and patient. Add exact labelled answers, then create a draft to review.</p>
+    <h2>Start with your notes</h2><p>Choose a form and patient. Add documented narrative or labelled notes, then create a draft to review.</p>
   </a>
   <a class="start-card" href="{% url 'encounter_new' %}#voice-next">
     <span class="start-icon" aria-hidden="true"><svg class="nav-icon" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></svg></span><span class="start-arrow" aria-hidden="true">↗</span>
@@ -19,7 +19,7 @@
     <h2>Use your own form</h2><p>Upload a supported blank Word or PDF form. Check its answer fields before using it.</p>
   </a>
 </section>
-<p class="workflow-note" data-labelled-notes-limit><strong>For this private demo:</strong> Use the prepared SOAP form and the exact labels for documented facts: <span class="mono">Subjective:</span>, <span class="mono">Objective:</span>, <span class="mono">Assessment:</span> or <span class="mono">Plan:</span>. Omit undocumented sections; missing fields stay blank for review. Free-prose SOAP rewriting and arbitrary Word layouts are not qualified.</p>
+<p class="workflow-note" data-labelled-notes-limit><strong>For this private demo:</strong> Approved custom forms accept ordinary narrative or labelled notes. Draft answers retain complete source passages; missing and conflicting facts need your review. WM IOV requires exact question labels and labelled prewritten statements. Check each form’s approved mapping before use.</p>
 <section class="section">
   <div class="section-heading"><h2>Pick up where you left off</h2><span class="small muted">Recent documents in your authorized scope</span></div>
   {% if encounters %}

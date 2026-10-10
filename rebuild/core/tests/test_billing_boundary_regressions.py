@@ -3,7 +3,7 @@
 Each test asserts the CORRECT behaviour for a scenario a refuter demonstrated to be wrong in 345e61dd/061bf1f4:
 output QuillMD cannot use is a platform failure whatever the user did meanwhile; charged declines are disclosed before a
 further request; output is delivered only for requests that stand charged; nothing billable happened means nothing held;
-a failed request can be retried; cancellation never deadlocks; the doctor reads classifications in words.
+a failed request can be retried after explicitly saving source notes; cancellation never deadlocks; the doctor reads classifications in words.
 
 All data is synthetic. No provider, payment or console request leaves the test database.
 """
@@ -271,9 +271,26 @@ class ChargedDeclinesAreDisclosedAndFailuresCanBeRetried(RegressionFixture,TestC
         self.assertEqual(failed.request_key,f'{key}:failed:{failed.pk.hex}')
         self.client.force_login(self.user);url=f'/encounters/{self.encounter.pk}/'
         page=self.client.get(url)
+        accounting_before=(Usage.objects.count(),ProviderReceipt.objects.count(),LedgerEntry.objects.count())
+        replay=self.client.post(url+'generate/',{'usage_quote':page.context['usage_quote']},HTTP_ACCEPT='application/json')
+        self.assertEqual(replay.status_code,200);self.assertTrue(replay.json()['reused'])
+        self.assertEqual(replay.json()['latest_job']['id'],str(failed.pk))
+        self.assertIn('save the source notes again',replay.json()['message'])
+        self.assertEqual(Job.objects.filter(encounter=self.encounter).count(),1)
+        self.assertEqual((Usage.objects.count(),ProviderReceipt.objects.count(),LedgerEntry.objects.count()),accounting_before)
+        with patch('core.jobs.generation.generate') as provider:
+            self.assertFalse(run_one())
+        provider.assert_not_called()
+        # Saving even unchanged source notes is the supported explicit retry act.
+        source_revision=self.encounter.revision
+        self.assertEqual(self.client.post(url+'notes/',{'notes':self.encounter.notes,'revision':str(source_revision)}).status_code,302)
+        self.encounter.refresh_from_db();self.assertEqual(self.encounter.revision,source_revision+1)
+        page=self.client.get(url)
         self.assertEqual(self.client.post(url+'generate/',{'usage_quote':page.context['usage_quote']}).status_code,302)
         retry=Job.objects.exclude(pk=failed.pk).get(encounter=self.encounter)
-        self.assertEqual(retry.state,'queued');self.assertEqual(retry.request_key,key)
+        self.assertEqual(retry.state,'queued');self.assertEqual(retry.request_key,f'generation:{self.encounter.pk}:{self.encounter.revision}')
+        self.assertEqual(retry.revision,self.encounter.revision)
+        failed.refresh_from_db();self.assertEqual(failed.revision,source_revision)
         with patch('core.jobs.generation.generate',return_value=adopted_live_result(self.encounter.notes,self.encounter.template_version.fields,'req_regression_retry_ok')):
             self.assertTrue(run_one())
         retry.refresh_from_db();self.assertEqual(retry.state,'succeeded')

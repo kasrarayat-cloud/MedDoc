@@ -172,7 +172,7 @@ class StripeLifecycle(StripeFixture,TestCase):
         from core.jobs import enqueue,run_one
         response=SimpleNamespace(id='msg_synthetic_resource',_request_id='req_synthetic_http',
             usage=SimpleNamespace(input_tokens=100,output_tokens=10,cache_read_input_tokens=0,cache_creation_input_tokens=0),
-            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','quotes':['no chest pain'],'conflict':False}]}))],
+            stop_reason='end_turn',content=[SimpleNamespace(type='text',text=json.dumps({'fields':[{'key':'symptoms','unit_ids':[1],'conflict':False}]}))],
             model_dump=lambda **kwargs:{'id':'msg_synthetic_resource'})
         with tempfile.TemporaryDirectory() as directory,override_settings(MEDIA_ROOT=Path(directory)),patch('anthropic.Anthropic') as client:
             client.return_value.messages.create.return_value=response

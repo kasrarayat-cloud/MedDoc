@@ -57,7 +57,10 @@ class DoctorGuideTests(SimpleTestCase):
         self.assertEqual([line.partition(':')[0] for line in lines], expected)
         self.assertTrue(all(line.partition(':')[2].strip() for line in lines))
         dashboard = get_template('dashboard.html').template.source
-        self.assertEqual(re.findall(r'<span class="mono">([^<]+):</span>', dashboard), expected)
+        self.assertIn('Approved custom forms accept ordinary narrative or labelled notes.', dashboard)
+        self.assertIn('WM IOV requires exact question labels and labelled prewritten statements.', dashboard)
+        self.assertIn('approved custom forms also accept ordinary narrative', case.group(1))
+        self.assertNotIn('use its exact labels', case.group(1))
         self.assertNotIn('eight-field', case.group(1))
         self.assertIn('own authorized department', case.group(1))
 

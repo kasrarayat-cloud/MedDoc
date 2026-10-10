@@ -124,13 +124,9 @@ try {
   await check('Generate supported answers with explicit zero fixture charge', async () => {
     assert.equal(await page.getByText('Synthetic fixture · $0 charge. No live AI service is called.', { exact: true }).isVisible(), true);
     await page.getByRole('button', { name: 'Generate supported answers', exact: true }).click();
-    for (let attempt = 0; attempt < 40; attempt++) {
-      await page.waitForTimeout(1000);
-      await page.reload();
-      if (await page.locator('textarea[name^=answer_]').count()) break;
-      const terminalErrors = await page.locator('.source-panel .badge').allTextContents();
-      assert(!terminalErrors.some(state => ['failed', 'reconciliation'].includes(state)), 'Fixture job did not complete.');
-    }
+    await page.waitForFunction(() => document.querySelector('[data-latest-job]')?.textContent.includes('Ready for review'),
+      null, {timeout: 40000});
+    await page.locator('textarea[name^=answer_]').first().waitFor();
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
     assert.equal(await page.locator('.evidence blockquote').count(), 3);
     assert.equal(await page.getByRole('link', { name: 'Download provider result', exact: true }).count(), 1);
@@ -138,9 +134,22 @@ try {
   await check('Supported answers retain source evidence', async () => {
     const answers = await page.locator('textarea[name^=answer_]').evaluateAll(inputs => inputs.map(input => input.value));
     const evidence = await page.locator('.evidence blockquote').allTextContents();
+    const expected = ['Synthetic patient reports left wrist discomfort after a fall.',
+      'No deformity documented.', 'Follow-up assessment documented.'];
+    const source = ['History: '+expected[0], 'Findings: '+expected[1], 'Plan: '+expected[2]];
+    assert.deepEqual(answers, expected);
+    assert.deepEqual(evidence, source);
+    const id = page.url().match(/\/encounters\/([a-f0-9-]+)\/$/)[1];
+    const response = await context.request.get(new URL('/api/encounters/'+id+'/', base).href);
+    assert.equal(response.status(), 200);
+    const snapshot = await response.json();
+    const points = Array.from(snapshot.notes);
     for (let index = 0; index < answers.length; index++) {
-      assert(answers[index].trim().length > 0);
-      assert.equal(answers[index], evidence[index]);
+      const answer = snapshot.answers['cell_'+index];
+      assert.equal(answer.text, expected[index]);assert.equal(answer.status, 'supported');assert.equal(answer.reviewed, false);
+      assert.equal(answer.evidence.length, 1);
+      assert.equal(points.slice(answer.evidence[0].start,answer.evidence[0].end).join(''),source[index]);
+      assert.equal(answer.evidence[0].quote,source[index]);
     }
     await page.screenshot({ path: path.join(artifacts, 'review-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });

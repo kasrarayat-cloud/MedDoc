@@ -12,13 +12,16 @@ document.querySelectorAll("form p > input[type='checkbox']").forEach((input) => 
 
 // Source edits stay in this page until explicitly saved. Do not let another
 // action submit an older source revision or discard a corrected transcript.
-const draftForms = [...document.querySelectorAll("form[data-unsaved-form]")];
+const draftForms = [];
 const formValue = (form) => JSON.stringify([...new FormData(form)].filter(([key]) => key !== "csrfmiddlewaretoken"));
-const draftBaselines = new Map(draftForms.map((form) => [form, formValue(form)]));
-const dirtyForms = () => draftForms.filter((form) => formValue(form) !== draftBaselines.get(form));
+const draftBaselines = new WeakMap();
+const dirtyForms = () => draftForms.filter((form) => form.isConnected && formValue(form) !== draftBaselines.get(form));
 // Multiple edited forms need an explicit way out without silently choosing which
 // draft to lose. Undo is reversible in memory until this page is left.
-draftForms.forEach((form) => {
+const initializeDraftForms = (root = document) => root.querySelectorAll("form[data-unsaved-form]").forEach((form) => {
+  if (draftBaselines.has(form)) return;
+  draftForms.push(form);
+  draftBaselines.set(form, formValue(form));
   let undone = null;
   const undo = document.createElement("button");
   undo.type = "button";
@@ -51,6 +54,7 @@ draftForms.forEach((form) => {
   form.addEventListener("change", refresh);
   form.append(undo, help);
 });
+initializeDraftForms();
 let pageSubmission = false;
 let audioUnsaved = false;
 let audioBusy = false;
@@ -87,7 +91,10 @@ document.addEventListener("submit", (event) => { if (!event.defaultPrevented) pa
 
 // Preserve native validation and form field submission while limiting accidental
 // repeated clicks. The server remains responsible for idempotency.
-document.querySelectorAll("form[data-submit-once]").forEach((form) => {
+const initializedSubmissions = new WeakSet();
+const initializeSubmitOnceForms = (root = document) => root.querySelectorAll("form[data-submit-once]").forEach((form) => {
+  if (initializedSubmissions.has(form)) return;
+  initializedSubmissions.add(form);
   form.addEventListener("submit", (event) => {
     if (event.defaultPrevented) return;
     if (form.dataset.submitting === "true") {
@@ -102,6 +109,18 @@ document.querySelectorAll("form[data-submit-once]").forEach((form) => {
       button.textContent = button.dataset.pendingLabel || "Working…";
     }
   });
+});
+initializeSubmitOnceForms();
+// A newly returned review form receives the same unsaved-edit and submit guards
+// as the original page. Expose only a read of dirty state, never draft contents.
+window.quillmdFormState = Object.freeze({
+  hasUnsavedEdits: (root = document) => dirtyForms().some((form) => root.contains(form))
+});
+document.addEventListener("quillmd:content-updated", (event) => {
+  const root = event.detail?.root;
+  if (!(root instanceof Element)) return;
+  initializeDraftForms(root);
+  initializeSubmitOnceForms(root);
 });
 
 // A back/forward restore must retain the doctor's edits. The server still

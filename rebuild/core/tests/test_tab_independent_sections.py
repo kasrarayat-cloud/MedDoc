@@ -51,7 +51,7 @@ class IndependentSectionPromptTests(SimpleTestCase):
         fails HERE, and the repair is to bump the version and re-pin, deliberately.
         """
         _, sent, config = self.mocked_generation()
-        self.assertEqual(config['prompt_version'], 'extractive-v6-source-scope-attestation')
+        self.assertEqual(config['prompt_version'], 'extractive-v7-custom-sentence-evidence')
         self.assertEqual(hashlib.sha256(sent['system'].encode()).hexdigest(),
                          '476768227326ce344dfe791dbbef0545da87ddd31ed037cf14aa308a78a16358')
 
