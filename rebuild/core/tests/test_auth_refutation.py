@@ -23,12 +23,12 @@ class AuthRefutation(TestCase):
         self.assertContains(self.client.post(wrong,self.replacement()),'Recovery link unavailable')
         other.refresh_from_db();self.assertTrue(other.check_password(self.password))
     def test_account_disabled_after_link_open_cannot_reset(self):
-        target=self.client.get(self.link(self.user))['Location']
+        target=self.client.get(self.link(self.user)).context['continue_url']
         User.objects.filter(pk=self.user.pk).update(is_active=False)
         self.assertContains(self.client.post(target,self.replacement()),'Recovery link unavailable')
         self.user.refresh_from_db();self.assertTrue(self.user.check_password(self.password))
     def test_account_promoted_after_link_open_still_requires_mfa(self):
-        target=self.client.get(self.link(self.user))['Location']
+        target=self.client.get(self.link(self.user)).context['continue_url']
         User.objects.filter(pk=self.user.pk).update(is_staff=True)
         self.assertContains(self.client.post(target,self.replacement()),'This field is required')
         self.user.refresh_from_db();self.assertTrue(self.user.check_password(self.password))
