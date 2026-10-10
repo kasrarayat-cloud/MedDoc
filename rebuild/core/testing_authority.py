@@ -23,7 +23,11 @@ PURPOSES = {'preparation': 'word-template-preparation',
             'generation': 'typed-or-reviewed-voice-generation',
             'transcription': 'reviewed-synthetic-voice-transcription'}
 ACTORS = {'71dc60e3-ca1e-40c7-ad49-4a2612ed8d1a': 'd41ad441-987c-4e68-bb0e-b885ec4b642a',
-          '2247e403-a830-4807-9a34-6903b95a0f50': '46a5abdd-36f1-41f0-968f-8c09c39d9daa'}
+          '2247e403-a830-4807-9a34-6903b95a0f50': '46a5abdd-36f1-41f0-968f-8c09c39d9daa',
+          'e1a20625-455d-4603-a874-794327b19d10': '46a5abdd-36f1-41f0-968f-8c09c39d9daa'}
+ACTOR_ENROLLMENT_KEY = 'testing_actor_enrollment'
+ACTOR_ENROLLMENT = 'quillmd-actual-clinician-20261010-v1'
+ENROLLED_ACTOR = 'e1a20625-455d-4603-a874-794327b19d10'
 FINITE_KEYS = frozenset(('campaign', 'campaign_scope_sha256', 'campaign_actor_scope_sha256', 'campaign_quote_usd'))
 PROVIDER_LOCK = 717844900623  # The same actual-send lock as the retained delivery cohort.
 RESERVATION_LOCK = 717844900619
@@ -53,13 +57,14 @@ def identity(config):
     if type(config) is not dict:
         raise ValidationError('Provider configuration must be a recorded object.')
     present = KEYS.intersection(config)
-    if not present:
+    if not present and ACTOR_ENROLLMENT_KEY not in config:
         return None
     if (present != KEYS or FINITE_KEYS.intersection(config)
             or config['testing_authority_mode'] != MODE
             or config['testing_authority_id'] != AUTHORITY_ID
             or config['testing_authority_sha256'] != AUTHORITY_SHA256
-            or config['testing_purpose'] not in PURPOSES.values()):
+            or config['testing_purpose'] not in PURPOSES.values()
+            or (ACTOR_ENROLLMENT_KEY in config and config[ACTOR_ENROLLMENT_KEY] != ACTOR_ENROLLMENT)):
         raise ValidationError('Testing configuration differs from the recorded standing authority.')
     return AUTHORITY_ID
 
@@ -103,12 +108,39 @@ def validate_config(config, kind):
         raise ValidationError('Standing testing retains the configured authorized provider and model.')
 
 
-def admit_actor(actor, department_id):
+def admit_actor(actor, department_id, config=None):
     if (not settings.SYNTHETIC_ONLY or not getattr(actor, 'is_active', False)
             or ACTORS.get(str(getattr(actor, 'pk', ''))) != str(department_id)):
         raise ValidationError('Standing testing requires its exact authorized synthetic doctor and department.')
     from .security import membership
     membership(actor, department_id, roles=['owner', 'clinician', 'manager'])
+    if config is not None:
+        if identity(config) != AUTHORITY_ID:
+            raise ValidationError('Actor enrollment requires the recorded standing authority.')
+        if str(actor.pk) == ENROLLED_ACTOR:
+            if config.get(ACTOR_ENROLLMENT_KEY) != ACTOR_ENROLLMENT:
+                raise ValidationError('This clinician requires a new request with its exact testing enrollment.')
+        elif ACTOR_ENROLLMENT_KEY in config:
+            raise ValidationError('The clinician enrollment cannot be used by another testing actor.')
+
+
+def bind_actor_config(config, actor, department_id):
+    """Bind only a new request; never relabel a retained preparation or job."""
+    admit_actor(actor, department_id)
+    if identity(config) != AUTHORITY_ID:
+        raise ValidationError('Actor enrollment requires the recorded standing authority.')
+    result = dict(config)
+    if str(actor.pk) == ENROLLED_ACTOR:
+        result[ACTOR_ENROLLMENT_KEY] = ACTOR_ENROLLMENT
+    admit_actor(actor, department_id, result)
+    return result
+
+
+def admit_encounter(actor, encounter):
+    """The added clinician sponsors new documents they create in their scope."""
+    if (str(getattr(actor, 'pk', '')) == ENROLLED_ACTOR
+            and str(encounter.created_by_id) != str(actor.pk)):
+        raise ValidationError('Create your own synthetic document from an approved department form before using sponsored testing.')
 
 
 def quote(value):
@@ -124,7 +156,7 @@ def quote(value):
 
 def create_preparation(template, actor, config):
     validate_config(config, 'preparation')
-    admit_actor(actor, template.department_id)
+    config = bind_actor_config(config, actor, template.department_id)
     if template.format != 'docx':
         raise ValidationError('AI preparation requires an authorized blank Word original.')
     from .models import TemplatePreparation
@@ -133,7 +165,7 @@ def create_preparation(template, actor, config):
 
 def reserve_role(prep, role, request_sha256, quoted):
     validate_config(prep.config, 'preparation')
-    admit_actor(prep.requested_by, prep.template.department_id)
+    admit_actor(prep.requested_by, prep.template.department_id, prep.config)
     if role not in ('proposer', 'checker'):
         raise ValidationError('Only the proposer and independent checker are authorized.')
     from .models import PreparationReceipt
@@ -153,13 +185,14 @@ def reserve_role(prep, role, request_sha256, quoted):
 
 def job_config(config, kind, actor, department_id, quoted):
     validate_config(config, kind)
-    admit_actor(actor, department_id)
-    return {**config, 'testing_quote_usd': str(quote(quoted))}
+    result = bind_actor_config(config, actor, department_id)
+    return {**result, 'testing_quote_usd': str(quote(quoted))}
 
 
 def reserve_job(job, quoted):
     validate_config(job.config, job.kind)
-    admit_actor(job.user, job.encounter.department_id)
+    admit_actor(job.user, job.encounter.department_id, job.config)
+    admit_encounter(job.user, job.encounter)
     expected = quote(job.config.get('testing_quote_usd'))
     if quote(quoted) != expected:
         raise ValidationError('The testing request estimate differs from its immutable quote.')
@@ -183,7 +216,8 @@ def reserve_job(job, quoted):
 
 def admit_job_send(job):
     validate_config(job.config, job.kind)
-    admit_actor(job.user, job.encounter.department_id)
+    admit_actor(job.user, job.encounter.department_id, job.config)
+    admit_encounter(job.user, job.encounter)
     from .models import TestingReservation, Reservation
     row = TestingReservation.objects.filter(job=job).first()
     if (row is None or row.state != 'held' or row.authority_id != AUTHORITY_ID
@@ -250,12 +284,18 @@ def runtime_admission(actor, department_id):
     if not enabled():
         raise ValidationError('Standing authority has not been enabled.')
     admit_actor(actor, department_id)
+    witness = bind_actor_config(active_config(
+        importlib.import_module('core.generation').configuration(), 'preparation'), actor, department_id)
     with connection.cursor() as cursor:
-        cursor.execute("SELECT EXISTS(SELECT 1 FROM django_migrations WHERE app='core' AND name='0024_standing_testing_authority')")
+        cursor.execute("SELECT count(*)=2 FROM django_migrations WHERE app='core' AND name IN "
+                       "('0024_standing_testing_authority','0025_personal_synthetic_testing_actor')")
         migrated = cursor.fetchone()[0]
         cursor.execute('SELECT quillmd_standing_config(%s::jsonb)', [
-            json.dumps(active_config(importlib.import_module('core.generation').configuration(), 'preparation'))])
+            json.dumps(witness)])
         matched = cursor.fetchone()[0]
+        cursor.execute('SELECT quillmd_standing_actor(%s::uuid,%s::uuid,%s::jsonb)',
+                       [str(actor.pk), str(department_id), json.dumps(witness)])
+        cursor.fetchone()
         cursor.execute('SELECT tgname,tgenabled,pg_get_triggerdef(t.oid) FROM pg_trigger t '
                        'JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace '
                        'WHERE NOT tgisinternal AND n.nspname=%s AND tgname=ANY(%s)', ['public',list(TRIGGERS)])
@@ -267,6 +307,8 @@ def runtime_admission(actor, department_id):
         migration = importlib.import_module('core.migrations.0024_standing_testing_authority')
         pattern = r'CREATE (?:OR REPLACE )?FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;'
         expected = {name: body for name, body in re.findall(pattern, migration.SQL, re.S)}
+        enrollment = importlib.import_module('core.migrations.0025_personal_synthetic_testing_actor')
+        expected.update({name: body for name, body in re.findall(pattern, enrollment.SQL, re.S)})
         previous = importlib.import_module('core.migrations.0023_delivery_campaign')
         expected.update({name: body for name, body in re.findall(pattern, previous.SQL, re.S)
                          if name == 'quillmd_delivery_actor'})
@@ -281,4 +323,5 @@ def runtime_admission(actor, department_id):
             'authority_sha256': AUTHORITY_SHA256, 'monetary_ceiling': None,
             'cumulative_call_ceiling': None, 'wallet_credit_created': False,
             'provider_calls': 0, 'synthetic_only': True, 'database_guards': guards,
+            'actor_enrollment': witness.get(ACTOR_ENROLLMENT_KEY),
             'database_function_definitions_verified': len(expected)}

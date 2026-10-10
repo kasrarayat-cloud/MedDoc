@@ -68,6 +68,9 @@ INVARIANTS = {
 # Backup qualification is historical: use the immutable grant captured on the
 # request, not today's activation settings or account membership. Keep the old
 # multiplier query intact for pre-0024 restores and every non-sponsored row.
+# The enrolled personal actor requires its prospective marker. Historical actor
+# pairs must remain unmarked; adding enrollment cannot qualify old-style personal
+# requests or transfer that grant to another actor or department.
 _STANDING_USAGE_VALID = r"""
     jsonb_typeof(j.config)='object'
     AND j.config ?& ARRAY['testing_authority_mode','testing_authority_id','testing_authority_sha256','testing_purpose','testing_quote_usd']
@@ -87,8 +90,12 @@ _STANDING_USAGE_VALID = r"""
       ELSE false END
     AND r.authority_id='quillmd-standing-testing-20261009-v1' AND r.state='settled'
     AND r.quoted_provider_cost>=0
-    AND ((j.user_id='71dc60e3-ca1e-40c7-ad49-4a2612ed8d1a' AND e.department_id='d41ad441-987c-4e68-bb0e-b885ec4b642a')
+    AND ((((j.user_id='71dc60e3-ca1e-40c7-ad49-4a2612ed8d1a' AND e.department_id='d41ad441-987c-4e68-bb0e-b885ec4b642a')
       OR (j.user_id='2247e403-a830-4807-9a34-6903b95a0f50' AND e.department_id='46a5abdd-36f1-41f0-968f-8c09c39d9daa'))
+      AND NOT (j.config ? 'testing_actor_enrollment'))
+      OR (j.user_id='e1a20625-455d-4603-a874-794327b19d10' AND e.department_id='46a5abdd-36f1-41f0-968f-8c09c39d9daa'
+        AND jsonb_typeof(j.config->'testing_actor_enrollment')='string'
+        AND j.config->>'testing_actor_enrollment'='quillmd-actual-clinician-20261010-v1'))
     AND u.user_id=j.user_id AND e.created_by_id=j.user_id
     AND u.department_id=e.department_id AND u.organization_id=d.organization_id
     AND j.payer='standing:quillmd-standing-testing-20261009-v1' AND u.payer=j.payer
@@ -149,7 +156,7 @@ _STANDING_USAGE_INVARIANT = '''SELECT count(*) FROM core_usage u
     LEFT JOIN core_testingreservation r ON r.job_id=u.job_id
     LEFT JOIN core_providerreceipt p ON p.job_id=u.job_id
     LEFT JOIN core_costreconciliation c ON c.usage_id=u.id
-    WHERE CASE WHEN j.config ?| ARRAY['testing_authority_mode','testing_authority_id','testing_authority_sha256','testing_purpose','testing_quote_usd']
+    WHERE CASE WHEN j.config ?| ARRAY['testing_authority_mode','testing_authority_id','testing_authority_sha256','testing_purpose','testing_quote_usd','testing_actor_enrollment']
         OR j.payer LIKE 'standing:%' OR u.payer LIKE 'standing:%' OR r.id IS NOT NULL
       THEN (''' + _STANDING_USAGE_VALID + ''') IS NOT TRUE
       ELSE ''' + INVARIANTS['usage_multiplier'].split(' WHERE ', 1)[1] + ''' END'''

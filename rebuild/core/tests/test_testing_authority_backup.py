@@ -16,6 +16,12 @@ from core.models import (Department, Encounter, Job, Membership, Organization, P
 from core.tests.test_testing_authority import SETTINGS
 
 
+PERSONAL_ACTOR = 'e1a20625-455d-4603-a874-794327b19d10'
+PERSONAL_DEPARTMENT = '46a5abdd-36f1-41f0-968f-8c09c39d9daa'
+ENROLLMENT_KEY = 'testing_actor_enrollment'
+ENROLLMENT = 'quillmd-actual-clinician-20261010-v1'
+
+
 spec = importlib.util.spec_from_file_location('standing_backup_restore',
     Path(__file__).resolve().parents[2] / 'ops' / 'backup_restore.py')
 backup = importlib.util.module_from_spec(spec)
@@ -57,11 +63,30 @@ class StandingBackupPostgresTests(TransactionTestCase):
             cursor.execute(statement)
             return cursor.fetchall()
 
-    def sponsored(self, kind='generation', simulated=False):
+    def select_actor(self, actor_id, department_id, role='clinician'):
+        """Build isolated exact-UUID fixtures; never use an operational account."""
+        organization = self.department.organization
+        self.doctor = User.objects.create(id=actor_id, username='backup-'+actor_id,
+            email='backup-'+actor_id+'@example.invalid', verified_at=timezone.now())
+        self.department = Department.objects.create(id=department_id,
+            organization=organization, name='Synthetic enrolled backup scope')
+        Membership.objects.create(user=self.doctor, department=self.department, role=role)
+        patient = Patient.objects.create(department=self.department, created_by=self.doctor,
+            display_name='Synthetic enrolled patient', reference='enrolled-backup-fixture')
+        template = Template.objects.create(department=self.department, created_by=self.doctor,
+            name='Synthetic enrolled blank', format='docx', original_name='blank.docx',
+            original_path='synthetic-not-read-enrolled.docx', sha256='b'*64)
+        version = TemplateVersion.objects.create(template=template, number=1, created_by=self.doctor)
+        self.encounter = Encounter.objects.create(patient=patient, department=self.department,
+            created_by=self.doctor, template_version=version, service_date=timezone.now().date())
+
+    def sponsored(self, kind='generation', simulated=False, enrolled=False):
         config = authority.active_config({'mode':'fixture' if simulated else 'live',
             'provider':'anthropic', 'model':SETTINGS['AI_MODEL']}, kind)
         quote = Decimal('0') if simulated else Decimal('0.01')
         config['testing_quote_usd'] = str(quote)
+        if enrolled:
+            config[ENROLLMENT_KEY] = ENROLLMENT
         job = Job.objects.create(encounter=self.encounter, user=self.doctor, kind=kind,
             request_key=str(uuid.uuid4()), config=config)
         billing.reserve(job, quote)
@@ -121,6 +146,89 @@ class StandingBackupPostgresTests(TransactionTestCase):
             self.doctor.save(update_fields=['is_active'])
             Membership.objects.all().delete()
             self.assert_clean()
+
+    def test_enrolled_actual_generation_asr_and_fixture_preserve_sponsor_accounting(self):
+        from core.models import LedgerEntry, Reservation, TestingReservation, Wallet
+        self.select_actor(PERSONAL_ACTOR, PERSONAL_DEPARTMENT)
+        Wallet.objects.create(user=self.doctor, kind='promo', balance=Decimal('2.00'))
+        before = list(Wallet.objects.order_by('id').values())
+        for kind, simulated in [('generation', False), ('transcription', False), ('generation', True)]:
+            with self.subTest(kind=kind, simulated=simulated):
+                job, usage = self.sponsored(kind, simulated, enrolled=True)
+                self.assertEqual(job.config[ENROLLMENT_KEY], ENROLLMENT)
+                self.assertEqual(str(usage.user_id), str(self.doctor.pk))
+                self.assertEqual(str(usage.department_id), str(self.department.pk))
+                self.assertEqual(usage.charged_cost, 0)
+                self.assertEqual(usage.payer, 'standing:'+authority.AUTHORITY_ID)
+                self.assertEqual(TestingReservation.objects.get(job=job).state, 'settled')
+                self.assertEqual(list(Wallet.objects.order_by('id').values()), before)
+                self.assertFalse(Reservation.objects.exists())
+                self.assertFalse(LedgerEntry.objects.exists())
+                self.assert_clean()
+        with override_settings(TESTING_AUTHORITY_MODE='', TESTING_AUTHORITY_ID='',
+                TESTING_AUTHORITY_SHA256='', AI_PROVIDER='unrelated-current-setting'):
+            self.doctor.is_active = False
+            self.doctor.save(update_fields=['is_active'])
+            Membership.objects.filter(user=self.doctor).delete()
+            self.assert_clean()
+
+    def test_enrolled_actual_restored_rows_require_the_exact_immutable_marker(self):
+        self.select_actor(PERSONAL_ACTOR, PERSONAL_DEPARTMENT)
+        job, _ = self.sponsored(enrolled=True)
+        for value in [None, False, 1, [], {}, '', 'other-enrollment']:
+            with self.subTest(marker=value):
+                config = {**job.config, ENROLLMENT_KEY: value}
+                self.corrupt('core_job', 'UPDATE core_job SET config=%s::jsonb', (json.dumps(config),))
+        config = {key: value for key, value in job.config.items() if key != ENROLLMENT_KEY}
+        self.corrupt('core_job', 'UPDATE core_job SET config=%s::jsonb', (json.dumps(config),))
+
+    def test_enrollment_marker_cannot_be_reused_by_historical_actor_pairs(self):
+        job, _ = self.sponsored()
+        for value in [ENROLLMENT, None, 'other-enrollment']:
+            with self.subTest(actor='qa', marker=value):
+                self.corrupt('core_job', 'UPDATE core_job SET config=%s::jsonb',
+                    (json.dumps({**job.config, ENROLLMENT_KEY: value}),))
+        self.select_actor('2247e403-a830-4807-9a34-6903b95a0f50', PERSONAL_DEPARTMENT, role='owner')
+        owner_job, _ = self.sponsored()
+        self.assert_clean()
+        with self.shadow('core_job'):
+            with connection.cursor() as cursor:
+                cursor.execute('UPDATE core_job SET config=%s::jsonb WHERE id=%s',
+                    (json.dumps({**owner_job.config, ENROLLMENT_KEY: ENROLLMENT}), owner_job.pk))
+            self.assertEqual(self.query(backup._STANDING_USAGE_INVARIANT)[0][0], 1)
+            with self.assertRaisesMessage(RuntimeError, 'Database invariants failed'):
+                backup.invariant_counts(self.query)
+        self.assert_clean()
+
+    def test_enrolled_restored_actor_and_department_must_match_even_when_rows_agree(self):
+        self.select_actor(PERSONAL_ACTOR, PERSONAL_DEPARTMENT)
+        self.sponsored(enrolled=True)
+        for actor_id, department_id in [
+                (uuid.uuid4(), PERSONAL_DEPARTMENT),
+                (PERSONAL_ACTOR, 'd41ad441-987c-4e68-bb0e-b885ec4b642a'),
+                ('2247e403-a830-4807-9a34-6903b95a0f50', PERSONAL_DEPARTMENT)]:
+            with self.subTest(actor=actor_id, department=department_id), self.shadow(
+                    'core_job', 'core_usage', 'core_encounter'):
+                with connection.cursor() as cursor:
+                    cursor.execute('UPDATE core_job SET user_id=%s', (actor_id,))
+                    cursor.execute('UPDATE core_usage SET user_id=%s,department_id=%s', (actor_id, department_id))
+                    cursor.execute('UPDATE core_encounter SET created_by_id=%s,department_id=%s', (actor_id, department_id))
+                self.assertEqual(self.query(backup._STANDING_USAGE_INVARIANT)[0][0], 1)
+                with self.assertRaisesMessage(RuntimeError, 'Database invariants failed'):
+                    backup.invariant_counts(self.query)
+            self.assert_clean()
+
+    def test_marker_only_restored_config_cannot_fall_back_to_legacy_charge_rules(self):
+        job = Job.objects.create(encounter=self.encounter, user=self.doctor,
+            request_key=str(uuid.uuid4()), config={})
+        Usage.objects.create(job=job, user=self.doctor, department=self.department,
+            organization=self.department.organization, payer='user:'+str(self.doctor.pk),
+            provider='legacy:recorded', actual_cost=Decimal('0.10'), charged_cost=Decimal('0.15'))
+        self.assert_clean()
+        for value in [ENROLLMENT, None, 'other-enrollment']:
+            with self.subTest(marker=value):
+                self.corrupt('core_job', 'UPDATE core_job SET config=%s::jsonb',
+                    (json.dumps({ENROLLMENT_KEY: value}),))
 
     def test_actual_pre_0024_schema_and_plain_and_capped_legacy_rules(self):
         from django.db.migrations.executor import MigrationExecutor
