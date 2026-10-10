@@ -2358,9 +2358,15 @@ class TheGoverningHeadingIsShownAndEnforcedOnEveryOlderForm(DocumentWorkflow):
         return buffer.getvalue()
 
     def generated(self, data, suffix, notes):
+        from unittest.mock import patch
         template, mapping = self.upload(data, suffix)
         encounter = self.create_encounter(mapping, notes)
-        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+        # This class pins the retained older-form review contract, including
+        # answers before a later heading. Prospective v7 custom evidence has
+        # separate review/export coverage in test_custom_narrative_generation.
+        config = {**generation.configuration(), 'prompt_version': 'extractive-v6-source-scope-attestation'}
+        with patch.object(generation, 'configuration', return_value=config):
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
         self.assertTrue(run_one())
         encounter.refresh_from_db()
         return encounter, {f['label'].rstrip(':'): f['key'] for f in mapping.fields}

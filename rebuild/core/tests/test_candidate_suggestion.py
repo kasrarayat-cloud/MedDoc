@@ -13,6 +13,7 @@ Everything below is offline. No provider call is made by any test in this module
 """
 import json
 import re
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
@@ -225,7 +226,12 @@ class AnUnacceptedSuggestionCannotReachAnExport(DocumentWorkflow):
     def generated(self):
         template, mapping = self.upload(self.make_docx(), 'docx')
         encounter = self.create_encounter(mapping, self.NOTES)
-        self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
+        # This is the retained legacy opening-disclaimer regression. New v7
+        # custom jobs have their own complete-unit contract; they must not
+        # retrospectively change this job's evidence or acceptance history.
+        config = {**generation.configuration(), 'prompt_version': 'extractive-v6-source-scope-attestation'}
+        with patch.object(generation, 'configuration', return_value=config):
+            self.assertEqual(self.client.post(f'/encounters/{encounter.pk}/generate/').status_code, 302)
         self.assertTrue(run_one())
         encounter.refresh_from_db()
         by_label = {f['label'].rstrip(':'): f['key'] for f in mapping.fields}

@@ -48,7 +48,8 @@ def _legacy_instructions(config):
     client.messages.create.side_effect = create
     # generate() refuses before building a request when rates are unset; supply synthetic ones
     # so the instruction is reached. Nothing is sent: create() raises on entry.
-    config = {**config, 'input_rate': '0.000003', 'output_rate': '0.000015', 'cached_rate': '0.0000003'}
+    config = {**config, 'provider': 'anthropic', 'input_rate': '0.000003',
+              'output_rate': '0.000015', 'cached_rate': '0.0000003'}
     fields = [{'key': 'cell_0', 'label': 'Consent', 'kind': 'text', 'locator': {'cell': 0}}]
     from core import generation
     with patch('anthropic.Anthropic', return_value=client):
@@ -254,6 +255,7 @@ class TheVersionGateIsTestedAtTheVersionThatWillBeQueued(TestCase):
         return _legacy_instructions(config)
 
     def test_the_current_version_receives_the_attestation_guidance(self):
+        self.assertIn(self.SENTENCE, self.instruction_for('extractive-v7-custom-sentence-evidence'))
         self.assertIn(self.SENTENCE, self.instruction_for('extractive-v6-source-scope-attestation'))
 
     def test_the_version_sitting_in_the_queue_today_does_not(self):

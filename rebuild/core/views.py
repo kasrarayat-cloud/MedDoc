@@ -17,7 +17,8 @@ from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST,require_http_methods
+from django.views.decorators.http import require_POST,require_http_methods,require_GET
+from django.views.decorators.cache import never_cache
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from .models import *
@@ -30,6 +31,7 @@ from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outco
 from .billing import available_balance
 from . import wm_review
 from .preview_access import account_destination
+from .live_results import result_snapshot,answer_preview
 
 
 def error_message(exc):
@@ -370,6 +372,7 @@ def encounter_detail(request,pk):
             'patient','department__organization','template_version__template','finalized_by'
         ).select_for_update(of=('self',)),pk=pk)
         jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
+        live_result=result_snapshot(e,jobs)
         visible_codes=CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by')
         # Retain historical suggestions, but do not display licensed descriptors
         # after entitlement expires or changes to a different licensed feed.
@@ -397,7 +400,7 @@ def encounter_detail(request,pk):
         # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
         # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
         from .generation import as_currently_governed,governance_for
-        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+        governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements],answers=e.answers)
         rows=[as_currently_governed(governance,e.notes,row,is_wm) for row in rows]
     for row in rows:
         row['accepted_by_email']=accepters.get(str(row.get('accepted_by') or ''),'')
@@ -495,11 +498,26 @@ def encounter_detail(request,pk):
     return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
-        'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None})
+        'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
+        'live_result_version':live_result['result_version']})
+
+@require_GET
+@never_cache
+def encounter_status(request,pk):
+    # The same tenant boundary and row lock as the HTML reader: never queue,
+    # settle, retry or update the clinical record while observing progress.
+    with transaction.atomic():
+        e=get_object_or_404(scoped(Encounter,request.user).select_related(
+            'template_version').select_for_update(of=('self',)),pk=pk)
+        jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
+        result=result_snapshot(e,jobs)
+        result['answers_preview']=answer_preview(e) if e.answers else []
+    return JsonResponse(result)
 
 @require_POST
 def generate_view(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
+    wants_json=request.headers.get('Accept')=='application/json'
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
@@ -509,10 +527,27 @@ def generate_view(request,pk):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
             # revision, so the succeeded job still holds this request key. Saying "queued" would
             # promise a request that was not made and answers that will not change.
-            messages.info(request,'These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.')
+            if job.state=='succeeded':
+                message='These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.'
+            elif job.state in ('queued','running','reconciliation'):
+                message='This saved revision already has a request in progress. No new request was made and nothing was charged.'
+            else:
+                message='This saved revision already has an ended attempt. Review its status and error, then save the source notes again (unchanged is fine) to explicitly request another draft. No new job or charge was created.'
+            if not wants_json:messages.info(request,message)
         else:
-            messages.success(request,'Generation queued. Refresh this page to view the result.')
-    except ValidationError as exc:messages.error(request,error_message(exc))
+            message='Generation queued. Progress and the result will appear automatically.'
+            if not wants_json:messages.success(request,message)
+        if wants_json:
+            with transaction.atomic():
+                e=Encounter.objects.select_for_update(of=('self',)).get(pk=e.pk)
+                result=result_snapshot(e,list(Job.objects.filter(encounter=e).order_by('-created_at')))
+            result.update(reused=bool(getattr(job,'reused',False)),message=message)
+            response=JsonResponse(result);response['Cache-Control']='no-store';return response
+    except ValidationError as exc:
+        if wants_json:
+            response=JsonResponse({'error':error_message(exc),'message':error_message(exc)},status=409)
+            response['Cache-Control']='no-store';return response
+        messages.error(request,error_message(exc))
     return redirect('encounter_detail',pk=pk)
 
 @require_POST
@@ -547,7 +582,7 @@ def save_answers(request,pk):
     previous_answers=dict(e.answers)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
-    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements])
+    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements],answers=e.answers)
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
         held_shown=request.POST.get('held_shown_'+key)=='1'
