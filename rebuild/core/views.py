@@ -465,6 +465,7 @@ def encounter_detail(request,pk):
     try:
         if testing_authority.enabled():
             testing_authority.admit_actor(request.user,e.department_id)
+            testing_authority.admit_encounter(request.user,e)
             standing_testing=True
     except (ValidationError,PermissionDenied):
         pass

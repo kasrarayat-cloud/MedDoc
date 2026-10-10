@@ -10,12 +10,22 @@ with existing department `46a5abdd-36f1-41f0-968f-8c09c39d9daa` to standing
 synthetic test admission. Preserve existing actor pairs. Do not alter the old
 finite `quillmd_delivery_actor` function or historical finite allowlists/migrations.
 Use one new forward SQL migration after `0024_standing_testing_authority`: add a
-standing-specific actor helper and replace only the four existing function bodies
-whose standing branches currently call the finite actor helper. Retain every
+standing-specific actor helper and replace the four existing function bodies
+whose standing branches currently call the finite actor helper. Also replace only
+the standing-config discriminator to reject enrollment metadata without the full
+standing-authority identity. Bind new requests for this added actor to immutable
+`testing_actor_enrollment=quillmd-actual-clinician-20261010-v1`; old actor configs
+retain their exact identity and must omit that marker. Unmarked old-style configs
+for the added actor stay refused; this grant is prospective, not historical. Retain every
 finite branch byte-for-byte. Runtime admission must pin the complete revised
 functions and existing enabled trigger definitions. Adapt backup qualification
 only for this exact standing pair, preserving historical invariant statements,
 manifest keys, encrypted backup primitives and the ten retained reference queries.
+Align `jobs.py` enqueue and `views.py` sponsored-control admission with the new
+actor’s own-encounter requirement, because retained sponsor accounting requires
+encounter creator to match job actor. The standing SQL job guard independently
+checks that condition for the new actor. Shared approved templates remain reusable
+in new encounters created by this clinician; existing actors are unchanged.
 Tests, operational documentation and authority records may accompany this change.
 No new application tables, columns, triggers, constraints, account or clinical rows.
 
@@ -31,7 +41,7 @@ Apply only the single newly unapplied migration through MigrationExecutor in one
 transaction, without post_migrate signals or historical replay. The only allowed
 row delta is one `django_migrations` row and its sequence advance. Every original
 migration row and all other 38 tables retain exact contents. The only schema delta
-is the named standing helper plus four qualified function-body replacements.
+is the named standing helper plus five qualified function-body replacements.
 All table/sequence/retained function ACLs, trigger bindings and enabled state remain
 unchanged. Preserve all password/session/MFA/membership state, documents, approved
 versions, billing/provider histories and unresolved reservations. No wallet movements.

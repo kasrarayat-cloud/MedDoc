@@ -237,6 +237,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     from . import testing_authority
     if testing_authority.identity(config):
         testing_authority.admit_actor(user,e.department_id)
+        testing_authority.admit_encounter(user,e)
     if kind=='transcription':
         if not (config['voice_rate_minute'] or config['voice_rate_second']): raise ValidationError('Transcription usage rates have not been configured.')
         # Exact, not an estimate: notes with no room for even one character can take no transcript, so nothing is sent or charged.
