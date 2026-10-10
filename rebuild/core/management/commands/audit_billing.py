@@ -6,9 +6,9 @@ from decimal import Decimal, ROUND_HALF_EVEN
 from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.utils import timezone
-from core.models import CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet, TestingReservation
+from core.models import AIStageReceipt, CostReconciliation, Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage, Wallet, TestingReservation
 from core.security import private_path
 
 
@@ -28,9 +28,107 @@ def recompute_list_cost(provider, units, rates):
 def recompute_cost(provider, units, rates, simulated):
     """Configured estimate: list cost at the recorded rates, less the recorded discount fraction (absent means zero)."""
     from core.generation import discounted_cost
+    if provider == 'quillmd:semantic-stages':
+        if (units.get('protocol') != 'quillmd-ai-stages-v1'
+                or rates != {'aggregation': 'sum_of_independently_rounded_stage_costs'}):
+            raise ValueError('Unknown independent-stage aggregation contract')
+        stages=units.get('stages')
+        if type(stages) is not list or not 1<=len(stages)<=5:
+            raise ValueError('Invalid independent-stage count')
+        ids=set();calls=set();requests=set();resources=set();total=Decimal(0)
+        for stage in stages:
+            if type(stage) is not dict or type(stage.get('simulated')) is not bool:
+                raise ValueError('Invalid stage cost evidence')
+            identifier=stage['id'];call=(stage['stage'],stage['attempt'])
+            if not isinstance(identifier,str) or not identifier or identifier in ids or call in calls:
+                raise ValueError('Duplicate stage cost evidence')
+            ids.add(identifier);calls.add(call)
+            if (stage['stage'] not in ('extractor','assigner','checker')
+                    or type(stage['attempt']) is not int or stage['attempt'] not in (1,2)
+                    or stage['stage']=='extractor' and stage['attempt']!=1
+                    or not stage['provider'].startswith(('anthropic','openai'))):
+                raise ValueError('Invalid generation stage provider or role')
+            for name,seen in (('request_id',requests),('resource_id',resources)):
+                value=stage[name]
+                if not isinstance(value,str):raise ValueError('Invalid provider stage identifier')
+                if value:
+                    pair=(stage['provider'],value)
+                    if pair in seen:raise ValueError('Duplicate provider evidence in stage total')
+                    seen.add(pair)
+            not_sent=(stage.get('state')=='failed' and stage.get('error_code')=='not_sent'
+                and stage.get('started_at') is None and not stage['request_id'] and not stage['resource_id']
+                and not stage['usage'] and not stage['rates'] and not stage.get('result_sha256'))
+            cost=Decimal(0) if not_sent else recompute_cost(stage['provider']+':stage',stage['usage'],stage['rates'],stage['simulated'])
+            if cost!=Decimal(stage['actual_cost']):raise ValueError('Stage cost differs from its independently rounded meter')
+            total+=cost
+        if simulated!=all(stage['simulated'] for stage in stages):raise ValueError('Stage simulation status differs from aggregate')
+        return total
     if simulated:
         return Decimal('0')
     return discounted_cost(recompute_list_cost(provider,units,rates),Decimal(str(rates.get('discount_rate','0') or '0')))
+
+
+def stage_evidence_report(file_reader=None):
+    """Audit each separately metered call without exporting its source payload."""
+    from core.ai_stages import aggregate, encode
+    def integrity(relative, expected):
+        if not relative:return 'not_recorded'
+        try:
+            path=private_path(relative)
+            data=file_reader(path) if file_reader else path.read_bytes()
+            return 'matched' if hashlib.sha256(data).hexdigest()==expected else 'mismatch'
+        except (OSError,ValueError):return 'unavailable'
+    rows=[]
+    for stage in AIStageReceipt.objects.select_related('job','definition_preparation').order_by('created_at','pk'):
+        parent=stage.job if stage.job_id else stage.definition_preparation
+        request_integrity=integrity(stage.request_path,stage.request_sha256)
+        result_integrity=integrity(stage.result_path,stage.result_sha256)
+        not_sent=(stage.state=='failed' and stage.error_code=='not_sent' and stage.started_at is None
+                  and not stage.result_path and not stage.provider_request_id and not stage.provider_resource_id)
+        try:
+            calculated=Decimal(0) if not_sent else recompute_cost(stage.provider+':stage',stage.usage,stage.rates,stage.simulated)
+        except (KeyError,ValueError,TypeError,ArithmeticError):calculated=None
+        terminal=stage.state in ('succeeded','failed','unknown')
+        checks={'parent_configuration_matches':stage.config==parent.config,
+                'request_hash_matches':request_integrity=='matched',
+                'retained_result_hash_matches':result_integrity=='matched' if stage.result_path else stage.state!='succeeded',
+                'terminal_timestamp_matches':bool(stage.finished_at)==terminal,
+                'known_cost_recomputes':stage.actual_cost is None or calculated==stage.actual_cost,
+                'completed_stage_has_known_cost':stage.state not in ('succeeded','failed') or stage.actual_cost is not None,
+                'ended_job_has_no_unresolved_stage':not stage.job_id or stage.job.state not in ('succeeded','failed','cancelled') or stage.state in ('succeeded','failed')}
+        if not stage.simulated:
+            identifiers=Q(pk__isnull=True)
+            if stage.provider_request_id:identifiers|=Q(provider_request_id=stage.provider_request_id)
+            if stage.provider_resource_id:identifiers|=Q(provider_resource_id=stage.provider_resource_id)
+            checks['provider_ids_not_already_accounted_as_legacy_usage']=(
+                not Usage.objects.filter(provider__startswith=stage.provider+':').filter(identifiers).exists()
+                and not ProviderReceipt.objects.filter(provider__startswith=stage.provider+':').filter(identifiers).exists())
+        if stage.job_id and Usage.objects.filter(job_id=stage.job_id).exists():
+            usage=Usage.objects.get(job_id=stage.job_id)
+            try:
+                cost,units,rates,provider,request_id,simulated=aggregate(stage.job)
+                matches=(usage.actual_cost==cost and usage.units==units and usage.rates==rates
+                    and usage.provider==provider and usage.provider_request_id==request_id
+                    and usage.provider_resource_id=='' and usage.simulated==simulated)
+            except Exception:matches=False
+            checks['settled_aggregate_matches_stage_receipts']=matches
+        rows.append({'id':str(stage.pk),'job_id':str(stage.job_id) if stage.job_id else None,
+            'definition_preparation_id':str(stage.definition_preparation_id) if stage.definition_preparation_id else None,
+            'stage':stage.stage,'attempt':stage.attempt,'state':stage.state,'error_code':stage.error_code or None,
+            'provider':stage.provider,'request_id':stage.provider_request_id or None,'resource_id':stage.provider_resource_id or None,
+            'requested_model':stage.requested_model,'returned_model':stage.returned_model or None,
+            'simulated':stage.simulated,'defined_cost_usd':str(stage.actual_cost) if stage.actual_cost is not None else None,
+            'quote_maximum_usd':str(stage.quote_maximum),'units':stage.usage,'configured_rates':stage.rates,
+            'request_sha256':stage.request_sha256,'result_sha256':stage.result_sha256 or None,
+            'config_sha256':hashlib.sha256(encode(stage.config)).hexdigest(),
+            'started_at':stage.started_at.isoformat() if stage.started_at else None,
+            'finished_at':stage.finished_at.isoformat() if stage.finished_at else None,
+            'latency_seconds':(stage.finished_at-stage.started_at).total_seconds() if stage.started_at and stage.finished_at else None,
+            'request_integrity':request_integrity,'result_integrity':result_integrity,'checks':checks})
+    return {'rows':rows,'all_checks_pass':all(all(row['checks'].values()) for row in rows),
+        'known_generation_provider_cost_usd':str(sum((Decimal(row['defined_cost_usd']) for row in rows if row['job_id'] and row['defined_cost_usd'] is not None),Decimal(0))),
+        'known_definition_preparation_provider_cost_usd':str(sum((Decimal(row['defined_cost_usd']) for row in rows if row['definition_preparation_id'] and row['defined_cost_usd'] is not None),Decimal(0))),
+        'cost_basis':'Per-stage configured-rate estimates, including retained failures. Generation totals describe the same costs as aggregate usage and must not be added to it. Definition preparation is separate. No invoice reconciliation is implied.'}
 
 
 def audit_report(file_reader=None):
@@ -41,7 +139,7 @@ def audit_report(file_reader=None):
         # Wallet-id order: the same order the writer's proportional split uses, so the audit recomputes the split it wrote.
         entries=list(LedgerEntry.objects.filter(job_id=usage.job_id,kind='usage').order_by('wallet_id').values('amount','wallet_id','wallet__kind','balance_after'))
         try:calculated=recompute_cost(usage.provider,usage.units,usage.rates,usage.simulated)
-        except (KeyError,ValueError,ArithmeticError):calculated=None
+        except (KeyError,ValueError,TypeError,ArithmeticError):calculated=None
         # Recording charge limit: the customer charge is exactly 1.5 × cost up to the approved limit (the settled holds); anything
         # above the limit must appear, exactly, as one 'absorbed_over_limit' platform cost and never in the customer's ledger.
         settled_holds=sum((r.amount for r in Reservation.objects.filter(job_id=usage.job_id,state='settled')),Decimal(0))
@@ -142,6 +240,7 @@ def audit_report(file_reader=None):
     cancellation_policy={'cancelled_jobs':cancelled.count(),'checks':{
         'cancelled_jobs_have_no_usage':not Usage.objects.filter(job__in=cancelled).exists(),
         'cancelled_jobs_have_no_provider_receipt':not ProviderReceipt.objects.filter(job__in=cancelled).exists(),
+        'cancelled_jobs_have_no_stage_receipt':not AIStageReceipt.objects.filter(job__in=cancelled).exists(),
         'cancelled_jobs_have_no_ledger_entries':not LedgerEntry.objects.filter(job__in=cancelled).exists(),
         'cancelled_jobs_hold_no_funds':not Reservation.objects.filter(job__in=cancelled,state='held').exists(),
         'cancelled_jobs_hold_no_sponsor_reservation':not TestingReservation.objects.filter(job__in=cancelled,state='held').exists()}}
@@ -168,6 +267,7 @@ def audit_report(file_reader=None):
     evidence_counts={kind:CostReconciliation.objects.filter(evidence_kind=kind).count() for kind,_ in CostReconciliation.EVIDENCE_KINDS}
     reconciliation_summary={'evidence_kinds':evidence_counts,'reconciled_rows':CostReconciliation.objects.count(),'unreconciled_rows':Usage.objects.filter(costreconciliation__isnull=True).count(),
         'pending_funds':CostReconciliation.objects.filter(ledger_status='pending_funds').count(),'absorbed_rows':sum(row['absorbed'] for row in rows)}
+    stages=stage_evidence_report(file_reader)
     return {'checked_at':timezone.now().isoformat(),'scope':'Read-only fresh application records; no external requests; no clinical text or credentials exported.',
         'charge_policy':'Standing-authority synthetic testing is owner-sponsored with zero user charge, no wallet credits and separately retained provider-cost estimates. Other user charge is exactly 1.5 × the attributable metered provider cost after applicable discounts and allocated provider credits; configured-rate rows are estimates until reconciled to authentic provider evidence.',
         'platform_costs':platform_costs,'reconciliation_summary':reconciliation_summary,
@@ -175,8 +275,8 @@ def audit_report(file_reader=None):
         'fingerprint_limit':'A configured pricing fingerprint identifies the application configuration, not a provider contract, tariff version, invoice, or verified account discount.',
         'rate_reference_reviewed_on':'2026-09-17','rate_references':['https://platform.claude.com/docs/en/about-claude/pricing','https://deepgram.com/pricing'],
         'rows':rows,'wallets':wallets,'unsettled_provider_receipts':unsettled,'unresolved_jobs':unresolved,
-        'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,
-        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()),
+        'ledger_policy':ledger_policy,'cancellation_policy':cancellation_policy,'hold_policy':hold_policy,'independent_ai_stages':stages,
+        'all_checks_pass':all(all(row['checks'].values()) for row in rows+wallets) and all(ledger_policy['checks'].values()) and all(cancellation_policy['checks'].values()) and all(hold_policy['checks'].values()) and stages['all_checks_pass'],
         'durable_receipt_gaps':sum(not row['durable_receipt_present'] and not row['simulated'] for row in rows),
         'invoice_reconciliation':{'invoice_rows':evidence_counts['invoice'],'provider_report_rows':evidence_counts['provider_report'],'unclassified_rows':evidence_counts['unclassified'],'scope':'Administrator-recorded per-usage classification; no account-wide or whole-invoice reconciliation is implied.','provenance':'Source authenticity and attribution require administrator review; this audit verifies ledger arithmetic, not provider authenticity.'}}
 

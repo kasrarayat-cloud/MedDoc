@@ -15,8 +15,8 @@ except ImportError:
 
 class PreparationReferenceTests(unittest.TestCase):
     def references(self, rows):
-        return b.file_references(lambda statement: rows.get(
-            next(kind for kind, text in b.FILE_QUERIES if text == statement), []))
+        return b.file_references(lambda statement: [('core_aistagereceipt',)] if statement.startswith('SELECT to_regclass') else rows.get(
+            next(kind for kind, text in b.FILE_QUERIES+b.SEMANTIC_FILE_QUERIES if text == statement), []))
 
     def test_all_preparation_artifacts_are_included_alongside_legacy_files(self):
         kinds = b.PREPARATION_FILE_KINDS | {'original', 'export', 'audio', 'receipt'}
@@ -24,9 +24,10 @@ class PreparationReferenceTests(unittest.TestCase):
         seen = []
         def query(statement):
             seen.append(statement)
-            return next(rows[kind] for kind, text in b.FILE_QUERIES if statement == text)
+            if statement.startswith('SELECT to_regclass'):return [('core_aistagereceipt',)]
+            return next(rows[kind] for kind, text in b.FILE_QUERIES+b.SEMANTIC_FILE_QUERIES if statement == text)
         references = b.file_references(query)
-        self.assertEqual(seen, [statement for _, statement in b.FILE_QUERIES])
+        self.assertEqual(seen, ["SELECT to_regclass('public.core_aistagereceipt')"]+[statement for _, statement in b.FILE_QUERIES+b.SEMANTIC_FILE_QUERIES])
         self.assertEqual(set(references), {kind + '/synthetic.bin' for kind in kinds})
         for kind in b.PREPARATION_FILE_KINDS:
             self.assertEqual(references[kind + '/synthetic.bin']['expected_sha256'], 'a' * 64)
@@ -98,7 +99,8 @@ class PreparationCaptureTests(unittest.TestCase):
                     owner.snapshot_exported = True
                     return SimpleNamespace(fetchone=lambda: ('synthetic-snapshot',))
                 if statement == 'COMMIT': owner.committed = True
-                if statement in {text for _, text in b.FILE_QUERIES}:
+                if statement.startswith('SELECT to_regclass'):return SimpleNamespace(fetchall=lambda: [('core_aistagereceipt',)])
+                if statement in {text for _, text in b.FILE_QUERIES+b.SEMANTIC_FILE_QUERIES}:
                     if not owner.snapshot_exported:
                         raise AssertionError('References queried outside exported snapshot')
                     return SimpleNamespace(fetchall=lambda: owner.rows.get(statement, []))
@@ -131,7 +133,7 @@ class PreparationCaptureTests(unittest.TestCase):
         target = self.media / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(data)
-        statement = next(text for row_kind, text in b.FILE_QUERIES if kind == row_kind)
+        statement = next(text for row_kind, text in b.FILE_QUERIES+b.SEMANTIC_FILE_QUERIES if kind == row_kind)
         self.rows.setdefault(statement, []).append((path, b.digest(data)))
 
     def backup_directory(self):
@@ -148,7 +150,7 @@ class PreparationCaptureTests(unittest.TestCase):
         self.assertLess(self.statements.index('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY'),
                         self.statements.index('SELECT pg_export_snapshot()'))
         self.assertEqual({kind for row in manifest['files'] for kind in row['kinds']}, b.PREPARATION_FILE_KINDS)
-        self.assertEqual(len(manifest['files']), 5)
+        self.assertEqual(len(manifest['files']), len(b.PREPARATION_FILE_KINDS))
         for row in manifest['files']:
             self.assertEqual(b.decrypt_checked(root / row['object'], row, self.cipher),
                              (self.media / row['path']).read_bytes())

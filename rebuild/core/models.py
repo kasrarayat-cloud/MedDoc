@@ -106,8 +106,10 @@ class TemplateVersion(Entity):
     prepared_path=models.CharField(max_length=100,blank=True)
     prepared_sha256=models.CharField(max_length=64,blank=True)
     preparation=models.ForeignKey('TemplatePreparation',on_delete=models.PROTECT,null=True,blank=True,related_name='versions')
+    semantic_definitions=models.JSONField(default=dict,blank=True)
+    semantic_preparation=models.ForeignKey('TemplateDefinitionPreparation',on_delete=models.PROTECT,null=True,blank=True,related_name='versions')
     created_by=models.ForeignKey(User,on_delete=models.PROTECT)
-    class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique')]
+    class Meta: constraints=[models.UniqueConstraint(fields=['template','number'],name='mapping_version_unique'),models.UniqueConstraint(fields=['semantic_preparation'],name='semantic_approval_single_version')]
     def __str__(self): return f'{self.template.name} · mapping {self.number}'
 class TemplatePreparation(Entity):
     template=models.OneToOneField(Template,on_delete=models.PROTECT,related_name='preparation')
@@ -133,6 +135,64 @@ class TemplatePreparation(Entity):
     approval_sha256=models.CharField(max_length=64,blank=True)
     class Meta:
         constraints=[models.UniqueConstraint(models.Value(1),condition=models.Q(state__in=['inventory','proposer','checker']),name='preparation_single_running')]
+
+class TemplateDefinitionPreparation(Entity):
+    """Separate definition approval; existing mappings and approvals remain intact."""
+    source_version=models.ForeignKey(TemplateVersion,on_delete=models.PROTECT,related_name='definition_preparations')
+    requested_by=models.ForeignKey(User,on_delete=models.PROTECT,related_name='definition_preparations')
+    state=models.CharField(max_length=24,default='queued')
+    revision=models.PositiveIntegerField(default=0)
+    config=models.JSONField(default=dict)
+    inventory=models.JSONField(default=dict)
+    proposal=models.JSONField(default=dict)
+    checker=models.JSONField(default=dict)
+    corrections=models.JSONField(default=dict)
+    correction_history=models.JSONField(default=list)
+    approved_definitions=models.JSONField(default=dict)
+    error_code=models.CharField(max_length=60,blank=True)
+    started_at=models.DateTimeField(null=True)
+    finished_at=models.DateTimeField(null=True)
+    approved_at=models.DateTimeField(null=True)
+    approved_by=models.ForeignKey(User,on_delete=models.PROTECT,null=True,related_name='approved_definition_preparations')
+    approval_sha256=models.CharField(max_length=64,blank=True)
+    class Meta:
+        constraints=[models.UniqueConstraint(models.Value(1),condition=models.Q(state__in=['inventory','proposer','checker']),name='definition_preparation_single_running')]
+
+class AIStageReceipt(Entity):
+    """Exactly one independent provider attempt with its retained request and response."""
+    job=models.ForeignKey('Job',on_delete=models.PROTECT,null=True,related_name='ai_stage_receipts')
+    definition_preparation=models.ForeignKey(TemplateDefinitionPreparation,on_delete=models.PROTECT,null=True,related_name='ai_stage_receipts')
+    stage=models.CharField(max_length=32)
+    attempt=models.PositiveIntegerField(default=1)
+    state=models.CharField(max_length=16,default='reserved')
+    config=models.JSONField(default=dict)
+    request_path=models.CharField(max_length=100)
+    request_sha256=models.CharField(max_length=64)
+    provider=models.CharField(max_length=30)
+    requested_model=models.CharField(max_length=100)
+    returned_model=models.CharField(max_length=100,blank=True)
+    quote_maximum=models.DecimalField(max_digits=24,decimal_places=12)
+    actual_cost=models.DecimalField(max_digits=24,decimal_places=12,null=True)
+    usage=models.JSONField(default=dict)
+    rates=models.JSONField(default=dict)
+    result_path=models.CharField(max_length=100,blank=True)
+    result_sha256=models.CharField(max_length=64,blank=True)
+    provider_request_id=models.CharField(max_length=140,blank=True)
+    provider_resource_id=models.CharField(max_length=140,blank=True)
+    simulated=models.BooleanField(default=False)
+    error_code=models.CharField(max_length=60,blank=True)
+    started_at=models.DateTimeField(null=True)
+    finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[
+            models.CheckConstraint(condition=(models.Q(job__isnull=False,definition_preparation__isnull=True)|models.Q(job__isnull=True,definition_preparation__isnull=False)),name='ai_stage_single_parent'),
+            models.UniqueConstraint(fields=['job','stage','attempt'],name='ai_job_stage_attempt_unique'),
+            models.UniqueConstraint(fields=['definition_preparation','stage','attempt'],name='ai_definition_stage_attempt_unique'),
+            models.UniqueConstraint(fields=['provider','provider_request_id'],condition=~models.Q(provider_request_id='')&models.Q(simulated=False),name='ai_stage_provider_request_once'),
+            models.UniqueConstraint(fields=['provider','provider_resource_id'],condition=~models.Q(provider_resource_id='')&models.Q(simulated=False),name='ai_stage_provider_resource_once'),
+            models.CheckConstraint(condition=models.Q(quote_maximum__gte=0)&(models.Q(actual_cost__isnull=True)|models.Q(actual_cost__gte=0)),name='ai_stage_cost_nonnegative'),
+            models.CheckConstraint(condition=models.Q(state__in=['reserved','sending','received','succeeded','failed','unknown']),name='ai_stage_state_known'),
+        ]
 class PreparationReceipt(Entity):
     preparation=models.ForeignKey(TemplatePreparation,on_delete=models.PROTECT,related_name='receipts')
     role=models.CharField(max_length=12)

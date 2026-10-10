@@ -208,6 +208,18 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
     return bounds,limit,quote
 
 
+def generation_maximum(encounter,config=None):
+    """One immutable whole-workflow estimate; legacy versions retain their quote."""
+    config=config or generation.configuration()
+    if encounter.template_version.semantic_preparation_id or encounter.template_version.semantic_definitions:
+        from .semantic_preparation import validated_semantic_definitions
+        from .ai_stages import maximum_cost
+        validated_semantic_definitions(encounter.template_version)
+        return maximum_cost(config)
+    return generation.maximum_cost(encounter.notes,encounter.template_version.fields,config,
+        context_labels=[row['label'] for row in encounter.template_version.review_requirements])
+
+
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
@@ -240,6 +252,15 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
     from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
     config=campaign_job_config(dict(config or generation.configuration()),kind)
+    if kind=='generation' and (e.template_version.semantic_preparation_id or e.template_version.semantic_definitions):
+        from .semantic_preparation import validated_semantic_definitions
+        from .ai_stages import pipeline_config
+        definitions=validated_semantic_definitions(e.template_version)
+        from .semantic_generation import digest
+        config=pipeline_config(config)
+        config.update(semantic_template_version=str(e.template_version_id),
+            semantic_source_sha256=hashlib.sha256(e.notes.encode()).hexdigest(),
+            semantic_definitions_sha256=digest(definitions))
     from . import testing_authority
     if testing_authority.identity(config):
         testing_authority.admit_actor(user,e.department_id)
@@ -282,13 +303,11 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     from . import testing_authority
     if testing_authority.identity(config):
         estimated_cost=(charge_limit/MULTIPLIER if kind=='transcription' else
-            generation.maximum_cost(e.notes,e.template_version.fields,config,
-                context_labels=[row['label'] for row in e.template_version.review_requirements]))
+            generation_maximum(e,config))
         config=testing_authority.job_config(config,kind,user,e.department_id,estimated_cost)
     if campaign_identity(config) is not None:
         expected_charge=(charge_limit if kind=='transcription' else
-            generation.maximum_cost(e.notes,e.template_version.fields,config,
-                context_labels=[row['label'] for row in e.template_version.review_requirements])*MULTIPLIER)
+            generation_maximum(e,config)*MULTIPLIER)
         if expected_charge>JOB_QUOTE_LIMIT:
             raise ValidationError('This request exceeds the delivery campaign per-request allowance. Nothing was queued.')
         admit_campaign_job(config,kind,user,e.department_id)
@@ -297,7 +316,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if kind=='transcription':
         reserve(job,charge_limit=charge_limit)
     else:
-        max_cost=generation.maximum_cost(e.notes,e.template_version.fields,job.config,context_labels=[row['label'] for row in e.template_version.review_requirements])
+        max_cost=generation_maximum(e,job.config)
         reserve(job,max_cost)
         charge_limit=max_cost*MULTIPLIER
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
@@ -544,6 +563,76 @@ def submit_transcription(job,raw,key,submitted):
     units=dict(submitted,duration_seconds=str(duration),**transcription_models(data.get('metadata')))
     return transcript,cost,units,rates,'deepgram:nova-3-medical',data['metadata']['request_id'],False
 
+def run_semantic_job(job):
+    """Settle the whole known stage chain once; uncertain later stages retain holds."""
+    from . import ai_stages,semantic_generation
+    from .semantic_preparation import validated_semantic_definitions
+    answers=None
+    try:
+        e=job.encounter
+        definitions=validated_semantic_definitions(e.template_version)
+        if (job.config.get('semantic_template_version')!=str(e.template_version_id)
+            or job.config.get('semantic_source_sha256')!=hashlib.sha256(e.notes.encode()).hexdigest()
+            or job.config.get('semantic_definitions_sha256')!=semantic_generation.digest(definitions)):
+            raise ai_stages.StageNotSent('The approved generation source or definitions changed before processing.')
+        def send(role,attempt,payload,schema,instructions):
+            return ai_stages.execute_stage(job=job,stage=role,attempt=attempt,payload=payload,
+                schema=schema,instructions=instructions,config=job.config)
+        answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send)
+        for field in e.template_version.fields:
+            semantic_generation.validate_stored_answer(e.notes,field,definitions[field['key']],answers[field['key']])
+        result_path,result_sha=ai_stages.retain({'contract':semantic_generation.CONTRACT,'answers':answers,
+            'stages':[str(pk) for pk in job.ai_stage_receipts.order_by('created_at','pk').values_list('pk',flat=True)]})
+        job.result_path=result_path;job.result_sha256=result_sha;job.save(update_fields=['result_path','result_sha256'])
+        settle_semantic_stages(job)
+        with transaction.atomic():
+            e=Encounter.objects.select_for_update().get(pk=e.pk)
+            try:membership(job.user,e.department)
+            except PermissionDenied:raise NotAdoptedByUser('Access was revoked before the output could be adopted; its recorded usage stays billed.')
+            if e.status=='finalized' or e.revision!=job.revision:
+                raise NotAdoptedByUser('Source changed while this job ran; output was not adopted. Its recorded usage stays billed.')
+            e.answers=answers;e.status='review';e.template_review={};e.save()
+            job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
+            audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind,
+                  contract=semantic_generation.CONTRACT,stage_count=job.ai_stage_receipts.count())
+    except Exception as exc:
+        rows=list(job.ai_stage_receipts.all())
+        sent=any(row.started_at is not None for row in rows)
+        unresolved=any(row.actual_cost is None or row.state not in ('succeeded','failed') for row in rows)
+        if sent and not unresolved and not Usage.objects.filter(job=job).exists():
+            try:settle_semantic_stages(job)
+            except Exception:unresolved=True
+        known=Usage.objects.filter(job=job).exists()
+        declined=known and isinstance(exc,NotAdoptedByUser)
+        unsent=not sent and not unresolved
+        job.state='failed' if known or unsent else 'reconciliation'
+        if known:job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
+        elif unsent:job.error=NOT_PROCESSED+'Semantic generation was refused before any provider request; nothing was charged.'
+        else:job.error='An independent AI stage has an uncertain outcome or unsettled cost. Retained earlier stages are preserved; administrator reconciliation is required. Do not resubmit.'
+        job.finished_at=timezone.now()
+        if job.state=='failed':job.request_key=ended_key(job,'failed')
+        if unsent:
+            with transaction.atomic():job.save();release(job)
+        else:job.save()
+        if known and not declined:
+            try:absorb_failed_job(job)
+            except Exception as absorb_error:audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
+        audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
+              billing='not_adopted' if declined else 'platform_failure' if known else 'not_processed' if unsent else 'uncertain')
+    return True
+
+
+def settle_semantic_stages(job):
+    from .ai_stages import aggregate
+    cost,units,rates,provider,request_id,simulated=aggregate(job)
+    with transaction.atomic():
+        ProviderReceipt.objects.get_or_create(job=job,defaults={'provider':provider,'provider_request_id':'',
+            'provider_resource_id':'','actual_cost':cost,'units':units,'rates':rates,'simulated':simulated})
+        job.provider=provider;job.provider_request_id='';job.provider_resource_id=''
+        job.save(update_fields=['provider','provider_request_id','provider_resource_id'])
+    settle(job,cost,units,rates,provider,'',simulated,provider_resource_id='')
+
+
 def run_one():
     with transaction.atomic():
         job=Job.objects.select_for_update(skip_locked=True).filter(state='queued').order_by('created_at').first()
@@ -551,13 +640,14 @@ def run_one():
         try: membership(job.user,job.encounter.department)
         except Exception:
             job.state='failed'; job.error='Access was revoked before processing.'; job.finished_at=timezone.now(); job.request_key=ended_key(job,'failed'); job.save();release(job); return True
-        if job.encounter.template_version.preparation_id:
+        if job.encounter.template_version.preparation_id or job.encounter.template_version.semantic_preparation_id or job.encounter.template_version.semantic_definitions:
             try:
                 from .template_source import source_for_version
                 source_for_version(job.encounter.template_version)
             except (ValidationError,ValueError,OSError):
                 job.state='failed';job.error='The approved form source changed before processing.';job.finished_at=timezone.now();job.request_key=ended_key(job,'failed');job.save();release(job);return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
+    if job.kind=='generation' and job.config.get('semantic_contract')=='semantic-facts-v1':return run_semantic_job(job)
     provider_returned=False
     try:
         e=job.encounter
@@ -726,5 +816,11 @@ def mark_stale():
         with transaction.atomic():
             locked=Job.objects.select_for_update().get(pk=job.pk)
             if locked.state!='running':continue
+            if locked.config.get('semantic_contract')=='semantic-facts-v1':
+                # Current stage activity distinguishes a bounded pipeline from
+                # a worker that stopped between independent sends.
+                recent=locked.ai_stage_receipts.order_by('-created_at').first()
+                activity=(recent.finished_at or recent.started_at or recent.created_at) if recent else locked.started_at
+                if activity and activity>timezone.now()-timedelta(minutes=2):continue
             locked.state='reconciliation';locked.error='Worker stopped with an unknown provider outcome. Automatic retry is disabled.';locked.save(update_fields=['state','error'])
             audit(locked.user,'job.reconciliation',locked.pk)

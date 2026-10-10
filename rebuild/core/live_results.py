@@ -9,6 +9,9 @@ def result_snapshot(encounter, jobs):
     latest=jobs[0] if jobs else None
     job=({'id':str(latest.pk),'kind':latest.kind,'state':latest.state,
           'display_error':public_error(latest),'revision':latest.revision} if latest else None)
+    if job and latest.config.get('semantic_contract')=='semantic-facts-v1':
+        from .ai_stages import stage_progress
+        job['stages']=stage_progress(latest)
     version={'revision':encounter.revision,'status':encounter.status,
              'answers':encounter.answers,'template_review':encounter.template_review,
              'latest_job':job}
@@ -22,12 +25,16 @@ def answer_preview(encounter):
     """Apply the same governing reader as the review page before displaying text."""
     from .generation import governance_for,as_currently_governed
     fields=encounter.template_version.fields
+    from .semantic_review import definitions_for,displayed_answer
+    definitions=definitions_for(encounter.template_version)
     governance=governance_for(encounter.notes,fields,
-        [r['label'] for r in encounter.template_version.review_requirements],answers=encounter.answers)
+        [r['label'] for r in encounter.template_version.review_requirements],answers=encounter.answers) if not definitions else None
     result=[]
     for field in fields:
         answer=encounter.answers.get(field['key'],{'text':'','status':'missing'})
-        if encounter.status!='finalized':
+        if definitions:
+            answer=displayed_answer(encounter,field,answer,definitions)
+        elif encounter.status!='finalized':
             answer=as_currently_governed(governance,encounter.notes,{**field,**answer},
                 bool(encounter.template_version.document_backend))
         result.append({'label':field['label'],'text':answer.get('text',''),'status':answer.get('status','missing')})

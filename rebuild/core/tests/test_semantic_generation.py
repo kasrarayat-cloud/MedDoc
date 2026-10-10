@@ -1,0 +1,791 @@
+"""Source-bound semantic generation controls; every API reply is a local fixture.
+
+The fixtures intentionally separate a fact's concise answer span from its full
+source sentence. They exercise compound statements, people, polarity, timing
+and typed values rather than assuming that a passing checker makes a draft safe.
+"""
+from copy import deepcopy
+import hashlib
+import json
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase
+
+from core import generation
+from core import semantic_generation as semantic
+from documents.semantic_preparation_roles import default_definitions
+
+
+NOTES = ('Synthetic Alex Morgan came in because of left ankle pain after stepping off a curb yesterday. '
+         'The patient rates the pain as 3 out of 10 and reports no head injury. '
+         'Examination shows mild swelling over the left lateral ankle, no deformity, and intact distal sensation. '
+         'My assessment is left ankle pain. The plan is a follow-up assessment in one week.')
+LABELS = ('Patient name', 'Reason for visit', 'History', 'Findings', 'Pain score0 to 10',
+          'Assessment', 'Plan', 'Follow-up')
+FIELDS = [{'key': 'cell_'+str(index), 'kind': 'text', 'label': label, 'locator': {'cell': index}}
+          for index, label in enumerate(LABELS)]
+
+
+def span(notes, quote, occurrence=0):
+    start = -1
+    for _ in range(occurrence+1):
+        start = notes.index(quote, start+1)
+    return {'start': start, 'end': start+len(quote)}
+
+
+def fact(notes, fields, identity, quote, *, kind='finding', concept=None,
+         subject='patient', polarity='affirmed', timing='current', timing_quote=None,
+         name_quote=None, unit=None, unit_quote=None, scale=None, occurrence=0,
+         supersedes=()):
+    value_span = span(notes, quote, occurrence)
+    units, _ = generation.source_units(notes, fields)
+    selected = [source['id'] for source in units
+                if source['start'] <= value_span['start'] < value_span['end'] <= source['end']]
+    if len(selected) != 1:
+        raise AssertionError('The fixture value must belong to exactly one complete source unit.')
+    return {'id': identity, 'kind': kind, 'concept': concept or identity,
+            'subject': {'kind': subject, 'name_span': span(notes, name_quote) if name_quote else None},
+            'value_span': value_span, 'polarity': polarity,
+            'timing': {'kind': timing, 'span': span(notes, timing_quote) if timing_quote else None},
+            'source_unit_ids': selected, 'unit': unit,
+            'unit_span': span(notes, unit_quote) if unit_quote else None,
+            'scale': scale, 'supersedes': list(supersedes)}
+
+
+def assignments(fields, selected=None, states=None):
+    selected = selected or {}
+    states = states or {}
+    return {'fields': [{'key': field['key'], 'fact_ids': list(selected.get(field['key'], [])),
+                        'status': states.get(field['key'], 'supported' if selected.get(field['key']) else 'missing'),
+                        'separator': '; '}
+                       for field in fields]}
+
+
+def checker(assignment, *, verdicts=None, fact_findings=()):
+    verdicts = verdicts or {}
+    return {'fields': [{'key': row['key'], 'verdict': verdicts.get(row['key'],
+                            'pass' if row['status'] == 'supported' else row['status']),
+                        'fact_ids': list(row['fact_ids']), 'reason': ''}
+                       for row in assignment['fields']],
+            'fact_findings': list(fact_findings)}
+
+
+def source_reference(notes, units, selected_span):
+    """Test-only fixture conversion; the application never accepts this fallback."""
+    if selected_span is None:
+        return None
+    unit = next(item for item in units if item['start'] <= selected_span['start']
+                < selected_span['end'] <= item['end'])
+    quote = notes[selected_span['start']:selected_span['end']]
+    occurrence = 1
+    position = unit['quote'].find(quote)
+    while unit['start']+position != selected_span['start']:
+        if position < 0:
+            raise AssertionError('Fixture source occurrence was not found.')
+        occurrence += 1
+        position = unit['quote'].find(quote, position+1)
+    return {'quote': quote, 'source_unit_id': unit['id'], 'occurrence': occurrence}
+
+
+def api_facts(notes, units, facts):
+    converted = deepcopy(facts)
+    for value in converted:
+        value['value_span'] = source_reference(notes, units, value['value_span'])
+        value['subject']['name_span'] = source_reference(notes, units, value['subject']['name_span'])
+        value['timing']['span'] = source_reference(notes, units, value['timing']['span'])
+        value['unit_span'] = source_reference(notes, units, value['unit_span'])
+        if value['scale'] is not None:
+            value['scale']['span'] = source_reference(notes, units, value['scale']['span'])
+    return {'facts': converted}
+
+
+class FixtureSender:
+    """Enforce each expected role/attempt, retaining independent input copies."""
+    def __init__(self, facts, assignment, checked=None, *, repaired=None, rechecked=None):
+        self.calls = []
+        self.responses = [('extractor', 1, {'facts': facts}),
+                          ('assigner', 1, assignment),
+                          ('checker', 1, checked if checked is not None else checker(assignment))]
+        if repaired is not None:
+            self.responses += [('assigner', 2, repaired),
+                               ('checker', 2, rechecked if rechecked is not None else checker(repaired))]
+
+    def __call__(self, role, attempt, payload, schema, instructions):
+        self.calls.append((role, attempt, deepcopy(payload), deepcopy(schema), instructions))
+        if not self.responses:
+            raise AssertionError('Unbudgeted provider stage '+str((role, attempt)))
+        expected_role, expected_attempt, result = self.responses.pop(0)
+        if (role, attempt) != (expected_role, expected_attempt):
+            raise AssertionError('Expected '+str((expected_role, expected_attempt))+'; got '+str((role, attempt)))
+        if role == 'extractor' and 'quote' in schema['properties']['facts']['items']['properties']['value_span'].get('required', []):
+            return api_facts(payload['notes'], payload['source_units'], result['facts'])
+        return deepcopy(result)
+
+
+def alex_case():
+    fields = deepcopy(FIELDS)
+    definitions = default_definitions(fields)
+    meanings = ('The synthetic patient name, without the presenting complaint.',
+                'The current reason for this visit.',
+                'The history of this injury and relevant stated negative history.',
+                'The documented examination findings, preserving relevant negatives.',
+                'The current pain score as an integer on the stated zero-to-ten scale.',
+                'The clinician assessment.', 'The documented management plan.',
+                'The planned follow-up interval.')
+    for field, meaning in zip(fields, meanings):
+        definitions[field['key']]['meaning'] = meaning
+    definitions['cell_6']['scope']['temporality'] = 'future'
+    definitions['cell_7']['scope']['temporality'] = 'future'
+    facts = [
+        fact(NOTES, fields, 'name', 'Synthetic Alex Morgan', kind='identity', name_quote='Synthetic Alex Morgan'),
+        fact(NOTES, fields, 'reason', 'left ankle pain', kind='reason'),
+        fact(NOTES, fields, 'mechanism', 'after stepping off a curb yesterday', kind='history',
+             timing='past', timing_quote='yesterday'),
+        fact(NOTES, fields, 'head_injury', 'no head injury', kind='history', polarity='negated'),
+        fact(NOTES, fields, 'pain', '3', kind='measurement', concept='pain_score',
+             scale={'minimum': None, 'maximum': '10', 'span': span(NOTES, '3 out of 10')}),
+        fact(NOTES, fields, 'swelling', 'mild swelling over the left lateral ankle'),
+        fact(NOTES, fields, 'deformity', 'no deformity', polarity='negated'),
+        fact(NOTES, fields, 'sensation', 'intact distal sensation'),
+        fact(NOTES, fields, 'assessment', 'left ankle pain', kind='assessment', occurrence=1),
+        fact(NOTES, fields, 'plan', 'follow-up assessment in one week', kind='plan',
+             timing='future', timing_quote='in one week'),
+        fact(NOTES, fields, 'follow_up', 'in one week', kind='follow_up',
+             timing='future', timing_quote='in one week'),
+    ]
+    assigned = assignments(fields, {'cell_0': ['name'], 'cell_1': ['reason'],
+        'cell_2': ['mechanism', 'head_injury'], 'cell_3': ['swelling', 'deformity', 'sensation'],
+        'cell_4': ['pain'], 'cell_5': ['assessment'], 'cell_6': ['plan'], 'cell_7': ['follow_up']})
+    return fields, definitions, facts, assigned
+
+
+class SemanticGenerationTests(SimpleTestCase):
+    def test_actual_narrative_has_concise_values_and_complete_exact_source_evidence(self):
+        self.assertEqual(hashlib.sha256(NOTES.encode()).hexdigest(),
+                         '07f55572e09e0cb646700e3621d68efb4ee19b5a61570f72d5a92006c1cb7340')
+        fields, definitions, facts, assigned = alex_case()
+        before = deepcopy((fields, definitions, facts, assigned))
+        sender = FixtureSender(facts, assigned)
+        answers = semantic.run(NOTES, fields, definitions, sender)
+        expected = {'cell_0': 'Synthetic Alex Morgan', 'cell_1': 'Left ankle pain',
+                    'cell_2': 'After stepping off a curb yesterday; No head injury',
+                    'cell_3': 'Mild swelling over the left lateral ankle; No deformity; Intact distal sensation',
+                    'cell_4': '3', 'cell_5': 'Left ankle pain',
+                    'cell_6': 'Follow-up assessment in one week', 'cell_7': 'In one week'}
+        self.assertEqual(set(answers), set(expected))
+        units = {unit['id']: unit for unit in generation.source_units(NOTES, fields)[0]}
+        fact_index = {value['id']: value for value in facts}
+        for field in fields:
+            key = field['key']; answer = answers[key]
+            with self.subTest(key=key):
+                self.assertEqual(answer['text'], expected[key])
+                self.assertEqual(answer['status'], 'supported')
+                self.assertFalse(answer['reviewed'])
+                self.assertEqual(answer['evidence_contract'], semantic.CONTRACT)
+                wanted_ids = sorted({identity for selected in assigned['fields'] if selected['key'] == key
+                                     for fact_id in selected['fact_ids']
+                                     for identity in fact_index[fact_id]['source_unit_ids']})
+                self.assertEqual(answer['evidence'], [{name: units[identity][name]
+                                                      for name in ('quote', 'start', 'end')}
+                                                     for identity in wanted_ids])
+                for evidence in answer['evidence']:
+                    self.assertEqual(NOTES[evidence['start']:evidence['end']], evidence['quote'])
+        self.assertEqual((fields, definitions, facts, assigned), before)
+        self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls],
+                         [('extractor', 1), ('assigner', 1), ('checker', 1)])
+        self.assertFalse(sender.responses)
+
+    def test_independent_checker_receives_original_notes_and_approved_meanings(self):
+        fields, definitions, facts, assigned = alex_case()
+        sender = FixtureSender(facts, assigned)
+        semantic.run(NOTES, fields, definitions, sender)
+        role, attempt, payload, schema, instructions = sender.calls[-1]
+        self.assertEqual((role, attempt), ('checker', 1))
+        encoded = json.dumps(payload, ensure_ascii=False)
+        self.assertIn(NOTES, encoded)
+        for definition in definitions.values():
+            self.assertIn(definition['meaning'], encoded)
+        self.assertFalse(schema.get('additionalProperties', True))
+        self.assertIsInstance(instructions, str)
+
+    def one_field(self, label='Findings', **scope):
+        fields = [{'key': 'answer', 'label': label, 'kind': 'text', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['answer']['scope'].update(scope)
+        return fields, definitions
+
+    def generated(self, notes, fields, definitions, facts, ids, **kwargs):
+        assigned = assignments(fields, {fields[0]['key']: ids})
+        return semantic.run(notes, fields, definitions, FixtureSender(facts, assigned, **kwargs))[fields[0]['key']]
+
+    def assert_held(self, answer):
+        self.assertEqual(answer['text'], '')
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertFalse(answer['reviewed'])
+
+    def test_fact_offsets_unit_ids_and_duplicate_fact_ids_cannot_be_fabricated(self):
+        fields, definitions, facts, assigned = alex_case()
+        for change in ('negative_offset', 'outside_note', 'wrong_unit', 'duplicate_id', 'boolean_id', 'unknown_id'):
+            changed = deepcopy(facts)
+            if change == 'negative_offset': changed[0]['value_span']['start'] = -1
+            elif change == 'outside_note': changed[0]['value_span']['end'] = len(NOTES)+1
+            elif change == 'wrong_unit': changed[0]['source_unit_ids'] = [5]
+            elif change == 'duplicate_id': changed[1]['id'] = changed[0]['id']
+            elif change == 'boolean_id': changed[0]['source_unit_ids'] = [True]
+            else: changed[0]['source_unit_ids'] = [6]
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                semantic.validate_facts(NOTES, generation.source_units(NOTES, fields)[0], {'facts': changed})
+
+    def test_assigner_cannot_supply_composed_text_or_another_destination(self):
+        fields, definitions, facts, assigned = alex_case()
+        for change in ('composed_text', 'unknown_key', 'duplicate_key', 'unknown_fact', 'omitted_field'):
+            changed = deepcopy(assigned)
+            if change == 'composed_text': changed['fields'][0]['text'] = 'Invented patient'
+            elif change == 'unknown_key': changed['fields'][0]['key'] = 'unapproved'
+            elif change == 'duplicate_key': changed['fields'][1] = deepcopy(changed['fields'][0])
+            elif change == 'unknown_fact': changed['fields'][0]['fact_ids'] = ['invented']
+            else: changed['fields'].pop()
+            sender = FixtureSender(facts, changed)
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                semantic.run(NOTES, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 2)
+
+    def test_compound_positive_measurement_does_not_inherit_later_negative_history(self):
+        fields, definitions, facts, assigned = alex_case()
+        answers = semantic.run(NOTES, fields, definitions, FixtureSender(facts, assigned))
+        self.assertEqual(answers['cell_4']['text'], '3')
+        self.assertEqual(answers['cell_4']['value'], 3)
+        self.assertEqual(answers['cell_4']['scale'], {'scale_minimum': '0', 'scale_maximum': '10'})
+        self.assertIn('No head injury', answers['cell_2']['text'])
+
+    def test_direct_negation_cannot_be_marked_positive_even_if_checker_passes(self):
+        fields, definitions = self.one_field()
+        notes = 'The patient reports no head injury.'
+        facts = [fact(notes, fields, 'injury', 'head injury', polarity='affirmed')]
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['injury']))
+
+    def test_shared_negation_survives_conjunction_without_a_new_subject_or_predicate(self):
+        fields, definitions = self.one_field()
+        notes = 'The patient denies fever and cough.'
+        facts = [fact(notes, fields, 'cough', 'cough', polarity='affirmed')]
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['cough']))
+
+    def test_negation_of_denial_and_no_change_do_not_become_absence_of_symptom(self):
+        fields, definitions = self.one_field()
+        for notes, quote in [('The patient does not deny fever.', 'fever'),
+                             ('There is no change in ankle pain.', 'ankle pain')]:
+            facts = [fact(notes, fields, 'symptom', quote, polarity='negated')]
+            with self.subTest(notes=notes):
+                self.assert_held(self.generated(notes, fields, definitions, facts, ['symptom']))
+
+    def test_other_person_cannot_be_assigned_to_patient_field(self):
+        fields, definitions = self.one_field()
+        notes = 'The patient reports ankle pain. Mother reports diabetes.'
+        facts = [fact(notes, fields, 'mother_diabetes', 'diabetes', subject='other', name_quote='Mother')]
+        answer = self.generated(notes, fields, definitions, facts, ['mother_diabetes'])
+        self.assert_held(answer)
+        self.assertEqual(answer['evidence'][0]['quote'], 'Mother reports diabetes.')
+
+    def test_named_subject_evidence_cannot_be_borrowed_from_an_unrelated_source_unit(self):
+        fields, definitions = self.one_field(subject='other')
+        notes = 'Mother reports diabetes. The patient reports ankle pain.'
+        facts = [fact(notes, fields, 'pain', 'ankle pain', subject='other', name_quote='Mother')]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_citing_both_units_does_not_reassign_explicit_patient_fact_to_another_person(self):
+        fields, definitions = self.one_field(subject='other')
+        notes = 'Mother reports diabetes. The patient reports ankle pain.'
+        facts = [fact(notes, fields, 'pain', 'ankle pain', subject='other', name_quote='Mother')]
+        facts[0]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(notes, fields)[0]]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_current_time_annotation_cannot_be_borrowed_for_explicitly_past_value(self):
+        fields, definitions = self.one_field(temporality='current')
+        notes = ('The patient had left ankle pain last year. '
+                 'The patient currently has no ankle pain.')
+        facts = [fact(notes, fields, 'pain', 'left ankle pain', timing='current', timing_quote='currently')]
+        facts[0]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(notes, fields)[0]]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_measurement_unit_cannot_be_borrowed_from_a_different_source_expression(self):
+        fields, definitions = self.one_field('Vein diameter')
+        definitions['answer'].update(value_type='number', unit='mm')
+        notes = 'Vein diameter is 3 cm. Another diameter is 4 mm.'
+        facts = [fact(notes, fields, 'diameter', '3', kind='measurement', unit='mm', unit_quote='mm')]
+        facts[0]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(notes, fields)[0]]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['diameter'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_named_subject_annotation_cannot_override_explicit_patient_in_same_sentence(self):
+        fields, definitions = self.one_field(subject='other')
+        notes = 'Mother reports diabetes, and the patient reports ankle pain.'
+        facts = [fact(notes, fields, 'pain', 'ankle pain', subject='other', name_quote='Mother')]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_measurement_unit_cannot_be_borrowed_from_a_different_number_in_same_sentence(self):
+        fields, definitions = self.one_field('Vein diameter')
+        definitions['answer'].update(value_type='number', unit='mm')
+        notes = 'Vein diameter is 3 cm and another diameter is 4 mm.'
+        facts = [fact(notes, fields, 'diameter', '3', kind='measurement', unit='mm', unit_quote='mm')]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['diameter'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_numeric_source_value_cannot_drop_sign_or_leading_decimal_point(self):
+        fields, definitions = self.one_field('Temperature')
+        definitions['answer'].update(value_type='number', unit='C')
+        for source_number, expected in [('-3', -3), ('.3', 0.3)]:
+            notes = 'Temperature is '+source_number+' C.'
+            with self.subTest(source_number=source_number):
+                whole = [fact(notes, fields, 'temperature', source_number,
+                              kind='measurement', unit='C', unit_quote='C')]
+                preserved = self.generated(notes, fields, definitions, whole, ['temperature'])
+                self.assertEqual((preserved['status'], preserved['value']), ('supported', expected))
+                partial = [fact(notes, fields, 'temperature', '3',
+                                kind='measurement', unit='C', unit_quote='C')]
+                try:
+                    answer = self.generated(notes, fields, definitions, partial, ['temperature'])
+                except ValidationError:
+                    continue
+                self.assert_held(answer)
+
+    def test_numeric_source_value_cannot_select_fragment_of_grouped_or_exponent_number(self):
+        fields, definitions = self.one_field('Count')
+        definitions['answer']['value_type'] = 'integer'
+        for source_number, selected in (('1,000', '1'), ('1,000', '000'),
+                                        ('1e3', '1'), ('1e3', '3'), ('1e-3', '-3')):
+            notes = 'Count is '+source_number+'.'
+            partial = [fact(notes, fields, 'count', selected, kind='measurement')]
+            with self.subTest(source_number=source_number, selected=selected):
+                try:
+                    answer = self.generated(notes, fields, definitions, partial, ['count'])
+                except ValidationError:
+                    continue
+                self.assert_held(answer)
+
+    def test_partial_word_or_digit_spans_are_not_self_contained_answer_values(self):
+        for notes, quote, label in [('Synthetic Alexander Morgan reports ankle pain.', 'Alex', 'Patient name'),
+                                     ('Examination shows no swelling.', 'well', 'Findings'),
+                                     ('The patient reports 13 episodes.', '3', 'Number of episodes')]:
+            fields, definitions = self.one_field(label)
+            facts = [fact(notes, fields, 'partial', quote)]
+            with self.subTest(quote=quote):
+                try:
+                    answer = self.generated(notes, fields, definitions, facts, ['partial'])
+                except ValidationError:
+                    continue
+                self.assert_held(answer)
+
+    def test_displayed_fact_cannot_drop_adjacent_laterality_severity_or_anatomical_site(self):
+        fields, definitions = self.one_field()
+        for notes, quote in [('The patient reports left ankle pain.', 'ankle pain'),
+                             ('Examination shows mild swelling over the left lateral ankle.', 'swelling'),
+                             ('Examination shows swelling over the left lateral ankle.', 'swelling')]:
+            facts = [fact(notes, fields, 'finding', quote)]
+            with self.subTest(notes=notes):
+                try:
+                    answer = self.generated(notes, fields, definitions, facts, ['finding'])
+                except ValidationError:
+                    continue
+                self.assert_held(answer)
+
+    def test_family_heading_and_invisible_reframer_cannot_be_lost_from_atomic_fact(self):
+        fields, definitions = self.one_field()
+        for prefix in ('Family history:\n', 'Family hi\u200bstory is documented here.\n',
+                       'The following symptoms are hypothetical.\n',
+                       'Correction of a previous finding is required.\n'):
+            notes = prefix+'The patient has diabetes.'
+            facts = [fact(notes, fields, 'diabetes', 'diabetes')]
+            answer = self.generated(notes, fields, definitions, facts, ['diabetes'])
+            with self.subTest(prefix=prefix):
+                self.assert_held(answer)
+                self.assertTrue(any(prefix.strip() in evidence['quote'] for evidence in answer['evidence']))
+
+    def test_scope_mismatch_and_uncertainty_remain_unreviewed(self):
+        for case in ('past', 'future', 'uncertain', 'other_subject'):
+            fields, definitions = self.one_field(temporality='current')
+            if case == 'past':
+                notes = 'Previously the patient had ankle pain.'
+                facts = [fact(notes, fields, 'pain', 'ankle pain', timing='past', timing_quote='Previously')]
+            elif case == 'future':
+                notes = 'The plan is an assessment in one week.'
+                facts = [fact(notes, fields, 'plan', 'assessment in one week', timing='future', timing_quote='in one week')]
+            elif case == 'uncertain':
+                notes = 'The patient may have ankle pain.'
+                facts = [fact(notes, fields, 'pain', 'ankle pain', polarity='uncertain')]
+            else:
+                notes = 'The clinician has ankle pain.'
+                facts = [fact(notes, fields, 'pain', 'ankle pain', subject='clinician')]
+            with self.subTest(case=case):
+                self.assert_held(self.generated(notes, fields, definitions, facts, [facts[0]['id']]))
+
+    def test_missing_field_is_not_converted_to_a_negative_answer(self):
+        fields, definitions = self.one_field('Head injury')
+        notes = 'The patient has ankle pain.'
+        answer = self.generated(notes, fields, definitions, [], [])
+        self.assertEqual((answer['text'], answer['status'], answer['evidence'], answer['value']),
+                         ('', 'missing', [], None))
+
+    def test_numeric_scale_unit_and_integer_constraints_do_not_convert_source(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        for quote, maximum in [('3', '5'), ('3.5', '10'), ('11', '10')]:
+            notes = 'The patient rates pain '+quote+' out of '+maximum+'.'
+            facts = [fact(notes, fields, 'pain', quote, kind='measurement', concept='pain_score',
+                          scale={'minimum': None, 'maximum': maximum,
+                                 'span': span(notes, quote+' out of '+maximum)})]
+            with self.subTest(quote=quote, maximum=maximum):
+                self.assert_held(self.generated(notes, fields, definitions, facts, ['pain']))
+        fields, definitions = self.one_field('Temperature')
+        definitions['answer'].update(value_type='number', unit='°C')
+        notes = 'The patient temperature is 98.6 °F.'
+        facts = [fact(notes, fields, 'temperature', '98.6', kind='measurement', unit='°F', unit_quote='°F')]
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['temperature']))
+
+    def test_conflicting_measurements_cannot_be_hidden_by_selecting_only_one(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'The patient rates pain 3 out of 10. The patient rates pain 6 out of 10.'
+        facts = [fact(notes, fields, 'pain_'+value, value, kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, value+' out of 10')})
+                 for value in ('3', '6')]
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['pain_3']))
+
+    def test_opposite_polarities_for_same_concept_cannot_be_hidden_by_selecting_one(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows ankle swelling. Examination shows no ankle swelling.'
+        facts = [fact(notes, fields, 'yes', 'ankle swelling', concept='ankle_swelling'),
+                 fact(notes, fields, 'no', 'no ankle swelling', concept='ankle_swelling', polarity='negated')]
+        answer = self.generated(notes, fields, definitions, facts, ['yes'])
+        self.assert_held(answer)
+        self.assertEqual({entry['quote'] for entry in answer['evidence']},
+                         {'Examination shows ankle swelling.', 'Examination shows no ankle swelling.'})
+
+    def test_stated_nonzero_scale_minimum_cannot_be_discarded_when_maximum_matches(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'The patient rates pain 3 on a 1 to 10 scale.'
+        facts = [fact(notes, fields, 'pain', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': '1', 'maximum': '10', 'span': span(notes, '1 to 10')})]
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['pain']))
+
+    def test_scale_denominator_cannot_be_adopted_as_the_actual_pain_score(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'The patient rates pain 3 out of 10.'
+        facts = [fact(notes, fields, 'pain', '10', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')})]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_scale_bound_cannot_be_borrowed_from_a_different_measurement_in_same_sentence(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'Today pain is 3 out of 5; yesterday pain was 10 out of 10.'
+        facts = [fact(notes, fields, 'pain', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10',
+                             'span': span(notes, '3 out of 5; yesterday pain was 10 out of 10')})]
+        try:
+            answer = self.generated(notes, fields, definitions, facts, ['pain'])
+        except ValidationError:
+            return
+        self.assert_held(answer)
+
+    def test_explicit_correction_can_select_corrected_fact_and_retains_both_in_stored_proof(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'The patient rates pain 3 out of 10. Correction: the patient rates pain 6 out of 10.'
+        facts = [fact(notes, fields, 'pain_'+value, value, kind='measurement', concept='pain_score',
+                      supersedes=['pain_3'] if value == '6' else [],
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, value+' out of 10')})
+                 for value in ('3', '6')]
+        answer = self.generated(notes, fields, definitions, facts, ['pain_6'])
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('6', 6, 'supported'))
+        self.assertIs(semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer), answer)
+        self.assert_held(self.generated(notes, fields, definitions, facts, ['pain_3']))
+
+    def test_checker_omission_gets_one_targeted_repair_and_an_independent_recheck(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling and no deformity.'
+        facts = [fact(notes, fields, 'swelling', 'swelling'),
+                 fact(notes, fields, 'deformity', 'no deformity', polarity='negated')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        checked = checker(assigned, verdicts={'answer': 'omission'})
+        checked['fields'][0].update(fact_ids=['swelling', 'deformity'], reason='The stated negative finding was omitted.')
+        repaired = assignments(fields, {'answer': ['swelling', 'deformity']})
+        sender = FixtureSender(facts, assigned, checked, repaired=repaired)
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assertEqual((answer['text'], answer['status']), ('Swelling; No deformity', 'supported'))
+        self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls],
+                         [('extractor', 1), ('assigner', 1), ('checker', 1), ('assigner', 2), ('checker', 2)])
+        self.assertEqual(sender.calls[3][2]['repair_keys'], ['answer'])
+        self.assertFalse(answer['reviewed'])
+
+    def test_second_checker_failure_is_held_without_an_unbounded_repair_loop(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling and no deformity.'
+        facts = [fact(notes, fields, 'swelling', 'swelling')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        failed = checker(assigned, verdicts={'answer': 'omission'})
+        failed['fields'][0]['reason'] = 'Relevant source content is absent from the facts.'
+        sender = FixtureSender(facts, assigned, failed, repaired=assigned, rechecked=failed)
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assert_held(answer)
+        self.assertEqual(len(sender.calls), semantic.MAX_CALLS)
+        self.assertIn('Relevant source content is absent from the facts.', answer['review_reasons'])
+
+    def test_checker_rejected_fact_cannot_be_laundered_through_assignment_repair(self):
+        fields, definitions = self.one_field()
+        notes = 'The patient has ankle pain.'
+        facts = [fact(notes, fields, 'pain', 'ankle pain')]
+        assigned = assignments(fields, {'answer': ['pain']})
+        checked = checker(assigned, fact_findings=[{'fact_id': 'pain', 'verdict': 'incorrect',
+                                                  'reason': 'The extracted fact has the wrong attribution.'}])
+        sender = FixtureSender(facts, assigned, checked)
+        self.assert_held(semantic.run(notes, fields, definitions, sender)['answer'])
+        self.assertEqual(len(sender.calls), 3)
+
+    def test_passing_checker_must_verify_selected_fact_ids_rather_than_another_fact(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling and intact sensation.'
+        facts = [fact(notes, fields, 'swelling', 'swelling'),
+                 fact(notes, fields, 'sensation', 'intact sensation')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        for checked_ids in ([], ['sensation'], ['swelling', 'swelling']):
+            checked = checker(assigned)
+            checked['fields'][0]['fact_ids'] = checked_ids
+            with self.subTest(checked_ids=checked_ids):
+                try:
+                    answer = semantic.run(notes, fields, definitions,
+                                          FixtureSender(facts, assigned, checked))['answer']
+                except ValidationError:
+                    continue
+                self.assert_held(answer)
+
+    def test_targeted_repair_cannot_reuse_an_initially_rejected_unselected_fact(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling and intact sensation.'
+        facts = [fact(notes, fields, 'swelling', 'swelling'),
+                 fact(notes, fields, 'sensation', 'intact sensation')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        first = checker(assigned, verdicts={'answer': 'incorrect'}, fact_findings=[
+            {'fact_id': 'sensation', 'verdict': 'incorrect', 'reason': 'The sensation attribution is unresolved.'}])
+        repaired = assignments(fields, {'answer': ['sensation']})
+        sender = FixtureSender(facts, assigned, first, repaired=repaired, rechecked=checker(repaired))
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assert_held(answer)
+        self.assertIn('The sensation attribution is unresolved.', answer['review_reasons'])
+
+    def test_generated_signatures_remain_manual_but_documented_dates_are_source_driven(self):
+        for label in ('Patient signature', 'Signed by (witness)', 'Electronically signed by'):
+            fields, definitions = self.one_field(label)
+            notes = 'Synthetic Alex Morgan signed the form.'
+            facts = [fact(notes, fields, 'signature', 'Synthetic Alex Morgan', kind='identity')]
+            with self.subTest(label=label):
+                self.assert_held(self.generated(notes, fields, definitions, facts, ['signature']))
+        fields, definitions = self.one_field('Date of signature')
+        notes = 'The date of signature is 2026-10-10.'
+        facts = [fact(notes, fields, 'signature_date', '2026-10-10', kind='other')]
+        answer = self.generated(notes, fields, definitions, facts, ['signature_date'])
+        self.assertEqual((answer['text'], answer['status']), ('2026-10-10', 'supported'))
+
+    def test_approved_printed_date_formats_do_not_require_rewriting_the_notes(self):
+        for printed, quote in [('YYYY-MM-DD', '2026-10-09'), ('DD/MM/YYYY', '09/10/2026'),
+                               ('MM/DD/YYYY', '10/09/2026'), ('DD-MM-YYYY', '09-10-2026'),
+                               ('MM-DD-YYYY', '10-09-2026')]:
+            fields = [{'key': 'date', 'label': 'Visit date ('+printed+')', 'kind': 'text',
+                       'locator': {'cell': 0}, 'answer_constraints': {
+                           'version': 1, 'data_type': 'date', 'format': printed}}]
+            definitions = default_definitions(fields)
+            notes = 'The visit date is '+quote+'.'
+            facts = [fact(notes, fields, 'visit_date', quote, kind='other')]
+            with self.subTest(printed=printed):
+                answer = self.generated(notes, fields, definitions, facts, ['visit_date'])
+                self.assertEqual((answer['text'], answer['status']), (quote, 'supported'))
+                self.assertIs(semantic.validate_stored_answer(notes, fields[0], definitions['date'], answer), answer)
+
+    def test_stored_generated_text_source_definition_and_fact_proof_cannot_drift(self):
+        fields, definitions, facts, assigned = alex_case()
+        answer = semantic.run(NOTES, fields, definitions, FixtureSender(facts, assigned))['cell_4']
+        self.assertIs(semantic.validate_stored_answer(NOTES, fields[4], definitions['cell_4'], answer), answer)
+        for change in ('text', 'value', 'source', 'definition', 'fact', 'check', 'evidence_removed'):
+            changed = deepcopy(answer); notes = NOTES; definition = deepcopy(definitions['cell_4'])
+            if change == 'text': changed['text'] = '4'
+            elif change == 'value': changed['value'] = 4
+            elif change == 'source': notes += ' The patient has fever.'
+            elif change == 'definition': definition['meaning'] += ' Changed.'
+            elif change == 'fact': changed['facts'][0]['value_span']['start'] += 1
+            elif change == 'check': changed['independent_check']['verdict'] = 'incorrect'
+            else: changed['evidence'] = []
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                semantic.validate_stored_answer(notes, fields[4], definition, changed)
+
+    def test_stale_supported_status_cannot_hide_global_conflicting_measurements(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'The patient rates pain 3 out of 10. The patient rates pain 6 out of 10.'
+        facts = [fact(notes, fields, 'pain_'+value, value, kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, value+' out of 10')})
+                 for value in ('3', '6')]
+        answer = self.generated(notes, fields, definitions, facts, ['pain_3'])
+        self.assert_held(answer)
+        answer.update(status='supported', text='3', value=3)
+        with self.assertRaises(ValidationError):
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_hidden_invalid_proof_is_not_cleared_by_a_review_tick_and_ordinary_save(self):
+        from core import semantic_review
+        fields, definitions, facts, assigned = alex_case()
+        previous = semantic.run(NOTES, fields, definitions, FixtureSender(facts, assigned))['cell_1']
+        previous['semantic_proof_sha256'] = '0'*64
+        encounter = SimpleNamespace(notes=NOTES, status='draft', department=SimpleNamespace())
+        actor = SimpleNamespace(pk='11111111-1111-4111-8111-111111111111')
+        shown = semantic_review.displayed_answer(encounter, fields[1], previous, definitions)
+        self.assertEqual((shown['text'], shown['status']), ('', 'conflict'))
+        before = deepcopy(previous)
+        with patch.object(semantic_review, 'membership'):
+            with self.assertRaises(ValidationError):
+                semantic_review.save_answer(encounter, fields[1], previous, shown['text'],
+                                            actor, True, False, 2, definitions)
+            blank = semantic_review.save_answer(encounter, fields[1], previous, '',
+                                                actor, True, True, 2, definitions)
+            entered = semantic_review.save_answer(encounter, fields[1], previous, 'Clinician reviewed ankle pain',
+                                                  actor, True, False, 2, definitions)
+        self.assertEqual(previous, before)
+        self.assertEqual((blank['text'], blank['status'], blank['semantic_review_mode']), ('', 'left_blank', 'manual'))
+        self.assertEqual(blank['semantic_edit_history'][-1]['previous']['text'], previous['text'])
+        self.assertEqual((entered['text'], entered['status'], entered['semantic_review_mode']),
+                         ('Clinician reviewed ankle pain', 'edited', 'manual'))
+        self.assertIs(semantic_review.validate_answer(encounter, fields[1], blank, definitions), blank)
+        self.assertIs(semantic_review.validate_answer(encounter, fields[1], entered, definitions), entered)
+
+    def test_standalone_manual_marker_cannot_waive_generated_source_proof(self):
+        fields, definitions, facts, assigned = alex_case()
+        answer = semantic.run(NOTES, fields, definitions, FixtureSender(facts, assigned))['cell_1']
+        answer.update(semantic_review_mode='manual', text='Confirmed acute ankle fracture',
+                      value='Confirmed acute ankle fracture', reviewed=True)
+        with self.assertRaises(ValidationError):
+            semantic.validate_stored_answer(NOTES, fields[1], definitions['cell_1'], answer)
+
+    def test_manual_decision_record_and_typed_value_must_remain_internally_consistent(self):
+        from core import semantic_review
+        fields, definitions, facts, assigned = alex_case()
+        previous = semantic.run(NOTES, fields, definitions, FixtureSender(facts, assigned))['cell_1']
+        encounter = SimpleNamespace(notes=NOTES, status='draft', department=SimpleNamespace())
+        actor = SimpleNamespace(pk='11111111-1111-4111-8111-111111111111')
+        with patch.object(semantic_review, 'membership'):
+            original = semantic_review.save_answer(encounter, fields[1], previous,
+                'Clinician reviewed ankle pain', actor, True, False, 2, definitions)
+        self.assertIs(semantic.validate_stored_answer(NOTES, fields[1], definitions['cell_1'], original), original)
+        for change in ('status', 'history', 'actor', 'time', 'revision', 'previous', 'decision', 'value'):
+            modified = deepcopy(original)
+            last = modified['semantic_edit_history'][-1]
+            if change == 'status': modified['status'] = 'supported'
+            elif change == 'history': modified['semantic_edit_history'] = []
+            elif change == 'actor': last['by'] = 'unidentified editor'
+            elif change == 'time': last['at'] = '2026-10-10T12:00:00'
+            elif change == 'revision': last['revision'] = True
+            elif change == 'previous': last.pop('previous')
+            elif change == 'decision': last['decision'] = 'reviewed'
+            else: modified['value'] = 3
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                semantic.validate_stored_answer(NOTES, fields[1], definitions['cell_1'], modified)
+
+
+class SemanticSourceReferenceTests(SimpleTestCase):
+    def test_exact_api_references_round_trip_to_canonical_original_character_offsets(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        raw = api_facts(NOTES, units, facts)
+        before = deepcopy(raw)
+        self.assertEqual(semantic.resolve_source_references(NOTES, units, raw), {'facts': facts})
+        self.assertEqual(raw, before)
+        self.assertFalse(semantic.API_FACT_SCHEMA['additionalProperties'])
+
+    def test_unicode_and_repeated_quote_are_bound_to_explicit_within_unit_occurrence(self):
+        fields = [{'key': 'answer', 'label': 'Symptoms', 'locator': {'cell': 0}}]
+        notes = 'Synthetic Élise 王 reports pain and pain.'
+        selected = fact(notes, fields, 'second_pain', 'pain', occurrence=1,
+                        name_quote='Synthetic Élise 王')
+        units = generation.source_units(notes, fields)[0]
+        raw = api_facts(notes, units, [selected])
+        self.assertEqual(raw['facts'][0]['value_span']['occurrence'], 2)
+        resolved = semantic.resolve_source_references(notes, units, raw)['facts'][0]
+        self.assertEqual(resolved, selected)
+        self.assertEqual(notes[resolved['value_span']['start']:resolved['value_span']['end']], 'pain')
+
+    def test_api_refuses_numeric_offset_fallback_and_extra_reference_keys(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        for change in ('offsets', 'extra', 'missing_quote', 'empty_quote'):
+            raw = api_facts(NOTES, units, facts)
+            ref = raw['facts'][0]['value_span']
+            if change == 'offsets': raw['facts'][0]['value_span'] = deepcopy(facts[0]['value_span'])
+            elif change == 'extra': ref['start'] = 0
+            elif change == 'missing_quote': ref.pop('quote')
+            else: ref['quote'] = ''
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                semantic.resolve_source_references(NOTES, units, raw)
+
+    def test_api_requires_exact_unicode_quote_without_normalizing_or_nearest_match(self):
+        fields = [{'key': 'answer', 'label': 'Patient name', 'locator': {'cell': 0}}]
+        notes = 'Synthetic Élise 王 reports pain.'
+        units = generation.source_units(notes, fields)[0]
+        selected = fact(notes, fields, 'name', 'Synthetic Élise 王', kind='identity')
+        for wrong in ('Synthetic E\u0301lise 王', 'synthetic Élise 王', 'Synthetic  Élise 王', 'Synthetic Alex Morgan'):
+            raw = api_facts(notes, units, [selected]); raw['facts'][0]['value_span']['quote'] = wrong
+            with self.subTest(wrong=wrong), self.assertRaises(ValidationError):
+                semantic.resolve_source_references(notes, units, raw)
+
+    def test_unknown_uncited_noninteger_unit_and_invalid_occurrence_are_refused(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        for attribute, wrong in [('source_unit_id', 6), ('source_unit_id', 2),
+                                 ('source_unit_id', True), ('source_unit_id', '1'),
+                                 ('occurrence', 0), ('occurrence', -1), ('occurrence', 2),
+                                 ('occurrence', 50001), ('occurrence', True),
+                                 ('occurrence', 1.0), ('occurrence', '1')]:
+            raw = api_facts(NOTES, units, facts); raw['facts'][0]['value_span'][attribute] = wrong
+            with self.subTest(attribute=attribute, wrong=wrong), self.assertRaises(ValidationError):
+                semantic.resolve_source_references(NOTES, units, raw)
+
+    def test_subject_timing_unit_and_scale_references_all_use_the_same_strict_resolver(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        for location in ('subject', 'timing', 'unit', 'scale'):
+            raw = api_facts(NOTES, units, facts)
+            bad = {'quote': 'invented source text', 'source_unit_id': 1, 'occurrence': 1}
+            if location == 'subject': raw['facts'][0]['subject']['name_span'] = bad
+            elif location == 'timing': raw['facts'][0]['timing']['span'] = bad
+            elif location == 'unit': raw['facts'][0]['unit_span'] = bad
+            else: raw['facts'][4]['scale']['span'] = bad
+            with self.subTest(location=location), self.assertRaises(ValidationError):
+                semantic.resolve_source_references(NOTES, units, raw)
+
+    def test_original_source_units_cannot_be_substituted_after_reference_was_built(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        raw = api_facts(NOTES, units, facts)
+        changed = deepcopy(units); changed[0]['quote'] = changed[0]['quote'].replace('Alex', 'Evan')
+        with self.assertRaises(ValidationError):
+            semantic.resolve_source_references(NOTES, changed, raw)
+

@@ -49,7 +49,11 @@ FILE_QUERIES = [
     hashed_reference_query('preparation_response', 'core_preparationreceipt', 'response_path', 'response_sha256'),
     hashed_reference_query('preparation_failure', 'core_preparationreceipt', 'failure_path', 'failure_sha256'),
 ]
-PREPARATION_FILE_KINDS = {'approved_prepared', 'candidate', 'candidate_history',
+SEMANTIC_FILE_QUERIES = [
+    hashed_reference_query('ai_stage_request','core_aistagereceipt','request_path','request_sha256'),
+    hashed_reference_query('ai_stage_response','core_aistagereceipt','result_path','result_sha256'),
+]
+PREPARATION_FILE_KINDS = {'ai_stage_request','ai_stage_response','approved_prepared', 'candidate', 'candidate_history',
                           'preparation_response', 'preparation_failure'}
 INVARIANTS = {
     'wallet_bounds': 'SELECT count(*) FROM core_wallet WHERE balance<0 OR reserved<0 OR reserved>balance',
@@ -162,6 +166,90 @@ _STANDING_USAGE_INVARIANT = '''SELECT count(*) FROM core_usage u
       ELSE ''' + INVARIANTS['usage_multiplier'].split(' WHERE ', 1)[1] + ''' END'''
 
 
+# The legacy sponsor predicate remains verbatim; prospective stage totals get
+# their own provider/meter branch only after migration0026 exists.
+_SEMANTIC_STAGE_TOTAL_VALID = r"""
+ j.kind='generation' AND j.config->>'semantic_contract'='semantic-facts-v1'
+ AND j.config->>'semantic_stage_protocol'='quillmd-ai-stages-v1'
+ AND j.config->>'semantic_max_calls'='5' AND j.config->>'semantic_output_token_limit'='4000'
+ AND j.config->>'semantic_request_byte_limit'='512000'
+ AND j.config->>'semantic_template_version'=e.template_version_id::text
+ AND j.config->>'semantic_source_sha256' ~ '^[a-f0-9]{64}$'
+ AND j.config->>'semantic_definitions_sha256' ~ '^[a-f0-9]{64}$'
+ AND u.provider='quillmd:semantic-stages' AND u.provider_request_id='' AND u.provider_resource_id=''
+ AND u.units->>'protocol'='quillmd-ai-stages-v1'
+ AND u.rates='{"aggregation":"sum_of_independently_rounded_stage_costs"}'::jsonb
+ AND jsonb_typeof(u.units->'stages')='array'
+ AND jsonb_array_length(u.units->'stages') BETWEEN 1 AND 5
+ AND jsonb_array_length(u.units->'stages')=(SELECT count(*) FROM core_aistagereceipt WHERE job_id=j.id)
+ AND (SELECT count(DISTINCT x->>'id') FROM jsonb_array_elements(u.units->'stages') x)=jsonb_array_length(u.units->'stages')
+ AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(u.units->'stages') x
+   LEFT JOIN core_aistagereceipt s ON s.id::text=x->>'id' AND s.job_id=j.id
+   WHERE s.id IS NULL OR s.config IS DISTINCT FROM j.config OR s.state NOT IN ('succeeded','failed')
+    OR s.actual_cost IS NULL OR s.stage IS DISTINCT FROM x->>'stage'
+    OR to_jsonb(s.attempt) IS DISTINCT FROM x->'attempt' OR s.provider IS DISTINCT FROM x->>'provider'
+    OR s.provider_request_id IS DISTINCT FROM x->>'request_id' OR s.provider_resource_id IS DISTINCT FROM x->>'resource_id'
+    OR s.requested_model IS DISTINCT FROM x->>'requested_model' OR s.returned_model IS DISTINCT FROM x->>'returned_model'
+    OR s.state IS DISTINCT FROM x->>'state' OR s.error_code IS DISTINCT FROM x->>'error_code'
+    OR s.request_sha256 IS DISTINCT FROM x->>'request_sha256' OR s.result_sha256 IS DISTINCT FROM x->>'result_sha256'
+    OR (x->>'config_sha256' ~ '^[a-f0-9]{64}$') IS NOT TRUE OR to_jsonb(s.simulated) IS DISTINCT FROM x->'simulated'
+    OR s.usage IS DISTINCT FROM x->'usage' OR s.rates IS DISTINCT FROM x->'rates'
+    OR (s.started_at IS NULL) IS DISTINCT FROM (x->>'started_at' IS NULL)
+    OR (s.started_at IS NOT NULL AND s.started_at IS DISTINCT FROM (x->>'started_at')::timestamptz)
+    OR CASE WHEN x->>'actual_cost' ~ '^[0-9]+([.][0-9]{1,12})?$' THEN s.actual_cost<>(x->>'actual_cost')::numeric ELSE true END)
+ AND u.actual_cost=(SELECT sum(actual_cost) FROM core_aistagereceipt WHERE job_id=j.id)
+ AND u.simulated=(SELECT bool_and(simulated) FROM core_aistagereceipt WHERE job_id=j.id)
+"""
+_SEMANTIC_STANDING_USAGE_VALID = _STANDING_USAGE_VALID.replace(
+ "(j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')",
+ "(("+_SEMANTIC_STAGE_TOTAL_VALID+") OR (j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')")
+_SEMANTIC_STANDING_USAGE_VALID = _SEMANTIC_STANDING_USAGE_VALID.replace(
+ "AND u.rates ?& ARRAY['input_per_million','output_per_million'])",
+ "AND u.rates ?& ARRAY['input_per_million','output_per_million']))")
+_SEMANTIC_STANDING_USAGE_VALID += " AND (COALESCE(j.config->>'semantic_contract','')<>'semantic-facts-v1' OR ("+_SEMANTIC_STAGE_TOTAL_VALID+"))"
+_SEMANTIC_STANDING_USAGE_INVARIANT = _STANDING_USAGE_INVARIANT.replace(_STANDING_USAGE_VALID,_SEMANTIC_STANDING_USAGE_VALID)
+
+
+SEMANTIC_INVARIANTS = {
+    'semantic_version_approval': '''SELECT count(*) FROM core_templateversion v
+        LEFT JOIN core_templatedefinitionpreparation p ON p.id=v.semantic_preparation_id
+        LEFT JOIN core_templateversion o ON o.id=p.source_version_id
+        WHERE CASE WHEN v.semantic_preparation_id IS NULL THEN v.semantic_definitions<>'{}'::jsonb
+        ELSE p.id IS NULL OR p.state<>'approved' OR p.approved_by_id IS NULL OR p.approved_at IS NULL
+          OR p.approval_sha256 !~ '^[a-f0-9]{64}$' OR v.semantic_definitions='{}'::jsonb
+          OR v.semantic_definitions IS DISTINCT FROM p.approved_definitions OR v.template_id<>o.template_id
+          OR v.fields IS DISTINCT FROM o.fields OR v.review_requirements IS DISTINCT FROM o.review_requirements
+          OR v.document_backend IS DISTINCT FROM o.document_backend OR v.preparation_id IS DISTINCT FROM o.preparation_id
+          OR v.prepared_path<>o.prepared_path OR v.prepared_sha256<>o.prepared_sha256 END''',
+    'semantic_stage_parent': '''SELECT count(*) FROM core_aistagereceipt s
+        LEFT JOIN core_job j ON j.id=s.job_id
+        LEFT JOIN core_templatedefinitionpreparation p ON p.id=s.definition_preparation_id
+        WHERE (s.job_id IS NULL)=(s.definition_preparation_id IS NULL)
+          OR s.config IS DISTINCT FROM COALESCE(j.config,p.config)
+          OR s.provider IS DISTINCT FROM s.config->>'provider' OR s.requested_model IS DISTINCT FROM s.config->>'model'
+          OR s.simulated IS DISTINCT FROM (s.config->>'mode'<>'live')
+          OR s.request_path !~ '^receipts/[a-f0-9]{48}[.]json$' OR s.request_sha256 !~ '^[a-f0-9]{64}$'
+          OR (s.result_path='')<>(s.result_sha256='')
+          OR (s.result_path<>'' AND (s.result_path !~ '^receipts/[a-f0-9]{48}[.]json$' OR s.result_sha256 !~ '^[a-f0-9]{64}$'))
+          OR s.quote_maximum<0 OR s.actual_cost<0
+          OR (s.state IN ('received','succeeded','failed') AND s.actual_cost IS NULL)
+          OR (s.state='unknown' AND s.actual_cost IS NOT NULL)
+          OR (s.state IN ('succeeded','failed','unknown') AND s.finished_at IS NULL)
+          OR (s.state IN ('received','succeeded') AND s.result_path='')''',
+    'semantic_aggregate_cost': '''SELECT count(*) FROM core_usage u JOIN core_job j ON j.id=u.job_id
+        LEFT JOIN core_providerreceipt p ON p.job_id=j.id
+        WHERE j.config->>'semantic_contract'='semantic-facts-v1' AND
+          (u.provider<>'quillmd:semantic-stages' OR u.provider_request_id<>'' OR u.provider_resource_id<>''
+           OR p.id IS NULL OR p.provider_request_id<>'' OR p.provider_resource_id<>''
+           OR p.units IS DISTINCT FROM u.units OR p.rates IS DISTINCT FROM u.rates OR p.actual_cost<>u.actual_cost
+           OR u.actual_cost IS DISTINCT FROM (SELECT sum(s.actual_cost) FROM core_aistagereceipt s WHERE s.job_id=j.id)
+           OR NOT EXISTS(SELECT 1 FROM core_aistagereceipt WHERE job_id=j.id)
+           OR EXISTS(SELECT 1 FROM core_aistagereceipt WHERE job_id=j.id AND (actual_cost IS NULL OR state NOT IN ('succeeded','failed'))))''',
+    'cancelled_semantic_unsent': '''SELECT count(*) FROM core_job j WHERE j.state='cancelled'
+        AND EXISTS(SELECT 1 FROM core_aistagereceipt s WHERE s.job_id=j.id AND s.started_at IS NOT NULL)''',
+}
+
+
 def require(value, message):
     if not value:
         raise RuntimeError(message)
@@ -226,7 +314,10 @@ def safe_relative(value):
 def file_references(query):
     """Collect every DB-snapshot reference, refusing incomplete/conflicting pairs."""
     references = {}
-    for kind, statement in FILE_QUERIES:
+    statements=list(FILE_QUERIES)
+    if query("SELECT to_regclass('public.core_aistagereceipt')")[0][0] is not None:
+        statements+=SEMANTIC_FILE_QUERIES
+    for kind, statement in statements:
         for relative, expected in query(statement):
             safe_relative(relative)
             if kind in PREPARATION_FILE_KINDS:
@@ -290,6 +381,10 @@ def invariant_counts(query):
     statements = dict(INVARIANTS)
     if query("SELECT to_regclass('public.core_testingreservation')")[0][0] is not None:
         statements['usage_multiplier'] = _STANDING_USAGE_INVARIANT
+    if query("SELECT to_regclass('public.core_aistagereceipt')")[0][0] is not None:
+        statements.update(SEMANTIC_INVARIANTS)
+        if query("SELECT to_regclass('public.core_testingreservation')")[0][0] is not None:
+            statements['usage_multiplier']=_SEMANTIC_STANDING_USAGE_INVARIANT
     result = {name: query(statement)[0][0] for name, statement in statements.items()}
     require(not any(result.values()), 'Database invariants failed; backup/restore qualification stopped.')
     return result
