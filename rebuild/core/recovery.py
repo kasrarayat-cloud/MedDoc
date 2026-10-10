@@ -9,11 +9,13 @@ from django.contrib.auth.views import PasswordResetConfirmView, INTERNAL_RESET_S
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import redirect, render
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
+from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.cache import never_cache
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .email_delivery import deliver_account_email
@@ -74,6 +76,21 @@ class RecoveryConfirmView(PasswordResetConfirmView):
     success_url = reverse_lazy('recovery_complete')
     extra_context = {'mode': 'confirm'}
     post_reset_login = False
+
+    @method_decorator(never_cache)
+    def dispatch(self, request, *args, **kwargs):
+        response = super().dispatch(request, *args, **kwargs)
+        clean_url = reverse('recovery_confirm', kwargs={
+            'uidb64': kwargs['uidb64'], 'token': self.reset_url_token})
+        if (request.method == 'GET' and kwargs['token'] != self.reset_url_token
+                and response.status_code == 302 and response.get('Location') == clean_url):
+            # A cross-site email navigation cannot send Strict session cookies
+            # through Django's immediate redirect. Finish that navigation first;
+            # an explicit same-origin click then carries the session-held token.
+            response = render(request, self.template_name, {
+                'mode': 'continue', 'continue_url': clean_url})
+            response['Referrer-Policy'] = 'no-referrer'
+        return response
 
     def get_user(self, uidb64):
         user = super().get_user(uidb64)

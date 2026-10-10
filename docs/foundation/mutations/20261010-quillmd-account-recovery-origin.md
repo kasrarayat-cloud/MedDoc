@@ -48,3 +48,19 @@ clinical edits, resets of history, public launch or other-project actions.
 
 Record provider acceptance separately from owner inbox receipt and password choice.
 Never claim recovery completed merely because a different QA account signed in.
+
+## Explicit clinician grant — owner reply before execution
+
+The owner explicitly selected "Grant clinician permissions in the synthetic
+workspace". Change only existing membership
+`34540940-6c19-400d-b77a-ff452ac6cbbd` from employee to clinician, retaining its
+user, active status and department `46a5abdd-36f1-41f0-968f-8c09c39d9daa`
+(X-ray, Synthetic North Clinic). Use the existing non-administrator workspace
+owner through the supported team-membership form. This is the sole authorized
+membership delta in addition to ordinary membership-change audit rows. Preserve
+all other memberships, tenant boundaries, staff flags and MFA enrollment.
+
+The existing nonstaff workspace owner may receive its ordinary `last_login`
+update when signing in to submit this membership form. Verify synthetic download
+access by an authenticated GET without modifying its stored document; retain the
+ordinary download audit. No other user password or account fields may change.

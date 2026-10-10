@@ -177,6 +177,7 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:9130/health/ > /dev/null
+          node ops/test_recovery_origin_browser.cjs "$PWD/.runtime/recovery-origin-browser"
           node browser-tests.mjs
           python prepare-wm-browser.py
           node wm-browser-tests.mjs
@@ -195,3 +196,4 @@ jobs:
             rebuild/.runtime/input-workflow-browser/result.json
             rebuild/.runtime/word-preview-browser/browser-evidence.json
             rebuild/.runtime/word-preview-browser/*.png
+            rebuild/.runtime/recovery-origin-browser/result.json

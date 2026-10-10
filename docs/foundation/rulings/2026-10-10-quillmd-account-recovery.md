@@ -21,3 +21,8 @@ membership in synthetic X-ray department `46a5abdd-36f1-41f0-968f-8c09c39d9daa`.
 Membership changes await the owner's separately requested preference; account
 recovery itself preserves that membership. Provider acceptance of an email is
 distinct from owner-confirmed inbox receipt.
+
+The subsequent owner reply explicitly authorizes granting clinician permissions
+to the existing account within its current synthetic workspace. The prospective
+mutation declaration binds the exact membership and department; administrator
+privileges and tenant expansion remain outside this authorization.

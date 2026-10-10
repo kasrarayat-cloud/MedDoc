@@ -40,12 +40,85 @@ class RecoveryTests(TestCase):
     def new_password(self, **extra):
         return {'new_password1': self.replacement, 'new_password2': self.replacement, **extra}
 
+    def test_email_handoff_has_no_token_or_referrer_and_clean_url_needs_its_session(self):
+        link = self.request_link()
+        raw = link.split('/')[-2]
+        response = self.client.get(link + '?next=https://attacker.invalid/')
+        self.assertContains(response, 'Continue to password form')
+        self.assertNotContains(response, raw)
+        self.assertNotContains(response, 'attacker.invalid')
+        self.assertNotContains(response, 'new_password1')
+        self.assertNotIn('Location', response)
+        self.assertEqual(response['Referrer-Policy'], 'no-referrer')
+        self.assertIn('no-store', response['Cache-Control'])
+        self.assertContains(response, 'referrerpolicy="no-referrer"')
+        clean = response.context['continue_url']
+        self.assertTrue(clean.startswith('/recovery/confirm/'))
+        self.assertTrue(clean.endswith('/set-password/'))
+        self.assertContains(Client().get(clean), 'Recovery link unavailable')
+        self.assertContains(self.client.get(clean), 'Set a new password')
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.password))
+        self.assertFalse(AuditEvent.objects.filter(action='auth.password_recovered').exists())
+
+    def test_expiry_and_account_status_are_rechecked_after_handoff(self):
+        from core.recovery import recovery_token_generator
+        clean = self.client.get(self.request_link()).context['continue_url']
+        future = timezone.now().replace(tzinfo=None) + timedelta(minutes=31)
+        with patch.object(recovery_token_generator, '_now', return_value=future):
+            self.assertContains(self.client.get(clean), 'Recovery link unavailable')
+        self.user.verified_at = None
+        self.user.save(update_fields=['verified_at'])
+        self.assertContains(self.client.get(clean), 'Recovery link unavailable')
+        self.user.verified_at = timezone.now()
+        self.user.is_active = False
+        self.user.save(update_fields=['verified_at', 'is_active'])
+        self.assertContains(self.client.get(clean), 'Recovery link unavailable')
+
+    def test_password_change_after_handoff_invalidates_held_token(self):
+        clean = self.client.get(self.request_link()).context['continue_url']
+        self.user.set_password('Another-synthetic-password-729315!')
+        self.user.save(update_fields=['password'])
+        self.assertContains(self.client.get(clean), 'Recovery link unavailable')
+
+    def test_confirm_post_requires_csrf_after_handoff(self):
+        browser = Client(enforce_csrf_checks=True)
+        clean = browser.get(self.request_link()).context['continue_url']
+        self.assertContains(browser.get(clean), 'Set a new password')
+        self.assertEqual(browser.post(clean, self.new_password()).status_code, 403)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(self.password))
+
+    @override_settings(QUILLMD_TRUST_PROXY=True, QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED=True,
+                       QUILLMD_DIRECT_ACCOUNT_ACCESS_ENABLED=True, SESSION_COOKIE_SECURE=True,
+                       CSRF_COOKIE_SECURE=True, SECURE_SSL_REDIRECT=True,
+                       SECURE_PROXY_SSL_HEADER=('HTTP_X_FORWARDED_PROTO', 'https'))
+    def test_canonical_handoff_retains_no_referrer_and_strict_secure_cookies(self):
+        from core.recovery import recovery_token_generator
+        uid = urlsafe_base64_encode(force_bytes(self.user.pk))
+        raw = recovery_token_generator.make_token(self.user)
+        response = self.client.get(f'/recovery/confirm/{uid}/{raw}/', secure=True,
+            HTTP_HOST='app.quillmd.com', HTTP_X_QUILLMD_ACCOUNT='1', HTTP_X_FORWARDED_PROTO='https')
+        self.assertContains(response, 'Continue to password form')
+        self.assertEqual(response['Referrer-Policy'], 'no-referrer')
+        self.assertEqual(response['X-Frame-Options'], 'DENY')
+        session = response.cookies['quillmd_doctor_session']
+        self.assertEqual(session['samesite'], 'Strict')
+        self.assertTrue(session['secure'])
+        self.assertTrue(session['httponly'])
+
+    def test_raw_token_head_keeps_existing_redirect_behavior(self):
+        response = self.client.head(self.request_link())
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response['Location'].endswith('/set-password/'))
+
     def test_recovery_invalidates_other_sessions_and_token_cannot_repeat(self):
         old_session = Client()
         old_session.force_login(self.user)
         link = self.request_link()
         response = self.client.get(link)
-        clean_link = response['Location']
+        self.assertContains(response, 'Continue to password form')
+        clean_link = response.context['continue_url']
         self.assertTrue(clean_link.endswith('/set-password/'))
         self.assertNotIn(link.split('/')[-2], clean_link)
         self.assertContains(self.client.get(clean_link), 'Set a new password')
@@ -62,8 +135,8 @@ class RecoveryTests(TestCase):
     def test_same_token_open_in_two_sessions_cannot_change_password_twice(self):
         link = self.request_link()
         other = Client()
-        first = self.client.get(link)['Location']
-        second = other.get(link)['Location']
+        first = self.client.get(link).context['continue_url']
+        second = other.get(link).context['continue_url']
         self.assertEqual(self.client.post(first, self.new_password()).status_code, 302)
         self.assertContains(other.post(second, self.new_password(new_password1='Other-synthetic-password-8299!', new_password2='Other-synthetic-password-8299!')), 'Recovery link unavailable')
         self.assertEqual(AuditEvent.objects.filter(action='auth.password_recovered').count(), 1)
@@ -92,7 +165,7 @@ class RecoveryTests(TestCase):
         self.user.save(update_fields=['is_staff'])
         device = TOTPDevice.objects.create(user=self.user, confirmed=True, name='Synthetic authenticator')
         link = self.request_link()
-        clean_link = self.client.get(link)['Location']
+        clean_link = self.client.get(link).context['continue_url']
         self.assertContains(self.client.post(clean_link, self.new_password()), 'This field is required')
         code = str(totp(device.bin_key, step=device.step, t0=device.t0, digits=device.digits)).zfill(6)
         self.assertEqual(self.client.post(clean_link, self.new_password(otp=code)).status_code, 302)

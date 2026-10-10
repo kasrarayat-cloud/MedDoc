@@ -141,7 +141,7 @@ class AccountOriginMiddleware:
             response.delete_cookie(COOKIE, path='/', samesite='Lax')
         if not request.path.startswith('/static/'):
             response['Cache-Control'] = 'no-store, private'
-        response['Referrer-Policy'] = 'strict-origin'
+        response.setdefault('Referrer-Policy', 'strict-origin')
         response['X-Robots-Tag'] = 'noindex, nofollow'
         response.setdefault('Content-Security-Policy', "default-src 'self'; style-src 'self'; script-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'")
         return response

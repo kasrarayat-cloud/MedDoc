@@ -127,7 +127,7 @@ class AccountSessionRevocation(TestCase):
         raw = default_token_generator.make_token(self.user)
         url = f'/recovery/confirm/{urlsafe_base64_encode(force_bytes(self.user.pk))}/{raw}/'
         browser = Client()
-        clean_url = browser.get(url)['Location']
+        clean_url = browser.get(url).context['continue_url']
         self.access(False)
         self.access(True)
         response = browser.post(clean_url, {
@@ -146,7 +146,7 @@ class AccountSessionRevocation(TestCase):
             self.assertEqual(browser.post('/recovery/', {'email': self.user.email}).status_code, 200)
         delivery.assert_called_once()
         raw = delivery.call_args.args[4]
-        clean_url = browser.get('/recovery/confirm/' + raw + '/')['Location']
+        clean_url = browser.get('/recovery/confirm/' + raw + '/').context['continue_url']
         replacement = 'Fresh-synthetic-password-after-reactivation-9428!'
         response = browser.post(clean_url, {'new_password1': replacement, 'new_password2': replacement})
         self.assertEqual(response.status_code, 302)
