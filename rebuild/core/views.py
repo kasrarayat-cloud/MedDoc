@@ -13,6 +13,7 @@ from django.contrib.auth import authenticate,login as auth_login,logout as auth_
 from django.core.exceptions import PermissionDenied,ValidationError
 from django.core import signing
 from django.db import transaction,IntegrityError
+from django.db.models import Q
 from django.http import FileResponse,HttpResponse,JsonResponse,Http404
 from django.shortcuts import render,redirect,get_object_or_404
 from django.utils import timezone
@@ -310,6 +311,11 @@ def template_detail(request,pk):
                 if request.POST.get('mapping_version')!=str(latest.pk):
                     form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
                     return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields],'statements':statement_guide(latest)},status=409)
+                if t.versions.filter(Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})).exists():
+                    if labels!={f['key']:f['label'] for f in latest.fields}:
+                        raise ValidationError('This form has separately approved answer definitions. Keep its question labels unchanged here. Use the reusable answer definitions review to change what an answer means; approval creates a separate reviewed version. Your entered labels are retained below.')
+                    messages.info(request,'Labels are unchanged. The approved answer definitions and mapping are preserved; no new version was created.')
+                    return redirect('template_detail',pk=t.pk)
                 if latest.document_backend and labels!={f['key']:f['label'] for f in latest.fields}:
                     raise ValidationError('This qualified Word mapping uses fixed question labels so source evidence remains unambiguous. Keep the original labels.')
                 # ⚠️ A RENAME MUST NOT REMOVE THE SIGNATURE PROTECTION. `structure()` excludes the
@@ -356,11 +362,17 @@ def encounter_new(request):
     if request.method=='POST' and form.is_valid():
         data=form.cleaned_data
         with transaction.atomic():
+            Template.objects.select_for_update().get(pk=data['template_version'].template_id)
             membership(request.user,data['patient'].department)
+            current=current_template_versions().filter(template_id=data['template_version'].template_id).first()
+            if current is None or current.pk!=data['template_version'].pk:
+                form.add_error('template_version',CURRENT_MAPPING_ERROR)
+                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
         return redirect('encounter_detail',pk=e.pk)
-    return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()})
+    return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},
+                  status=409 if request.method=='POST' and 'template_version' in form.errors else 200)
 
 def encounter_detail(request,pk):
     from documents import DocumentError

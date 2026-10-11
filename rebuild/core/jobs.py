@@ -311,6 +311,9 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         if expected_charge>JOB_QUOTE_LIMIT:
             raise ValidationError('This request exceeds the delivery campaign per-request allowance. Nothing was queued.')
         admit_campaign_job(config,kind,user,e.department_id)
+    # Record the release that accepted this new request. An idempotent replay
+    # returns above and must never relabel a retained attempt.
+    config['queued_release_sha']=settings.RELEASE_SHA
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     job.reused=False
     if kind=='transcription':
@@ -647,6 +650,11 @@ def run_one():
             except (ValidationError,ValueError,OSError):
                 job.state='failed';job.error='The approved form source changed before processing.';job.finished_at=timezone.now();job.request_key=ended_key(job,'failed');job.save();release(job);return True
         job.state='running';job.started_at=timezone.now();job.save(update_fields=['state','started_at'])
+        # Financial configuration is immutable after enqueue. Execution
+        # provenance belongs in its own append-only audit record.
+        audit(job.user,'job.running',job.pk,department=job.encounter.department,
+              executing_release_sha=settings.RELEASE_SHA,
+              queued_release_sha=job.config.get('queued_release_sha',''))
     if job.kind=='generation' and job.config.get('semantic_contract')=='semantic-facts-v1':return run_semantic_job(job)
     provider_returned=False
     try:
