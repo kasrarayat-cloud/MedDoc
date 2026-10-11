@@ -194,3 +194,79 @@ checks: one complete positive population and 56 refused negative populations.
 Exact byte comparisons show that each browser v2 only removes the impossible
 pre-enqueue metadata assertions. Syntax checks passed. This is verifier
 qualification, not evidence of installation or live provider quality.
+
+## Public verification supplement: native form line endings (v3)
+
+This separately committed supplement governs only public verification of installed
+application candidate `f396ebfa5e869355e47515789c371037002cf780`; the native
+installation remains governed by the candidate's unchanged v7 declaration and
+operator. No runtime source, migration, static contract, provider configuration,
+funding authority, case population or call bound changes here.
+
+Use notes v3, corpus v3 and scorer v2 below, preserving all predecessors unexecuted.
+Native browser forms serialize LF fixture line endings to CRLF. Before generation,
+verify that the actual saved notes equal that exact serialization, retaining both
+the declared fixture hash and the raw saved-source hash. All evidence offsets and
+provider/collector source bindings use the unchanged raw saved notes. Textarea
+unsaved-edit comparisons use their DOM line-ending representation only.
+
+| Replacement verifier | SHA-256 |
+| --- | --- |
+| `public-semantic-notes-v3.mjs` | `0eef0085e4c0d14b0a8e997660a45d7758a2cb355a59c57979381cfb7b1988cd` |
+| `public-semantic-corpus-v3.mjs` | `8cde22b0211158f38b5e9e22fb8de3a4bb249a5ba9478b0cc0cad20c9ee04fc9` |
+| `score-semantic-corpus-v2.mjs` | `69ab43a174b011990d919fb77686c2a9dc48dc06d883fcaab437a64f2a8e6549` |
+| `public-verifier-v3-line-endings-qualification-v1.json` | `ba5be11c96d9575ae3d522c050118e1528ff24b8db7fdccf907fc8b4220e1ff5` |
+
+Pure qualification passed 30 positive and 34 negative controls, four local
+network-disabled DOM cases and syntax checks. The preceding failed DOM control
+assumption is retained honestly in the qualification; no public/provider request
+was made. Collector v2 and all other declared verifier bindings remain unchanged.
+
+The merged candidate's first CI browser attempt exposed an eight-second test
+wait shorter than the existing ten-second idle status poll. A controlled Chromium
+probe using exact merged scripts timed out at 8.006 seconds and then displayed
+both status and answer automatically at 10.044 seconds, retaining unsaved notes
+and sending zero generation requests. Evidence SHA-256:
+`fc8c6568691b871873ea220dbd7573b8befcc646d8fdd23607e07e4add0be96e`;
+failed completed-job log SHA-256:
+`b1aafd415b16ddf457d7b3e7a675dd045e391e3546c01c203598816c1648ca62`.
+The test wait is corrected to 15 seconds in this verification-only change.
+A failed-job rerun of the unchanged application candidate is justified by this
+reproduced bounded timing flake, with the first attempt retained and any second
+attempt explicitly cited. This is not evidence of installed provider quality.
+
+
+## Pre-execution native adapter correction (v8)
+
+The v7 native attempt at 2026-10-11T00:55Z refused before static staging,
+service quiescence, backup, source publication or database writes. Its strict
+public-file check encountered the worktree virtual-environment symlink in the
+imported `django_otp` package path. The retained v7 attempt and input remain
+unchanged. A read-only comparison confirmed all 27 historical fingerprint groups,
+the original failed response, blank template and prior finalized exports unchanged
+(receipt `native-v7-refusal-baseline-v1.json`, SHA-256
+`d110597863160be9f70549dcd2d5a438f08a3ee06afb7122ec2a29ec741b6aad`).
+
+Use the separately qualified v8 operator below with a new `native-install-v2`
+output directory and new protected execution inputs. It resolves only the imported
+OTP package root to its canonical existing path before applying the unchanged
+strict per-file read checks. It also includes the test-only
+`rebuild/live-results-browser.mjs` assertion in its exact source manifest: 40 paths,
+23 runtime paths. That test permits the existing ten-second idle poll to finish
+within fifteen seconds; it changes no shipped application behavior. The native
+candidate is the eventual fully cited merge of this declaration and test change.
+All migration, catalog, static, backup and preservation hashes above remain exact.
+No v7 output is adopted as a completed installation and no provider stage is sent
+or resent by this correction.
+
+| Replacement artifact under `ops-review-v1/` | SHA-256 |
+| --- | --- |
+| `reviewed-native-semantic-facts-install-v8.py` | `e1703cdc80b31dca2b366b1575dd795098a641159004f334e7ae8d367a456687` |
+| `qualify_semantic_operator_v8.py` | `0961bb992af1080590f1e3f78cea6c368b9cca623df8e26734d53df38929d13d` |
+| `offline-operator-v8-qualification-v1.json` | `b278da3db7bd8022f8af8c34a296d4133daa8c755a9d4c4d4a4e7bc9710415b0` |
+
+The actual v8 operator passed 13 positive and 94 refusal controls, including the
+actual root-resolution expression with a symlinked package root, refusal of an
+unresolved alias and continued refusal of a symlinked leaf file. Default execution
+remains inert; qualification made no credential reads, native service actions,
+database connections or provider calls.
