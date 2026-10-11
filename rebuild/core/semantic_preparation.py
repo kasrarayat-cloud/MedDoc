@@ -72,8 +72,9 @@ def _validate_source(prep, *, current=False):
 
 def _validate_roles(prep):
     fields = prep.source_version.fields
-    validate_role_result(fields, prep.inventory, prep.proposal, 'proposer')
-    validate_role_result(fields, prep.inventory, prep.checker, 'checker')
+    for role, response in (('proposer', prep.proposal), ('checker', prep.checker)):
+        validate_role_result(fields, prep.inventory, response, role)
+        _require_definition_version(response, definition_version(prep.config))
 
 
 def corrected_definitions(prep):
@@ -90,8 +91,18 @@ def roles_agree(prep):
 
 def validated_semantic_definitions(version):
     """Shared enqueue/review/export gate for a separately approved semantic version."""
-    if not version.semantic_definitions and not version.semantic_preparation_id:
-        return {}
+    try:
+        return _validated_semantic_definitions(version)
+    except OSError as exc:
+        raise ValidationError('The retained approved Word source is unavailable. Contact support to restore that source; no generation was started.') from exc
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+def _validated_semantic_definitions(version):
+    if not getattr(version, 'semantic_definitions', {}) and not getattr(version, 'semantic_preparation_id', None):
+        from .word_contract import definitions
+        return definitions(version)
     if not version.semantic_definitions or not version.semantic_preparation_id:
         raise ValidationError('Semantic answer definitions require their separate clinician approval.')
     prep = version.semantic_preparation
@@ -107,6 +118,7 @@ def validated_semantic_definitions(version):
         _validate_source(prep)
         _validate_roles(prep)
         values = validate_definitions(source.fields, corrected_definitions(prep))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
         if values != version.semantic_definitions:
             raise ValidationError('The semantic version differs from the reviewed field definitions.')
     except DefinitionError as exc:
@@ -148,7 +160,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
         config = testing_authority.bind_actor_config(config, actor, template.department_id)
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
-    config = {**config, 'semantic_definition_protocol': PROTOCOL}
+    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 2}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -169,17 +181,32 @@ def _inventory(prep):
         source_sha256=source.template.sha256, original=model_inventory(inventory))
 
 
+def definition_version(config):
+    value = config.get('semantic_definition_version', 1)
+    if type(value) is not int or value not in (1, 2):
+        raise ValidationError('Unsupported explicit answer-definition version.')
+    return value
+
+
+def _require_definition_version(response, expected):
+    if any(row['definition']['version'] != expected for row in response['fields']):
+        raise DefinitionError('The returned answer definitions do not match the requested schema version. Review a new preparation; no older contract was adopted.')
+    return response
+
+
 def _call_role(prep, role):
+    version = definition_version(prep.config)
     payload = {'protocol': PROTOCOL, 'original': prep.inventory, 'role': role}
     if role == 'checker':
         payload['proposal'] = prep.proposal
     options = {}
     if prep.config.get('mode') != 'live':
-        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal)
+        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal, version)
     response = ai_stages.execute_stage(definition_preparation=prep, stage='definition_'+role,
-        payload=payload, schema=role_schema(role), instructions=role_instructions(role),
+        payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version),
         config=prep.config, **options)
-    return validate_role_result(prep.source_version.fields, prep.inventory, response, role)
+    return _require_definition_version(
+        validate_role_result(prep.source_version.fields, prep.inventory, response, role), version)
 
 
 def run_one():
@@ -230,6 +257,7 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
         raise ValidationError('Give a specific review reason between 12 and 1000 characters.')
     try:
         validate_definitions(prep.source_version.fields, definitions)
+        _require_definition_version({'fields':[{'definition':d} for d in definitions.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.corrections = deepcopy(definitions)
@@ -271,6 +299,7 @@ def approve(prep_id, actor, revision, inventory_sha256, reviewed_fields, origina
     _receipt_integrity(prep)
     try:
         values = validate_definitions(source.fields, corrected_definitions(prep))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.approved_definitions = deepcopy(values)

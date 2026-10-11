@@ -211,10 +211,9 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 def generation_maximum(encounter,config=None):
     """One immutable whole-workflow estimate; legacy versions retain their quote."""
     config=config or generation.configuration()
-    if encounter.template_version.semantic_preparation_id or encounter.template_version.semantic_definitions:
-        from .semantic_preparation import validated_semantic_definitions
+    from .word_contract import require_generation
+    if require_generation(encounter.template_version):
         from .ai_stages import maximum_cost
-        validated_semantic_definitions(encounter.template_version)
         return maximum_cost(config)
     return generation.maximum_cost(encounter.notes,encounter.template_version.fields,config,
         context_labels=[row['label'] for row in encounter.template_version.review_requirements])
@@ -252,10 +251,10 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
     from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
     config=campaign_job_config(dict(config or generation.configuration()),kind)
-    if kind=='generation' and (e.template_version.semantic_preparation_id or e.template_version.semantic_definitions):
-        from .semantic_preparation import validated_semantic_definitions
+    from .word_contract import require_generation
+    definitions = require_generation(e.template_version) if kind == 'generation' else {}
+    if definitions:
         from .ai_stages import pipeline_config
-        definitions=validated_semantic_definitions(e.template_version)
         from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT
         config=pipeline_config(config)
         config.update(semantic_template_version=str(e.template_version_id),

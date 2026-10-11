@@ -68,18 +68,26 @@ class CurrentTemplateSelectionTests(TestCase):
     def choices(self):
         return list(EncounterForm(user=self.user).fields['template_version'].queryset)
 
-    def test_library_offers_one_current_version_per_template_and_newest_legacy_without_definitions(self):
+    def test_latest_physical_mapping_can_create_a_manual_draft_but_cannot_generate(self):
         second=self.legacy(); third=self.legacy()
         another=Template.objects.create(department=self.department,name='Another synthetic form',
             format='docx',original_name='blank.docx',original_path='blank.docx',sha256=self.template.sha256,
             created_by=self.user)
         other_version=TemplateVersion.objects.create(template=another,number=1,
             fields=self.source.fields,created_by=self.user)
-        self.assertEqual({version.pk for version in self.choices()},{third.pk,other_version.pk})
+        self.assertEqual({row.pk for row in self.choices()},{third.pk,other_version.pk})
         page=self.client.get('/encounters/new/')
         self.assertContains(page,f'value="{third.pk}"')
+        self.assertContains(page,f'value="{other_version.pk}"')
         self.assertNotContains(page,f'value="{self.source.pk}"')
         self.assertNotContains(page,f'value="{second.pk}"')
+        response=self.client.post('/encounters/new/',self.post(third))
+        self.assertEqual(response.status_code,302)
+        encounter=Encounter.objects.get()
+        self.client.post(f'/encounters/{encounter.pk}/generate/')
+        self.assertFalse(Job.objects.exists())
+        detail=self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertContains(detail,'needs approved answer definitions')
 
     def test_latest_semantic_is_used_even_if_a_later_legacy_version_exists(self):
         approved=self.semantic(); later=self.legacy()

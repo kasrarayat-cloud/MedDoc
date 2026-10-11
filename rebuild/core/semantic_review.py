@@ -7,7 +7,6 @@ from .security import membership
 
 
 def definitions_for(version):
-    if not getattr(version,'semantic_definitions',{}) and not getattr(version,'semantic_preparation_id',None):return {}
     from .semantic_preparation import validated_semantic_definitions
     return validated_semantic_definitions(version)
 

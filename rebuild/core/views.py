@@ -311,7 +311,7 @@ def template_detail(request,pk):
                 if request.POST.get('mapping_version')!=str(latest.pk):
                     form.add_error(None,'This mapping changed. Your unsaved labels are retained below. Compare them with the current mapping before saving again.')
                     return render(request,'template_detail.html',{'template':t,'version':latest,'form':form,'field_rows':field_location.rows(latest.fields),'field_locations':[field_location.describe(f) for f in latest.fields],'statements':statement_guide(latest)},status=409)
-                if t.versions.filter(Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})).exists():
+                if t.versions.filter(Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})|Q(preparation__config__has_key='word_answer_contract')).exists():
                     if labels!={f['key']:f['label'] for f in latest.fields}:
                         raise ValidationError('This form has separately approved answer definitions. Keep its question labels unchanged here. Use the reusable answer definitions review to change what an answer means; approval creates a separate reviewed version. Your entered labels are retained below.')
                     messages.info(request,'Labels are unchanged. The approved answer definitions and mapping are preserved; no new version was created.')
@@ -338,7 +338,22 @@ def template_detail(request,pk):
         except ValidationError as exc:form.add_error(None,error_message(exc))
     from .semantic_preparation import unavailable_reason
     definition_unavailable_reason=unavailable_reason(version)
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+    from .word_contract import require_generation
+    try:
+        approved_definitions = require_generation(version)
+        answer_contract_ready = True
+        answer_contract_error = ''
+    except ValidationError as exc:
+        approved_definitions = {}
+        answer_contract_ready = False
+        answer_contract_error = error_message(exc)
+    from .semantic_preparation import validated_semantic_definitions
+    try:
+        validated_semantic_definitions(version)
+        manual_form_allowed = True
+    except ValidationError:
+        manual_form_allowed = False
+    return render(request,'template_detail.html',{'manual_form_allowed':manual_form_allowed,'template':t,'version':version,'form':form,'answer_contract_ready':answer_contract_ready,'answer_contract_error':answer_contract_error,'approved_definitions':approved_definitions,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -364,9 +379,14 @@ def encounter_new(request):
         with transaction.atomic():
             Template.objects.select_for_update().get(pk=data['template_version'].template_id)
             membership(request.user,data['patient'].department)
-            current=current_template_versions().filter(template_id=data['template_version'].template_id).first()
+            current=current_template_versions(department_ids=[data['patient'].department_id]).filter(template_id=data['template_version'].template_id).first()
             if current is None or current.pk!=data['template_version'].pk:
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
+                return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
+            from .semantic_preparation import validated_semantic_definitions
+            try: validated_semantic_definitions(current)
+            except ValidationError as exc:
+                form.add_error('template_version', error_message(exc))
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
             e=Encounter(department=data['patient'].department,patient=data['patient'],template_version=data['template_version'],created_by=request.user,notes=data['notes'],service_date=data['service_date']);e.full_clean(exclude=['notes','answers','finalized_at','finalized_by','export_path','export_sha256']);e.save()
             audit(request.user,'encounter.create',e.pk,department=e.department)
@@ -480,8 +500,11 @@ def encounter_detail(request,pk):
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
     from .jobs import generation_maximum
+    generation_contract_error = ''
     try:maximum_charge=generation_maximum(e)*Decimal('1.5')
-    except ValidationError:maximum_charge=None
+    except ValidationError as exc:
+        maximum_charge=None
+        generation_contract_error=error_message(exc)
     from . import testing_authority
     standing_testing=False
     try:
@@ -514,7 +537,10 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    manual_entry=is_wm or bool(e.template_version.fields) and (
+        all('tab_form' in f.get('locator',{}) for f in e.template_version.fields)
+        or e.template_version.template.format=='docx' and not semantic_definitions)
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,

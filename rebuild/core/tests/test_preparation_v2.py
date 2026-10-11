@@ -3,6 +3,7 @@ from copy import deepcopy
 from contextlib import contextmanager, nullcontext
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -351,7 +352,10 @@ class WMOriginalStoryContextProductTests(SimpleTestCase):
 
 class TypedWMDeadlineTests(SimpleTestCase):
     """Deadline classifier/queue controls; synthetic SDK transport, no live API."""
-    setUp=TypedRoleProductTests.setUp
+    def setUp(self):
+        TypedRoleProductTests.setUp(self)
+        credentials=patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-offline-only'})
+        credentials.start();self.addCleanup(credentials.stop)
 
     def wm_inventory(self):
         # A classifier fixture, not a claim that these synthetic questions were
@@ -427,7 +431,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
                         'content':[{'type':'text','text':json.dumps(fixture)}],'stop_reason':'end_turn',
                         'stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':20}})
                 def client(**kwargs):
-                    self.assertEqual(kwargs,{'timeout':expected_timeout,'max_retries':0})
+                    self.assertEqual(kwargs,{'timeout':preparation.timing_limits(value)[0],'max_retries':0})
                     result=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
                         http_client=http,**kwargs);clients.append(result);return result
                 packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
@@ -556,7 +560,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
                     packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
                     with httpx.Client(transport=httpx.MockTransport(handle)) as http:
                         def client(**kwargs):
-                            self.assertEqual(kwargs,{'timeout':3,'max_retries':0})
+                            self.assertEqual(kwargs,{'timeout':preparation.timing_limits(value)[0],'max_retries':0})
                             return Anthropic(api_key='synthetic-offline-only',
                                 base_url='https://synthetic-provider.invalid',http_client=http,**kwargs)
                         with patch('anthropic.Anthropic',side_effect=client) as constructed, \
@@ -572,7 +576,7 @@ class TypedWMDeadlineTests(SimpleTestCase):
                                 with self.assertRaises(preparation.DocumentError) as error:
                                     preparation.call_role(packet,'proposer',104)
                                 self.assertEqual(error.exception.code,'deadline')
-                                self.assertEqual(sent,[]);constructed.assert_not_called()
+                                self.assertEqual(sent,[]);constructed.assert_called_once()
                                 self.assertEqual(receipt.state,'failed')
                                 self.assertEqual(receipt.error_code,'deadline')
                                 self.assertFalse(receipt.failure['provider_invoked'])
@@ -586,7 +590,8 @@ class TypedWMDeadlineTests(SimpleTestCase):
                                 with self.assertRaises(ValidationError):
                                     preparation.call_role(packet,'proposer',clock['now']+180)
                                 self.assertEqual((receipt.state,receipt.quote_maximum,receipt.failure),frozen)
-                                constructed.assert_not_called()
+                                self.assertEqual(constructed.call_count,2)
+                                self.assertEqual(sent,[])
                     self.assertEqual(receipt.quote_maximum,Decimal('0.220432'))
 
     def test_reserved_deadline_failure_stops_worker_before_checker_and_candidate(self):

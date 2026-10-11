@@ -79,7 +79,9 @@ class AuthorizationAndPayerRefutation(TestCase):
         self.org = Organization.objects.create(name="Synthetic refutation organization")
         self.department = Department.objects.create(name="X-ray", organization=self.org)
         Membership.objects.create(user=self.user, department=self.department, role="clinician")
-        template = Template.objects.create(department=self.department, name="Synthetic", format="docx", original_name="synthetic.docx", original_path="unused.docx", sha256="0" * 64, created_by=self.user)
+        # This empty opaque fixture tests reservation/configuration boundaries,
+        # not Word semantic admission or automatic clinical extraction.
+        template = Template.objects.create(department=self.department, name="Synthetic", format="pdf", original_name="synthetic.pdf", original_path="unused.pdf", sha256="0" * 64, created_by=self.user)
         mapping = TemplateVersion.objects.create(template=template, number=1, fields=[], created_by=self.user)
         patient = Patient.objects.create(department=self.department, display_name="Synthetic patient", reference="refute", created_by=self.user)
         encounter = Encounter.objects.create(department=self.department, patient=patient, template_version=mapping, created_by=self.user, service_date=timezone.localdate(), notes="Synthetic notes")
