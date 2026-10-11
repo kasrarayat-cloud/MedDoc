@@ -21,6 +21,8 @@ from .generation import configuration, rates
 from .template_source import approval_binding
 
 MAX_OUTPUT = 2500
+OUTPUT_PROFILE = 'inventory-sized-typed-v1'
+MAX_TYPED_OUTPUT = 16000
 ROLE_LIMIT = Decimal('0.10')
 TOTAL_SECONDS = 180
 ROLE_SECONDS = 60
@@ -49,14 +51,19 @@ WM_LAYOUT_ADVISORIES = (
 SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'preparation_limit',
                'source_changed', 'source_unavailable', 'parser_timeout', 'parser_failed',
                'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
-               'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure'}
+               'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure',
+               'output_limit', 'invalid_response'}
 
 def feature_enabled():
     return settings.WORD_PREPARATION_ENABLED
 
-def role_limits(inventory):
+def role_limits(inventory, config=None):
     from documents.sdk_service import WM_IOV_SHA256
     validate_inventory(inventory)
+    profile = config.get('word_preparation_output_profile') if config is not None else None
+    if config is not None and 'word_preparation_output_profile' in config:
+        if type(profile) is not str or profile != OUTPUT_PROFILE or inventory['protocol'] != TYPED_PROTOCOL:
+            raise DocumentError('Unsupported explicit preparation output profile.', 'preparation_limit')
     if (inventory['source_sha256']==WM_IOV_SHA256 and len(inventory['anchors'])==90
             and len(inventory['fields'])==90 and len(inventory['stories'])==16
             and inventory['document_backend'].get('backend')=='wm-iov-foss-v2'
@@ -68,6 +75,33 @@ def role_limits(inventory):
             # output allowance to the same fully qualified deadline profile.
             return (16000 if timing_limits(inventory)==(120,360) else 12000),Decimal('0.30')
         return 6000,Decimal('0.16')
+    if profile == OUTPUT_PROFILE:
+        # A typed result repeats source labels, choices and destinations for
+        # EVERY anchor, then acknowledges EVERY original story. Bound that
+        # complete finite response, rather than giving all form sizes 2,500
+        # tokens. Allow one token per escaped JSON byte, plus the existing
+        # 2,500-token allowance as a separate reasoning margin. Completion is
+        # still checked: this allowance never authorizes a partial response.
+        # These are sizing rows only, never a substitute for either AI result.
+        from documents.preparation_roles import role_rows
+        stories = [{'story_id': row['id'], 'content_sha256': row['content_sha256'], 'verdict': 'unresolved'}
+                   for row in model_inventory(inventory)['stories']]
+        sizes = []
+        for role in ('proposer', 'checker'):
+            rows=role_rows(inventory,role)
+            for anchor,row in zip(inventory['anchors'],rows):
+                row['decision' if role=='proposer' else 'verdict']='needs_review' if role=='proposer' else 'unresolved'
+                if anchor['kind']=='choose_cell':
+                    row['metadata']['destination']=max((choice['id'] for choice in anchor['choices']),key=len)
+            response = {'inventory_sha256': inventory['inventory_sha256'],
+                        'anchors': rows, 'stories': stories}
+            sizes.append(len(json.dumps(response, ensure_ascii=True, sort_keys=True,
+                                        separators=(',', ':')).encode()))
+        output = MAX_OUTPUT + ((max(sizes) + 499) // 500) * 500
+        if output > MAX_TYPED_OUTPUT:
+            raise DocumentError('The complete preparation response exceeds its bounded output allowance. '
+                                'Split this form explicitly; nothing was omitted or sent.', 'preparation_limit')
+        return output, ROLE_LIMIT
     return MAX_OUTPUT,ROLE_LIMIT
 
 def timing_limits(inventory):
@@ -183,7 +217,7 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
             '(5) Otherwise retain the exact established number, integer, date or choice metadata '
             'and use uncertainty none. Model agreement never authorizes document writing.')
     client = Anthropic(timeout=timeout, max_retries=0)
-    response = client.messages.create(model=config['model'], max_tokens=role_limits(inventory)[0], system=instructions,
+    response = client.messages.create(model=config['model'], max_tokens=role_limits(inventory, config)[0], system=instructions,
         messages=[{'role': 'user', 'content': json.dumps(payload, ensure_ascii=False)}],
         output_config={'format': {'type': 'json_schema', 'schema': transform_schema(role_schema(role, inventory['protocol']))}})
     raw = response.model_dump(mode='json')
@@ -221,7 +255,7 @@ def retain_response(prep, role, evidence):
         stream.write(raw); stream.flush(); os.fsync(stream.fileno())
     return relative, hashlib.sha256(raw).hexdigest()
 
-def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_established):
+def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_established,stop_reason=None):
     # Never store an exception's message, headers, request, raw body or credentials.
     # Fixed class/type labels and token-shaped IDs are the entire diagnostic schema.
     def attr(name):
@@ -236,19 +270,66 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
     types={'invalid_request_error','authentication_error','permission_error','not_found_error','request_too_large',
            'rate_limit_error','api_error','overloaded_error','billing_error','timeout_error'}
     return {'format':'blank-preparation-provider-failure-v1','role':role if role in {'proposer','checker'} else 'unknown',
-            'stage':stage if stage in {'provider_role','response_retained','response_validation','proposal_validation'} else 'unknown',
+            'stage':stage if stage in {'provider_role','response_retained','response_validation','response_parsing','proposal_validation'} else 'unknown',
             'error_class':type(exc).__name__ if type(exc).__name__ in classes else 'other_exception',
             'http_status':status if type(status) is int and 400<=status<=599 else None,
             'provider_request_id':request_id if isinstance(request_id,str) and re.fullmatch(r'[A-Za-z0-9_-]{1,140}',request_id) else '',
             'provider_error_type':code if isinstance(code,str) and code in types else 'unestablished',
+            'provider_stop_reason':stop_reason if type(stop_reason) is str and stop_reason in {
+                'end_turn','max_tokens','stop_sequence','tool_use','pause_turn','refusal'} else 'unestablished',
             'elapsed_ms':max(0,int(elapsed_ms)),'response_retained':bool(response_retained),
             'usage_established':bool(usage_established),'automatic_retry':False}
+
+
+def failure_explanation(prep, receipts):
+    """Closed user-facing explanations; historical evidence is never rewritten."""
+    if not prep.error_code:
+        return ''
+    messages = {
+        'output_limit': ('The AI reached its output limit before completing the mapping and original-content check. '
+                         'The incomplete result was not adopted. Its response and computed usage are retained. '
+                         'Ask support to check the output allowance before starting a separate preparation; '
+                         'you do not need to edit the original because of this failure.'),
+        'invalid_response': ('The returned preparation result was incomplete or could not be parsed. '
+                             'Its response and computed usage are retained. Ask support to inspect this attempt '
+                             'before starting a separate preparation. The original remains intact.'),
+        'deadline': ('Preparation reached its time limit, so no unchecked candidate was adopted. '
+                     'Ask support to inspect the retained stage results before starting a separate preparation.'),
+        'preparation_limit': ('The complete form exceeds a preparation processing limit. No fields are omitted '
+                              'to fit it. Ask support which limit was reached before changing or splitting the form.'),
+        'invalid_proposal': ('The proposed mapping did not match the original questions, constraints or protected areas. '
+                             'Ask support to inspect the retained proposal; this attempt does not establish that '
+                             'the original form is unsupported.'),
+        'incomplete_proposal': ('The returned mapping or original-content check omitted a required area. '
+                               'Ask support to inspect the retained result before starting a separate preparation.'),
+    }
+    if prep.error_code in messages:
+        return messages[prep.error_code]
+    if prep.error_code == 'provider_unknown':
+        # Older code used this label for JSON parsing failures even after a
+        # complete HTTP response and its calculated cost had been retained.
+        # Explain only what the closed historical diagnostic establishes.
+        for receipt in receipts:
+            failure=receipt.failure if isinstance(receipt.failure,dict) else {}
+            if (failure.get('error_class') == 'JSONDecodeError'
+                    and failure.get('response_retained') is True and failure.get('usage_established') is True
+                    and receipt.response_path and receipt.computed_cost is not None):
+                return ('The retained structured preparation result could not be parsed. Its response and '
+                        'computed provider usage are recorded; the original remains intact. Ask support to '
+                        'inspect the retained response before starting a separate preparation. The historical '
+                        'result label is preserved below.')
+            if (receipt.state == 'unknown' or (failure.get('provider_invoked') is True
+                    and receipt.computed_cost is None)):
+                return ('The provider outcome or usage has not been established. The reservation is retained. '
+                        'Ask support to reconcile this existing request before starting another preparation.')
+    return ('This attempt was not adopted. Ask support to inspect its retained stage results before starting '
+            'another preparation. The original remains intact, and unresolved usage keeps its reservation.')
 
 
 def call_role(prep, role, deadline, proposal=None):
     payload = role_payload(prep.inventory, role, proposal,
                            source_review_context=source_review_mode(prep.config))
-    max_output,limit=role_limits(prep.inventory)
+    max_output,limit=role_limits(prep.inventory, prep.config)
     role_seconds,_=timing_limits(prep.inventory)
     quoted = maximum_cost(payload, prep.config,max_output)
     from . import testing_authority
@@ -277,7 +358,7 @@ def call_role(prep, role, deadline, proposal=None):
         receipt = PreparationReceipt.objects.create(preparation=prep, role=role,
             provider=prep.config['provider'], requested_model=prep.config['model'], request_sha256=digest(payload),
             quote_maximum=limit if prep.config['mode']=='live' else Decimal('0'), state='running', started_at=timezone.now())
-    began = time.monotonic();stage='provider_role';provider_invoked=False
+    began = time.monotonic();stage='provider_role';provider_invoked=False;stop_reason=None
     try:
         def observed(evidence):
             nonlocal stage
@@ -304,7 +385,19 @@ def call_role(prep, role, deadline, proposal=None):
             receipt.rates=evidence['rates']; receipt.computed_cost=Decimal(evidence['cost']); receipt.simulated=evidence['simulated']
             receipt.state='responded'; receipt.save()
         if not standing and receipt.computed_cost > limit: raise DocumentError('The returned usage exceeds its reserved cap.', 'budget_limit')
-        if isinstance(response, str): response=json.loads(response)
+        if not receipt.simulated:
+            raw_response=evidence.get('response')
+            stop_reason=raw_response.get('stop_reason') if isinstance(raw_response,dict) else None
+            if stop_reason != 'end_turn':
+                code = 'output_limit' if stop_reason == 'max_tokens' else 'invalid_response'
+                raise DocumentError('The provider returned an incomplete preparation result. '
+                                    'Its response and computed usage are retained; no automatic retry was made.', code)
+        stage='response_parsing'
+        if isinstance(response, str):
+            try:response=json.loads(response)
+            except (ValueError,UnicodeError):
+                raise DocumentError('The retained preparation response is not valid structured JSON. '
+                                    'Its computed provider usage remains recorded.', 'invalid_response') from None
         stage='proposal_validation'
         validate_role(prep.inventory, response, role)
         receipt.state='succeeded'; receipt.save(update_fields=['state'])
@@ -313,7 +406,7 @@ def call_role(prep, role, deadline, proposal=None):
         receipt.state='failed' if receipt.response_path or not provider_invoked else 'unknown'
         receipt.error_code=getattr(exc, 'code', 'provider_unknown') if getattr(exc, 'code', '') in SAFE_ERRORS else 'provider_unknown'
         receipt.failure=safe_provider_failure(exc,role,stage,(time.monotonic()-began)*1000,
-                                             bool(receipt.response_path),receipt.computed_cost is not None)
+                                             bool(receipt.response_path),receipt.computed_cost is not None,stop_reason)
         receipt.failure['provider_invoked']=provider_invoked
         # This closed metadata is retained before private-file I/O. File-retention
         # failure cannot erase the original diagnostic or imply free usage.
@@ -332,7 +425,8 @@ def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
-    config={**config, 'word_preparation_protocol': TYPED_PROTOCOL}
+    config={**config, 'word_preparation_protocol': TYPED_PROTOCOL,
+            'word_preparation_output_profile': OUTPUT_PROFILE}
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     from . import testing_authority

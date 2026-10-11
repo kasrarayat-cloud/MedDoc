@@ -8,7 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from .models import Template, TemplatePreparation
 from .security import scoped, membership, private_path, audit
-from .preparation import approve, correct, corrected_fields, can_continue_wm_review, continue_wm_review
+from .preparation import approve, correct, corrected_fields, can_continue_wm_review, continue_wm_review, failure_explanation
 from documents.preparation_service import read_original
 from documents import DocumentError
 
@@ -40,12 +40,14 @@ def detail(request,pk):
            'checker':checked.get(a['id'],{}).get('verdict','pending'),
            'proposal_metadata':metadata(proposed.get(a['id'],{})),
            'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
+    receipts=list(prep.receipts.order_by('created_at'))
     return render(request,'template_preparation.html',{'template':template,'preparation':prep,
         'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
         'placement_rows':[r for r in rows if r['kind']=='choose_cell'],
         'protected_rows':[r for r in rows if r['protected_signing']],
         'stories':prep.inventory.get('stories',[]),
-        'options':prep.inventory.get('options',[]),'receipts':prep.receipts.order_by('created_at'),
+        'options':prep.inventory.get('options',[]),'receipts':receipts,
+        'failure_explanation':failure_explanation(prep,receipts),
         'can_continue_wm_review':can_continue_wm_review(prep),
         'can_correct':prep.state in {'review','guided'},'preview_token':secrets.token_hex(24)})
 
@@ -53,6 +55,7 @@ def detail(request,pk):
 def status(request,pk):
     _,prep=selected(request,pk)
     return JsonResponse({'state':prep.state,'revision':prep.revision,'error_code':prep.error_code,
+        'explanation':failure_explanation(prep,prep.receipts.order_by('created_at')),
         'started_at':prep.started_at.isoformat() if prep.started_at else None,
         'finished_at':prep.finished_at.isoformat() if prep.finished_at else None,
         'proposer':prep.receipts.filter(role='proposer').values_list('state',flat=True).first(),

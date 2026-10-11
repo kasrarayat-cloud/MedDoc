@@ -505,7 +505,9 @@ class TypedWMDeadlineTests(SimpleTestCase):
                     patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
                     patch.object(preparation,'retain_response',side_effect=retain), \
                     patch.object(preparation.time,'monotonic',return_value=100):
-                with self.assertRaises(json.JSONDecodeError):preparation.call_role(packet,'proposer',460)
+                with self.assertRaises(preparation.DocumentError) as incomplete:
+                    preparation.call_role(packet,'proposer',460)
+                self.assertEqual(incomplete.exception.code,'output_limit')
                 frozen=(receipt.state,receipt.quote_maximum,receipt.computed_cost,deepcopy(receipt.failure))
                 with self.assertRaises(ValidationError):preparation.call_role(packet,'proposer',460)
         self.assertEqual(len(sent),1);self.assertEqual(reserve.call_args_list[0].args[-1],quote)
@@ -514,7 +516,9 @@ class TypedWMDeadlineTests(SimpleTestCase):
         self.assertEqual(receipt.returned_model,'offline-returned-model')
         self.assertEqual(receipt.provider_request_id,'offline-truncated-request')
         self.assertEqual(receipt.provider_resource_id,'offline-truncated-response')
-        self.assertEqual(receipt.failure['error_class'],'JSONDecodeError')
+        self.assertEqual(receipt.error_code,'output_limit')
+        self.assertEqual(receipt.failure['error_class'],'DocumentError')
+        self.assertEqual(receipt.failure['provider_stop_reason'],'max_tokens')
         self.assertTrue(receipt.failure['provider_invoked']);self.assertTrue(receipt.failure['response_retained'])
         self.assertTrue(receipt.failure['usage_established']);self.assertFalse(receipt.failure['automatic_retry'])
         self.assertEqual(retained[0]['response']['stop_reason'],'max_tokens')
