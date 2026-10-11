@@ -447,7 +447,7 @@ def person_name_value(text):
     # Conservative Unicode name shape. Sentence predicates and final full stops
     # are not name components. Unsupported spelling stays visible for review.
     particles = {'van','von','de','del','der','da','di','du','la','le','al','bin','ibn'}
-    if re.search(r'\b(?:attended|reports?|reported|requests?|requested|records|recorded|rates|rated|states|stated|shows|showed|presents|presented|lasts|lasted|causes|caused|is|are|was|were|has|have|had)\b', text, re.I): return False
+    if re.search(r'\b(?:attended|attends|visited|visits|arrived|arrives|came|comes|reports?|reported|requests?|requested|records|recorded|rates|rated|states|stated|shows|showed|presents|presented|lasts|lasted|causes|caused|is|are|was|were|has|have|had)\b', text, re.I): return False
     tokens = text.split(' ')
     if not 1 <= len(tokens) <= 12 or any(not token for token in tokens): return False
     for index, token in enumerate(tokens):
@@ -481,6 +481,18 @@ def unit_identity(unit):
     value = ' '.join(unit.casefold().split())
     return {'degree celsius':'celsius', 'degrees celsius':'celsius', '°c':'celsius',
             'degree fahrenheit':'fahrenheit', 'degrees fahrenheit':'fahrenheit', '°f':'fahrenheit'}.get(value, value)
+
+
+def identifier_fragment(notes, evidence, label):
+    """Require the complete contiguous reference, allowing a label's colon
+    and a single sentence-ending full stop outside the reference."""
+    before, after = notes[:evidence['start']], notes[evidence['end']:]
+    label_colon = before.casefold().endswith(label.casefold()+':')
+    prefix = bool(before and re.fullmatch(r'[A-Za-z0-9._:/-]', before[-1]) and not label_colon)
+    suffix = bool(after and re.match(r'[A-Za-z0-9._:/-]', after))
+    if after.startswith('.') and (len(after) == 1 or not re.match(r'[A-Za-z0-9._:/-]', after[1])):
+        suffix = False
+    return prefix or suffix
 
 
 def validate_value(definition, text, field=None):
@@ -557,10 +569,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
         if d['value_type'] == 'identifier':
             for f in picked:
                 e = f['value_evidence']
-                before, after = notes[:e['start']], notes[e['end']:]
-                label_colon = before.casefold().endswith(field['label'].casefold()+':')
-                if (re.search(r'[A-Za-z0-9][._:/-]$', before) and not label_colon
-                        or re.match(r'^[._:/-][A-Za-z0-9]', after)):
+                if identifier_fragment(notes, e, field['label']):
                     reasons.append('The identifier is a fragment of a longer source reference; review the complete value.')
         if protected(field) and picked: reasons.append('Protected signing areas cannot be populated by a note-generation agent.')
         if (row['status'] == 'missing') != (not picked): reasons.append('Missing information cannot carry an asserted value.')

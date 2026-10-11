@@ -72,8 +72,9 @@ def _validate_source(prep, *, current=False):
 
 def _validate_roles(prep):
     fields = prep.source_version.fields
-    validate_role_result(fields, prep.inventory, prep.proposal, 'proposer')
-    validate_role_result(fields, prep.inventory, prep.checker, 'checker')
+    for role, response in (('proposer', prep.proposal), ('checker', prep.checker)):
+        validate_role_result(fields, prep.inventory, response, role)
+        _require_definition_version(response, definition_version(prep.config))
 
 
 def corrected_definitions(prep):
@@ -108,6 +109,7 @@ def validated_semantic_definitions(version):
         _validate_source(prep)
         _validate_roles(prep)
         values = validate_definitions(source.fields, corrected_definitions(prep))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
         if values != version.semantic_definitions:
             raise ValidationError('The semantic version differs from the reviewed field definitions.')
     except DefinitionError as exc:
@@ -177,6 +179,12 @@ def definition_version(config):
     return value
 
 
+def _require_definition_version(response, expected):
+    if any(row['definition']['version'] != expected for row in response['fields']):
+        raise DefinitionError('The returned answer definitions do not match the requested schema version. Review a new preparation; no older contract was adopted.')
+    return response
+
+
 def _call_role(prep, role):
     version = definition_version(prep.config)
     payload = {'protocol': PROTOCOL, 'original': prep.inventory, 'role': role}
@@ -188,7 +196,8 @@ def _call_role(prep, role):
     response = ai_stages.execute_stage(definition_preparation=prep, stage='definition_'+role,
         payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version),
         config=prep.config, **options)
-    return validate_role_result(prep.source_version.fields, prep.inventory, response, role)
+    return _require_definition_version(
+        validate_role_result(prep.source_version.fields, prep.inventory, response, role), version)
 
 
 def run_one():
@@ -239,6 +248,7 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
         raise ValidationError('Give a specific review reason between 12 and 1000 characters.')
     try:
         validate_definitions(prep.source_version.fields, definitions)
+        _require_definition_version({'fields':[{'definition':d} for d in definitions.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.corrections = deepcopy(definitions)
@@ -280,6 +290,7 @@ def approve(prep_id, actor, revision, inventory_sha256, reviewed_fields, origina
     _receipt_integrity(prep)
     try:
         values = validate_definitions(source.fields, corrected_definitions(prep))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.approved_definitions = deepcopy(values)

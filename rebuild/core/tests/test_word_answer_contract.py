@@ -164,6 +164,25 @@ class FreshWordContractTests(SimpleTestCase):
             'cell_11':'The patient requests reassessment in fourteen days'}
         for key,text in failures.items():
             with self.subTest(key=key),self.assertRaises(ValidationError): semantic.validate_value(values[key],text)
+        for clause in ('SYNTHETIC THEO VAREN VISITED THE CLINIC', 'SYNTHETIC THEO VAREN CAME FOR REVIEW'):
+            with self.subTest(clause=clause), self.assertRaises(ValidationError):
+                semantic.validate_value(values['cell_2'],clause)
+
+    def test_reference_requires_complete_token_not_a_punctuation_delimited_fragment(self):
+        for source in ('TEST-B942--ALT','ABC..TEST-B942','TEST-B942-ALT','TEST-B942Z','ZTEST-B942'):
+            notes='Clinic reference: '+source+'.'
+            self.assertTrue(semantic.identifier_fragment(notes,span(notes,'TEST-B942'),'Clinic reference'))
+        for source in ('TEST-B942','TEST-B942--ALT','ABC..TEST-B942'):
+            notes='Clinic reference:'+source+'. Next sentence.'
+            self.assertFalse(semantic.identifier_fragment(notes,span(notes,source),'Clinic reference'))
+
+    def test_separate_definition_response_must_match_explicit_requested_version(self):
+        from core.semantic_preparation import _require_definition_version
+        from documents.semantic_preparation_roles import DefinitionError
+        response={'fields':[{'definition':{'version':1}}]}
+        self.assertEqual(_require_definition_version(response,1),response)
+        with self.assertRaises(DefinitionError): _require_definition_version(response,2)
+        self.assertEqual(_require_definition_version({'fields':[{'definition':{'version':2}}]},2)['fields'][0]['definition']['version'],2)
 
     def test_complete_calendar_dates_validate_without_invented_printed_format(self):
         definition=self.definitions()['cell_3']
