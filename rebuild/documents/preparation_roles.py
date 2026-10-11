@@ -18,11 +18,11 @@ UNCERTAINTIES = ('none', 'constraints_unstated', 'placement_requires_review',
 METADATA_KEYS = frozenset(('label', 'data_type', 'unit', 'choices', 'destination', 'uncertainty'))
 
 
-def _fail(message):
-    raise DocumentFailure(message, 'invalid_proposal')
+def _fail(message, code='invalid_proposal'):
+    raise DocumentFailure(message, code)
 
 
-def role_schema(role):
+def role_schema(role, inventory=None):
     if role not in {'proposer', 'checker'}:
         _fail('Unsupported preparation role.')
     decision = 'decision' if role == 'proposer' else 'verdict'
@@ -38,7 +38,7 @@ def role_schema(role):
                                 'items': {'type': 'string', 'minLength': 1, 'maxLength': 2000}},
                     'destination': {'type': 'string', 'minLength': 1, 'maxLength': 128},
                     'uncertainty': {'type': 'string', 'enum': list(UNCERTAINTIES)}}}
-    return {'type': 'object', 'additionalProperties': False,
+    schema = {'type': 'object', 'additionalProperties': False,
             'required': ['inventory_sha256', 'anchors', 'stories'], 'properties': {
                 'inventory_sha256': {'type': 'string'},
                 'anchors': {'type': 'array', 'maxItems': 100, 'items': {
@@ -51,6 +51,14 @@ def role_schema(role):
                     'required': ['story_id', 'content_sha256', 'verdict'], 'properties': {
                         'story_id': {'type': 'string'}, 'content_sha256': {'type': 'string'},
                         'verdict': {'type': 'string', 'enum': ['retain', 'unresolved']}}}}}}
+    if inventory is not None:
+        areas = source_role_areas(inventory)
+        item = schema['properties']['anchors']['items']['properties']
+        item['anchor_id']['enum'] = [area['anchor_id'] for area in areas]
+        item['question_id']['enum'] = list(dict.fromkeys(area['question_id'] for area in areas))
+        metadata['properties']['destination']['enum'] = list(dict.fromkeys(
+            destination for area in areas for destination in area['allowed_destination_ids']))
+    return schema
 
 
 def _source_metadata(inventory, anchor):
@@ -141,6 +149,22 @@ def role_rows(inventory, role):
     return rows
 
 
+def source_role_areas(inventory):
+    """Code-derived physical IDs, distinct from semantic answer field keys.
+
+    The schema enumerates the finite union; validation still checks the exact
+    per-anchor association, including ambiguous placement and signing policy.
+    """
+    areas = []
+    for anchor in inventory.get('anchors', []) if isinstance(inventory, dict) else []:
+        metadata, destinations = _source_metadata(inventory, anchor)
+        areas.append({'anchor_id': anchor['id'], 'question_id': anchor['question_id'],
+                      'source_metadata': metadata, 'allowed_destination_ids': destinations})
+    if not areas:
+        _fail('The original inventory has no finite physical answer areas.')
+    return areas
+
+
 def validate_metadata_row(inventory, anchor, row):
     """Role agreement cannot authorize fabricated metadata or destinations."""
     expected, destinations = _source_metadata(inventory, anchor)
@@ -160,7 +184,7 @@ def validate_metadata_row(inventory, anchor, row):
             or any(not isinstance(choice, str) for choice in metadata['choices'])):
         _fail('The proposed field metadata is not the closed structured schema.')
     if metadata['destination'] not in destinations:
-        _fail('The proposed destination is not one of the original finite answer areas.')
+        _fail('The proposed destination is not one of the original finite answer areas.', 'invalid_destination')
     expected['destination'] = metadata['destination']
     if metadata != expected:
         _fail('The proposed field metadata differs from the original question, constraints or protection.')

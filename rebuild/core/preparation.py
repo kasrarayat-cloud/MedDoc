@@ -23,6 +23,8 @@ from . import word_contract
 
 MAX_OUTPUT = 2500
 OUTPUT_PROFILE = 'inventory-sized-typed-v1'
+DESTINATION_PROFILE = 'finite-physical-destinations-v1'
+DESTINATION_KEY = 'word_preparation_destinations'
 MAX_TYPED_OUTPUT = 16000
 ROLE_LIMIT = Decimal('0.10')
 TOTAL_SECONDS = 180
@@ -53,7 +55,17 @@ SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'pr
                'source_changed', 'source_unavailable', 'parser_timeout', 'parser_failed',
                'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
                'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure',
-               'output_limit', 'invalid_response', 'provider_not_configured'}
+               'output_limit', 'invalid_response', 'provider_not_configured', 'invalid_destination'}
+
+
+def finite_destinations(inventory, config):
+    # Historical requests retain their exact shape. Unknown explicit profiles
+    # cannot downgrade to unrestricted strings or create an AI reservation.
+    if config is None or DESTINATION_KEY not in config:
+        return False
+    if config[DESTINATION_KEY] != DESTINATION_PROFILE or inventory.get('protocol') != TYPED_PROTOCOL:
+        raise DocumentError('Unsupported explicit physical destination profile.', 'invalid_proposal')
+    return True
 
 def feature_enabled():
     return settings.WORD_PREPARATION_ENABLED
@@ -132,7 +144,7 @@ def timing_limits(inventory, config=None):
 def role_schema(role, protocol=None, inventory=None, config=None):
     if protocol == TYPED_PROTOCOL:
         from documents.preparation_roles import role_schema as typed_role_schema
-        schema = typed_role_schema(role)
+        schema = typed_role_schema(role, inventory if finite_destinations(inventory, config) else None)
         if inventory and config and word_contract.active(inventory, config):
             from documents.semantic_preparation_roles import role_schema as definition_schema
             schema['required'].append('answer_definitions')
@@ -153,6 +165,9 @@ def role_schema(role, protocol=None, inventory=None, config=None):
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
+    if finite_destinations(inventory, config):
+        from documents.preparation_roles import source_role_areas
+        result['physical_answer_areas'] = source_role_areas(inventory)
     if config and word_contract.active(inventory, config):
         result['answer_definition_inventory'] = word_contract.inventory_for(inventory)
     if role == 'checker': result['proposal'] = proposal
@@ -217,6 +232,20 @@ def provider_request(inventory, role, config, proposal=None):
             'A Date of birth label without a printed format remains text with constraints_unstated. '
             '(5) Otherwise retain the exact established number, integer, date or choice metadata '
             'and use uncertainty none. Model agreement never authorizes document writing.')
+    if finite_destinations(inventory, config):
+        instructions += (' Physical answer IDs and semantic field keys are DIFFERENT namespaces. '
+            'For each anchor use physical_answer_areas: copy source_metadata exactly, choosing destination '
+            'only from that SAME anchor\'s allowed_destination_ids. For existing, literal_blank and '
+            'protected_blank anchors, the sole physical destination is anchor_id. For choose_cell use '
+            'only one of its offered physical choice IDs and retain placement_requires_review. '
+            'A semantic permitted_destination.field_key belongs only inside answer_definitions; '
+            'NEVER put a semantic field key into anchors[].metadata.destination. Do not change '
+            'physical generic text metadata to match a semantic answer type. '
+            'For semantic text definitions, a single concern, impression, duration or relative review '
+            'interval requests an atomic answer. Use narrative only when the question requests a '
+            'description, history, findings, plan or list; being text alone does not make a field narrative. '
+            'Questions about conditions, medicines, allergies or symptoms must allow documented absence '
+            'as well as presence (polarity any), unless the original explicitly requests positive findings only. ')
     if word_contract.active(inventory, config):
         from documents.semantic_preparation_roles import role_instructions
         instructions += (' Separately return answer_definitions from answer_definition_inventory. Physical metadata '
@@ -301,7 +330,7 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
     classes={'BadRequestError','AuthenticationError','PermissionDeniedError','NotFoundError','ConflictError',
              'UnprocessableEntityError','RateLimitError','InternalServerError','APIStatusError','APIConnectionError',
              'APITimeoutError','APIResponseValidationError','TypeError','ValueError','JSONDecodeError',
-             'ValidationError','DocumentError','KeyboardInterrupt','SystemExit'}
+             'ValidationError','DocumentError','DocumentFailure','KeyboardInterrupt','SystemExit'}
     status=attr('status_code');request_id=attr('request_id');body=attr('body')
     code=body.get('error',{}).get('type') if isinstance(body,dict) and isinstance(body.get('error'),dict) else None
     types={'invalid_request_error','authentication_error','permission_error','not_found_error','request_too_large',
@@ -339,6 +368,9 @@ def failure_explanation(prep, receipts):
         'invalid_proposal': ('The proposed mapping or answer definitions were incomplete or did not match the original questions, constraints or protected areas. '
                              'Ask support to inspect the retained proposal; this attempt does not establish that '
                              'the original form is unsupported.'),
+        'invalid_destination': ('The AI selected an answer location outside the original field’s allowed locations. '
+                                'Nothing was approved or moved. The returned response and usage are retained; '
+                                'ask support to inspect the physical destination contract before starting a separate preparation.'),
         'incomplete_proposal': ('The returned mapping or original-content check omitted a required area. '
                                'Ask support to inspect the retained result before starting a separate preparation.'),
     }
@@ -482,7 +514,8 @@ def create_preparation(template, actor):
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
     config={**config, 'word_preparation_protocol': TYPED_PROTOCOL,
-            'word_preparation_output_profile': OUTPUT_PROFILE}
+            'word_preparation_output_profile': OUTPUT_PROFILE,
+            DESTINATION_KEY: DESTINATION_PROFILE}
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
