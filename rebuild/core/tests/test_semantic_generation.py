@@ -1043,6 +1043,304 @@ class SemanticSourceScaleContractTests(SimpleTestCase):
                 self.assertFalse(answer['reviewed'])
 
 
+class SemanticNumberWordTests(SimpleTestCase):
+    def configured(self, label='Pain score0 to 10'):
+        fields = [{'key': 'answer', 'label': label, 'locator': {'cell': 0}}]
+        return fields, default_definitions(fields)
+
+    def measured(self, notes, quote='six', *, scale_quote='out of ten', minimum=None,
+                 maximum='10', label='Pain score0 to 10', polarity='affirmed'):
+        fields, definitions = self.configured(label)
+        scale = None if scale_quote is None else {'minimum': minimum, 'maximum': maximum,
+                                                  'span': span(notes, scale_quote)}
+        facts = [fact(notes, fields, 'pain', quote, kind='measurement', concept='pain_score',
+                      polarity=polarity, scale=scale)]
+        selected = assignments(fields, {'answer': ['pain']})
+        return fields, definitions, facts, selected
+
+    def test_exact_six_out_of_ten_becomes_typed_six_with_original_word_evidence(self):
+        notes = 'The patient rates the right wrist pain as six out of ten.'
+        fields, definitions, facts, selected = self.measured(notes)
+        before = deepcopy(facts)
+        sender = FixtureSender(facts, selected)
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('6', 6, 'supported'))
+        self.assertIs(type(answer['value']), int)
+        self.assertFalse(answer['reviewed'])
+        retained = answer['facts'][0]
+        self.assertEqual(retained['value_evidence'], {**span(notes, 'six'), 'quote': 'six'})
+        self.assertEqual(retained['scale']['evidence'], {**span(notes, 'out of ten'), 'quote': 'out of ten'})
+        self.assertIsNone(retained['scale']['minimum'])
+        self.assertEqual(retained['scale']['maximum'], '10')
+        self.assertEqual(answer['scale'], {'scale_minimum': '0', 'scale_maximum': '10'})
+        self.assertEqual(answer['evidence'], [{'start': 0, 'end': len(notes), 'quote': notes}])
+        self.assertEqual(facts, before)
+        self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls],
+                         [('extractor', 1), ('assigner', 1), ('checker', 1)])
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+        for changed in ('text', 'value', 'source_quote'):
+            modified = deepcopy(answer)
+            if changed == 'text': modified['text'] = 'Six'
+            elif changed == 'value': modified['value'] = 6.0
+            else: modified['facts'][0]['value_evidence']['quote'] = '6'
+            with self.subTest(changed=changed), self.assertRaises(ValidationError):
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], modified)
+
+    def test_digit_and_word_score_and_scale_combinations_use_same_source_binding(self):
+        for expression, value, scale_quote in [
+                ('six out of 10', 'six', 'out of 10'), ('6 out of ten', '6', 'out of ten'),
+                ('SIX out of TEN', 'SIX', 'out of TEN'), ('six/ten', 'six', '/ten'),
+                ('six / ten', 'six', '/ ten'),
+                ('six on a ten-point scale', 'six', 'ten-point scale'),
+                ('zero out of ten', 'zero', 'out of ten'), ('nine out of ten', 'nine', 'out of ten')]:
+            notes = 'The patient rates pain '+expression+'.'
+            fields, definitions, facts, selected = self.measured(notes, value, scale_quote=scale_quote)
+            with self.subTest(expression=expression):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                expected = {'zero': 0, 'nine': 9}.get(value, 6)
+                self.assertEqual((answer['text'], answer['value'], answer['status']), (str(expected), expected, 'supported'))
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_explicit_word_range_preserves_source_minimum_and_legacy_digit_range(self):
+        for expression, scale_quote in [('six on a zero to ten scale', 'zero to ten'),
+                                        ('six on a 0-10 scale', '0-10'),
+                                        ('six on a 0–10 scale', '0–10')]:
+            notes = 'The patient rates pain '+expression+'.'
+            fields, definitions, facts, selected = self.measured(notes, scale_quote=scale_quote, minimum='0')
+            with self.subTest(expression=expression):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), ('6', 6, 'supported'))
+                self.assertEqual(answer['facts'][0]['scale']['minimum'], '0')
+                facts[0]['scale']['minimum'] = None
+                with self.assertRaises(ValidationError):
+                    semantic.run(notes, fields, definitions, FixtureSender(facts, selected))
+
+    def test_supported_two_word_and_hyphenated_integers_retain_whole_value_span(self):
+        for value, expected in [('twenty one', 21), ('twenty-one', 21), ('twenty  one', 21),
+                                ('ninety nine', 99), ('ninety', 90), ('nineteen', 19)]:
+            notes = 'The patient reports '+value+' episodes.'
+            fields, definitions = self.configured('Episode count')
+            definitions['answer']['value_type'] = 'integer'
+            facts = [fact(notes, fields, 'episodes', value, kind='measurement')]
+            selected = assignments(fields, {'answer': ['episodes']})
+            with self.subTest(value=value):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), (str(expected), expected, 'supported'))
+                self.assertEqual(answer['facts'][0]['value_evidence']['quote'], value)
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_partial_compounds_signed_words_and_fractions_refuse_before_assignment(self):
+        for expression, selected_value in [
+                ('six hundred', 'six'), ('one hundred and six', 'six'), ('sixty six', 'six'),
+                ('sixty-six', 'sixty'), ('twenty one', 'twenty'), ('six point five', 'six'),
+                ('one point six', 'six'), ('six and a half', 'six'),
+                ('minus six', 'six'), ('negative six', 'six'), ('plus six', 'six'),
+                ('- six', 'six'), ('−six', 'six'), ('6 hundred', '6')]:
+            notes = 'The patient rates pain '+expression+' out of ten.'
+            fields, definitions, facts, selected = self.measured(notes, selected_value)
+            sender = FixtureSender(facts, selected)
+            with self.subTest(expression=expression), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_full_unsupported_numeric_expressions_remain_held_without_partial_conversion(self):
+        for quote in ('one hundred', 'six point five', 'minus six', 'six and a half'):
+            notes = 'The patient reports '+quote+' episodes.'
+            fields, definitions = self.configured('Episode count')
+            definitions['answer']['value_type'] = 'number'
+            facts = [fact(notes, fields, 'episodes', quote, kind='measurement')]
+            selected = assignments(fields, {'answer': ['episodes']})
+            with self.subTest(quote=quote):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value']), ('', None))
+                self.assertNotEqual(answer['status'], 'supported')
+
+    def test_scale_free_fragments_cannot_be_normalized_into_exact_counts(self):
+        fields, definitions = self.configured('Episode count')
+        definitions['answer']['value_type'] = 'integer'
+        for expression, quote in [('six hundred', 'six'), ('sixty six', 'six'),
+                                  ('six point five', 'six'), ('six and a half', 'six'),
+                                  ('six-and-a-quarter', 'six'), ('six and a third', 'six'),
+                                  ('six and one-hundredth', 'six'), ('six and one-millionth', 'six'),
+                                  ('six and one-zillionth', 'six'), ('six and one-second', 'six'),
+                                  ('minus six', 'six'), ('- six', 'six'), ('– six', 'six'),
+                                  ('half of six', 'six'), ('about six', 'six'),
+                                  ('six to seven', 'six'), ('six or seven', 'six'),
+                                  ('six hundred', 'six '), ('minus six', ' six')]:
+            notes = 'The patient reports '+expression+' episodes.'
+            facts = [fact(notes, fields, 'count', quote, kind='measurement')]
+            sender = FixtureSender(facts, assignments(fields, {'answer': ['count']}))
+            with self.subTest(expression=expression), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_compound_word_denominator_keeps_exact_whole_scale_value(self):
+        notes = 'The patient rates pain twenty one out of ninety nine.'
+        fields, definitions, facts, selected = self.measured(notes, 'twenty one',
+            scale_quote='out of ninety nine', maximum='99', label='Pain score0 to 99')
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('21', 21, 'supported'))
+        self.assertEqual(answer['facts'][0]['value_evidence']['quote'], 'twenty one')
+        self.assertEqual(answer['facts'][0]['scale']['evidence']['quote'], 'out of ninety nine')
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_teen_denominators_match_whole_words_before_shorter_prefixes(self):
+        for word, maximum in [('eleven', 11), ('twelve', 12), ('thirteen', 13), ('fourteen', 14),
+                              ('fifteen', 15), ('sixteen', 16), ('seventeen', 17), ('eighteen', 18), ('nineteen', 19)]:
+            notes = 'The patient rates pain six out of '+word+'.'
+            fields, definitions, facts, selected = self.measured(notes, scale_quote='out of '+word,
+                maximum=str(maximum), label='Pain score0 to '+str(maximum))
+            with self.subTest(word=word):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), ('6', 6, 'supported'))
+                self.assertEqual(answer['facts'][0]['scale']['maximum'], str(maximum))
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_unicode_boundaries_hidden_signs_and_fraction_tails_cannot_clip_to_integer(self):
+        fields, definitions = self.configured('Episode count')
+        definitions['answer']['value_type'] = 'integer'
+        for expression, quote in [('six½', 'six'), ('six.5', 'six'), ('six,5', 'six'),
+                                  ('six\u0301', 'six'), ('six_teen', 'six'), ('−\u200bsix', 'six'),
+                                  ('minus\u200b six', 'six'), ('－six', 'six'),
+                                  ('six-to-ten', 'six'), ('six–ten', 'six'), ('six – ten', 'six'),
+                                  ('one-third', 'one'), ('two-thirds', 'two'), ('three fifths', 'three')]:
+            notes = 'The patient reports '+expression+' episodes.'
+            facts = [fact(notes, fields, 'count', quote, kind='measurement')]
+            sender = FixtureSender(facts, assignments(fields, {'answer': ['count']}))
+            with self.subTest(expression=expression), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_count_and_separate_hyphenated_duration_are_not_a_compound_number(self):
+        fields, definitions = self.configured('Episode count')
+        definitions['answer']['value_type'] = 'integer'
+        for value, modifier, expected in [('3', 'one-hour', 3), ('3', '1-hour', 3),
+                                          ('six', 'one-hour', 6), ('six', 'one-second', 6)]:
+            notes = 'The patient reports '+value+' '+modifier+' episodes.'
+            facts = [fact(notes, fields, 'count', value, kind='measurement')]
+            selected = assignments(fields, {'answer': ['count']})
+            with self.subTest(value=value, modifier=modifier):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), (str(expected), expected, 'supported'))
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_unscaled_word_ratio_is_not_an_integer_count(self):
+        for slash in ('/', '⁄', '∕'):
+            for gap in ('', ' '):
+                notes = 'The patient reports six'+gap+slash+gap+'ten episodes.'
+                fields, definitions = self.configured('Episode count')
+                definitions['answer']['value_type'] = 'integer'
+                facts = [fact(notes, fields, 'count', 'six', kind='measurement')]
+                selected = assignments(fields, {'answer': ['count']})
+                with self.subTest(slash=slash, gap=gap), self.assertRaises(ValidationError):
+                    semantic.run(notes, fields, definitions, FixtureSender(facts, selected))
+        for ratio in ('six/ten', 'six / ten'):
+            notes = 'The patient reports '+ratio+' episodes.'
+            scale_quote = ratio[3:].lstrip()
+            facts = [fact(notes, fields, 'count', 'six', kind='measurement',
+                          scale={'minimum': None, 'maximum': '10', 'span': span(notes, scale_quote)})]
+            answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+            self.assertEqual((answer['text'], answer['value']), ('', None))
+            self.assertIn('A source ratio requires its explicitly documented matching approved measurement scale.', answer['review_reasons'])
+
+    def test_denominator_cannot_be_clipped_from_another_ratio_or_range(self):
+        for suffix in ('/three', ' / three', '⁄three', ' ⁄ three', '–twenty', ' – twenty',
+                       ' to twenty', ' through twenty', ' out of twenty', '½', ' ½'):
+            notes = 'The patient rates pain six out of ten'+suffix+'.'
+            fields, definitions, facts, selected = self.measured(notes)
+            sender = FixtureSender(facts, selected)
+            with self.subTest(suffix=suffix), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_plural_and_ordinal_fraction_prefixes_cannot_be_dropped(self):
+        fields, definitions = self.configured('Episode count')
+        definitions['answer']['value_type'] = 'integer'
+        for prefix in ('two thirds of', 'three quarters of', 'one fifth of', 'two-thirds of',
+                       'one third of', 'half of', 'three fourths of', 'one tenth of',
+                       'one twenty-first of', 'two thirty seconds of', 'one hundredth of'):
+            notes = 'The patient reports '+prefix+' six episodes.'
+            facts = [fact(notes, fields, 'count', 'six', kind='measurement')]
+            sender = FixtureSender(facts, assignments(fields, {'answer': ['count']}))
+            with self.subTest(prefix=prefix), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_word_scale_cannot_supply_zero_rescale_or_borrow_another_measurement(self):
+        for notes, quote, scale_quote, minimum, maximum in [
+                ('The patient rates pain six out of ten.', 'six', 'out of ten', '0', '10'),
+                ('The patient rates pain six out of five.', 'six', 'out of five', None, '10'),
+                ('The patient rates pain six out of one hundred.', 'six', 'out of one hundred', None, '1'),
+                ('The patient rates pain six out of ten point five.', 'six', 'out of ten point five', None, '10'),
+                ('The patient rates pain six out of five and anxiety two out of ten.', 'six', 'out of ten', None, '10'),
+                ('The patient rates pain six out of ten.', 'ten', 'out of ten', None, '10')]:
+            fields, definitions, facts, selected = self.measured(notes, quote, scale_quote=scale_quote,
+                                                                minimum=minimum, maximum=maximum)
+            with self.subTest(notes=notes, value=quote), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, FixtureSender(facts, selected))
+        notes = 'The patient rates pain six out of twenty.'
+        fields, definitions, facts, selected = self.measured(notes, scale_quote='out of twenty', maximum='20')
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((answer['text'], answer['value']), ('', None))
+        self.assertIn('The source scale differs from or does not establish the approved scale.', answer['review_reasons'])
+
+    def test_negative_uncertain_and_other_subject_word_values_remain_held(self):
+        for notes, polarity, subject in [
+                ('The patient denies pain six out of ten.', 'affirmed', 'patient'),
+                ('The patient denies pain six out of ten.', 'negated', 'patient'),
+                ('The patient reports possible pain six out of ten.', 'uncertain', 'patient'),
+                ('The patient reports pain six out of ten.', 'affirmed', 'uncertain')]:
+            fields, definitions, facts, selected = self.measured(notes, polarity=polarity)
+            facts[0]['subject']['kind'] = subject
+            with self.subTest(notes=notes, polarity=polarity, subject=subject):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual((answer['text'], answer['value']), ('', None))
+                self.assertNotEqual(answer['status'], 'supported')
+
+    def test_word_and_digit_peers_agree_but_conflicting_value_or_scale_stays_held(self):
+        for later, maximum, expected_status in [('6', '10', 'supported'), ('seven', '10', 'conflict'), ('six', '20', 'conflict')]:
+            notes = 'The patient rates pain six out of ten. The patient now rates pain '+later+' out of '+maximum+'.'
+            fields, definitions, facts, selected = self.measured(notes)
+            facts += [fact(notes, fields, 'later', later, concept='pain_score', kind='measurement',
+                           occurrence=1 if later == 'six' else 0,
+                           scale={'minimum': None, 'maximum': maximum, 'span': span(notes, 'out of '+maximum)})]
+            with self.subTest(later=later, maximum=maximum):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+                self.assertEqual(answer['status'], expected_status)
+                if expected_status == 'supported': self.assertEqual(answer['value'], 6)
+                else:
+                    self.assertEqual((answer['text'], answer['value']), ('', None))
+                    self.assertEqual(len(answer['evidence']), 2)
+
+    def test_explicit_word_correction_supersedes_only_old_measurement_and_preserves_both_facts(self):
+        notes = 'The patient rates pain three out of ten. The patient corrects the pain score: actually six out of ten.'
+        fields, definitions, facts, selected = self.measured(notes, 'three')
+        facts += [fact(notes, fields, 'corrected', 'six', kind='measurement', concept='pain_score', supersedes=['pain'],
+                       scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', 1)})]
+        selected = assignments(fields, {'answer': ['corrected']})
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('6', 6, 'supported'))
+        self.assertEqual({item['value_evidence']['quote'] for item in answer['facts']}, {'three', 'six'})
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+        selected = assignments(fields, {'answer': ['pain']})
+        held = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((held['text'], held['value']), ('', None))
+        self.assertIn('This fact was explicitly corrected by later source documentation.', held['review_reasons'])
+
+    def test_narrative_fields_require_full_word_measurement_phrase_and_do_not_convert_words(self):
+        notes = 'The patient reports pain six out of ten.'
+        fields, definitions, facts, selected = self.measured(notes, label='History')
+        held = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((held['text'], held['value']), ('', None))
+        facts += [fact(notes, fields, 'summary', 'pain six out of ten', kind='history', concept='pain_score')]
+        selected = assignments(fields, {'answer': ['summary']})
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, selected))['answer']
+        self.assertEqual((answer['text'], answer['value'], answer['status']),
+                         ('Pain six out of ten', 'Pain six out of ten', 'supported'))
+        self.assertEqual(answer['facts'][0]['value_evidence']['quote'], 'six')
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+
 class SemanticSourceReferenceTests(SimpleTestCase):
     def test_exact_api_references_round_trip_to_canonical_original_character_offsets(self):
         fields, _, facts, _ = alex_case()

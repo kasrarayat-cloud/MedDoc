@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.forms import UserCreationForm
+from django.db.models import Case, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.utils import timezone
 from .models import User, Department, Patient, TemplateVersion, Membership, latest_service_date
 from .security import departments
@@ -40,16 +41,34 @@ class PatientForm(ScopedForm):
     display_name=forms.CharField(max_length=140)
     reference=forms.CharField(max_length=100)
     synthetic_only=forms.BooleanField(label='This is a synthetic test patient.')
+
+
+CURRENT_MAPPING_ERROR=('This form has a newer or unavailable approved mapping. Choose its current '
+                       'version below before creating the document. Your entered notes are retained.')
+
+
+def current_template_versions():
+    """One usable version per form; an approved semantic form cannot fall back to legacy."""
+    semantic=Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})
+    preferred=TemplateVersion.objects.filter(template_id=OuterRef('template_id')).order_by(
+        Case(When(semantic,then=Value(0)),default=Value(1),output_field=IntegerField()),'-number')
+    # Choose before checking approval completeness: corrupt semantic metadata must
+    # withhold the form, rather than silently select an older contract.
+    return TemplateVersion.objects.filter(pk=Subquery(preferred.values('pk')[:1])).filter(
+        Q(semantic_preparation__isnull=True,semantic_definitions={})|
+        (Q(semantic_preparation__state='approved')&~Q(semantic_definitions={})))
+
+
 class EncounterForm(ScopedForm):
     patient=forms.ModelChoiceField(queryset=Patient.objects.none())
-    template_version=forms.ModelChoiceField(queryset=TemplateVersion.objects.none(),label='Template and mapping version')
+    template_version=forms.ModelChoiceField(queryset=TemplateVersion.objects.none(),label='Template and current mapping version',error_messages={'invalid_choice':CURRENT_MAPPING_ERROR})
     notes=forms.CharField(label='Type source notes (or add voice next)',required=False,widget=forms.Textarea(attrs={'rows':9}),max_length=50000,help_text='Type documented facts here, or leave this blank to record or upload audio after creating the document. Review is required before export.')
     service_date=forms.DateField(label='Date of service or discharge',widget=forms.DateInput(attrs={'type':'date'}),help_text='The date the service was provided, in your local time. Diagnosis codes are validated against the ICD-10-CM release in effect on that date, not the date you write the note. Check it if your clinic is not on UTC; it cannot be changed afterwards.')
     synthetic_only=forms.BooleanField(label='These are synthetic clinical notes.')
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,user=user,**kwargs)
         self.fields['patient'].queryset=Patient.objects.filter(department__in=departments(user)).select_related('department')
-        self.fields['template_version'].queryset=TemplateVersion.objects.filter(template__department__in=departments(user)).select_related('template').order_by('template__name','-number')
+        self.fields['template_version'].queryset=current_template_versions().filter(template__department__in=departments(user)).select_related('template').order_by('template__name','-number')
         self.fields['service_date'].initial=timezone.localdate()
     def clean_service_date(self):
         service_date=self.cleaned_data['service_date']

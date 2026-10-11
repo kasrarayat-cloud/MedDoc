@@ -8,6 +8,7 @@ Historical extractive protocols never enter this module.
 import hashlib
 import json
 import re
+import unicodedata
 from copy import deepcopy
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -27,6 +28,16 @@ SEPARATORS = ('; ', '\n', '')
 STATES = ('supported', 'missing', 'conflict', 'ambiguous')
 VERDICTS = ('pass', 'missing', 'conflict', 'ambiguous', 'incorrect', 'omission', 'unrelated')
 BOUND_KEYS = ('minimum', 'maximum', 'scale_minimum', 'scale_maximum')
+NUMERIC_LITERAL = r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)'
+NUMBER_WORDS = dict(zip(('zero one two three four five six seven eight nine ten eleven twelve thirteen '
+                        'fourteen fifteen sixteen seventeen eighteen nineteen').split(), range(20)))
+NUMBER_TENS = dict(zip('twenty thirty forty fifty sixty seventy eighty ninety'.split(), range(20, 100, 10)))
+NUMBER_WORD_PATTERN = (r'(?:'+ '|'.join(NUMBER_TENS)+r')(?:(?:\s+|-)(?:'+
+                       '|'.join(list(NUMBER_WORDS)[1:10])+r'))?|(?:'+'|'.join(sorted(NUMBER_WORDS, key=len, reverse=True))+r')')
+SOURCE_NUMBER_PATTERN = r'(?:'+NUMERIC_LITERAL+r'|'+NUMBER_WORD_PATTERN+r')'
+FRACTION_WORD_PATTERN = (
+    r'(?:half|halves|quarters?|(?:third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|thirtieth|fortieth|fiftieth|sixtieth|seventieth|eightieth|ninetieth|hundredth|thousandth|millionth|billionth|trillionth)s?'
+    r'|(?:'+'|'.join(NUMBER_TENS)+r')(?:\s+|-)(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)s?)')
 
 
 def digest(value):
@@ -63,6 +74,90 @@ def _decimal(value):
         return result
     except (ValueError, InvalidOperation):
         _fail('A finite numeric value is required.')
+
+
+def _source_number(value):
+    """Read a complete source number, without changing its retained quotation.
+
+    The word grammar is deliberately finite: unsigned English integers 0–99.
+    Fractions, spoken decimals, magnitudes and signed words need clinician review.
+    Approved bounds still use the existing strict decimal representation.
+    """
+    text = ' '.join(value.split()).casefold()
+    if re.fullmatch(NUMERIC_LITERAL, text): return _decimal(text)
+    if not re.fullmatch(NUMBER_WORD_PATTERN, text): return None
+    parts = re.split(r'[ -]', text)
+    return Decimal(NUMBER_WORDS[text] if len(parts) == 1 and text in NUMBER_WORDS
+                   else NUMBER_TENS[parts[0]]+(NUMBER_WORDS[parts[1]] if len(parts) == 2 else 0))
+
+
+def _number_fragment(notes, value, *, scale_bound=False, score_scale=False, terminal_bound=False):
+    """Refuse a recognized number cut out of a larger or signed expression."""
+    from .generation import readings
+    quoted = value['quote']
+    quote = quoted.strip()
+    start = value['start']+len(quoted)-len(quoted.lstrip())
+    end = value['end']-(len(quoted)-len(quoted.rstrip()))
+    components = (r'(?:'+'|'.join((*NUMBER_WORDS, *NUMBER_TENS))+
+                  r'|hundred|thousand|million|billion|trillion|point|decimal|'+FRACTION_WORD_PATTERN+r'|\d+(?:\.\d+)?)')
+    # A withholding check takes the union of the existing raw/visible readers.
+    # Hidden formatting must not conceal a sign or join two number components.
+    for before in readings(notes[:start]):
+        for after in readings(notes[end:]):
+            left, right = before.rstrip(), after.lstrip()
+            for adjacent, edge in ((before[-1:], quote[:1]), (after[:1], quote[-1:])):
+                if adjacent and edge and (adjacent=='_' or unicodedata.category(adjacent)[0] in 'LMN'
+                                          or unicodedata.category(adjacent)=='Cf'):
+                    return True
+            if quote[:1].isdigit() and before[-1:]=='.' or re.match(r'^[.,]\d', after):
+                return True
+            range_before = scale_bound and re.search(r'[-–—]\s*$', before)
+            if (not range_before and re.search(r'\b'+components+r'(?:\s+and)?[\s-]+$', before, re.I)
+                    or re.search(r'\b(?:minus|negative|plus|positive)\s+$', before, re.I)
+                    or not range_before and re.search(r'[+−–—-]\s*$', unicodedata.normalize('NFKC', before))):
+                return True
+            # "ten-point scale" is a scale expression; "ten point five" is a decimal.
+            point_scale = scale_bound and re.match(r'^[- ]point\s+scale\b', after, re.I)
+            range_after = scale_bound and re.match(r'^\s*[-–—]\s*'+SOURCE_NUMBER_PATTERN, after, re.I)
+            if not re.fullmatch(NUMERIC_LITERAL, quote):
+                if (before[-1:] and unicodedata.category(before[-1:])=='Pd' and not range_before
+                        or after[:1] and unicodedata.category(after[:1])=='Pd' and not (point_scale or range_after)):
+                    return True
+                if left[-1:] in ('⁄','∕') or right[:1] in ('⁄','∕'): return True
+                if not scale_bound and not score_scale and (left[-1:]=='/' or right[:1]=='/'):
+                    return True
+                if right[:1] and right[0].isnumeric() and not right[0].isdecimal(): return True
+                if (not scale_bound and re.match(r'^[-–—]\s*'+SOURCE_NUMBER_PATTERN+r'\b', right, re.I)):
+                    return True
+            if terminal_bound and re.match(r'^(?:[/⁄∕]|[-–—]\s*'+SOURCE_NUMBER_PATTERN+
+                    r'\b|(?:to|through|or|out\s+of)\s+'+SOURCE_NUMBER_PATTERN+r'\b)', right, re.I):
+                return True
+            following = re.match(r'^[\s-]+(?P<conjunction>and[\s-]+)?(?P<component>'+components+r')\b', after, re.I)
+            if not point_scale and not range_after and following:
+                # A separate "one-hour" modifier does not make the preceding
+                # complete count3 a compound number ("3 one-hour episodes").
+                modifier = after[following.end():]
+                separate_modifier = (not following['conjunction'] and _source_number(following['component']) is not None
+                    and re.match(r'-(?:second|minute|hour|day|week|month|year)s?\b', modifier, re.I))
+                if not separate_modifier: return True
+            if re.match(r'^[\s-]+and[\s-]+a[\s-]+'+FRACTION_WORD_PATTERN+r'\b', after, re.I): return True
+            if re.search(r'\b'+FRACTION_WORD_PATTERN+r'\s+of\s+$', before, re.I): return True
+            if re.search(r'\b(?:about|around|approximately|roughly|nearly|almost|over|under|at\s+least|at\s+most|more\s+than|less\s+than)\s+$', before, re.I):
+                return True
+            if not scale_bound and (re.match(r'^\s+(?:to|through|or)\s+'+SOURCE_NUMBER_PATTERN+r'\b', after, re.I)
+                    or re.search(r'\b'+SOURCE_NUMBER_PATTERN+r'\s+(?:to|through|or)\s+$', before, re.I)):
+                return True
+    return False
+
+
+def _source_bound_present(notes, evidence, bound):
+    # Overlap is intentional: the dash in "0-10" separates bounds, whereas in
+    # "-10" it is a sign. The exact expression matcher below decides which.
+    for match in re.finditer(r'(?=('+SOURCE_NUMBER_PATTERN+r'))', evidence['quote'], re.I):
+        value = {'start': evidence['start']+match.start(1), 'end': evidence['start']+match.end(1), 'quote': match.group(1)}
+        if not _number_fragment(notes, value, scale_bound=True) and _source_number(match.group(1)) == bound:
+            return True
+    return False
 
 
 def protected(field):
@@ -149,7 +244,7 @@ def _scope_issues(fact, contexts):
         issues.append('A historical scope was presented as current.')
     if re.search(r'\b(?:if|suppose|imagine|hypothetical|would)\b', own['quote'], re.I):
         issues.append('Conditional or hypothetical source needs clinician interpretation.')
-    if not re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)',value['quote'].strip()):
+    if _source_number(value['quote']) is None:
         # Finite omission guards supplement the independent semantic checker.
         # They do not claim a general clinical grammar: hold a selected fragment
         # when adjacent source words explicitly qualify its severity or site.
@@ -174,7 +269,7 @@ def _same_subject(first, second):
 
 def _measurement_scale(notes, value, contexts, proposed, span):
     """Bind a score to its own stated scale, never another number nearby."""
-    number = r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)'
+    number = SOURCE_NUMBER_PATTERN
     patterns = (
         re.compile(r'(?P<score>'+number+r')\s*(?:out\s+of|/)\s*(?P<maximum>'+number+r')', re.I),
         re.compile(r'(?P<score>'+number+r')\s+(?:on|using)\s+(?:a\s+|an\s+)?(?P<minimum>'+number+r')\s*(?:to|[-–—])\s*(?P<maximum>'+number+r')(?:\s+scale)?', re.I),
@@ -188,13 +283,17 @@ def _measurement_scale(notes, value, contexts, proposed, span):
                 if (context['start']+start, context['start']+end) != (value['start'], value['end']): continue
                 maximum_start, maximum_end = match.span('maximum')
                 if not span['start'] <= context['start']+maximum_start < context['start']+maximum_end <= span['end']: continue
+                maximum = {'start': context['start']+maximum_start, 'end': context['start']+maximum_end, 'quote': match.group('maximum')}
+                if _number_fragment(notes, maximum, scale_bound=True, terminal_bound=True): continue
                 minimum = match.groupdict().get('minimum')
                 if minimum is not None:
                     lo_start, lo_end = match.span('minimum')
                     if not span['start'] <= context['start']+lo_start < context['start']+lo_end <= span['end']: continue
-                if (proposed['maximum'] is None or _decimal(proposed['maximum']) != _decimal(match.group('maximum'))
+                    lower = {'start': context['start']+lo_start, 'end': context['start']+lo_end, 'quote': minimum}
+                    if _number_fragment(notes, lower, scale_bound=True): continue
+                if (proposed['maximum'] is None or _decimal(proposed['maximum']) != _source_number(match.group('maximum'))
                         or (minimum is None) != (proposed['minimum'] is None)
-                        or minimum is not None and _decimal(proposed['minimum']) != _decimal(minimum)):
+                        or minimum is not None and _decimal(proposed['minimum']) != _source_number(minimum)):
                     _fail('The proposed measurement scale changes its exact source bounds.')
                 return
     _fail('The measurement value and scale are not explicitly bound in the same source expression.')
@@ -248,6 +347,8 @@ def validate_facts(notes, units, result):
         contexts = [{k: by_unit[i][k] for k in ('start', 'end', 'quote')} for i in ids]
         value = _span(notes, raw['value_span'])
         if not _inside(value, contexts): _fail('The fact value is outside its complete source context.')
+        if _source_number(value['quote']) is not None and _number_fragment(notes, value, score_scale=raw['scale'] is not None):
+            _fail('A numeric source value cannot select a fragment of a compound or signed number.')
         if (value['quote'][:1].isdigit() and notes[value['start']-1:value['start']] in ('-', '+', '.', '−')):
             _fail('A numeric source value must retain its sign and leading decimal point.')
         if re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)', value['quote']):
@@ -282,7 +383,7 @@ def validate_facts(notes, units, result):
             for bound in ('minimum', 'maximum'):
                 if scale[bound] is not None:
                     number = _decimal(scale[bound])
-                    if not re.search(r'(?<![\d.])'+re.escape(format(number, 'f'))+r'(?![\d.])', scale_span['quote']):
+                    if not _source_bound_present(notes, scale_span, number):
                         _fail('A scale bound is absent from its exact source evidence.')
             _measurement_scale(notes, value, contexts, scale, scale_span)
             scale = {**scale, 'evidence': scale_span}
@@ -319,8 +420,11 @@ def validate_facts(notes, units, result):
     return facts
 
 
-def _render_fact(fact):
+def _render_fact(fact, definition=None):
     value = ' '.join(fact['value_evidence']['quote'].split())
+    if definition and definition['value_type'] in ('integer', 'number') and not re.fullmatch(NUMERIC_LITERAL, value):
+        number = _source_number(value)
+        if number is not None: return format(number, 'f')
     return value[:1].upper()+value[1:]
 
 
@@ -377,7 +481,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
         if (row['status'] == 'missing') != (not picked): reasons.append('Missing information cannot carry an asserted value.')
         for f in picked:
             if f['id'] in superseded: reasons.append('This fact was explicitly corrected by later source documentation.')
-            if d['value_type']=='text' and re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)',f['value_evidence']['quote'].strip()):
+            if d['value_type']=='text' and _source_number(f['value_evidence']['quote']) is not None:
                 reasons.append('A narrative answer needs the complete documented measurement phrase, preserving its clinical label, units and scale; a bare numeric fact is insufficient.')
             if d['scope']['subject'] in ('patient', 'clinician', 'other') and f['subject']['kind'] != d['scope']['subject']:
                 reasons.append('The fact subject does not match the approved field scope.')
@@ -390,7 +494,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
             if {'affirmed','negated'} <= {x['polarity'] for x in peers}:
                 reasons.append('The notes contain contradictory positive and negative facts for this concept.')
                 competing.extend(peers)
-        text = row['separator'].join(_render_fact(f) for f in picked)
+        text = row['separator'].join(_render_fact(f, d) for f in picked)
         typed = None
         try: typed = validate_value(d, text, field)
         except ValidationError as exc: reasons.extend(exc.messages)
@@ -400,6 +504,10 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
                 if f['polarity'] != 'affirmed': reasons.append('A numeric value cannot discard negation or uncertainty.')
                 if d['unit'] != f['unit']: reasons.append('The source and approved measurement units differ; no conversion was authorized.')
                 b = d['constraints']
+                e = f['value_evidence']
+                if (not re.fullmatch(NUMERIC_LITERAL, e['quote'].strip()) and b['scale_maximum'] is None
+                        and (notes[:e['start']].rstrip().endswith('/') or notes[e['end']:].lstrip().startswith('/'))):
+                    reasons.append('A source ratio requires its explicitly documented matching approved measurement scale.')
                 if b['scale_maximum'] is not None:
                     if f['scale'] is None or f['scale']['maximum'] is None or _decimal(f['scale']['maximum']) != _decimal(b['scale_maximum']):
                         reasons.append('The source scale differs from or does not establish the approved scale.')
@@ -408,9 +516,10 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
                     reasons.append('The explicitly stated source scale minimum differs from the approved scale.')
                 peers = [x for x in facts.values() if x['id'] not in superseded and x['concept'].casefold() == f['concept'].casefold()
                          and _same_subject(x['subject'], f['subject']) and x['timing']['kind'] == f['timing']['kind'] and not x['issues']
-                         and re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)',x['value_evidence']['quote'].strip())]
-                measurement=lambda x:(_decimal(x['value_evidence']['quote'].strip()),x['unit'],
-                    tuple((x['scale'] or {}).get(k) for k in ('minimum','maximum')))
+                         and _source_number(x['value_evidence']['quote']) is not None]
+                measurement=lambda x:(_source_number(x['value_evidence']['quote']),x['unit'],
+                    tuple(_decimal((x['scale'] or {})[k]) if (x['scale'] or {}).get(k) is not None else None
+                          for k in ('minimum','maximum')))
                 if len({measurement(x) for x in peers}) > 1:
                     reasons.append('The notes contain conflicting values for this measurement.')
                     competing.extend(peers)
@@ -495,11 +604,14 @@ _api_fact['scale']['anyOf'][0]['properties']['span'] = deepcopy(SOURCE_REFERENCE
 _api_fact['value_span']['description'] = (
     'Exact self-contained source value. Retain a documented causal or timing connector '
     'in an injury/event phrase, for example after stepping off a curb yesterday. '
-    'A typed numeric measurement selects only its numeric value; source scale metadata is separate.')
+    'A typed numeric measurement selects only its exact numeric value, retaining source words such as six unchanged; '
+    'code normalizes complete English integers zero through ninety-nine only in approved numeric fields. '
+    'Never select part of a compound, signed or fractional number. Source scale metadata is separate.')
 _api_scale = _api_fact['scale']['anyOf'][0]
 _api_scale['description'] = (
     'Only bounds explicitly stated in this measurement source expression, never approved field constraints. '
-    'For 3 out of 10 or 3/10, minimum is null and maximum is "10". '
+    'For 3 out of 10, 3/10, or six out of ten, minimum is null and maximum is "10". '
+    'Bounds use decimal strings even when their exact source evidence uses number words; never change the stated scale. '
     'For 3 on a 1 to 10 scale, minimum is "1" and maximum is "10". '
     'If the notes state no scale, scale is null.')
 _api_scale['properties']['minimum']['description'] = (
@@ -534,7 +646,12 @@ EXTRACT_INSTRUCTIONS = ('Extract individual clinical/document facts from the ORI
     '(e.g. in one week), not the whole source sentence as the value. Evidence retains the whole context separately. '
     'For an injury or event history, retain its documented causal or timing connector in the self-contained value phrase: '
     'after stepping off a curb yesterday, before the fall, or since last week; do not detach the event from that relationship. '
-    'For a measurement, select only the numeric numerator/value, never its denominator. The scale span must retain its complete explicit range or out-of phrase, '
+    'For a measurement, select only the exact numeric numerator/value, never its denominator. Keep number words unchanged in source references: '
+    'six out of ten selects value quote six and scale quote out of ten, with minimum null and maximum "10". '
+    'Code alone normalizes complete English integers zero through ninety-nine for approved numeric fields. '
+    'Never select a fragment of a larger, signed, fractional or decimal number; unsupported expressions require review. '
+    'Scale bounds use decimal strings for the exact documented number, including a stated number word, without scale conversion. '
+    'The scale span must retain its complete explicit range or out-of phrase, '
     'bound to this same value. Explicitly preserve units and the stated scale with evidence. Do not assume or convert a scale. '
     'Source scale metadata and approved field constraints are different. For 3 out of 10, 3/10, or 3 on a 10-point scale, '
     'set scale.minimum to null and scale.maximum to "10": no source lower bound was stated. '
@@ -695,7 +812,7 @@ def validate_stored_answer(notes, field, definition, answer):
         fresh = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]})[field['key']]
         if fresh['status'] != 'supported': _fail('The stored answer no longer satisfies its source, scope or type constraints.')
-        expected = answer['separator'].join(_render_fact(facts[i]) for i in ids)
+        expected = answer['separator'].join(_render_fact(facts[i], definition) for i in ids)
         if answer.get('text') != expected: _fail('A generated answer differs from its grounded fact values.')
         typed=validate_value(definition, expected, field)
         if type(typed) is not type(answer.get('value')) or typed!=answer.get('value'): _fail('The stored typed value differs from its displayed answer.')
