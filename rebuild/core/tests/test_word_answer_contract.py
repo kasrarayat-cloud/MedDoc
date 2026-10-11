@@ -208,6 +208,17 @@ class FreshWordContractTests(SimpleTestCase):
             with self.assertRaises(ValueError): preparation.call_role(packet,'proposer',time.monotonic()+360)
         reserve.assert_not_called();client.assert_not_called()
 
+    def test_local_provider_configuration_failure_has_no_reservation_or_send(self):
+        from documents import DocumentError
+        import time
+        packet=SimpleNamespace(inventory=self.inv,config={**self.config,'mode':'live','input_rate':'3','output_rate':'15','cached_rate':'0.3'})
+        with patch('anthropic.Anthropic',side_effect=ValueError('synthetic unavailable configuration')) as client, \
+                patch('core.testing_authority.reserve_role') as reserve:
+            with self.assertRaises(DocumentError) as raised:
+                preparation.call_role(packet,'proposer',time.monotonic()+360)
+        self.assertEqual(raised.exception.code,'provider_not_configured')
+        reserve.assert_not_called();client.assert_called_once()
+
 
 @override_settings(WORD_PREPARATION_ENABLED=True, AI_MODE='fixture', ADMIN_SITE=False,
     TESTING_AUTHORITY_MODE='', TESTING_AUTHORITY_ID='', TESTING_AUTHORITY_SHA256='',
@@ -295,12 +306,13 @@ class OrdinaryClinicianWordTests(TestCase):
         template=Template.objects.create(department=dept,name='Unavailable foreign form',format='docx',
             original_name='missing.docx',original_path='missing.docx',sha256='a'*64,created_by=self.user)
         foreign=TemplateVersion.objects.create(template=template,number=1,fields=self.source.fields,created_by=self.user)
-        actual=word_contract.require_generation
+        from core import semantic_preparation
+        actual=semantic_preparation.validated_semantic_definitions
         seen=[]
         def inspect(version):
             seen.append(version.pk)
             if version.pk==foreign.pk: raise AssertionError('Foreign mapping was evaluated')
             return actual(version)
-        with patch.object(word_contract,'require_generation',side_effect=inspect):
-            self.assertEqual(list(EncounterForm(user=self.user).fields['template_version'].queryset),[])
+        with patch.object(semantic_preparation,'validated_semantic_definitions',side_effect=inspect):
+            self.assertEqual([v.pk for v in EncounterForm(user=self.user).fields['template_version'].queryset],[self.source.pk])
         self.assertNotIn(foreign.pk,seen)

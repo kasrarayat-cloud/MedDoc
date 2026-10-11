@@ -53,7 +53,7 @@ SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'pr
                'source_changed', 'source_unavailable', 'parser_timeout', 'parser_failed',
                'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
                'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure',
-               'output_limit', 'invalid_response'}
+               'output_limit', 'invalid_response', 'provider_not_configured'}
 
 def feature_enabled():
     return settings.WORD_PREPARATION_ENABLED
@@ -228,7 +228,7 @@ def provider_request(inventory, role, config, proposal=None):
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
     return envelope
 
-def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None):
+def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None,prepared_client=None):
     payload = role_payload(inventory, role, proposal,
                            source_review_context=source_review_mode(config), config=config)
     if config['mode'] != 'live':
@@ -255,8 +255,8 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
         raise ValidationError('Blank preparation currently requires the configured Anthropic provider.')
     from anthropic import Anthropic
     envelope = prepared_request if prepared_request is not None else provider_request(inventory, role, config, proposal)
-    client = Anthropic(timeout=timeout, max_retries=0)
-    response = client.messages.create(**envelope)
+    client = prepared_client if prepared_client is not None else Anthropic(timeout=timeout, max_retries=0)
+    response = client.messages.create(**envelope, timeout=timeout)
     raw = response.model_dump(mode='json')
     original_evidence={'model':getattr(response,'model',None),'request_id':getattr(response,'_request_id','') or '',
                        'resource_id':getattr(response,'id',''),'usage':raw.get('usage'),
@@ -323,6 +323,8 @@ def failure_explanation(prep, receipts):
     if not prep.error_code or prep.state != 'blocked':
         return ''
     messages = {
+        'provider_not_configured': ('The preparation provider could not be configured locally. No request was sent or reserved. '
+                                    'Ask support to check the provider configuration, then start a separate preparation.'),
         'output_limit': ('The AI reached its output limit before completing the mapping and original-content check. '
                          'The incomplete result was not adopted. Its response and computed usage are retained. '
                          'Ask support to check the output allowance before starting a separate preparation; '
@@ -371,6 +373,14 @@ def call_role(prep, role, deadline, proposal=None):
     # Local schema/instruction construction is completed before reservation or
     # send admission; a local refusal cannot create an uncertain provider hold.
     request = provider_request(prep.inventory, role, prep.config, proposal) if prep.config['mode'] == 'live' else None
+    client = None
+    if request is not None:
+        try:
+            from anthropic import Anthropic
+            client = Anthropic(timeout=role_seconds, max_retries=0)
+        except Exception:
+            raise DocumentError('The preparation provider could not be configured; no request was sent or reserved.',
+                                'provider_not_configured') from None
     quote_input = request if request is not None and word_contract.active(prep.inventory, prep.config) else payload
     quoted = maximum_cost(quote_input, prep.config,max_output)
     from . import testing_authority
@@ -416,7 +426,7 @@ def call_role(prep, role, deadline, proposal=None):
             if remaining<3:raise DocumentError('Preparation reached its time limit before a provider request started.', 'deadline')
             provider_invoked=True
             response, evidence = provider_role(prep.inventory, role, prep.config, min(role_seconds, remaining), proposal,observed,
-                **({'prepared_request':request} if request is not None else {}))
+                **({'prepared_request':request, 'prepared_client':client} if request is not None else {}))
             stage='response_validation'
             if (not isinstance(evidence['model'],str) or not 0<len(evidence['model'])<=100
                     or any(not isinstance(evidence[k],str) or len(evidence[k])>140 for k in ('request_id','resource_id'))

@@ -76,3 +76,35 @@ classification, identifier spelling/boundaries, whole-clause values, Unicode nam
 calendar dates, degree-unit spelling, and version-preserving definition review.
 Finished-diff refutation, qualification and installed acceptance will be appended
 only after their actual results exist.
+
+## Qualification and refutation before installation
+
+The first full PostgreSQL fixture run retained 1,545 tests with 137 failures,
+44 errors and nine skips. Independent classification found nine supported
+manual tab-form admission regressions, one incomplete fixture packet, and
+171 historical untyped Word admission mismatches/downstream effects. Manual
+creation is now separate from AI admission: it validates any present semantic
+contract without requiring one for manual entry. AI quote/enqueue still refuse
+missing definitions before provider reservation. No generation fallback was reopened.
+
+Generic opaque-byte authorization/accounting fixtures now use the unchanged PDF
+protocol; explicit real Word fixture consumers retain DOCX. Older single-call
+Word compatibility suites have a narrowly scoped, documented test-only historical
+admission mock. Their results are not fresh semantic acceptance. The unmocked
+ordinary-clinician fresh-upload suite remains separate. The CI seed now uses
+supported simulated preparation/explicit approval; simulated note agents leave
+facts missing, and the browser's separate manual-entry coverage is labelled as
+such. It cannot be cited as automatic semantic extraction success.
+
+Independent finished-candidate passes on `2b6272c0ac62c665005727b1398fc834c4c28c38`
+retained 55 mapping controls, 38 value/evidence controls and 12 version controls.
+The earlier counterexamples (clipped repeated-punctuation identifiers, whole
+all-caps name clauses and separate-v2 downgrades) are now refused or held for
+review. A further product-stage finding demonstrated local SDK configuration
+failure creating an uncertain hold with zero HTTP sends. Client construction is
+now completed before reservation/send admission; this prospective fix does not
+reclassify historical unknown usage. Revised finished-diff checks are pending.
+
+The document-engine suite passed all 147 tests without provider calls. Full-core
+v2, complete browser qualification, merged-revision installation and public HTTPS
+fresh-upload acceptance remain pending at this report revision.

@@ -34,7 +34,10 @@ class SyntheticFixture:
         Membership.objects.create(user=user, department=department, role="clinician")
         patient = Patient.objects.create(department=department, display_name=f"SYNTHETIC {label}", reference=label, created_by=user)
         blob = f"synthetic {label} original".encode() if original_bytes is None else original_bytes
-        template = Template.objects.create(department=department, name=label, format="docx", original_name="synthetic.docx", original_path=f"originals/{label}.docx", sha256=hashlib.sha256(blob).hexdigest(), created_by=user)
+        # Opaque bytes exercise authorization/accounting, not Word preparation.
+        # Keep this single-call legacy protocol fixture outside semantic Word admission.
+        kind = 'docx' if original_bytes is not None else 'pdf'
+        template = Template.objects.create(department=department, name=label, format=kind, original_name=f"synthetic.{kind}", original_path=f"originals/{label}.{kind}", sha256=hashlib.sha256(blob).hexdigest(), created_by=user)
         version = TemplateVersion.objects.create(template=template, number=1, fields=[{"key": "symptoms", "label": "Symptoms", "kind": "text", "locator": {"cell": 0}}], created_by=user)
         encounter = Encounter.objects.create(department=department, patient=patient, template_version=version, created_by=user, service_date=timezone.localdate(), notes="Symptoms: no chest pain", answers={"symptoms": {"text": "no chest pain", "status": "supported", "reviewed": True, "evidence": []}})
         welcome_credit(user)

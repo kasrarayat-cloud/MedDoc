@@ -36,9 +36,9 @@ class StandingAuthorityPostgresTests(TransactionTestCase):
     def config(self,kind='preparation',**extra):
         return {**authority.active_config({'mode':'live','provider':'anthropic','model':SETTINGS['AI_MODEL']},kind),**extra}
 
-    def template(self):
+    def template(self,kind='docx'):
         return Template.objects.create(department=self.department,created_by=self.doctor,name='Authorized synthetic blank',
-            format='docx',original_name='blank.docx',original_path='synthetic-not-read.docx',sha256='a'*64)
+            format=kind,original_name='blank.'+kind,original_path='synthetic-not-read.'+kind,sha256='a'*64)
 
     def preparation(self,config=None):
         return self.raw_insert(TemplatePreparation,template=self.template(),requested_by=self.doctor,
@@ -49,7 +49,8 @@ class StandingAuthorityPostgresTests(TransactionTestCase):
             requested_model=SETTINGS['AI_MODEL'],request_sha256='b'*64,quote_maximum=extra.pop('quote_maximum',Decimal('2.50')),**extra)
 
     def encounter(self):
-        version=TemplateVersion.objects.create(template=self.template(),number=1,created_by=self.doctor)
+        # This is financial/actor admission, not a Word semantic-quality fixture.
+        version=TemplateVersion.objects.create(template=self.template('pdf'),number=1,created_by=self.doctor)
         return Encounter.objects.create(patient=self.patient,department=self.department,created_by=self.doctor,
             template_version=version,notes='Synthetic documented source only',service_date=timezone.now().date())
 

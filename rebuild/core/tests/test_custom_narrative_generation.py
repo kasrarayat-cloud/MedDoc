@@ -1,4 +1,4 @@
-"""Ordinary custom forms accept complete narrative evidence, never rewritten facts.
+"""Retained sentence-copying protocol compatibility; not fresh semantic acceptance.
 
 The eight-field mapping and synthetic note reproduce the actual retained
 failure. All provider responses below are local fixtures; no request is sent.
@@ -41,7 +41,7 @@ def judged(notes, fields, selected=None, conflicts=()):
 
 
 class CustomNarrativeEvidenceTests(SimpleTestCase):
-    def test_actual_narrative_populates_all_eight_approved_fields_with_exact_evidence(self):
+    def test_retained_sentence_contract_reproduces_wrong_specific_values_with_exact_evidence(self):
         fields_before = copy.deepcopy(FIELDS)
         self.assertEqual(hashlib.sha256(NOTES.encode()).hexdigest(),
                          '07f55572e09e0cb646700e3621d68efb4ee19b5a61570f72d5a92006c1cb7340')

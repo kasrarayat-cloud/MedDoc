@@ -56,7 +56,7 @@ def current_template_versions(*, department_ids=None):
     # Choose before checking approval completeness: corrupt semantic metadata must
     # withhold the form, rather than silently select an older contract.
     from django.core.exceptions import ValidationError
-    from .word_contract import require_generation
+    from .semantic_preparation import validated_semantic_definitions
     candidates = TemplateVersion.objects.filter(pk=Subquery(preferred.values('pk')[:1])).select_related(
         'template', 'preparation', 'semantic_preparation__source_version__template')
     if department_ids is not None:
@@ -64,7 +64,9 @@ def current_template_versions(*, department_ids=None):
     usable = []
     for version in candidates:
         try:
-            require_generation(version)
+            # Manual entry remains available on historical physical mappings.
+            # A present semantic contract must still validate, without downgrade.
+            validated_semantic_definitions(version)
             usable.append(version.pk)
         except (ValidationError, ValueError):
             pass  # Withhold incomplete current contracts; never select an older version.

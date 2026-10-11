@@ -347,7 +347,13 @@ def template_detail(request,pk):
         approved_definitions = {}
         answer_contract_ready = False
         answer_contract_error = error_message(exc)
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'answer_contract_ready':answer_contract_ready,'answer_contract_error':answer_contract_error,'approved_definitions':approved_definitions,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+    from .semantic_preparation import validated_semantic_definitions
+    try:
+        validated_semantic_definitions(version)
+        manual_form_allowed = True
+    except ValidationError:
+        manual_form_allowed = False
+    return render(request,'template_detail.html',{'manual_form_allowed':manual_form_allowed,'template':t,'version':version,'form':form,'answer_contract_ready':answer_contract_ready,'answer_contract_error':answer_contract_error,'approved_definitions':approved_definitions,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -377,8 +383,8 @@ def encounter_new(request):
             if current is None or current.pk!=data['template_version'].pk:
                 form.add_error('template_version',CURRENT_MAPPING_ERROR)
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)
-            from .word_contract import require_generation
-            try: require_generation(current)
+            from .semantic_preparation import validated_semantic_definitions
+            try: validated_semantic_definitions(current)
             except ValidationError as exc:
                 form.add_error('template_version', error_message(exc))
                 return render(request,'encounter_form.html',{'form':form,'has_patients':form.fields['patient'].queryset.exists()},status=409)

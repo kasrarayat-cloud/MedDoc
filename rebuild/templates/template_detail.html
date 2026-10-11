@@ -2,7 +2,7 @@
 {% block title %}{{ template.name }}{% endblock %}
 {% block breadcrumb %}Form library <span>/</span> Mapping{% endblock %}
 {% block content %}
-<div class="page-heading"><div><div class="eyebrow">Form setup · {{ template.format|upper }}</div><h1>{{ template.name }}</h1><p>Check the original alongside its detected answer fields before using this form.</p></div><div class="actions"><a href="{% url 'dashboard' %}#templates">Back to forms</a>{% if answer_contract_ready %}<a class="button" href="{% url 'encounter_new' %}?template={{ template.pk }}">Use this form <span aria-hidden="true">→</span></a>{% endif %}</div></div>
+<div class="page-heading"><div><div class="eyebrow">Form setup · {{ template.format|upper }}</div><h1>{{ template.name }}</h1><p>Check the original alongside its detected answer fields before using this form.</p></div><div class="actions"><a href="{% url 'dashboard' %}#templates">Back to forms</a>{% if manual_form_allowed %}<a class="button" href="{% url 'encounter_new' %}?template={{ template.pk }}">Use this form{% if not answer_contract_ready %} manually{% endif %} <span aria-hidden="true">→</span></a>{% endif %}</div></div>
 {% if answer_contract_error %}<p class="notice warning" data-answer-contract-required>{{ answer_contract_error }}</p>{% endif %}
 <ol class="step-list" aria-label="Form setup"><li>1. Upload original</li><li class="current" aria-current="step">2. Check answer fields</li><li>3. Use form</li></ol>
 {% if template.warnings %}<div class="notice warning"><strong>Form inspection notes</strong><ul>{% for warning in template.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}

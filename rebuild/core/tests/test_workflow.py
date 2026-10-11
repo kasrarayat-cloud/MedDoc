@@ -1,4 +1,9 @@
-"""Complete private workflows using synthetic files and the real document sandbox."""
+"""Historical single-call Word review/export compatibility, using the real sandbox.
+
+The explicit test-only admission below represents earlier releases' untyped
+Word jobs. These cases cannot establish fresh Word semantic acceptance; that
+unmocked route lives in test_word_answer_contract. PDF admission is unchanged.
+"""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -8,6 +13,7 @@ import json
 from pathlib import Path
 import re
 import tempfile
+from unittest.mock import patch
 from zipfile import ZipFile
 
 from django.core import mail
@@ -35,6 +41,15 @@ TEST_SETTINGS = {
 @override_settings(**TEST_SETTINGS)
 class DocumentWorkflow(TestCase):
     def setUp(self):
+        from core.word_contract import require_generation, CONFIG_KEY
+        def historical_admission(version):
+            if (version.template.format == 'docx' and not getattr(version,'semantic_definitions',{})
+                    and not getattr(version,'semantic_preparation_id',None)
+                    and CONFIG_KEY not in (getattr(getattr(version,'preparation',None),'config',{}) or {})):
+                return {}  # Retained earlier-release one-call contract only.
+            return require_generation(version)
+        admission=patch('core.word_contract.require_generation',side_effect=historical_admission)
+        admission.start(); self.addCleanup(admission.stop)
         self.directory = tempfile.TemporaryDirectory()
         self.override = override_settings(MEDIA_ROOT=Path(self.directory.name) / "private")
         self.override.enable()
@@ -125,7 +140,7 @@ class DocumentWorkflow(TestCase):
         self.assertEqual(hashlib.sha256(exported).hexdigest(), encounter.export_sha256)
         return exported
 
-    def test_word_upload_generate_review_export_and_finalization_guards(self):
+    def test_historical_word_generation_review_export_and_finalization_guards(self):
         original = self.make_docx()
         template, mapping = self.upload(original, "docx")
         encounter = self.create_encounter(mapping, "Symptoms: No chest pain.\nExamination: Normal gait.")

@@ -137,13 +137,15 @@ class PersonalSyntheticTestingPostgresTests(TransactionTestCase):
             result[authority.ACTOR_ENROLLMENT_KEY] = authority.ACTOR_ENROLLMENT
         return {**result, **extra}
 
-    def template(self, creator=None):
+    def template(self, creator=None, kind='docx'):
         return Template.objects.create(department=self.department, created_by=creator or self.actor,
-            name='SYNTHETIC personal blank fixture', format='docx', original_name='synthetic.docx',
-            original_path='synthetic-fixture-not-read.docx', sha256='a' * 64)
+            name='SYNTHETIC personal blank fixture', format=kind, original_name='synthetic.'+kind,
+            original_path='synthetic-fixture-not-read.'+kind, sha256='a' * 64)
 
     def encounter(self, creator=None, approved_shared=False):
-        template = self.template(self.owner)
+        # Admission-only jobs use the existing PDF protocol; Word preparation
+        # tests keep their real format and do not claim semantic fidelity here.
+        template = self.template(self.owner, kind='docx' if approved_shared else 'pdf')
         preparation = None
         if approved_shared:
             preparation = authority.create_preparation(template, self.owner, self.config(enrolled=False))
@@ -204,6 +206,7 @@ class PersonalSyntheticTestingPostgresTests(TransactionTestCase):
         encounter = self.encounter(approved_shared=True)
         config = self.config('generation', enrolled=False)
         with patch('core.template_source.source_for_version') as source, \
+                patch('core.word_contract.require_generation',return_value={}), \
                 patch('core.generation.maximum_cost', return_value=Decimal('0.10')):
             job = jobs.enqueue(encounter, self.actor, config=config)
         source.assert_called_once()

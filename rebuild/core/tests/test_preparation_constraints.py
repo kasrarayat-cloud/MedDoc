@@ -44,7 +44,7 @@ class PreparationConstraintApprovalTests(SimpleTestCase):
         config = {'mode': 'fixture', 'provider': 'anthropic', 'model': 'configured-label'}
         proposal, _ = prep.provider_role(self.inv, 'proposer', config, 1)
         checker, _ = prep.provider_role(self.inv, 'checker', config, 1, proposal)
-        packet = SimpleNamespace(pk='new-preparation', template_id='synthetic-template', template=template,
+        packet = SimpleNamespace(pk='new-preparation', template_id='synthetic-template', template=template, config=config,
                                  inventory=self.inv, candidate_sha256=hashlib.sha256(self.prepared.read_bytes()).hexdigest(),
                                  candidate_path='prepared.docx', state='review', revision=0, corrections={},
                                  proposal=proposal, checker=checker, changes=self.result['changes'], save=Mock())

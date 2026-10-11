@@ -121,36 +121,35 @@ try {
     await page.getByRole('button', { name: 'Create document', exact: true }).click();
     await page.waitForURL(/\/encounters\/[0-9a-f-]+\/$/);
   });
-  await check('Generate supported answers with explicit zero fixture charge', async () => {
+  await check('Run three simulated semantic stages with explicit zero fixture charge', async () => {
     assert.equal(await page.getByText('Synthetic fixture · $0 charge. No live AI service is called.', { exact: true }).isVisible(), true);
     await page.getByRole('button', { name: 'Generate supported answers', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-latest-job]')?.textContent.includes('Ready for review'),
       null, {timeout: 40000});
     await page.locator('textarea[name^=answer_]').first().waitFor();
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
-    assert.equal(await page.locator('.evidence blockquote').count(), 3);
+    assert.equal(await page.locator('.evidence blockquote').count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Download provider result', exact: true }).count(), 1);
   });
-  await check('Supported answers retain source evidence', async () => {
+  await check('Simulated roles leave answers missing without pretending to infer clinical facts', async () => {
     const answers = await page.locator('textarea[name^=answer_]').evaluateAll(inputs => inputs.map(input => input.value));
     const evidence = await page.locator('.evidence blockquote').allTextContents();
     const expected = ['Synthetic patient reports left wrist discomfort after a fall.',
       'No deformity documented.', 'Follow-up assessment documented.'];
-    const source = ['History: '+expected[0], 'Findings: '+expected[1], 'Plan: '+expected[2]];
-    assert.deepEqual(answers, expected);
-    assert.deepEqual(evidence, source);
+    assert.deepEqual(answers, ['', '', '']);
+    assert.deepEqual(evidence, []);
     const id = page.url().match(/\/encounters\/([a-f0-9-]+)\/$/)[1];
     const response = await context.request.get(new URL('/api/encounters/'+id+'/', base).href);
     assert.equal(response.status(), 200);
     const snapshot = await response.json();
-    const points = Array.from(snapshot.notes);
     for (let index = 0; index < answers.length; index++) {
       const answer = snapshot.answers['cell_'+index];
-      assert.equal(answer.text, expected[index]);assert.equal(answer.status, 'supported');assert.equal(answer.reviewed, false);
-      assert.equal(answer.evidence.length, 1);
-      assert.equal(points.slice(answer.evidence[0].start,answer.evidence[0].end).join(''),source[index]);
-      assert.equal(answer.evidence[0].quote,source[index]);
+      assert.equal(answer.text, '');assert.equal(answer.status, 'missing');assert.equal(answer.reviewed, false);
+      assert.equal(answer.evidence.length, 0);
     }
+    // Explicit manual UI coverage, never automatic-extraction acceptance.
+    for (let index = 0; index < expected.length; index++)
+      await page.locator('textarea[name^=answer_]').nth(index).fill(expected[index]);
     await page.screenshot({ path: path.join(artifacts, 'review-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await noPageOverflow();

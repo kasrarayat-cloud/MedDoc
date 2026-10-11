@@ -14,6 +14,7 @@ class Command(BaseCommand):
         if not settings.SYNTHETIC_ONLY:raise CommandError('Synthetic-only environment required.')
         dest=settings.BASE_DIR/'.runtime'/'private-access.json'
         if dest.exists():self.stdout.write('Private credentials already exist; refusing to replace.');return
+        if settings.AI_MODE != 'fixture':raise CommandError('This private CI seed requires fixture AI mode; it never sends paid requests.')
         org=Organization.objects.create(name='Synthetic North Clinic')
         other=Organization.objects.create(name='Synthetic South Clinic')
         xray=Department.objects.create(organization=org,name='X-ray')
@@ -46,7 +47,18 @@ class Command(BaseCommand):
         doc.save(path);path.chmod(0o600)
         info=inspect_template(path)
         template=Template.objects.create(department=xray,name='Clinical assessment',format=info['format'],original_name='synthetic-assessment.docx',original_path=relative,sha256=info['sha256'],warnings=info['warnings'],created_by=doctor)
-        version=TemplateVersion.objects.create(template=template,number=1,fields=info['fields'],created_by=doctor)
+        # CI setup uses the supported approval path. It is explicitly simulated,
+        # and never serves as evidence of automatic extraction quality.
+        from django.test import override_settings
+        from core import preparation
+        with override_settings(WORD_PREPARATION_ENABLED=True):
+            prepared=preparation.create_preparation(template,doctor)
+            if not preparation.run_one():raise CommandError('Fixture preparation did not run.')
+            prepared.refresh_from_db()
+            if prepared.state!='review':raise CommandError('Fixture preparation needs review: '+prepared.error_code)
+            version=preparation.approve(prepared.pk,doctor,prepared.revision,prepared.candidate_sha256,
+                [change['anchor_id'] for change in prepared.changes],True,True,
+                [field['key'] for field in prepared.inventory['fields']])
         Encounter.objects.create(department=xray,patient=Patient.objects.get(department=xray),template_version=version,created_by=doctor,service_date=timezone.localdate(),notes='History: Synthetic patient reports left wrist discomfort after a fall.\nFindings: No deformity documented.\nPlan: Follow-up assessment documented.')
         dest.parent.mkdir(exist_ok=True,mode=0o700);dest.write_text(json.dumps(accounts,indent=2));dest.chmod(0o600)
         self.stdout.write(f'Synthetic accounts and blank template ready. Private credentials: {dest}')
