@@ -10,13 +10,13 @@ from django.core.exceptions import ValidationError
 from django.db import DatabaseError,transaction
 from django.test import TestCase,override_settings
 from django.utils import timezone
-from core import ai_stages,generation,semantic_preparation
+from core import ai_stages,generation,semantic_generation,semantic_preparation
 from core.billing import welcome_credit
 from core.jobs import enqueue,run_one
 from core.models import AIStageReceipt,Encounter,Patient,ProviderReceipt,Usage,Reservation,PlatformCost
 from core.security import private_path
 from core.tests import test_semantic_preparation as preparation_fixture
-from core.tests.test_semantic_generation import NOTES,alex_case,api_facts,checker
+from core.tests.test_semantic_generation import NOTES,alex_case,declared_api_facts,checker
 
 
 @override_settings(WORD_PREPARATION_ENABLED=True,AI_MODE='fixture',TESTING_AUTHORITY_MODE='',
@@ -58,7 +58,8 @@ class IndependentStageTests(TestCase):
                 _,_,facts,assigned=alex_case()
                 key_map={old['key']:new['key'] for old,new in zip(alex_case()[0],self.version.fields)}
                 assigned['fields']=[{**row,'key':key_map[row['key']]} for row in assigned['fields']]
-                parsed=api_facts(NOTES,payload['source_units'],facts) if role=='extractor' else assigned if role=='assigner' else checker(assigned)
+                parsed=declared_api_facts(NOTES,payload['source_units'],facts,
+                    payload.get('reference_contract',semantic_generation.LEGACY_REFERENCE_CONTRACT)) if role=='extractor' else assigned if role=='assigner' else checker(assigned)
             response=SimpleNamespace(id='msg_stage_'+str(count),_request_id='req_stage_'+str(count),model='synthetic-model',
                 model_dump=lambda **kw:{'id':'msg_stage_'+str(count),'output':parsed,'usage':{'input_tokens':10,'output_tokens':0}})
             if failure=='duplicate':response.id='msg_replayed';response._request_id='req_replayed'
