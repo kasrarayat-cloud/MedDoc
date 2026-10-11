@@ -3,6 +3,7 @@ from copy import deepcopy
 from contextlib import contextmanager, nullcontext
 from decimal import Decimal
 import json
+import os
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
