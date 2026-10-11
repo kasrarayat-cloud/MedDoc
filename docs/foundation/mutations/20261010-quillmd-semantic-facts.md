@@ -168,3 +168,29 @@ not constitute evidence of a successful public flow.
 | `collect_served_semantic_evidence_v1.py` | `bc2600cd36ee0a17f89543485e8dde0239cd15a691b606d1e8c58ce799126958` |
 | `word-review-v2/verify_word.py` | `20038119b83f6a61d44f1647957e91a5a1ecae64af030b1957a944bffd8d4355` |
 | `score-semantic-corpus-v1.mjs` | `167ce8bf9fdb7c8f060a0900e313d211c9103f2c7772aa009a81bcfd2fcf272d` |
+
+## Pre-execution verifier correction (v2)
+
+Use the following preserved v2 note/corpus/collection sources in place of their
+v1 verifier sources above. The two paid browser scripts retain the identical
+finite plan, output directories, one-submit/no-retry behavior and provider-call
+bounds. The signed UI quote contains base rates and model configuration; semantic
+pipeline bindings are added by enqueue and are checked against retained Job.config
+afterward. The read-only collector now requires all twelve uniquely identified
+same-release cases and both separately approved preparations, with their actual
+source/mapping bindings. A missing corpus cannot produce a completion report.
+The v1 sources remain retained and were never executed against the public service.
+No application source, native operator, static delta or testing authority changes.
+
+| Replacement verifier | SHA-256 |
+| --- | --- |
+| `public-semantic-notes-v2.mjs` | `8ec6e7de16d5e1bb13774795530eae6291c91fefaddc0a2f13d6856275b4fad2` |
+| `public-semantic-corpus-v2.mjs` | `70729e0613cf3b207abd620d79e132df2a3fbd3fdaee2b990b747ade3427cbef` |
+| `collect_served_semantic_evidence_v2.py` | `4b464ceeebd92e006637e9a01e37d7efb2875fca34069f4441f57c62ba4d6a24` |
+| `public-verifier-v2-independent-qualification-v1.json` | `53035c1ba6c2f59e8e37f652a0be142c427a2cc7eea070cd5daca0596372d2c7` |
+
+Independent pure qualification ran the actual collector's pre-database input
+checks: one complete positive population and 56 refused negative populations.
+Exact byte comparisons show that each browser v2 only removes the impossible
+pre-enqueue metadata assertions. Syntax checks passed. This is verifier
+qualification, not evidence of installation or live provider quality.
