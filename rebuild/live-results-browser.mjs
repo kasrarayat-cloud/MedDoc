@@ -78,7 +78,7 @@ const fresh=async()=>{
   await page.waitForFunction(()=>Boolean(window.quillmdFormState));
 };
 const reconnect=()=>page.evaluate(()=>window.dispatchEvent(new Event('online')));
-const status=async(pattern)=>{await page.waitForFunction(source=>new RegExp(source).test(document.querySelector('[data-latest-job]').textContent),pattern,{timeout:8000});};
+const status=async(pattern)=>{await page.waitForFunction(source=>new RegExp(source).test(document.querySelector('[data-latest-job]').textContent),pattern,{timeout:15000});};
 const evidence=message=>report.cases.push({passed:true,check:message});
 try{
   browser=await chromium.launch({headless:true,channel:'chromium'});report.browser_version=browser.version();
