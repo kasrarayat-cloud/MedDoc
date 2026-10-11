@@ -256,9 +256,10 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         from .semantic_preparation import validated_semantic_definitions
         from .ai_stages import pipeline_config
         definitions=validated_semantic_definitions(e.template_version)
-        from .semantic_generation import digest
+        from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT
         config=pipeline_config(config)
         config.update(semantic_template_version=str(e.template_version_id),
+            semantic_fact_reference_contract=REFERENCE_INVENTORY_CONTRACT,
             semantic_source_sha256=hashlib.sha256(e.notes.encode()).hexdigest(),
             semantic_definitions_sha256=digest(definitions))
     from . import testing_authority
@@ -581,7 +582,8 @@ def run_semantic_job(job):
         def send(role,attempt,payload,schema,instructions):
             return ai_stages.execute_stage(job=job,stage=role,attempt=attempt,payload=payload,
                 schema=schema,instructions=instructions,config=job.config)
-        answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send)
+        answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send,
+            reference_contract=job.config.get('semantic_fact_reference_contract',semantic_generation.LEGACY_REFERENCE_CONTRACT))
         for field in e.template_version.fields:
             semantic_generation.validate_stored_answer(e.notes,field,definitions[field['key']],answers[field['key']])
         result_path,result_sha=ai_stages.retain({'contract':semantic_generation.CONTRACT,'answers':answers,

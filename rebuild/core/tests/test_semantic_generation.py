@@ -101,6 +101,22 @@ def api_facts(notes, units, facts):
     return {'facts': converted}
 
 
+def inventory_api_facts(notes, units, facts):
+    """Test-only explicit v2 envelope; no legacy source-reference fallback."""
+    raw = api_facts(notes, units, facts)
+    for value in raw['facts']:
+        value.pop('source_unit_ids')
+    return {'reference_contract': semantic.REFERENCE_INVENTORY_CONTRACT, **raw}
+
+
+def declared_api_facts(notes, units, facts, reference_contract=semantic.LEGACY_REFERENCE_CONTRACT):
+    if reference_contract == semantic.LEGACY_REFERENCE_CONTRACT:
+        return api_facts(notes, units, facts)
+    if reference_contract == semantic.REFERENCE_INVENTORY_CONTRACT:
+        return inventory_api_facts(notes, units, facts)
+    raise AssertionError('The fixture cannot fall back from an unknown reference contract.')
+
+
 class FixtureSender:
     """Enforce each expected role/attempt, retaining independent input copies."""
     def __init__(self, facts, assignment, checked=None, *, repaired=None, rechecked=None):
@@ -120,7 +136,8 @@ class FixtureSender:
         if (role, attempt) != (expected_role, expected_attempt):
             raise AssertionError('Expected '+str((expected_role, expected_attempt))+'; got '+str((role, attempt)))
         if role == 'extractor' and 'quote' in schema['properties']['facts']['items']['properties']['value_span'].get('required', []):
-            return api_facts(payload['notes'], payload['source_units'], result['facts'])
+            return declared_api_facts(payload['notes'], payload['source_units'], result['facts'],
+                                      payload.get('reference_contract', semantic.LEGACY_REFERENCE_CONTRACT))
         return deepcopy(result)
 
 
@@ -1418,4 +1435,272 @@ class SemanticSourceReferenceTests(SimpleTestCase):
         changed = deepcopy(units); changed[0]['quote'] = changed[0]['quote'].replace('Alex', 'Evan')
         with self.assertRaises(ValidationError):
             semantic.resolve_source_references(NOTES, changed, raw)
+
+
+WRIST_NOTES = ('Synthetic Alex Morgan reports right wrist pain after lifting a heavy box two days ago. '
+               'The pain is six out of ten. Examination shows mild swelling of the right wrist, '
+               'intact sensation and no deformity. My assessment is right wrist pain. '
+               'The plan is a reassessment in two weeks.')
+
+
+def wrist_reference_case():
+    """The eleven retained synthetic clinical facts; no opaque provider metadata.
+
+    In the original live response every name reference points to unit 1, while
+    the redundant source_unit_ids cites only each value's own complete unit.
+    """
+    fields, definitions, _, _ = alex_case()
+    definitions['cell_0']['meaning'] = 'The documented patient name, including the documented Synthetic prefix.'
+    facts = [
+        fact(WRIST_NOTES, fields, 'f1', 'Synthetic Alex Morgan', kind='identity',
+             concept='Patient name', timing='unspecified', name_quote='Synthetic Alex Morgan'),
+        fact(WRIST_NOTES, fields, 'f2', 'right wrist pain', kind='reason', concept='Reason for visit'),
+        fact(WRIST_NOTES, fields, 'f3', 'after lifting a heavy box two days ago', kind='history',
+             concept='History of injury', timing='past', timing_quote='two days ago'),
+        fact(WRIST_NOTES, fields, 'f4', 'mild swelling of the right wrist', concept='Swelling'),
+        fact(WRIST_NOTES, fields, 'f5', 'intact sensation', concept='Sensation'),
+        fact(WRIST_NOTES, fields, 'f6', 'no deformity', concept='Deformity', polarity='negated'),
+        fact(WRIST_NOTES, fields, 'f7', 'six', kind='measurement', concept='Pain score',
+             scale={'minimum': None, 'maximum': '10', 'span': span(WRIST_NOTES, 'out of ten')}),
+        fact(WRIST_NOTES, fields, 'f8', 'The pain is six out of ten', kind='history', concept='Pain score text'),
+        fact(WRIST_NOTES, fields, 'f9', 'right wrist pain', kind='assessment', concept='Clinician assessment', occurrence=1),
+        fact(WRIST_NOTES, fields, 'f10', 'a reassessment in two weeks', kind='plan',
+             concept='Management plan', timing='future', timing_quote='in two weeks'),
+        fact(WRIST_NOTES, fields, 'f11', 'in two weeks', kind='follow_up', concept='Follow-up interval',
+             timing='future', timing_quote='in two weeks'),
+    ]
+    for selected in facts:
+        selected['subject']['name_span'] = span(WRIST_NOTES, 'Synthetic Alex Morgan')
+    assigned = assignments(fields, {'cell_0': ['f1'], 'cell_1': ['f2'], 'cell_2': ['f3', 'f8'],
+        'cell_3': ['f4', 'f5', 'f6'], 'cell_4': ['f7'], 'cell_5': ['f9'], 'cell_6': ['f10'], 'cell_7': ['f11']})
+    return fields, definitions, facts, assigned
+
+
+class SemanticReferenceInventoryTests(SimpleTestCase):
+    contract = semantic.REFERENCE_INVENTORY_CONTRACT
+
+    def resolve(self, notes, units, raw):
+        return semantic.resolve_source_references(notes, units, raw, reference_contract=self.contract)
+
+    def test_exact_retained_eleven_fact_response_derives_all_reference_units_without_changing_any_fact(self):
+        fields, definitions, facts, assigned = wrist_reference_case()
+        units = generation.source_units(WRIST_NOTES, fields)[0]
+        legacy = api_facts(WRIST_NOTES, units, facts)
+        before = deepcopy(legacy)
+        with self.assertRaisesMessage(ValidationError, 'A source reference must name a cited unit'):
+            semantic.resolve_source_references(WRIST_NOTES, units, legacy)
+        raw = inventory_api_facts(WRIST_NOTES, units, facts)
+        self.assertEqual(raw['facts'], [{k: v for k, v in value.items() if k != 'source_unit_ids'}
+                                        for value in legacy['facts']])
+        resolved = self.resolve(WRIST_NOTES, units, raw)
+        self.assertEqual([value['source_unit_ids'] for value in resolved['facts']],
+                         [[1], [1], [1], [1, 3], [1, 3], [1, 3], [1, 2], [1, 2], [1, 4], [1, 5], [1, 5]])
+        for original, current in zip(facts, resolved['facts']):
+            self.assertEqual({k: v for k, v in original.items() if k != 'source_unit_ids'},
+                             {k: v for k, v in current.items() if k != 'source_unit_ids'})
+        self.assertEqual(legacy, before)
+        self.assertEqual(semantic.validate_facts(WRIST_NOTES, units, resolved)['f7']['value_evidence']['quote'], 'six')
+        sender = FixtureSender(facts, assigned)
+        answers = semantic.run(WRIST_NOTES, fields, definitions, sender, reference_contract=self.contract)
+        expected = ['Synthetic Alex Morgan', 'Right wrist pain',
+                    'After lifting a heavy box two days ago; The pain is six out of ten',
+                    'Mild swelling of the right wrist; Intact sensation; No deformity',
+                    '6', 'Right wrist pain', 'A reassessment in two weeks', 'In two weeks']
+        self.assertEqual([answers[field['key']]['text'] for field in fields], expected)
+        self.assertEqual(answers['cell_4']['value'], 6)
+        self.assertEqual(answers['cell_4']['scale'], {'scale_minimum': '0', 'scale_maximum': '10'})
+        for field in fields:
+            answer = answers[field['key']]
+            self.assertEqual(answer['status'], 'supported')
+            self.assertFalse(answer['reviewed'])
+            semantic.validate_stored_answer(WRIST_NOTES, field, definitions[field['key']], answer)
+            for evidence in answer['evidence']:
+                self.assertEqual(WRIST_NOTES[evidence['start']:evidence['end']], evidence['quote'])
+        self.assertEqual(len(sender.calls), 3)
+        self.assertEqual(sender.calls[0][2]['reference_contract'], self.contract)
+        self.assertEqual(sender.calls[0][3], semantic.API_FACT_INVENTORY_SCHEMA)
+        self.assertEqual(sender.calls[0][4], semantic.EXTRACT_INVENTORY_INSTRUCTIONS)
+
+    def test_default_legacy_contract_keeps_original_payload_schema_instructions_and_stored_answers(self):
+        fields, definitions, facts, assigned = alex_case()
+        old = FixtureSender(facts, assigned)
+        current = FixtureSender(facts, assigned)
+        legacy_answers = semantic.run(NOTES, fields, definitions, old)
+        current_answers = semantic.run(NOTES, fields, definitions, current, reference_contract=self.contract)
+        self.assertEqual(current_answers, legacy_answers)
+        self.assertNotIn('reference_contract', old.calls[0][2])
+        self.assertEqual(old.calls[0][3], semantic.API_FACT_SCHEMA)
+        self.assertEqual(old.calls[0][4], semantic.EXTRACT_INSTRUCTIONS)
+        self.assertEqual(old.calls[1:], current.calls[1:])
+        legacy_item = semantic.API_FACT_SCHEMA['properties']['facts']['items']
+        current_item = semantic.API_FACT_INVENTORY_SCHEMA['properties']['facts']['items']
+        self.assertIn('source_unit_ids', legacy_item['required'])
+        self.assertNotIn('source_unit_ids', current_item['required'])
+        self.assertNotIn('source_unit_ids', current_item['properties'])
+        self.assertFalse(current_item['additionalProperties'])
+        self.assertEqual(semantic.EXTRACT_INVENTORY_INSTRUCTIONS.count('source_unit_ids'), 1)
+        self.assertIn('Do not return source_unit_ids.', semantic.EXTRACT_INVENTORY_INSTRUCTIONS)
+
+    def test_unknown_or_null_requested_contract_refuses_before_any_send(self):
+        fields, definitions, facts, assigned = alex_case()
+        for wrong in (None, '', 'v2', False, [], {}, 2):
+            sender = FixtureSender(facts, assigned)
+            with self.subTest(wrong=wrong), self.assertRaises(ValidationError):
+                semantic.run(NOTES, fields, definitions, sender, reference_contract=wrong)
+            self.assertEqual(sender.calls, [])
+            with self.assertRaises(ValidationError):
+                semantic.resolve_source_references(NOTES, [], {'facts': []}, reference_contract=wrong)
+            with self.assertRaises(AssertionError):
+                declared_api_facts(NOTES, [], [], wrong)
+
+    def test_response_envelopes_cannot_autodetect_switch_version_or_reintroduce_ids(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        for change in ('no_marker', 'wrong_marker', 'null_marker', 'extra', 'missing_facts', 'legacy_ids', 'missing_fact_key'):
+            raw = inventory_api_facts(NOTES, units, facts)
+            if change == 'no_marker': raw.pop('reference_contract')
+            elif change == 'wrong_marker': raw['reference_contract'] = semantic.LEGACY_REFERENCE_CONTRACT
+            elif change == 'null_marker': raw['reference_contract'] = None
+            elif change == 'extra': raw['unknown'] = True
+            elif change == 'missing_facts': raw.pop('facts')
+            elif change == 'legacy_ids': raw['facts'][0]['source_unit_ids'] = [1]
+            else: raw['facts'][0].pop('subject')
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                self.resolve(NOTES, units, raw)
+        with self.assertRaises(ValidationError):
+            semantic.resolve_source_references(NOTES, units, inventory_api_facts(NOTES, units, facts))
+        with self.assertRaises(ValidationError):
+            self.resolve(NOTES, units, api_facts(NOTES, units, facts))
+
+    def test_legacy_null_empty_duplicate_or_uncited_ids_are_still_refused_without_augmentation(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        for ids in (None, [], [1, 1], [2], [True], ['1']):
+            raw = api_facts(NOTES, units, facts)
+            raw['facts'][0]['source_unit_ids'] = ids
+            before = deepcopy(raw)
+            with self.subTest(ids=ids), self.assertRaises(ValidationError):
+                semantic.validate_facts(NOTES, units, semantic.resolve_source_references(NOTES, units, raw))
+            self.assertEqual(raw, before)
+
+    def test_every_reference_validates_exact_quote_type_unit_and_occurrence(self):
+        fields, _, facts, _ = wrist_reference_case()
+        units = generation.source_units(WRIST_NOTES, fields)[0]
+        locations = [(0, ('value_span',)), (3, ('subject', 'name_span')),
+                     (2, ('timing', 'span')), (6, ('unit_span',)), (6, ('scale', 'span'))]
+        invalid = [('quote', 'invented'), ('quote', ''), ('quote', None), ('quote', 6),
+                   ('source_unit_id', 6), ('source_unit_id', True), ('source_unit_id', '1'),
+                   ('occurrence', 0), ('occurrence', -1), ('occurrence', True),
+                   ('occurrence', 1.0), ('occurrence', '1'), ('occurrence', 50001)]
+        for fact_index, path in locations:
+            for key, value in invalid:
+                raw = inventory_api_facts(WRIST_NOTES, units, facts)
+                parent = raw['facts'][fact_index]
+                for part in path[:-1]: parent = parent[part]
+                if path == ('unit_span',):
+                    parent[path[-1]] = {'quote': 'six', 'source_unit_id': 2, 'occurrence': 1}
+                parent[path[-1]][key] = value
+                with self.subTest(path=path, key=key, value=value), self.assertRaises(ValidationError):
+                    self.resolve(WRIST_NOTES, units, raw)
+        for change in ('offsets', 'extra', 'missing', 'absent_occurrence'):
+            raw = inventory_api_facts(WRIST_NOTES, units, facts)
+            if change == 'offsets': raw['facts'][0]['value_span'] = facts[0]['value_span']
+            elif change == 'extra': raw['facts'][0]['value_span']['start'] = 0
+            elif change == 'missing': raw['facts'][0]['value_span'].pop('quote')
+            else: raw['facts'][0]['value_span']['occurrence'] = 2
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                self.resolve(WRIST_NOTES, units, raw)
+
+    def test_complete_inventory_checks_uncited_units_ids_metadata_offsets_and_order(self):
+        fields, _, facts, _ = alex_case()
+        units = generation.source_units(NOTES, fields)[0]
+        raw = inventory_api_facts(NOTES, units, facts[:1])
+        for change in ('duplicate', 'reorder', 'missing', 'id', 'bool_id', 'float_id', 'bool_offset',
+                       'float_offset', 'negative_offset', 'partial', 'quote', 'correction', 'extra', 'missing_key'):
+            changed = deepcopy(units)
+            last = changed[-1]  # Deliberately not cited by this identity fact.
+            if change == 'duplicate': changed.append(deepcopy(last))
+            elif change == 'reorder': changed.reverse()
+            elif change == 'missing': changed.pop()
+            elif change == 'id': last['id'] = 99
+            elif change == 'bool_id': last['id'] = True
+            elif change == 'float_id': last['id'] = float(last['id'])
+            elif change == 'bool_offset': last['start'] = True
+            elif change == 'float_offset': last['start'] = float(last['start'])
+            elif change == 'negative_offset': last['start'] = -1
+            elif change == 'partial':
+                last['end'] -= 1; last['quote'] = NOTES[last['start']:last['end']]
+            elif change == 'quote': last['quote'] = last['quote'].replace('week', 'month')
+            elif change == 'correction': last['correction_value'] = 'invented correction'
+            elif change == 'extra': last['unknown'] = 'extra'
+            else: last.pop('correction_value')
+            with self.subTest(change=change), self.assertRaises(ValidationError):
+                self.resolve(NOTES, changed, raw)
+
+    def test_repeated_unicode_identity_refs_deduplicate_and_keep_explicit_occurrence(self):
+        fields = [{'key': 'answer', 'label': 'Patient name', 'locator': {'cell': 0}}]
+        notes = 'Synthetic Élise 王 and Synthetic Élise 王 are present.'
+        selected = fact(notes, fields, 'identity', 'Synthetic Élise 王', kind='identity', occurrence=1)
+        selected['subject']['name_span'] = deepcopy(selected['value_span'])
+        units = generation.source_units(notes, fields)[0]
+        raw = inventory_api_facts(notes, units, [selected])
+        self.assertEqual(raw['facts'][0]['value_span']['occurrence'], 2)
+        self.assertEqual(self.resolve(notes, units, raw)['facts'], [selected])
+        for wrong in ('Synthetic E\u0301lise 王', 'synthetic Élise 王', 'Synthetic  Élise 王'):
+            changed = deepcopy(raw); changed['facts'][0]['subject']['name_span']['quote'] = wrong
+            with self.subTest(wrong=wrong), self.assertRaises(ValidationError): self.resolve(notes, units, changed)
+
+    def test_derived_references_do_not_relax_other_person_timing_or_unit_attribution(self):
+        fields = [{'key': 'answer', 'label': 'Findings', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        examples = [
+            ('The mother reports a headache. Examination shows swelling.',
+             {'quote': 'swelling', 'subject': 'other', 'name_quote': 'mother'}, 'named other person'),
+            ('The patient was examined yesterday. Examination shows swelling.',
+             {'quote': 'swelling', 'timing': 'past', 'timing_quote': 'yesterday'}, 'timing annotation'),
+            ('The patient has 3 lesions. The largest lesion is 5 mm.',
+             {'quote': '3', 'kind': 'measurement', 'unit': 'mm', 'unit_quote': 'mm'}, 'measurement unit'),
+        ]
+        for notes, values, reason in examples:
+            selected = fact(notes, fields, 'value', **values)
+            assigned = assignments(fields, {'answer': ['value']})
+            sender = FixtureSender([selected], assigned)
+            with self.subTest(reason=reason):
+                answer = semantic.run(notes, fields, definitions, sender, reference_contract=self.contract)['answer']
+                self.assertEqual((answer['text'], answer['status']), ('', 'conflict'))
+                self.assertIn(reason, ' '.join(answer['review_reasons']))
+                self.assertFalse(answer['reviewed'])
+
+    def test_derived_reference_inventory_preserves_negative_and_partial_number_refusal(self):
+        fields = [{'key': 'answer', 'label': 'Episode count', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields); definitions['answer']['value_type'] = 'integer'
+        for expression in ('six and a half', 'six / ten', 'two thirds of six', '−\u200bsix'):
+            notes = 'The patient reports '+expression+' episodes.'
+            selected = fact(notes, fields, 'value', 'six', kind='measurement')
+            sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+            with self.subTest(expression=expression), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender, reference_contract=self.contract)
+            self.assertEqual(len(sender.calls), 1)
+        fields = [{'key': 'answer', 'label': 'Findings', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        notes = 'Examination shows no deformity.'
+        selected = fact(notes, fields, 'value', 'deformity')
+        sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+        answer = semantic.run(notes, fields, definitions, sender, reference_contract=self.contract)['answer']
+        self.assertEqual((answer['text'], answer['status']), ('', 'conflict'))
+
+    def test_fixture_stage_returns_only_its_declared_contract_without_medical_inference(self):
+        self.assertEqual(semantic.fixture_stage('extractor', {}), {'facts': []})
+        self.assertEqual(semantic.fixture_stage('extractor', {'reference_contract': self.contract}),
+                         {'reference_contract': self.contract, 'facts': []})
+        for wrong in (None, '', 'unknown', False):
+            with self.subTest(wrong=wrong), self.assertRaises(ValidationError):
+                semantic.fixture_stage('extractor', {'reference_contract': wrong})
+        fields, definitions, _, _ = alex_case()
+        calls = []
+        def sender(role, attempt, payload, schema, instructions):
+            calls.append((role, attempt)); return semantic.fixture_stage(role, payload)
+        answers = semantic.run(NOTES, fields, definitions, sender, reference_contract=self.contract)
+        self.assertTrue(all(answer['status'] == 'missing' and answer['text'] == '' for answer in answers.values()))
+        self.assertEqual(calls, [('extractor', 1), ('assigner', 1), ('checker', 1)])
 
