@@ -590,7 +590,8 @@ class TypedWMDeadlineTests(SimpleTestCase):
                                 with self.assertRaises(ValidationError):
                                     preparation.call_role(packet,'proposer',clock['now']+180)
                                 self.assertEqual((receipt.state,receipt.quote_maximum,receipt.failure),frozen)
-                                constructed.assert_not_called()
+                                self.assertEqual(constructed.call_count,2)
+                                self.assertEqual(sent,[])
                     self.assertEqual(receipt.quote_maximum,Decimal('0.220432'))
 
     def test_reserved_deadline_failure_stops_worker_before_checker_and_candidate(self):
