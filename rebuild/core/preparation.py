@@ -375,6 +375,9 @@ def call_role(prep, role, deadline, proposal=None):
     request = provider_request(prep.inventory, role, prep.config, proposal) if prep.config['mode'] == 'live' else None
     client = None
     if request is not None:
+        if prep.config.get('provider') != 'anthropic' or not os.getenv('ANTHROPIC_API_KEY','').strip():
+            raise DocumentError('The configured preparation provider is unavailable; no request was sent or reserved.',
+                                'provider_not_configured')
         try:
             from anthropic import Anthropic
             client = Anthropic(timeout=role_seconds, max_retries=0)
@@ -500,10 +503,12 @@ def create_preparation(template, actor):
         raise ValidationError('The bounded preparation pilot is limited to six unique blank originals.')
     return TemplatePreparation.objects.create(template=template, requested_by=actor, config=config)
 
-def run_one():
+def run_one(*, preparation_pk=None):
     if not feature_enabled(): return False
     with transaction.atomic():
-        prep=TemplatePreparation.objects.select_for_update(skip_locked=True).filter(state='queued').order_by('created_at').first()
+        queued=TemplatePreparation.objects.select_for_update(skip_locked=True).filter(state='queued')
+        if preparation_pk is not None: queued=queued.filter(pk=preparation_pk)
+        prep=queued.order_by('created_at').first()
         if not prep: return False
         # Global single preparation call stream; running states are never replayed automatically.
         if TemplatePreparation.objects.filter(state__in=['inventory','proposer','checker']).exists(): return False

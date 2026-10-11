@@ -53,7 +53,7 @@ class Command(BaseCommand):
         from core import preparation
         with override_settings(WORD_PREPARATION_ENABLED=True):
             prepared=preparation.create_preparation(template,doctor)
-            if not preparation.run_one():raise CommandError('Fixture preparation did not run.')
+            if not preparation.run_one(preparation_pk=prepared.pk):raise CommandError('Fixture preparation did not run.')
             prepared.refresh_from_db()
             if prepared.state!='review':raise CommandError('Fixture preparation needs review: '+prepared.error_code)
             version=preparation.approve(prepared.pk,doctor,prepared.revision,prepared.candidate_sha256,

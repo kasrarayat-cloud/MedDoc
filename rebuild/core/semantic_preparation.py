@@ -91,6 +91,15 @@ def roles_agree(prep):
 
 def validated_semantic_definitions(version):
     """Shared enqueue/review/export gate for a separately approved semantic version."""
+    try:
+        return _validated_semantic_definitions(version)
+    except OSError as exc:
+        raise ValidationError('The retained approved Word source is unavailable. Contact support to restore that source; no generation was started.') from exc
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+
+
+def _validated_semantic_definitions(version):
     if not getattr(version, 'semantic_definitions', {}) and not getattr(version, 'semantic_preparation_id', None):
         from .word_contract import definitions
         return definitions(version)

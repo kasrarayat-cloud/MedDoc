@@ -112,6 +112,13 @@ class FreshWordContractTests(SimpleTestCase):
         with self.assertRaisesMessage(ValidationError, 'needs approved answer definitions'):
             word_contract.require_generation(version)
 
+    def test_missing_approved_source_is_actionable_through_all_contract_readers(self):
+        version=self.version()
+        (self.root/'blank.docx').unlink()
+        for reader in (validated_semantic_definitions,word_contract.require_generation,definitions_for):
+            with self.subTest(reader=reader.__name__),self.assertRaisesMessage(ValidationError,'source is unavailable'):
+                reader(version)
+
     def test_incomplete_semantic_response_is_not_adopted(self):
         response, _ = preparation.provider_role(self.inv,'proposer',self.config,1)
         response.pop('answer_definitions')
@@ -211,13 +218,26 @@ class FreshWordContractTests(SimpleTestCase):
     def test_local_provider_configuration_failure_has_no_reservation_or_send(self):
         from documents import DocumentError
         import time
+        import os
         packet=SimpleNamespace(inventory=self.inv,config={**self.config,'mode':'live','input_rate':'3','output_rate':'15','cached_rate':'0.3'})
-        with patch('anthropic.Anthropic',side_effect=ValueError('synthetic unavailable configuration')) as client, \
+        with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-local-only'}), \
+                patch('anthropic.Anthropic',side_effect=ValueError('synthetic unavailable configuration')) as client, \
                 patch('core.testing_authority.reserve_role') as reserve:
             with self.assertRaises(DocumentError) as raised:
                 preparation.call_role(packet,'proposer',time.monotonic()+360)
         self.assertEqual(raised.exception.code,'provider_not_configured')
         reserve.assert_not_called();client.assert_called_once()
+
+    def test_real_sdk_missing_credentials_refuse_before_reservation_and_http_send(self):
+        from documents import DocumentError
+        import os,time
+        packet=SimpleNamespace(inventory=self.inv,config={**self.config,'mode':'live','input_rate':'3','output_rate':'15','cached_rate':'0.3'})
+        with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'','ANTHROPIC_AUTH_TOKEN':''}), \
+                patch('httpx.Client.send') as send, patch('core.testing_authority.reserve_role') as reserve:
+            with self.assertRaises(DocumentError) as raised:
+                preparation.call_role(packet,'proposer',time.monotonic()+360)
+        self.assertEqual(raised.exception.code,'provider_not_configured')
+        reserve.assert_not_called();send.assert_not_called()
 
 
 @override_settings(WORD_PREPARATION_ENABLED=True, AI_MODE='fixture', ADMIN_SITE=False,
@@ -297,6 +317,42 @@ class OrdinaryClinicianWordTests(TestCase):
         with self.assertRaisesMessage(ValidationError,'needs approved answer definitions'):
             enqueue(encounter,self.user)
         self.assertFalse(Job.objects.exists());self.assertFalse(AIStageReceipt.objects.exists())
+        detail=self.client.get(f'/encounters/{encounter.pk}/')
+        self.assertTrue(detail.context['manual_entry'])
+        self.assertContains(detail,'name="answer_'+self.source.fields[0]['key']+'"')
+        self.assertContains(detail,'needs approved answer definitions')
+
+    def test_missing_own_approved_source_is_withheld_without_http_500(self):
+        template,prep=self.fresh_upload()
+        version=self.approve(template,prep)
+        from core.security import private_path
+        private_path(template.original_path).unlink()
+        page=self.client.get('/encounters/new/')
+        self.assertEqual(page.status_code,200)
+        self.assertNotIn(version.pk,[v.pk for v in page.context['form'].fields['template_version'].queryset])
+        detail=self.client.get(f'/templates/{template.pk}/')
+        self.assertContains(detail,'source is unavailable')
+        self.assertFalse(detail.context['manual_form_allowed'])
+
+    def test_targeted_fixture_preparation_does_not_execute_older_live_request(self):
+        from core.models import Template,TemplatePreparation
+        older=TemplatePreparation.objects.create(template=self.template,requested_by=self.user,config={'mode':'live'})
+        template=Template.objects.create(department=self.department,name='Targeted fixture form',format='docx',
+            original_name=self.template.original_name,original_path=self.template.original_path,
+            sha256=self.template.sha256,created_by=self.user)
+        selected=preparation.create_preparation(template,self.user)
+        original=preparation.call_role
+        called=[]
+        def record(packet,*args,**kwargs):
+            self.assertEqual(packet.pk,selected.pk)
+            self.assertEqual(packet.config['mode'],'fixture')
+            called.append(packet.pk)
+            return original(packet,*args,**kwargs)
+        with patch.object(preparation,'call_role',side_effect=record):
+            self.assertTrue(preparation.run_one(preparation_pk=selected.pk))
+        older.refresh_from_db();selected.refresh_from_db()
+        self.assertEqual(older.state,'queued');self.assertEqual(selected.state,'review',selected.error_code)
+        self.assertEqual(called,[selected.pk,selected.pk])
 
     def test_foreign_missing_source_is_never_evaluated_for_clinician_choices(self):
         from core.models import Organization,Department,Template,TemplateVersion
