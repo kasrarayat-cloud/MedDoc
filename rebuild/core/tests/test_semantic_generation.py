@@ -807,6 +807,96 @@ class SemanticGenerationTests(SimpleTestCase):
                 semantic.validate_stored_answer(NOTES, fields[1], definitions['cell_1'], modified)
 
 
+class SemanticSourceScaleContractTests(SimpleTestCase):
+    def test_served_invented_zero_minimum_still_refuses_before_assignment(self):
+        fields, definitions, facts, assigned = alex_case()
+        pain = next(item for item in facts if item['id'] == 'pain')
+        # The retained live extractor supplied exactly this unsupported bound.
+        pain['scale'] = {'minimum': '0', 'maximum': '10',
+                         'span': span(NOTES, 'out of 10')}
+        sender = FixtureSender(facts, assigned)
+        with self.assertRaisesMessage(ValidationError, 'A scale bound is absent from its exact source evidence.'):
+            semantic.run(NOTES, fields, definitions, sender)
+        self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls], [('extractor', 1)])
+
+    def test_source_minimum_null_preserves_typed_three_and_approved_zero_to_ten(self):
+        fields, definitions, facts, assigned = alex_case()
+        pain = next(item for item in facts if item['id'] == 'pain')
+        pain['scale']['span'] = span(NOTES, 'out of 10')
+        sender = FixtureSender(facts, assigned)
+        answer = semantic.run(NOTES, fields, definitions, sender)['cell_4']
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('3', 3, 'supported'))
+        self.assertFalse(answer['reviewed'])
+        retained_pain = next(item for item in answer['facts'] if item['id'] == 'pain')
+        self.assertIsNone(retained_pain['scale']['minimum'])
+        self.assertEqual(retained_pain['scale']['maximum'], '10')
+        self.assertEqual(answer['scale'], {'scale_minimum': '0', 'scale_maximum': '10'})
+        semantic.validate_stored_answer(NOTES, fields[4], definitions['cell_4'], answer)
+        _, _, payload, schema, instructions = sender.calls[0]
+        self.assertEqual(payload['approved_definitions']['cell_4']['constraints']['scale_minimum'], '0')
+        minimum = schema['properties']['facts']['items']['properties']['scale']['anyOf'][0]['properties']['minimum']
+        self.assertIn('null when absent', minimum['description'])
+        self.assertIn('approved field minimum', minimum['description'])
+        self.assertIn('set scale.minimum to null', instructions)
+        self.assertIn('causal or timing connector', instructions)
+
+    def test_denominator_and_point_scales_do_not_supply_an_unstated_lower_bound(self):
+        fields = [{'key': 'answer', 'label': 'Pain score0 to 10', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        for expression, scale_quote in [('3 out of 10', 'out of 10'), ('3/10', '/10'),
+                                        ('3 on a 10-point scale', '10-point scale')]:
+            notes = 'The patient rates pain '+expression+'.'
+            facts = [fact(notes, fields, 'pain', '3', kind='measurement',
+                          scale={'minimum': None, 'maximum': '10', 'span': span(notes, scale_quote)})]
+            assigned = assignments(fields, {'answer': ['pain']})
+            with self.subTest(expression=expression):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, assigned))['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), ('3', 3, 'supported'))
+                self.assertIsNone(answer['facts'][0]['scale']['minimum'])
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_explicit_source_lower_bound_is_retained_and_cannot_be_erased(self):
+        fields = [{'key': 'answer', 'label': 'Pain score1 to 10', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        notes = 'The patient rates pain 3 on a 1 to 10 scale.'
+        facts = [fact(notes, fields, 'pain', '3', kind='measurement',
+                      scale={'minimum': '1', 'maximum': '10', 'span': span(notes, '1 to 10')})]
+        assigned = assignments(fields, {'answer': ['pain']})
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, assigned))['answer']
+        self.assertEqual((answer['value'], answer['status']), (3, 'supported'))
+        self.assertEqual(answer['facts'][0]['scale']['minimum'], '1')
+        facts[0]['scale']['minimum'] = None
+        with self.assertRaisesMessage(ValidationError, 'The proposed measurement scale changes its exact source bounds.'):
+            semantic.run(notes, fields, definitions, FixtureSender(facts, assigned))
+
+    def test_approved_scale_cannot_fill_missing_source_scale(self):
+        fields = [{'key': 'answer', 'label': 'Pain score0 to 10', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        notes = 'The patient rates pain 3.'
+        facts = [fact(notes, fields, 'pain', '3', kind='measurement')]
+        assigned = assignments(fields, {'answer': ['pain']})
+        answer = semantic.run(notes, fields, definitions, FixtureSender(facts, assigned))['answer']
+        self.assertEqual((answer['text'], answer['value']), ('', None))
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertFalse(answer['reviewed'])
+
+    def test_history_keeps_exact_causal_and_timing_relationships(self):
+        fields = [{'key': 'answer', 'label': 'History', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        for notes, phrase in [
+                ('The patient reports wrist pain after lifting a box yesterday.', 'after lifting a box yesterday'),
+                ('The patient reports nausea since last week.', 'since last week'),
+                ('The patient reports dizziness before the fall.', 'before the fall')]:
+            facts = [fact(notes, fields, 'history', phrase, kind='history', timing='past')]
+            assigned = assignments(fields, {'answer': ['history']})
+            with self.subTest(phrase=phrase):
+                answer = semantic.run(notes, fields, definitions, FixtureSender(facts, assigned))['answer']
+                self.assertEqual((answer['text'], answer['status']), (phrase[0].upper()+phrase[1:], 'supported'))
+                self.assertEqual(answer['facts'][0]['value_evidence']['quote'], phrase)
+                self.assertEqual(answer['evidence'][0]['quote'], notes)
+                self.assertFalse(answer['reviewed'])
+
+
 class SemanticSourceReferenceTests(SimpleTestCase):
     def test_exact_api_references_round_trip_to_canonical_original_character_offsets(self):
         fields, _, facts, _ = alex_case()
