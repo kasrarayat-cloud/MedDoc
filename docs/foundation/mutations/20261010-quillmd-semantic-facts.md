@@ -234,3 +234,39 @@ The test wait is corrected to 15 seconds in this verification-only change.
 A failed-job rerun of the unchanged application candidate is justified by this
 reproduced bounded timing flake, with the first attempt retained and any second
 attempt explicitly cited. This is not evidence of installed provider quality.
+
+
+## Pre-execution native adapter correction (v8)
+
+The v7 native attempt at 2026-10-11T00:55Z refused before static staging,
+service quiescence, backup, source publication or database writes. Its strict
+public-file check encountered the worktree virtual-environment symlink in the
+imported `django_otp` package path. The retained v7 attempt and input remain
+unchanged. A read-only comparison confirmed all 27 historical fingerprint groups,
+the original failed response, blank template and prior finalized exports unchanged
+(receipt `native-v7-refusal-baseline-v1.json`, SHA-256
+`d110597863160be9f70549dcd2d5a438f08a3ee06afb7122ec2a29ec741b6aad`).
+
+Use the separately qualified v8 operator below with a new `native-install-v2`
+output directory and new protected execution inputs. It resolves only the imported
+OTP package root to its canonical existing path before applying the unchanged
+strict per-file read checks. It also includes the test-only
+`rebuild/live-results-browser.mjs` assertion in its exact source manifest: 40 paths,
+23 runtime paths. That test permits the existing ten-second idle poll to finish
+within fifteen seconds; it changes no shipped application behavior. The native
+candidate is the eventual fully cited merge of this declaration and test change.
+All migration, catalog, static, backup and preservation hashes above remain exact.
+No v7 output is adopted as a completed installation and no provider stage is sent
+or resent by this correction.
+
+| Replacement artifact under `ops-review-v1/` | SHA-256 |
+| --- | --- |
+| `reviewed-native-semantic-facts-install-v8.py` | `e1703cdc80b31dca2b366b1575dd795098a641159004f334e7ae8d367a456687` |
+| `qualify_semantic_operator_v8.py` | `0961bb992af1080590f1e3f78cea6c368b9cca623df8e26734d53df38929d13d` |
+| `offline-operator-v8-qualification-v1.json` | `b278da3db7bd8022f8af8c34a296d4133daa8c755a9d4c4d4a4e7bc9710415b0` |
+
+The actual v8 operator passed 13 positive and 94 refusal controls, including the
+actual root-resolution expression with a symlinked package root, refusal of an
+unresolved alias and continued refusal of a symlinked leaf file. Default execution
+remains inert; qualification made no credential reads, native service actions,
+database connections or provider calls.
