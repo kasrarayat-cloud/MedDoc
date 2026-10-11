@@ -182,7 +182,7 @@ class PreparationOutputTests(SimpleTestCase):
         self.assertIsNone(retained[0]['response']['usage']);self.assertFalse(receipt.failure['automatic_retry'])
 
     def test_historical_explanation_preserves_label_and_does_not_infer_output_limit(self):
-        packet=SimpleNamespace(error_code='provider_unknown')
+        packet=SimpleNamespace(error_code='provider_unknown',state='blocked')
         receipt=self.receipt();receipt.response_path='retained-original.json';receipt.computed_cost=Decimal('0.031788')
         receipt.failure={'error_class':'JSONDecodeError','response_retained':True,'usage_established':True,
                          'private-message':'secret-is-never-displayed'}
@@ -198,6 +198,12 @@ class PreparationOutputTests(SimpleTestCase):
             receipt.failure=bad
             self.assertNotIn('private-message',preparation.failure_explanation(packet,[receipt]))
         receipt.save.assert_not_called()
+
+    def test_historical_error_after_retained_wm_continuation_does_not_claim_another_attempt_is_required(self):
+        for state in ('guided','review','approved'):
+            packet=SimpleNamespace(error_code='guided_layout',state=state)
+            self.assertEqual(preparation.failure_explanation(packet,[]),'')
+            self.assertEqual(packet.error_code,'guided_layout')
 
     def test_department_scoped_detail_and_status_expose_closed_explanation_only(self):
         from core import preparation_views

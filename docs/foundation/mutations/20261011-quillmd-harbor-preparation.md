@@ -21,3 +21,11 @@ Finished source binding for the prospective code-only installation (recorded bef
 - `rebuild/templates/template_preparation.html`: `a594bed6df1301811bde5d2d81991b3826b3c161d0bf2a318b8a228e4f0d7ac6`.
 
 Exact seven published paths are these five source files, `docs/foundation/mutations/20261011-quillmd-harbor-preparation.md` and `docs/audit-reports/quillmd-harbor-preparation-refutation-20261011.md`. Runtime changes are confined to preparation.py, preparation_views.py and template_preparation.html. All static sources and published assets remain unchanged. The inventory-sized typed profile is bounded at 16,000 output tokens and grants no adoption authority: complete response, full original coverage and strict mapping validation remain mandatory.
+
+Final binding correction before installation: the preceding source binding is superseded by this block after a focused UI guard. Installed schema `0026` remains unchanged. The stopped-preparation advice applies only to state blocked; an approved/continued WM preparation retaining an older error code must not show retry advice. No reservation, provider, mapping, approval or generation behavior changes.
+
+- `rebuild/core/preparation.py`: `d0c7f15f08d69971590a06baef7f3cf98a58e004204bc88b69f793e9f0e9eedb`.
+- `rebuild/core/preparation_views.py`: `b81db7747b662284e0813f0598a494bba2cfc1f694453bfafb3cd80febc5d0e7`.
+- `rebuild/core/tests/test_preparation_output.py`: `4640860cb7fbc7d00be28bf1ac1e8c5a818d63f9178e8bdbdae4cacb29e5c4da`.
+- `rebuild/core/tests/test_preparation_v2.py`: `ca594ee1e50b913e2ea3cd76988779c67bc9ff53f3d25e72ba3f48679a14dff2`.
+- `rebuild/templates/template_preparation.html`: `a594bed6df1301811bde5d2d81991b3826b3c161d0bf2a318b8a228e4f0d7ac6`.

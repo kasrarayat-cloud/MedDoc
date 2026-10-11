@@ -283,7 +283,7 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
 
 def failure_explanation(prep, receipts):
     """Closed user-facing explanations; historical evidence is never rewritten."""
-    if not prep.error_code:
+    if not prep.error_code or prep.state != 'blocked':
         return ''
     messages = {
         'output_limit': ('The AI reached its output limit before completing the mapping and original-content check. '
