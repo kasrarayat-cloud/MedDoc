@@ -198,7 +198,7 @@ class PreparationPureTests(SimpleTestCase):
             receipt=SimpleNamespace(response_path='',response_sha256='',returned_model='',provider_request_id='',provider_resource_id='',
                 computed_cost=None,usage={},failure={},failure_path='',failure_sha256='',save=Mock())
             manager=Mock();manager.exclude.return_value=manager;manager.count.return_value=0;manager.values_list.return_value=[];manager.create.return_value=receipt
-            def fail(*args):
+            def fail(*args, **kwargs):
                 if after_response:args[-1]({'model':'retained-real-response-model','request_id':'response_req','resource_id':'response_id','response':{'raw':'retained'},'cost':None})
                 raise error
             with patch.object(prep.PreparationReceipt,'objects',manager),patch('core.preparation.provider_role',side_effect=fail) as provider:

@@ -41,8 +41,11 @@ def detail(request,pk):
            'proposal_metadata':metadata(proposed.get(a['id'],{})),
            'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
     receipts=list(prep.receipts.order_by('created_at'))
+    from .word_contract import review_rows
+    definition_rows = review_rows(prep)
+    from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
     return render(request,'template_preparation.html',{'template':template,'preparation':prep,
-        'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
+        'definition_rows':definition_rows, 'definition_version':2, 'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
         'placement_rows':[r for r in rows if r['kind']=='choose_cell'],
         'protected_rows':[r for r in rows if r['protected_signing']],
         'stories':prep.inventory.get('stories',[]),
@@ -67,8 +70,15 @@ def corrections(request,pk):
     labels={} if request.POST.get('placement_only')=='on' else {f['key']:request.POST.get('label_'+f['key'],'') for f in prep.candidate_info.get('fields',[])}
     placements={a['id']:request.POST.get('placement_'+a['id'],'') for a in prep.inventory.get('anchors',[]) if a['kind']=='choose_cell'}
     try:
-        correct(prep.pk,request.user,revision(request),labels,request.POST.getlist('reviewed_anchor'),request.POST.get('correction_reason',''),placements)
-    except (ValidationError,DocumentError) as exc:
+        from .word_contract import active
+        definitions = None
+        if active(prep.inventory, prep.config):
+            from types import SimpleNamespace
+            from .semantic_preparation_views import posted_definitions
+            definitions = posted_definitions(SimpleNamespace(source_version=SimpleNamespace(fields=prep.inventory['fields']),
+                config={'semantic_definition_version':2}), request.POST)
+        correct(prep.pk,request.user,revision(request),labels,request.POST.getlist('reviewed_anchor'),request.POST.get('correction_reason',''),placements,definitions,request.POST.getlist('reviewed_field'))
+    except (ValidationError,DocumentError,ValueError) as exc:
         return HttpResponse('; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc),status=409,content_type='text/plain')
     return redirect('template_preparation',pk=pk)
 
@@ -77,7 +87,7 @@ def continue_review(request,pk):
     _,prep=selected(request,pk)
     try:
         continue_wm_review(prep.pk,request.user,revision(request),request.POST.get('candidate_sha256',''))
-    except (ValidationError,DocumentError) as exc:
+    except (ValidationError,DocumentError,ValueError) as exc:
         return HttpResponse('; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc),status=409,content_type='text/plain')
     return redirect('template_preparation',pk=pk)
 
@@ -87,7 +97,7 @@ def approval(request,pk):
     try:
         approve(prep.pk,request.user,revision(request),request.POST.get('candidate_sha256',''),
                 request.POST.getlist('approved_change'),request.POST.get('original_reviewed')=='on',
-                request.POST.get('prepared_reviewed')=='on')
+                request.POST.get('prepared_reviewed')=='on', request.POST.getlist('reviewed_definition'))
     except ValidationError as exc:
         return HttpResponse('; '.join(exc.messages),status=409,content_type='text/plain')
     return redirect('template_detail',pk=pk)

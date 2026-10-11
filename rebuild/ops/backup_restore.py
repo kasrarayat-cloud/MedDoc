@@ -211,6 +211,21 @@ _SEMANTIC_STANDING_USAGE_INVARIANT = _STANDING_USAGE_INVARIANT.replace(_STANDING
 
 
 SEMANTIC_INVARIANTS = {
+    'inline_word_answer_contract': '''SELECT count(*) FROM core_templateversion v
+        JOIN core_templatepreparation p ON p.id=v.preparation_id
+        WHERE v.semantic_preparation_id IS NULL AND (
+          (p.candidate_info ? 'answer_contract' AND
+            (p.config->>'word_answer_contract' IS DISTINCT FROM 'reviewed-word-answer-contract-v1'
+             OR p.state<>'approved' OR p.approved_by_id IS NULL OR p.approved_at IS NULL
+             OR v.fields IS DISTINCT FROM p.candidate_info->'fields'
+             OR p.candidate_info->'answer_contract'->>'profile' IS DISTINCT FROM 'reviewed-word-answer-contract-v1'
+             OR p.candidate_info->'answer_contract'->>'reviewed_by' IS DISTINCT FROM p.approved_by_id::text
+             OR jsonb_typeof(p.candidate_info->'answer_contract'->'definitions') IS DISTINCT FROM 'object'
+             OR jsonb_typeof(p.candidate_info->'answer_contract'->'reviewed_fields') IS DISTINCT FROM 'array'
+             OR p.candidate_info->'answer_contract'->>'fields_sha256' !~ '^[a-f0-9]{64}$'
+             OR p.candidate_info->'answer_contract'->>'source_inventory_sha256' IS DISTINCT FROM p.inventory->>'inventory_sha256'))
+          OR (p.config->>'word_answer_contract'='reviewed-word-answer-contract-v1'
+              AND p.proposal ? 'answer_definitions' AND NOT p.candidate_info ? 'answer_contract'))''',
     'semantic_version_approval': '''SELECT count(*) FROM core_templateversion v
         LEFT JOIN core_templatedefinitionpreparation p ON p.id=v.semantic_preparation_id
         LEFT JOIN core_templateversion o ON o.id=p.source_version_id

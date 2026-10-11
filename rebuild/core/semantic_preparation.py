@@ -90,8 +90,9 @@ def roles_agree(prep):
 
 def validated_semantic_definitions(version):
     """Shared enqueue/review/export gate for a separately approved semantic version."""
-    if not version.semantic_definitions and not version.semantic_preparation_id:
-        return {}
+    if not getattr(version, 'semantic_definitions', {}) and not getattr(version, 'semantic_preparation_id', None):
+        from .word_contract import definitions
+        return definitions(version)
     if not version.semantic_definitions or not version.semantic_preparation_id:
         raise ValidationError('Semantic answer definitions require their separate clinician approval.')
     prep = version.semantic_preparation
@@ -148,7 +149,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
         config = testing_authority.bind_actor_config(config, actor, template.department_id)
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
-    config = {**config, 'semantic_definition_protocol': PROTOCOL}
+    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 2}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -169,15 +170,23 @@ def _inventory(prep):
         source_sha256=source.template.sha256, original=model_inventory(inventory))
 
 
+def definition_version(config):
+    value = config.get('semantic_definition_version', 1)
+    if type(value) is not int or value not in (1, 2):
+        raise ValidationError('Unsupported explicit answer-definition version.')
+    return value
+
+
 def _call_role(prep, role):
+    version = definition_version(prep.config)
     payload = {'protocol': PROTOCOL, 'original': prep.inventory, 'role': role}
     if role == 'checker':
         payload['proposal'] = prep.proposal
     options = {}
     if prep.config.get('mode') != 'live':
-        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal)
+        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal, version)
     response = ai_stages.execute_stage(definition_preparation=prep, stage='definition_'+role,
-        payload=payload, schema=role_schema(role), instructions=role_instructions(role),
+        payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version),
         config=prep.config, **options)
     return validate_role_result(prep.source_version.fields, prep.inventory, response, role)
 

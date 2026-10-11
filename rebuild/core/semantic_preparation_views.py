@@ -6,7 +6,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST
 from documents.semantic_preparation_roles import (
-    CONSTRAINT_KEYS, POLARITIES, SUBJECTS, TEMPORALITIES, VALUE_TYPES, DefinitionError,
+    CONSTRAINT_KEYS, POLARITIES, SUBJECTS, TEMPORALITIES, VALUE_TYPES, ANSWER_TYPES, ANSWER_MODES, DefinitionError,
     destination, protected_field,
 )
 from . import semantic_preparation as workflow
@@ -32,14 +32,16 @@ def revision(request):
 def posted_definitions(prep, post):
     """Destination is code controlled; no user/model location mutation is accepted."""
     values = {}
+    version = workflow.definition_version(getattr(prep, 'config', {}))
     for field in prep.source_version.fields:
         prefix = 'field_'+field['key']+'_'
-        values[field['key']] = {'version': 1, 'meaning': post.get(prefix+'meaning', ''),
+        values[field['key']] = {'version': version, 'meaning': post.get(prefix+'meaning', ''),
             'value_type': post.get(prefix+'value_type', ''), 'unit': post.get(prefix+'unit', '').strip() or None,
             'choices': [choice for choice in post.get(prefix+'choices', '').splitlines() if choice],
             'scope': {name: post.get(prefix+name, '') for name in ('subject', 'temporality', 'polarity')},
             'permitted_destination': destination(field),
             'constraints': {name: post.get(prefix+name, '').strip() or None for name in CONSTRAINT_KEYS}}
+        if version == 2: values[field['key']]['answer_mode'] = post.get(prefix+'answer_mode', '')
     return values
 
 
@@ -62,7 +64,8 @@ def context(prep, member, *, definitions=None, error='', post=None):
         'can_retry': member.role in ('owner','clinician') and prep.state=='blocked'
             and prep.error_code!='provider_unknown'
             and all(row.state in ('succeeded','failed') and row.actual_cost is not None for row in receipts),
-        'value_types': VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
+        'definition_version':workflow.definition_version(prep.config), 'answer_modes':ANSWER_MODES,
+        'value_types': ANSWER_TYPES if workflow.definition_version(prep.config)==2 else VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
         'error': error, 'correction_reason': post.get('correction_reason', '') if post else '',
         'approved_version': prep.versions.order_by('number').first() if prep.state == 'approved' else None}
 

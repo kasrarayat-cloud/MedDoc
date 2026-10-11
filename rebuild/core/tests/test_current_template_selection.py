@@ -68,16 +68,17 @@ class CurrentTemplateSelectionTests(TestCase):
     def choices(self):
         return list(EncounterForm(user=self.user).fields['template_version'].queryset)
 
-    def test_library_offers_one_current_version_per_template_and_newest_legacy_without_definitions(self):
+    def test_library_withholds_word_forms_without_approved_answer_definitions(self):
         second=self.legacy(); third=self.legacy()
         another=Template.objects.create(department=self.department,name='Another synthetic form',
             format='docx',original_name='blank.docx',original_path='blank.docx',sha256=self.template.sha256,
             created_by=self.user)
         other_version=TemplateVersion.objects.create(template=another,number=1,
             fields=self.source.fields,created_by=self.user)
-        self.assertEqual({version.pk for version in self.choices()},{third.pk,other_version.pk})
+        self.assertEqual(self.choices(),[])
         page=self.client.get('/encounters/new/')
-        self.assertContains(page,f'value="{third.pk}"')
+        self.assertNotContains(page,f'value="{third.pk}"')
+        self.assertNotContains(page,f'value="{other_version.pk}"')
         self.assertNotContains(page,f'value="{self.source.pk}"')
         self.assertNotContains(page,f'value="{second.pk}"')
 

@@ -24,7 +24,7 @@ class ScopedForm(forms.Form):
             only=list(self.fields['department'].queryset[:2])
             if len(only)==1 and not self.is_bound: self.initial.setdefault('department',only[0].pk)
 class UploadForm(ScopedForm):
-    prepare_with_ai=forms.BooleanField(required=False,label='Prepare this blank Word form with AI',help_text='Two AI roles propose and check answer areas. You approve the layout before the form can be used.')
+    prepare_with_ai=forms.BooleanField(required=False,label='Prepare this blank Word form with AI',help_text='Two AI roles propose and check answer locations and reusable answer meanings. You review and approve them before using the form.')
     name=forms.CharField(max_length=140)
     department=forms.ModelChoiceField(queryset=Department.objects.none())
     # `accept` narrows the OS picker to the two formats the adapter supports, so an
@@ -47,16 +47,28 @@ CURRENT_MAPPING_ERROR=('This form has a newer or unavailable approved mapping. C
                        'version below before creating the document. Your entered notes are retained.')
 
 
-def current_template_versions():
+def current_template_versions(*, department_ids=None):
     """One usable version per form; an approved semantic form cannot fall back to legacy."""
-    semantic=Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})
+    semantic=(Q(semantic_preparation__isnull=False)|~Q(semantic_definitions={})|
+              Q(preparation__config__has_key='word_answer_contract'))
     preferred=TemplateVersion.objects.filter(template_id=OuterRef('template_id')).order_by(
         Case(When(semantic,then=Value(0)),default=Value(1),output_field=IntegerField()),'-number')
     # Choose before checking approval completeness: corrupt semantic metadata must
     # withhold the form, rather than silently select an older contract.
-    return TemplateVersion.objects.filter(pk=Subquery(preferred.values('pk')[:1])).filter(
-        Q(semantic_preparation__isnull=True,semantic_definitions={})|
-        (Q(semantic_preparation__state='approved')&~Q(semantic_definitions={})))
+    from django.core.exceptions import ValidationError
+    from .word_contract import require_generation
+    candidates = TemplateVersion.objects.filter(pk=Subquery(preferred.values('pk')[:1])).select_related(
+        'template', 'preparation', 'semantic_preparation__source_version__template')
+    if department_ids is not None:
+        candidates = candidates.filter(template__department_id__in=department_ids)
+    usable = []
+    for version in candidates:
+        try:
+            require_generation(version)
+            usable.append(version.pk)
+        except (ValidationError, ValueError):
+            pass  # Withhold incomplete current contracts; never select an older version.
+    return TemplateVersion.objects.filter(pk__in=usable)
 
 
 class EncounterForm(ScopedForm):
@@ -68,7 +80,7 @@ class EncounterForm(ScopedForm):
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,user=user,**kwargs)
         self.fields['patient'].queryset=Patient.objects.filter(department__in=departments(user)).select_related('department')
-        self.fields['template_version'].queryset=current_template_versions().filter(template__department__in=departments(user)).select_related('template').order_by('template__name','-number')
+        self.fields['template_version'].queryset=current_template_versions(department_ids=departments(user).values_list('pk', flat=True)).select_related('template').order_by('template__name','-number')
         self.fields['service_date'].initial=timezone.localdate()
     def clean_service_date(self):
         service_date=self.cleaned_data['service_date']

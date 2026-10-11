@@ -6,19 +6,25 @@ from documents.preparation import digest
 from .security import private_path
 
 def approval_binding(preparation):
-    return digest({'template_id': str(preparation.template_id),
+    binding = {'template_id': str(preparation.template_id),
                    'original_sha256': preparation.template.sha256,
                    'inventory_sha256': preparation.inventory.get('inventory_sha256'),
                    'proposal': preparation.proposal, 'checker': preparation.checker,
                    'corrections': preparation.corrections, 'revision': preparation.revision,
                    'correction_history':getattr(preparation,'correction_history',[]),
                    'candidate_sha256': preparation.candidate_sha256,
-                   'candidate_info': preparation.candidate_info, 'changes': preparation.changes})
+                   'candidate_info': preparation.candidate_info, 'changes': preparation.changes}
+    if 'word_answer_contract' in getattr(preparation, 'config', {}):
+        binding['word_answer_contract'] = preparation.config['word_answer_contract']
+    return digest(binding)
 
 def source_for_version(version):
-    if getattr(version,'semantic_preparation_id',None) or getattr(version,'semantic_definitions',{}):
-        from .semantic_preparation import validated_semantic_definitions
-        validated_semantic_definitions(version)
+    from .semantic_preparation import validated_semantic_definitions
+    validated_semantic_definitions(version)
+    return physical_source_for_version(version)
+
+
+def physical_source_for_version(version):
     original = private_path(version.template.original_path)
     data = read_original(original) if version.template.format == 'docx' else original.read_bytes()
     if hashlib.sha256(data).hexdigest() != version.template.sha256:
