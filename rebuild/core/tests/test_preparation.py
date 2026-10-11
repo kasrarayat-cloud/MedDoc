@@ -201,7 +201,9 @@ class PreparationPureTests(SimpleTestCase):
             def fail(*args, **kwargs):
                 if after_response:args[-1]({'model':'retained-real-response-model','request_id':'response_req','resource_id':'response_id','response':{'raw':'retained'},'cost':None})
                 raise error
-            with patch.object(prep.PreparationReceipt,'objects',manager),patch('core.preparation.provider_role',side_effect=fail) as provider:
+            with patch.dict('os.environ',{'ANTHROPIC_API_KEY':'synthetic-offline-only'}), \
+                    patch('anthropic.Anthropic',return_value=Mock()), \
+                    patch.object(prep.PreparationReceipt,'objects',manager),patch('core.preparation.provider_role',side_effect=fail) as provider:
                 with self.assertRaises(anthropic.BadRequestError) as caught:prep.call_role(p,'proposer',time.monotonic()+30)
             self.assertIs(caught.exception,error);self.assertEqual(provider.call_count,1)
             self.assertEqual(receipt.state,'failed' if after_response else 'unknown')

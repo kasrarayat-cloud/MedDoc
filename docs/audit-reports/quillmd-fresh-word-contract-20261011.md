@@ -140,3 +140,11 @@ production setting was changed. Complete CI uses its immutable separately instal
 Word helper. Fixture browser/manual values and hand-authored validator definitions
 are not automatic fresh-upload extraction proof. Installation/public HTTPS fresh
 acceptance and the owner's browser confirmation remain pending.
+
+Branch CI on `3e19a8e0558bcc0dc7269cd638b7a117e15aa192` passed the actual
+private browser/accessibility and marketing jobs. The full application run retained
+1,552 tests with four failures and one error, all five in old offline preparation
+transport fixtures that omitted the now-explicit local synthetic SDK key. Those
+fixtures now supply a local dummy key within their mock transport scope; the
+provider guard remains intact. No product runtime file changed. The failed run
+`38176363166` remains retained; the next descendant must earn a full citation.

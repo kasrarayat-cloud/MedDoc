@@ -68,8 +68,8 @@ is retained; preserve server originals, finalized documents, failures and audit 
 ## Finished finite code-only source scope
 
 The installed schema remains migration `0026`; no migration or data rewrite is permitted.
-The finite publication set contains these 30 code/qualification files plus this
-declaration and `docs/audit-reports/quillmd-fresh-word-contract-20261011.md` (32 paths).
+The finite publication set contains these 31 code/qualification files plus this
+declaration and `docs/audit-reports/quillmd-fresh-word-contract-20261011.md` (33 paths).
 The private execution declaration must bind the completed merged candidate, this
 prospective declaration, the finished inert operator and current preservation controls.
 
@@ -89,8 +89,9 @@ prospective declaration, the finished inert operator and current preservation co
 | `rebuild/core/tests/test_current_template_selection.py` | `72fa88dc33967b1cdf40b86dc1654fb3c6e5d8200dfb233b2df58524a8160b03` |
 | `rebuild/core/tests/test_custom_narrative_generation.py` | `7f8f0cd7690df633b231b233684c7f54c82559ae5c56abb5b98dbbea454f44cc` |
 | `rebuild/core/tests/test_personal_testing_actor.py` | `31a18ded7da0421613ef9dbe04027e54627ddac6e103e5617ec8cebc1fbbb5f3` |
-| `rebuild/core/tests/test_preparation.py` | `ba9b307bec12aef8cc52d0eb1c41aaef24f5b88afd368f612651d7c5f4df451c` |
+| `rebuild/core/tests/test_preparation.py` | `5325a4c71b6ad99a24a26a32e2843c13b7affa5772f3ed4d7cab7d9628f139d3` |
 | `rebuild/core/tests/test_preparation_constraints.py` | `b6dbff794dcb6312645c9cc261e5789f9818eb519691394fb56ce8a8e30addd8` |
+| `rebuild/core/tests/test_preparation_output.py` | `2a5bfa8e66ef6fdca9655653ccada76976b932f086c5821d366b4f6d10b2e2a4` |
 | `rebuild/core/tests/test_preparation_v2.py` | `dcb4b2e14abb8fa3c2720b77399bb986b3ab2efcd2586de47f9a5080ecd10ec7` |
 | `rebuild/core/tests/test_refutation.py` | `487fac65b7d8a1d03b8ea10d49f5583e158d4ed62ea5e21de2e74aaf4c65431b` |
 | `rebuild/core/tests/test_security.py` | `a6e272af645b9dfb2fc2bea6ba0759a3d7cc9013cca41ae72cffe5f9d06b42d6` |

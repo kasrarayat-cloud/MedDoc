@@ -63,7 +63,8 @@ class PreparationOutputTests(SimpleTestCase):
         with httpx.Client(transport=httpx.MockTransport(handle)) as http:
             client=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
                 http_client=http,timeout=60,max_retries=0)
-            with patch('anthropic.Anthropic',return_value=client), \
+            with patch.dict('os.environ',{'ANTHROPIC_API_KEY':'synthetic-offline-only'}), \
+                    patch('anthropic.Anthropic',return_value=client), \
                     patch('core.testing_authority.identity',return_value=True), \
                     patch('core.testing_authority.reserve_role',return_value=receipt) as reserve, \
                     patch('core.preparation_campaign.provider_slot',return_value=nullcontext()), \
