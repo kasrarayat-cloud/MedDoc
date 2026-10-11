@@ -108,3 +108,35 @@ reclassify historical unknown usage. Revised finished-diff checks are pending.
 The document-engine suite passed all 147 tests without provider calls. Full-core
 v2, complete browser qualification, merged-revision installation and public HTTPS
 fresh-upload acceptance remain pending at this report revision.
+
+The second full isolated PostgreSQL run retained 1,548 tests, four failures, five
+errors and nine skips. Its remaining failures were nine old financial/SDK-fixture
+assumptions. Financial-only empty mappings are now PDF protocol fixtures. Actual
+SDK offline deadline tests supply a synthetic local key, assert locally prepared
+client construction separately from actual transport timeout, and still require
+zero sends, unchanged reservations and no retry on deadline refusal. These are
+qualification updates, not an exception to Word AI admission.
+
+Further finished-diff counterexamples were fixed before installation: actual SDK
+credential validation was lazy, so an explicit provider/key guard now precedes
+reservation; missing own approved sources become actionable shared validation
+errors; fixture seeding targets only its own preparation rather than a queued live
+request; physical-only manual Word drafts expose their existing answer controls.
+Historical unknown holds are not retrospectively reclassified.
+
+All three independent finished-product-diff passes found no further demonstrated
+defect on `d5fac5dc26ee3e511ddacbbfb46fbab57620af1b`: mapping/routing 72 controls,
+product stages 15 focused tests plus actual SDK offline transport controls, and
+saved/export handling 38 value/evidence, five rendering and 12 definition controls.
+Proof digests: `a92c96407742468efb6e9343524815d3bb198aa25bacdff3f8f6403cf2ef0a82`,
+`92846452e616ea62ad19e38ebc3d6e9747cbb1a67c898d3d8ef331c886e7e091`,
+`1c31979eba186aef549963c9a7346ee71f4659334c339d993671fa3e24f168a8`.
+
+All 1,344 operations tests passed (two environmental skips). The isolated fixture
+browser's first actual flow passed all 15 checks, including three simulated roles,
+manual review, finalization, original-format export and administrator MFA isolation.
+Its next advanced-WM stage refused the local operator ownership boundary; no
+production setting was changed. Complete CI uses its immutable separately installed
+Word helper. Fixture browser/manual values and hand-authored validator definitions
+are not automatic fresh-upload extraction proof. Installation/public HTTPS fresh
+acceptance and the owner's browser confirmation remain pending.
