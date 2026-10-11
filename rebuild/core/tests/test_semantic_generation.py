@@ -210,6 +210,25 @@ class SemanticGenerationTests(SimpleTestCase):
         self.assertFalse(schema.get('additionalProperties', True))
         self.assertIsInstance(instructions, str)
 
+    def test_checker_api_contract_distinguishes_selected_ids_from_context_and_omission_ids(self):
+        fields, definitions, facts, assigned = alex_case()
+        sender = FixtureSender(facts, assigned)
+        semantic.run(NOTES, fields, definitions, sender)
+        _, _, payload, schema, instructions = sender.calls[-1]
+        properties = schema['properties']['fields']['items']['properties']
+        binding = properties['fact_ids']['description']
+        self.assertIn('proposed_answers[key].fact_ids', binding)
+        self.assertIn('exactly the same fact ID set', binding)
+        self.assertIn('order is immaterial', binding)
+        self.assertIn('omission may include unselected facts', binding)
+        self.assertIn('exact answer and its selected facts', properties['verdict']['description'])
+        self.assertIn('do not silently revise the selection under pass', instructions)
+        self.assertIn('distinct facts even when they share source evidence', instructions)
+        self.assertEqual(payload['proposed_answers']['cell_3']['fact_ids'],
+                         ['swelling', 'deformity', 'sensation'])
+        self.assertEqual({value['id'] for value in payload['facts']},
+                         {value['id'] for value in facts})
+
     def test_soap_subjective_cannot_reduce_documented_pain_measurement_to_bare_number(self):
         fields, definitions = self.one_field('Subjective')
         notes = 'Subjective: Left ankle pain. Pain is 3 out of 10.'
@@ -677,6 +696,133 @@ class SemanticGenerationTests(SimpleTestCase):
                 except ValidationError:
                     continue
                 self.assert_held(answer)
+
+    def test_passing_checker_cannot_add_contextual_fact_without_a_clinical_finding(self):
+        fields, definitions = self.one_field('Subjective')
+        notes = 'Subjective: Left ankle pain. Pain is 3 out of 10.'
+        facts = [fact(notes, fields, 'symptom', 'Left ankle pain', kind='history'),
+                 fact(notes, fields, 'pain_narrative', 'Pain is 3 out of 10', kind='history', concept='pain_score'),
+                 fact(notes, fields, 'pain_numeric', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')})]
+        assigned = assignments(fields, {'answer': ['symptom', 'pain_narrative']})
+        for checked_ids in (['symptom', 'pain_narrative', 'pain_numeric'],
+                            ['symptom', 'pain_numeric'], ['symptom']):
+            checked = checker(assigned)
+            checked['fields'][0]['fact_ids'] = checked_ids
+            sender = FixtureSender(facts, assigned, checked)
+            with self.subTest(checked_ids=checked_ids):
+                answer = semantic.run(notes, fields, definitions, sender)['answer']
+                self.assert_held(answer)
+                self.assertEqual(answer['candidate_text'], 'Left ankle pain; Pain is 3 out of 10')
+                self.assertEqual(answer['fact_ids'], ['symptom', 'pain_narrative'])
+                self.assertIn('does not bind exactly', ' '.join(answer['review_reasons']))
+                self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls],
+                                 [('extractor', 1), ('assigner', 1), ('checker', 1)])
+                stale = deepcopy(answer)
+                stale.update(status='supported', text=answer['candidate_text'], value=answer['candidate_text'])
+                with self.assertRaises(ValidationError):
+                    semantic.validate_stored_answer(notes, fields[0], definitions['answer'], stale)
+
+    def test_retained_soap_context_id_mismatch_is_held_and_exact_binding_preserves_all_facts(self):
+        # The retained public SOAP attempt selected f1/f3/f4. Its checker said
+        # pass but also listed f2, the separate numeric version of the same pain.
+        notes = ('Subjective: The patient reports left ankle pain after stepping off a curb yesterday. '
+                 'Pain is 3 out of 10. No head injury.\r\n\r\n'
+                 'Objective: Mild swelling over the left lateral ankle. No deformity. Distal sensation intact.\r\n\r\n'
+                 'Assessment: Left ankle pain.\r\n\r\nPlan: Follow-up in one week.')
+        self.assertEqual(hashlib.sha256(notes.encode()).hexdigest(),
+                         'a023de599fb1359ae7319b28a28e9a8325dbcab70bb2ba70832296000e4bbaa8')
+        fields = [{'key': 'cell_'+str(i), 'label': label, 'kind': 'text', 'locator': {'cell': i}}
+                  for i, label in enumerate(('Subjective', 'Objective', 'Assessment', 'Plan'))]
+        definitions = default_definitions(fields)
+        facts = [fact(notes, fields, 'f1', 'left ankle pain after stepping off a curb yesterday', kind='reason',
+                      concept='left ankle pain', timing='past', timing_quote='yesterday'),
+                 fact(notes, fields, 'f2', '3', kind='measurement', concept='pain severity',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')}),
+                 fact(notes, fields, 'f3', 'Pain is 3 out of 10', kind='history', concept='pain severity text'),
+                 fact(notes, fields, 'f4', 'No head injury', kind='history', concept='head injury',
+                      polarity='negated', timing='unspecified'),
+                 fact(notes, fields, 'f5', 'Mild swelling over the left lateral ankle', concept='swelling'),
+                 fact(notes, fields, 'f6', 'No deformity', concept='deformity', polarity='negated'),
+                 fact(notes, fields, 'f7', 'Distal sensation intact', concept='distal sensation'),
+                 fact(notes, fields, 'f8', 'Left ankle pain', kind='assessment', concept='assessment'),
+                 fact(notes, fields, 'f9', 'Follow-up in one week', kind='follow_up',
+                      concept='follow-up', timing='future', timing_quote='in one week')]
+        assigned = assignments(fields, {'cell_0': ['f1', 'f3', 'f4'], 'cell_1': ['f5', 'f6', 'f7'],
+                                        'cell_2': ['f8'], 'cell_3': ['f9']})
+        expected = {'cell_0': 'Left ankle pain after stepping off a curb yesterday; Pain is 3 out of 10; No head injury',
+                    'cell_1': 'Mild swelling over the left lateral ankle; No deformity; Distal sensation intact',
+                    'cell_2': 'Left ankle pain', 'cell_3': 'Follow-up in one week'}
+        for mismatch in (True, False):
+            checked = checker(assigned)
+            if mismatch:
+                checked['fields'][0]['fact_ids'] = ['f1', 'f2', 'f3', 'f4']
+            sender = FixtureSender(facts, assigned, checked)
+            with self.subTest(mismatch=mismatch):
+                answers = semantic.run(notes, fields, definitions, sender)
+                self.assertEqual(len(sender.calls), 3)
+                self.assertEqual(answers['cell_0']['fact_ids'], ['f1', 'f3', 'f4'])
+                for field in fields:
+                    key = field['key']; answer = answers[key]
+                    self.assertFalse(answer['reviewed'])
+                    if key == 'cell_0' and mismatch:
+                        self.assert_held(answer)
+                        self.assertEqual(answer['candidate_text'], expected[key])
+                    else:
+                        self.assertEqual((answer['text'], answer['status']), (expected[key], 'supported'))
+                        self.assertIs(semantic.validate_stored_answer(notes, field, definitions[key], answer), answer)
+                    for evidence in answer['evidence']:
+                        self.assertEqual(notes[evidence['start']:evidence['end']], evidence['quote'])
+
+    def test_passing_checker_id_order_does_not_change_answer_order_or_discard_negation(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling and no deformity.'
+        facts = [fact(notes, fields, 'swelling', 'swelling'),
+                 fact(notes, fields, 'deformity', 'no deformity', polarity='negated')]
+        assigned = assignments(fields, {'answer': ['swelling', 'deformity']})
+        checked = checker(assigned)
+        checked['fields'][0]['fact_ids'].reverse()
+        sender = FixtureSender(facts, assigned, checked)
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assertEqual((answer['text'], answer['status']), ('Swelling; No deformity', 'supported'))
+        self.assertEqual(answer['fact_ids'], ['swelling', 'deformity'])
+        self.assertFalse(answer['reviewed'])
+        self.assertEqual(len(sender.calls), 3)
+        self.assertIs(semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer), answer)
+
+    def test_targeted_omission_recheck_still_holds_a_passing_mismatched_fact_set(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling, no deformity, and intact sensation.'
+        facts = [fact(notes, fields, 'swelling', 'swelling'),
+                 fact(notes, fields, 'deformity', 'no deformity', polarity='negated'),
+                 fact(notes, fields, 'sensation', 'intact sensation')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        first = checker(assigned, verdicts={'answer': 'omission'})
+        first['fields'][0].update(fact_ids=['swelling', 'deformity', 'sensation'],
+                                  reason='The documented negative and sensation were omitted.')
+        repaired = assignments(fields, {'answer': ['swelling', 'deformity', 'sensation']})
+        second = checker(repaired)
+        second['fields'][0]['fact_ids'] = ['swelling', 'sensation']
+        sender = FixtureSender(facts, assigned, first, repaired=repaired, rechecked=second)
+        answer = semantic.run(notes, fields, definitions, sender)['answer']
+        self.assert_held(answer)
+        self.assertEqual(answer['candidate_text'], 'Swelling; No deformity; Intact sensation')
+        self.assertEqual(answer['fact_ids'], ['swelling', 'deformity', 'sensation'])
+        self.assertIn('does not bind exactly', ' '.join(answer['review_reasons']))
+        self.assertEqual(len(sender.calls), semantic.MAX_CALLS)
+
+    def test_checker_cannot_invent_or_repeat_a_selected_fact_id(self):
+        fields, definitions = self.one_field()
+        notes = 'Examination shows swelling.'
+        facts = [fact(notes, fields, 'swelling', 'swelling')]
+        assigned = assignments(fields, {'answer': ['swelling']})
+        for checked_ids in (['invented'], ['swelling', 'swelling']):
+            checked = checker(assigned)
+            checked['fields'][0]['fact_ids'] = checked_ids
+            sender = FixtureSender(facts, assigned, checked)
+            with self.subTest(checked_ids=checked_ids), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender)
+            self.assertEqual(len(sender.calls), 3)
 
     def test_targeted_repair_cannot_reuse_an_initially_rejected_unselected_fact(self):
         fields, definitions = self.one_field()
