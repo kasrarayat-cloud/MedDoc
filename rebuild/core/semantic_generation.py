@@ -487,11 +487,31 @@ SOURCE_REFERENCE = _schema({'quote': {'type': 'string','minLength':1,'maxLength'
     'source_unit_id': {'type':'integer','minimum':1},'occurrence': {'type':'integer','minimum':1,'maximum':50000}})
 API_FACT_SCHEMA = deepcopy(FACT_SCHEMA)
 _api_fact = API_FACT_SCHEMA['properties']['facts']['items']['properties']
-_api_fact['value_span'] = SOURCE_REFERENCE
+_api_fact['value_span'] = deepcopy(SOURCE_REFERENCE)
 _api_fact['subject']['properties']['name_span'] = _nullable(SOURCE_REFERENCE)
 _api_fact['timing']['properties']['span'] = _nullable(SOURCE_REFERENCE)
 _api_fact['unit_span'] = _nullable(SOURCE_REFERENCE)
-_api_fact['scale']['anyOf'][0]['properties']['span'] = SOURCE_REFERENCE
+_api_fact['scale']['anyOf'][0]['properties']['span'] = deepcopy(SOURCE_REFERENCE)
+_api_fact['value_span']['description'] = (
+    'Exact self-contained source value. Retain a documented causal or timing connector '
+    'in an injury/event phrase, for example after stepping off a curb yesterday. '
+    'A typed numeric measurement selects only its numeric value; source scale metadata is separate.')
+_api_scale = _api_fact['scale']['anyOf'][0]
+_api_scale['description'] = (
+    'Only bounds explicitly stated in this measurement source expression, never approved field constraints. '
+    'For 3 out of 10 or 3/10, minimum is null and maximum is "10". '
+    'For 3 on a 1 to 10 scale, minimum is "1" and maximum is "10". '
+    'If the notes state no scale, scale is null.')
+_api_scale['properties']['minimum']['description'] = (
+    'The explicitly stated source lower bound, or null when absent. '
+    'An out-of denominator or a 10-point scale does not state a lower bound. '
+    'Never copy zero or any other approved field minimum into source evidence.')
+_api_scale['properties']['maximum']['description'] = (
+    'The explicitly stated source upper bound or out-of denominator, or null when absent; '
+    'never copy an approved field maximum that the measurement source does not state.')
+_api_scale['properties']['span']['description'] = (
+    'Exact quote of this same measurement\'s stated range or out-of phrase, '
+    'containing every non-null bound. Do not cite another measurement or approved definition.')
 ASSIGN_SCHEMA = _schema({'fields': _array(_schema({'key': STRING, 'fact_ids': _array(STRING), 'status': _enum(STATES), 'separator': _enum(SEPARATORS)}), 100)})
 CHECK_SCHEMA = _schema({'fields': _array(_schema({'key': STRING, 'verdict': _enum(VERDICTS), 'fact_ids': _array(STRING), 'reason': STRING}), 100),
     'fact_findings': _array(_schema({'fact_id': STRING, 'verdict': _enum(('incorrect', 'ambiguous')), 'reason': STRING}))})
@@ -503,8 +523,15 @@ EXTRACT_INSTRUCTIONS = ('Extract individual clinical/document facts from the ORI
     'subject, negation/uncertainty and timing. Separate compound facts: pain 3 and no head injury are different facts. Keep the negative word within the value span '
     'where possible; never change negation, certainty, person or time. Extract exact name, concise symptom/finding/assessment phrases and complete timing phrases '
     '(e.g. in one week), not the whole source sentence as the value. Evidence retains the whole context separately. '
+    'For an injury or event history, retain its documented causal or timing connector in the self-contained value phrase: '
+    'after stepping off a curb yesterday, before the fall, or since last week; do not detach the event from that relationship. '
     'For a measurement, select only the numeric numerator/value, never its denominator. The scale span must retain its complete explicit range or out-of phrase, '
     'bound to this same value. Explicitly preserve units and the stated scale with evidence. Do not assume or convert a scale. '
+    'Source scale metadata and approved field constraints are different. For 3 out of 10, 3/10, or 3 on a 10-point scale, '
+    'set scale.minimum to null and scale.maximum to "10": no source lower bound was stated. '
+    'For 3 on a 1 to 10 scale, set scale.minimum to "1" and scale.maximum to "10". '
+    'Never copy an approved zero-to-ten minimum of "0" into the source scale when the notes do not explicitly state it. '
+    'If no scale is stated in the notes, set scale to null; the approved definition cannot supply missing source evidence. '
     'If an approved narrative field also needs that measurement, extract a separate history/finding/plan fact with a self-contained exact source phrase '
     'retaining its clinical label, value, units and scale (for example Pain is 3 out of 10). Keep the separate numeric measurement fact for typed numeric fields. '
     'For these complete text facts leave unit, unit_span and scale metadata null: the original unit/scale words remain in their exact value quote, while '
