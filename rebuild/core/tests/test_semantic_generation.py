@@ -210,6 +210,102 @@ class SemanticGenerationTests(SimpleTestCase):
         self.assertFalse(schema.get('additionalProperties', True))
         self.assertIsInstance(instructions, str)
 
+    def test_soap_subjective_cannot_reduce_documented_pain_measurement_to_bare_number(self):
+        fields, definitions = self.one_field('Subjective')
+        notes = 'Subjective: Left ankle pain. Pain is 3 out of 10.'
+        facts = [fact(notes, fields, 'symptom', 'Left ankle pain', kind='history'),
+                 fact(notes, fields, 'pain', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')})]
+        answer = self.generated(notes, fields, definitions, facts, ['symptom', 'pain'])
+        self.assert_held(answer)
+        self.assertIn('complete documented measurement phrase', ' '.join(answer['review_reasons']))
+        self.assertEqual([item['quote'] for item in answer['evidence']],
+                         ['Subjective: Left ankle pain.', 'Pain is 3 out of 10.'])
+        stale = deepcopy(answer)
+        stale.update(status='supported', text=answer['candidate_text'], value=answer['candidate_text'])
+        with self.assertRaises(ValidationError):
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], stale)
+
+    def test_labelled_soap_keeps_complete_measurement_phrase_and_separate_typed_numeric_value(self):
+        labels = ('Subjective', 'Objective', 'Assessment', 'Plan', 'Pain score0 to 10')
+        fields = [{'key': 'soap_'+str(index), 'label': label, 'kind': 'text', 'locator': {'cell': index}}
+                  for index, label in enumerate(labels)]
+        definitions = default_definitions(fields)
+        definitions['soap_3']['scope']['temporality'] = 'future'
+        notes = ('Subjective: Left ankle pain after stepping off a curb yesterday. Pain is 3 out of 10.\n'
+                 'Objective: Mild swelling over the left lateral ankle, no deformity, and intact distal sensation.\n'
+                 'Assessment: Left ankle pain.\n'
+                 'Plan: Follow-up assessment in one week.')
+        facts = [fact(notes, fields, 'symptom', 'Left ankle pain', kind='history'),
+                 fact(notes, fields, 'mechanism', 'after stepping off a curb yesterday', kind='history',
+                      timing='past', timing_quote='yesterday'),
+                 fact(notes, fields, 'pain_narrative', 'Pain is 3 out of 10', kind='history', concept='pain_score'),
+                 fact(notes, fields, 'pain_numeric', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')}),
+                 fact(notes, fields, 'swelling', 'Mild swelling over the left lateral ankle'),
+                 fact(notes, fields, 'deformity', 'no deformity', polarity='negated'),
+                 fact(notes, fields, 'sensation', 'intact distal sensation'),
+                 fact(notes, fields, 'assessment', 'Left ankle pain', kind='assessment', occurrence=1),
+                 fact(notes, fields, 'plan', 'Follow-up assessment in one week', kind='plan',
+                      timing='future', timing_quote='in one week')]
+        assigned = assignments(fields, {'soap_0': ['symptom', 'mechanism', 'pain_narrative'],
+            'soap_1': ['swelling', 'deformity', 'sensation'], 'soap_2': ['assessment'],
+            'soap_3': ['plan'], 'soap_4': ['pain_numeric']})
+        sender = FixtureSender(facts, assigned)
+        answers = semantic.run(notes, fields, definitions, sender)
+        expected = {'soap_0': 'Left ankle pain; After stepping off a curb yesterday; Pain is 3 out of 10',
+                    'soap_1': 'Mild swelling over the left lateral ankle; No deformity; Intact distal sensation',
+                    'soap_2': 'Left ankle pain', 'soap_3': 'Follow-up assessment in one week', 'soap_4': '3'}
+        for field in fields:
+            answer = answers[field['key']]
+            with self.subTest(field=field['key']):
+                self.assertEqual((answer['text'], answer['status']), (expected[field['key']], 'supported'))
+                self.assertFalse(answer['reviewed'])
+                self.assertIs(semantic.validate_stored_answer(notes, field, definitions[field['key']], answer), answer)
+                for evidence in answer['evidence']:
+                    self.assertEqual(notes[evidence['start']:evidence['end']], evidence['quote'])
+        self.assertEqual(answers['soap_4']['value'], 3)
+        self.assertEqual([(role, attempt) for role, attempt, *_ in sender.calls],
+                         [('extractor', 1), ('assigner', 1), ('checker', 1)])
+
+    def test_bare_narrative_measurement_cannot_escape_by_extractor_kind_relabelling(self):
+        fields, definitions = self.one_field('Subjective')
+        notes = 'Subjective: Left ankle pain. Pain is 3 out of 10.'
+        for kind in ('history', 'finding', 'other'):
+            with self.subTest(kind=kind):
+                facts = [fact(notes, fields, 'symptom', 'Left ankle pain', kind='history'),
+                         fact(notes, fields, 'pain', '3', kind=kind, concept='pain_score',
+                              scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')})]
+                answer = self.generated(notes, fields, definitions, facts, ['symptom', 'pain'])
+                self.assert_held(answer)
+                self.assertIn('complete documented measurement phrase', ' '.join(answer['review_reasons']))
+
+    def test_numeric_measurement_peers_exclude_complete_same_concept_narrative_summary(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'Pain is 3 out of 10. Pain is 3.0 out of 10.'
+        facts = [fact(notes, fields, 'summary', 'Pain is 3 out of 10', kind='history', concept='pain_score'),
+                 fact(notes, fields, 'score_integer', '3', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3 out of 10')}),
+                 fact(notes, fields, 'score_decimal', '3.0', kind='measurement', concept='pain_score',
+                      scale={'minimum': None, 'maximum': '10', 'span': span(notes, '3.0 out of 10')})]
+        answer = self.generated(notes, fields, definitions, facts, ['score_integer'])
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('3', 3, 'supported'))
+        self.assertFalse(answer['reviewed'])
+        self.assertIs(semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer), answer)
+
+    def test_equal_measurement_numbers_on_conflicting_scales_stay_held_with_both_contexts(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        notes = 'Pain is 3 out of 5. Pain is 3 out of 10.'
+        facts = [fact(notes, fields, 'score_'+denominator, '3', kind='measurement', concept='pain_score',
+                      occurrence=index, scale={'minimum': None, 'maximum': denominator,
+                                               'span': span(notes, '3 out of '+denominator)})
+                 for index, denominator in enumerate(('5', '10'))]
+        answer = self.generated(notes, fields, definitions, facts, ['score_10'])
+        self.assert_held(answer)
+        self.assertIn('conflicting values', ' '.join(answer['review_reasons']))
+        self.assertEqual([item['quote'] for item in answer['evidence']],
+                         ['Pain is 3 out of 10.', 'Pain is 3 out of 5.'])
+
     def one_field(self, label='Findings', **scope):
         fields = [{'key': 'answer', 'label': label, 'kind': 'text', 'locator': {'cell': 0}}]
         definitions = default_definitions(fields)

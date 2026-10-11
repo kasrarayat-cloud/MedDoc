@@ -377,6 +377,8 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
         if (row['status'] == 'missing') != (not picked): reasons.append('Missing information cannot carry an asserted value.')
         for f in picked:
             if f['id'] in superseded: reasons.append('This fact was explicitly corrected by later source documentation.')
+            if d['value_type']=='text' and re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)',f['value_evidence']['quote'].strip()):
+                reasons.append('A narrative answer needs the complete documented measurement phrase, preserving its clinical label, units and scale; a bare numeric fact is insufficient.')
             if d['scope']['subject'] in ('patient', 'clinician', 'other') and f['subject']['kind'] != d['scope']['subject']:
                 reasons.append('The fact subject does not match the approved field scope.')
             if d['scope']['temporality'] != 'any' and f['timing']['kind'] != d['scope']['temporality']:
@@ -405,8 +407,11 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
                         and _decimal(f['scale']['minimum']) != _decimal(b['scale_minimum'])):
                     reasons.append('The explicitly stated source scale minimum differs from the approved scale.')
                 peers = [x for x in facts.values() if x['id'] not in superseded and x['concept'].casefold() == f['concept'].casefold()
-                         and _same_subject(x['subject'], f['subject']) and x['timing']['kind'] == f['timing']['kind'] and not x['issues']]
-                if len({x['value_evidence']['quote'].strip() for x in peers}) > 1:
+                         and _same_subject(x['subject'], f['subject']) and x['timing']['kind'] == f['timing']['kind'] and not x['issues']
+                         and re.fullmatch(r'[+-]?(?:\d+(?:\.\d+)?|\.\d+)',x['value_evidence']['quote'].strip())]
+                measurement=lambda x:(_decimal(x['value_evidence']['quote'].strip()),x['unit'],
+                    tuple((x['scale'] or {}).get(k) for k in ('minimum','maximum')))
+                if len({measurement(x) for x in peers}) > 1:
                     reasons.append('The notes contain conflicting values for this measurement.')
                     competing.extend(peers)
         evidence = []
@@ -500,6 +505,10 @@ EXTRACT_INSTRUCTIONS = ('Extract individual clinical/document facts from the ORI
     '(e.g. in one week), not the whole source sentence as the value. Evidence retains the whole context separately. '
     'For a measurement, select only the numeric numerator/value, never its denominator. The scale span must retain its complete explicit range or out-of phrase, '
     'bound to this same value. Explicitly preserve units and the stated scale with evidence. Do not assume or convert a scale. '
+    'If an approved narrative field also needs that measurement, extract a separate history/finding/plan fact with a self-contained exact source phrase '
+    'retaining its clinical label, value, units and scale (for example Pain is 3 out of 10). Keep the separate numeric measurement fact for typed numeric fields. '
+    'For these complete text facts leave unit, unit_span and scale metadata null: the original unit/scale words remain in their exact value quote, while '
+    'the separate numeric fact carries the typed measurement metadata. Bare numeric facts are not displayed in approved text fields. '
     'Every named subject span must be within the cited complete source_unit_ids. Patient identity may be established earlier, but another person, a timing phrase '
     'or a measurement unit cannot be borrowed from an unrelated statement. Units must directly qualify their numeric value. If attribution needs ambiguous '
     'pronoun/antecedent interpretation, mark the subject uncertain. The subject is the person the clinical fact describes, not merely its speaker. '
@@ -511,6 +520,7 @@ ASSIGN_INSTRUCTIONS = ('Assign the extracted facts to the APPROVED field meaning
     'and independently checks types and source references. A name gets only the identity fact; reason and assessment get the documented appropriate symptom/diagnosis '
     'phrase; a numeric field gets only its measurement; follow-up gets its timing phrase. History, findings and plan must retain relevant documented facts and '
     'negations. Use ; or newline to combine relevant facts. Do not copy other people into patient fields or historical facts into current findings. '
+    'For narrative text fields select complete documented measurement phrases, never bare numeric measurement facts that would lose their label or scale. '
     'Return every requested key. Missing has no fact IDs. Conflict/ambiguity remains explicit. Protected signing fields stay missing. '
     'On targeted repair return ONLY repair_keys and use the original unchanged facts; unresolved extraction problems require clinician review.')
 CHECK_INSTRUCTIONS = ('You are an INDEPENDENT answer checker. Inspect the ORIGINAL complete notes and APPROVED definitions, not an assurance from another role. '

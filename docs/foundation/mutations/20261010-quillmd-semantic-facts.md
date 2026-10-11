@@ -75,10 +75,96 @@ No receipt, uncertain request, existing job or preparation is automatically
 resent by installation, reconnect, refresh or recovery.
 
 Publish only the final reviewed source manifest and independently qualified
-static delta. Preserve every old immutable hashed asset and all 96 current
-installed static entries; update only the declared current aliases, manifest and
+static delta. Preserve every old immutable hashed asset and all 102 current
+installed static entries (93 files, nine directories, 18 manifest sources); update only the declared current aliases, manifest and
 new source-bound assets. Retain the stopped baseline and a fresh authenticated,
 isolated-restored encrypted backup before applying the additive migration. Use
 the reviewed v5 owner-hourly and strictly dormant-service witness without widening
 its allowed states. Final feature/merge SHA, migration/catalog/static/operator
 hashes and exact path lists are recorded prospectively before native execution.
+
+## Prospective artifact binding (finished native adapter v7)
+
+The protected operator and qualification artifacts are under
+`/opt/meddoc-pro/rebuild/.runtime/semantic-facts-20261010/ops-review-v1/`
+(directory 0700; artifacts 0600). They are prospective installation inputs, not
+evidence that installation or public verification has occurred. The operator is
+inert by default and requires separately reviewed protected execution inputs,
+the exact merged candidate and declaration commit, successful citation, and the
+unchanged native baseline before acting. Candidate and final declaration commit
+remain execution inputs to avoid a commit/hash circularity. The exact list of 39
+source paths is sealed in the operator; it includes the initial authority
+documents and the finished refutation report.
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `reviewed-native-semantic-facts-install-v7.py` | `5d2207f93efe87daed7dd55611cc9ae0517463581dfa2f2eb62fc593ec2c5177` |
+| `reviewed-native-semantic-facts-install-v6.py` (retained historical 37 path adapter) | `80e769433a383b377e58cd0a1fbaaf7ebbedcc07413c68bf83b3a1c0b181e881` |
+| `semantic_additive_v1.py` | `168a53ab7785a745a5f35bd0cf02dc16b927136c461de0da71d11da4ce35908d` |
+| `semantic_static_v1.py` | `bfa09a0f6a5090a95fe0ef11ba010ece2a714fece8257eace1c90301432904ac` |
+| `qualified-pg17-semantic-contract-v1.json` | `4d4987df5edf81bd948534ffb6caa58bb9e89f70940886404b87a508ebf8f202` |
+| `qualified-pg17-semantic-contract-proof-v1.json` | `8ff497b8a4f5ce0e8e22fce5316d405b79fff767c601e0836299b85f8af32996` |
+| `qualified-static-contract-v1.json` | `51c4fca0caebe327188dfd55b42c5d64304ad235ca7d425fb2ac400c46b8183f` |
+| `qualify_semantic_operator_v7.py` | `ab747a6ed5718fd7ff67c05bcd6e0ae9cf58856c7fe6070607ec6664ccc3617f` |
+| `offline-operator-v7-qualification-v2.json` | `6b8f729549573a3f22e4b1ff4721ddb1c3f5640f7cc8072b9fc83010a537f427` |
+| `collect_fixture_semantic_catalog_v1.py` | `e8783e7e034f4e770e49e4626b762e270467695f131892f776017233685452b3` |
+| `qualify_actual_semantic_static_v2.py` | `e9a26d314565b4268b57aff2af11df52bd8ea3628421bfdce76b18a1191f15ee` |
+
+The first concrete scope is commit
+`b74379d44e7e5ff8901da708b771880a6fe713a1`, whose declaration blob SHA-256 is
+`976e75fd7e27cbc1919456cc87210fc7ad08616048361e817e65b15dbfe80ed6`.
+Its initial authority ancestor is `bd1de4d820103a09f410c45299be62e4b0b0aa96`.
+The installed/base backup source remains
+`098637bc0fa63e4699da7d307519b508bad6047580af93bc57343b702b36d9e8`;
+the new candidate backup source is
+`29d46db0cdfec0b472baf90ca413127d6deb17d241b5ef1e6ab44e856db0df23`.
+Migration 0026 is exactly
+`bfdc362a31440974f630f1e3cb61dc8141b8b7e97a0ffd823baf51f2e1333a33`.
+
+The static contract binds all 102 existing inventory entries (93 files, nine
+directories, 18 manifest sources) to inventory SHA-256
+`e386a07908bf806286b792f9a0f6880741891e7fbcca26142a97d3a16db2d87b`. The candidate has 19 public sources.
+The only two changed or new public script source hashes are:
+
+| Public source | SHA-256 |
+| --- | --- |
+| `encounter-live.js` | `3bd376ffb8fe3e024439b93ab329402ac50d0f2b2765bc578f44f6d216d781f1` |
+| `template-semantic-preparation.js` | `52e1821b9c4aae52aea5b3505b4a9a9a407d55cd72a1dfdf7fcb7057d2570846` |
+
+Qualification exercised 12 positive and 91 refusal/mutation controls on the actual
+operator/helpers. The isolated committed migration measured 41 tables, 27 public
+functions and 28 triggers; all three new function bodies equal the frozen
+migration SQL and all 24 prior function bodies/security match. Fixture ownership
+is explicitly mapped only for the three new function owners to native
+`quillmd_owner`; the live native comparison never normalizes old or new catalog
+values. The actual static collector and installer passed all 10 partial file
+boundaries, preserving the native public inventory and every historical hash.
+Qualification sent zero provider requests and performed zero native service,
+database or public-asset mutations. The earlier stale fixture guard and
+incorrect 96 entry assumption were refused, retained as diagnostic evidence, and
+corrected before this binding.
+
+## Finite public verification plan
+
+Use two separately reviewed semantic preparations and twelve new synthetic note
+jobs: exact retained Alex narrative, the actual previously successful labelled
+SOAP source, and ten declared adapted adversarial/quality cases. Each preparation
+has two API calls; each note has three plus at most one targeted repair/recheck.
+This plan has at most 64 API requests, with a frozen conservative quote for every
+whole pipeline. A failed assertion stops further corpus sends. Unknown provider
+outcomes are never automatically resent. The controlled stale-revision refusal
+and retained failed-job replay create no new provider request. Account charges
+remain zero under the existing standing authority; actual configured provider
+costs are measured separately.
+
+The following owner-only verifier sources are frozen before execution. They do
+not constitute evidence of a successful public flow.
+
+| Verifier under `rebuild/.runtime/semantic-facts-20261010/` | SHA-256 |
+| --- | --- |
+| `public-semantic-prepare-v1.mjs` | `2e5ad5228c7dd24b23003ae71b661bbe578f2f34a5f541ab0986686edea6e3a7` |
+| `public-semantic-notes-v1.mjs` | `31f90ba91cd205925c10f3646d36b9f5694bc739faca6a2397f50e53628a34c5` |
+| `public-semantic-corpus-v1.mjs` | `05f8d9755feecd849ed366663c019f3eab812dc964205d89bff35f7000915fdc` |
+| `collect_served_semantic_evidence_v1.py` | `bc2600cd36ee0a17f89543485e8dde0239cd15a691b606d1e8c58ce799126958` |
+| `word-review-v2/verify_word.py` | `20038119b83f6a61d44f1647957e91a5a1ecae64af030b1957a944bffd8d4355` |
+| `score-semantic-corpus-v1.mjs` | `167ce8bf9fdb7c8f060a0900e313d211c9103f2c7772aa009a81bcfd2fcf272d` |
