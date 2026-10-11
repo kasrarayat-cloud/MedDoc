@@ -58,6 +58,32 @@ try {
   page.on('pageerror', () => scriptErrors.push('Client script error'));
   page.setDefaultTimeout(20_000);
 
+  await check('Preparation status reconnects after failed read-only requests', async () => {
+    const probe = await context.newPage();
+    let documents = 0, requests = 0;
+    await probe.route('**/__preparation_poll_test/', route => {
+      documents++;
+      return route.fulfill({contentType:'text/html', body:`<!doctype html><div data-preparation data-state="${documents===1?'queued':'blocked'}" data-status-url="/__preparation_status_test/"><h2 data-preparation-status>Preparation ${documents===1?'queued':'stopped'}</h2><span data-elapsed></span></div><script src="/static/template-preparation.js" defer></script>`});
+    });
+    await probe.route('**/__preparation_status_test/', route => {
+      assert.equal(route.request().method(),'GET');requests++;
+      if(requests===1)return route.abort('failed');
+      if(requests===2)return route.fulfill({status:503,contentType:'text/plain',body:'Temporary status read failure'});
+      return route.fulfill({contentType:'application/json',body:JSON.stringify({state:requests===3?'checker':'blocked'})});
+    });
+    await probe.goto(new URL('/__preparation_poll_test/',base).href);
+    await probe.getByText(/Connection interrupted/).waitFor();
+    await probe.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await probe.waitForTimeout(300);
+    await probe.evaluate(()=>window.dispatchEvent(new Event('online')));
+    await probe.getByText('Independent AI checker is checking completeness and placement',{exact:true}).waitFor();
+    await probe.waitForFunction(()=>document.querySelector('[data-preparation]')?.dataset.state==='blocked');
+    await probe.getByText('Preparation stopped',{exact:true}).waitFor();
+    assert.equal(requests,4);assert.equal(documents,2);
+    await probe.waitForTimeout(2800);assert.equal(requests,4);
+    await probe.close();
+  });
+
   async function accessibility(name) {
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa']).analyze();
     // Report rule identifiers only, never form values or document content.

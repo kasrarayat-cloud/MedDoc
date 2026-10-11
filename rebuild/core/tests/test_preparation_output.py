@@ -107,6 +107,8 @@ class PreparationOutputTests(SimpleTestCase):
                 patch('core.testing_authority.create_preparation') as create:
             preparation.create_preparation(SimpleNamespace(sha256=self.inventory['source_sha256']),'synthetic-doctor')
         self.assertEqual(create.call_args.args[2]['word_preparation_output_profile'],preparation.OUTPUT_PROFILE)
+        self.assertEqual(create.call_args.args[2][preparation.DESTINATION_KEY],preparation.DESTINATION_PROFILE)
+        self.assertNotIn(preparation.DESTINATION_KEY,original)
         self.assertEqual(original,before)
         self.assertEqual(preparation.role_limits(self.inventory,original),(2500,Decimal('0.10')))
         self.assertEqual(preparation.role_limits(self.inventory),(2500,Decimal('0.10')))
