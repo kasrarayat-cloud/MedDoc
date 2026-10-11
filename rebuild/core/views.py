@@ -330,7 +330,9 @@ def template_detail(request,pk):
                 audit(request.user,'template.mapping_version',version.pk,department=t.department,number=version.number)
             messages.success(request,'New mapping version saved. Existing documents keep their original version.');return redirect('template_detail',pk=t.pk)
         except ValidationError as exc:form.add_error(None,error_message(exc))
-    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
+    from .semantic_preparation import unavailable_reason
+    definition_unavailable_reason=unavailable_reason(version)
+    return render(request,'template_detail.html',{'template':t,'version':version,'form':form,'definition_unavailable_reason':definition_unavailable_reason,'can_prepare_definitions':not definition_unavailable_reason and Membership.objects.filter(user=request.user,department=t.department,active=True,role__in=['owner','clinician']).exists(),'field_rows':field_location.rows(version.fields),'field_locations':[field_location.describe(f) for f in version.fields],'statements':statement_guide(version)})
 
 def template_original(request,pk):
     t=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -384,6 +386,8 @@ def encounter_detail(request,pk):
         codes=list(visible_codes)
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
+    from .semantic_review import definitions_for,displayed_answer
+    semantic_definitions=definitions_for(e.template_version)
     rows=[{**f,**e.answers.get(f['key'],{'text':'','status':'missing','evidence':[],'reviewed':False})} for f in e.template_version.fields]
     # ⚠️ A CLINICAL DECISION IS ATTRIBUTED TO THE PERSON WHO MADE IT, NOT TO WHOEVER IS READING.
     # The page told every reader "You accepted this as your answer" — so a second clinician opening
@@ -395,7 +399,9 @@ def encounter_detail(request,pk):
     from .tab_review import clinician_identity
     deciders={str(pk):email for pk,email in User.objects.filter(
         pk__in={(row.get('blank_decision') or {}).get('by') for row in rows} - {None}).values_list('pk','email')}
-    if e.status!='finalized' and e.answers:
+    if semantic_definitions and e.answers:
+        rows=[{**field,**displayed_answer(e,field,e.answers.get(field['key'],{}),semantic_definitions)} for field in e.template_version.fields]
+    if e.status!='finalized' and e.answers and not semantic_definitions:
         # ⚠️ THE PAGE SHOWS WHAT FINALIZATION WILL REFUSE, BY THE SAME READER. A draft from an earlier release
         # can hold a governed answer as `supported` or as a one-click offer, accepted or not; each is shown held,
         # with every line that governs it. A FINALIZED record is never re-described: it shows what was offered.
@@ -461,7 +467,8 @@ def encounter_detail(request,pk):
             row['review_errors']=[WM_BLOCKERS.get(reason,'Clinical review is incomplete.') for reason in reasons]
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
-    try:maximum_charge=maximum_cost(e.notes,e.template_version.fields,context_labels=[row['label'] for row in e.template_version.review_requirements])*Decimal('1.5')
+    from .jobs import generation_maximum
+    try:maximum_charge=generation_maximum(e)*Decimal('1.5')
     except ValidationError:maximum_charge=None
     from . import testing_authority
     standing_testing=False
@@ -498,7 +505,7 @@ def encounter_detail(request,pk):
     return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':is_wm or bool(e.template_version.fields) and all('tab_form' in f.get('locator',{}) for f in e.template_version.fields),'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
-        'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
+        'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
         'live_result_version':live_result['result_version']})
 
 @require_GET
@@ -580,11 +587,25 @@ def save_answers(request,pk):
         membership(request.user,e.department,roles=['owner','clinician'])
     answers={};review_errors=[];newly_accepted=[];withdrawn=[];newly_blank=[];withdrawn_blank=[];target_revision=e.revision+1
     previous_answers=dict(e.answers)
+    from .semantic_review import definitions_for,save_answer as save_semantic_answer
+    semantic_definitions=definitions_for(e.template_version)
     # ⚠️ ONCE PER SAVE, NOT PER FIELD: this runs under the row lock, and a 100-field save recomputed it per offer.
     from .generation import governance_for,governed_supported,held_for_decision,is_empty,looks_the_same,offer_context
-    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements],answers=e.answers)
+    governance=governance_for(e.notes,e.template_version.fields,[row['label'] for row in e.template_version.review_requirements],answers=e.answers) if not semantic_definitions else None
     for field in e.template_version.fields:
         key=field['key'];previous=e.answers.get(key,{'text':'','evidence':[],'status':'missing'})
+        if semantic_definitions:
+            value=request.POST.get('answer_'+key,'').replace('\r\n','\n').replace('\r','\n')
+            blank=request.POST.get(('semantic_blank_' if is_wm else 'blank_')+key)=='on'
+            if previous.get('status')=='left_blank' and value.strip():blank=False
+            try:
+                answers[key]=save_semantic_answer(e,field,previous,value,request.user,
+                    request.POST.get('reviewed_'+key)=='on',blank,target_revision,semantic_definitions,
+                    withdraw_blank=request.POST.get(('semantic_blank_shown_' if is_wm else 'blank_shown_')+key)=='1')
+            except ValidationError as exc:return document_refusal(request,e,'"'+field['label']+'": '+error_message(exc)+' Nothing was saved.',400)
+            if blank and previous.get('status')!='left_blank':newly_blank.append(key)
+            if previous.get('status')=='left_blank' and answers[key].get('status')!='left_blank':withdrawn_blank.append(key)
+            continue
         held_shown=request.POST.get('held_shown_'+key)=='1'
         supported_context=governed_supported(governance,e.notes,previous,field['label'])
         governed_offer=offer_context(governance,e.notes,previous,field['label']) is not None
@@ -796,13 +817,17 @@ def finalize(request,pk):
             if unreviewed:raise ValidationError('A clinician must review every field, including missing information. Not yet reviewed: '+field_list(unreviewed))
             order=[f['key'] for f in e.template_version.fields]
             names={f['key']:f['label'] for f in e.template_version.fields}
-            conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status')=='conflict'),key=lambda k:(order.index(k) if k in order else len(order),k))]
+            conflicts=[names.get(k,k) for k in sorted((k for k,v in e.answers.items() if v.get('status') in ('conflict','ambiguous')),key=lambda k:(order.index(k) if k in order else len(order),k))]
             if conflicts:raise ValidationError('Resolve every conflict before finalizing. Each needs your decision: your own answer, the offered suggestion where there is one, or "Leave blank — reviewed" when no answer belongs there. Still in conflict: '+field_list(conflicts))
             # ⚠️ RECOMPUTED FROM THE NOTES, NOT TRUSTED FROM THE DRAFT. A draft generated before headings
             # governed their lines (or by any path that skipped the rule) can still hold a denied finding as
             # a ready answer; the review tick alone must not finalize it.
             from .generation import governed_decisions
-            governed=governed_decisions(e.notes,e.template_version.fields,e.answers,
+            from .semantic_review import definitions_for,validate_answer
+            semantic_definitions=definitions_for(e.template_version)
+            if semantic_definitions:
+                for field in e.template_version.fields:validate_answer(e,field,e.answers.get(field['key'],{}),semantic_definitions)
+            governed=[] if semantic_definitions else governed_decisions(e.notes,e.template_version.fields,e.answers,
                                         [row['label'] for row in e.template_version.review_requirements])
             if governed:raise ValidationError('These answers were read from lines that a heading or a sentence in the notes may change, and still need your decision: '+field_list(governed)+' Each is shown on the document with what governs it (its lines, or the reason that applies to the whole note): enter your own answer there'+('' if e.template_version.document_backend else ' or choose "Leave blank — reviewed"')+'.')
             from .template_source import source_for_version, export_layout_for_version

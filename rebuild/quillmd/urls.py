@@ -41,3 +41,12 @@ urlpatterns += [
     path('console/services/', a.admin_services, name='admin_services'),
     path('console/usage.csv', a.admin_usage_export, name='admin_usage_export'),
 ]
+
+from core import semantic_preparation_views as definitions
+urlpatterns += [
+    path('templates/<uuid:pk>/definitions/start/',definitions.start,name='template_definitions_start'),
+    path('definition-preparations/<uuid:pk>/',definitions.detail,name='template_definitions'),
+    path('definition-preparations/<uuid:pk>/status/',definitions.status,name='template_definitions_status'),
+    path('definition-preparations/<uuid:pk>/corrections/',definitions.corrections,name='template_definitions_correct'),
+    path('definition-preparations/<uuid:pk>/approve/',definitions.approval,name='template_definitions_approve'),
+]

@@ -35,7 +35,11 @@ class LegacyBackupQueryTests(SimpleTestCase):
             seen.append(statement)
             return [(None,)] if statement.startswith('SELECT to_regclass(') else [(0,)]
         self.assertEqual(backup.invariant_counts(query), dict.fromkeys(backup.INVARIANTS, 0))
-        self.assertEqual(seen[1:], list(backup.INVARIANTS.values()))
+        self.assertEqual(seen[:2], ["SELECT to_regclass('public.core_testingreservation')",
+                                   "SELECT to_regclass('public.core_aistagereceipt')"])
+        # Catalog detection may grow, but pre-0024 data qualification must keep
+        # exactly the four original statements and original manifest keys.
+        self.assertEqual(seen[2:], list(backup.INVARIANTS.values()))
 
 
 @override_settings(**SETTINGS)
@@ -107,7 +111,10 @@ class StandingBackupPostgresTests(TransactionTestCase):
         return job, usage
 
     def assert_clean(self):
-        self.assertEqual(backup.invariant_counts(self.query), dict.fromkeys(backup.INVARIANTS, 0))
+        expected=dict.fromkeys(backup.INVARIANTS,0)
+        if self.query("SELECT to_regclass('public.core_aistagereceipt')")[0][0] is not None:
+            expected.update(dict.fromkeys(backup.SEMANTIC_INVARIANTS,0))
+        self.assertEqual(backup.invariant_counts(self.query),expected)
 
     @contextmanager
     def shadow(self, *tables):

@@ -183,6 +183,7 @@ jobs:
           node wm-browser-tests.mjs
           node input-workflow-browser.mjs "$PWD/.runtime/input-workflow-browser"
           node live-results-browser.mjs "$PWD/.runtime/live-results-browser"
+          node semantic-preparation-browser.mjs "$PWD/.runtime/semantic-preparation-browser"
       - name: Upload synthetic browser evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -196,6 +197,7 @@ jobs:
             rebuild/.runtime/wm-browser-artifacts/report.json
             rebuild/.runtime/input-workflow-browser/result.json
             rebuild/.runtime/live-results-browser/result.json
+            rebuild/.runtime/semantic-preparation-browser/result.json
             rebuild/.runtime/word-preview-browser/browser-evidence.json
             rebuild/.runtime/word-preview-browser/*.png
             rebuild/.runtime/recovery-origin-browser/result.json

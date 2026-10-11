@@ -78,6 +78,13 @@
         cancelled:"The queued request was cancelled. No automatic retry will be sent."
       }[job.state] || "Check the request in Document record.");
       latest.append(title, detail);
+      if (Array.isArray(job.stages) && job.stages.length) {
+        const current = job.stages[job.stages.length - 1], progress = document.createElement("p");
+        const stageStates = {reserved:"queued",sending:"running",received:"response retained",succeeded:"complete",failed:"failed",unknown:"needs reconciliation"};
+        progress.className = "small";
+        progress.textContent = `${current.label} · ${stageStates[current.state] || "review required"}${current.attempt === 2 ? " · targeted repair" : ""}. ${current.completed_calls} of up to ${current.maximum_calls} independent calls complete.`;
+        latest.append(progress);
+      }
       if (job.kind === "generation" && job.state === "failed") {
         const retry = document.createElement("p");
         retry.textContent = "Review this error and Document record. To explicitly try again, save the source notes again (unchanged is fine), then generate. Refreshing or clicking Generate again on this revision reuses this attempt.";

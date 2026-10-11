@@ -90,15 +90,16 @@ class DeliveryCampaignPostgresTests(TransactionTestCase):
             provider='anthropic', requested_model='synthetic-guard-configured-label', request_sha256='a' * 64,
             quote_maximum=extra.pop('quote_maximum', quote), **extra)
 
-    def encounter(self):
+    def encounter(self, version_model=TemplateVersion):
         template = self.template()
-        version = TemplateVersion.objects.create(template=template, number=1, created_by=self.doctor)
+        version = version_model.objects.create(template_id=template.pk, number=1, created_by_id=self.doctor.pk)
         return Encounter.objects.create(patient=self.patient, department=self.department,
-            created_by=self.doctor, template_version=version, notes='Synthetic guard fixture only',
+            created_by=self.doctor, template_version_id=version.pk, notes='Synthetic guard fixture only',
             service_date=timezone.now().date())
 
     def job(self, kind='generation', **extra):
-        return self.raw_insert(Job, encounter=self.encounter(), user=extra.pop('user', self.doctor),
+        version_model=extra.pop('version_model',TemplateVersion)
+        return self.raw_insert(Job, encounter=self.encounter(version_model), user=extra.pop('user', self.doctor),
             kind=kind, request_key=str(uuid.uuid4()), config=extra.pop('config', self.config(campaign_quote_usd='0.20')), **extra)
 
     def refusal(self, call, message=None):
@@ -354,6 +355,10 @@ class DeliveryCampaignPostgresTests(TransactionTestCase):
                 cursor.execute('REVOKE EXECUTE ON ALL FUNCTIONS IN SCHEMA public FROM PUBLIC')
                 cursor.execute(sql.SQL('ALTER DEFAULT PRIVILEGES FOR ROLE {} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC').format(sql.Identifier(owner)))
             MigrationExecutor(connection).migrate([('core', '0023_delivery_campaign')])
+            # This probe intentionally runs the actual 0023 schema. Use its
+            # historical model so later additive columns are not sent to it.
+            historical_version=executor.loader.project_state([('core','0023_delivery_campaign')]).apps.get_model('core','TemplateVersion')
+            self.assertNotIn('semantic_definitions',{field.name for field in historical_version._meta.fields})
             with connection.cursor() as cursor:
                 cursor.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(sql.Identifier(role)))
                 cursor.execute(sql.SQL('GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO {}').format(sql.Identifier(role)))
@@ -365,7 +370,7 @@ class DeliveryCampaignPostgresTests(TransactionTestCase):
                 self.assertEqual(cursor.fetchone(), (role, False, False))
                 prep = self.preparation(SHORT)
                 self.receipt(prep)
-                self.job()
+                self.job(version_model=historical_version)
                 self.refusal(lambda: self.preparation(SHORT), 'one attempt per original')
                 cursor.execute('RESET ROLE')
             self.assertEqual(TemplatePreparation.objects.count(), 1)

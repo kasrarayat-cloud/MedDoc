@@ -16,6 +16,9 @@ def approval_binding(preparation):
                    'candidate_info': preparation.candidate_info, 'changes': preparation.changes})
 
 def source_for_version(version):
+    if getattr(version,'semantic_preparation_id',None) or getattr(version,'semantic_definitions',{}):
+        from .semantic_preparation import validated_semantic_definitions
+        validated_semantic_definitions(version)
     original = private_path(version.template.original_path)
     data = read_original(original) if version.template.format == 'docx' else original.read_bytes()
     if hashlib.sha256(data).hexdigest() != version.template.sha256:
