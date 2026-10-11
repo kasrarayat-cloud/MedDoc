@@ -15,7 +15,7 @@ unknown reservations and approvals stay intact. Additionally preserve fresh temp
 `e5158f93-339a-477d-b98c-81c1e105a24b`, preparation
 `419bd180-0995-4fc5-8b63-f4d859b326f7`, receipt
 `8f8e7cc9-4ac5-48d8-8def-d4aebdc0b7aa` and its computedUSD0.077810000000.
-PacketSHA732093db00550c1c9be62255dd01b7300b5b09e3774f8f4c18c43fc67e4dd6a8.
+PacketSHA732093db00550c1c9be62255dd01b7300b5b09a3774f8f4c18c43fc67e4dd6a8.
 No retry or correction of that failed preparation is part of installation.
 
 The new explicit finite-physical-destinations-v1 profile supplies canonical physical
