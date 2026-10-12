@@ -89,6 +89,41 @@ class FreshWordContractTests(SimpleTestCase):
             self.assertEqual(generation_maximum(SimpleNamespace(template_version=version), self.config), 17)
         quote.assert_called_once()
 
+    @override_settings(STORAGES={'default':{'BACKEND':'django.core.files.storage.FileSystemStorage'},
+                                'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+    def test_preparation_detail_renders_before_inventory_or_both_role_results_exist(self):
+        from django.contrib.auth.models import AnonymousUser
+        from django.test import RequestFactory
+        from core import preparation_views
+        template = SimpleNamespace(pk='00000000-0000-0000-0000-000000000001',
+            name='Fresh blank form', sha256='a'*64)
+        for state, inv, proposal in [('queued', {}, {}), ('inventory', {}, {}),
+                ('proposer', self.inv, {}), ('checker', self.inv, {'pending':True}),
+                ('blocked', {}, {})]:
+            with self.subTest(state=state):
+                prep = SimpleNamespace(template=template, state=state, inventory=inv,
+                    proposal=proposal, checker={}, config=self.config, candidate_info={},
+                    corrections={}, candidate_path='', candidate_sha256='', changes=[],
+                    started_at=None, finished_at=None, error_code='', revision=0,
+                    receipts=Mock())
+                prep.receipts.order_by.return_value=[]
+                request=RequestFactory().get('/templates/'+template.pk+'/preparation/')
+                request.user=AnonymousUser()
+                with patch.object(preparation_views, 'selected', return_value=(template,prep)):
+                    response=preparation_views.detail(request, template.pk)
+                self.assertEqual(response.status_code, 200)
+                html=response.content.decode()
+                self.assertIn('data-state="'+state+'"', html)
+                self.assertNotIn('name="reviewed_definition"', html)
+                self.assertNotIn('Approve layout and create form version', html)
+
+    def test_complete_review_keeps_all_definitions_and_rejects_malformed_contract(self):
+        prep=self.version().preparation
+        self.assertEqual(len(word_contract.review_rows(prep)),12)
+        prep.checker['answer_definitions'].pop('fields')
+        with self.assertRaises((ValidationError, ValueError)):
+            word_contract.review_rows(prep)
+
     def test_missing_or_tampered_contract_never_downgrades(self):
         for name in ('payload','label','locator','definition','profile','reviewer','reviewed_fields'):
             version = deepcopy(self.version()); info = version.preparation.candidate_info
