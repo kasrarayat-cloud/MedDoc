@@ -120,6 +120,37 @@ class DefinitionPreparationPureTests(SimpleTestCase):
                    STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
                              'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class DefinitionPreparationDatabaseTests(TestCase):
+    def test_ambiguous_identity_needs_reviewed_correction_before_a_new_version(self):
+        original_role = workflow._call_role
+        def ambiguous(prep, role):
+            response = original_role(prep, role)
+            definition = response['fields'][0]['definition']
+            definition.update(value_type='person_name', answer_mode='atomic')
+            definition['scope']['subject'] = 'unspecified'
+            return response
+        prep = workflow.create_preparation(self.source, self.user)
+        with patch.object(workflow, '_call_role', side_effect=ambiguous):
+            self.assertTrue(workflow.run_one())
+        prep.refresh_from_db(); self.assertEqual(prep.state, 'guided')
+        context = __import__('core.semantic_preparation_views', fromlist=['context']).context(
+            prep, SimpleNamespace(role='clinician'))
+        self.assertIn('Choose whose name', context['definition_rows'][0]['reason'])
+        original = deepcopy((prep.proposal, prep.checker))
+        prep.state = 'review'; prep.save(update_fields=['state'])
+        with self.assertRaisesMessage(ValidationError, 'Choose whose name'):
+            self.approve(prep)
+        self.assertEqual(self.template.versions.count(), 1)
+        definitions = workflow.corrected_definitions(prep)
+        definitions[self.source.fields[0]['key']]['scope']['subject'] = 'patient'
+        corrected = workflow.correct(prep.pk, self.user, 0, definitions, list(definitions),
+            'Clarified the patient identity from the complete original form.')
+        version = self.approve(corrected)
+        self.assertEqual(version.number, 2)
+        corrected.refresh_from_db()
+        self.assertEqual((corrected.proposal, corrected.checker), original)
+        self.assertEqual(len(corrected.correction_history), 1)
+        self.assertEqual(self.source.semantic_definitions, {})
+
     def setUp(self):
         directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
         self.root = Path(directory.name)

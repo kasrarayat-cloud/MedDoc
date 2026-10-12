@@ -13,6 +13,7 @@ from documents.preparation_service import inspect_preparation
 from documents.semantic_preparation_roles import (
     PROTOCOL, DefinitionError, build_inventory, definitions_from_role, digest, fixture_role,
     role_instructions, role_schema, validate_definitions, validate_inventory, validate_role_result,
+    identity_scope_issues, require_identity_scopes,
 )
 from . import ai_stages, testing_authority
 from .generation import configuration
@@ -226,7 +227,8 @@ def run_one():
         prep.proposal = _call_role(prep, 'proposer')
         prep.state = 'checker'; prep.save(update_fields=['proposal', 'state'])
         prep.checker = _call_role(prep, 'checker')
-        prep.state = 'review' if roles_agree(prep) else 'guided'
+        prep.state = ('review' if roles_agree(prep) and not identity_scope_issues(
+            prep.source_version.fields, corrected_definitions(prep)) else 'guided')
     except Exception as exc:
         prep.state = 'blocked'
         prep.error_code = ('membership_lost' if isinstance(exc, PermissionDenied) else
@@ -298,7 +300,7 @@ def approve(prep_id, actor, revision, inventory_sha256, reviewed_fields, origina
         raise ValidationError('Resolve every proposer/checker disagreement with explicit clinician corrections.')
     _receipt_integrity(prep)
     try:
-        values = validate_definitions(source.fields, corrected_definitions(prep))
+        values = require_identity_scopes(source.fields, corrected_definitions(prep))
         _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc

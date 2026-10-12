@@ -570,7 +570,8 @@ def run_one(*, preparation_pk=None):
         prep.save(update_fields=['checker'])
         unresolved=(prep.inventory['issues'] or any(r['decision']!='map' for r in prep.proposal['anchors'])
                     or any(r['verdict']!='pass' for r in prep.checker['anchors'])
-                    or any(r['verdict']!='retain' for r in prep.proposal['stories']+prep.checker['stories']))
+                    or any(r['verdict']!='retain' for r in prep.proposal['stories']+prep.checker['stories'])
+                    or word_contract.identity_scope_issues(prep))
         if prep.inventory['issues'] or any(a['kind']=='choose_cell' for a in prep.inventory['anchors']):
             prep.state='guided'
         else:

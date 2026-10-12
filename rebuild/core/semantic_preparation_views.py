@@ -47,11 +47,14 @@ def posted_definitions(prep, post):
 
 def context(prep, member, *, definitions=None, error='', post=None):
     values = workflow.corrected_definitions(prep) if definitions is None else definitions
+    identity_issues = workflow.identity_scope_issues(prep.source_version.fields, values) if values and definitions is None else {}
     proposed = {row['field_key']: row for row in prep.proposal.get('fields', [])}
     checked = {row['field_key']: row for row in prep.checker.get('fields', [])}
     rows = [{'field': field, 'definition': values.get(field['key']), 'location': describe(field),
              'protected': protected_field(field), 'proposal': proposed.get(field['key']),
              'checker': checked.get(field['key']),
+             'state': 'unresolved' if field['key'] in identity_issues else '',
+             'reason': identity_issues.get(field['key'], ''),
              'reviewed': bool(post and field['key'] in post.getlist('reviewed_field'))}
             for field in prep.source_version.fields]
     receipts = list(prep.ai_stage_receipts.order_by('created_at'))
