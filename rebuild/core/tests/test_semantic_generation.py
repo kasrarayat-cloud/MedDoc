@@ -335,6 +335,60 @@ class SemanticGenerationTests(SimpleTestCase):
         for field in fields:
             semantic.validate_stored_answer(notes, field, definitions[field['key']], answers[field['key']])
 
+    def test_correction_concept_identity_is_requested_and_never_repaired_by_code(self):
+        notes = ('Synthetic Neri Vale attended today. The patient first reported pain eight out of ten. '
+                 "Correction: the patient's current pain score is three out of ten rather than the earlier eight out of ten. "
+                 'The patient takes vitamin D 1000 IU once daily. '
+                 "The patient's brother Synthetic Tomas Vale reports pain nine out of ten and takes aspirin.")
+        fields = [{'key': key, 'label': label, 'kind': 'text', 'locator': {'cell': i}}
+                  for i, (key, label) in enumerate((('name', 'Patient name'), ('pain', 'Pain score0 to 10'),
+                                                   ('medicines', 'Regular medicines')))]
+        definitions = default_definitions(fields)
+        values = [fact(notes, fields, 'name', 'Synthetic Neri Vale', kind='identity', name_quote='Synthetic Neri Vale'),
+                  fact(notes, fields, 'medicines', 'vitamin D 1000 IU once daily', kind='history'),
+                  fact(notes, fields, 'brother_pain', 'nine', kind='measurement', concept='pain intensity',
+                       subject='other', name_quote='Synthetic Tomas Vale',
+                       scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', 3)})]
+        values += [fact(notes, fields, identity, quote, kind='measurement', concept='pain intensity',
+                        supersedes=['first'] if identity == 'corrected' else [],
+                        scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                   for i, (identity, quote) in enumerate((('first', 'eight'), ('corrected', 'three')))]
+        identity_unit = generation.source_units(notes, fields)[0][0]['id']
+        for value in values:
+            if value['id'] not in ('name', 'brother_pain'):
+                value['subject']['name_span'] = span(notes, 'Synthetic Neri Vale')
+                value['source_unit_ids'] = [identity_unit, *value['source_unit_ids']]
+        selected = assignments(fields, {'name': ['name'], 'pain': ['corrected'], 'medicines': ['medicines']})
+        for reference in (semantic.LEGACY_REFERENCE_CONTRACT, semantic.REFERENCE_INVENTORY_CONTRACT):
+            for drift in (False, True):
+                raw = deepcopy(values)
+                if drift:
+                    next(v for v in raw if v['id'] == 'first')['concept'] += ' initially reported'
+                sender = FixtureSender(raw, selected)
+                answers = semantic.run(notes, fields, definitions, sender, reference_contract=reference)
+                with self.subTest(reference=reference, drift=drift):
+                    self.assertEqual(len(sender.calls), 3)
+                    requested = sender.calls[0]
+                    self.assertIn(semantic.CONCEPT_IDENTITY_INSTRUCTIONS, requested[4])
+                    concept_schema = requested[3]['properties']['facts']['items']['properties']['concept']
+                    self.assertEqual(concept_schema['description'], semantic.CONCEPT_IDENTITY_INSTRUCTIONS)
+                    self.assertIn('select exactly one unambiguous measurement', sender.calls[1][4])
+                    self.assertIn('select its replacement', sender.calls[1][4])
+                    if drift:
+                        self.assertNotEqual(answers['pain']['status'], 'supported')
+                        self.assertIn('The proposed correction is not explicitly bound to the same earlier fact.',
+                                      answers['pain']['review_reasons'])
+                        self.assertNotEqual(answers['name']['status'], 'supported')
+                    else:
+                        self.assertEqual([answers[k]['status'] for k in ('name', 'pain', 'medicines')], ['supported'] * 3)
+                        self.assertEqual(answers['pain']['value'], 3)
+                        self.assertEqual(answers['medicines']['text'], 'Vitamin D 1000 IU once daily')
+                        inventory = {f['id']: f for f in answers['pain']['facts']}
+                        self.assertEqual({inventory[k]['value_evidence']['quote'] for k in ('first', 'corrected', 'brother_pain')},
+                                         {'eight', 'three', 'nine'})
+                    for field in fields:
+                        semantic.validate_stored_answer(notes, field, definitions[field['key']], answers[field['key']])
+
     def test_correction_marker_cannot_be_borrowed_from_an_unrelated_source_unit(self):
         notes = 'Pain is two out of ten. Correction: temperature is 37 Celsius. Pain is four out of ten.'
         fields, definitions = self.one_field('Pain score0 to 10')
