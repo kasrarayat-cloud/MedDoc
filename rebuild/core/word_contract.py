@@ -88,10 +88,10 @@ def review_rows(prep):
         return []
     proposals = roles.definitions_from_role(prep.proposal['answer_definitions']) if values else {}
     checks = {r['field_key']: r for r in prep.checker['answer_definitions']['fields']} if values else {}
-    issues = roles.identity_scope_issues(prep.inventory['fields'], values)
+    issues = approval_issues(prep)
     return [{'key': f['key'], 'label': f['label'], 'field': f, 'definition': values[f['key']],
              'disagreement': values[f['key']] != proposals[f['key']],
-             'state': 'unresolved' if f['key'] in issues else checks[f['key']]['state'],
+             'state': 'unresolved' if f['key'] in issues else 'pass',
              'reason': ' '.join(filter(None, (checks[f['key']]['reason'], issues.get(f['key']))))}
             for f in prep.inventory['fields'] if f['key'] in values]
 
@@ -99,6 +99,40 @@ def review_rows(prep):
 def identity_scope_issues(prep):
     values = proposed(prep)
     return roles.identity_scope_issues(prep.inventory['fields'], values) if values else {}
+
+
+def approval_issues(prep):
+    """Pending semantic decisions, separate from immutable source/layout issues.
+
+    The supported clinician correction saves complete reviewed definitions and
+    its reason separately. A layout correction or approval checkbox alone does
+    not adjudicate an unresolved semantic result. Historical readers do not use
+    this new-use gate.
+    """
+    values = proposed(prep)
+    if not values:
+        return {}
+    issues = roles.identity_scope_issues(prep.inventory['fields'], values)
+    if not prep.corrections.get('answer_definitions'):
+        labels = {f['key']: f['label'] for f in prep.inventory['fields']}
+        for role, response in (('Proposer', prep.proposal), ('Checker', prep.checker)):
+            for row in response['answer_definitions']['fields']:
+                if row['state'] == 'unresolved':
+                    key = row['field_key']
+                    detail = (f"Resolve the answer definition for {labels[key]} using Save doctor corrections "
+                              f"before approval. {role}: {row['reason']}").strip()
+                    issues[key] = ' '.join(filter(None, (issues.get(key), detail)))
+    return issues
+
+
+def require_resolved(prep, *, generation=False):
+    issues = approval_issues(prep)
+    if issues:
+        if generation:
+            raise ValidationError('This approved form still has unresolved answer definitions. '
+                'Open its mapping and prepare/review a new answer-definition version before generation. '
+                'Earlier documents remain available; no AI request was sent.')
+        raise ValidationError(list(issues.values()))
 
 
 def require_identity_scopes(fields, values):
@@ -114,6 +148,7 @@ def seal(prep, reviewed, actor):
         return
     if len(reviewed) != len(values) or set(reviewed) != set(values):
         raise ValidationError('Review and confirm the meaning, type, unit, choices, scope and destination of every answer.')
+    require_resolved(prep)
     # New destinations must use the existing separate definition review, never
     # an anchor/field zip or label-based reassignment.
     fields = prep.candidate_info['fields']
@@ -171,4 +206,7 @@ def require_generation(version):
         raise ValidationError(MISSING)
     if values:
         require_identity_scopes(version.fields, values)
+        if (not getattr(version, 'semantic_definitions', {})
+                and not getattr(version, 'semantic_preparation_id', None) and has_inline(version)):
+            require_resolved(version.preparation, generation=True)
     return values

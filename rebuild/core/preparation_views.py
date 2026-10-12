@@ -41,11 +41,14 @@ def detail(request,pk):
            'proposal_metadata':metadata(proposed.get(a['id'],{})),
            'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
     receipts=list(prep.receipts.order_by('created_at'))
-    from .word_contract import review_rows
+    from .word_contract import review_rows, approval_issues
     definition_rows = review_rows(prep)
+    definition_issues = approval_issues(prep) if definition_rows and prep.state in {'review','guided'} else {}
     from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
     return render(request,'template_preparation.html',{'template':template,'preparation':prep,
-        'definition_rows':definition_rows, 'definition_version':2, 'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
+        'definition_rows':definition_rows, 'definition_issues':definition_issues,
+        'can_approve':prep.state == 'review' and not definition_issues,
+        'definition_version':2, 'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
         'placement_rows':[r for r in rows if r['kind']=='choose_cell'],
         'protected_rows':[r for r in rows if r['protected_signing']],
         'stories':prep.inventory.get('stories',[]),

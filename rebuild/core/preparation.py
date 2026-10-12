@@ -571,7 +571,7 @@ def run_one(*, preparation_pk=None):
         unresolved=(prep.inventory['issues'] or any(r['decision']!='map' for r in prep.proposal['anchors'])
                     or any(r['verdict']!='pass' for r in prep.checker['anchors'])
                     or any(r['verdict']!='retain' for r in prep.proposal['stories']+prep.checker['stories'])
-                    or word_contract.identity_scope_issues(prep))
+                    or word_contract.approval_issues(prep))
         if prep.inventory['issues'] or any(a['kind']=='choose_cell' for a in prep.inventory['anchors']):
             prep.state='guided'
         else:
@@ -853,7 +853,8 @@ def correct(prep_id, actor, revision, labels, reviewed_anchors, reason,placement
     if definitions is not None:
         prep.corrections['answer_definitions'] = definitions
     prep.correction_history.append({'revision':prep.revision+1,**prep.corrections})
-    prep.revision+=1; prep.state='review'; prep.save(update_fields=['corrections','correction_history','revision','state','candidate_info'])
+    prep.revision+=1; prep.state='guided' if word_contract.approval_issues(prep) else 'review'
+    prep.save(update_fields=['corrections','correction_history','revision','state','candidate_info'])
     audit(actor,'template.preparation_corrected',prep.pk,department=prep.template.department,revision=prep.revision)
     return prep
 
