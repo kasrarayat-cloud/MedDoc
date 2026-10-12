@@ -8,7 +8,8 @@ from django.core.exceptions import ValidationError
 from documents.preparation import digest, model_inventory, validate_role
 from documents import semantic_preparation_roles as roles
 
-PROFILE = 'reviewed-word-answer-contract-v1'
+LEGACY_PROFILE = 'reviewed-word-answer-contract-v1'
+PROFILE = 'reviewed-word-answer-contract-v2'
 CONFIG_KEY = 'word_answer_contract'
 INFO_KEY = 'answer_contract'
 MISSING = ('This Word form needs approved answer definitions before generation. '
@@ -19,9 +20,14 @@ MISSING = ('This Word form needs approved answer definitions before generation. 
 def requested(config):
     if CONFIG_KEY not in config:
         return False
-    if config[CONFIG_KEY] != PROFILE:
+    if config[CONFIG_KEY] not in (LEGACY_PROFILE, PROFILE):
         raise ValidationError('Unsupported explicit Word answer contract. Nothing was downgraded.')
     return True
+
+
+def timing_reference(config):
+    requested(config)
+    return roles.TEMPORAL_REFERENCE_CONTRACT if config.get(CONFIG_KEY) == PROFILE else None
 
 
 def eligible(inventory):
@@ -102,7 +108,7 @@ def seal(prep, reviewed, actor):
             f['label'] != source[f['key']]['label'] or f['locator'] != source[f['key']]['locator'] for f in fields):
         raise ValidationError('Answer definitions changed their original questions or destinations.')
     roles.validate_definitions(fields, values)
-    prep.candidate_info[INFO_KEY] = {'profile': PROFILE, 'fields_sha256': digest(fields),
+    prep.candidate_info[INFO_KEY] = {'profile': prep.config[CONFIG_KEY], 'fields_sha256': digest(fields),
         'source_inventory_sha256': prep.inventory['inventory_sha256'], 'definitions': values,
         'reviewed_fields': sorted(reviewed), 'reviewed_by': str(actor.pk)}
 
@@ -127,7 +133,7 @@ def definitions(version):
     value = prep.candidate_info.get(INFO_KEY)
     expected = proposed(prep)
     if (not isinstance(value, dict) or set(value) != {'profile','fields_sha256','source_inventory_sha256',
-            'definitions','reviewed_fields','reviewed_by'} or value['profile'] != PROFILE
+            'definitions','reviewed_fields','reviewed_by'} or value['profile'] != prep.config[CONFIG_KEY]
             or value['fields_sha256'] != digest(version.fields)
             or digest(version.fields) != digest(prep.candidate_info['fields'])
             or value['source_inventory_sha256'] != prep.inventory['inventory_sha256']

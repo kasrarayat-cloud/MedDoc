@@ -170,6 +170,8 @@ def role_payload(inventory, role, proposal=None, *, source_review_context=None, 
         result['physical_answer_areas'] = source_role_areas(inventory)
     if config and word_contract.active(inventory, config):
         result['answer_definition_inventory'] = word_contract.inventory_for(inventory)
+        if word_contract.timing_reference(config):
+            result['timing_reference_contract'] = word_contract.timing_reference(config)
     if role == 'checker': result['proposal'] = proposal
     return result
 
@@ -250,7 +252,8 @@ def provider_request(inventory, role, config, proposal=None):
         from documents.semantic_preparation_roles import role_instructions
         instructions += (' Separately return answer_definitions from answer_definition_inventory. Physical metadata '
                          'describes existing document controls; semantic definitions describe the values requested. '
-                         'Physical generic text MUST NOT erase semantic types or constraints. ' + role_instructions(role, 2))
+                         'Physical generic text MUST NOT erase semantic types or constraints. ' +
+                         role_instructions(role, 2, timing_reference=word_contract.timing_reference(config)))
     schema = transform_schema(role_schema(role, inventory['protocol'], inventory, config))
     envelope = {'model':config['model'], 'max_tokens':role_limits(inventory, config)[0], 'system':instructions,
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False)}],
