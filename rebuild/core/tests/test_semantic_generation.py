@@ -179,6 +179,108 @@ def alex_case():
 
 
 class SemanticGenerationTests(SimpleTestCase):
+    def test_explicit_backdated_target_is_current_only_in_the_new_reference_frame(self):
+        for notes in ('This record documents the review visit last week.',):
+            numeric = 'three' in notes
+            fields, definitions = self.one_field('Pain score0 to 10' if numeric else 'Category', temporality='current')
+            if not numeric:
+                definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial','Review'])
+            raw = [fact(notes, fields, 'value', 'three' if numeric else 'review',
+                        kind='measurement' if numeric else 'other', timing_quote='last week',
+                        scale={'minimum':None,'maximum':'10','span':span(notes,'out of ten')} if numeric else None)]
+            selected = assignments(fields, {'answer':['value']})
+            answer = semantic.run(notes, fields, definitions, FixtureSender(raw, selected))['answer']
+            self.assertEqual((answer['status'], answer['text']), ('supported', '3' if numeric else 'Review'))
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+            units, _ = generation.source_units(notes, fields)
+            old_facts = semantic.validate_facts(notes, units, {'facts':raw})
+            old = semantic._assign(notes, fields, definitions, old_facts, selected)['answer']
+            self.assert_held(old)
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], old)
+
+    def test_relative_target_guard_does_not_adopt_an_earlier_or_unbound_visit(self):
+        for notes, time_quote in (
+            ('At the target encounter last week, the patient rated pain as three out of ten.', 'last week'),
+            ('Last week the patient rated pain as three out of ten.', 'Last week'),
+            ('At the previous encounter last week, the patient rated pain as three out of ten.', 'last week'),
+            ('At the target encounter last week, the patient previously rated pain as three out of ten.', 'last week'),
+            ('At the target encounter last week, pain at the prior visit was three out of ten.', 'last week'),
+            ('At the target encounter last week, the patient described pain as three out of ten at the 2020 visit.', 'last week'),
+            ('At the target encounter last week, the clinician documented the 2020 visit with pain as three out of ten.', 'last week'),
+            ('At the target encounter last week, the patient described pain as three out of ten during childhood.', 'last week'),
+            ("At the target encounter last week, the pain expected at tomorrow's visit is three out of ten.", 'last week'),
+            ('At the target encounter last week, the patient rated pain as three out of ten.', None)):
+            fields, definitions = self.one_field('Pain score0 to 10', temporality='current')
+            raw = [fact(notes, fields, 'value', 'three', kind='measurement', timing_quote=time_quote,
+                        scale={'minimum':None,'maximum':'10','span':span(notes,'out of ten')})]
+            answer = semantic.run(notes, fields, definitions, FixtureSender(raw, assignments(fields, {'answer':['value']})))['answer']
+            self.assert_held(answer)
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_dated_target_encounter_uses_explicit_relative_timing_in_every_role_and_saved_proof(self):
+        for date in ('October 11, 2026', 'January 8, 2027'):
+            notes = 'The patient attended a review visit on '+date+'.'
+            fields, definitions = self.one_field('Category', subject='encounter', temporality='current')
+            definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial','Review'])
+            values = [fact(notes, fields, 'category', 'review', kind='other', timing='current', timing_quote=date)]
+            selected = assignments(fields, {'answer':['category']})
+            sender = FixtureSender(values, selected)
+            answer = semantic.run(notes, fields, definitions, sender)['answer']
+            self.assertEqual((answer['status'], answer['text']), ('supported','Review'))
+            for _, _, payload, schema, instructions in sender.calls:
+                self.assertEqual(payload['timing_reference_contract'], semantic.TEMPORAL_REFERENCE_CONTRACT)
+                self.assertIn(semantic.TEMPORAL_REFERENCE_INSTRUCTIONS, instructions)
+            self.assertIn(semantic.TEMPORAL_REFERENCE_CONTRACT,
+                sender.calls[0][3]['properties']['facts']['items']['properties']['timing']['properties']['kind']['description'])
+            self.assertEqual(answer['timing_reference_contract'], semantic.TEMPORAL_REFERENCE_CONTRACT)
+            before = deepcopy(answer)
+            semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+            self.assertEqual(answer, before)
+            for value in (None, 'wall-clock', ''):
+                changed = deepcopy(answer); changed['timing_reference_contract'] = value
+                with self.subTest(value=value), self.assertRaises(ValidationError):
+                    semantic.validate_stored_answer(notes, fields[0], definitions['answer'], changed)
+            changed = deepcopy(answer); del changed['timing_reference_contract']
+            with self.assertRaises(ValidationError):
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], changed)
+
+    def test_relative_contract_does_not_waive_explicit_current_past_or_future_scopes(self):
+        notes = 'Previously the patient attended a review visit. This encounter is Initial. The next visit will be a review visit.'
+        fields, definitions = self.one_field('Category', subject='encounter', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial','Review'])
+        raw = [fact(notes, fields, 'prior', 'review', kind='other', timing='past'),
+               fact(notes, fields, 'current', 'Initial', kind='other', timing='current'),
+               fact(notes, fields, 'next', 'review', kind='other', timing='future', occurrence=1)]
+        units, _ = generation.source_units(notes, fields)
+        facts = semantic.validate_facts(notes, units, {'facts':raw})
+        for scope, matching in (('current','current'), ('past','prior'), ('future','next')):
+            definitions['answer']['scope']['temporality'] = scope
+            for selected in ('prior','current','next'):
+                result = semantic._assign(notes, fields, definitions, facts,
+                    assignments(fields, {'answer':[selected]}), timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)['answer']
+                with self.subTest(scope=scope, selected=selected):
+                    self.assertEqual(result['status']=='supported', selected==matching)
+
+    def test_new_timing_contract_keeps_old_unmarked_saved_fact_proofs_unchanged(self):
+        notes = 'The patient attended a review visit on October 11, 2026.'
+        fields, definitions = self.one_field('Category', subject='encounter', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial','Review'])
+        values = [fact(notes, fields, 'category', 'review', kind='other', timing='past', timing_quote='October 11, 2026')]
+        units, _ = generation.source_units(notes, fields)
+        facts = semantic.validate_facts(notes, units, {'facts':values})
+        selected = assignments(fields, {'answer':['category']})
+        old = semantic._assign(notes, fields, definitions, facts, selected)['answer']
+        self.assertNotIn('timing_reference_contract', old)
+        self.assert_held(old)
+        before = deepcopy(old)
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], old)
+        self.assertEqual(old, before)
+        # Even a new declared frame cannot silently retime the retained past fact.
+        new = semantic._assign(notes, fields, definitions, facts, selected,
+            timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)['answer']
+        self.assert_held(new)
+        self.assertEqual(new['facts'], old['facts'])
+
     def test_local_conflict_annotation_does_not_blank_independent_supported_facts(self):
         notes = ('Synthetic Mina Solen attended today. Pain is four out of ten. Pain is seven out of ten. '
                  'These simultaneous entries are not marked as a correction. Temperature is 38.2 Celsius.')

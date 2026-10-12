@@ -30,6 +30,35 @@ LABELS = ('Encounter category: Initial or Review', 'Clinic record reference', 'P
 
 
 class FreshWordContractTests(SimpleTestCase):
+    def test_new_preparation_frame_is_explicit_in_both_requests_and_the_immutable_seal(self):
+        from documents.semantic_preparation_roles import TEMPORAL_REFERENCE_CONTRACT
+        version = self.version()
+        self.assertEqual(version.preparation.candidate_info[word_contract.INFO_KEY]['profile'], word_contract.PROFILE)
+        for role in ('proposer','checker'):
+            proposal = version.preparation.proposal if role=='checker' else None
+            payload = preparation.role_payload(self.inv, role, proposal, config=self.config)
+            request = preparation.provider_request(self.inv, role, self.config, proposal)
+            self.assertEqual(payload['timing_reference_contract'], TEMPORAL_REFERENCE_CONTRACT)
+            self.assertIn(TEMPORAL_REFERENCE_CONTRACT, request['system'])
+            self.assertIn('scope.temporality any unless', request['system'])
+        version.preparation.config[word_contract.CONFIG_KEY] = word_contract.LEGACY_PROFILE
+        with self.assertRaises(ValidationError):
+            word_contract.require_generation(version)
+
+    def test_legacy_approved_profile_and_request_keep_their_original_frame(self):
+        self.config[word_contract.CONFIG_KEY] = word_contract.LEGACY_PROFILE
+        version = self.version()
+        before = deepcopy(version.preparation.candidate_info)
+        self.assertEqual(before[word_contract.INFO_KEY]['profile'], word_contract.LEGACY_PROFILE)
+        self.assertEqual(word_contract.require_generation(version), self.definitions())
+        self.assertEqual(version.preparation.candidate_info, before)
+        for role in ('proposer','checker'):
+            proposal = version.preparation.proposal if role=='checker' else None
+            payload = preparation.role_payload(self.inv, role, proposal, config=self.config)
+            request = preparation.provider_request(self.inv, role, self.config, proposal)
+            self.assertNotIn('timing_reference_contract', payload)
+            self.assertNotIn('documented-encounter-relative-v1', request['system'])
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
