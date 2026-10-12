@@ -1,4 +1,4 @@
-# Prospective QuillMD narrative context repair
+# Prospective QuillMD fresh-word-contract narrative context repair
 
 Standing owner synthetic-testing authority covers repair, installation and ordinary HTTPS verification. Root alone implements, publishes and performs live actions. Base `cc267c74a4d3680cfb1b87d8c78e799a8d0ee78c`; code-only change, schema0026 unchanged.
 
@@ -23,5 +23,5 @@ Frozen implementation SHA-256:
 
 | Source | SHA-256 |
 |---|---|
-| rebuild/core/semantic_generation.py | 1e61fc9a2b4651dab54449d0e34b70fd4a12aafabefeb88d633771a883c41ef7 |
-| rebuild/core/tests/test_narrative_context.py | 46155f79d99ab23719ca3f7f15d1c412611bb53350bb3345b36e06676f9af868 |
+| `rebuild/core/semantic_generation.py` | `1e61fc9a2b4651dab54449d0e34b70fd4a12aafabefeb88d633771a883c41ef7` |
+| `rebuild/core/tests/test_narrative_context.py` | `46155f79d99ab23719ca3f7f15d1c412611bb53350bb3345b36e06676f9af868` |
