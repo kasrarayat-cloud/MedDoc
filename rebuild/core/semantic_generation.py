@@ -19,6 +19,8 @@ from django.core.exceptions import ValidationError
 CONTRACT = PROMPT_VERSION = 'semantic-facts-v1'
 LEGACY_REFERENCE_CONTRACT = 'explicit-source-unit-citations-v1'
 REFERENCE_INVENTORY_CONTRACT = 'exact-source-reference-inventory-v2'
+LEGACY_SCOPE_CONTRACT = 'note-wide-offer-scope-v1'
+POSITIONED_SCOPE_CONTRACT = 'positioned-fact-scope-v2'
 MAX_CALLS = 5
 MAX_OUTPUT_TOKENS = 4000
 TYPES = ('text', 'integer', 'number', 'date', 'choice', 'person_name', 'identifier')
@@ -336,15 +338,66 @@ def _annotation_issues(notes, value, contexts, subject, name, timing, time_span,
     return issues
 
 
-def validate_facts(notes, units, result):
+def _fact_governance(notes, units, facts):
+    """Positioned source scope, separate from legacy one-click offer eligibility."""
+    from .generation import (heading_governance, recognized_labels, readings, erratum_points,
+                             REFRAMED_SCOPE, QUOTED_SOURCE, SCOPE_POINTER, INLINE_BREAK, _plain_pointer_only)
+    visible = list(notes)
+    for fact in facts.values():
+        if not fact['supersedes'] or fact['issues']:
+            continue
+        own = next(u for u in units if _inside(fact['value_evidence'], [u]))
+        # Only an explicit local, fully bound correction can stop a generic
+        # backward erratum from reframing unrelated earlier facts. Broad scope,
+        # quotes and hypotheses remain governed, including invisible readings.
+        if any(SCOPE_POINTER.search(r) or REFRAMED_SCOPE.search(r) or QUOTED_SOURCE.search(r)
+               for r in readings(own['quote'])):
+            continue
+        markers = list(erratum_points(own['quote']))
+        if len(markers) != 1 or markers[0] >= fact['value_evidence']['start']-own['start']:
+            continue
+        marker = re.match(r'corrections?\b', own['quote'][markers[0]:], re.I)
+        if marker is None:
+            continue
+        # Erase only this bound erratum marker. A second clause may contain an
+        # independent denial/heading which must keep governing later facts.
+        for at in range(own['start']+markers[0], own['start']+markers[0]+marker.end()):
+            visible[at] = ' '
+    scoped = ''.join(visible)
+    governance = heading_governance(scoped, recognized_labels([]), lexical=True, per_sentence=True)
+    # Negating a correction is metadata about supersession, not a denial of the
+    # referenced clinical facts. Only this finite complete clause is excluded
+    # from the legacy blanket offer veto; its original evidence stays intact.
+    # Extra clauses, denials, headings or unfamiliar wording still fail closed.
+    offer_scope = list(scoped)
+    non_correction = re.compile(
+        r'\s*(?:these|those|the|both|all)\s+'
+        r'(?:(?:simultaneous|current|earlier|documented|recorded|conflicting|two|three)\s+){0,5}'
+        r'(?:entries|values|ratings|scores|measurements|statements)\s+(?:are|were|is|was)\s+not\s+'
+        r'(?:(?:marked|documented|recorded|intended|treated|designated)\s+as\s+)?(?:a\s+)?corrections?\s*[.!?]?\s*', re.I)
+    for unit in units:
+        if all(non_correction.fullmatch(r) for r in readings(unit['quote'])):
+            for at in range(unit['start'], unit['end']):
+                if notes[at] not in '\r\n': offer_scope[at] = ' '
+    filtered = ''.join(offer_scope)
+    broad_denial = re.compile(
+        r'\b(?:all|every|each)\s+(?:of\s+the\s+)?(?:facts?|findings?|statements?|entries|values|measurements)\b'
+        r'[^.!?;:\r\n]{0,80}\b(?:denied|incorrect|false|invalid|not\s+true)\b', re.I)
+    withheld = governance[6] or bool(INLINE_BREAK.search(scoped)) or any(
+        not _plain_pointer_only(r) or broad_denial.search(r) for r in readings(filtered))
+    return (*governance[:8], bool(withheld), *governance[9:])
+
+
+def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONTRACT):
     _object(result, ('facts',), 'fact extraction')
     if type(result['facts']) is not list or len(result['facts']) > 200: _fail('Fact extraction exceeds its finite limit.')
     by_unit = {u['id']: u for u in units}
-    from .generation import custom_source_governance, heading_governance, recognized_labels, governed_context
-    # Reuse the same positioned scope reader as the historical custom path.
-    # No field label is needed to decide whether a clinical prefix reframes a
-    # source sentence, keeping persisted proof independent of a field subset.
-    governance = custom_source_governance(notes, heading_governance(notes, recognized_labels([]), lexical=True, per_sentence=True))
+    if scope_contract not in (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT):
+        _fail('Unsupported semantic fact scope contract.')
+    from .generation import governed_context, custom_source_governance, heading_governance, recognized_labels
+    legacy = scope_contract == LEGACY_SCOPE_CONTRACT
+    if legacy:
+        governance = custom_source_governance(notes, heading_governance(notes, recognized_labels([]), lexical=True, per_sentence=True))
     facts = {}
     keys = ('id', 'kind', 'concept', 'subject', 'value_span', 'polarity', 'timing', 'source_unit_ids', 'unit', 'unit_span', 'scale', 'supersedes')
     for raw in result['facts']:
@@ -402,31 +455,85 @@ def validate_facts(notes, units, result):
                 'subject': {**subject, 'name_evidence': name}, 'timing': {**timing, 'evidence': time_span}, 'scale': scale}
         fact['issues'] = _scope_issues(fact, contexts)
         fact['issues'].extend(_annotation_issues(notes, value, contexts, subject, name, timing, time_span, unit_span))
-        context = governed_context(governance, notes, contexts) or []
-        outside = [e for e in context if 'start' in e and not any(c['start'] <= e['start'] and e['end'] <= c['end'] for c in contexts)]
-        if outside or governance[8]:
-            fact['issues'].append('Governing source context requires clinician review.')
-            # Context excerpts in the existing reader can be abbreviated for
-            # display. Persist exact complete source spans, never those excerpts.
-            for e in outside:
-                exact = {'start': e['start'], 'end': e['end'], 'quote': notes[e['start']:e['end']]}
-                if exact not in fact['evidence']: fact['evidence'].append(exact)
-            if governance[8]:
-                whole = {'start': 0, 'end': len(notes), 'quote': notes}
-                if whole not in fact['evidence']: fact['evidence'].append(whole)
+        if legacy:
+            context = governed_context(governance, notes, contexts) or []
+            outside = [e for e in context if 'start' in e and not any(c['start'] <= e['start'] and e['end'] <= c['end'] for c in contexts)]
+            if outside or governance[8]:
+                fact['issues'].append('Governing source context requires clinician review.')
+                for e in outside:
+                    exact = {'start': e['start'], 'end': e['end'], 'quote': notes[e['start']:e['end']]}
+                    if exact not in fact['evidence']: fact['evidence'].append(exact)
+                if governance[8]:
+                    whole = {'start': 0, 'end': len(notes), 'quote': notes}
+                    if whole not in fact['evidence']: fact['evidence'].append(whole)
         facts[fact['id']] = fact
     for fact in facts.values():
         for old_id in fact['supersedes']:
             old = facts.get(old_id)
+            own = next(c for c in fact['evidence'] if _inside(fact['value_evidence'], [c]))
+            before = own['quote'][:fact['value_evidence']['start']-own['start']]
+            clause = re.split(r'[;,/\u2013\u2014]|\s-\s|\b(?:and|but|whereas|while)\b', before, flags=re.I)[-1]
+            marker = (any(re.search(r'\b(?:correction|corrected|actually|rather than)\b', e['quote'], re.I) for e in fact['evidence'])
+                      if legacy else re.search(r'\b(?:correction|corrected|actually|rather than)\b', clause, re.I))
+            if not legacy and marker:
+                # A marker alone does not bind its target. Require a conservative
+                # local attribution phrase containing only this concept, its
+                # evidenced subject and finite grammatical/value qualifiers.
+                # Unfamiliar correction prose remains visible for review.
+                phrase = clause[:marker.start()]+' '+clause[marker.end():]
+                subject_name = (fact['subject'].get('name_evidence') or {}).get('quote', '')
+                if subject_name:
+                    phrase = re.sub(re.escape(subject_name), ' ', phrase, flags=re.I)
+                words = set(re.findall(r'[^\W\d_]+', phrase.casefold()))
+                concept_words = set(re.findall(r'[^\W\d_]+', fact['concept'].casefold()))
+                if old is not None:
+                    prior_context = next(e for e in old['evidence'] if _inside(old['value_evidence'], [e]))
+                    prior_prefix = prior_context['quote'][:old['value_evidence']['start']-prior_context['start']]
+                    concept_words.intersection_update(re.findall(r'[^\W\d_]+', prior_prefix.casefold()))
+                else:
+                    concept_words.clear()
+                grammar = {'the', 'a', 'an', 'patient', 's', 'current', 'earlier', 'previous',
+                           'score', 'rating', 'level', 'value', 'measurement', 'is', 'was',
+                           'now', 'at', 'this', 'visit', 'to', 'only', 'of', 'for', 'has', 'had',
+                           'reports', 'reported', 'rates', 'rated', 'corrects'}
+                bare_correction = (marker.group().casefold() != 'correction'
+                                   or not clause[:marker.start()].strip()
+                                   and re.match(r'\s*:', clause[marker.end():]))
+                forbidden_target = re.search(r'\b(?:to|for|only|instead|with|without|including|plus|alongside|associated)\b', phrase, re.I)
+                if (not bare_correction or forbidden_target
+                        or not concept_words or not words.intersection(concept_words)
+                        or words - concept_words - grammar
+                        or re.search(SOURCE_NUMBER_PATTERN, clause[marker.end():], re.I)):
+                    marker = None
             if (old is None or old_id == fact['id'] or old['concept'].casefold() != fact['concept'].casefold()
                     or not _same_subject(old['subject'], fact['subject']) or old['value_evidence']['start'] >= fact['value_evidence']['start']
-                    or not any(re.search(r'\b(?:correction|corrected|actually|rather than)\b', e['quote'], re.I) for e in fact['evidence'])):
+                    or not marker or (not legacy and (old['kind'] != fact['kind'] or unit_identity(old['unit']) != unit_identity(fact['unit'])
+                        or (old['subject'].get('name_evidence') or {}).get('quote', '').casefold()
+                           != (fact['subject'].get('name_evidence') or {}).get('quote', '').casefold()
+                        or old['timing']['kind'] != fact['timing']['kind']
+                        or any((old['scale'] or {}).get(k) != (fact['scale'] or {}).get(k) for k in ('minimum', 'maximum'))))):
                 fact['issues'].append('The proposed correction is not explicitly bound to the same earlier fact.')
         for other in facts.values():
             name = other['subject']['name_evidence']
             if other['subject']['kind'] == 'other' and name and fact['subject']['kind'] == 'patient':
                 if any(name['quote'] in e['quote'][:max(0, fact['value_evidence']['start']-e['start'])] for e in fact['evidence']):
                     fact['issues'].append('Another named subject occurs before this value; attribution needs review.')
+    if legacy:
+        return facts
+    governance = _fact_governance(notes, units, facts)
+    for fact in facts.values():
+        # An earlier identity citation supplies attribution, not the position
+        # of this clinical value relative to an erratum or a heading.
+        context = governed_context(governance, notes, [fact['value_evidence']]) or []
+        positioned = [e for e in context if 'start' in e]
+        if positioned or governance[8]:
+            fact['issues'].append('Governing source context requires clinician review.')
+            for e in positioned:
+                exact = {'start': e['start'], 'end': e['end'], 'quote': notes[e['start']:e['end']]}
+                if exact not in fact['evidence']: fact['evidence'].append(exact)
+            if governance[8]:
+                whole = {'start': 0, 'end': len(notes), 'quote': notes}
+                if whole not in fact['evidence']: fact['evidence'].append(whole)
     return facts
 
 
@@ -537,7 +644,7 @@ def validate_value(definition, text, field=None):
     return text
 
 
-def _assign(notes, fields, definitions, facts, result, *, only=None):
+def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contract=POSITIONED_SCOPE_CONTRACT):
     _object(result, ('fields',), 'field assignments')
     expected = {f['key'] for f in fields} if only is None else set(only)
     if type(result['fields']) is not list: _fail('Field assignments must be a list.')
@@ -631,7 +738,9 @@ def _assign(notes, fields, definitions, facts, result, *, only=None):
                   'source_sha256': hashlib.sha256(notes.encode()).hexdigest(), 'definition_sha256': definition_digest(d),
                   'candidate_text': text if status != 'supported' else '', 'review_reasons': list(dict.fromkeys(reasons)),
                   'unit': d['unit'], 'scale': {k: d['constraints'][k] for k in ('scale_minimum', 'scale_maximum')}}
-        answer['semantic_proof_sha256'] = digest({k: answer[k] for k in ('source_sha256', 'definition_sha256', 'facts', 'fact_ids', 'separator')})
+        if scope_contract == POSITIONED_SCOPE_CONTRACT:
+            answer['fact_scope_contract'] = scope_contract
+        answer['semantic_proof_sha256'] = _fact_proof(answer)
         answers[key] = answer
     return answers
 
@@ -745,7 +854,8 @@ EXTRACT_INSTRUCTIONS = ('Extract individual clinical/document facts from the ORI
     'including a documented synthetic-name prefix such as Synthetic; do not discard it as descriptive metadata. '
     'Keep that same complete name in subject references, without importing another person or surrounding clinical clauses. '
     'Codes, dates, durations, choices and review intervals exclude '
-    'surrounding clauses. Narrative fields retain the complete relevant documented facts. '
+    'surrounding clauses. A symptom duration value contains its number and time unit without the introductory for, lasting or over; '
+    'a future review interval retains its documented in or within. Narrative fields retain the complete relevant documented facts. '
     'For each span return its exact Unicode quote, source_unit_id and one-based occurrence of that exact quote within that source unit. '
     'Code computes offsets; do not count characters. Never normalize, paraphrase or select a fragment of a word/number. '
     'Each fact has one minimal self-contained value span, complete source_unit_ids, '
@@ -950,9 +1060,19 @@ def _resolve_legacy_source_references(notes, units, parsed):
     return result
 
 
+def _fact_proof(answer):
+    keys = ('source_sha256', 'definition_sha256', 'facts', 'fact_ids', 'separator')
+    if 'fact_scope_contract' in answer:
+        keys += ('fact_scope_contract',)
+    return digest({k: answer.get(k) for k in keys})
+
+
 def validate_stored_answer(notes, field, definition, answer):
     """Revalidate persisted generated proof; clinician edits have a distinct path."""
     if answer.get('evidence_contract') != CONTRACT: _fail('This answer has no semantic facts contract.')
+    scope_contract = answer.get('fact_scope_contract', LEGACY_SCOPE_CONTRACT)
+    if scope_contract not in (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT):
+        _fail('Unsupported semantic fact scope contract.')
     if answer.get('source_sha256') != hashlib.sha256(notes.encode()).hexdigest() or answer.get('definition_sha256') != definition_digest(definition):
         _fail('The semantic answer source or approved definition changed.')
     if answer.get('semantic_review_mode') == 'manual':
@@ -991,16 +1111,16 @@ def validate_stored_answer(notes, field, definition, answer):
             raw_facts.append(f)
     except (KeyError,TypeError):_fail('The stored fact inventory is incomplete.')
     # Source-unit numbering is stable across fields; labels only affect scope flags.
-    facts = validate_facts(notes, units, {'facts': raw_facts})
+    facts = validate_facts(notes, units, {'facts': raw_facts}, scope_contract=scope_contract)
     if list(facts.values())!=answer['facts']:_fail('The stored fact inventory differs from its canonical source evidence.')
     ids = answer.get('fact_ids', [])
     if type(ids) is not list or any(not isinstance(i, str) or i not in facts for i in ids) or len(ids) != len(set(ids)):
         _fail('Stored answer fact references do not match its proof.')
-    proof = digest({k: answer.get(k) for k in ('source_sha256', 'definition_sha256', 'facts', 'fact_ids', 'separator')})
+    proof = _fact_proof(answer)
     if proof != answer.get('semantic_proof_sha256'): _fail('Stored semantic fact proof changed.')
     if answer.get('status') == 'supported':
         fresh = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
-            {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]})[field['key']]
+            {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]}, scope_contract=scope_contract)[field['key']]
         if fresh['status'] != 'supported': _fail('The stored answer no longer satisfies its source, scope or type constraints.')
         expected = answer['separator'].join(_render_fact(facts[i], definition) for i in ids)
         if answer.get('text') != expected: _fail('A generated answer differs from its grounded fact values.')
