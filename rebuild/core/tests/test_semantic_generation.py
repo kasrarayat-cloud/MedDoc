@@ -179,6 +179,190 @@ def alex_case():
 
 
 class SemanticGenerationTests(SimpleTestCase):
+    def test_own_visit_metadata_is_not_another_person_or_a_displayed_evidence_sentence(self):
+        notes = ('Synthetic Ivo Fenrin, record reference TEST-P416, attended a review visit on 2027-01-08.')
+        fields = [{'key': key, 'label': label, 'kind': 'text', 'locator': {'cell': index}}
+                  for index, (key, label) in enumerate((('reference', 'Record reference'),
+                      ('category', 'Category'), ('date', 'Visit date')))]
+        definitions = default_definitions(fields)
+        for key, value_type in (('reference', 'identifier'), ('category', 'choice'), ('date', 'date')):
+            definitions[key].update(version=2, answer_mode='atomic', value_type=value_type)
+            definitions[key]['scope'].update(subject='encounter', temporality='current')
+        definitions['category']['choices'] = ['Initial', 'Review']
+        facts = [fact(notes, fields, key, value, kind='other', name_quote='Synthetic Ivo Fenrin')
+                 for key, value in (('reference', 'TEST-P416'), ('category', 'review'), ('date', '2027-01-08'))]
+        selected = assignments(fields, {key: [key] for key in definitions})
+        for contract in (semantic.LEGACY_REFERENCE_CONTRACT, semantic.REFERENCE_INVENTORY_CONTRACT):
+            with self.subTest(contract=contract):
+                sender = FixtureSender(facts, selected)
+                answers = semantic.run(notes, fields, definitions, sender, reference_contract=contract)
+                self.assertEqual([answers[key]['text'] for key in definitions], ['TEST-P416', 'Review', '2027-01-08'])
+                self.assertEqual([call[:2] for call in sender.calls], [('extractor', 1), ('assigner', 1), ('checker', 1)])
+                for field in fields:
+                    answer = answers[field['key']]
+                    self.assertEqual(answer['status'], 'supported')
+                    self.assertNotEqual(answer['text'], answer['evidence'][0]['quote'])
+                    semantic.validate_stored_answer(notes, field, definitions[field['key']], answer)
+                invalid = deepcopy(facts)
+                invalid[0]['subject'] = {'kind': 'other', 'name_span': None}
+                before = deepcopy(invalid)
+                sender = FixtureSender(invalid, selected)
+                with self.assertRaisesMessage(ValidationError, 'Another person needs explicit subject evidence.'):
+                    semantic.run(notes, fields, definitions, sender, reference_contract=contract)
+                self.assertEqual([call[:2] for call in sender.calls], [('extractor', 1)])
+                self.assertEqual(invalid, before)
+
+    def test_visit_metadata_without_identity_is_allowed_but_unresolved_ownership_is_held(self):
+        notes = 'The patient attended a review visit.'
+        fields, definitions = self.one_field('Category', subject='encounter', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial', 'Review'])
+        for subject, expected in (('patient', 'Review'), ('uncertain', '')):
+            with self.subTest(subject=subject):
+                facts = [fact(notes, fields, 'category', 'review', kind='other', subject=subject)]
+                answer = self.generated(notes, fields, definitions, facts, ['category'])
+                self.assertEqual(answer['text'], expected)
+                if subject == 'uncertain':
+                    self.assert_held(answer)
+                    self.assertIn('The subject is unresolved.', answer['review_reasons'])
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+
+    def test_other_person_visit_metadata_cannot_be_relabelled_as_patient_metadata(self):
+        notes = 'The patient\'s brother, Synthetic Omar Dalen, attended a review visit.'
+        fields, definitions = self.one_field('Category', subject='patient', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial', 'Review'])
+        selected = assignments(fields, {'answer': ['category']})
+        other = [fact(notes, fields, 'category', 'review', kind='other', subject='other',
+                      name_quote='Synthetic Omar Dalen')]
+        answer = semantic.run(notes, fields, definitions, FixtureSender(other, selected))['answer']
+        self.assert_held(answer)
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+        for name in ('Synthetic Omar Dalen', None):
+            with self.subTest(name=name):
+                facts = [fact(notes, fields, 'category', 'review', kind='other', name_quote=name)]
+                sender = FixtureSender(facts, selected)
+                before = deepcopy(facts)
+                with self.assertRaisesMessage(ValidationError, 'Person attribution needs review:') as failure:
+                    semantic.run(notes, fields, definitions, sender)
+                from core.jobs import failure_reason, PLATFORM_FAILURE
+                message = failure_reason(failure.exception)
+                self.assertIn('No answers were adopted.', message)
+                self.assertNotIn('Omar', message)
+                self.assertLessEqual(len(PLATFORM_FAILURE+message), 250)
+                self.assertEqual([call[:2] for call in sender.calls], [('extractor', 1)])
+                self.assertEqual(facts, before)
+        # Historical canonicalization and finalized-proof reading remain stable.
+        units = generation.source_units(notes, fields)[0]
+        historical = semantic.validate_facts(notes, units, {'facts': facts})
+        old = semantic._assign(notes, fields, definitions, historical, selected)['answer']
+        old['independent_check'] = checker(selected)['fields'][0]
+        self.assertEqual(old['text'], 'Review')
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], old)
+
+    def test_relative_apposition_does_not_override_an_explicit_new_patient_clause(self):
+        fields, definitions = self.one_field('Category', subject='patient', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial', 'Review'])
+        for switch in (', but the patient attended', '; the patient attended', ', the patient attended',
+                       ' and reports that the patient attended', ', but the patient presented for',
+                       '; the patient came for', ' and accompanied the patient, who attended'):
+            notes = "The patient's brother, Synthetic Omar Dalen, attended an initial visit"+switch+' a review visit.'
+            with self.subTest(switch=switch):
+                good = [fact(notes, fields, 'category', 'review', kind='other')]
+                answer = self.generated(notes, fields, definitions, good, ['category'])
+                self.assertEqual((answer['status'], answer['text']), ('supported', 'Review'))
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+                wrong_name = deepcopy(good)
+                wrong_name[0]['subject']['name_span'] = span(notes, 'Synthetic Omar Dalen')
+                # Include the other unit only when a semicolon splits the source.
+                wrong_name[0]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(notes, fields)[0]]
+                with self.assertRaisesMessage(ValidationError, 'Person attribution needs review:'):
+                    self.generated(notes, fields, definitions, wrong_name, ['category'])
+
+    def test_provider_sdk_keeps_other_person_name_required_in_both_reference_contracts(self):
+        from anthropic import transform_schema
+        for schema in (semantic.API_FACT_SCHEMA, semantic.API_FACT_INVENTORY_SCHEMA):
+            with self.subTest(contract=schema.get('required')):
+                transformed = transform_schema(schema)
+                branches = transformed['properties']['facts']['items']['properties']['subject']['anyOf']
+                self.assertEqual(len(branches), 2)
+                by_kinds = {tuple(branch['properties']['kind']['enum']): branch for branch in branches}
+                self.assertEqual(set(by_kinds), {('patient', 'clinician', 'uncertain'), ('other',)})
+                for branch in branches:
+                    self.assertEqual(branch['required'], ['kind', 'name_span'])
+                    self.assertFalse(branch['additionalProperties'])
+                name = by_kinds[('other',)]['properties']['name_span']
+                self.assertEqual(name['type'], 'object')
+                self.assertEqual(name['required'], ['quote', 'source_unit_id', 'occurrence'])
+                self.assertFalse(name['additionalProperties'])
+                self.assertNotIn('anyOf', name)
+                nullable = by_kinds[('patient', 'clinician', 'uncertain')]['properties']['name_span']['anyOf']
+                self.assertEqual([branch['type'] for branch in nullable], ['object', 'null'])
+
+    def test_an_earlier_patient_mention_does_not_clear_a_later_companion_clause(self):
+        fields, definitions = self.one_field('Category', subject='patient', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial', 'Review'])
+        for notes in (
+            "The patient's brother, Synthetic Omar Dalen, said the patient was absent, then attended a review visit himself.",
+            "The patient's brother, Synthetic Omar Dalen, reports that the patient attended an initial visit, while Synthetic Omar Dalen attended a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, discussed the patient and attended a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, spoke about the patient before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, said the patient was absent, then he himself attended a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, told the patient that he himself attended a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, discussed the clinic and the patient before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, read the patient's record before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, brought the patient a letter before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, discussed his father and the patient before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, told his father and the patient that he himself attended a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, brought the patient to the hospital and then attended a review visit himself.",
+            "The patient's brother, Synthetic Omar Dalen, discussed that patient before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, reported the patient missing before attending a review visit.",
+            "The patient's brother, Synthetic Omar Dalen, reported the patient to reception before attending a review visit.",
+        ):
+            with self.subTest(notes=notes):
+                values = [fact(notes, fields, 'category', 'review', kind='other')]
+                sender = FixtureSender(values, assignments(fields, {'answer': ['category']}))
+                with self.assertRaisesMessage(ValidationError, 'Person attribution needs review:'):
+                    semantic.run(notes, fields, definitions, sender)
+                self.assertEqual([call[:2] for call in sender.calls], [('extractor', 1)])
+        for note in (
+            "The patient's brother, Synthetic Omar Dalen, accompanied the patient, who attended a review visit himself.",
+            "The patient's brother, Synthetic Omar Dalen, attended an initial visit, but the patient then attended a review visit himself.",
+        ):
+            values = [fact(note, fields, 'category', 'review', kind='other')]
+            self.assertEqual(self.generated(note, fields, definitions, values, ['category'])['text'], 'Review')
+
+    def test_patient_identity_and_owned_metadata_are_not_a_relative_apposition(self):
+        fields, definitions = self.one_field('Category', subject='patient', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='choice', choices=['Initial', 'Review'])
+        notes = 'Synthetic Arin Lome is the clinician. His brother, Synthetic Ivo Fenrin, is the patient and attended a review visit.'
+        values = [fact(notes, fields, 'category', 'review', kind='other', name_quote='Synthetic Ivo Fenrin')]
+        self.assertEqual(self.generated(notes, fields, definitions, values, ['category'])['text'], 'Review')
+        # These exact forms have only a category fact: a separate identity
+        # extraction or earlier sentence must not be needed to follow the
+        # explicit patient attribution already in the source/name reference.
+        for name, note in (
+            ('Synthetic Alex Morgan', "Synthetic Alex Morgan is the patient. The patient's brother, Synthetic Omar Dalen, reports that Synthetic Alex Morgan attended a review visit."),
+            ('Synthetic Omar Dalen Junior', "The patient's brother, Synthetic Omar Dalen, accompanied the patient Synthetic Omar Dalen Junior to a review visit."),
+        ):
+            values = [fact(note, fields, 'category', 'review', kind='other', name_quote=name)]
+            values[0]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(note, fields)[0]]
+            self.assertEqual(self.generated(note, fields, definitions, values, ['category'])['text'], 'Review')
+        for name, note in (
+            ('Synthetic Alex Morgan', "Synthetic Alex Morgan is the patient. The patient's brother, Synthetic Omar Dalen, reports that Synthetic Alex Morgan attended a review visit."),
+            ('Synthetic Omar Dalen Junior', "Synthetic Omar Dalen Junior is the patient. The patient's brother, Synthetic Omar Dalen, accompanied the patient Synthetic Omar Dalen Junior to a review visit."),
+        ):
+            with self.subTest(name=name):
+                values = [fact(note, fields, 'identity', name, kind='identity', name_quote=name),
+                          fact(note, fields, 'category', 'review', kind='other', name_quote=name)]
+                values[1]['source_unit_ids'] = [unit['id'] for unit in generation.source_units(note, fields)[0]]
+                answer = self.generated(note, fields, definitions, values, ['category'])
+                self.assertEqual((answer['status'], answer['text']), ('supported', 'Review'))
+                semantic.validate_stored_answer(note, fields[0], definitions['answer'], answer)
+        fields, definitions = self.one_field('Record reference', subject='patient', temporality='current')
+        definitions['answer'].update(version=2, answer_mode='atomic', value_type='identifier')
+        note = "The patient's brother, Synthetic Omar Dalen, supplied the patient's record reference TEST-P416."
+        values = [fact(note, fields, 'reference', 'TEST-P416', kind='identity')]
+        self.assertEqual(self.generated(note, fields, definitions, values, ['reference'])['text'], 'TEST-P416')
+
     def test_explicit_backdated_target_is_current_only_in_the_new_reference_frame(self):
         for notes in ('This record documents the review visit last week.',):
             numeric = 'three' in notes
