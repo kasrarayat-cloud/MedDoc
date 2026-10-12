@@ -30,6 +30,64 @@ LABELS = ('Encounter category: Initial or Review', 'Clinic record reference', 'P
 
 
 class FreshWordContractTests(SimpleTestCase):
+    def test_unresolved_semantic_result_cannot_be_sealed_by_review_checkboxes_or_layout_corrections(self):
+        for role in ('proposal', 'checker'):
+            for correction in ({}, {'labels': {'cell_2': 'Person full name'}}):
+                with self.subTest(role=role, correction=correction):
+                    prep = self.version().preparation
+                    prep.candidate_info.pop(word_contract.INFO_KEY)
+                    row = next(r for r in getattr(prep, role)['answer_definitions']['fields']
+                               if r['field_key'] == 'cell_2')
+                    row.update(state='unresolved', reason='Clarify whose name belongs here.')
+                    # Enum-valid patient scope was the actual fresh-upload counterexample.
+                    self.assertEqual(row['definition']['scope']['subject'], 'patient')
+                    prep.corrections = correction
+                    before = deepcopy(prep.__dict__)
+                    self.assertEqual(set(word_contract.approval_issues(prep)), {'cell_2'})
+                    with self.assertRaisesMessage(ValidationError, 'Save doctor corrections'):
+                        word_contract.seal(prep, list(self.definitions()), SimpleNamespace(pk='doctor'))
+                    self.assertEqual(prep.__dict__, before)
+
+    def test_complete_reviewed_definition_correction_resolves_but_does_not_replace_model_result(self):
+        prep = self.version().preparation
+        prep.candidate_info.pop(word_contract.INFO_KEY)
+        row = prep.checker['answer_definitions']['fields'][2]
+        row.update(state='unresolved', reason='Clarify whose name belongs here.')
+        original = deepcopy((prep.proposal, prep.checker))
+        values = self.definitions()
+        values['cell_2']['meaning'] = 'The full name of the patient whose encounter is recorded.'
+        for incomplete in ({'cell_0': values['cell_0']}, {k:v for k,v in values.items() if k != 'cell_2'}):
+            prep.corrections = {'answer_definitions': incomplete}
+            with self.assertRaises(ValueError): word_contract.approval_issues(prep)
+        prep.corrections = {'answer_definitions': values, 'reason': 'Confirmed the patient section against the original.'}
+        self.assertEqual(word_contract.approval_issues(prep), {})
+        self.assertEqual(word_contract.review_rows(prep)[2]['state'], 'pass')
+        word_contract.seal(prep, list(values), SimpleNamespace(pk='doctor'))
+        self.assertEqual(prep.candidate_info[word_contract.INFO_KEY]['definitions'], values)
+        self.assertEqual((prep.proposal, prep.checker), original)
+
+    def test_historical_unresolved_seal_stays_readable_but_cannot_start_new_generation(self):
+        version = self.version(); prep = version.preparation
+        prep.checker['answer_definitions']['fields'][2].update(state='unresolved', reason='Choose the named person.')
+        prep.approval_sha256 = approval_binding(prep)
+        before = deepcopy(prep.__dict__)
+        self.assertEqual(validated_semantic_definitions(version), self.definitions())
+        self.assertEqual(source_for_version(version), self.root/'prepared.docx')
+        with patch('core.ai_stages.maximum_cost') as quote, self.assertRaisesMessage(ValidationError, 'new answer-definition version'):
+            word_contract.require_generation(version)
+        quote.assert_not_called()
+        self.assertEqual(prep.__dict__, before)
+
+    def test_separate_approved_definitions_supersede_prior_inline_unresolved_decision(self):
+        version = self.version()
+        version.preparation.checker['answer_definitions']['fields'][2]['state'] = 'unresolved'
+        version.semantic_preparation_id = 'separately-approved-version'
+        version.semantic_definitions = self.definitions()
+        # The existing reader owns the separate approval integrity check.
+        with patch('core.semantic_preparation.validated_semantic_definitions', return_value=self.definitions()) as reader:
+            self.assertEqual(word_contract.require_generation(version), self.definitions())
+        reader.assert_called_once_with(version)
+
     def test_unspecified_identity_is_visible_but_cannot_receive_new_approval(self):
         prep = self.version().preparation
         prep.candidate_info.pop(word_contract.INFO_KEY)
@@ -411,6 +469,86 @@ class OrdinaryClinicianWordTests(TestCase):
         prep.refresh_from_db()
         self.assertFalse(template.versions.exists())
         self.assertEqual((prep.proposal, prep.checker, prep.corrections), original)
+
+    def test_unresolved_checker_with_valid_scope_requires_separate_clinician_correction(self):
+        original_role = preparation.provider_role
+        def unresolved(*args, **kwargs):
+            response, evidence = original_role(*args, **kwargs)
+            if args[1] == 'checker':
+                response['answer_definitions']['fields'][0].update(
+                    state='unresolved', reason='The intended answer needs a clinician decision.')
+            return response, evidence
+        with patch.object(preparation, 'provider_role', side_effect=unresolved):
+            template, prep = self.fresh_upload('guided')
+        original = deepcopy((prep.proposal, prep.checker))
+        self.assertEqual(prep.inventory['issues'], [])
+        # A retained old review state also cannot expose or bypass approval.
+        prep.state = 'review'; prep.save(update_fields=['state'])
+        page = self.client.get(f'/templates/{template.pk}/preparation/')
+        self.assertContains(page, 'Answer definitions need your decision')
+        self.assertContains(page, 'Save doctor corrections')
+        self.assertNotContains(page, 'Approve layout and create form version')
+        response = self.client.post(f'/templates/{template.pk}/preparation/approve/', {
+            'revision':str(prep.revision), 'candidate_sha256':prep.candidate_sha256,
+            'approved_change':[c['anchor_id'] for c in prep.changes],
+            'original_reviewed':'on', 'prepared_reviewed':'on',
+            'reviewed_definition':[f['key'] for f in prep.inventory['fields']]})
+        self.assertContains(response, 'Save doctor corrections', status_code=409)
+        self.assertFalse(template.versions.exists())
+        values = word_contract.proposed(prep)
+        values[next(iter(values))]['meaning'] = 'The documented patient answer to the original clinical question.'
+        preparation.correct(prep.pk, self.user, prep.revision,
+            {f['key']:f['label'] for f in prep.candidate_info['fields']},
+            [a['id'] for a in prep.inventory['anchors']],
+            'Checked the complete original and clarified the requested patient answer.',
+            definitions=values, reviewed_definitions=list(values))
+        prep.refresh_from_db()
+        self.assertEqual(prep.state, 'review')
+        self.assertEqual((prep.proposal, prep.checker), original)
+        self.assertEqual(prep.correction_history[-1]['answer_definitions'], values)
+        version = self.approve(template, prep)
+        self.assertEqual(version.number, 1)
+        self.assertEqual(word_contract.require_generation(version), values)
+
+    def test_pre_upgrade_queued_job_rechecks_unresolved_definitions_before_any_stage(self):
+        from decimal import Decimal
+        from core.models import Encounter, AIStageReceipt, Usage, Reservation
+        from core.jobs import enqueue, run_one
+        from core.billing import welcome_credit
+        original_role = preparation.provider_role
+        def unresolved(*args, **kwargs):
+            response, evidence = original_role(*args, **kwargs)
+            if args[1] == 'checker':
+                response['answer_definitions']['fields'][0].update(
+                    state='unresolved', reason='The original question still needs a semantic decision.')
+            return response, evidence
+        # Represent an immutable version and queue admitted by the old release.
+        with patch.object(preparation, 'provider_role', side_effect=unresolved), \
+                patch.object(word_contract, 'approval_issues', return_value={}):
+            template, prep = self.fresh_upload()
+            version = self.approve(template, prep)
+        values = validated_semantic_definitions(version)
+        welcome_credit(self.user)
+        encounter = Encounter.objects.create(patient=self.patient, department=self.department,
+            template_version=version, created_by=self.user, notes='Patient name: Synthetic Test',
+            service_date=timezone.localdate())
+        with patch.object(word_contract, 'require_generation', return_value=values), \
+                patch('core.ai_stages.maximum_cost', return_value=Decimal('0.01')):
+            job = enqueue(encounter, self.user)
+        self.assertEqual(set(Reservation.objects.filter(job=job).values_list('state',flat=True)), {'held'})
+        before = deepcopy((prep.proposal, prep.checker))
+        with patch('core.ai_stages.execute_stage') as send, patch('core.semantic_generation.run') as pipeline:
+            self.assertTrue(run_one())
+        send.assert_not_called(); pipeline.assert_not_called()
+        job.refresh_from_db(); encounter.refresh_from_db(); prep.refresh_from_db()
+        self.assertEqual(job.state, 'failed')
+        self.assertIn('new definition version', job.error)
+        self.assertFalse(AIStageReceipt.objects.filter(job=job).exists())
+        self.assertFalse(Usage.objects.filter(job=job).exists())
+        self.assertEqual(set(Reservation.objects.filter(job=job).values_list('state',flat=True)), {'released'})
+        self.assertEqual(encounter.answers, {})
+        self.assertEqual((prep.proposal, prep.checker), before)
+        self.assertEqual(validated_semantic_definitions(version), values)
 
     def approve(self,template,prep):
         response=self.client.post(f'/templates/{template.pk}/preparation/approve/',{

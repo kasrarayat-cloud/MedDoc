@@ -569,11 +569,16 @@ def submit_transcription(job,raw,key,submitted):
 def run_semantic_job(job):
     """Settle the whole known stage chain once; uncertain later stages retain holds."""
     from . import ai_stages,semantic_generation
-    from .semantic_preparation import validated_semantic_definitions
+    from .word_contract import require_generation
     answers=None
     try:
         e=job.encounter
-        definitions=validated_semantic_definitions(e.template_version)
+        try:
+            definitions=require_generation(e.template_version)
+        except ValidationError as exc:
+            raise NoProviderRequest('The approved form source or answer definitions need review before generation. '
+                'Open its mapping for a new definition version, or contact support if the original is unavailable. '
+                'Nothing was sent or charged.') from exc
         if (job.config.get('semantic_template_version')!=str(e.template_version_id)
             or job.config.get('semantic_source_sha256')!=hashlib.sha256(e.notes.encode()).hexdigest()
             or job.config.get('semantic_definitions_sha256')!=semantic_generation.digest(definitions)):
