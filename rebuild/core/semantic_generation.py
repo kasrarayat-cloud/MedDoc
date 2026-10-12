@@ -20,6 +20,9 @@ from documents.semantic_preparation_roles import TEMPORAL_REFERENCE_CONTRACT, TE
 CONTRACT = PROMPT_VERSION = 'semantic-facts-v1'
 LEGACY_REFERENCE_CONTRACT = 'explicit-source-unit-citations-v1'
 REFERENCE_INVENTORY_CONTRACT = 'exact-source-reference-inventory-v2'
+NUMERIC_REFERENCE_GUIDE_CONTRACT = 'numeric-source-occurrences-v1'
+MAX_NUMERIC_SOURCE_REFERENCES = 256
+MAX_NUMERIC_REFERENCE_GUIDE_BYTES = 65536
 LEGACY_SCOPE_CONTRACT = 'note-wide-offer-scope-v1'
 POSITIONED_SCOPE_CONTRACT = 'positioned-fact-scope-v2'
 MAX_CALLS = 5
@@ -889,6 +892,26 @@ _inventory_fact['required'].remove('source_unit_ids')
 API_FACT_INVENTORY_SCHEMA = _schema({
     'reference_contract': _enum((REFERENCE_INVENTORY_CONTRACT,)),
     'facts': API_FACT_INVENTORY_SCHEMA['properties']['facts']})
+
+
+def _describe_occurrences(schema):
+    # Only the current provider schema changes; stored and legacy readers do not.
+    if type(schema) is dict:
+        properties = schema.get('properties', {})
+        if set(properties) == {'quote', 'source_unit_id', 'occurrence'}:
+            properties['occurrence']['description'] = (
+                'One-based occurrence of this exact case-sensitive quote in the complete source unit, '
+                'counting every substring match, including matches inside other words. '
+                'Use the numeric_source_reference_guide for offered numeric quotes. '
+                'Choose the occurrence in this fact\'s own expression, not an earlier identical value '
+                'describing a duration, another person, time or measurement. '
+                'A measurement value and its unit/scale must belong to the same expression.')
+        for value in schema.values(): _describe_occurrences(value)
+    elif type(schema) is list:
+        for value in schema: _describe_occurrences(value)
+
+
+_describe_occurrences(API_FACT_INVENTORY_SCHEMA)
 ASSIGN_SCHEMA = _schema({'fields': _array(_schema({'key': STRING, 'fact_ids': _array(STRING), 'status': _enum(STATES), 'separator': _enum(SEPARATORS)}), 100)})
 CHECK_SCHEMA = _schema({'fields': _array(_schema({'key': STRING,
     'verdict': {**_enum(VERDICTS), 'description': (
@@ -956,7 +979,20 @@ EXTRACT_INVENTORY_INSTRUCTIONS = EXTRACT_INSTRUCTIONS.replace(
     'independently names its exact quote, offered source_unit_id and one-based occurrence. '
     'Code derives the complete citation inventory only from those validated references. '
     'A patient name may cite the earlier statement that documents that identity; never borrow '
-    'another person, timing, unit or scale from an unrelated source statement.')
+    'another person, timing, unit or scale from an unrelated source statement. '
+    'numeric_source_reference_guide is a code-built lexical aid containing exact numeric quotes, '
+    'their actual within-unit substring occurrences and nearby source text. Copy the reference '
+    'for the occurrence belonging to this fact, not simply the first matching quote. '
+    'For example, in symptoms lasting five days and rated five out of ten, the duration and '
+    'score use different occurrences of five; only the second belongs to out of ten. '
+    'A quote can occur inside another word before its numeric use; the supplied ordinal counts '
+    'that substring too. The guide does not identify clinical facts, resolve people/timing, '
+    'validate a number or provide a complete list of permitted spans. Read the original notes. '
+    'Retain whole dates, identifiers and duration phrases rather than replacing them with a '
+    'numeric guide entry. Never adopt a fragment of a compound, signed or fractional expression. '
+    'If no suitable guide entry exists, use the unchanged exact-source-reference contract; '
+    'do not infer an answer or borrow an occurrence. Unit and scale evidence must explicitly '
+    'qualify this same value in its original source expression.')
 ASSIGN_INSTRUCTIONS = ('Assign the extracted facts to the APPROVED field meanings/types/units/choices/scope and destinations. Do not extract or invent new facts, '
     'write prose, change a mapping, or copy complete evidence sentences as answers. Select concise atomic facts appropriate to each field. Code renders their values '
     'and independently checks types and source references. A name gets only the identity fact; reason and assessment get the documented appropriate symptom/diagnosis '
@@ -1067,6 +1103,92 @@ def _validate_current_subjects(notes, units, facts):
                     'to the patient. No answers were adopted. Review the retained attempt and original notes.')
 
 
+def numeric_source_reference_guide(units):
+    """Offer lexical positions, never facts or permission to adopt a value.
+
+    Ordinals use the resolver's overlapping, case-sensitive substring rule, not
+    the ordinal among regex matches. Context remains exact source text. Every
+    lexical match is included or dispatch refuses; a partial guide is not sent.
+    """
+    from .jobs import NoProviderRequest
+    references = []
+    pattern = re.compile(r'(?<!\w)'+SOURCE_NUMBER_PATTERN+r'(?!\w)', re.I)
+    for unit in units:
+        for match in pattern.finditer(unit['quote']):
+            if len(references) >= MAX_NUMERIC_SOURCE_REFERENCES:
+                raise NoProviderRequest('The notes contain too many numeric source references for reliable extraction. '
+                      'Split the notes into separate encounters; nothing was sent or charged.')
+            quote = match.group()
+            offset, occurrence = -1, 0
+            while offset < match.start():
+                offset = unit['quote'].find(quote, offset+1)
+                occurrence += 1
+            references.append({
+                'reference': {'quote': quote, 'source_unit_id': unit['id'], 'occurrence': occurrence},
+                'before': unit['quote'][max(0, match.start()-48):match.start()],
+                'after': unit['quote'][match.end():match.end()+48]})
+    guide = {'contract': NUMERIC_REFERENCE_GUIDE_CONTRACT, 'references': references}
+    if len(json.dumps(guide, ensure_ascii=False, separators=(',', ':')).encode()) > MAX_NUMERIC_REFERENCE_GUIDE_BYTES:
+        raise NoProviderRequest('The numeric source-reference guide exceeds the supported size. '
+              'Split the notes into separate encounters; nothing was sent or charged.')
+    return guide
+
+
+def _validate_current_numeric_answers(notes, fields, definitions, facts, answers):
+    """A source fraction is not an unscaled typed count in a new generation.
+
+    Historical canonicalization remains unchanged. Explicitly approved score
+    scales still require the existing exact source-scale and numerator binding.
+    """
+    from .generation import readings
+    from .jobs import PlatformFailure
+    for field in fields:
+        definition, answer = definitions[field['key']], answers[field['key']]
+        if (definition['value_type'] not in ('integer', 'number') or answer['status'] != 'supported'
+                or definition['constraints']['scale_maximum'] is not None):
+            continue
+        for identity in answer['fact_ids']:
+            value = facts[identity]['value_evidence']
+            if _source_number(value['quote']) is None: continue
+            before = [form for text in readings(notes[:value['start']])
+                      for form in (text, unicodedata.normalize('NFKC', text))]
+            after = [form for text in readings(notes[value['end']:])
+                     for form in (text, unicodedata.normalize('NFKC', text))]
+            operand = r'(?:(?:[+−–—-]\s*|(?:minus|negative|plus|positive)\s+))?'+SOURCE_NUMBER_PATTERN
+            numerator = r'^\s*[/⁄∕]\s*'+operand+r'(?!\w)'
+            denominator = r'(?<!\w)'+operand+r'\s*[/⁄∕]\s*$'
+            # Unicode numeric glyphs may normalize to letters (Ⅳ -> IV).
+            # They still denote an unsupported fraction operand; never convert
+            # them into a numeric answer or lose them by normalizing first.
+            unicode_after = [re.match(r'^\s*[/⁄∕／]\s*(?:[+−–—-]\s*|(?:minus|negative|plus|positive)\s+)?(.)',
+                                     text, re.I) for text in after]
+            unicode_before = [re.search(r'(.)\s*[/⁄∕／]\s*$', text) for text in before]
+            prior_ratio = (any(re.search(denominator, text, re.I) for text in before)
+                           or any(match and match[1].isnumeric() for match in unicode_before))
+            following_ratio = (any(re.search(numerator, text, re.I) for text in after)
+                               or any(match and match[1].isnumeric() for match in unicode_after))
+            # A directly qualifying, explicitly approved rate unit such as
+            # /24 hours is a unit, not permission to strip an arbitrary fraction.
+            fact = facts[identity]
+            unit = fact['unit_span']
+            rate_suffix = ''
+            if unit is not None:
+                rate = re.match(r'^[/⁄∕]\s*(.*)$', unicodedata.normalize('NFKC',
+                    notes[unit['start']:unit['end']]), re.S)
+                if rate:
+                    rate_suffix = rate[1]
+                    number = re.match(operand, rate_suffix, re.I)
+                    if number: rate_suffix = rate_suffix[number.end():].lstrip()
+            rate_unit = (unit is not None and fact['unit'] is not None
+                and unit['start'] >= value['end']
+                and not notes[value['end']:unit['start']].strip()
+                and any(character.isalpha() for character in notes[unit['start']:unit['end']])
+                and rate_suffix and rate_suffix[0].isalpha())
+            if prior_ratio or following_ratio and not rate_unit:
+                raise PlatformFailure('A fraction or ratio cannot populate a numeric field without an approved '
+                    'matching measurement scale. No answers were adopted. Review the retained attempt and original notes.')
+
+
 def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE_CONTRACT):
     from .generation import source_units
     if type(reference_contract) is not str or reference_contract not in (LEGACY_REFERENCE_CONTRACT, REFERENCE_INVENTORY_CONTRACT):
@@ -1081,10 +1203,19 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
         extractor['reference_contract'] = reference_contract
+        extractor['numeric_source_reference_guide'] = numeric_source_reference_guide(units)
         schema, instructions = API_FACT_INVENTORY_SCHEMA, EXTRACT_INVENTORY_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
-    facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
-                           timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
+    try:
+        facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
+                               timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
+    except ValidationError as exc:
+        if (reference_contract == REFERENCE_INVENTORY_CONTRACT and exc.messages == [
+                'The measurement value and scale are not explicitly bound in the same source expression.']):
+            from .jobs import PlatformFailure
+            raise PlatformFailure('Numeric value and scale are not explicitly bound in the same source expression. '
+                'No answers were adopted. Review the retained attempt and original notes.') from exc
+        raise
     _validate_current_subjects(notes, units, facts)
     assignments = send('assigner', 1, {**base, 'facts': list(facts.values())}, ASSIGN_SCHEMA, TEMPORAL_REFERENCE_INSTRUCTIONS + ASSIGN_INSTRUCTIONS)
     answers = _assign(notes, fields, definitions, facts, assignments, timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
@@ -1105,7 +1236,9 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
             if previous_checks[key]['verdict'] == 'omission' and not answers[key]['fact_ids']:
                 checks[key] = {**previous_checks[key], 'verdict': 'ambiguous',
                                'reason': 'The checker identified an omission but no grounded fact resolved it. Clinician review is required.'}
-    return _apply_check(answers, checks, bad)
+    answers = _apply_check(answers, checks, bad)
+    _validate_current_numeric_answers(notes, fields, definitions, facts, answers)
+    return answers
 
 
 def _answer_preview(answers):
