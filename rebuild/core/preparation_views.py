@@ -5,6 +5,8 @@ import secrets
 from django.core.exceptions import ValidationError
 from django.http import FileResponse, HttpResponse, JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from . import template_review
 from django.views.decorators.http import require_http_methods, require_GET, require_POST
 from .models import Template, TemplatePreparation
 from .security import scoped, membership, private_path, audit
@@ -42,10 +44,14 @@ def detail(request,pk):
            'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
     receipts=list(prep.receipts.order_by('created_at'))
     from .word_contract import review_rows, approval_issues
-    definition_rows = review_rows(prep)
-    definition_issues = approval_issues(prep) if definition_rows and prep.state in {'review','guided'} else {}
+    definition_rows = template_review.review_items(prep, review_rows(prep))
+    definition_issues = {r['field']['key']: r['reason'] for r in definition_rows if r['state'] == 'unresolved'} if prep.state in {'review','guided'} else {}
     from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
-    return render(request,'template_preparation.html',{'template':template,'preparation':prep,
+    compact = {'review_rows': template_review.rows(definition_rows, template_review.label_displays(template)),
+        'review_save_url': reverse('template_preparation_correct', args=[template.pk]),
+        'review_approve_url': reverse('template_preparation_approve', args=[template.pk]),
+        **template_review.tokens(prep, definition_rows, request.user.pk)} if definition_rows else {}
+    return render(request,'template_preparation.html',{**compact, 'template':template,'preparation':prep,'layout_preparation':prep,
         'definition_rows':definition_rows, 'definition_issues':definition_issues,
         'can_approve':prep.state == 'review' and not definition_issues,
         'definition_version':2, 'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
@@ -55,7 +61,7 @@ def detail(request,pk):
         'options':prep.inventory.get('options',[]),'receipts':receipts,
         'failure_explanation':failure_explanation(prep,receipts),
         'can_continue_wm_review':can_continue_wm_review(prep),
-        'can_correct':prep.state in {'review','guided'},'preview_token':secrets.token_hex(24)})
+        'can_correct':prep.state in {'review','guided'} and membership(request.user, template.department).role in {'owner','clinician'},'preview_token':secrets.token_hex(24)})
 
 @require_GET
 def status(request,pk):
@@ -80,7 +86,15 @@ def corrections(request,pk):
             from .semantic_preparation_views import posted_definitions
             definitions = posted_definitions(SimpleNamespace(source_version=SimpleNamespace(fields=prep.inventory['fields']),
                 config={'semantic_definition_version':2}), request.POST)
-        correct(prep.pk,request.user,revision(request),labels,request.POST.getlist('reviewed_anchor'),request.POST.get('correction_reason',''),placements,definitions,request.POST.getlist('reviewed_field'))
+        reviewed_anchors = request.POST.getlist('reviewed_anchor')
+        reviewed_fields = request.POST.getlist('reviewed_field')
+        reason = request.POST.get('correction_reason','')
+        if request.POST.get('compact_review') == 'on':
+            from .word_contract import review_rows
+            definitions, reviewed_fields, reason = template_review.submitted(prep, template_review.review_items(prep, review_rows(prep)), request.user, request.POST, 'save')
+            labels = {f['key']: f['label'] for f in prep.candidate_info.get('fields', [])}
+            reviewed_anchors = [a['id'] for a in prep.inventory.get('anchors', [])]
+        correct(prep.pk,request.user,revision(request),labels,reviewed_anchors,reason,placements,definitions,reviewed_fields)
     except (ValidationError,DocumentError,ValueError) as exc:
         return HttpResponse('; '.join(exc.messages) if isinstance(exc,ValidationError) else str(exc),status=409,content_type='text/plain')
     return redirect('template_preparation',pk=pk)
@@ -98,9 +112,23 @@ def continue_review(request,pk):
 def approval(request,pk):
     _,prep=selected(request,pk)
     try:
+        from .word_contract import review_rows, approval_issues
+        current_rows = template_review.review_items(prep, review_rows(prep))
+        # Existing core errors still explain retained model uncertainty. This adds
+        # the one-time person choice for an otherwise complete generic name label.
+        if any(r['state'] == 'unresolved' for r in current_rows) and not approval_issues(prep):
+            raise ValidationError('Resolve and save the open questions before approving this template.')
+        reviewed = request.POST.getlist('reviewed_definition')
+        changes = request.POST.getlist('approved_change')
+        original_seen = request.POST.get('original_reviewed') == 'on'
+        prepared_seen = request.POST.get('prepared_reviewed') == 'on'
+        if request.POST.get('compact_review') == 'on':
+            from .word_contract import review_rows
+            _, reviewed, _ = template_review.submitted(prep, current_rows, request.user, request.POST, 'approve')
+            changes = [c['anchor_id'] for c in prep.changes]
+            original_seen = prepared_seen = True  # Explicit snapshot-bound summary consent above.
         approve(prep.pk,request.user,revision(request),request.POST.get('candidate_sha256',''),
-                request.POST.getlist('approved_change'),request.POST.get('original_reviewed')=='on',
-                request.POST.get('prepared_reviewed')=='on', request.POST.getlist('reviewed_definition'))
+                changes,original_seen,prepared_seen,reviewed)
     except ValidationError as exc:
         return HttpResponse('; '.join(exc.messages),status=409,content_type='text/plain')
     return redirect('template_detail',pk=pk)

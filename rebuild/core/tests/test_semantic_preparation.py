@@ -258,7 +258,7 @@ class DefinitionPreparationDatabaseTests(TestCase):
         response = self.client.post(reverse('template_definitions_correct', args=[prep.pk]), post)
         self.assertEqual(response.status_code, 409)
         self.assertContains(response, values[first]['meaning'], status_code=409)
-        self.assertContains(response, 'Save reviewed definitions', status_code=409)
+        self.assertContains(response, 'Save decisions', status_code=409)
         self.assertEqual(prep.ai_stage_receipts.count(), 2)
         stranger = User.objects.create_user(username='definition-stranger', verified_at=timezone.now())
         self.client.force_login(stranger)

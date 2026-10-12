@@ -1,9 +1,12 @@
 """Department-scoped, explicit clinician review of reusable answer definitions."""
+import secrets
 from copy import deepcopy
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from . import template_review
 from django.views.decorators.http import require_GET, require_POST
 from documents.semantic_preparation_roles import (
     CONSTRAINT_KEYS, POLARITIES, SUBJECTS, TEMPORALITIES, VALUE_TYPES, ANSWER_TYPES, ANSWER_MODES, DefinitionError,
@@ -46,24 +49,41 @@ def posted_definitions(prep, post):
 
 
 def context(prep, member, *, definitions=None, error='', post=None):
-    values = workflow.corrected_definitions(prep) if definitions is None else definitions
-    identity_issues = workflow.identity_scope_issues(prep.source_version.fields, values) if values and definitions is None else {}
+    retained = workflow.corrected_definitions(prep)
+    values = retained if definitions is None else definitions
+    identity_issues = workflow.identity_scope_issues(prep.source_version.fields, retained) if retained else {}
     proposed = {row['field_key']: row for row in prep.proposal.get('fields', [])}
     checked = {row['field_key']: row for row in prep.checker.get('fields', [])}
-    rows = [{'field': field, 'definition': values.get(field['key']), 'location': describe(field),
+    rows = [{'field': field, 'definition': retained.get(field['key']), 'location': describe(field),
              'protected': protected_field(field), 'proposal': proposed.get(field['key']),
              'checker': checked.get(field['key']),
              'state': 'unresolved' if field['key'] in identity_issues else '',
              'reason': identity_issues.get(field['key'], ''),
+             'name_subject': post.get('name_subject_'+field['key'], '') if post else '',
+             'name_other': post.get('name_other_'+field['key'], '') if post else '',
+             'decision': post.get('decision_'+field['key'], '') if post else '',
+             'name_question_type': retained.get(field['key'], {}).get('value_type'),
              'reviewed': bool(post and field['key'] in post.getlist('reviewed_field'))}
             for field in prep.source_version.fields]
+    if not prep.corrections:
+        for row in rows:
+            proposal, checker = row['proposal'] or {}, row['checker'] or {}
+            if proposal.get('state') == 'unresolved' or checker.get('state') == 'unresolved' or proposal.get('definition') != checker.get('definition'):
+                row['state'] = 'unresolved'
+                row['reason'] = row['reason'] or checker.get('reason') or proposal.get('reason') or 'The independent definitions differ. Confirm which meaning belongs here.'
+    baseline_rows = template_review.review_items(prep, rows)
+    rows = [{**r, 'definition':values.get(r['field']['key'])} for r in baseline_rows]
     receipts = list(prep.ai_stage_receipts.order_by('created_at'))
-    return {'template': prep.source_version.template, 'source_version': prep.source_version,
-        'preparation': prep, 'definition_rows': rows, 'receipts': receipts,
+    return {**template_review.tokens(prep, baseline_rows, getattr(member, 'user_id', None)),
+        'review_rows': template_review.rows(rows, template_review.label_displays(prep.source_version.template)) if values else [], 'preview_token': secrets.token_hex(24),
+        'review_save_url': reverse('template_definitions_correct', args=[prep.pk]),
+        'review_approve_url': reverse('template_definitions_approve', args=[prep.pk]),
+        'template': prep.source_version.template, 'source_version': prep.source_version,
+        'preparation': prep, 'layout_preparation':prep.source_version.preparation, 'definition_rows': rows, 'receipts': receipts,
         'provider_cost': sum((row.actual_cost or Decimal('0') for row in receipts), Decimal('0')),
         'provider_cost_unknown': any(row.actual_cost is None for row in receipts),
         'can_edit': member.role in ('owner', 'clinician') and prep.state in workflow.EDITABLE,
-        'can_approve': member.role in ('owner', 'clinician') and prep.state == 'review',
+        'can_approve': member.role in ('owner', 'clinician') and prep.state == 'review' and not any(r['state']=='unresolved' for r in rows),
         'can_retry': member.role in ('owner','clinician') and prep.state=='blocked'
             and prep.error_code!='provider_unknown'
             and all(row.state in ('succeeded','failed') and row.actual_cost is not None for row in receipts),
@@ -109,8 +129,11 @@ def corrections(request, pk):
     membership(request.user, prep.source_version.template.department, roles=['owner', 'clinician'])
     values = posted_definitions(prep, request.POST)
     try:
-        workflow.correct(prep.pk, request.user, revision(request), values,
-            request.POST.getlist('reviewed_field'), request.POST.get('correction_reason', ''))
+        reviewed = request.POST.getlist('reviewed_field')
+        reason = request.POST.get('correction_reason', '')
+        if request.POST.get('compact_review') == 'on':
+            values, reviewed, reason = template_review.submitted(prep, context(prep, member)['definition_rows'], request.user, request.POST, 'save')
+        workflow.correct(prep.pk, request.user, revision(request), values, reviewed, reason)
     except (ValidationError, DefinitionError) as exc:
         prep.refresh_from_db()
         message = '; '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
@@ -124,8 +147,15 @@ def approval(request, pk):
     prep, member = selected(request, pk)
     membership(request.user, prep.source_version.template.department, roles=['owner', 'clinician'])
     try:
-        workflow.approve(prep.pk, request.user, revision(request), request.POST.get('inventory_sha256', ''),
-            request.POST.getlist('approved_field'), request.POST.get('original_reviewed') == 'on')
+        current_rows = context(prep, member)['definition_rows']
+        if any(r['state'] == 'unresolved' for r in current_rows):
+            raise ValidationError('Resolve and save the open questions before approving this template.')
+        reviewed = request.POST.getlist('approved_field')
+        original_seen = request.POST.get('original_reviewed') == 'on'
+        if request.POST.get('compact_review') == 'on':
+            _, reviewed, _ = template_review.submitted(prep, current_rows, request.user, request.POST, 'approve')
+            original_seen = True  # Explicit snapshot-bound summary consent above.
+        workflow.approve(prep.pk, request.user, revision(request), request.POST.get('inventory_sha256', ''), reviewed, original_seen)
     except (ValidationError, DefinitionError) as exc:
         prep.refresh_from_db()
         message = '; '.join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
