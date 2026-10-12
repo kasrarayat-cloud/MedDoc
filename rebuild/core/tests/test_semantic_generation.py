@@ -179,6 +179,163 @@ def alex_case():
 
 
 class SemanticGenerationTests(SimpleTestCase):
+    def test_local_conflict_annotation_does_not_blank_independent_supported_facts(self):
+        notes = ('Synthetic Mina Solen attended today. Pain is four out of ten. Pain is seven out of ten. '
+                 'These simultaneous entries are not marked as a correction. Temperature is 38.2 Celsius.')
+        fields = [{'key': key, 'label': label, 'kind': 'text', 'locator': {'cell': i}}
+                  for i, (key, label) in enumerate((('name', 'Patient name'), ('pain', 'Pain score0 to 10'),
+                                                   ('temperature', 'Temperature'), ('medicines', 'Medicines')))]
+        definitions = default_definitions(fields)
+        definitions['temperature'].update(value_type='number', unit='Celsius')
+        values = [fact(notes, fields, 'name', 'Synthetic Mina Solen', kind='identity', name_quote='Synthetic Mina Solen'),
+                  fact(notes, fields, 'temperature', '38.2', kind='measurement', unit='Celsius', unit_quote='Celsius')]
+        values += [fact(notes, fields, 'pain_'+word, word, kind='measurement', concept='pain',
+                        scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                   for i, word in enumerate(('four', 'seven'))]
+        selected = assignments(fields, {'name': ['name'], 'pain': ['pain_four', 'pain_seven'],
+                                        'temperature': ['temperature']}, {'pain': 'conflict'})
+        # Use an independently verified conflict without a paid repair fixture.
+        checked = checker(selected, fact_findings=[{'fact_id': 'pain_four', 'verdict': 'ambiguous',
+                                                    'reason': 'The current ratings conflict.'}])
+        answers = semantic.run(notes, fields, definitions, FixtureSender(values, selected, checked))
+        self.assertEqual((answers['name']['text'], answers['name']['status']), ('Synthetic Mina Solen', 'supported'))
+        self.assertEqual((answers['temperature']['value'], answers['temperature']['status']), (38.2, 'supported'))
+        self.assertEqual((answers['pain']['text'], answers['pain']['value']), ('', None))
+        self.assertEqual(answers['medicines']['status'], 'missing')
+        for field in fields:
+            semantic.validate_stored_answer(notes, field, definitions[field['key']], answers[field['key']])
+
+    def test_bound_local_correction_does_not_reframe_independent_identity_citation(self):
+        notes = ('Synthetic Neri Vale attended today. Pain is eight out of ten. '
+                 'Correction: pain is three out of ten. Temperature is 36.8 Celsius.')
+        fields = [{'key': key, 'label': label, 'kind': 'text', 'locator': {'cell': i}}
+                  for i, (key, label) in enumerate((('name', 'Patient name'), ('pain', 'Pain score0 to 10'),
+                                                   ('temperature', 'Temperature')))]
+        definitions = default_definitions(fields)
+        definitions['temperature'].update(value_type='number', unit='Celsius')
+        values = [fact(notes, fields, 'name', 'Synthetic Neri Vale', kind='identity', name_quote='Synthetic Neri Vale'),
+                  fact(notes, fields, 'temperature', '36.8', kind='measurement', unit='Celsius', unit_quote='Celsius')]
+        values += [fact(notes, fields, 'pain_'+word, word, kind='measurement', concept='pain',
+                        supersedes=['pain_eight'] if word == 'three' else [],
+                        scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                   for i, word in enumerate(('eight', 'three'))]
+        # Shared identity evidence must not move either measurement before an erratum.
+        identity_unit = generation.source_units(notes, fields)[0][0]['id']
+        for value in values[1:]:
+            value['subject']['name_span'] = span(notes, 'Synthetic Neri Vale')
+            value['source_unit_ids'] = [identity_unit, *value['source_unit_ids']]
+        answers = semantic.run(notes, fields, definitions, FixtureSender(values, assignments(
+            fields, {'name': ['name'], 'pain': ['pain_three'], 'temperature': ['temperature']})))
+        self.assertEqual([answers[k]['status'] for k in ('name', 'pain', 'temperature')], ['supported'] * 3)
+        self.assertEqual(answers['pain']['value'], 3)
+        self.assertEqual(answers['temperature']['value'], 36.8)
+        self.assertEqual({f['value_evidence']['quote'] for f in answers['pain']['facts'] if f['concept'] == 'pain'}, {'eight', 'three'})
+        for field in fields:
+            semantic.validate_stored_answer(notes, field, definitions[field['key']], answers[field['key']])
+
+    def test_correction_marker_cannot_be_borrowed_from_an_unrelated_source_unit(self):
+        notes = 'Pain is two out of ten. Correction: temperature is 37 Celsius. Pain is four out of ten.'
+        fields, definitions = self.one_field('Pain score0 to 10')
+        values = [fact(notes, fields, word, word, kind='measurement', concept='pain',
+                       supersedes=['two'] if word == 'four' else [],
+                       scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                  for i, word in enumerate(('two', 'four'))]
+        values[1]['source_unit_ids'].insert(0, 2)
+        self.assert_held(self.generated(notes, fields, definitions, values, ['four']))
+
+    def test_correction_marker_cannot_cross_an_independent_clause_or_measurement(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        for correction in ('Correction: the temperature, and only the temperature, is 37 Celsius; pain is four out of ten.',
+                           'Temperature correction: 37 Celsius; an independent pain entry is four out of ten.',
+                           'Correction: temperature is 37 Celsius and pain is four out of ten.',
+                           'Correction to the temperature only: 37 Celsius — pain is four out of ten.',
+                           'Correction to the temperature only: 37 Celsius / pain is four out of ten.',
+                           'Correction: temperature is 37 Celsius subsequently pain is four out of ten.',
+                           'Correction to the medication only: doxycycline with an independent pain rating of four out of ten.',
+                           'Correction to allergy only: penicillin instead of amoxicillin with pain remaining four out of ten.',
+                           'Correction: doxycycline with an independent pain rating of four out of ten.'):
+            notes = 'Pain is two out of ten. '+correction
+            values = [fact(notes, fields, word, word, kind='measurement', concept='pain',
+                           supersedes=['two'] if word == 'four' else [],
+                           scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                      for i, word in enumerate(('two', 'four'))]
+            with self.subTest(correction=correction):
+                self.assert_held(self.generated(notes, fields, definitions, values, ['four']))
+
+    def test_model_concept_cannot_authorize_another_explicit_correction_target(self):
+        fields, definitions = self.one_field('Pain score0 to 10')
+        for clause in ('Correction to medication only: doxycycline with pain four out of ten.',
+                       'Correction: medication only doxycycline with pain four out of ten.',
+                       'Correction: doxycycline with pain four out of ten.'):
+            notes = 'Medication is doxycycline with pain two out of ten. '+clause
+            values = [fact(notes, fields, word, word, kind='measurement',
+                           concept='medication doxycycline with pain',
+                           supersedes=['two'] if word == 'four' else [],
+                           scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                      for i, word in enumerate(('two', 'four'))]
+            with self.subTest(clause=clause):
+                self.assert_held(self.generated(notes, fields, definitions, values, ['four']))
+
+    def test_local_correction_keeps_an_independent_denial_heading_in_the_same_unit(self):
+        notes = 'Pain is eight out of ten. Correction: pain is three out of ten; patient denies:\nfever.'
+        fields = [{'key': key, 'label': label, 'kind': 'text', 'locator': {'cell': i}}
+                  for i, (key, label) in enumerate((('pain', 'Pain score0 to 10'), ('finding', 'Findings')))]
+        definitions = default_definitions(fields)
+        values = [fact(notes, fields, word, word, kind='measurement', concept='pain',
+                       supersedes=['eight'] if word == 'three' else [],
+                       scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                  for i, word in enumerate(('eight', 'three'))]
+        values.append(fact(notes, fields, 'fever', 'fever'))
+        answers = semantic.run(notes, fields, definitions, FixtureSender(values,
+            assignments(fields, {'pain': ['three'], 'finding': ['fever']})))
+        self.assert_held(answers['finding'])
+        self.assertTrue(any('patient denies:' in e['quote'] for e in answers['finding']['evidence']))
+
+    def test_correction_cannot_supersede_a_different_explicitly_named_patient(self):
+        notes = ('Synthetic Alpha Mason has pain eight out of ten. '
+                 'Correction: Synthetic Beta Hale has pain three out of ten.')
+        fields, definitions = self.one_field('Pain score0 to 10')
+        values = [fact(notes, fields, word, word, kind='measurement', concept='pain', name_quote=name,
+                       supersedes=['eight'] if word == 'three' else [],
+                       scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten', i)})
+                  for i, (word, name) in enumerate((('eight', 'Synthetic Alpha Mason'), ('three', 'Synthetic Beta Hale')))]
+        self.assert_held(self.generated(notes, fields, definitions, values, ['three']))
+
+    def test_denials_of_referenced_facts_are_not_negated_correction_annotations(self):
+        fields, definitions = self.one_field()
+        for suffix in ('All findings above are denied.', 'Patient denies the above.', 'These findings are denied.',
+                       'All findings in this note are denied.', 'Every finding in this note is incorrect.',
+                       'These findings are not marked as a correction and are denied.',
+                       'These findings are not marked as a correction:\n'):
+            notes = 'Fever. '+suffix
+            with self.subTest(suffix=suffix):
+                self.assert_held(self.generated(notes, fields, definitions,
+                    [fact(notes, fields, 'fever', 'Fever')], ['fever']))
+
+    def test_positioned_scope_profile_is_bound_and_old_saved_proofs_remain_immutable(self):
+        notes = 'The patient has ankle pain. These entries are not marked as a correction.'
+        fields, definitions = self.one_field()
+        values = [fact(notes, fields, 'pain', 'ankle pain')]
+        units, _ = generation.source_units(notes, fields)
+        old_facts = semantic.validate_facts(notes, units, {'facts': values}, scope_contract=semantic.LEGACY_SCOPE_CONTRACT)
+        assigned = assignments(fields, {'answer': ['pain']})
+        old = semantic._apply_check(semantic._assign(notes, fields, definitions, old_facts, assigned,
+            scope_contract=semantic.LEGACY_SCOPE_CONTRACT), *semantic._check(fields, old_facts, checker(assigned)))['answer']
+        self.assertNotIn('fact_scope_contract', old)
+        self.assert_held(old)
+        before = deepcopy(old)
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], old)
+        self.assertEqual(old, before)
+        answer = self.generated(notes, fields, definitions, values, ['pain'])
+        self.assertEqual(answer['fact_scope_contract'], semantic.POSITIONED_SCOPE_CONTRACT)
+        semantic.validate_stored_answer(notes, fields[0], definitions['answer'], answer)
+        for profile in (None, 'unknown', semantic.LEGACY_SCOPE_CONTRACT):
+            bad = deepcopy(answer)
+            if profile is None: bad.pop('fact_scope_contract')
+            else: bad['fact_scope_contract'] = profile
+            with self.subTest(profile=profile), self.assertRaises(ValidationError):
+                semantic.validate_stored_answer(notes, fields[0], definitions['answer'], bad)
+
     def test_actual_narrative_has_concise_values_and_complete_exact_source_evidence(self):
         self.assertEqual(hashlib.sha256(NOTES.encode()).hexdigest(),
                          '07f55572e09e0cb646700e3621d68efb4ee19b5a61570f72d5a92006c1cb7340')
