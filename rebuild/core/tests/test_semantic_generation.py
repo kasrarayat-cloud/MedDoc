@@ -420,6 +420,33 @@ class SemanticGenerationTests(SimpleTestCase):
         self.assert_held(answer)
         self.assertEqual(answer['evidence'][0]['quote'], 'Mother reports diabetes.')
 
+    def test_complete_synthetic_identity_is_not_replaced_by_supported_shorter_name(self):
+        fields, definitions = self.one_field('Person full name')
+        definitions['answer'].update(version=2, value_type='person_name', answer_mode='atomic')
+        for name in ('Synthetic Theo Varen', 'Synthetic Mina Solen', 'Synthetic Élise 王'):
+            notes = name+', record reference TEST-731, attended a review visit.'
+            with self.subTest(name=name):
+                full = fact(notes, fields, 'name', name, kind='identity', name_quote=name)
+                answer = self.generated(notes, fields, definitions, [full], ['name'])
+                self.assertEqual((answer['status'], answer['text']), ('supported', name))
+                self.assertEqual(answer['evidence'][0]['quote'], notes)
+                # All three role fixtures agree on a shorter, source-backed name.
+                # Code must still hold it, rather than infer or prepend characters.
+                shortened = name.removeprefix('Synthetic ')
+                partial = fact(notes, fields, 'name', shortened, kind='identity', name_quote=shortened)
+                held = self.generated(notes, fields, definitions, [partial], ['name'])
+                self.assert_held(held)
+                self.assertEqual(held['text'], '')
+
+    def test_another_complete_synthetic_name_cannot_fill_patient_identity(self):
+        fields, definitions = self.one_field('Person full name')
+        definitions['answer'].update(version=2, value_type='person_name', answer_mode='atomic')
+        notes = ('Synthetic Rhea Dalen attended a review visit. '
+                 'Her brother, Synthetic Omar Dalen, reports ankle pain.')
+        other = fact(notes, fields, 'brother', 'Synthetic Omar Dalen', kind='identity',
+                     subject='other', name_quote='Synthetic Omar Dalen')
+        self.assert_held(self.generated(notes, fields, definitions, [other], ['brother']))
+
     def test_named_subject_evidence_cannot_be_borrowed_from_an_unrelated_source_unit(self):
         fields, definitions = self.one_field(subject='other')
         notes = 'Mother reports diabetes. The patient reports ankle pain.'
