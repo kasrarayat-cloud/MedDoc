@@ -5,10 +5,12 @@ source sentence. They exercise compound statements, people, polarity, timing
 and typed values rather than assuming that a passing checker makes a draft safe.
 """
 from copy import deepcopy
+from contextlib import nullcontext
 import hashlib
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
+from uuid import uuid4
 
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
@@ -2227,4 +2229,260 @@ class SemanticReferenceInventoryTests(SimpleTestCase):
         answers = semantic.run(NOTES, fields, definitions, sender, reference_contract=self.contract)
         self.assertTrue(all(answer['status'] == 'missing' and answer['text'] == '' for answer in answers.values()))
         self.assertEqual(calls, [('extractor', 1), ('assigner', 1), ('checker', 1)])
+
+
+class NumericSourceReferenceGuideTests(SimpleTestCase):
+    def guide(self, notes):
+        units = generation.source_units(notes, [])[0]
+        return units, semantic.numeric_source_reference_guide(units)
+
+    def test_compound_equal_duration_and_score_have_distinct_exact_contexts(self):
+        notes = 'He reports left ankle soreness lasting two weeks and rates it as two out of ten.'
+        units, guide = self.guide(notes)
+        self.assertEqual(guide['contract'], semantic.NUMERIC_REFERENCE_GUIDE_CONTRACT)
+        twos = [item for item in guide['references'] if item['reference']['quote'] == 'two']
+        self.assertEqual([item['reference'] for item in twos], [
+            {'quote': 'two', 'source_unit_id': 1, 'occurrence': 1},
+            {'quote': 'two', 'source_unit_id': 1, 'occurrence': 2}])
+        self.assertTrue(twos[0]['after'].startswith(' weeks'))
+        self.assertTrue(twos[1]['after'].startswith(' out of ten'))
+        self.assertEqual(units, generation.source_units(notes, [])[0])
+
+    def test_ordinals_include_substrings_overlaps_and_exact_case(self):
+        examples = [
+            ('Someone noted one day, pain one out of ten.', 'one', [2, 3]),
+            ('twenty-two episodes, pain two out of ten.', 'two', [2]),
+            ('Reference111, pain 11 out of 20.', '11', [3]),
+            ('One day, one lesion and pain one out of ten.', 'one', [1, 2]),
+        ]
+        for notes, quote, expected in examples:
+            with self.subTest(notes=notes):
+                _, guide = self.guide(notes)
+                self.assertEqual([item['reference']['occurrence'] for item in guide['references']
+                                  if item['reference']['quote'] == quote], expected)
+
+    def test_unit_local_ordinals_unicode_and_exact_context_are_not_normalized(self):
+        notes = 'Élise 王 reports two days. Her pain is two out of ten.'
+        units, guide = self.guide(notes)
+        twos = [item for item in guide['references'] if item['reference']['quote'] == 'two']
+        self.assertEqual([item['reference']['source_unit_id'] for item in twos], [1, 2])
+        self.assertEqual([item['reference']['occurrence'] for item in twos], [1, 1])
+        self.assertEqual(twos[0]['before'], 'Élise 王 reports ')
+        self.assertEqual(twos[0]['after'], ' days.')
+        self.assertEqual(len(units), 2)
+
+    def test_guide_is_only_lexical_data_without_clinical_or_field_assignment(self):
+        _, guide = self.guide('The patient had -3 episodes, temperature +37.0 Celsius and weight .5 kg.')
+        self.assertEqual([item['reference']['quote'] for item in guide['references']], ['-3', '+37.0', '.5'])
+        for item in guide['references']:
+            self.assertEqual(set(item), {'reference', 'before', 'after'})
+            self.assertEqual(set(item['reference']), {'quote', 'source_unit_id', 'occurrence'})
+            self.assertLessEqual(len(item['before']), 48)
+            self.assertLessEqual(len(item['after']), 48)
+
+    def test_current_extractor_gets_guide_but_other_roles_and_legacy_do_not(self):
+        fields, definitions, facts, assigned = alex_case()
+        current, legacy = FixtureSender(facts, assigned), FixtureSender(facts, assigned)
+        answer = semantic.run(NOTES, fields, definitions, current,
+                              reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(answer, semantic.run(NOTES, fields, definitions, legacy))
+        self.assertEqual(current.calls[0][2]['numeric_source_reference_guide'],
+                         self.guide(NOTES)[1])
+        self.assertNotIn('numeric_source_reference_guide', legacy.calls[0][2])
+        self.assertEqual(current.calls[1:], legacy.calls[1:])
+        self.assertEqual(len(current.calls), 3)
+
+    def test_wrong_equal_value_occurrence_is_refused_without_retarget_or_retry(self):
+        notes = 'The patient has pain lasting two weeks and rates it as two out of ten.'
+        fields = [{'key': 'pain', 'label': 'Pain score0 to 10', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['pain']['value_type'] = 'integer'
+        definitions['pain']['constraints'].update(scale_minimum='0', scale_maximum='10')
+        selected = fact(notes, fields, 'pain', 'two', kind='measurement', occurrence=1,
+                        scale={'minimum': None, 'maximum': '10', 'span': span(notes, 'out of ten')})
+        assigned = assignments(fields, {'pain': ['pain']})
+        sender = FixtureSender([selected], assigned)
+        good = semantic.run(notes, fields, definitions, sender,
+                            reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual((good['pain']['text'], good['pain']['value']), ('2', 2))
+        raw = inventory_api_facts(notes, generation.source_units(notes, fields)[0], [selected])
+        raw['facts'][0]['value_span']['occurrence'] = 1
+        before, calls = deepcopy(raw), []
+        def wrong(role, attempt, payload, schema, instructions):
+            calls.append((role, attempt))
+            return deepcopy(raw)
+        with self.assertRaisesMessage(ValidationError, 'not explicitly bound in the same source expression'):
+            semantic.run(notes, fields, definitions, wrong,
+                         reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(calls, [('extractor', 1)])
+        self.assertEqual(raw, before)
+
+    def test_overlarge_count_refuses_before_any_provider_call_without_truncation(self):
+        fields, definitions, _, _ = alex_case()
+        calls = []
+        notes = ' '.join(['3']*(semantic.MAX_NUMERIC_SOURCE_REFERENCES+1))
+        with self.assertRaisesMessage(ValidationError, 'too many numeric source references'):
+            semantic.run(notes, fields, definitions, lambda *args: calls.append(args),
+                         reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(calls, [])
+        _, guide = self.guide(' '.join(['3']*semantic.MAX_NUMERIC_SOURCE_REFERENCES))
+        self.assertEqual(len(guide['references']), semantic.MAX_NUMERIC_SOURCE_REFERENCES)
+
+    def test_serialized_byte_limit_refuses_before_send_including_unicode_bytes(self):
+        fields, definitions, _, _ = alex_case()
+        notes = '王'*40+' 3 '+'王'*40
+        units, guide = self.guide(notes)
+        size = len(json.dumps(guide, ensure_ascii=False, separators=(',', ':')).encode())
+        calls = []
+        with patch.object(semantic, 'MAX_NUMERIC_REFERENCE_GUIDE_BYTES', size-1):
+            with self.assertRaisesMessage(ValidationError, 'guide exceeds the supported size'):
+                semantic.run(notes, fields, definitions, lambda *args: calls.append(args),
+                             reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(calls, [])
+        with patch.object(semantic, 'MAX_NUMERIC_REFERENCE_GUIDE_BYTES', size):
+            self.assertEqual(semantic.numeric_source_reference_guide(units), guide)
+
+    def test_guide_does_not_make_partial_signed_or_fractional_values_valid(self):
+        fields = [{'key': 'answer', 'label': 'Episode count', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['answer']['value_type'] = 'integer'
+        for expression, quote in [('six and a half', 'six'), ('−\u200bsix', 'six'),
+                                  ('one hundred', 'one')]:
+            notes = 'The patient reports '+expression+' episodes.'
+            selected = fact(notes, fields, 'value', quote, kind='measurement')
+            sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+            with self.subTest(expression=expression), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender,
+                             reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+            self.assertEqual(len(sender.calls), 1)
+
+    def test_new_numeric_adoption_refuses_fraction_fragments_without_approved_scale(self):
+        fields = [{'key': 'answer', 'label': 'Episode count', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['answer']['value_type'] = 'integer'
+        for expression in ('3/4', '3 / 4', '3⁄4', '3∕4', '3\u200b/\u200b4', '3／4', '3 ／ 4'):
+            for source_scale in (False, True):
+                notes = 'The patient reports '+expression+' episodes.'
+                scale = {'minimum': None, 'maximum': '4', 'span': span(notes, expression)} if source_scale else None
+                selected = fact(notes, fields, 'value', '3', kind='measurement', scale=scale)
+                sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+                with self.subTest(expression=expression, source_scale=source_scale), self.assertRaises(ValidationError):
+                    semantic.run(notes, fields, definitions, sender,
+                                 reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+                self.assertLessEqual(len(sender.calls), 3)
+
+    def test_slash_delimiter_and_approved_rate_units_remain_supported(self):
+        examples = [
+            ('The patient has pulse 72 / temperature 37.0 Celsius.', '72', None),
+            ('The patient has pulse 72 / normal rhythm.', '72', None),
+            ('The patient reports 3/day.', '3', '/day'),
+            ('The patient reports 3/24 hours.', '3', '/24 hours'),
+        ]
+        for notes, quote, unit in examples:
+            with self.subTest(notes=notes):
+                fields = [{'key': 'answer', 'label': 'Measured value', 'locator': {'cell': 0}}]
+                definitions = default_definitions(fields)
+                definitions['answer'].update(value_type='integer', unit=unit)
+                selected = fact(notes, fields, 'value', quote, kind='measurement', unit=unit, unit_quote=unit)
+                sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+                answer = semantic.run(notes, fields, definitions, sender,
+                                      reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)['answer']
+                self.assertEqual((answer['text'], answer['value'], answer['status']), (quote, int(quote), 'supported'))
+                self.assertEqual(len(sender.calls), 3)
+
+    def test_fraction_denominator_cannot_be_adopted_as_an_unscaled_count(self):
+        fields = [{'key': 'answer', 'label': 'Episode count', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['answer']['value_type'] = 'integer'
+        for expression, quote in [('3/4', '4'), ('3/Ⅳ', '3'), ('Ⅲ/4', '4'),
+                                  ('3/−Ⅳ', '3'), ('Ⅲ／4', '4'), ('3/½', '3'),
+                                  ('3/−four', '3'), ('3/+four', '3'), ('3/minus four', '3'),
+                                  ('3/negative four', '3')]:
+            notes = 'The patient reports '+expression+' episodes.'
+            selected = fact(notes, fields, 'value', quote, kind='measurement')
+            sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+            with self.subTest(expression=expression), self.assertRaisesMessage(
+                    ValidationError, 'without an approved matching measurement scale'):
+                semantic.run(notes, fields, definitions, sender,
+                             reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+
+    def test_following_approved_rate_unit_cannot_waive_a_preceding_fraction(self):
+        notes = 'The patient reports 3/4/day.'
+        fields = [{'key': 'answer', 'label': 'Episodes per day', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['answer'].update(value_type='integer', unit='/day')
+        selected = fact(notes, fields, 'value', '4', kind='measurement', unit='/day', unit_quote='/day')
+        sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+        with self.assertRaisesMessage(ValidationError, 'without an approved matching measurement scale'):
+            semantic.run(notes, fields, definitions, sender,
+                         reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+
+    def test_bare_number_word_is_not_a_rate_unit_exemption(self):
+        fields = [{'key': 'answer', 'label': 'Measured value', 'locator': {'cell': 0}}]
+        for unit in ('/four', '/minus four', '/4', '/Ⅳ'):
+            notes = 'The patient reports 3'+unit+'.'
+            definitions = default_definitions(fields)
+            definitions['answer'].update(value_type='integer', unit=unit)
+            selected = fact(notes, fields, 'value', '3', kind='measurement', unit=unit, unit_quote=unit)
+            sender = FixtureSender([selected], assignments(fields, {'answer': ['value']}))
+            with self.subTest(unit=unit), self.assertRaises(ValidationError):
+                semantic.run(notes, fields, definitions, sender,
+                             reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)
+
+    def test_unsent_cap_reason_survives_actual_job_handler_without_usage_or_send(self):
+        from core import jobs
+        fields, definitions, _, _ = alex_case()
+        notes = ' '.join(['3']*(semantic.MAX_NUMERIC_SOURCE_REFERENCES+1))
+        encounter = SimpleNamespace(template_version=SimpleNamespace(fields=fields),
+                                    template_version_id='version', notes=notes, department=None)
+        def new_job():
+            return SimpleNamespace(pk=uuid4(), request_key=str(uuid4()), encounter=encounter, user=None,
+                kind='generation', result_path='', result_sha256='', save=Mock(),
+                ai_stage_receipts=SimpleNamespace(all=lambda: []), config={
+                    'semantic_template_version': 'version',
+                    'semantic_source_sha256': hashlib.sha256(notes.encode()).hexdigest(),
+                    'semantic_definitions_sha256': semantic.digest(definitions),
+                    'semantic_fact_reference_contract': semantic.REFERENCE_INVENTORY_CONTRACT})
+        with patch('core.semantic_preparation.validated_semantic_definitions', return_value=definitions), \
+             patch('core.ai_stages.execute_stage') as send, \
+             patch.object(jobs.Usage.objects, 'filter') as usage, \
+             patch.object(jobs.transaction, 'atomic', side_effect=lambda: nullcontext()), \
+             patch.object(jobs, 'release') as release, patch.object(jobs, 'audit'), \
+             patch.object(jobs, 'settle_semantic_stages') as settle, \
+             patch.object(jobs, 'absorb_failed_job') as absorb:
+            usage.return_value.exists.return_value = False
+            job = new_job()
+            jobs.run_semantic_job(job)
+            self.assertEqual(job.state, 'failed')
+            self.assertIn('too many numeric source references', jobs.public_error(job))
+            self.assertIn('nothing was sent or charged', jobs.public_error(job))
+            self.assertLessEqual(len(job.error), 250)
+            self.assertEqual((job.result_path, job.result_sha256), ('', ''))
+            release.assert_called_once_with(job)
+            send.assert_not_called(); settle.assert_not_called(); absorb.assert_not_called()
+            release.reset_mock()
+            other = new_job()
+            with patch.object(semantic, 'run', side_effect=ValidationError('SECRET CLINICAL TEXT')):
+                jobs.run_semantic_job(other)
+            self.assertEqual(other.state, 'failed')
+            self.assertEqual(jobs.public_error(other),
+                'Not processed: Semantic generation was refused before any provider request; nothing was charged.')
+            self.assertNotIn('SECRET', other.error)
+            release.assert_called_once_with(other)
+            send.assert_not_called(); settle.assert_not_called(); absorb.assert_not_called()
+
+    def test_explicit_approved_source_matching_score_scale_still_adopts_numerator(self):
+        notes = 'The patient rates pain 3/4.'
+        fields = [{'key': 'pain', 'label': 'Pain score0 to 4', 'locator': {'cell': 0}}]
+        definitions = default_definitions(fields)
+        definitions['pain']['value_type'] = 'integer'
+        definitions['pain']['constraints'].update(scale_minimum='0', scale_maximum='4')
+        selected = fact(notes, fields, 'pain', '3', kind='measurement',
+                        scale={'minimum': None, 'maximum': '4', 'span': span(notes, '3/4')})
+        sender = FixtureSender([selected], assignments(fields, {'pain': ['pain']}))
+        answer = semantic.run(notes, fields, definitions, sender,
+                              reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT)['pain']
+        self.assertEqual((answer['text'], answer['value'], answer['status']), ('3', 3, 'supported'))
+        self.assertEqual(len(sender.calls), 3)
+        semantic.validate_stored_answer(notes, fields[0], definitions['pain'], answer)
 

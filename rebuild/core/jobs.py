@@ -611,7 +611,10 @@ def run_semantic_job(job):
         unsent=not sent and not unresolved
         job.state='failed' if known or unsent else 'reconciliation'
         if known:job.error=((NOT_ADOPTED if declined else PLATFORM_FAILURE)+failure_reason(exc))[:250]
-        elif unsent:job.error=NOT_PROCESSED+'Semantic generation was refused before any provider request; nothing was charged.'
+        elif unsent:
+            reason=(failure_reason(exc) if isinstance(exc,NoProviderRequest)
+                    else 'Semantic generation was refused before any provider request; nothing was charged.')
+            job.error=(NOT_PROCESSED+reason)[:250]
         else:job.error='An independent AI stage has an uncertain outcome or unsettled cost. Retained earlier stages are preserved; administrator reconciliation is required. Do not resubmit.'
         job.finished_at=timezone.now()
         if job.state=='failed':job.request_key=ended_key(job,'failed')
