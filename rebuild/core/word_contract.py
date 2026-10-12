@@ -73,7 +73,13 @@ def proposed(prep):
 
 
 def review_rows(prep):
-    values = proposed(prep) if prep.proposal and prep.checker else {}
+    # Queued and failed-before-inspection records have no inventory yet.
+    # Completed responses still pass the full contract validator below.
+    if not prep.proposal or not prep.checker:
+        return []
+    values = proposed(prep)
+    if not values:
+        return []
     proposals = roles.definitions_from_role(prep.proposal['answer_definitions']) if values else {}
     checks = {r['field_key']: r for r in prep.checker['answer_definitions']['fields']} if values else {}
     return [{'key': f['key'], 'label': f['label'], 'field': f, 'definition': values[f['key']],
