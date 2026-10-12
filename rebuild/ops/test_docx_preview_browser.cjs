@@ -11,7 +11,7 @@ fs.mkdirSync(out,{mode:0o700});
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const JSZip=require(path.join(base,'static/vendor/docx-preview/jszip.min.js'));
 const token='a'.repeat(48);
-const assetNames=['static/docx-frame.js','static/docx-frame.css','static/template-preparation.js',
+const assetNames=['static/docx-frame.js','static/docx-frame.css','static/template-preparation.js','static/template-review.js',
   'static/vendor/docx-preview/jszip.min.js','static/vendor/docx-preview/docx-preview.min.js'];
 const assets=Object.fromEntries(assetNames.map(name=>['/'+name,fs.readFileSync(path.join(base,name))]));
 const frameTemplate=fs.readFileSync(path.join(base,'templates/docx_preview_frame.html'),'utf8');
@@ -27,7 +27,7 @@ const server=http.createServer((req,res)=>{
   else if(url.pathname==='/doc'){raw=doc;type='application/vnd.openxmlformats-officedocument.wordprocessingml.document';}
   else if(assets[url.pathname]){raw=assets[url.pathname];type=url.pathname.endsWith('.css')?'text/css':'application/javascript';}
   else if(url.pathname==='/observe.js'){raw="window.previewMessages=[];window.addEventListener('message',e=>{if(e.data?.type==='blank-form-preview-result')previewMessages.push({origin:e.origin,data:e.data});});";type='application/javascript';}
-  else if(url.pathname==='/'){raw=`<!doctype html><html><head><meta charset="utf-8"><script src="/observe.js" defer></script><script src="/static/template-preparation.js" defer></script></head><body><div data-preparation data-state="review"><h1>Blank synthetic form preview</h1><section><p data-preview-status>Loading…</p><iframe title="Original blank form" sandbox="allow-scripts" referrerpolicy="no-referrer" width="${Number(url.searchParams.get('width'))||1100}" height="850" src="/frame" data-token="${token}" data-docx-url="/doc"></iframe></section></div></body></html>`;}
+  else if(url.pathname==='/'){raw=`<!doctype html><html><head><meta charset="utf-8"><script src="/observe.js" defer></script><script src="/static/template-review.js" defer></script><script src="/static/template-preparation.js" defer></script></head><body><div data-preparation data-state="review"><h1>Blank synthetic form preview</h1><section><p data-preview-status>Loading…</p><iframe title="Original blank form" sandbox="allow-scripts" referrerpolicy="no-referrer" width="${Number(url.searchParams.get('width'))||1100}" height="850" src="/frame" data-token="${token}" data-docx-url="/doc"></iframe></section></div></body></html>`;}
   else{res.statusCode=404;raw='Not found';}
   res.setHeader('Content-Type',type);res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Cache-Control','no-store');res.end(raw);
 });

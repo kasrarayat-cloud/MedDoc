@@ -2,7 +2,7 @@
 
 This is the fresh-word-contract code-only UI change from installed base `4f64ac1513c3f42d1602a060d4da90d9f2078747`. Schema `0026` stays unchanged. The source hashes below identify the finished implementation; installation remains prospective.
 
-Expected publication is exactly nineteen paths: thirteen runtime sources, four tests, and this declaration plus the audit report. The change simplifies preparation review and presentation, adds explicit whole-summary consent, retains detailed field editing, and requires saved current definitions before approval. Existing core approval/correction and immutable version behavior remain the authority. The document engine change adds inspect-only display labels within its existing sandbox; document filling and clinical generation behavior remain unchanged.
+Expected publication is exactly twenty paths: thirteen runtime sources, five tests, and this declaration plus the audit report. The change simplifies preparation review and presentation, adds explicit whole-summary consent, retains detailed field editing, and requires saved current definitions before approval. Existing core approval/correction and immutable version behavior remain the authority. The document engine change adds inspect-only display labels within its existing sandbox; document filling and clinical generation behavior remain unchanged.
 
 Static publication adds `template-review.css` and `template-review.js` and changes `template-preparation.js`. The new stylesheet has no URL/import syntax or backslash escapes. All nineteen existing public source names remain; eighteen stay byte-identical and only the declared existing JS changes. A credential-free full collection must qualify every manifest/alias/hash/compression output against the actual current 110-entry inventory. Retain all prior hashed assets and untouched bytes/metadata; publish the manifest last with the inherited atomic installer after proving each interrupted file boundary on isolated copies.
 
@@ -20,6 +20,7 @@ Actual first-declaration and merge commit identities, exact required CI, current
 | `rebuild/core/tests/test_word_answer_contract.py` | `4f9f4a927230f8ee9c7a9a1e5a7eccbb2ef64ece3dcb5d963b1913ac015c3db7` |
 | `rebuild/core/views.py` | `df8682294595db2c2872247f92e1573d42222b68354c54d0156d2a888a230acd` |
 | `rebuild/documents/engine.py` | `509c00f8e9c2958c25dfc5001e45ebeb620dc98de458d388fb48d0bc2801405e` |
+| `rebuild/ops/test_docx_preview_browser.cjs` | `0a3679e0e6cf43b90108018c2775cf63483b6794ee339ca209a149c585d45ae4` |
 | `rebuild/semantic-preparation-browser.mjs` | `ee59a85f2f5666ff3cd7a5b0598955a6ab95d7661e6b44f8202ea50611faec87` |
 | `rebuild/static/template-preparation.js` | `a9a6d36eefb9aac4e5902fa7a63502d66177195ca54dc0181778d35cb3ab0f37` |
 | `rebuild/static/template-review.css` | `a333a373d085a7bc9d9fb86e29ccb2391788af5467d86eacaf3d13f3b2edec4c` |
