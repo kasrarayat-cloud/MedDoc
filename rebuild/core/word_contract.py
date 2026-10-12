@@ -88,10 +88,24 @@ def review_rows(prep):
         return []
     proposals = roles.definitions_from_role(prep.proposal['answer_definitions']) if values else {}
     checks = {r['field_key']: r for r in prep.checker['answer_definitions']['fields']} if values else {}
+    issues = roles.identity_scope_issues(prep.inventory['fields'], values)
     return [{'key': f['key'], 'label': f['label'], 'field': f, 'definition': values[f['key']],
              'disagreement': values[f['key']] != proposals[f['key']],
-             'state': checks[f['key']]['state'], 'reason': checks[f['key']]['reason']}
+             'state': 'unresolved' if f['key'] in issues else checks[f['key']]['state'],
+             'reason': ' '.join(filter(None, (checks[f['key']]['reason'], issues.get(f['key']))))}
             for f in prep.inventory['fields'] if f['key'] in values]
+
+
+def identity_scope_issues(prep):
+    values = proposed(prep)
+    return roles.identity_scope_issues(prep.inventory['fields'], values) if values else {}
+
+
+def require_identity_scopes(fields, values):
+    try:
+        return roles.require_identity_scopes(fields, values)
+    except roles.DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
 
 
 def seal(prep, reviewed, actor):
@@ -107,7 +121,7 @@ def seal(prep, reviewed, actor):
     if {f['key'] for f in fields} != set(source) or any(
             f['label'] != source[f['key']]['label'] or f['locator'] != source[f['key']]['locator'] for f in fields):
         raise ValidationError('Answer definitions changed their original questions or destinations.')
-    roles.validate_definitions(fields, values)
+    require_identity_scopes(fields, values)
     prep.candidate_info[INFO_KEY] = {'profile': prep.config[CONFIG_KEY], 'fields_sha256': digest(fields),
         'source_inventory_sha256': prep.inventory['inventory_sha256'], 'definitions': values,
         'reviewed_fields': sorted(reviewed), 'reviewed_by': str(actor.pk)}
@@ -155,4 +169,6 @@ def require_generation(version):
     if (not values and version.template.format == 'docx'
             and (version.document_backend or {}).get('backend') != 'wm-iov-foss-v2'):
         raise ValidationError(MISSING)
+    if values:
+        require_identity_scopes(version.fields, values)
     return values

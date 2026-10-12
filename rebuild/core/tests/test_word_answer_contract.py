@@ -30,6 +30,59 @@ LABELS = ('Encounter category: Initial or Review', 'Clinic record reference', 'P
 
 
 class FreshWordContractTests(SimpleTestCase):
+    def test_unspecified_identity_is_visible_but_cannot_receive_new_approval(self):
+        prep = self.version().preparation
+        prep.candidate_info.pop(word_contract.INFO_KEY)
+        for response in (prep.proposal, prep.checker):
+            for row in response['answer_definitions']['fields']:
+                if row['field_key'] == 'cell_2':
+                    row['definition']['scope']['subject'] = 'unspecified'
+                    row['definition']['meaning'] = 'The full name of the person only.'
+        before = deepcopy((prep.proposal, prep.checker, prep.corrections))
+        row = next(row for row in word_contract.review_rows(prep) if row['key'] == 'cell_2')
+        self.assertEqual(row['state'], 'unresolved')
+        self.assertIn('Choose whose name', row['reason'])
+        with self.assertRaisesMessage(ValidationError, 'Choose whose name'):
+            word_contract.seal(prep, list(self.definitions()), SimpleNamespace(pk='doctor'))
+        self.assertNotIn(word_contract.INFO_KEY, prep.candidate_info)
+        self.assertEqual((prep.proposal, prep.checker, prep.corrections), before)
+
+    def test_historical_identity_contract_stays_readable_but_cannot_start_new_generation(self):
+        version = self.version(); prep = version.preparation
+        # Represent a previously sealed ambiguous contract, without changing production data.
+        for response in (prep.proposal, prep.checker):
+            next(row for row in response['answer_definitions']['fields']
+                 if row['field_key'] == 'cell_2')['definition']['scope']['subject'] = 'unspecified'
+        prep.candidate_info[word_contract.INFO_KEY]['definitions']['cell_2']['scope']['subject'] = 'unspecified'
+        prep.approval_sha256 = approval_binding(prep)
+        before = deepcopy(prep.__dict__)
+        self.assertEqual(validated_semantic_definitions(version)['cell_2']['scope']['subject'], 'unspecified')
+        self.assertEqual(source_for_version(version), self.root/'prepared.docx')
+        with patch('core.ai_stages.maximum_cost') as quote, self.assertRaisesMessage(ValidationError, 'Choose whose name'):
+            word_contract.require_generation(version)
+        quote.assert_not_called()
+        self.assertEqual(prep.__dict__, before)
+
+    def test_identity_capability_preserves_distinct_people_and_unrelated_scopes(self):
+        from documents.semantic_preparation_roles import DefinitionError, require_identity_scopes
+        values = self.definitions()
+        for subject in ('patient', 'clinician', 'other'):
+            values['cell_2']['scope']['subject'] = subject
+            self.assertIs(require_identity_scopes(self.fields, values), values)
+        for subject in ('encounter', 'unspecified'):
+            values['cell_2']['scope']['subject'] = subject
+            self.assertIs(validate_definitions(self.fields, values), values)  # historical reader
+            with self.assertRaises(DefinitionError): require_identity_scopes(self.fields, values)
+        values['cell_2']['scope']['subject'] = 'patient'
+        values['cell_1']['scope']['subject'] = 'unspecified'
+        values['cell_0']['scope']['subject'] = 'encounter'
+        self.assertIs(require_identity_scopes(self.fields, values), values)
+        for role in ('proposer', 'checker'):
+            request = preparation.provider_request(self.inv, role, self.config,
+                self.version().preparation.proposal if role == 'checker' else None)
+            self.assertIn('person_name requires scope.subject', request['system'])
+            self.assertIn('Do not make every name a patient name', request['system'])
+
     def test_new_preparation_frame_is_explicit_in_both_requests_and_the_immutable_seal(self):
         from documents.semantic_preparation_roles import TEMPORAL_REFERENCE_CONTRACT
         version = self.version()
@@ -317,7 +370,7 @@ class OrdinaryClinicianWordTests(TestCase):
             reference='fresh-contract-test', created_by=self.user)
         self.client.force_login(self.user)
 
-    def fresh_upload(self):
+    def fresh_upload(self, expected_state='review'):
         from django.core.files.uploadedfile import SimpleUploadedFile
         from core.models import Template
         response=self.client.post('/templates/upload/', {'name':'Fresh ordinary clinician form',
@@ -330,8 +383,34 @@ class OrdinaryClinicianWordTests(TestCase):
         self.assertEqual(template.versions.count(),0)
         self.assertTrue(preparation.run_one())
         prep=template.preparation; prep.refresh_from_db()
-        self.assertEqual(prep.state,'review',prep.error_code)
+        self.assertEqual(prep.state,expected_state,prep.error_code)
         return template,prep
+
+    def test_fresh_ambiguous_name_is_guided_and_server_refuses_approval_without_changing_responses(self):
+        original_role = preparation.provider_role
+        def ambiguous(*args, **kwargs):
+            response, evidence = original_role(*args, **kwargs)
+            row = response['answer_definitions']['fields'][0]
+            row['definition'].update(version=2, value_type='person_name', answer_mode='atomic')
+            row['definition']['scope']['subject'] = 'unspecified'
+            return response, evidence
+        with patch.object(preparation, 'provider_role', side_effect=ambiguous):
+            template, prep = self.fresh_upload('guided')
+        original = deepcopy((prep.proposal, prep.checker, prep.corrections))
+        response = self.client.get(f'/templates/{template.pk}/preparation/')
+        self.assertContains(response, 'Choose whose name')
+        self.assertNotContains(response, 'Approve layout and create form version')
+        # Even a retained pre-repair review-state preparation cannot bypass the server gate.
+        prep.state = 'review'; prep.save(update_fields=['state'])
+        response = self.client.post(f'/templates/{template.pk}/preparation/approve/', {
+            'revision':str(prep.revision), 'candidate_sha256':prep.candidate_sha256,
+            'approved_change':[c['anchor_id'] for c in prep.changes],
+            'original_reviewed':'on', 'prepared_reviewed':'on',
+            'reviewed_definition':[f['key'] for f in prep.inventory['fields']]})
+        self.assertContains(response, 'Choose whose name', status_code=409)
+        prep.refresh_from_db()
+        self.assertFalse(template.versions.exists())
+        self.assertEqual((prep.proposal, prep.checker, prep.corrections), original)
 
     def approve(self,template,prep):
         response=self.client.post(f'/templates/{template.pk}/preparation/approve/',{
