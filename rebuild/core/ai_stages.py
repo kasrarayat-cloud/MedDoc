@@ -15,6 +15,9 @@ from .security import audit, membership, private_path
 PROTOCOL='quillmd-ai-stages-v1'
 MAX_REQUEST_BYTES=512000
 MAX_OUTPUT_TOKENS=4000
+GENERATION_CAPACITY_PROFILE='bounded-output-16k-v1'
+GENERATION_MAX_OUTPUT_TOKENS=16000
+GENERATION_TIMEOUT_SECONDS=120
 MAX_CALLS=5
 DEFINITION_MAX_OUTPUT_TOKENS=16000
 STAGES={'extractor':1,'assigner':2,'checker':2,'definition_proposer':1,'definition_checker':1}
@@ -41,10 +44,29 @@ def quote(config,input_bytes=MAX_REQUEST_BYTES,output_tokens=MAX_OUTPUT_TOKENS):
     return (bound*(1-generation.discount_rate(config))).quantize(generation.COST_QUANTUM,rounding=ROUND_CEILING)
 
 
+def generation_limits(config):
+    """Absent means historical; an explicit invalid profile never falls back."""
+    if 'semantic_capacity_profile' not in config:
+        if 'semantic_timeout_seconds' in config:
+            raise StageNotSent('The generation timeout has no capacity profile.')
+        return MAX_OUTPUT_TOKENS,60
+    if config['semantic_capacity_profile']!=GENERATION_CAPACITY_PROFILE:
+        raise StageNotSent('Unknown generation capacity profile; nothing was sent.')
+    if (type(config.get('semantic_output_token_limit')) is not int
+        or config['semantic_output_token_limit']!=GENERATION_MAX_OUTPUT_TOKENS
+        or type(config.get('semantic_timeout_seconds')) is not int
+        or config['semantic_timeout_seconds']!=GENERATION_TIMEOUT_SECONDS):
+        raise StageNotSent('The generation limits differ from their capacity profile.')
+    return GENERATION_MAX_OUTPUT_TOKENS,GENERATION_TIMEOUT_SECONDS
+
+
 def pipeline_config(config):
-    return {**config,'semantic_contract':'semantic-facts-v1','semantic_stage_protocol':PROTOCOL,
+    prospective={**config,'semantic_contract':'semantic-facts-v1','semantic_stage_protocol':PROTOCOL,
             'semantic_max_calls':MAX_CALLS,'semantic_request_byte_limit':MAX_REQUEST_BYTES,
-            'semantic_output_token_limit':MAX_OUTPUT_TOKENS,'semantic_maximum_cost':str(quote(config)*MAX_CALLS)}
+            'semantic_capacity_profile':GENERATION_CAPACITY_PROFILE,
+            'semantic_timeout_seconds':GENERATION_TIMEOUT_SECONDS,
+            'semantic_output_token_limit':GENERATION_MAX_OUTPUT_TOKENS}
+    return {**prospective,'semantic_maximum_cost':str(maximum_cost(prospective))}
 
 
 def definition_pipeline_config(config):
@@ -55,7 +77,8 @@ def definition_pipeline_config(config):
 
 
 def maximum_cost(config):
-    return quote(config)*MAX_CALLS
+    output_limit,_=generation_limits(config)
+    return quote(config,output_tokens=output_limit)*MAX_CALLS
 
 
 def retain(value):
@@ -145,15 +168,19 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     if stage not in STAGES or type(attempt) is not int or not 1<=attempt<=STAGES[stage]:
         raise StageNotSent('This stage is outside the bounded workflow.')
     if (job is None)!=stage.startswith('definition_'):raise StageNotSent('The stage does not match its parent.')
-    output_limit=DEFINITION_MAX_OUTPUT_TOKENS if stage.startswith('definition_') else MAX_OUTPUT_TOKENS
+    output_limit,default_timeout=((DEFINITION_MAX_OUTPUT_TOKENS,120) if stage.startswith('definition_')
+                                  else generation_limits(config))
     if max_output_tokens is None:max_output_tokens=output_limit
-    if timeout_seconds is None:timeout_seconds=120 if stage.startswith('definition_') else 60
-    if type(max_output_tokens) is not int or not 1<=max_output_tokens<=output_limit or not 0<timeout_seconds<=120:
+    if timeout_seconds is None:timeout_seconds=default_timeout
+    if (type(max_output_tokens) is not int or not 1<=max_output_tokens<=output_limit
+        or type(timeout_seconds) not in (int,float) or not 0<timeout_seconds<=120):
         raise StageNotSent('The stage exceeds its output or time limit.')
     parent,actor,department=parent_context(job,definition_preparation,config)
     schema_json=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
+    if job is not None and 'semantic_capacity_profile' in config:
+        envelope['timeout_seconds']=timeout_seconds
     raw=encode(envelope)
     if len(raw)>MAX_REQUEST_BYTES:raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
     if config.get('mode') not in ('live','fixture'):raise StageNotSent('Unknown provider execution mode; nothing was sent.')
@@ -171,7 +198,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         if previous.filter(stage=stage,attempt=attempt).exists():raise StageNotSent('This stage already has a retained attempt; it cannot be resent.')
         if previous.exclude(state='succeeded').exists():raise StageUnknown('An earlier stage remains unresolved; no new request was sent.')
         if previous.count()>=(MAX_CALLS if job is not None else 2):raise StageNotSent('The bounded workflow has no further provider requests.')
-        if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=MAX_CALLS or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=MAX_OUTPUT_TOKENS):
+        if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=MAX_CALLS or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=output_limit):
             raise StageNotSent('The immutable generation quote does not cover this workflow.')
         if job is not None:
             if Decimal(config.get('semantic_maximum_cost','-1'))!=maximum_cost(config):raise StageNotSent('The pipeline quote differs from its authorized configuration.')

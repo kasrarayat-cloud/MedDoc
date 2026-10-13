@@ -146,6 +146,11 @@ class IndependentStageTests(TestCase):
         return report
 
     def test_raw_response_identifiers_survive_malformed_usage_and_identity_replay(self):
+        from core.models import Wallet
+        from core.tests.test_billing_policy import fund
+        # Both unknown outcomes keep their holds; the larger prospective quote
+        # needs more than the welcome grant to exercise the second request.
+        fund(Wallet.objects.get(user=self.user,kind='paid'),Decimal('1'),'payment:two-unknown-stages')
         for failure in ('meter','duplicate'):
             with self.subTest(failure=failure):
                 e=Encounter.objects.create(department=self.encounter.department,patient=self.encounter.patient,
