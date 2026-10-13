@@ -16,6 +16,10 @@
         if(!['queued','inventory','proposer','checker','review','guided','blocked','approved'].includes(result.state))throw new Error();
         failures=0;root.dataset.state=result.state;
         message.textContent={queued:'Waiting for the preparation worker',inventory:'Checking the complete original',proposer:'AI proposer is preparing answer areas',checker:'Independent AI checker is checking completeness and placement'}[result.state]||'Preparation finished';
+        const coverage=root.querySelector('[data-preparation-coverage]');
+        if(coverage&&Number.isInteger(result.field_count)&&result.field_count>0&&result.field_count<=100){
+          coverage.textContent='All '+result.field_count+' detected answer fields are included. The original questions and answer locations stay intact.';
+        }
         if(!['queued','inventory','proposer','checker'].includes(result.state)){finished=true;clearInterval(interval);window.location.reload();}
       }catch(_){failures++;message.textContent='Connection interrupted. Checking the retained preparation status again automatically; no new preparation is started.';}
       finally{clearTimeout(timeout);pending=false;if(!finished)nextPoll=setTimeout(poll,Math.min(15000,2500*2**Math.min(failures,3)));}

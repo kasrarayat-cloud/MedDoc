@@ -106,7 +106,7 @@ class PreparationOutputTests(SimpleTestCase):
                 patch('core.testing_authority.identity',return_value=True), \
                 patch('core.testing_authority.create_preparation') as create:
             preparation.create_preparation(SimpleNamespace(sha256=self.inventory['source_sha256']),'synthetic-doctor')
-        self.assertEqual(create.call_args.args[2]['word_preparation_output_profile'],preparation.OUTPUT_PROFILE)
+        self.assertEqual(create.call_args.args[2]['word_preparation_output_profile'],preparation.COMPLETE_OUTPUT_PROFILE)
         self.assertEqual(create.call_args.args[2][preparation.DESTINATION_KEY],preparation.DESTINATION_PROFILE)
         self.assertNotIn(preparation.DESTINATION_KEY,original)
         self.assertEqual(original,before)

@@ -23,9 +23,12 @@ from . import word_contract
 
 MAX_OUTPUT = 2500
 OUTPUT_PROFILE = 'inventory-sized-typed-v1'
+COMPLETE_OUTPUT_PROFILE = 'complete-inventory-typed-v2'
 DESTINATION_PROFILE = 'finite-physical-destinations-v1'
 DESTINATION_KEY = 'word_preparation_destinations'
 MAX_TYPED_OUTPUT = 16000
+MAX_COMPLETE_OUTPUT = 48000
+MAX_PREPARATION_REQUEST_BYTES = 512000
 ROLE_LIMIT = Decimal('0.10')
 TOTAL_SECONDS = 180
 ROLE_SECONDS = 60
@@ -70,12 +73,33 @@ def finite_destinations(inventory, config):
 def feature_enabled():
     return settings.WORD_PREPARATION_ENABLED
 
+def processing_limit_error(name, measured, allowed, stage):
+    """Closed, content-free diagnostics; no provider exception text is exposed."""
+    diagnostic = {'name': name, 'measured': measured, 'allowed': allowed, 'stage': stage}
+    if validated_processing_limit(diagnostic) is None:
+        raise ValueError('Invalid preparation limit diagnostic.')
+    error = DocumentError('The complete preparation exceeds a bounded processing limit.', 'preparation_limit')
+    error.processing_limit = diagnostic
+    return error
+
+
+def validated_processing_limit(value):
+    if (type(value) is not dict or set(value) != {'name', 'measured', 'allowed', 'stage'}
+            or value['name'] not in ('response_output_tokens', 'request_bytes')
+            or value['stage'] not in ('output_planning', 'proposer_request', 'checker_request')
+            or any(type(value[k]) is not int or not 0 <= value[k] <= 100000000 for k in ('measured', 'allowed'))
+            or value['measured'] <= value['allowed']):
+        return None
+    return dict(value)
+
+
 def role_limits(inventory, config=None):
     from documents.sdk_service import WM_IOV_SHA256
     validate_inventory(inventory)
     profile = config.get('word_preparation_output_profile') if config is not None else None
     if config is not None and 'word_preparation_output_profile' in config:
-        if type(profile) is not str or profile != OUTPUT_PROFILE or inventory['protocol'] != TYPED_PROTOCOL:
+        if (type(profile) is not str or profile not in (OUTPUT_PROFILE, COMPLETE_OUTPUT_PROFILE)
+                or inventory['protocol'] != TYPED_PROTOCOL):
             raise DocumentError('Unsupported explicit preparation output profile.', 'preparation_limit')
     if (inventory['source_sha256']==WM_IOV_SHA256 and len(inventory['anchors'])==90
             and len(inventory['fields'])==90 and len(inventory['stories'])==16
@@ -88,7 +112,7 @@ def role_limits(inventory, config=None):
             # output allowance to the same fully qualified deadline profile.
             return (16000 if timing_limits(inventory)==(120,360) else 12000),Decimal('0.30')
         return 6000,Decimal('0.16')
-    if profile == OUTPUT_PROFILE:
+    if profile in (OUTPUT_PROFILE, COMPLETE_OUTPUT_PROFILE):
         # A typed result repeats source labels, choices and destinations for
         # EVERY anchor, then acknowledges EVERY original story. Bound that
         # complete finite response, rather than giving all form sizes 2,500
@@ -118,15 +142,18 @@ def role_limits(inventory, config=None):
             semantic_size = len(json.dumps({'fields': definitions}, ensure_ascii=True).encode())
             sizes = [size + semantic_size + 1000 for size in sizes]
         output = MAX_OUTPUT + ((max(sizes) + 499) // 500) * 500
-        if output > MAX_TYPED_OUTPUT:
-            raise DocumentError('The complete preparation response exceeds its bounded output allowance. '
-                                'Split this form explicitly; nothing was omitted or sent.', 'preparation_limit')
+        maximum = MAX_COMPLETE_OUTPUT if profile == COMPLETE_OUTPUT_PROFILE else MAX_TYPED_OUTPUT
+        if output > maximum:
+            raise processing_limit_error('response_output_tokens', output, maximum, 'output_planning')
         return output, ROLE_LIMIT
     return MAX_OUTPUT,ROLE_LIMIT
 
 def timing_limits(inventory, config=None):
     """Allow complete typed WM checks within a separately bounded deadline."""
     validate_inventory(inventory)
+    if (config and config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE
+            and role_limits(inventory, config)[0] > MAX_TYPED_OUTPUT):
+        return 180, 480
     if config and word_contract.active(inventory, config):
         return 120, 360
     if (inventory['protocol'] == TYPED_PROTOCOL
@@ -258,6 +285,12 @@ def provider_request(inventory, role, config, proposal=None):
     envelope = {'model':config['model'], 'max_tokens':role_limits(inventory, config)[0], 'system':instructions,
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False)}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
+    if config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE:
+        # Include schema, system instructions, complete original and (for the
+        # checker) the complete proposal. Never trim a payload to make it fit.
+        size = len(json.dumps(envelope, ensure_ascii=False).encode())
+        if size > MAX_PREPARATION_REQUEST_BYTES:
+            raise processing_limit_error('request_bytes', size, MAX_PREPARATION_REQUEST_BYTES, role+'_request')
     return envelope
 
 def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None,prepared_client=None):
@@ -350,10 +383,41 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
             'usage_established':bool(usage_established),'automatic_retry':False}
 
 
+def retained_processing_limit(prep):
+    """Use retained metrics, or read-only replay of a historical output plan."""
+    if getattr(prep, 'pk', None):
+        from .models import AuditEvent
+        event = AuditEvent.objects.filter(action='template.preparation_finished', target=str(prep.pk)).order_by('-created_at').first()
+        if event:
+            diagnostic = validated_processing_limit(event.details.get('processing_limit'))
+            if diagnostic:
+                return diagnostic
+    # Older local refusals retained the inventory/configuration but no metrics.
+    # Reconstruct only the deterministic planner, never extraction or a send.
+    if getattr(prep, 'inventory', None) and getattr(prep, 'config', None):
+        try:
+            role_limits(prep.inventory, prep.config)
+        except DocumentError as error:
+            return validated_processing_limit(getattr(error, 'processing_limit', None))
+        except (ValueError, KeyError, TypeError):
+            pass
+    return None
+
+
 def failure_explanation(prep, receipts):
     """Closed user-facing explanations; historical evidence is never rewritten."""
     if not prep.error_code or prep.state != 'blocked':
         return ''
+    if prep.error_code == 'preparation_limit':
+        diagnostic = retained_processing_limit(prep)
+        if diagnostic:
+            label, unit = {'response_output_tokens': ('complete-response allowance', 'tokens'),
+                           'request_bytes': ('complete AI request size', 'bytes')}[diagnostic['name']]
+            return (f'The {label} requires {diagnostic["measured"]:,} {unit}; this attempt allows '
+                    f'{diagnostic["allowed"]:,}. No questions were omitted. This limit stopped the next '
+                    'AI request before it was sent; any earlier completed role remains retained. '
+                    'Ask support to review this limit and the retained attempt before starting a separate '
+                    'preparation of the unchanged original. No automatic retry was made.')
     messages = {
         'provider_not_configured': ('The preparation provider could not be configured locally. No request was sent or reserved. '
                                     'Ask support to check the provider configuration, then start a separate preparation.'),
@@ -407,9 +471,10 @@ def call_role(prep, role, deadline, proposal=None):
     role_seconds,_=timing_limits(prep.inventory, prep.config)
     # Local schema/instruction construction is completed before reservation or
     # send admission; a local refusal cannot create an uncertain provider hold.
-    request = provider_request(prep.inventory, role, prep.config, proposal) if prep.config['mode'] == 'live' else None
+    request = (provider_request(prep.inventory, role, prep.config, proposal)
+               if prep.config['mode'] == 'live' or prep.config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE else None)
     client = None
-    if request is not None:
+    if prep.config['mode'] == 'live':
         if prep.config.get('provider') != 'anthropic' or not os.getenv('ANTHROPIC_API_KEY','').strip():
             raise DocumentError('The configured preparation provider is unavailable; no request was sent or reserved.',
                                 'provider_not_configured')
@@ -517,7 +582,8 @@ def create_preparation(template, actor):
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
     config={**config, 'word_preparation_protocol': TYPED_PROTOCOL,
-            'word_preparation_output_profile': OUTPUT_PROFILE,
+            'word_preparation_output_profile': COMPLETE_OUTPUT_PROFILE,
+            'queued_release_sha': settings.RELEASE_SHA,
             DESTINATION_KEY: DESTINATION_PROFILE}
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
@@ -551,6 +617,7 @@ def run_one(*, preparation_pk=None):
         prep.state='inventory'; prep.started_at=timezone.now(); prep.save(update_fields=['state','started_at'])
     began=time.monotonic()
     deadline=began+TOTAL_SECONDS
+    processing_limit = None
     try:
         membership(prep.requested_by, prep.template.department, roles=['owner','clinician','manager'])
         original=private_path(prep.template.original_path)
@@ -583,9 +650,12 @@ def run_one(*, preparation_pk=None):
         prep.state='blocked'
         prep.error_code=(getattr(exc, 'code') if getattr(exc, 'code', '') in SAFE_ERRORS else
             'invalid_proposal' if isinstance(exc, (ValidationError, ValueError)) else 'provider_unknown')
+        processing_limit = validated_processing_limit(getattr(exc, 'processing_limit', None))
     prep.finished_at=timezone.now(); prep.save()
     audit(prep.requested_by, 'template.preparation_finished', prep.pk, department=prep.template.department,
-          state=prep.state, error_code=prep.error_code, original_sha256=prep.template.sha256)
+          state=prep.state, error_code=prep.error_code, original_sha256=prep.template.sha256,
+          executing_release_sha=settings.RELEASE_SHA,
+          **({'processing_limit': processing_limit} if processing_limit else {}))
     return True
 
 def build_candidate(prep,placements):

@@ -67,6 +67,7 @@ def detail(request,pk):
 def status(request,pk):
     _,prep=selected(request,pk)
     return JsonResponse({'state':prep.state,'revision':prep.revision,'error_code':prep.error_code,
+        'field_count':len(prep.inventory.get('fields',[])),
         'explanation':failure_explanation(prep,prep.receipts.order_by('created_at')),
         'started_at':prep.started_at.isoformat() if prep.started_at else None,
         'finished_at':prep.finished_at.isoformat() if prep.finished_at else None,
