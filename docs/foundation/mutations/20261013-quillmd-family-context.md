@@ -1,0 +1,19 @@
+# Prospective QuillMD positioned family-history repair
+
+Root is the sole implementation, deployment and browser operator. This declaration precedes installation. Base release: `78b7cd62238f6643f9a44b344d91721136da8376`. Require finished-diff independent refutation, the exact merged revision's completed CI and secrets-scan citation, independently reviewed installation binding, fresh encrypted backup and isolated restoration, and the existing source-first code-only installation procedure. A private execution declaration must pin the actual source plan, current catalog, preservation proofs and schedule observations before execution.
+
+The complete GI form now has 34 independently reviewed definitions and a byte-identical candidate from ordinary preparation `72d74c88-de51-44b5-b921-dfb4f2778163`. It remains unapproved. Pure replay of the supplied synthetic source found that a legacy whole-note offer veto interprets a retained family-history phrase as global source reframing and holds even the unrelated patient-name fact. Reproduction: `0310663f6e34c906c9c6014ace2c868d4c287390c464e9f6e4804176b7d77414`. No paid note-generation request was needed to reproduce this defect.
+
+Only newly admitted semantic generation jobs freeze `positioned-family-context-v4`. A complete source-bound patient family-history assertion or clinician-reported assessment can exclude its own retained family-history phrase from the legacy blanket veto. The exemption requires closed source-owner wording and a complete selected value through the source unit's end. It never rewrites evidence, synthesizes a clinical value, removes a positioned governor, or treats a relative's disease as the patient's disease. Uncovered family-history occurrences, clipped qualifications, unfamiliar ownership, example framing, quotations, hypotheses, denials and other explicit past-time markers remain held. The duration-specific safeguards remain active. Existing profiles and saved proofs are unchanged.
+
+| Source | SHA-256 |
+|---|---|
+| `rebuild/core/semantic_generation.py` | `4f857a46359b61c7f4346e15c1daba33d24d701a4b262ce9016c0db6d7c5b1e0` |
+| `rebuild/core/jobs.py` | `f9730c694ba95a7f6cf907425ddeb3895aa4749a30325e46df119fc918a03cda` |
+| `rebuild/core/tests/test_family_context.py` | `2bbb7b328efbb8c0befd5f841cca055a721d404ff8f93e0a862fc98f2c997f56` |
+
+Expected installation delta: these three source/test paths, this declaration and the release environment value. Two runtime files change. No migrations, database mutations, static collection/publication, ingress changes, account/password/MFA/permission changes or other-project changes. Preserve all current tables, functions, triggers, existing rows, files, approvals, finalized documents, provider/accounting evidence and unresolved reservations. Only the three QuillMD native services may stop/start for installation. VoiceAssistMain remains unchanged.
+
+No migration, enrollment, account, role, password, MFA, wallet or accounting mutation is authorized by this code-only installation. Preserve the post-0027 catalog exactly, including all tables, functions and triggers, and verify it against the actual pre-installation snapshot.
+
+Verification must finish the already prepared exact GI source through explicit clinician approval, supplied Morgan generation and a separate fictional reuse case, with independent clinical review before finalization. All 34 saved/displayed/downloaded fields must agree, including missingness, separate examinations and direct versus total time. Retain all earlier failures and costs. No manually corrected answer or database remapping counts as automatic success. Reuse the existing single document-level approval, automatic progress and duplicate prevention. Owner-browser confirmation remains separately pending; no owner password reset or credential request. Existing standing paid synthetic-testing authority applies; no automatic retry or unrecorded paid resend.

@@ -26,7 +26,8 @@ MAX_NUMERIC_REFERENCE_GUIDE_BYTES = 65536
 LEGACY_SCOPE_CONTRACT = 'note-wide-offer-scope-v1'
 POSITIONED_SCOPE_CONTRACT = 'positioned-fact-scope-v2'
 DURATION_SCOPE_CONTRACT = 'dimension-aware-duration-scope-v3'
-SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT)
+FAMILY_SCOPE_CONTRACT = 'positioned-family-context-v4'
+SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT)
 MAX_CALLS = 5
 MAX_OUTPUT_TOKENS = 4000
 TYPES = ('text', 'integer', 'number', 'date', 'choice', 'person_name', 'identifier')
@@ -289,7 +290,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
         # negation, subject and timing checks above still apply.
         duration = (re.fullmatch(SOURCE_NUMBER_PATTERN+r'\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)', value['quote'], re.I)
                     and re.search(r'\b(?:for|lasting|lasted|over)\s+$', before, re.I))
-        if scope_contract == DURATION_SCOPE_CONTRACT and _duration_value(value['quote']):
+        if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT) and _duration_value(value['quote']):
             duration = True
             if _duration_fragment(before, own['quote'][value['end']-own['start']:]):
                 issues.append('The duration omits its documented approximation, bound or range.')
@@ -366,8 +367,45 @@ def _explicit_target_time(own, time_span):
         and re.fullmatch(r'\s*[.!?]?\s*', own['quote'][match.end():]))
 
 
+def _retained_family_history(value, own, subject, kind):
+    """Literal relationship retained in a complete value, never a disease-only span.
+
+    These offsets only exclude the phrase from a legacy blanket offer veto.
+    They do not supply an answer or remove local/positioned source governance.
+    Invisible spellings and incomplete relationship phrases remain held.
+    """
+    if subject['kind'] != 'patient' or kind not in ('history', 'assessment'):
+        return
+    # The closed reporting prefix below does not transfer an embedded speaker,
+    # named owner's or another clinician's history to this patient. Such
+    # ownership can occur before or after the relationship, not just beside it.
+    if re.search(r"\b(?:my|our|your|his|her|their|its|clinician|physician|doctor|nurse|provider|another|other\s+(?:person|patient))\b|['’]s\b", value['quote'], re.I):
+        return
+    if re.search(r'\b(?:unconfirmed|unverified|uncertain|unknown|unclear|pending|awaiting|ruled?\s+out|'
+                 r'(?:needs?|requires?|awaits?)\s+(?:(?:further|additional)\s+)?(?:confirmation|verification|clarification)|'
+                 r'(?:not|never)\s+(?:confirmed|verified|established))\b', own['quote'], re.I):
+        return
+    # A clipped relationship followed by "is not confirmed" or "was ruled
+    # out" is not a complete asserted history. Do not interpret that suffix.
+    if '?' in own['quote'] or not re.fullmatch(r'\s*\.?\s*', own['quote'][value['end']-own['start']:]):
+        return
+    value_prefix = own['quote'][:value['start']-own['start']]
+    reported_assessment = re.fullmatch(
+        r"\s*(?:my|the\s+(?:clinician|physician|doctor)['’]s)\s+(?:documented\s+)?"
+        r'(?:impression|assessment)\s+(?:is|was)\s+', value_prefix, re.I)
+    for match in re.finditer(r'\bfamily history of\s+(?=[^\W\d_])', value['quote'], re.I):
+        relationship_prefix = value_prefix + value['quote'][:match.start()]
+        explicit_patient = re.fullmatch(
+            r'\s*(?:the\s+)?patient\s+(?:has|reports|describes)\s+(?:a\s+)?', relationship_prefix, re.I)
+        # A model's patient annotation cannot move the clinician's own history
+        # to the patient. Unfamiliar or named-owner constructions remain held.
+        if not reported_assessment and not explicit_patient:
+            continue
+        yield value['start'] + match.start(), value['start'] + match.start() + len('family history')
+
+
 def _annotation_issues(notes, value, contexts, subject, name, timing, time_span, unit_span,
-                       timing_reference_contract=None):
+                       timing_reference_contract=None, scope_contract=POSITIONED_SCOPE_CONTRACT, fact_kind=None):
     """Exact quotations still need to describe this value, not a nearby fact.
 
     These deliberately bounded guards refuse unsupported cross-sentence
@@ -383,7 +421,14 @@ def _annotation_issues(notes, value, contexts, subject, name, timing, time_span,
     clause = re.split(r'[,;]|\b(?:but|whereas|while)\b|\band\s+(?=(?:the\s+)?(?:patient|he|she|they)\b)', before, flags=re.I)[-1]
     if subject['kind'] != 'patient' and re.search(r'\b(?:the\s+)?patient\s+(?:reports?|has|had|denies|rates?|is|was)\b', clause, re.I):
         issues.append('The source explicitly attributes this value to the patient, rather than the proposed subject.')
-    if timing['kind'] == 'current' and re.search(r'\b(?:last\s+(?:year|month|week)|previously|formerly|history\s+of|used\s+to)\b', own['quote'], re.I):
+    past_context = list(own['quote'])
+    if scope_contract == FAMILY_SCOPE_CONTRACT:
+        # A current family-history assertion is not an assertion that the
+        # patient currently has the relative's disease. Retain that relationship
+        # in the value; all other explicit past markers still require review.
+        for start, end in _retained_family_history(value, own, subject, fact_kind):
+            past_context[start-own['start']:end-own['start']] = ' ' * (end-start)
+    if timing['kind'] == 'current' and re.search(r'\b(?:last\s+(?:year|month|week)|previously|formerly|history\s+of|used\s+to)\b', ''.join(past_context), re.I):
         if timing_reference_contract != TEMPORAL_REFERENCE_CONTRACT or not _explicit_target_time(own, time_span):
             issues.append('The value source contains an explicit past time; current attribution needs review.')
     if unit_span is not None:
@@ -397,9 +442,9 @@ def _annotation_issues(notes, value, contexts, subject, name, timing, time_span,
     return issues
 
 
-def _fact_governance(notes, units, facts):
+def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     """Positioned source scope, separate from legacy one-click offer eligibility."""
-    from .generation import (heading_governance, recognized_labels, readings, erratum_points,
+    from .generation import (heading_governance, governed_context, recognized_labels, readings, erratum_points,
                              REFRAMED_SCOPE, QUOTED_SOURCE, SCOPE_POINTER, INLINE_BREAK, _plain_pointer_only)
     visible = list(notes)
     for fact in facts.values():
@@ -438,6 +483,17 @@ def _fact_governance(notes, units, facts):
         if all(non_correction.fullmatch(r) for r in readings(unit['quote'])):
             for at in range(unit['start'], unit['end']):
                 if notes[at] not in '\r\n': offer_scope[at] = ' '
+    example_frame = re.compile(r'\b(?:examples?|samples?|illustrations?|demonstrations?|fictional|pretend|test\s+case|case\s+study)\b', re.I)
+    if scope_contract == FAMILY_SCOPE_CONTRACT and not any(example_frame.search(r) for r in readings(scoped)):
+        for fact in facts.values():
+            value = fact['value_evidence']
+            if fact['issues'] or governed_context(governance, notes, [value]):
+                continue
+            own = next(u for u in units if _inside(value, [u]))
+            if any(SCOPE_POINTER.search(r) or QUOTED_SOURCE.search(r) for r in readings(own['quote'])):
+                continue
+            for start, end in _retained_family_history(value, own, fact['subject'], fact['kind']):
+                offer_scope[start:end] = ' ' * (end-start)
     filtered = ''.join(offer_scope)
     broad_denial = re.compile(
         r'\b(?:all|every|each)\s+(?:of\s+the\s+)?(?:facts?|findings?|statements?|entries|values|measurements)\b'
@@ -517,7 +573,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                 'subject': {**subject, 'name_evidence': name}, 'timing': {**timing, 'evidence': time_span}, 'scale': scale}
         fact['issues'] = _scope_issues(fact, contexts, scope_contract)
         fact['issues'].extend(_annotation_issues(notes, value, contexts, subject, name, timing, time_span, unit_span,
-                                               timing_reference_contract))
+                                               timing_reference_contract, scope_contract, fact['kind']))
         if legacy:
             context = governed_context(governance, notes, contexts) or []
             outside = [e for e in context if 'start' in e and not any(c['start'] <= e['start'] and e['end'] <= c['end'] for c in contexts)]
@@ -583,7 +639,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                     fact['issues'].append('Another named subject occurs before this value; attribution needs review.')
     if legacy:
         return facts
-    governance = _fact_governance(notes, units, facts)
+    governance = _fact_governance(notes, units, facts, scope_contract)
     for fact in facts.values():
         # An earlier identity citation supplies attribution, not the position
         # of this clinical value relative to an erratum or a heading.
@@ -1256,11 +1312,16 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     base = {'notes': notes, 'approved_definitions': definitions,
             'timing_reference_contract': TEMPORAL_REFERENCE_CONTRACT,
             'fields': [{'key': f['key'], 'label': f['label'], 'protected_signing': protected(f)} for f in fields]}
-    if scope_contract == DURATION_SCOPE_CONTRACT:
+    if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT):
         base['fact_scope_contract'] = scope_contract
         base['qualifier_review'] = ('Judge completeness against the approved field meaning. A duration is a complete time quantity; '
             'do not require it to repeat symptom laterality or body site. Preserve bounds, approximation and ranges. '
             'A symptom or finding must retain its relevant clinical qualifiers. Structured verdicts must agree with the cited facts; prose cannot override a hold.')
+    if scope_contract == FAMILY_SCOPE_CONTRACT:
+        base['family_history_review'] = ('A family-history answer must retain the documented relationship or family-history phrase. '
+            'Do not assign a relative\'s disease to the patient. A current impression can include a family history without claiming '
+            'the patient currently has that disease. Preserve complete documented impressions and all relevant source attribution; '
+            'headings, hypothetical statements and unresolved scope still require review.')
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
