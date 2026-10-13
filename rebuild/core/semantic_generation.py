@@ -387,7 +387,8 @@ def _retained_family_history(value, own, subject, kind):
         return
     # A clipped relationship followed by "is not confirmed" or "was ruled
     # out" is not a complete asserted history. Do not interpret that suffix.
-    if (any('QUESTION' in unicodedata.name(char, '') for char in own['quote'] if not char.isalnum())
+    if (any(any(mark in unicodedata.name(char, '') for mark in ('QUESTION', 'INTERROBANG'))
+            for char in own['quote'] if not char.isalnum())
             or not re.fullmatch(r'\s*\.?\s*', own['quote'][value['end']-own['start']:])):
         return
     value_prefix = own['quote'][:value['start']-own['start']]
