@@ -210,17 +210,19 @@ def recording_charge_limit(e,input_path,config,approved_limit=None):
 
 def generation_maximum(encounter,config=None):
     """One immutable whole-workflow estimate; legacy versions retain their quote."""
-    config=config or generation.configuration()
+    fresh=config is None
+    if fresh:config=generation.configuration()
     from .word_contract import require_generation
     if require_generation(encounter.template_version):
-        from .ai_stages import maximum_cost
-        return maximum_cost(config)
+        from .ai_stages import maximum_cost,pipeline_config
+        return maximum_cost(pipeline_config(config) if fresh else config)
     return generation.maximum_cost(encounter.notes,encounter.template_version.fields,config,
         context_labels=[row['label'] for row in encounter.template_version.review_requirements])
 
 
 @transaction.atomic
-def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None):
+def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None,
+            require_current_generation_quote=False):
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
@@ -256,7 +258,14 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     if definitions:
         from .ai_stages import pipeline_config
         from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT,FAMILY_SCOPE_CONTRACT
-        config=pipeline_config(config)
+        prospective=pipeline_config(config)
+        if require_current_generation_quote:
+            quoted_keys=('semantic_contract','semantic_stage_protocol','semantic_max_calls',
+                'semantic_request_byte_limit','semantic_capacity_profile','semantic_timeout_seconds',
+                'semantic_output_token_limit','semantic_maximum_cost')
+            if any(type(config.get(key)) is not type(prospective[key]) or config[key]!=prospective[key] for key in quoted_keys):
+                raise ValidationError('Generation capacity changed after this quote. Reload to review the current maximum charge. Nothing was queued.')
+        config=prospective
         config.update(semantic_template_version=str(e.template_version_id),
             semantic_fact_reference_contract=REFERENCE_INVENTORY_CONTRACT,
             semantic_fact_scope_contract=FAMILY_SCOPE_CONTRACT,
@@ -840,6 +849,13 @@ def mark_stale():
                 # a worker that stopped between independent sends.
                 recent=locked.ai_stage_receipts.order_by('-created_at').first()
                 activity=(recent.finished_at or recent.started_at or recent.created_at) if recent else locked.started_at
-                if activity and activity>timezone.now()-timedelta(minutes=2):continue
+                from .ai_stages import generation_limits,StageNotSent
+                try:
+                    # SDK I/O timeout plus the existing minute of retention grace;
+                    # this is not a claimed whole-pipeline wall-clock deadline.
+                    grace=generation_limits(locked.config)[1]+60
+                except StageNotSent:
+                    grace=120
+                if activity and activity>timezone.now()-timedelta(seconds=grace):continue
             locked.state='reconciliation';locked.error='Worker stopped with an unknown provider outcome. Automatic retry is disabled.';locked.save(update_fields=['state','error'])
             audit(locked.user,'job.reconciliation',locked.pk)

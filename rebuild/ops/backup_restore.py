@@ -174,7 +174,14 @@ _STANDING_USAGE_INVARIANT = '''SELECT count(*) FROM core_usage u
 _SEMANTIC_STAGE_TOTAL_VALID = r"""
  j.kind='generation' AND j.config->>'semantic_contract'='semantic-facts-v1'
  AND j.config->>'semantic_stage_protocol'='quillmd-ai-stages-v1'
- AND j.config->>'semantic_max_calls'='5' AND j.config->>'semantic_output_token_limit'='4000'
+ AND j.config->>'semantic_max_calls'='5'
+ AND ((NOT j.config ? 'semantic_capacity_profile' AND NOT j.config ? 'semantic_timeout_seconds'
+       AND j.config->>'semantic_output_token_limit'='4000')
+   OR (j.config->>'semantic_capacity_profile'='bounded-output-16k-v1'
+       AND jsonb_typeof(j.config->'semantic_output_token_limit')='number'
+       AND j.config->>'semantic_output_token_limit'='16000'
+       AND jsonb_typeof(j.config->'semantic_timeout_seconds')='number'
+       AND j.config->>'semantic_timeout_seconds'='120'))
  AND j.config->>'semantic_request_byte_limit'='512000'
  AND j.config->>'semantic_template_version'=e.template_version_id::text
  AND j.config->>'semantic_source_sha256' ~ '^[a-f0-9]{64}$'

@@ -503,8 +503,14 @@ def encounter_detail(request,pk):
             row['review_errors']+=[conflict['explanation'] for conflict in wm_conflicts if row['key'] in conflict['statement_keys']]
     from .generation import maximum_cost,configuration
     from .jobs import generation_maximum
+    base_config=configuration()
+    quoted_config=base_config
     generation_contract_error = ''
-    try:maximum_charge=generation_maximum(e)*Decimal('1.5')
+    try:
+        if semantic_definitions:
+            from .ai_stages import pipeline_config
+            quoted_config=pipeline_config(quoted_config)
+        maximum_charge=generation_maximum(e,quoted_config)*Decimal('1.5')
     except ValidationError as exc:
         maximum_charge=None
         generation_contract_error=error_message(exc)
@@ -548,7 +554,7 @@ def encounter_detail(request,pk):
     manual_entry=is_wm or bool(e.template_version.fields) and (
         all('tab_form' in f.get('locator',{}) for f in e.template_version.fields)
         or e.template_version.template.format=='docx' and not semantic_definitions)
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':configuration()},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
@@ -577,8 +583,9 @@ def generate_view(request,pk):
     try:
         if not rate_limit('generate:'+str(request.user.pk),limit=30):raise ValidationError('Generation rate limit reached.')
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
-        quoted=usage_quote(request,e)
-        job=enqueue(e,request.user,config=quoted,expected_revision=e.revision)
+        quoted=usage_quote(request,e,generation_request=True)
+        job=enqueue(e,request.user,config=quoted,expected_revision=e.revision,
+                    require_current_generation_quote=bool(request.POST.get('usage_quote')))
         if getattr(job,'reused',False):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
             # revision, so the succeeded job still holds this request key. Saying "queued" would
@@ -1502,14 +1509,16 @@ VOICE_DOCUMENT_CHANGED=('This document (its notes or answers) changed in another
                         'loaded. Nothing was sent or charged, and the recording was not kept. Reload the page, then record '
                         'or upload it again.')
 
-def usage_quote(request,encounter,max_age=600,expired='Usage quote expired or changed. Reload to review the current maximum charge.',changed=None):
+def usage_quote(request,encounter,max_age=600,expired='Usage quote expired or changed. Reload to review the current maximum charge.',changed=None,
+                generation_request=False):
     from .generation import configuration
     raw=request.POST.get('usage_quote')
     if not raw and settings.AI_MODE!='live':return configuration()
     try:
         quote=signing.loads(raw,salt='usage-quote',max_age=max_age)
         if quote['user']!=str(request.user.pk) or quote['encounter']!=str(encounter.pk):raise ValueError()
-        revision,config=quote['revision'],quote['config']
+        revision=quote['revision']
+        config=quote['generation_config'] if generation_request and 'generation_config' in quote else quote['config']
     except (signing.BadSignature,ValueError,TypeError,KeyError):
         raise ValidationError(expired)
     # The same refusal either way; only the reason differs, so the doctor knows what actually happened.
