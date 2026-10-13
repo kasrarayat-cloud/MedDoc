@@ -463,3 +463,33 @@ td .subline { font-size: 12px; }
 @media(max-width:740px) { .document-toolbar { padding: 17px; grid-template-columns: minmax(0,1fr); } }
 :root{--preparation-preview-height:540px}
 .preparation-previews{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px;margin:24px 0}.preparation-previews iframe{width:100%;height:var(--preparation-preview-height);border:1px solid var(--line);border-radius:8px;background:var(--canvas)}.hash-value{overflow-wrap:anywhere;font-size:.75rem}.preparation-labels{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.approval-panel{border-color:var(--line-strong);margin:24px 0}.check-row{display:flex;align-items:flex-start;gap:10px;margin:12px 0}.check-row input{width:auto;flex:none;margin-top:4px}fieldset{border:1px solid var(--line);border-radius:8px;padding:16px;margin:20px 0}legend{font-weight:600;padding:0 8px}@media(max-width:900px){.preparation-previews,.preparation-labels{grid-template-columns:1fr}}
+
+/* Patient review follows the compact template-review hierarchy. */
+.compact-review { background: white; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.compact-review .document-heading { margin: 0; }
+.review-intro, .approval-record { padding: 0 24px; font-size: .86rem; }
+.review-decisions { margin: 0 24px 18px; padding: 16px 18px; border-left: 3px solid var(--warning); background: var(--warning-bg); }
+.review-decisions ul { margin-bottom: 0; padding-left: 20px; }
+.compact-answer { padding: 15px 24px; border-top: 1px solid var(--line); }
+.compact-answer-value { display: grid; grid-template-columns: minmax(140px, .8fr) minmax(0, 1.2fr); gap: 20px; }
+.compact-answer h3 { margin: 0; font-size: .85rem; color: var(--muted); font-weight: 550; }
+.compact-answer [data-saved-answer] { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .94rem; }
+.compact-answer details { margin-top: 6px; }
+.compact-answer summary { font-size: .79rem; color: var(--accent); min-height: 32px; padding-block: 5px; cursor: pointer; }
+.compact-answer-details { padding: 10px 0 3px; }
+.compact-answer-details textarea { min-height: 64px; }
+.compact-answer.needs-decision { border-left: 3px solid var(--warning); }
+.review-evidence { margin: 14px 0 6px; padding-left: 14px; border-left: 2px solid var(--line-strong); color: var(--muted); font-size: .85rem; }
+.compact-approval { padding: 22px 24px; border-top: 1px solid var(--line); background: var(--sidebar); }
+.compact-approval p { font-size: .84rem; }
+.compact-approval .helptext { margin: 12px 0 0; }
+.review-default-save { position: absolute; width: 1px; height: 1px; min-height: 0; overflow: hidden; clip-path: inset(50%); padding: 0; border: 0; }
+@media (max-width: 600px) {
+  .compact-answer { padding: 14px 18px; }
+  .compact-answer-value { grid-template-columns: 1fr; gap: 5px; }
+  .compact-approval { padding: 18px; }
+  .compact-approval .actions { align-items: stretch; flex-direction: column; }
+}
+
+.review-source-edit { margin-bottom: 20px; }
+.review-source-edit > summary { padding: 10px 0; cursor: pointer; color: var(--accent); }

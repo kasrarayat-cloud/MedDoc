@@ -25,6 +25,8 @@ MAX_NUMERIC_SOURCE_REFERENCES = 256
 MAX_NUMERIC_REFERENCE_GUIDE_BYTES = 65536
 LEGACY_SCOPE_CONTRACT = 'note-wide-offer-scope-v1'
 POSITIONED_SCOPE_CONTRACT = 'positioned-fact-scope-v2'
+DURATION_SCOPE_CONTRACT = 'dimension-aware-duration-scope-v3'
+SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT)
 MAX_CALLS = 5
 MAX_OUTPUT_TOKENS = 4000
 TYPES = ('text', 'integer', 'number', 'date', 'choice', 'person_name', 'identifier')
@@ -225,7 +227,31 @@ def _inside(span, contexts):
     return any(c['start'] <= span['start'] < span['end'] <= c['end'] for c in contexts)
 
 
-def _scope_issues(fact, contexts):
+def _duration_value(value):
+    # A finite temporal quantity, independent of the symptom it qualifies.
+    prefix = r'(?:(?:about|approximately|roughly|around|almost|nearly|over|under|at least|at most|more than|less than|up to|exactly|only|just|another)\s+)?'
+    return bool(re.fullmatch(prefix + SOURCE_NUMBER_PATTERN +
+        r'(?:\s*(?:to|or|[-–—])\s*' + SOURCE_NUMBER_PATTERN + r')?\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)', value, re.I))
+
+
+def _duration_fragment(before, after):
+    """Finite temporal boundaries; a neighboring number alone is not a duration."""
+    unit = r'(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)'
+    number = SOURCE_NUMBER_PATTERN + r'\b'
+    bounds = r'(?:about|approximately|roughly|around|almost|nearly|over|under|at least|at most|more than|less than|up to|exactly|only|just|another|between)'
+    return bool(
+        re.search(r'\b' + bounds + r'\s+$', before, re.I)
+        or re.search(number + r'(?:\s+' + unit + r')?\s*(?:to|or|and|plus|through|until|[-–—])\s*$', before, re.I)
+        or re.match(r'\s*(?:to|or|through|until|[-–—])\s*' + number + r'(?=\s+' + unit + r'\b|\s*(?:ago\b|[.,;!?]|$))', after, re.I)
+        or re.match(r'\s+(?:and|plus)\s+(?:a\s+)?' + number + r'\s+' + unit + r'\b', after, re.I)
+        or re.match(r'\s+and\s+(?:a\s+)?half\b', after, re.I)
+        or re.match(r'\s+(?:ago\s+)?(?:or\s+(?:more|less|so)\b|at\s+(?:most|least)\b|approximately\b|roughly\b|minimum\b|maximum\b)', after, re.I)
+        or re.match(r'\s+(?:per|each|every)\b', after, re.I)
+        or (re.match(r'\s+(?:after|before|since)\b', after, re.I)
+            and not re.search(r'\b(?:for|lasting|lasted|lasts|duration(?: is| of)?)\s+$', before, re.I)))
+
+
+def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     """Conservative local guards, never sentence-wide negation of another fact."""
     value = fact['value_evidence']
     own = next(c for c in contexts if _inside(value, [c]))
@@ -263,6 +289,10 @@ def _scope_issues(fact, contexts):
         # negation, subject and timing checks above still apply.
         duration = (re.fullmatch(SOURCE_NUMBER_PATTERN+r'\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)', value['quote'], re.I)
                     and re.search(r'\b(?:for|lasting|lasted|over)\s+$', before, re.I))
+        if scope_contract == DURATION_SCOPE_CONTRACT and _duration_value(value['quote']):
+            duration = True
+            if _duration_fragment(before, own['quote'][value['end']-own['start']:]):
+                issues.append('The duration omits its documented approximation, bound or range.')
         related_phrase = related_phrase or duration
         if not related_phrase and re.search(r'\b'+qualifier+r'(?:\s+[^\W\d_]+){0,5}\s+$',clause,re.I):
             issues.append('The selected value omits an adjacent documented clinical qualifier.')
@@ -424,7 +454,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
     _object(result, ('facts',), 'fact extraction')
     if type(result['facts']) is not list or len(result['facts']) > 200: _fail('Fact extraction exceeds its finite limit.')
     by_unit = {u['id']: u for u in units}
-    if scope_contract not in (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT):
+    if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract.')
     from .generation import governed_context, custom_source_governance, heading_governance, recognized_labels
     legacy = scope_contract == LEGACY_SCOPE_CONTRACT
@@ -485,7 +515,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
         if type(raw['supersedes']) is not list or any(not isinstance(i, str) for i in raw['supersedes']): _fail('Invalid correction references.')
         fact = {**deepcopy(raw), 'value_evidence': value, 'evidence': contexts,
                 'subject': {**subject, 'name_evidence': name}, 'timing': {**timing, 'evidence': time_span}, 'scale': scale}
-        fact['issues'] = _scope_issues(fact, contexts)
+        fact['issues'] = _scope_issues(fact, contexts, scope_contract)
         fact['issues'].extend(_annotation_issues(notes, value, contexts, subject, name, timing, time_span, unit_span,
                                                timing_reference_contract))
         if legacy:
@@ -774,7 +804,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                   'source_sha256': hashlib.sha256(notes.encode()).hexdigest(), 'definition_sha256': definition_digest(d),
                   'candidate_text': text if status != 'supported' else '', 'review_reasons': list(dict.fromkeys(reasons)),
                   'unit': d['unit'], 'scale': {k: d['constraints'][k] for k in ('scale_minimum', 'scale_maximum')}}
-        if scope_contract == POSITIONED_SCOPE_CONTRACT:
+        if scope_contract != LEGACY_SCOPE_CONTRACT:
             answer['fact_scope_contract'] = scope_contract
         if timing_reference_contract is not None:
             answer['timing_reference_contract'] = timing_reference_contract
@@ -1213,16 +1243,24 @@ def _validate_current_numeric_answers(notes, fields, definitions, facts, answers
                     'matching measurement scale. No answers were adopted. Review the retained attempt and original notes.')
 
 
-def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE_CONTRACT):
+def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE_CONTRACT,
+        scope_contract=POSITIONED_SCOPE_CONTRACT):
     from .generation import source_units
     if type(reference_contract) is not str or reference_contract not in (LEGACY_REFERENCE_CONTRACT, REFERENCE_INVENTORY_CONTRACT):
         _fail('Unsupported semantic fact reference contract; nothing was sent.')
+    if scope_contract not in SCOPE_CONTRACTS:
+        _fail('Unsupported semantic fact scope contract; nothing was sent.')
     validate_definitions(fields, definitions)
     if not isinstance(notes, str) or len(notes) > 50000: _fail('Notes exceed the supported source limit; nothing was truncated.')
     units, _ = source_units(notes, fields)
     base = {'notes': notes, 'approved_definitions': definitions,
             'timing_reference_contract': TEMPORAL_REFERENCE_CONTRACT,
             'fields': [{'key': f['key'], 'label': f['label'], 'protected_signing': protected(f)} for f in fields]}
+    if scope_contract == DURATION_SCOPE_CONTRACT:
+        base['fact_scope_contract'] = scope_contract
+        base['qualifier_review'] = ('Judge completeness against the approved field meaning. A duration is a complete time quantity; '
+            'do not require it to repeat symptom laterality or body site. Preserve bounds, approximation and ranges. '
+            'A symptom or finding must retain its relevant clinical qualifiers. Structured verdicts must agree with the cited facts; prose cannot override a hold.')
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -1232,7 +1270,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
-                               timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
+                               scope_contract=scope_contract, timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
     except ValidationError as exc:
         if (reference_contract == REFERENCE_INVENTORY_CONTRACT and exc.messages == [
                 'The measurement value and scale are not explicitly bound in the same source expression.']):
@@ -1242,7 +1280,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         raise
     _validate_current_subjects(notes, units, facts)
     assignments = send('assigner', 1, {**base, 'facts': list(facts.values())}, ASSIGN_SCHEMA, TEMPORAL_REFERENCE_INSTRUCTIONS + ASSIGN_INSTRUCTIONS)
-    answers = _assign(notes, fields, definitions, facts, assignments, timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
+    answers = _assign(notes, fields, definitions, facts, assignments, scope_contract=scope_contract, timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
     check_result = send('checker', 1, {**base, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers)}, CHECK_SCHEMA, TEMPORAL_REFERENCE_INSTRUCTIONS + CHECK_INSTRUCTIONS)
     checks, bad = _check(fields, facts, check_result)
     repair = [key for key, row in checks.items() if row['verdict'] in ('incorrect', 'omission', 'unrelated', 'conflict', 'ambiguous')
@@ -1250,7 +1288,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     if repair:
         previous_checks, previous_bad = checks, bad
         changed = send('assigner', 2, {**base, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'checker_findings': check_result, 'repair_keys': repair}, ASSIGN_SCHEMA, TEMPORAL_REFERENCE_INSTRUCTIONS + ASSIGN_INSTRUCTIONS)
-        answers.update(_assign(notes, fields, definitions, facts, changed, only=repair,
+        answers.update(_assign(notes, fields, definitions, facts, changed, only=repair, scope_contract=scope_contract,
                                timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT))
         check_result = send('checker', 2, {**base, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'prior_findings': check_result}, CHECK_SCHEMA, TEMPORAL_REFERENCE_INSTRUCTIONS + CHECK_INSTRUCTIONS)
         checks, bad = _check(fields, facts, check_result)
@@ -1382,7 +1420,7 @@ def validate_stored_answer(notes, field, definition, answer):
     if 'timing_reference_contract' in answer and answer['timing_reference_contract'] != TEMPORAL_REFERENCE_CONTRACT:
         _fail('Unsupported semantic temporal reference contract.')
     scope_contract = answer.get('fact_scope_contract', LEGACY_SCOPE_CONTRACT)
-    if scope_contract not in (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT):
+    if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract.')
     if answer.get('source_sha256') != hashlib.sha256(notes.encode()).hexdigest() or answer.get('definition_sha256') != definition_digest(definition):
         _fail('The semantic answer source or approved definition changed.')

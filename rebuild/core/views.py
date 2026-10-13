@@ -540,6 +540,11 @@ def encounter_detail(request,pk):
                 transcript_reviews.append({'job':job,'raw':raw,'text':transcript,'empty':not (raw or '').strip() and not (transcript or '').strip()})
             except (ValidationError,OSError,ValueError):
                 job.display_error='The retained transcript could not be verified. Contact an administrator; do not resubmit a paid recording.'
+    from . import document_review
+    compact_review=document_review.applies(e,semantic_definitions)
+    for row in rows:
+        row['needs_decision']=row.get('status') in ('conflict','ambiguous') or row.get('required') is True and not row.get('text')
+        row['display_label']=' '.join(row['label'].split())
     manual_entry=is_wm or bool(e.template_version.fields) and (
         all('tab_form' in f.get('locator',{}) for f in e.template_version.fields)
         or e.template_version.template.format=='docx' and not semantic_definitions)
@@ -547,7 +552,10 @@ def encounter_detail(request,pk):
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
-        'live_result_version':live_result['result_version']})
+        'live_result_version':live_result['result_version'], 'compact_review':compact_review,
+        'document_review_token':document_review.review_token(e,request.user,semantic_definitions) if compact_review and can_finalize and e.status!='finalized' else '',
+        'decision_rows':[row for row in rows if row['needs_decision']],
+        'document_approval':e.template_review.get('document_approval')})
 
 @require_GET
 @never_cache
@@ -620,6 +628,8 @@ def save_answers(request,pk):
     from .tab_review import clinician_identity
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
+    from .document_review import applies
+    if applies(e):return document_refusal(request,e,'Reopen this document to use its current compact review and exact-revision approval.',409)
     if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
@@ -851,6 +861,8 @@ def finalize(request,pk):
             e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
             membership(request.user,e.department,roles=['owner','clinician'])
             if e.status=='finalized':return redirect('encounter_detail',pk=pk)
+            from .document_review import applies
+            if applies(e):raise ValidationError('Reopen this document and use Approve and create Word after reviewing the current answers.')
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
             if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')

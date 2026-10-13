@@ -1,0 +1,33 @@
+<div class="compact-review" data-document-review>
+  <div class="document-heading review-card-heading"><div><h2>{% if encounter.status == 'finalized' %}Approved answers{% else %}Review patient document{% endif %}</h2><p>{{ answer_rows|length }} answers · Approved template v{{ encounter.template_version.number }}</p></div></div>
+  {% if encounter.status == 'finalized' %}
+    <p class="approval-record">Approved by {{ encounter.finalized_by.email }} on {{ encounter.finalized_at|date:'M j, Y, H:i T' }}{% if document_approval %} · Saved revision {{ document_approval.approved_revision }}{% endif %}.</p>
+  {% else %}
+    <p class="review-intro">Check the answers below against your notes. Optional information that is not documented stays blank in Word.</p>
+    {% if decision_rows %}<section class="review-decisions" aria-labelledby="decision-heading"><h3 id="decision-heading">Needs your decision</h3><p class="small">{{ decision_rows|length }} field{{ decision_rows|length|pluralize }} need{{ decision_rows|length|pluralize:'s,' }} clarification before approval. Open each field to correct it or decide to leave it blank.</p><ul>{% for answer in decision_rows %}<li><a href="#review-field-{{ answer.key }}">{{ answer.display_label }}</a></li>{% endfor %}</ul></section>{% endif %}
+  {% endif %}
+  <form method="post" action="{% url 'document_review' encounter.pk %}" {% if encounter.status != 'finalized' %}data-submit-once data-unsaved-form{% endif %}>
+    {% csrf_token %}<input type="hidden" name="review_token" value="{{ document_review_token }}">
+    {% if encounter.status != 'finalized' and can_finalize %}<button type="submit" name="intent" value="save" class="review-default-save" tabindex="-1" aria-hidden="true">Save changes</button>{% endif %}
+    <div class="compact-answers">
+    {% for answer in answer_rows %}
+      <section class="compact-answer{% if answer.needs_decision and encounter.status != 'finalized' %} needs-decision{% endif %}" id="review-field-{{ answer.key }}" data-answer-key="{{ answer.key }}">
+        <div class="compact-answer-value"><h3>{{ answer.display_label }}</h3><div data-saved-answer>{% if answer.text %}{{ answer.text }}{% elif answer.left_blank %}<span class="muted">Left blank by clinician decision</span>{% elif answer.needs_decision and encounter.status != 'finalized' %}<span class="error-text">Needs your decision</span>{% else %}<span class="muted">Not documented</span>{% endif %}</div></div>
+        <details {% if answer.needs_decision and encounter.status != 'finalized' %}open{% endif %}><summary>{% if encounter.status != 'finalized' and can_finalize %}Edit / evidence{% else %}Source evidence{% endif %}</summary><div class="compact-answer-details">
+          {% if encounter.status != 'finalized' and can_finalize %}
+          {% if answer.needs_decision %}{% if answer.candidate_text %}<p><strong>Proposed value held for review:</strong> {{ answer.candidate_text }}</p>{% endif %}{% for reason in answer.review_reasons %}<p class="small error-text">{{ reason }}</p>{% endfor %}{% endif %}
+          <label for="answer-{{ answer.key }}">{{ answer.display_label }}</label><textarea id="answer-{{ answer.key }}" name="answer_{{ answer.key }}" rows="2" maxlength="20000">
+{{ answer.text }}</textarea>
+          {% if answer.identity %}<p class="helptext">To sign, enter your account name exactly: {{ signer_name }}. You may leave this blank.</p>{% endif %}
+          {% if not answer.identity %}<label class="small" for="decision-{{ answer.key }}">If no answer belongs here</label><select name="decision_{{ answer.key }}" id="decision-{{ answer.key }}"><option value="keep">Keep the answer above</option><option value="blank">I decide to leave this field blank</option></select><p class="helptext">Use this decision only to clear a documented or held value. Empty the answer first. Optional undocumented fields already export blank.</p>{% else %}<input type="hidden" name="decision_{{ answer.key }}" value="keep">{% endif %}
+          {% endif %}
+          {% for evidence in answer.evidence %}<blockquote class="review-evidence">{{ evidence.quote }}</blockquote>{% empty %}<p class="small muted">No supporting passage was documented.</p>{% endfor %}
+          {% if answer.left_blank %}<p class="small muted">Blank decision{% if answer.blank_by_email %} by {{ answer.blank_by_email }}{% endif %}. Earlier facts and decisions remain in the record.</p>{% endif %}
+          {% if encounter.status == 'finalized' and answer.review_reasons %}<details><summary>Retained generation findings</summary>{% for reason in answer.review_reasons %}<p class="small muted">{{ reason }}</p>{% endfor %}</details>{% endif %}
+        </div></details>
+      </section>
+    {% endfor %}
+    </div>
+    {% if encounter.status != 'finalized' and can_finalize %}<div class="compact-approval"><p>By choosing <strong>Approve and create Word</strong>, you confirm that you have reviewed these answers for accuracy and completeness, including any missing information. Your saved document will be locked to this template version.</p><div class="actions"><button type="submit" name="intent" value="save" class="secondary">Save changes</button><button type="submit" name="intent" value="approve" data-pending-label="Creating Word…">Approve and create Word</button></div><p class="helptext">Approving as {{ signer_name }}. Edits in this review are saved with your approval.</p></div>{% endif %}
+  </form>
+</div>

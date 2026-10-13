@@ -372,3 +372,29 @@ if (documentSearch) {
     document.querySelector('[data-document-search-empty]').hidden = count !== 0;
   });
 }
+
+// Keep the compact summary honest while its edit controls are open or closed.
+// This changes only a local preview; the exact saved state stays server-bound.
+const refreshCompactAnswers = (form) => {
+  form.querySelectorAll(".compact-answer").forEach((row) => {
+    const input = row.querySelector("textarea[name^='answer_']");
+    const decision = row.querySelector("select[name^='decision_']");
+    const summary = row.querySelector("[data-saved-answer]");
+    if (!input || !summary) return;
+    if (!summary.dataset.savedLabel) summary.dataset.savedLabel = summary.textContent;
+    const original = input.defaultValue;
+    if (input.value === original && (!decision || decision.value === "keep")) {
+      summary.textContent = summary.dataset.savedLabel;
+    } else {
+      summary.textContent = input.value || (decision?.value === "blank" ? "Leave blank — unsaved decision" : "Empty answer — unsaved edit");
+    }
+  });
+};
+document.addEventListener("input", (event) => {
+  const form = event.target.closest("[data-document-review] form");
+  if (form) refreshCompactAnswers(form);
+});
+document.addEventListener("change", (event) => {
+  const form = event.target.closest("[data-document-review] form");
+  if (form) refreshCompactAnswers(form);
+});

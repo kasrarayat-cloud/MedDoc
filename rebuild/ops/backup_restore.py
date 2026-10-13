@@ -99,7 +99,10 @@ _STANDING_USAGE_VALID = r"""
       AND NOT (j.config ? 'testing_actor_enrollment'))
       OR (j.user_id='e1a20625-455d-4603-a874-794327b19d10' AND e.department_id='46a5abdd-36f1-41f0-968f-8c09c39d9daa'
         AND jsonb_typeof(j.config->'testing_actor_enrollment')='string'
-        AND j.config->>'testing_actor_enrollment'='quillmd-actual-clinician-20261010-v1'))
+        AND j.config->>'testing_actor_enrollment'='quillmd-actual-clinician-20261010-v1')
+      OR (j.user_id='5f4d1a3d-eeb6-4207-b1df-4597dc696e82' AND e.department_id='46a5abdd-36f1-41f0-968f-8c09c39d9daa'
+        AND jsonb_typeof(j.config->'testing_actor_enrollment')='string'
+        AND j.config->>'testing_actor_enrollment'='quillmd-cedar-clinician-20261013-v1'))
     AND u.user_id=j.user_id AND e.created_by_id=j.user_id
     AND u.department_id=e.department_id AND u.organization_id=d.organization_id
     AND j.payer='standing:quillmd-standing-testing-20261009-v1' AND u.payer=j.payer
