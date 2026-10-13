@@ -40,12 +40,17 @@ def review_items(prep, items):
         # A role in an instruction ("clinician to complete") does not identify
         # whose name belongs here; only a complete role/name phrase qualifies.
         role_label = re.sub(r'([a-z])([A-Z])', r'\1 \2', row['field']['label'])
+        question_label = role_label.strip(' :*')
         role_label = re.sub(r'\([^)]*\)', '', role_label).strip(' :*')
         role = (r'(?:patient|clinician|doctor|physician|provider|nurse|surgeon|therapist|witness|'
                 r'guardian|parent|carer|caregiver|mother|father|contact|referrer|consultant|assessor|author|staff|practitioner)')
         name = r'(?:(?:full|legal|first|last|given|family|middle|complete)\s+)*names?'
-        qualified = re.fullmatch(r'(?:the\s+)?'+role+r'(?:[’\']s)?\s+'+name+r'|'+name+r'\s+of\s+(?:the\s+)?'+role,
-                                 role_label, re.IGNORECASE)
+        legacy_role_name = r'(?:the\s+)?'+role+r'(?:[’\']s)?\s+'+name+r'|'+name+r'\s+of\s+(?:the\s+)?'+role
+        role_name = r'(?:the\s+)?(?:'+legacy_role_name+r')'
+        qualified = (re.fullmatch(legacy_role_name, role_label, re.IGNORECASE)
+            or re.fullmatch(r'what\s+is\s+(?:'+role_name+r')\s*\?'
+                            r'|who\s+is\s+(?:the\s+)?(?:referring\s+)?'+role+r'\s*\?',
+                            question_label, re.IGNORECASE))
         if (prep.state != 'approved' and not corrected and not qualified
                 and definition.get('value_type') == 'person_name'):
             row.update(state='unresolved', reason='The name label does not specify whose name belongs here.')

@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from documents import inspect_template, DocumentError
-from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields, TYPED_PROTOCOL, WM_SOURCE_REVIEW_CONTEXT
+from documents.preparation import digest, model_inventory, validate_role, validate_inventory,validate_candidate_fields, TYPED_PROTOCOL, WM_SOURCE_REVIEW_CONTEXT, SIGNING_CONTEXT
 from documents.preparation_service import inspect_preparation, prepare_candidate
 from documents.sdk_service import WM_IOV_SHA256
 from .models import TemplatePreparation, PreparationReceipt, TemplateVersion
@@ -589,6 +589,7 @@ def create_preparation(template, actor):
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
         config[word_contract.CONFIG_KEY] = word_contract.PROFILE
+        config['word_signing_context'] = SIGNING_CONTEXT
     from . import testing_authority
     if testing_authority.identity(config):
         return testing_authority.create_preparation(template,actor,config)
@@ -625,7 +626,12 @@ def run_one(*, preparation_pk=None):
         from documents.sdk_service import WM_IOV_SHA256
         if prep.template.sha256 == WM_IOV_SHA256: known=inspect_template(original)
         protocol=prep.config.get('word_preparation_protocol')
-        prep.inventory=(inspect_preparation(original, known, protocol=protocol)
+        signing_args = {}
+        if 'word_signing_context' in prep.config:
+            if prep.config['word_signing_context'] != SIGNING_CONTEXT or protocol != TYPED_PROTOCOL:
+                raise DocumentError('Unsupported signing classification policy.', 'invalid_proposal')
+            signing_args['signing_context'] = SIGNING_CONTEXT
+        prep.inventory=(inspect_preparation(original, known, protocol=protocol, **signing_args)
                         if protocol is not None else inspect_preparation(original, known))
         if prep.inventory['source_sha256'] != prep.template.sha256: raise DocumentError('Original changed.', 'source_changed')
         _,total_seconds=timing_limits(prep.inventory, prep.config)

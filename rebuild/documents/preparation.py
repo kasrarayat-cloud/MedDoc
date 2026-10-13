@@ -7,6 +7,7 @@ from copy import deepcopy
 import hashlib
 import json
 import re
+import unicodedata
 from zipfile import ZipFile
 from lxml import etree
 
@@ -35,6 +36,29 @@ SIGNING = re.compile(r'\b(?:signatures?|signed|signing|attest(?:ation|ed|ing)?|c
 # Unknown singular signing language is guided, never made writable. Plural
 # clinical signs and embedded words do not match this word-boundary predicate.
 AMBIGUOUS_SIGNING = re.compile(r'\bsign\b', re.I)
+SIGNING_CONTEXT = 'documented-consent-facts-v1'
+# A retrospective question asks for evidence of an event; it does not grant
+# consent. Unknown wording and every explicit signature/attestation stay guided.
+CONSENT_FACT = re.compile(
+    r'(?:(?:what|which)\s+(?:(?:informed|verbal|written|telephone|video|telehealth|patient|procedure|surgical)\s+){0,4}'
+    r'consent\s+(?:was|is|has\s+been)\s+(?:documented|recorded)\s*\?'
+    r'|describe\s+the\s+consent\s+discussion\s+(?:documented|recorded)\s+for\s+this\s+visit\s*[.?]?)'
+    r'(?:\s*for\s+(?:telephone|video|telehealth|in-person)(?:\s+or\s+(?:telephone|video|telehealth|in-person))?\s+visits\s+only\.)?'
+    r'(?:\s*leave\s+blank\s+for\s+(?:telephone|video|telehealth|in-person)\s+visits\.)?', re.I)
+
+
+def signing_protected(label, context=None):
+    if context not in (None, SIGNING_CONTEXT):
+        raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
+    if context is None:
+        return bool(SIGNING.search(label))
+    normalized = ''.join(c for c in unicodedata.normalize('NFKC', label)
+                         if unicodedata.category(c) != 'Cf')
+    normalized = ' '.join(normalized.split())
+    if CONSENT_FACT.fullmatch(normalized):
+        return False
+    return bool(SIGNING.search(normalized))
+
 BLANK = re.compile(r'_{3,}')
 UNSUPPORTED = {'sdt', 'txbxContent', 'fldChar', 'fldSimple', 'instrText', 'del', 'ins'}
 
@@ -69,7 +93,7 @@ def source_bound_candidate_fields(path, value):
     return fields
 
 
-def typed_source_fields(path, fields):
+def typed_source_fields(path, fields, *, signing_context=None):
     """Opt-in semantics for a new preparation; existing approvals are untouched."""
     if __package__:
         from .table_constraints import with_table_constraints
@@ -80,7 +104,7 @@ def typed_source_fields(path, fields):
     source = {field['key']: field for field in inspected}
     for field in result:
         location = source[field['key']]['locator']
-        if SIGNING.search(source[field['key']]['label']):
+        if signing_protected(source[field['key']]['label'], signing_context):
             continue
         if 'paragraph' in location and 'token' in location:
             text = paragraphs[location['paragraph']].text
@@ -118,9 +142,12 @@ def unmapped_multi_column_rows(path):
     return result
 
 
-def inventory(path, known=None, *, protocol=PROTOCOL):
+def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
     if protocol not in {PROTOCOL, TYPED_PROTOCOL}:
         raise DocumentFailure('Unsupported preparation protocol.', 'invalid_proposal')
+    if (signing_context is not None and (signing_context != SIGNING_CONTEXT
+            or protocol != TYPED_PROTOCOL or known)):
+        raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
     validate_docx(path, inventory_only=True)
     source_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     if known and known.get('sha256') != source_sha:
@@ -143,13 +170,13 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
             if exc.code != 'no_fields':
                 issues.append({'code': exc.code, 'message': str(exc)})
     if protocol == TYPED_PROTOCOL and not known and fields:
-        fields = typed_source_fields(path, fields)
+        fields = typed_source_fields(path, fields, signing_context=signing_context)
     for field in fields:
-        if AMBIGUOUS_SIGNING.search(field['label']) and not SIGNING.search(field['label']):
+        if AMBIGUOUS_SIGNING.search(field['label']) and not signing_protected(field['label'], signing_context):
             issues.append({'code':'guided_signing','message':field['label']+': clarify whether this is a clinical answer or a signing area before preparation.'})
         qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
         questions.append({'id': qid, 'text': field['label'], 'story': 'mapped',
-                          'protected_signing': bool(SIGNING.search(field['label']))})
+                          'protected_signing': signing_protected(field['label'], signing_context)})
         if protocol == TYPED_PROTOCOL and not questions[-1]['protected_signing']:
             constraint = field.get('answer_constraints')
             # Qualified WM metadata is bound to the exact original and its
@@ -161,7 +188,7 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
             if constraint is not None:
                 questions[-1]['answer_constraints'] = deepcopy(constraint)
         anchors.append({'id': aid, 'question_id': qid, 'kind': 'existing',
-                        'protected_signing': bool(SIGNING.search(field['label'])),
+                        'protected_signing': signing_protected(field['label'], signing_context),
                         'field_key': field['key'], 'locator': None})
     with ZipFile(path) as package:
         for part in package.infolist():
@@ -193,9 +220,9 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
                         issues.append({'code':'guided_layout','message':label+': an unmapped answer region contains unsupported content.'});continue
                     if label and blanks and row.xpath('.//w:vMerge | .//w:gridSpan | .//w:tbl | ./w:trPr/w:trHeight[@w:hRule="exact"]',namespaces=NS):
                         issues.append({'code':'guided_layout','message':label+': merged, nested or fixed-height answer row needs assisted setup.'});continue
-                    if AMBIGUOUS_SIGNING.search(label) and not SIGNING.search(label) and blanks:
+                    if AMBIGUOUS_SIGNING.search(label) and not signing_protected(label, signing_context) and blanks:
                         issues.append({'code':'guided_signing','message':label+': clarify whether this is a clinical answer or a signing area before preparation.'});continue
-                    if not label or len(label)>120 or not blanks or SIGNING.search(label) or not TOKEN.fullmatch('{{'+label+'}}'):continue
+                    if not label or len(label)>120 or not blanks or signing_protected(label, signing_context) or not TOKEN.fullmatch('{{'+label+'}}'):continue
                     other_text=[''.join(c.xpath('.//w:t/text()',namespaces=NS)).strip() for c in cells[1:] if occupied(c)]
                     units={'°C','°F','mm','cm','m','ms','s','mL','ml','L','kg','g','mg','%','bpm','mmHg','mm Hg','µm','μm','m/s'}
                     if len(other_text)>1 or any(t not in units for t in other_text):
@@ -216,9 +243,9 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
                 blank_count = len(BLANK.findall(complete))
                 if not blank_count:
                     continue
-                if AMBIGUOUS_SIGNING.search(complete) and not SIGNING.search(complete):
+                if AMBIGUOUS_SIGNING.search(complete) and not signing_protected(complete, signing_context):
                     issues.append({'code':'guided_signing','message':'Clarify whether Sign is a clinical answer or a signing area before preparation.'});continue
-                protected = bool(SIGNING.search(complete))
+                protected = signing_protected(complete, signing_context)
                 if protected:
                     qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
                     questions.append({'id':qid,'text':complete,'story':part.filename,'protected_signing':True})
@@ -278,6 +305,8 @@ def inventory(path, known=None, *, protocol=PROTOCOL):
               'review_requirements': deepcopy(known.get('review_requirements', [])) if known else [],
               'document_backend': {k: known[k] for k in ('backend', 'source_sha256', 'mapping_digest')}
                                   if qualified else {}}
+    if signing_context is not None:
+        result['signing_context'] = signing_context
     result['inventory_sha256'] = digest(result)
     return result
 
@@ -414,6 +443,9 @@ def validate_inventory(value):
     if (not isinstance(value,dict) or value.get('protocol') not in {PROTOCOL, TYPED_PROTOCOL}
             or value.get('inventory_sha256')!=digest({k:v for k,v in value.items() if k!='inventory_sha256'})):
         raise DocumentFailure('The original inventory changed.', 'stale_inventory')
+    if 'signing_context' in value and (value['signing_context'] != SIGNING_CONTEXT
+            or value['protocol'] != TYPED_PROTOCOL or value.get('document_backend')):
+        raise DocumentFailure('Unsupported signing classification policy.', 'stale_inventory')
     return value
 
 def validate_candidate_fields(value,fields,*,constraints=False):
@@ -439,7 +471,7 @@ def candidate(path, output, expected, selected,placements=None):
     if expected.get('document_backend'):
         known = {**expected['document_backend'], 'sha256': expected['source_sha256'],
                  'fields': expected['fields'], 'review_requirements': expected['review_requirements']}
-    actual = inventory(path, known, protocol=expected['protocol'])
+    actual = inventory(path, known, protocol=expected['protocol'], signing_context=expected.get('signing_context'))
     if actual != expected or not isinstance(selected, list) or len(set(selected)) != len(selected):
         raise DocumentFailure('The candidate request uses a stale inventory.', 'stale_inventory')
     if actual['issues']:
@@ -510,7 +542,7 @@ def candidate(path, output, expected, selected,placements=None):
         raise DocumentFailure('An unreviewed answer-shaped row remains in the candidate.', 'incomplete_proposal')
     fields = deepcopy(actual['fields']) if known else source_bound_candidate_fields(output, actual)
     if actual['protocol'] == TYPED_PROTOCOL and not known:
-        fields = typed_source_fields(output, fields)
+        fields = typed_source_fields(output, fields, signing_context=actual.get('signing_context'))
     # The qualified WM writer already enforces its pinned choices and units.
     # Its original mapping stays byte-for-byte compatible with older approvals.
     validate_candidate_fields(actual, fields, constraints=not (known and actual['protocol'] == TYPED_PROTOCOL))
