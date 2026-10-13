@@ -1,0 +1,24 @@
+# Prospective complete-form preparation publication
+
+Installed base: `cec21ff995ba49267158e717ec747ab989743dc5`. This declaration precedes native publication and does not claim installation or normal-HTTPS acceptance.
+
+A complete 34-question, three-table form was extracted intact but rejected by the historical 16,000-token preparation output ceiling: its calculated full-response allowance was 33,000 tokens. Its retained failed preparation, original source, inventory, accounting and zero provider receipts remain unchanged. No retry is authorized for that historical attempt.
+
+New preparations use the explicit `complete-inventory-typed-v2` profile with a 48,000-token maximum calculated allowance, a 512,000-byte complete SDK-request ceiling, and at most 180 seconds per role/480 seconds overall for larger forms. Keep one complete proposer and one independent checker, complete original-document context, finite original destinations, semantic definitions, full coverage validation, retained provider artifacts and unique per-role reservations. Smaller new semantic preparations retain their 120/360-second timing. Historical profiles retain their original output/deadline behavior. New queue and terminal records add release provenance and closed measured-limit diagnostics; no migration is required.
+
+Expected native publication changes exactly four runtime files: preparation.py, preparation_views.py, template-preparation.js and template_preparation.html, plus two nonserved test files and this declaration. The only changed public static source is template-preparation.js. Preserve the full current 21-source/126-entry static inventory and prior immutable hashed assets. No CSS URL or font change is permitted. The status response reports complete field coverage; the browser continues its existing read-only polling/terminal update path. The stopped-state explanation uses closed limit names, numbers and stages without private provider content.
+
+Capture a fresh authenticated encrypted backup and prove a full isolated restore before source publication. Require exact preservation of the current post-0027 catalog: all 41 tables, 27 functions, 28 triggers, constraints, grants, sequences and existing rows. No migration, enrollment, account, role, password, MFA, wallet, provider receipt, historical record or finalized export changes are authorized during installation. Preserve the original owner GI failure, all unknown usage and reservations, and all prior Cedar, wrist, SOAP and Harbor evidence. No old requests are resent.
+
+Only the QuillMD doctor, admin and worker services may stop/start under the reviewed native source-first installation and recovery lifecycle. No ingress, other project or VoiceAssistMain change. Bind the actual first declaration, exact merge commit CI, finite static/catalog contracts, fresh dual hourly endpoints and complete settled schedule forecast before execution. Enter with at least twenty minutes, preferably twenty-five, before the next strict watched transition. Future identities remain unset until observed. Pre-existing scheduled-backup timeout and expired offsite policy remain visible; this publication does not claim to repair those separate operational conditions.
+
+| Source or regression file | SHA256 |
+|---|---|
+| `rebuild/core/preparation.py` | `bb90656307bdccf8d678081f00e91691cd762b7439488016009678bb87087212` |
+| `rebuild/core/preparation_views.py` | `5ae8af0bd819be67b272994ca7da4e338af49f83765893640309b7e2a8a84eb8` |
+| `rebuild/static/template-preparation.js` | `3fa408dbc3833388083c2b429f8c9a78ad0332e128efc9f06a25604e1a7f6a31` |
+| `rebuild/templates/template_preparation.html` | `a69e3b0be16c8b6e3eed1d6df0667fa215ff4a507491701c05d698f6dfb2991f` |
+| `rebuild/core/tests/test_preparation_output.py` | `10a48318fb180ac2298e5d7ff837ff0d3b5d80d1ff7e6e1ec806cdecc1f12917` |
+| `rebuild/core/tests/test_complete_preparation.py` | `3d6ca42526e9091affb4da459a3dd0c888c2aa8b2294648df035444c8539974c` |
+
+After installation, use the exact original GI bytes through an already authorized ordinary synthetic clinician on normal HTTPS, then explicitly review all 34 AI-produced definitions and approve the immutable version. Exercise complete Morgan Ellis generation only against the owner's actual supplied fictional note; do not invent a replacement when unavailable. Verify separate direct/total time, conditional telehealth consent, separate examination findings, missingness, every saved/UI/Word response and unchanged original structure. Reuse the approved version for another independently specified fictional case, with no preparation or prior-patient carryover. Routine document review retains one final approval and genuine unresolved decisions remain separate. Correlate actual provider roles, retained usage and account charges; owner-browser confirmation remains pending without the owner's session. Offline checks or special preseeded templates do not constitute live acceptance.
