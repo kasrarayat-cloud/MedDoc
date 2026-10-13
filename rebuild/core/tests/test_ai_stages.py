@@ -111,13 +111,14 @@ class IndependentStageTests(TestCase):
     def test_generated_missing_review_and_manual_decision_are_distinct(self):
         job=enqueue(self.encounter,self.user);run_one();self.encounter.refresh_from_db()
         self.client.force_login(self.user)
-        post={'revision':self.encounter.revision}
-        for field in self.version.fields:post['answer_'+field['key']]='';post['reviewed_'+field['key']]='on'
-        response=self.client.post(f'/encounters/{self.encounter.pk}/save/',post)
+        from core.document_review import review_token
+        post={'intent':'save','review_token':review_token(self.encounter,self.user,self.version.semantic_definitions)}
+        for field in self.version.fields:post['answer_'+field['key']]='';post['decision_'+field['key']]='keep'
+        response=self.client.post(f'/encounters/{self.encounter.pk}/review/',post)
         self.assertEqual(response.status_code,302);self.encounter.refresh_from_db()
         self.assertTrue(all(a['status']=='missing' and a.get('semantic_review_mode')!='manual' for a in self.encounter.answers.values()))
-        first=self.version.fields[0]['key'];post['revision']=self.encounter.revision;post['answer_'+first]='Alex Morgan'
-        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/save/',post).status_code,302)
+        first=self.version.fields[0]['key'];post['review_token']=review_token(self.encounter,self.user,self.version.semantic_definitions);post['answer_'+first]='Alex Morgan'
+        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/review/',post).status_code,302)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers[first]['semantic_review_mode'],'manual')
         self.assertEqual(len(self.encounter.answers[first]['semantic_edit_history']),1)
 
@@ -173,12 +174,16 @@ class IndependentStageTests(TestCase):
         self.assert_audit();self.client.force_login(self.user)
         response=self.client.get(f'/encounters/{self.encounter.pk}/status/')
         self.assertEqual(response.status_code,200);self.assertEqual(len(response.json()['latest_job']['stages']),3)
-        post={'revision':self.encounter.revision}
+        from core.document_review import review_token
+        before_answers=deepcopy(self.encounter.answers)
+        post={'intent':'approve','review_token':review_token(self.encounter,self.user,self.version.semantic_definitions)}
         for field in self.version.fields:
-            post['answer_'+field['key']]=self.encounter.answers[field['key']]['text'];post['reviewed_'+field['key']]='on'
-        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/save/',post).status_code,302)
+            post['answer_'+field['key']]=self.encounter.answers[field['key']]['text'];post['decision_'+field['key']]='keep'
+        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/review/',post).status_code,302)
         self.encounter.refresh_from_db()
-        self.assertEqual(self.client.post(f'/encounters/{self.encounter.pk}/finalize/',{'revision':self.encounter.revision,'reviewed':'on'}).status_code,302)
+        self.assertEqual(self.encounter.answers,before_answers)
+        self.assertTrue(all(not a.get('reviewed') for a in self.encounter.answers.values()))
+        self.assertEqual(self.encounter.template_review['document_approval']['approved_revision'],self.encounter.revision)
         self.encounter.refresh_from_db();self.assertEqual(self.encounter.status,'finalized')
         download=self.client.get(f'/encounters/{self.encounter.pk}/export/')
         self.assertEqual(download.status_code,200);data=b''.join(download.streaming_content)

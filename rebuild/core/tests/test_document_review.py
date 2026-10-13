@@ -182,7 +182,7 @@ class DocumentApprovalTests(TestCase):
             self.encounter.refresh_from_db();self.assertEqual(self.encounter.answers,before)
 
 
-from django.db import transaction, close_old_connections
+from django.db import transaction, close_old_connections, connections
 from django.test import TransactionTestCase, Client
 import threading
 
@@ -198,7 +198,7 @@ class DocumentApprovalConcurrencyTests(TransactionTestCase):
         def approve():
             close_old_connections();started.set()
             try:results.append(client.post(self.route,post).status_code)
-            finally:close_old_connections()
+            finally:connections.close_all()
         with transaction.atomic():
             current=Encounter.objects.select_for_update().get(pk=self.encounter.pk)
             thread=threading.Thread(target=approve);thread.start();self.assertTrue(started.wait(5))
@@ -214,7 +214,7 @@ class DocumentApprovalConcurrencyTests(TransactionTestCase):
             close_old_connections()
             try:
                 barrier.wait(5);results.append(client.post(self.route,post).status_code)
-            finally:close_old_connections()
+            finally:connections.close_all()
         threads=[threading.Thread(target=approve,args=(client,)) for client in clients]
         for thread in threads:thread.start()
         for thread in threads:thread.join(15);self.assertFalse(thread.is_alive())
