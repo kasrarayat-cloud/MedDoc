@@ -26,6 +26,8 @@ OUTPUT_PROFILE = 'inventory-sized-typed-v1'
 COMPLETE_OUTPUT_PROFILE = 'complete-inventory-typed-v2'
 DESTINATION_PROFILE = 'finite-physical-destinations-v1'
 DESTINATION_KEY = 'word_preparation_destinations'
+IDENTITY_PROFILE = 'source-identity-enums-v1'
+IDENTITY_KEY = 'word_preparation_identities'
 MAX_TYPED_OUTPUT = 16000
 MAX_COMPLETE_OUTPUT = 48000
 MAX_PREPARATION_REQUEST_BYTES = 512000
@@ -69,6 +71,41 @@ def finite_destinations(inventory, config):
     if config[DESTINATION_KEY] != DESTINATION_PROFILE or inventory.get('protocol') != TYPED_PROTOCOL:
         raise DocumentError('Unsupported explicit physical destination profile.', 'invalid_proposal')
     return True
+
+
+def finite_identities(inventory, config):
+    # Absence preserves historical wire schemas and retained-response replay.
+    if config is None or IDENTITY_KEY not in config:
+        return False
+    if (config[IDENTITY_KEY] != IDENTITY_PROFILE or not isinstance(inventory, dict)
+            or not finite_destinations(inventory, config)):
+        raise DocumentError('Unsupported explicit source identity profile.', 'invalid_proposal')
+    validate_inventory(inventory)
+    return True
+
+
+def bind_identity_enums(schema, inventory, config):
+    """Constrain machine-owned identities; local validators still check pairs and coverage."""
+    if not finite_identities(inventory, config):
+        return schema
+    enum = lambda values: {'type': 'string', 'enum': list(dict.fromkeys(values))}
+    properties = schema['properties']
+    properties['inventory_sha256'] = enum([inventory['inventory_sha256']])
+    stories = model_inventory(inventory)['stories']
+    story = properties['stories']['items']['properties']
+    story['story_id'] = enum(row['id'] for row in stories)
+    story['content_sha256'] = enum(row['content_sha256'] for row in stories)
+    if word_contract.active(inventory, config):
+        semantic = word_contract.inventory_for(inventory)
+        definitions = properties['answer_definitions']['properties']
+        definitions['inventory_sha256'] = enum([semantic['inventory_sha256']])
+        row = definitions['fields']['items']['properties']
+        row['field_key'] = enum(field['key'] for field in semantic['fields'])
+        destination = row['definition']['properties']['permitted_destination']['properties']
+        destination['field_key'] = enum(field['key'] for field in semantic['fields'])
+        destination['locator_sha256'] = enum(field['permitted_destination']['locator_sha256']
+                                             for field in semantic['fields'])
+    return schema
 
 def feature_enabled():
     return settings.WORD_PREPARATION_ENABLED
@@ -169,6 +206,7 @@ def timing_limits(inventory, config=None):
     return ROLE_SECONDS,TOTAL_SECONDS
 
 def role_schema(role, protocol=None, inventory=None, config=None):
+    finite_identities(inventory, config)
     if protocol == TYPED_PROTOCOL:
         from documents.preparation_roles import role_schema as typed_role_schema
         schema = typed_role_schema(role, inventory if finite_destinations(inventory, config) else None)
@@ -176,7 +214,7 @@ def role_schema(role, protocol=None, inventory=None, config=None):
             from documents.semantic_preparation_roles import role_schema as definition_schema
             schema['required'].append('answer_definitions')
             schema['properties']['answer_definitions'] = definition_schema(role, 2)
-        return schema
+        return bind_identity_enums(schema, inventory, config)
     decision = 'decision' if role == 'proposer' else 'verdict'
     choices = ['map', 'needs_review'] if role == 'proposer' else ['pass', 'unresolved']
     return {'type': 'object', 'additionalProperties': False,
@@ -192,6 +230,8 @@ def role_schema(role, protocol=None, inventory=None, config=None):
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
+    if finite_identities(inventory, config):
+        result['source_identity_contract'] = IDENTITY_PROFILE
     if finite_destinations(inventory, config):
         from documents.preparation_roles import source_role_areas
         result['physical_answer_areas'] = source_role_areas(inventory)
@@ -281,6 +321,11 @@ def provider_request(inventory, role, config, proposal=None):
                          'describes existing document controls; semantic definitions describe the values requested. '
                          'Physical generic text MUST NOT erase semantic types or constraints. ' +
                          role_instructions(role, 2, timing_reference=word_contract.timing_reference(config)))
+    if finite_identities(inventory, config):
+        instructions += (' Source identity values are application-owned, not semantic decisions. '
+            'Copy each corresponding field key, locator digest, story ID and content digest from '
+            'its original inventory row. The schema offers only original identity values; '
+            'their exact associations and complete coverage are independently validated in code. ')
     schema = transform_schema(role_schema(role, inventory['protocol'], inventory, config))
     envelope = {'model':config['model'], 'max_tokens':role_limits(inventory, config)[0], 'system':instructions,
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False)}],
@@ -590,6 +635,7 @@ def create_preparation(template, actor):
     else:
         config[word_contract.CONFIG_KEY] = word_contract.PROFILE
         config['word_signing_context'] = SIGNING_CONTEXT
+        config[IDENTITY_KEY] = IDENTITY_PROFILE
     from . import testing_authority
     if testing_authority.identity(config):
         return testing_authority.create_preparation(template,actor,config)
