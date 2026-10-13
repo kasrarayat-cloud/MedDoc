@@ -1,0 +1,45 @@
+<article class="review-field" data-review-field="{{ row.field.key }}">
+  <div class="review-field-heading"><h3>{{ row.display_label }}</h3><span class="review-type" data-type-summary>{{ row.type_summary }}</span></div>
+  <p class="review-meaning" data-meaning-summary>{{ row.definition.meaning }}</p>
+  {% if row.definition.choices %}<p class="review-choices">Choices: {{ row.definition.choices|join:' · ' }}</p>{% endif %}
+  {% if row.constraints_summary %}<p class="review-choices">{{ row.constraints_summary }}</p>{% endif %}
+  <p class="review-destination">{{ row.location }}{% if row.subject_label %} · <span data-subject-summary>{{ row.subject_label }}{% if row.name_question %} (suggested){% endif %}</span>{% endif %}</p>
+  {% if row.scope_summary %}<p class="review-choices">{{ row.scope_summary }}</p>{% endif %}
+  {% if row.protected %}<p class="small">Protected signing area. Existing signing and identity checks still apply.</p>{% endif %}
+  {% if editable %}
+    {% if row.state == 'unresolved' %}<div class="review-question">
+      {% if row.name_question %}
+      <label for="person-{{ row.field.key }}">Whose name belongs here?</label>
+      <select id="person-{{ row.field.key }}" name="name_subject_{{ row.field.key }}" data-name-subject required>
+        <option value="">Choose a person</option><option value="patient" {% if row.name_subject == 'patient' %}selected{% endif %}>Patient</option><option value="clinician" {% if row.name_subject == 'clinician' %}selected{% endif %}>Clinician</option><option value="other" {% if row.name_subject == 'other' %}selected{% endif %}>Other person</option>
+      </select>
+      <div data-other-person><label for="other-{{ row.field.key }}">Other person's role</label><input id="other-{{ row.field.key }}" name="name_other_{{ row.field.key }}" value="{{ row.name_other }}" maxlength="120" placeholder="For example, accompanying parent"></div>
+      <p class="small">Your choice suggests “{{ row.display_label }}: the selected person's name, as requested by this form.” Advanced edits are kept. Check that the meaning matches your choice, then save before approval.</p>
+      {% else %}
+      <p><strong>This definition needs your decision.</strong></p><p class="small">{{ row.reason }}</p>
+      <label for="decision-{{ row.field.key }}">Does the proposed meaning match this question?</label><select id="decision-{{ row.field.key }}" name="decision_{{ row.field.key }}" required><option value="">Choose an answer</option><option value="accept" {% if row.decision == 'accept' %}selected{% endif %}>Yes, use the proposed definition</option><option value="edit" {% if row.decision == 'edit' %}selected{% endif %}>I will correct it in Advanced</option></select>
+      {% endif %}
+    </div>{% endif %}
+    <details class="review-advanced"><summary>Advanced <span class="sr-only">for {{ row.display_label }}</span></summary><div class="review-advanced-body">
+      <label for="meaning-{{ row.field.key }}">What belongs in this field?</label><textarea id="meaning-{{ row.field.key }}" name="field_{{ row.field.key }}_meaning" maxlength="2000" required rows="3" data-meaning>
+{{ row.definition.meaning }}</textarea>
+      <label for="type-{{ row.field.key }}">Answer type</label><select id="type-{{ row.field.key }}" name="field_{{ row.field.key }}_value_type" data-value-type>{% for value,label in row.type_options %}<option value="{{ value }}" {% if value == row.definition.value_type %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <div data-control-group="unit" {% if not row.numeric and not row.definition.unit %}hidden{% endif %}><label for="unit-{{ row.field.key }}">Unit</label><input id="unit-{{ row.field.key }}" name="field_{{ row.field.key }}_unit" maxlength="80" value="{{ row.definition.unit|default_if_none:'' }}"></div>
+      {% if definition_version == 2 %}<div data-control-group="mode" {% if row.definition.value_type != 'text' %}hidden{% endif %}><label for="mode-{{ row.field.key }}">Answer length</label><select id="mode-{{ row.field.key }}" name="field_{{ row.field.key }}_answer_mode">{% for value,label in row.mode_options %}<option value="{{ value }}" {% if value == row.definition.answer_mode %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>{% endif %}
+      <div data-control-group="choices" {% if not row.choice %}hidden{% endif %}><label for="choices-{{ row.field.key }}">Allowed choices · one per line</label><textarea id="choices-{{ row.field.key }}" name="field_{{ row.field.key }}_choices" rows="3">
+{% for choice in row.definition.choices %}{{ choice }}{% if not forloop.last %}
+{% endif %}{% endfor %}</textarea></div>
+      {% if row.name_question %}<input type="hidden" name="field_{{ row.field.key }}_subject" value="{{ row.definition.scope.subject }}" data-subject><p class="small">Choose whose name belongs here in the question above.</p>{% else %}<label for="subject-{{ row.field.key }}">Whom this field describes</label><select id="subject-{{ row.field.key }}" name="field_{{ row.field.key }}_subject" data-subject>{% for value,label in row.subject_options %}<option value="{{ value }}" {% if value == row.definition.scope.subject %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>{% endif %}
+      <label for="timing-{{ row.field.key }}">When it applies</label><select id="timing-{{ row.field.key }}" name="field_{{ row.field.key }}_temporality">{% for value,label in row.timing_options %}<option value="{{ value }}" {% if value == row.definition.scope.temporality %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <label for="polarity-{{ row.field.key }}">Statements to include</label><select id="polarity-{{ row.field.key }}" name="field_{{ row.field.key }}_polarity">{% for value,label in row.polarity_options %}<option value="{{ value }}" {% if value == row.definition.scope.polarity %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+      <div data-control-group="numeric" {% if not row.numeric %}hidden{% endif %}>
+        <p class="small muted">Use only ranges and scales stated by the form. These are not normal clinical ranges.</p><div class="review-number-grid">
+        <div><label for="minimum-{{ row.field.key }}">Minimum</label><input id="minimum-{{ row.field.key }}" name="field_{{ row.field.key }}_minimum" maxlength="32" inputmode="decimal" value="{{ row.definition.constraints.minimum|default_if_none:'' }}"></div>
+        <div><label for="maximum-{{ row.field.key }}">Maximum</label><input id="maximum-{{ row.field.key }}" name="field_{{ row.field.key }}_maximum" maxlength="32" inputmode="decimal" value="{{ row.definition.constraints.maximum|default_if_none:'' }}"></div>
+        <div><label for="scale-minimum-{{ row.field.key }}">Scale starts at</label><input id="scale-minimum-{{ row.field.key }}" name="field_{{ row.field.key }}_scale_minimum" maxlength="32" inputmode="decimal" value="{{ row.definition.constraints.scale_minimum|default_if_none:'' }}"></div>
+        <div><label for="scale-maximum-{{ row.field.key }}">Scale ends at</label><input id="scale-maximum-{{ row.field.key }}" name="field_{{ row.field.key }}_scale_maximum" maxlength="32" inputmode="decimal" value="{{ row.definition.constraints.scale_maximum|default_if_none:'' }}"></div></div>
+      </div>
+      <p class="small muted">The original Word destination is fixed. Changing a definition requires saving and reviewing it before approval.</p>
+    </div></details>
+  {% endif %}
+</article>

@@ -1,0 +1,30 @@
+<div class="template-review-workspace" data-word-preview>
+  <aside class="review-preview panel">
+    <div class="section-heading"><h2>Original form</h2><a href="{% url 'template_original' template.pk %}">Download Word</a></div>
+    <p class="small muted">Compare the questions and answer areas with the detected fields.</p>
+    <p data-preview-status role="status">Loading the original preview…</p>
+    <iframe title="Original blank Word form" sandbox="allow-scripts" referrerpolicy="no-referrer" src="{% url 'docx_preview_frame' %}?token={{ preview_token }}" data-token="{{ preview_token }}" data-docx-url="{% url 'template_original' template.pk %}"></iframe>
+    <p class="small muted">Approximate preview. Word pagination may differ; the download contains the original document.</p>
+    {% if layout_preparation.candidate_path %}<details class="review-candidate"><summary>Prepared answer locations</summary><div>
+      <p><a href="{% url 'template_preparation_download' template.pk %}">Download prepared blank</a></p>
+      <p data-preview-status role="status">Loading the prepared preview…</p><iframe title="Prepared blank Word form" sandbox="allow-scripts" referrerpolicy="no-referrer" src="{% url 'docx_preview_frame' %}?token={{ preview_token }}" data-token="{{ preview_token }}" data-docx-url="{% url 'template_preparation_preview' template.pk 'prepared' %}"></iframe>
+    </div></details>{% endif %}
+  </aside>
+  <section class="review-fields panel" data-answer-definitions aria-labelledby="detected-fields-title">
+    <div class="section-heading"><div><h2 id="detected-fields-title">{% if preparation.state == 'approved' or answer_contract_ready %}Approved fields{% else %}Review detected fields{% endif %}</h2><p class="small muted">{{ review_rows|length }} fields · {% if preparation.state == 'approved' or answer_contract_ready %}Reusable definitions and fixed destinations.{% else %}AI prepared the definitions for clinician review.{% endif %}</p></div></div>
+    {% if editable %}<form method="post" action="{{ review_save_url }}" data-template-review data-submit-once data-unsaved-form>{% csrf_token %}
+      <input type="hidden" name="compact_review" value="on"><input type="hidden" name="revision" value="{{ preparation.revision }}"><input type="hidden" name="candidate_sha256" value="{{ preparation.candidate_sha256 }}"><input type="hidden" name="inventory_sha256" value="{{ preparation.inventory.inventory_sha256 }}"><input type="hidden" name="review_token_save" value="{{ review_token_save }}"><input type="hidden" name="review_token_approve" value="{{ review_token_approve }}">
+    {% endif %}
+    {% for row in review_rows %}{% include 'template_review_field.html' %}{% endfor %}
+    {% if editable %}
+      <section class="review-consent" aria-labelledby="review-summary-title"><h2 id="review-summary-title">Review summary</h2>
+        <p>Check all {{ review_rows|length }} fields against the complete original: what each answer means, whose information it contains, its type, units, choices and destination.</p>
+        {% if preparation.changes %}<details><summary>Document changes to approve ({{ preparation.changes|length }})</summary><ul>{% for change in preparation.changes %}<li>{{ change.question }}: {{ change.change }} {{ change.placement }}</li>{% endfor %}</ul></details>{% else %}<p class="small">Original content and answer locations are preserved.</p>{% endif %}
+        <p class="small">Signing areas remain protected. Approval creates a reusable version; earlier approved versions and documents stay intact. Each patient's generated answers still need clinical review.</p>
+        <label class="check-row"><input type="checkbox" name="review_summary" required> I compared every field with the original, including its instructions, choices and signing areas, and reviewed the prepared answer locations and any listed changes.</label>
+        <p data-review-feedback role="status" class="small">{% if not can_approve %}Answer the open questions and save your decisions before approval.{% else %}Ready to approve. Save any edits before approving.{% endif %}</p>
+        <div class="review-actions"><button type="submit" class="secondary" data-review-save>Save decisions</button>{% if can_approve %}<button type="submit" formaction="{{ review_approve_url }}" data-review-approve data-pending-label="Saving approved template…">Approve template</button>{% endif %}</div>
+      </section>
+    </form>{% endif %}
+  </section>
+</div>

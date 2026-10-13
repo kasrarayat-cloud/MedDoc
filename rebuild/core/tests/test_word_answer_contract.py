@@ -486,7 +486,7 @@ class OrdinaryClinicianWordTests(TestCase):
         prep.state = 'review'; prep.save(update_fields=['state'])
         page = self.client.get(f'/templates/{template.pk}/preparation/')
         self.assertContains(page, 'Answer definitions need your decision')
-        self.assertContains(page, 'Save doctor corrections')
+        self.assertContains(page, 'Save decisions')
         self.assertNotContains(page, 'Approve layout and create form version')
         response = self.client.post(f'/templates/{template.pk}/preparation/approve/', {
             'revision':str(prep.revision), 'candidate_sha256':prep.candidate_sha256,
@@ -566,7 +566,9 @@ class OrdinaryClinicianWordTests(TestCase):
         template,prep=self.fresh_upload()
         review=self.client.get(f'/templates/{template.pk}/preparation/')
         self.assertContains(review,'data-answer-definitions')
-        self.assertContains(review,'name="reviewed_definition"',count=len(prep.inventory['fields']))
+        self.assertContains(review,'data-review-field=',count=len(prep.inventory['fields']))
+        self.assertContains(review,'name="review_summary" required>',count=1)
+        self.assertNotContains(review,'name="reviewed_definition"')
         version=self.approve(template,prep)
         self.assertEqual(version.number,1)
         self.assertTrue(word_contract.require_generation(version))

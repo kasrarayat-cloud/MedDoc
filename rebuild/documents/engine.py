@@ -785,6 +785,24 @@ def fill_docx(path, output, document, paragraphs, cells, fields, answers):
         document.save(output)
 
 
+def display_labels(document, fields):
+    """Display metadata only, computed inside the existing isolated inspector.
+
+    Runs are not word boundaries: retain HbA1c and McDonald exactly while
+    separating actual Word paragraphs, tabs and line breaks in table labels.
+    The mapping and its labels remain byte-for-byte unchanged.
+    """
+    labels = {field['label'] for field in fields}
+    found = {}
+    for part in docx_parts(document):
+        for cell in part.element.iter(qn('w:tc')):
+            stored = ''.join(cell.xpath('.//w:t/text()')).strip()
+            if stored not in labels: continue
+            text = ' '.join(Paragraph(p, part).text for p in cell.iter(qn('w:p')))
+            found.setdefault(stored, set()).add(' '.join(text.split()))
+    return {key: next(iter(values)) for key, values in found.items() if len(values) == 1}
+
+
 def process(workspace, request):
     fmt = request["format"]
     path = workspace / ("input." + fmt)
@@ -822,6 +840,7 @@ def process(workspace, request):
         fail("Unsupported document format.")
     result = {"format": fmt, "fields": fields, "warnings": warnings, "adapter": "python-docx" if fmt == "docx" else "pypdf", "sandbox": "landlock+seccomp"}
     if request["operation"] == "inspect":
+        if fmt == "docx": result["display_labels"] = display_labels(document, fields)
         return result
     if request["operation"] != "fill":
         fail("Unsupported operation.")
