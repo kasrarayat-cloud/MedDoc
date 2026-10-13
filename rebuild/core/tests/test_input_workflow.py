@@ -74,8 +74,8 @@ class InputWorkflow(BoundaryFixture, TestCase):
 
     def test_generation_post_race_does_not_queue_later_notes_under_older_quote(self):
         from core.views import usage_quote as original_quote
-        def quote_then_edit(request, encounter):
-            result = original_quote(request, encounter)
+        def quote_then_edit(request, encounter, **kwargs):
+            result = original_quote(request, encounter, **kwargs)
             Encounter.objects.filter(pk=encounter.pk).update(notes='Concurrent source revision', revision=encounter.revision + 1)
             return result
         with patch('core.views.usage_quote', side_effect=quote_then_edit):
