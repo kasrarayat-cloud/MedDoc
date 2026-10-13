@@ -107,6 +107,8 @@ class FamilyContextTests(SimpleTestCase):
         for statement, value in (
                 ('The patient has a family history of colon polyps?', 'family history of colon polyps'),
                 ('The patient has a family history of colon polyps?', 'family history of colon polyps?'),
+                ("The clinician's impression was family history of colon polyps？", 'family history of colon polyps？'),
+                ("The clinician's impression was family history of colon polyps؟", 'family history of colon polyps؟'),
                 ("The clinician's impression was my family history of colon polyps.", 'my family history of colon polyps'),
                 ("The clinician's impression was his family history of colon polyps.", 'his family history of colon polyps'),
                 ("The clinician's impression was Avery's family history of colon polyps.", "Avery's family history of colon polyps"),

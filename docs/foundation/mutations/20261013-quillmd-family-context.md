@@ -8,9 +8,9 @@ Only newly admitted semantic generation jobs freeze `positioned-family-context-v
 
 | Source | SHA-256 |
 |---|---|
-| `rebuild/core/semantic_generation.py` | `4f857a46359b61c7f4346e15c1daba33d24d701a4b262ce9016c0db6d7c5b1e0` |
+| `rebuild/core/semantic_generation.py` | `f1882b0fdd0948a2c6f0ffeadb26be10768136d173d03c70eb38f792c0c17e7d` |
 | `rebuild/core/jobs.py` | `f9730c694ba95a7f6cf907425ddeb3895aa4749a30325e46df119fc918a03cda` |
-| `rebuild/core/tests/test_family_context.py` | `2bbb7b328efbb8c0befd5f841cca055a721d404ff8f93e0a862fc98f2c997f56` |
+| `rebuild/core/tests/test_family_context.py` | `0490abd2b8d28172e1c303b889083ecc0a3237de09d4e81c0cf93de5a9495e6b` |
 
 Expected installation delta: these three source/test paths, this declaration and the release environment value. Two runtime files change. No migrations, database mutations, static collection/publication, ingress changes, account/password/MFA/permission changes or other-project changes. Preserve all current tables, functions, triggers, existing rows, files, approvals, finalized documents, provider/accounting evidence and unresolved reservations. Only the three QuillMD native services may stop/start for installation. VoiceAssistMain remains unchanged.
 
