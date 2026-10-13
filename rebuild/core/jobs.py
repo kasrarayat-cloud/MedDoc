@@ -255,11 +255,11 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     definitions = require_generation(e.template_version) if kind == 'generation' else {}
     if definitions:
         from .ai_stages import pipeline_config
-        from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT,DURATION_SCOPE_CONTRACT
+        from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT,FAMILY_SCOPE_CONTRACT
         config=pipeline_config(config)
         config.update(semantic_template_version=str(e.template_version_id),
             semantic_fact_reference_contract=REFERENCE_INVENTORY_CONTRACT,
-            semantic_fact_scope_contract=DURATION_SCOPE_CONTRACT,
+            semantic_fact_scope_contract=FAMILY_SCOPE_CONTRACT,
             semantic_source_sha256=hashlib.sha256(e.notes.encode()).hexdigest(),
             semantic_definitions_sha256=digest(definitions))
     from . import testing_authority
