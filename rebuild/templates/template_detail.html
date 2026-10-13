@@ -9,6 +9,7 @@
 {% endif %}
 {% if template.warnings %}<div class="notice warning"><strong>Form inspection notes</strong><ul>{% for warning in template.warnings %}<li>{{ warning }}</li>{% endfor %}</ul></div>{% endif %}
 {% if review_rows %}
+{% if form.errors %}<section class="notice warning" role="alert">{{ form.non_field_errors }}<p>Your label edits were not saved. Keep the proposed labels below for your review of a new definition version.</p><ul>{% for key,label in form.cleaned_data.labels.items %}<li>{{ label }}</li>{% endfor %}</ul></section>{% endif %}
 {% include 'template_review_workspace.html' with editable=False %}
 <details class="panel review-record"><summary>Template version and setup record</summary><p>Version {{ version.number }}. Earlier documents keep their original version and answers.</p>
 {% if version.semantic_preparation_id %}<p><a href="{% url 'template_definitions' version.semantic_preparation_id %}">View definition approval</a></p>{% elif version.preparation_id %}<p><a href="{% url 'template_preparation' template.pk %}">View preparation and approval</a></p>{% endif %}

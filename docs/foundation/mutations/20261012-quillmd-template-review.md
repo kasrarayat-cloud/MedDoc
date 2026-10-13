@@ -25,7 +25,7 @@ Actual first-declaration and merge commit identities, exact required CI, current
 | `rebuild/static/template-preparation.js` | `a9a6d36eefb9aac4e5902fa7a63502d66177195ca54dc0181778d35cb3ab0f37` |
 | `rebuild/static/template-review.css` | `a333a373d085a7bc9d9fb86e29ccb2391788af5467d86eacaf3d13f3b2edec4c` |
 | `rebuild/static/template-review.js` | `3ebab7d176fdae5029469ad35a6700ce4187fbd9606ef2e89c5131f6c20e8ff7` |
-| `rebuild/templates/template_detail.html` | `7fb385c44adb6abf573166e6099b31625c5a5c864771a65a29ed14a90ce02450` |
+| `rebuild/templates/template_detail.html` | `df10d8faf22178feca0f795e8f8c8fe0d54ae174ad9cbdd3d0593a0a324cda12` |
 | `rebuild/templates/template_preparation.html` | `f3e716cbc9fe34e8011ee35ddfd1cd46204c1596c1e270b5590533382b64ca92` |
 | `rebuild/templates/template_review_field.html` | `5ec0ed17b974d953ec91e5b4266ce4937b1b998038947a92544a72c257e8d828` |
 | `rebuild/templates/template_review_workspace.html` | `20622c581194f237e7bfa660fe35135cdcc07a4f61837d0067a253fb7eb8313c` |
