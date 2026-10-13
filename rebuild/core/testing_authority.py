@@ -24,10 +24,13 @@ PURPOSES = {'preparation': 'word-template-preparation',
             'transcription': 'reviewed-synthetic-voice-transcription'}
 ACTORS = {'71dc60e3-ca1e-40c7-ad49-4a2612ed8d1a': 'd41ad441-987c-4e68-bb0e-b885ec4b642a',
           '2247e403-a830-4807-9a34-6903b95a0f50': '46a5abdd-36f1-41f0-968f-8c09c39d9daa',
+          '5f4d1a3d-eeb6-4207-b1df-4597dc696e82': '46a5abdd-36f1-41f0-968f-8c09c39d9daa',
           'e1a20625-455d-4603-a874-794327b19d10': '46a5abdd-36f1-41f0-968f-8c09c39d9daa'}
 ACTOR_ENROLLMENT_KEY = 'testing_actor_enrollment'
 ACTOR_ENROLLMENT = 'quillmd-actual-clinician-20261010-v1'
 ENROLLED_ACTOR = 'e1a20625-455d-4603-a874-794327b19d10'
+ACTOR_ENROLLMENTS = {ENROLLED_ACTOR: ACTOR_ENROLLMENT,
+    '5f4d1a3d-eeb6-4207-b1df-4597dc696e82': 'quillmd-cedar-clinician-20261013-v1'}
 FINITE_KEYS = frozenset(('campaign', 'campaign_scope_sha256', 'campaign_actor_scope_sha256', 'campaign_quote_usd'))
 PROVIDER_LOCK = 717844900623  # The same actual-send lock as the retained delivery cohort.
 RESERVATION_LOCK = 717844900619
@@ -64,7 +67,7 @@ def identity(config):
             or config['testing_authority_id'] != AUTHORITY_ID
             or config['testing_authority_sha256'] != AUTHORITY_SHA256
             or config['testing_purpose'] not in PURPOSES.values()
-            or (ACTOR_ENROLLMENT_KEY in config and config[ACTOR_ENROLLMENT_KEY] != ACTOR_ENROLLMENT)):
+            or (ACTOR_ENROLLMENT_KEY in config and config[ACTOR_ENROLLMENT_KEY] not in tuple(ACTOR_ENROLLMENTS.values()))):
         raise ValidationError('Testing configuration differs from the recorded standing authority.')
     return AUTHORITY_ID
 
@@ -117,8 +120,8 @@ def admit_actor(actor, department_id, config=None):
     if config is not None:
         if identity(config) != AUTHORITY_ID:
             raise ValidationError('Actor enrollment requires the recorded standing authority.')
-        if str(actor.pk) == ENROLLED_ACTOR:
-            if config.get(ACTOR_ENROLLMENT_KEY) != ACTOR_ENROLLMENT:
+        if str(actor.pk) in ACTOR_ENROLLMENTS:
+            if config.get(ACTOR_ENROLLMENT_KEY) != ACTOR_ENROLLMENTS[str(actor.pk)]:
                 raise ValidationError('This clinician requires a new request with its exact testing enrollment.')
         elif ACTOR_ENROLLMENT_KEY in config:
             raise ValidationError('The clinician enrollment cannot be used by another testing actor.')
@@ -129,16 +132,18 @@ def bind_actor_config(config, actor, department_id):
     admit_actor(actor, department_id)
     if identity(config) != AUTHORITY_ID:
         raise ValidationError('Actor enrollment requires the recorded standing authority.')
+    if ACTOR_ENROLLMENT_KEY in config:
+        admit_actor(actor, department_id, config)
     result = dict(config)
-    if str(actor.pk) == ENROLLED_ACTOR:
-        result[ACTOR_ENROLLMENT_KEY] = ACTOR_ENROLLMENT
+    if str(actor.pk) in ACTOR_ENROLLMENTS:
+        result[ACTOR_ENROLLMENT_KEY] = ACTOR_ENROLLMENTS[str(actor.pk)]
     admit_actor(actor, department_id, result)
     return result
 
 
 def admit_encounter(actor, encounter):
     """The added clinician sponsors new documents they create in their scope."""
-    if (str(getattr(actor, 'pk', '')) == ENROLLED_ACTOR
+    if (str(getattr(actor, 'pk', '')) in ACTOR_ENROLLMENTS
             and str(encounter.created_by_id) != str(actor.pk)):
         raise ValidationError('Create your own synthetic document from an approved department form before using sponsored testing.')
 
@@ -287,8 +292,8 @@ def runtime_admission(actor, department_id):
     witness = bind_actor_config(active_config(
         importlib.import_module('core.generation').configuration(), 'preparation'), actor, department_id)
     with connection.cursor() as cursor:
-        cursor.execute("SELECT count(*)=2 FROM django_migrations WHERE app='core' AND name IN "
-                       "('0024_standing_testing_authority','0025_personal_synthetic_testing_actor')")
+        cursor.execute("SELECT count(*)=3 FROM django_migrations WHERE app='core' AND name IN "
+                       "('0024_standing_testing_authority','0025_personal_synthetic_testing_actor','0027_cedar_synthetic_clinician')")
         migrated = cursor.fetchone()[0]
         cursor.execute('SELECT quillmd_standing_config(%s::jsonb)', [
             json.dumps(witness)])
@@ -309,6 +314,8 @@ def runtime_admission(actor, department_id):
         expected = {name: body for name, body in re.findall(pattern, migration.SQL, re.S)}
         enrollment = importlib.import_module('core.migrations.0025_personal_synthetic_testing_actor')
         expected.update({name: body for name, body in re.findall(pattern, enrollment.SQL, re.S)})
+        clinician = importlib.import_module('core.migrations.0027_cedar_synthetic_clinician')
+        expected.update({name: body for name, body in re.findall(pattern, clinician.SQL, re.S)})
         previous = importlib.import_module('core.migrations.0023_delivery_campaign')
         expected.update({name: body for name, body in re.findall(pattern, previous.SQL, re.S)
                          if name == 'quillmd_delivery_actor'})

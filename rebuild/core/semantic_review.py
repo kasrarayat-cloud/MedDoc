@@ -25,7 +25,7 @@ def displayed_answer(encounter,field,answer,definitions):
             'review_reasons':['The retained semantic proof could not be verified. Review its original evidence and enter your decision; it cannot be finalized unchanged.']}
 
 
-def save_answer(encounter,field,previous,value,actor,reviewed,blank,revision,definitions,withdraw_blank=False):
+def save_answer(encounter,field,previous,value,actor,reviewed,blank,revision,definitions,withdraw_blank=False,document_level=False):
     from .semantic_generation import CONTRACT,definition_digest,validate_value,protected
     from .generation import is_empty
     if len(value)>20000:raise ValidationError('Answer too long; nothing was truncated or saved.')
@@ -61,6 +61,11 @@ def save_answer(encounter,field,previous,value,actor,reviewed,blank,revision,def
     else:
         # Ticking review alone never turns conflict/ambiguity into a usable answer.
         validate_answer(encounter,field,answer,definitions)
+    if document_level:
+        if manual:
+            for key in ('reviewed', 'reviewed_by', 'review_revision'):
+                answer.pop(key, None)
+        return answer
     answer.update(reviewed=reviewed or new_blank,reviewed_by=str(actor.pk) if reviewed or new_blank else None,
                   review_revision=revision if reviewed or new_blank else None)
     return answer

@@ -99,7 +99,7 @@
       for (const answer of data.answers_preview || []) {
         const row = document.createElement("section"), title = document.createElement("h4"), text = document.createElement("p");
         title.textContent = `${answer.label} · ${answer.status}`;
-        text.textContent = answer.text || "No answer documented; review required.";
+        text.textContent = answer.text || (answer.status === "missing" ? "Not documented" : answer.status === "left_blank" ? "Left blank by clinician decision" : "Needs your decision");
         row.append(title, text);
         previewContent.append(row);
       }

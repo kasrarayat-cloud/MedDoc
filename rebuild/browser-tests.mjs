@@ -152,14 +152,14 @@ try {
     await page.getByRole('button', { name: 'Generate supported answers', exact: true }).click();
     await page.waitForFunction(() => document.querySelector('[data-latest-job]')?.textContent.includes('Ready for review'),
       null, {timeout: 40000});
-    await page.locator('textarea[name^=answer_]').first().waitFor();
+    await page.locator('[data-document-review]').waitFor();
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
-    assert.equal(await page.locator('.evidence blockquote').count(), 0);
+    assert.equal(await page.locator('.review-evidence').count(), 0);
     assert.equal(await page.getByRole('link', { name: 'Download provider result', exact: true }).count(), 1);
   });
   await check('Simulated roles leave answers missing without pretending to infer clinical facts', async () => {
     const answers = await page.locator('textarea[name^=answer_]').evaluateAll(inputs => inputs.map(input => input.value));
-    const evidence = await page.locator('.evidence blockquote').allTextContents();
+    const evidence = await page.locator('.review-evidence').allTextContents();
     const expected = ['Synthetic patient reports left wrist discomfort after a fall.',
       'No deformity documented.', 'Follow-up assessment documented.'];
     assert.deepEqual(answers, ['', '', '']);
@@ -174,23 +174,28 @@ try {
       assert.equal(answer.evidence.length, 0);
     }
     // Explicit manual UI coverage, never automatic-extraction acceptance.
-    for (let index = 0; index < expected.length; index++)
-      await page.locator('textarea[name^=answer_]').nth(index).fill(expected[index]);
+    assert.equal(await page.locator('[data-document-review] input[type=checkbox]').count(), 0);
+    for (let index = 0; index < expected.length; index++) {
+      const row = page.locator('.compact-answer').nth(index);
+      await row.locator('details > summary').first().click();
+      await row.locator('textarea[name^=answer_]').fill(expected[index]);
+      await row.locator('details > summary').first().click();
+      assert.equal(await row.locator('[data-saved-answer]').innerText(), expected[index]);
+    }
     await page.screenshot({ path: path.join(artifacts, 'review-desktop.png'), fullPage: true });
     await page.setViewportSize({ width: 390, height: 844 });
     await noPageOverflow();
     await page.screenshot({ path: path.join(artifacts, 'review-mobile.png'), fullPage: true });
     await page.setViewportSize({ width: 1440, height: 1080 });
   });
-  await check('Save clinician review decisions', async () => {
-    for (const checkbox of await page.locator('input[name^=reviewed_]').all()) await checkbox.check();
-    await page.getByRole('button', { name: 'Save answers and review decisions', exact: true }).click();
+  await check('Save edits without inventing field approval', async () => {
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click();
     await page.waitForLoadState();
-    assert.equal(await page.locator('input[name^=reviewed_]:checked').count(), 3);
+    assert.equal(await page.locator('input[name^=reviewed_]').count(), 0);
+    assert.equal(await page.getByRole('button', { name: 'Approve and create Word', exact: true }).count(), 1);
   });
   await check('Finalize reviewed document and export the original format', async () => {
-    await page.locator('[name=reviewed]').check();
-    await page.getByRole('button', { name: 'Finalize document', exact: true }).click();
+    await page.getByRole('button', { name: 'Approve and create Word', exact: true }).click();
     await page.waitForLoadState();
     const downloadPromise = page.waitForEvent('download');
     await page.getByRole('link', { name: 'Export original format' }).click();

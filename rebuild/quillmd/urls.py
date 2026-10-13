@@ -50,3 +50,6 @@ urlpatterns += [
     path('definition-preparations/<uuid:pk>/corrections/',definitions.corrections,name='template_definitions_correct'),
     path('definition-preparations/<uuid:pk>/approve/',definitions.approval,name='template_definitions_approve'),
 ]
+
+from core.document_review import submit as document_review_submit
+urlpatterns += [path('encounters/<uuid:pk>/review/',document_review_submit,name='document_review')]
