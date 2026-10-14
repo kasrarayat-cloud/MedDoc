@@ -686,7 +686,7 @@ class NativeAdapter:
 
     def configure(self):
         self.host.check_hold(); self.host.require_stopped()
-        self.op.replace_account_environment(self.host, self.host.original, self.active_environment, 'coding-forward')
+        self.op.replace_account_environment(self.host, self.host.original, self.active_environment, 'forward')
 
     def start(self):
         self.host.resumed = True  # No later failure may stop a worker with a sent request.
