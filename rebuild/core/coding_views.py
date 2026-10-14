@@ -28,20 +28,37 @@ def unique(items):
 
 
 def payload(request):
-    if len(request.body) > 64000:
+    # CSRF middleware has already parsed multipart POSTs. Reading their raw
+    # stream again raises RawPostDataException, so bound forms without rereading.
+    length = request.META.get('CONTENT_LENGTH')
+    if (type(length) is not str or not length or len(length) > 10
+            or not length.isascii() or not length.isdecimal()):
+        raise ValidationError('Invalid coding form size.')
+    if int(length) > 64000:
         raise ValidationError('The coding form is too large.')
     if request.content_type == 'application/json':
+        body = request.body
+        if len(body) > 64000:
+            raise ValidationError('The coding form is too large.')
         try:
-            data = json.loads(request.body, object_pairs_hook=unique,
+            data = json.loads(body, object_pairs_hook=unique,
                 parse_constant=lambda _: (_ for _ in ()).throw(ValueError()))
         except (ValueError, UnicodeDecodeError) as exc:
             raise ValidationError('Invalid coding form.') from exc
         if type(data) is not dict:
             raise ValidationError('Invalid coding form.')
         return data
-    if any(len(request.POST.getlist(k)) != 1 for k in request.POST):
+    if request.content_type not in {'application/x-www-form-urlencoded', 'multipart/form-data'}:
+        raise ValidationError('Invalid coding form type.')
+    data = request.POST
+    if request.FILES:
+        raise ValidationError('Coding forms do not accept files.')
+    if any(len(data.getlist(k)) != 1 for k in data):
         raise ValidationError('Duplicate coding form field.')
-    return request.POST.dict()
+    if sum(len(key.encode('utf-8')) + len(value.encode('utf-8'))
+           for key, value in data.items()) > 64000:
+        raise ValidationError('The coding form is too large.')
+    return data.dict()
 
 
 def response(request, encounter, error='', status=200):

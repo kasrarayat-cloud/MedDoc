@@ -371,6 +371,47 @@ class SourcePlanTests(unittest.TestCase):
             os.umask(previous_umask)
 
 
+class EnvironmentLabelTests(unittest.TestCase):
+    def test_configure_uses_supported_forward_label_after_stopped_gate(self):
+        calls = []
+        host = SimpleNamespace(original=b'OLD=synthetic\n',
+            check_hold=lambda: calls.append('hold'),
+            require_stopped=lambda: calls.append('stopped'))
+        def replace(actual_host, expected, updated, label):
+            self.assertEqual(calls, ['hold', 'stopped'])
+            self.assertIs(actual_host, host)
+            self.assertEqual((expected, updated, label),
+                             (host.original, b'NEW=synthetic\n', 'forward'))
+            calls.append('replace')
+        adapter = SimpleNamespace(host=host, active_environment=b'NEW=synthetic\n',
+            op=SimpleNamespace(replace_account_environment=replace))
+        op.NativeAdapter.configure(adapter)
+        self.assertEqual(calls, ['hold', 'stopped', 'replace'])
+
+    def test_pinned_actual_environment_helper_accepts_forward_before_io(self):
+        path = Path('/opt/meddoc-pro/rebuild/.runtime/direct-account-signin-20261009/'
+                    'ops-v1/reviewed-native-direct-account-install-v1.py')
+        if not path.exists():
+            self.skipTest('Private pinned helper unavailable; portable caller contract still runs.')
+        raw = path.read_bytes()
+        self.assertEqual(op.sha(raw), '9b8c146d63b4ef0f8ac533b73c34f95859df8ff1966af7143e159df54a186179')
+        tree = ast.parse(raw)
+        function = next(n for n in tree.body if isinstance(n, ast.FunctionDef)
+                        and n.name == 'replace_account_environment')
+        class ReachedDirectory(Exception): pass
+        class Host:
+            def check_hold(self): pass
+            @property
+            def directory(self): raise ReachedDirectory()
+        namespace = {'q': op.need, 'no_legacy_environment_pending': lambda: None}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(path), 'exec'), namespace)
+        replace = namespace['replace_account_environment']
+        with self.assertRaises(ReachedDirectory):
+            replace(Host(), b'OLD=synthetic\n', b'NEW=synthetic\n', 'forward')
+        with self.assertRaisesRegex(op.Refusal, '^direct_environment_two_bounded_attempts$'):
+            replace(Host(), b'OLD=synthetic\n', b'NEW=synthetic\n', 'coding-forward')
+
+
 class StaticTests(unittest.TestCase):
     def fixture(self,root):
         old={'paths':{'app.css':'app.old.css'},'version':'1.1','hash':'old'};raw=json.dumps(old).encode()

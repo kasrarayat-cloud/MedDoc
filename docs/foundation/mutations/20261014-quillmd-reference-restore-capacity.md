@@ -1,0 +1,20 @@
+# QuillMD coding form and installation repairs — source declaration
+
+Date: 2026-10-14 UTC. Base: `06313135a0e7383f025273cad503bd1574c2dee4`.
+
+This source change raises the isolated backup restore container's memory and memory-plus-swap limits from 768 MiB to 2 GiB. Keeping those limits equal disables swap. The one CPU limit, network isolation, read-only root filesystem, 512 MiB database tmpfs, image pin, readiness gate, single restore transaction, full table/file verification, and owned-container cleanup remain unchanged. It also corrects the coding installer's environment replacement label from `coding-forward` to the existing helper's supported `forward` label. No native database, service, environment, provider request, or backup is changed by this commit. Installation requires its own subsequent declared action.
+
+The complete official coding reference fixture reproduced an OOM kill during a single restore at 768 MiB. A new isolated container restored the identical dump once at 2 GiB in 16.44 seconds, with all 45 table fingerprints equal, all eight checked invariants zero, no OOM kill, and a measured server peak of 1,574,989,824 bytes. These are isolated resource results, not evidence of a native restore. The synthetic fixture contains public official ICD reference data and no patient records or licensed CPT content.
+
+Protected evidence under `rebuild/.runtime/coding-release-20261014/resource-qualification-v1/`:
+
+- `restore768-resource-qualification-v1.json`: `9be05f3045f387629820f3aa088d79993458ee10ea07a86738bc946d9c59eb48` (retained failure).
+- `restore2048-resource-qualification-v1.json`: `f69e93f7506b7e60385cf23359921584765afbc459d38f60d00de712bd427500` (successful resource qualification).
+
+The focused test executes the restore orchestration with intercepted Docker transport, checks the qualified capacity and unchanged isolation arguments, and verifies cleanup is still required. Existing backup and restore tests continue to cover authenticated objects, immutable history references, readiness, and failure evidence.
+
+The label correction follows an actual refusal after the coding owner transaction and static publication had succeeded: the frozen environment helper accepts only `forward` or `recovery`, and rejected the caller's other label before environment writes. The correction changes only that argument; it does not repeat the owner transaction or resume a failed installation. A portable caller test preserves the hold/stopped gates and exact argument. A local test executes the pinned helper's actual function through its label guard, intercepting before any environment file access; `forward` reaches that boundary and `coding-forward` refuses. Forward recovery remains a separately declared operation with its completed database and static evidence retained.
+
+The first ordinary HTTPS coding-context submission exposed a separate form parsing defect. Django's CSRF middleware consumes multipart form data before the view; reading `request.body` afterwards raises `RawPostDataException`. The failed attempt is retained, and a read-only reconciliation found zero coding contexts, runs, decisions or provider requests. An independent reproduction reached this exception in all four coding endpoints after valid CSRF verification. The repaired parser reads the raw body only for JSON, bounds declared and parsed form sizes, and rejects duplicate fields, file uploads and unsupported media. Sixteen focused tests exercise the actual CSRF middleware with synthetic service doubles; they do not claim database or served-workflow acceptance. Existing display-token, tenant, revision and approval checks remain unchanged.
+
+The failed browser evidence and offline reproduction remain under `rebuild/.runtime/coding-release-20261014/`. The new code-only installation must preserve the complete current database, original Word files, terminology references and static assets. It must not repeat migrations, reference imports or the failed coding request. After installation, any new coding submission requires fresh read-only reconciliation and a separately declared, single browser action on the synthetic encounter.
