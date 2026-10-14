@@ -409,6 +409,19 @@ def encounter_detail(request,pk):
         ).select_for_update(of=('self',)),pk=pk)
         jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
         live_result=result_snapshot(e,jobs)
+        coding_display = None
+        if request.GET.get('tab') == 'coding':
+            from .coding_service import snapshot
+            coding_display = snapshot(e, request.user)
+            codes = coding_display['legacy_codes']
+        else:
+            from .coding_licensing import cpt_status
+            entitlement = cpt_status(e.service_date)
+            entitled_ids = [entitlement['release_id']] if entitlement['available'] else []
+            codes = list(CodeSuggestion.objects.filter(encounter=e).filter(
+                models.Q(terminology__release__system='ICD-10-CM')
+                | models.Q(terminology__release_id__in=entitled_ids)
+            ).select_related('terminology__release','accepted_by').order_by('created_at','pk'))
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     from .semantic_review import definitions_for,displayed_answer
@@ -544,10 +557,6 @@ def encounter_detail(request,pk):
     manual_entry=is_wm or bool(e.template_version.fields) and (
         all('tab_form' in f.get('locator',{}) for f in e.template_version.fields)
         or e.template_version.template.format=='docx' and not semantic_definitions)
-    coding_display = None
-    if request.GET.get('tab') == 'coding':
-        from .coding_service import snapshot
-        coding_display = snapshot(e, request.user)
     return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
@@ -555,7 +564,7 @@ def encounter_detail(request,pk):
         'live_result_version':live_result['result_version'], 'compact_review':compact_review,
         'document_review_token':document_review.review_token(e,request.user,semantic_definitions) if compact_review and can_finalize and e.status!='finalized' else '',
         'decision_rows':[row for row in rows if row['needs_decision']],
-        'document_approval':e.template_review.get('document_approval'), 'coding':coding_display})
+        'document_approval':e.template_review.get('document_approval'), 'coding':coding_display, 'codes':codes})
 
 @require_GET
 @never_cache
