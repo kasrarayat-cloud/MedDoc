@@ -119,13 +119,48 @@ class CodingWorkflow(TestCase):
         self.assertEqual(response.status_code,200)
         current=CodingRun.objects.exclude(pk=old.pk).get()
         self.assertNotEqual(current.input_digest,old.input_digest)
-        self.assertEqual(current.inputs['engine_contract'],'us-outpatient-index-tabular-v2')
+        self.assertEqual(current.inputs['engine_contract'],'us-outpatient-index-tabular-v3')
         self.assertEqual(service.ensure_run(self.e,self.user).pk,current.pk)
         self.assertEqual(CodingRun.objects.count(),2)
         self.assertEqual(old_before,CodingRun.objects.filter(pk=old.pk).values().get())
         self.assertEqual(clinical_before,Encounter.objects.filter(pk=self.e.pk).values().get())
         self.assertEqual(CodingDecision.objects.count(),0)
         self.assertEqual(CodingContext.objects.get(encounter=self.e).data,{**service.CONTEXT_DEFAULTS,'setting':'outpatient_office'})
+
+    def test_corrected_engine_requires_explicit_finalized_request_and_retains_charged_failure(self):
+        self.e.status='finalized'; self.e.finalized_at=timezone.now(); self.e.finalized_by=self.user
+        self.e.export_path='exports/synthetic.pdf'; self.e.export_sha256='e'*64; self.e.save()
+        clinical_before=Encounter.objects.filter(pk=self.e.pk).values().get()
+        receipt={'stage':'concepts','attempt':1,'state':'failed','sent':True,
+                 'actual_cost':'0.0123','envelope':{},'request_sha256':'b'*64}
+        def invalid(run):
+            run.requests=[receipt]; run.actual_cost=Decimal('0.0123')
+            run.save(update_fields=['requests','actual_cost'])
+            raise ValidationError('Synthetic invalid provider response')
+        with patch('core.coding_engine.CONTRACT','us-outpatient-index-tabular-v2'):
+            self.generate.side_effect=invalid
+            old=service.ensure_run(self.e,self.user); self.assertTrue(service.run_one())
+            self.assertEqual(service.ensure_run(self.e,self.user).pk,old.pk)
+            self.assertFalse(service.run_one())
+        old_before=CodingRun.objects.filter(pk=old.pk).values().get()
+        self.assertEqual(old_before['state'],'failed')
+        self.assertEqual(old_before['actual_cost'],Decimal('0.0123'))
+        self.assertIsNone(service.ensure_run(self.e,self.user,automatic=True))
+        self.assertEqual(CodingRun.objects.count(),1)
+        view=service.snapshot(self.e,self.user)
+        self.assertEqual(view['state'],'stale'); self.assertTrue(view['can_request'])
+        self.assertFalse(view['can_approve'])
+        response=self.client.post(self.url+'request/',{'display_token':view['display_token']},HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code,200)
+        current=CodingRun.objects.exclude(pk=old.pk).get()
+        self.assertEqual(current.inputs['engine_contract'],'us-outpatient-index-tabular-v3')
+        self.assertEqual(current.inputs,{**old_before['inputs'],'engine_contract':'us-outpatient-index-tabular-v3'})
+        self.assertEqual(service.ensure_run(self.e,self.user).pk,current.pk)
+        self.assertEqual(CodingRun.objects.count(),2)
+        self.assertEqual(old_before,CodingRun.objects.filter(pk=old.pk).values().get())
+        self.assertEqual(clinical_before,Encounter.objects.filter(pk=self.e.pk).values().get())
+        self.assertEqual(CodingDecision.objects.count(),0)
+        self.generate.assert_called_once()
 
     def test_draft_empty_and_active_clinical_job_are_ineligible(self):
         for field, value in [('status','draft'), ('notes',' '), ('answers',{})]:
