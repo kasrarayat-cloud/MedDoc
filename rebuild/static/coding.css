@@ -1,0 +1,33 @@
+.coding-panel { min-width: 0; }
+.coding-heading, .coding-code-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.coding-heading { margin-bottom: 24px; }
+.coding-heading p { margin-bottom: 0; }
+.coding-heading > .badge { flex-shrink: 0; max-width: 45%; white-space: normal; }
+.coding-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: 32px; }
+.coding-results, .coding-context { min-width: 0; }
+.coding-context { padding-left: 24px; border-left: 1px solid var(--line); }
+.coding-context label, .coding-code label { display: block; margin: 16px 0 6px; font-size: .84rem; font-weight: 600; }
+.coding-context input:not([type=checkbox]), .coding-context select, .coding-context textarea, .coding-code input, .coding-code select, .coding-code textarea { width: 100%; max-width: 100%; }
+.coding-context .check-label { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; }
+.coding-context input[type=checkbox] { margin-top: 5px; flex-shrink: 0; }
+.coding-context button { margin-top: 16px; }
+.coding-code { border-top: 1px solid var(--line); padding: 22px 0; }
+.coding-code-heading h3 { overflow-wrap: anywhere; }
+.coding-code > p, .coding-code .evidence { margin-bottom: 12px; }
+.coding-code details { margin-top: 12px; }
+.coding-code summary { cursor: pointer; font-size: .84rem; color: var(--accent); }
+.coding-correction { max-width: 560px; }
+.coding-approval, .coding-availability { border-top: 1px solid var(--line-strong); padding-top: 22px; margin-top: 24px; }
+.coding-questions { margin: 20px 0; }
+.coding-questions li { margin-bottom: 10px; }
+.coding-excluded, .coding-disclaimer { margin-top: 24px; }
+.coding-panel [hidden] { display: none !important; }
+.coding-panel [data-coding-update] p { margin-bottom: 10px; }
+@media (max-width: 900px) {
+  .coding-layout { grid-template-columns: minmax(0, 1fr); }
+  .coding-context { border-left: 0; border-top: 1px solid var(--line); padding: 24px 0 0; }
+  .coding-heading { flex-wrap: wrap; }
+  .coding-heading > .badge { max-width: 100%; }
+}
+
+.coding-code-heading > .badge { flex-shrink: 0; white-space: nowrap; }

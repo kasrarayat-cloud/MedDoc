@@ -24,5 +24,8 @@ class Command(BaseCommand):
             if not worked:
                 from core.semantic_preparation import run_one as define_one
                 worked=define_one()
+            if not worked:
+                from core.coding_service import run_one as code_one
+                worked=code_one()
             if options['once']:return
             if not worked:time.sleep(2)

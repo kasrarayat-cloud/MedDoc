@@ -399,7 +399,6 @@ def encounter_new(request):
 
 def encounter_detail(request,pk):
     from documents import DocumentError
-    from .coding import cpt_licensed
     # Worker adoption and source edits lock the encounter. Capture the related
     # display records while that same row is stable, then release before Word
     # processing. Lazy jobs/codes could otherwise expose a later completion
@@ -410,15 +409,6 @@ def encounter_detail(request,pk):
         ).select_for_update(of=('self',)),pk=pk)
         jobs=list(Job.objects.filter(encounter=e).order_by('-created_at'))
         live_result=result_snapshot(e,jobs)
-        visible_codes=CodeSuggestion.objects.filter(encounter=e).select_related('terminology__release','accepted_by')
-        # Retain historical suggestions, but do not display licensed descriptors
-        # after entitlement expires or changes to a different licensed feed.
-        cpt=models.Q(terminology__release__system='CPT')
-        if cpt_licensed():
-            visible_codes=visible_codes.exclude(cpt & ~models.Q(terminology__release__license_reference=settings.CPT_LICENSE_ID))
-        else:
-            visible_codes=visible_codes.exclude(cpt)
-        codes=list(visible_codes)
         can_finalize=Membership.objects.filter(user=request.user,department=e.department,active=True,role__in=['owner','clinician']).exists()
     is_wm=bool(e.template_version.document_backend)
     from .semantic_review import definitions_for,displayed_answer
@@ -554,14 +544,18 @@ def encounter_detail(request,pk):
     manual_entry=is_wm or bool(e.template_version.fields) and (
         all('tab_form' in f.get('locator',{}) for f in e.template_version.fields)
         or e.template_version.template.format=='docx' and not semantic_definitions)
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'codes':codes,'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    coding_display = None
+    if request.GET.get('tab') == 'coding':
+        from .coding_service import snapshot
+        coding_display = snapshot(e, request.user)
+    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
         'live_result_version':live_result['result_version'], 'compact_review':compact_review,
         'document_review_token':document_review.review_token(e,request.user,semantic_definitions) if compact_review and can_finalize and e.status!='finalized' else '',
         'decision_rows':[row for row in rows if row['needs_decision']],
-        'document_approval':e.template_review.get('document_approval')})
+        'document_approval':e.template_review.get('document_approval'), 'coding':coding_display})
 
 @require_GET
 @never_cache
@@ -851,6 +845,8 @@ def save_answers(request,pk):
           accepted_suggestions=sorted(newly_accepted),withdrawn_acceptances=sorted(withdrawn),
           left_blank=sorted(newly_blank),withdrawn_blank_decisions=sorted(withdrawn_blank),withdrawn_reviews=withdrawn_reviews)
     if is_wm:audit(request.user,'encounter.template_review_saved',e.pk,department=e.department,revision=e.revision,complete=e.template_review.get('assessment',{}).get('complete',False))
+    from .coding_hooks import after_saved_document
+    after_saved_document(e.pk, request.user.pk)
     messages.success(request,'Edits saved. Review every answer before finalizing.')
     for message in dict.fromkeys(review_errors):messages.warning(request,'Review remains incomplete: '+message)
     return redirect('encounter_detail',pk=pk)
@@ -1153,33 +1149,18 @@ def invite_accept(request,raw):
 
 @require_POST
 def coding(request,pk):
-    from .coding import suggest
+    # Historical forms cannot create a new request without the current display
+    # token. Reopen the scoped workflow to review its actual saved inputs.
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
-    membership(request.user,e.department)
-    result=suggest(e,request.user)
-    served=e.service_date.strftime('%d %B %Y')
-    if result.covered:
-        messages.info(request,f'{result.count} new suggestions from explicitly documented codes, validated against {", ".join(result.versions)} for the {served} date of service. Diagnosis inference is not enabled. CPT requires a licensed current feed.')
-    elif result.versions:
-        # A licensed CPT release can answer for a date no diagnosis release covers. Saying "nothing
-        # was recorded" here would deny suggestions sitting on the page underneath the message.
-        messages.warning(request,f'No ICD-10-CM release covers the {served} date of service, so no diagnosis code was validated. {result.count} new suggestions came from {", ".join(result.versions)}. Import the diagnosis release in effect for that date.')
-    else:
-        messages.warning(request,f'No terminology release covers the {served} date of service, so nothing was validated and no suggestion was recorded. Import the release in effect for that date.')
+    membership(request.user,e.department,roles=['owner','clinician'])
+    messages.info(request,'Open the current coding record to generate and approve its displayed selections.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 @require_POST
-@transaction.atomic
 def accept_code(request,pk,code_pk):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     membership(request.user,e.department,roles=['owner','clinician'])
-    from .coding import applicable_releases,cpt_licensed
-    item=get_object_or_404(CodeSuggestion.objects.select_for_update(),pk=code_pk,encounter=e)
-    if not applicable_releases(e).filter(pk=item.terminology.release_id).exists():raise ValidationError('This release is not the one in effect for the encounter date of service; generate new coding suggestions.')
-    if item.evidence not in e.notes:raise ValidationError('Source documentation changed; generate new coding suggestions.')
-    if item.system=='CPT' and (not cpt_licensed() or item.terminology.release.license_reference!=settings.CPT_LICENSE_ID):raise PermissionDenied
-    item.accepted_by=request.user;item.accepted_at=timezone.now();item.save(update_fields=['accepted_by','accepted_at'])
-    audit(request.user,'coding.accept',item.pk,department=e.department,code=item.code,release=item.terminology.release.version)
+    messages.warning(request,'Individual legacy-code approvals are retired. Review and approve the current coding record together.')
     return redirect('/encounters/'+str(pk)+'/?tab=coding')
 
 def billing(request):

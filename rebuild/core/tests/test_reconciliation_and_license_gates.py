@@ -7,7 +7,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core.billing import reconcile_usage
-from core.models import Code, CodeSet, CodeSuggestion, CostReconciliation, LedgerEntry
+from core.models import Code, CodeSet, CodeSuggestion, CodingDecision, CodingRun, CostReconciliation, LedgerEntry
 from core.tests.test_billing_policy import PolicyFixture, STORAGES
 
 
@@ -35,7 +35,7 @@ class ReconciliationInputValidation(PolicyFixture, TestCase):
             self.assertEqual(self.balances(), (Decimal('9.25'), Decimal('0')))
 
 
-@override_settings(ADMIN_SITE=False, STORAGES=STORAGES, AI_MODE='fixture')
+@override_settings(ADMIN_SITE=False, STORAGES=STORAGES, AI_MODE='fixture', CPT_ENTITLEMENT_MANIFEST='')
 class StoredCptDisplayGate(PolicyFixture, TestCase):
     def setUp(self):
         super().setUp()
@@ -65,9 +65,12 @@ class StoredCptDisplayGate(PolicyFixture, TestCase):
         self.assertContains(response, 'Synthetic ICD descriptor remains visible')
         self.assertEqual(CodeSuggestion.objects.filter(encounter=self.encounter).count(), 2)
         accepted = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
-        self.assertIn(accepted.status_code, [400, 403])
+        self.assertEqual(accepted.status_code, 302)
+        self.assertEqual(accepted.url, f'/encounters/{self.encounter.pk}/?tab=coding')
         self.suggestion.refresh_from_db()
         self.assertIsNone(self.suggestion.accepted_at)
+        self.assertFalse(CodingDecision.objects.exists())
+        self.assertFalse(CodingRun.objects.exists())
 
     @override_settings(CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='')
     def test_stored_cpt_descriptor_is_hidden_without_entitlement(self):
@@ -82,14 +85,8 @@ class StoredCptDisplayGate(PolicyFixture, TestCase):
         self.assert_not_displayed_or_accepted()
 
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
-    def test_current_matching_entitlement_displays_and_accepts_synthetic_descriptor(self):
-        response = self.client.get(f'/encounters/{self.encounter.pk}/?tab=coding')
-        self.assertContains(response, 'SYNTHETIC LICENSE GATE DESCRIPTOR NOT CPT CONTENT')
-        self.assertContains(response, 'Synthetic ICD descriptor remains visible')
-        response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
-        self.assertEqual(response.status_code, 302)
-        self.suggestion.refresh_from_db()
-        self.assertIsNotNone(self.suggestion.accepted_at)
+    def test_current_matching_environment_id_is_not_an_entitlement_or_new_approval(self):
+        self.assert_not_displayed_or_accepted()
 
     @override_settings(CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='')
     def test_prior_acceptance_is_preserved_when_descriptor_display_is_disabled(self):

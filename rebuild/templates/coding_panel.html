@@ -1,0 +1,78 @@
+<section class="coding-panel" data-coding-panel data-encounter-id="{{ encounter.pk }}" data-version="{{ coding.version }}" data-status-url="{% url 'coding_status' encounter.pk %}" data-pending="{{ coding.pending|yesno:'true,false' }}">
+  <div class="coding-heading">
+    <div><h2>Coding record</h2><p class="small muted">Separate from your clinical document. Coding changes do not alter its original export.</p></div>
+    <span class="badge" data-coding-state role="status" aria-live="polite">{{ coding.state_label }}</span>
+  </div>
+  <p class="notice warning" data-coding-error role="alert" tabindex="-1" hidden></p>
+  <p class="small muted" data-coding-dirty role="status" hidden>Unsaved coding edits. Save or undo them before approval.</p>
+  <p class="small muted" data-coding-connection role="status" hidden></p>
+  <div class="notice" data-coding-update hidden><p>A newer coding result is available. Your unsaved choices have been kept.</p><button type="button" class="secondary" data-coding-load>Discard local changes and load saved result</button></div>
+  <div class="coding-layout">
+    <div class="coding-results">
+      {% if coding.stale %}<p class="notice warning">This result belongs to an earlier saved document or coding context. Its history is retained; it cannot be approved as current.</p>{% endif %}
+      {% if coding.error %}<p class="notice warning">{{ coding.error }}</p>{% endif %}
+      {% if coding.state == 'unrequested' %}<p>Coding has not been requested for this saved document.</p>{% elif coding.state == 'documentation_pending' %}<p>Save your notes, generate the document, and wait for its request to finish. Coding then starts for the saved result.</p>{% elif coding.state == 'queued' %}<p role="status">The saved document is queued for coding. Results will appear here automatically.</p>{% elif coding.state == 'running' %}<p role="status">Checking the saved documentation against the applicable coding references. You can keep this panel open.</p>{% elif coding.state == 'empty' %}<p>No supported codes were found in this documentation. No codes have been approved.</p>{% elif coding.state == 'terminology_unavailable' %}<p>No verified coding reference covers this date of service. Contact your administrator to load the appropriate release.</p>{% elif coding.state == 'needs_detail' %}<p>Some coding details still need clarification. Review the questions below; supported selections can be reviewed independently.</p>{% elif coding.state == 'uncertain' %}<p>A provider outcome needs reconciliation. This request will not be sent again automatically.</p>{% endif %}
+      {% if coding.can_request %}<form method="post" action="{% url 'coding_request' encounter.pk %}" data-coding-form="request">{% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><button type="submit">{% if coding.run %}Code current saved document{% else %}Create coding record{% endif %}</button></form>{% endif %}
+      {% if coding.global_blockers %}<div class="notice warning"><h3>Review required</h3><ul>{% for blocker in coding.global_blockers %}<li>{{ blocker.message|default:blocker }}</li>{% endfor %}</ul></div>{% endif %}
+      {% if coding.questions %}<section class="coding-questions"><h3>Details needed</h3><ul>{% for question in coding.questions %}<li><span class="badge">{{ question.system }}</span> {{ question.question }}</li>{% endfor %}</ul></section>{% endif %}
+      {% if coding.decision %}<div class="notice success"><strong>Approved by {{ coding.decision.user.email }}</strong><p class="small">{{ coding.decision.approved_at|date:'j M Y, H:i' }}. The approved selections are retained with this saved coding context.</p></div>{% endif %}
+      {% if coding.suggestions %}
+      <form method="post" action="{% url 'coding_selections' encounter.pk coding.run.pk %}" data-coding-form="selections">
+        {% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><input type="hidden" name="selection_revision" value="{{ coding.run.selection_revision }}">
+        <div class="section-heading"><h3>Suggested codes</h3><span class="small muted">{{ coding.suggestions|length }} to review</span></div>
+        {% for suggestion in coding.suggestions %}
+        <article class="coding-code" data-coding-item data-suggestion-id="{{ suggestion.id }}">
+          <div class="coding-code-heading"><h3><span class="mono">{{ suggestion.code }}</span> · {{ suggestion.description }}</h3><span class="badge">{{ suggestion.system }}</span></div>
+          {% if suggestion.original_code %}<p class="small">Changed from {{ suggestion.original_code }}: {{ suggestion.override_reason }}</p>{% endif %}
+          <p>{{ suggestion.explanation }}</p>
+          <div class="evidence"><span class="evidence-label">SUPPORTING DOCUMENTATION</span><blockquote>{{ suggestion.evidence }}</blockquote></div>
+          {% if suggestion.instructions %}<details><summary>Coding reference instructions</summary><div class="small"><ul>{% for instruction in suggestion.instructions %}<li>{{ instruction.text|default:instruction }}</li>{% endfor %}</ul></div></details>{% endif %}
+          {% if coding.can_review %}
+          <label for="select-{{ suggestion.id }}">Selection for this coding record</label><select id="select-{{ suggestion.id }}" name="select_{{ suggestion.id }}" data-code-selection><option value="exclude" {% if not suggestion.selected %}selected{% endif %}>Do not include</option><option value="include" {% if suggestion.selected %}selected{% endif %}>Include code</option></select>
+          <details class="coding-correction" {% if suggestion.override_code %}open{% endif %}><summary>Correct this code with supporting documentation</summary>
+            <label for="code-{{ suggestion.id }}">Replacement code</label><input id="code-{{ suggestion.id }}" name="code_{{ suggestion.id }}" value="{{ suggestion.override_code }}" maxlength="15" spellcheck="false" autocomplete="off" data-code-override>
+            <label for="reason-{{ suggestion.id }}">Reason supported by the saved documentation</label><textarea id="reason-{{ suggestion.id }}" name="reason_{{ suggestion.id }}" rows="2" maxlength="500" data-code-reason>{{ suggestion.override_reason }}</textarea>
+            <p class="helptext">A correction must pass the same coding reference and source checks.</p>
+          </details>
+          {% else %}<p class="small"><strong>{% if suggestion.selected %}Included{% else %}Not included{% endif %}</strong>{% if suggestion.override_code %} · Corrected code: <span class="mono">{{ suggestion.override_code }}</span> · {{ suggestion.override_reason }}{% endif %}</p>{% endif %}
+        </article>
+        {% endfor %}
+        {% if coding.can_review %}<button class="secondary" type="submit">Save code selections</button><p class="helptext">Saving selections does not approve the coding record.</p>{% endif %}
+      </form>
+      {% if coding.can_review %}
+      <form class="coding-approval" method="post" action="{% url 'coding_approval' encounter.pk coding.run.pk %}" data-coding-form="approval">
+        {% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><input type="hidden" name="input_digest" value="{{ coding.run.input_digest }}"><input type="hidden" name="selection_digest" value="{{ coding.selection_digest }}">
+        <h3>Approve the complete coding record</h3><p class="small">Review the included and excluded codes above. Approval records all saved selections together, independently of your clinical document.</p>
+        {% if coding.approval_error %}<p class="notice warning">{{ coding.approval_error }}</p>{% endif %}
+        <button type="submit" {% if not coding.can_approve %}disabled{% endif %}>Approve coding record</button>
+      </form>{% endif %}
+      {% endif %}
+      {% if coding.excluded %}<details class="coding-excluded"><summary>Not suggested from this documentation</summary><ul>{% for item in coding.excluded %}<li>{{ item.reason|default:item }}</li>{% endfor %}</ul></details>{% endif %}
+      {% if coding.legacy_codes %}<details class="coding-excluded"><summary>Earlier coding history</summary><p class="small">These earlier suggestions were not bound to the current saved revision. Their historical decisions are preserved; they do not approve this coding record.</p><ul>{% for item in coding.legacy_codes %}<li><span class="mono">{{ item.code }}</span> · {{ item.terminology.description }} · {{ item.terminology.release.version }}{% if item.accepted_at %} · Earlier acceptance by {{ item.accepted_by.email }} on {{ item.accepted_at|date:'j M Y, H:i' }}{% else %} · Not accepted{% endif %}</li>{% endfor %}</ul></details>{% endif %}
+      <p class="small muted coding-disclaimer">Codes require clinician review. They do not establish reimbursement or replace the clinical document.</p>
+    </div>
+    <aside class="coding-context">
+      <h3>Visit context</h3><p class="small">Date of service: <strong>{{ coding.service_date|date:'j F Y' }}</strong>. The applicable release follows this date.</p>
+      {% if coding.can_edit %}<form method="post" action="{% url 'coding_context' encounter.pk %}" data-coding-form="context">
+        {% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}">
+        <label for="coding-setting">Care setting</label><select id="coding-setting" name="setting"><option value="unknown" {% if coding.context.setting == 'unknown' %}selected{% endif %}>Not confirmed</option><option value="outpatient_office" {% if coding.context.setting == 'outpatient_office' %}selected{% endif %}>US outpatient office</option></select>
+        <label for="coding-patient-status">New or established patient</label><select id="coding-patient-status" name="patient_status"><option value="unknown" {% if coding.context.patient_status == 'unknown' %}selected{% endif %}>Not confirmed</option><option value="new" {% if coding.context.patient_status == 'new' %}selected{% endif %}>New</option><option value="established" {% if coding.context.patient_status == 'established' %}selected{% endif %}>Established</option></select>
+        <label for="coding-em-basis">Office E/M basis</label><select id="coding-em-basis" name="em_basis" data-coding-basis><option value="unknown" {% if coding.context.em_basis == 'unknown' %}selected{% endif %}>Not confirmed</option><option value="mdm" {% if coding.context.em_basis == 'mdm' %}selected{% endif %}>Medical decision making</option><option value="time" {% if coding.context.em_basis == 'time' %}selected{% endif %}>Documented clinician time</option></select>
+        <div data-coding-time {% if coding.context.em_basis != 'time' %}hidden{% endif %}>
+          <label for="coding-time">Documented total minutes</label><input id="coding-time" type="number" name="time_minutes" min="1" max="1440" step="1" value="{{ coding.context.time_minutes }}">
+          <label for="coding-time-evidence">Exact supporting quotation</label><textarea id="coding-time-evidence" name="time_evidence" rows="3" maxlength="4000">{{ coding.context.time_evidence }}</textarea>
+          <label class="check-label"><input type="checkbox" name="time_qualified_clinician" value="true" {% if coding.context.time_qualified_clinician %}checked{% endif %}>Time is for the qualified clinician</label>
+          <label class="check-label"><input type="checkbox" name="time_same_day" value="true" {% if coding.context.time_same_day %}checked{% endif %}>Time was on the date of service</label>
+          <label class="check-label"><input type="checkbox" name="time_excludes_separately_reported" value="true" {% if coding.context.time_excludes_separately_reported %}checked{% endif %}>Separately reported services are excluded</label>
+        </div>
+        <div data-coding-mdm {% if coding.context.em_basis != 'mdm' %}hidden{% endif %}>{% for row in coding.mdm_rows %}
+          <label for="coding-{{ row.key }}">{{ row.label }}</label><select id="coding-{{ row.key }}" name="{{ row.key }}">{% for level in coding.levels %}<option value="{{ level }}" {% if row.value == level %}selected{% endif %}>{{ level|capfirst }}</option>{% endfor %}</select>
+          <label for="coding-{{ row.key }}-evidence">Exact supporting quotation</label><textarea id="coding-{{ row.key }}-evidence" name="{{ row.key }}_evidence" rows="2" maxlength="4000">{{ row.evidence }}</textarea>
+        {% endfor %}</div>
+        {% if coding.identity_review_available %}<label for="coding-identity-reason">Synthetic identity discrepancy review</label><textarea id="coding-identity-reason" name="identity_review_reason" rows="3" maxlength="4000">{{ coding.context.identity_review_reason }}</textarea><p class="helptext">Record your explicit review reason. This attests to the synthetic case only and does not rewrite the clinical record.</p>{% else %}<input type="hidden" name="identity_review_reason" value="{{ coding.context.identity_review_reason }}">{% endif %}
+        <button type="submit" class="secondary">Save coding context</button><p class="helptext">A changed context creates a new coding review. Earlier results and approvals remain retained.</p>
+      </form>{% endif %}
+      <div class="coding-availability"><h3>Coding references</h3>{% for release in coding.releases %}<p class="small">{{ release.system }} · {{ release.version }}{% if not release.coding_digest %} · Coding reference unavailable{% endif %}</p>{% empty %}<p class="small">No applicable release is available.</p>{% endfor %}{% if not coding.cpt_available %}<p class="small muted">CPT suggestions are unavailable without a verified licensed release. ICD review and the original document export remain available.</p>{% endif %}</div>
+    </aside>
+  </div>
+</section>
