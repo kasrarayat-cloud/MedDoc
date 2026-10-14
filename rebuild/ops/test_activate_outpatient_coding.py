@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -246,6 +247,128 @@ class LifecycleTests(unittest.TestCase):
         with patch.dict(sys.modules,modules),patch.object(subprocess,'check_output',return_value=b'a'*40),patch('sys.stdout',new=io.StringIO()):exec(code,{})
         self.assertEqual(events[0],'role');self.assertEqual(events.count('migrate'),1);self.assertEqual(events.count('import'),3)
         self.assertLess(events.index('migrate'),events.index('import'))
+
+
+class SourcePlanTests(unittest.TestCase):
+    """Exercise the constructor's source seam without constructing a native host."""
+    @staticmethod
+    def bind(adapter, plan, root, base):
+        tree = ast.parse(Path(op.__file__).read_text())
+        cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'NativeAdapter')
+        constructor = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == '__init__')
+        start = next(i for i, n in enumerate(constructor.body)
+                     if isinstance(n, ast.Assign) and ast.unparse(n.targets[0]) == 'self.source')
+        statements = constructor.body[start:start + 3]
+        namespace = {'self': adapter, 'plan': plan, 'ROOT': root, 'BASE': base, 'Path': Path}
+        exec(compile(ast.Module(body=statements, type_ignores=[]), '<constructor-source-binding>', 'exec'), namespace)
+
+    def test_donor_scope_copy_preserves_publication_plan(self):
+        root = Path('/synthetic/shared'); donor = Path('/synthetic/candidate')
+        publication = {'repo': str(root), 'before': {'old': 'retained'}, 'after': {'new': 'retained'}}
+        original = copy.deepcopy(publication)
+        calls = []
+        def make_plan(*args, **kwargs):
+            calls.append((args, kwargs))
+            return publication
+        def validate(repo, scoped, revision):
+            self.assertEqual(repo, donor)
+            self.assertEqual(scoped, {**original, 'repo': str(donor)})
+            self.assertIsNot(scoped, publication)
+            self.assertEqual(revision, 'b' * 40)
+        adapter = SimpleNamespace(guard=SimpleNamespace(make_plan=make_plan, validate_published=validate))
+        self.bind(adapter, {'source_worktree': str(donor), 'candidate': 'b' * 40,
+                            'source_sha256': {'rebuild/core/coding_service.py': 'c' * 64}}, root, 'a' * 40)
+        self.assertIs(adapter.publication, publication)
+        self.assertEqual(publication, original)
+        self.assertEqual(calls, [((root, 'a' * 40, 'b' * 40,
+                                  frozenset({'rebuild/core/coding_service.py'})),
+                                 {'owner_uid': 1000, 'owner_gid': 1000,
+                                  'service_uid': 996, 'service_gids': [988]})])
+
+    def test_real_pinned_guard_on_temporary_repositories(self):
+        path = Path('/opt/meddoc-pro/rebuild/.runtime/standing-testing-authority-20261009/'
+                    'native-review-v1/source_publication_guard_standing_v3.py')
+        if not path.exists():
+            self.skipTest('Private pinned native guard unavailable; portable source-scope test still runs.')
+        raw = path.read_bytes()
+        self.assertEqual(op.sha(raw), '13be30775df7ae6f0fc0266e8c1b148ef2bd8aabac8fc954e26b8fdc18b00300')
+        guard = ModuleType('_coding_actual_source_guard_test')
+        exec(compile(raw, str(path), 'exec'), guard.__dict__)
+        names = frozenset({'rebuild/core/coding_service.py', 'rebuild/core/coding_views.py'})
+        guard.DECLARED_PATHS = names
+        guard.GROUP_WRITABLE_BASE_PATHS = guard.DELETABLE_PATHS = frozenset()
+        uid, gid = os.getuid(), os.getgid()
+        if uid == 0 or gid == 0:
+            self.skipTest('Native guard requires a non-root source owner.')
+        env = {**os.environ, 'GIT_AUTHOR_NAME': 'Synthetic Fixture',
+               'GIT_AUTHOR_EMAIL': 'fixture@example.invalid', 'GIT_COMMITTER_NAME': 'Synthetic Fixture',
+               'GIT_COMMITTER_EMAIL': 'fixture@example.invalid', 'GIT_CONFIG_NOSYSTEM': '1'}
+        def git(repo, *args):
+            return subprocess.check_output(['git', '-c', 'core.hooksPath=/dev/null',
+                '-c', 'commit.gpgsign=false', '-C', str(repo), *args], env=env, stderr=subprocess.PIPE).decode().strip()
+        previous_umask = os.umask(0o077)
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory) / 'shared'; root.mkdir()
+                donor = Path(directory) / 'candidate'
+                git(root, 'init', '-q')
+                first = root / 'rebuild/core/coding_service.py'; first.parent.mkdir(parents=True)
+                first.write_text('# synthetic base\n'); first.chmod(0o644)
+                git(root, 'add', '.'); git(root, 'commit', '-qm', 'synthetic base')
+                base = git(root, 'rev-parse', 'HEAD')
+                first.write_text('# synthetic candidate\n')
+                second = root / 'rebuild/core/coding_views.py'
+                second.write_text('# synthetic addition\n'); second.chmod(0o644)
+                git(root, 'add', '.'); git(root, 'commit', '-qm', 'synthetic candidate')
+                candidate = git(root, 'rev-parse', 'HEAD')
+                git(root, 'worktree', 'add', '--detach', str(donor), candidate)
+                git(root, 'reset', '--hard', base)
+                for repo in (root, donor):
+                    for name in names:
+                        if (repo / name).exists():
+                            (repo / name).chmod(0o644)
+                publication = guard.make_plan(root, base, candidate, names,
+                    owner_uid=uid, owner_gid=gid, service_uid=uid, service_gids=[gid])
+                original = copy.deepcopy(publication)
+                with self.assertRaisesRegex(guard.Refusal, '^source_plan_repository$'):
+                    guard.validate_published(donor, publication, candidate)
+                with self.assertRaisesRegex(guard.Refusal, '^source_base_head$'):
+                    guard.make_plan(donor, base, candidate, names,
+                        owner_uid=uid, owner_gid=gid, service_uid=uid, service_gids=[gid])
+                # Keep actual validation unmocked; only substitute portable fixture
+                # owner/service IDs for the constructor's production identities.
+                def make_plan(repo, old, new, paths, **identity):
+                    self.assertEqual((repo, old, new, paths), (root, base, candidate, names))
+                    return publication
+                adapter = SimpleNamespace(guard=SimpleNamespace(make_plan=make_plan,
+                    validate_published=guard.validate_published))
+                plan = {'source_worktree': str(donor), 'candidate': candidate,
+                        'source_sha256': {name: 'a' * 64 for name in names}}
+                self.bind(adapter, plan, root, base)
+                self.assertEqual(publication, original)
+                self.assertEqual(guard.validate_published(root, publication, base)['revision'], base)
+                scoped = {**publication, 'repo': str(donor)}
+                for violation, reason in [('head', 'source_published_head'),
+                        ('bytes', 'source_file_bytes'), ('mode', 'source_file_mode'),
+                        ('index', 'source_index_contract'), ('paths', 'source_exact_declared_delta'),
+                        ('owner', 'source_file_identity')]:
+                    checked = copy.deepcopy(scoped)
+                    target = donor / 'rebuild/core/coding_service.py'
+                    if violation == 'head': git(donor, 'checkout', '--detach', base)
+                    if violation == 'bytes': target.write_text('# synthetic dirty\n')
+                    if violation == 'mode': target.chmod(0o600)
+                    if violation == 'index':
+                        target.write_text('# synthetic staged\n'); git(donor, 'add', str(target))
+                    if violation == 'paths': checked['paths'].pop()
+                    if violation == 'owner': checked['owner_uid'] += 1
+                    with self.subTest(violation=violation), self.assertRaisesRegex(guard.Refusal, '^' + reason + '$'):
+                        guard.validate_published(donor, checked, candidate)
+                    git(donor, 'reset', '--hard', candidate)
+                    for name in names: (donor / name).chmod(0o644)
+                self.assertEqual(guard.validate_published(donor, scoped, candidate)['revision'], candidate)
+                self.assertEqual(publication, original)
+        finally:
+            os.umask(previous_umask)
 
 
 class StaticTests(unittest.TestCase):
