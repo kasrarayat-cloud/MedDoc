@@ -1,9 +1,7 @@
 """Synthetic imports test provenance, completeness, atomicity and licensing gates."""
 from datetime import date
+from copy import deepcopy
 import hashlib
-from io import StringIO
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -11,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.management.commands.import_terminology import parse_cpt, parse_icd, save_release
 from core.models import AuditEvent, Code, CodeSet
+from core.tests.test_coding_imports import LicensedCptImportFixture
 
 
 class TerminologyParsingTests(SimpleTestCase):
@@ -43,18 +42,11 @@ class TerminologyParsingTests(SimpleTestCase):
                 parse_cpt(payload)
 
 
-class TerminologyImportTests(TestCase):
+class TerminologyImportTests(LicensedCptImportFixture, TestCase):
     def setUp(self):
-        self.temp = TemporaryDirectory()
-        self.addCleanup(self.temp.cleanup)
-        self.path = Path(self.temp.name) / 'licensed-synthetic.csv'
-        self.payload = b'code,description\n99999,Synthetic procedure for testing only\n'
-        self.path.write_bytes(self.payload)
-        self.args = dict(system='CPT', path=str(self.path), sha256=hashlib.sha256(self.payload).hexdigest(),
-                         release_version='synthetic-test', effective_from='2026-01-01', effective_until='2099-01-01',
-                         source_url='https://example.com/licensed-feed', expected_count=1, stdout=StringIO())
+        self.set_up_licensed_cpt()
 
-    @override_settings(CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='')
+    @override_settings(CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='', CPT_ENTITLEMENT_MANIFEST='')
     def test_unlicensed_cpt_is_refused_before_any_database_write(self):
         with self.assertRaises(CommandError):
             call_command('import_terminology', **self.args)
@@ -63,22 +55,44 @@ class TerminologyImportTests(TestCase):
 
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2020-01-01')
     def test_expired_license_is_refused(self):
+        self.manifest['validity']['until'] = '2020-01-01'
+        self.write_entitlement()
         with self.assertRaises(CommandError):
             call_command('import_terminology', **self.args)
         self.assertEqual(Code.objects.count(), 0)
 
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
+    def test_environment_id_and_expiry_without_owner_documents_cannot_enable_import(self):
+        self.entitlement_path.unlink()
+        with self.assertRaises(CommandError):
+            call_command('import_terminology', **self.args)
+        self.assertEqual(CodeSet.objects.count(), 0)
+        self.assertEqual(AuditEvent.objects.count(), 0)
+
+    @override_settings(CPT_LICENSE_ID='unrelated-environment-id', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_reimport_is_idempotent_and_unchanged_release_is_verified(self):
         call_command('import_terminology', **self.args)
         call_command('import_terminology', **self.args)
         self.assertEqual(Code.objects.count(), 1)
         self.assertEqual(CodeSet.objects.get().license_reference, 'synthetic-license')
         self.assertEqual(AuditEvent.objects.filter(action='terminology.import').count(), 1)
-        self.assertEqual(AuditEvent.objects.get().details['license_expiry'], '2099-01-01')
+        self.assertEqual(AuditEvent.objects.get().details['license_expiry'], '2027-12-31')
 
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_checksum_and_count_mismatch_are_atomic(self):
+        original_manifest, original_rules = deepcopy(self.manifest), deepcopy(self.rules)
         for changes in [{'sha256': '0' * 64}, {'expected_count': 2}]:
+            # Admit the exact reviewed metadata first, so the feed checks (not
+            # an earlier entitlement mismatch) reject the actual bad bytes/count.
+            self.manifest, self.rules = deepcopy(original_manifest), deepcopy(original_rules)
+            if 'sha256' in changes:
+                self.manifest['content_release']['sha256'] = changes['sha256']
+            else:
+                self.manifest['content_release']['code_count'] = 2
+                self.rules['tabular']['codes']['00001'] = deepcopy(self.rules['tabular']['codes']['00000'])
+                self.rules['index'].append({'code':'00001','terms':['another synthetic procedure'],
+                                            'reference':'SYNTHETIC additional index'})
+            self.write_entitlement()
             with self.assertRaises(CommandError):
                 call_command('import_terminology', **{**self.args, **changes})
         self.assertEqual(CodeSet.objects.count(), 0)
@@ -86,8 +100,11 @@ class TerminologyImportTests(TestCase):
     @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
     def test_existing_release_cannot_be_rewritten(self):
         call_command('import_terminology', **self.args)
-        changed = b'code,description\n99999,Changed synthetic description\n'
+        changed = b'code,description\n00000,Changed synthetic description\n'
         self.path.write_bytes(changed)
+        self.manifest['content_release']['sha256'] = hashlib.sha256(changed).hexdigest()
+        self.rules['tabular']['codes']['00000']['description'] = 'Changed synthetic description'
+        self.write_entitlement()
         with self.assertRaises(CommandError):
             call_command('import_terminology', **{**self.args, 'sha256': hashlib.sha256(changed).hexdigest()})
         self.assertEqual(Code.objects.get().description, 'Synthetic procedure for testing only')

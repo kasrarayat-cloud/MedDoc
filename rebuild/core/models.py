@@ -401,6 +401,62 @@ class CodeSuggestion(Entity):
     @property
     def description(self): return self.terminology.description
     class Meta: constraints=[models.UniqueConstraint(fields=['encounter','terminology'],name='suggestion_once')]
+
+class CodingRelease(Entity):
+    """Immutable Index/Tabular or licensed reference tied to an existing code set."""
+    release=models.OneToOneField(CodeSet,on_delete=models.PROTECT,related_name='coding_reference')
+    index=models.JSONField(default=list)
+    tabular=models.JSONField(default=dict)
+    provenance=models.JSONField(default=dict)
+    digest=models.CharField(max_length=64)
+    def save(self,*args,**kwargs):
+        if not self._state.adding:raise ValidationError('Coding references are immutable; import a new dated release.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs):raise ValidationError('Historical coding references must be retained.')
+
+class CodingContext(Entity):
+    """Coding-only facts and clinician attestations; never modifies a clinical note."""
+    encounter=models.OneToOneField(Encounter,on_delete=models.PROTECT,related_name='coding_context')
+    data=models.JSONField(default=dict)
+    updated_by=models.ForeignKey(User,on_delete=models.PROTECT)
+    updated_at=models.DateTimeField(auto_now=True)
+
+class CodingRun(Entity):
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='coding_runs')
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    input_digest=models.CharField(max_length=64,unique=True)
+    inputs=models.JSONField(default=dict)
+    context=models.JSONField(default=dict)
+    releases=models.JSONField(default=list)
+    config=models.JSONField(default=dict)
+    state=models.CharField(max_length=20,default='queued',db_index=True)
+    result=models.JSONField(default=dict)
+    requests=models.JSONField(default=list)
+    actual_cost=models.DecimalField(max_digits=24,decimal_places=12,null=True)
+    selection=models.JSONField(default=dict)
+    selection_revision=models.PositiveIntegerField(default=0)
+    error_code=models.CharField(max_length=80,blank=True)
+    error=models.CharField(max_length=500,blank=True)
+    started_at=models.DateTimeField(null=True)
+    finished_at=models.DateTimeField(null=True)
+    class Meta:
+        constraints=[models.CheckConstraint(condition=models.Q(actual_cost__isnull=True)|models.Q(actual_cost__gte=0),name='coding_cost_nonnegative')]
+
+class CodingDecision(Entity):
+    """One real approval of the exact displayed selections, separate from signing."""
+    run=models.ForeignKey(CodingRun,on_delete=models.PROTECT,related_name='decisions')
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    input_digest=models.CharField(max_length=64)
+    selection_digest=models.CharField(max_length=64)
+    selections=models.JSONField(default=dict)
+    approved_at=models.DateTimeField(default=timezone.now)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['run','selection_digest'],name='coding_approval_once')]
+    def save(self,*args,**kwargs):
+        if not self._state.adding:raise ValidationError('Coding approvals are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs):raise ValidationError('Coding approvals are append-only.')
+
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)

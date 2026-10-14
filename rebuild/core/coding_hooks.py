@@ -1,0 +1,25 @@
+"""Queue coding only after the saved clinical transaction has committed."""
+import logging
+
+from django.db import transaction
+
+
+def after_saved_document(encounter_id, user_id):
+    def enqueue():
+        from .coding_service import ensure_run
+        from .models import Encounter, User
+        try:
+            encounter = Encounter.objects.get(pk=encounter_id)
+            user = User.objects.get(pk=user_id)
+            ensure_run(encounter, user, automatic=True)
+        except Exception as exc:
+            # Independent coding must never roll back a successfully saved
+            # clinical document or misclassify its already settled request.
+            logging.getLogger(__name__).error('Coding enqueue failed (%s).', type(exc).__name__)
+            try:
+                from .security import audit
+                audit(user, 'coding.enqueue_failed', encounter.pk, department=encounter.department,
+                      error_type=type(exc).__name__)
+            except Exception:
+                pass  # A database outage cannot be recorded in that database.
+    transaction.on_commit(enqueue)

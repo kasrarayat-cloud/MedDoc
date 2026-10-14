@@ -68,6 +68,39 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         self.assertContains(following, 'Finalize document')
 
     def test_voice_adoption_cannot_mix_old_source_with_new_jobs_or_deleted_codes(self):
+        self.assert_voice_adoption_snapshot(coding_tab=False)
+
+    def test_coding_tab_captures_legacy_history_before_voice_adoption(self):
+        self.url += '?tab=coding'
+        self.assert_voice_adoption_snapshot(coding_tab=True)
+
+    def test_legacy_cpt_snapshot_requires_current_entitled_release_on_both_tabs(self):
+        today = self.encounter.service_date
+        releases = [CodeSet.objects.create(system='CPT', version='synthetic-snapshot-'+suffix,
+            effective_from=today-timedelta(days=1), effective_until=today+timedelta(days=1),
+            source_url='https://synthetic.invalid/codes', sha256=suffix*64,
+            license_reference='synthetic-'+suffix) for suffix in ('a', 'b')]
+        suggestions = []
+        for i, release in enumerate(releases):
+            code = Code.objects.create(release=release, code='0000'+str(i),
+                description='Synthetic licensed snapshot '+str(i))
+            suggestions.append(CodeSuggestion.objects.create(encounter=self.encounter,
+                terminology=code, explanation='Synthetic only', evidence='no chest pain'))
+        for coding_tab in (False, True):
+            self.url = f'/encounters/{self.encounter.pk}/' + ('?tab=coding' if coding_tab else '')
+            for available in (False, True):
+                with self.subTest(coding_tab=coding_tab, available=available):
+                    entitlement = {'available': available, 'release_id': str(releases[0].pk)}
+                    with patch('core.coding_licensing.cpt_status', return_value=entitlement), \
+                            patch('core.coding_service.cpt_status', return_value=entitlement):
+                        response = self.get_without_document_processor()
+                    expected = [suggestions[0].pk] if available else []
+                    self.assertEqual([row.pk for row in response.context['codes']], expected)
+                    if coding_tab:
+                        self.assertEqual([row.pk for row in response.context['coding']['legacy_codes']], expected)
+                    self.assertNotContains(response, 'Synthetic licensed snapshot 1')
+
+    def assert_voice_adoption_snapshot(self, *, coding_tab):
         today = timezone.localdate()
         release = CodeSet.objects.create(system='ICD-10-CM', version='synthetic-snapshot',
             effective_from=today-timedelta(days=1), effective_until=today+timedelta(days=1),
@@ -94,9 +127,16 @@ class EncounterSnapshotTests(SyntheticFixture, TransactionTestCase):
         self.assertEqual([row.state for row in response.context['jobs']], ['queued'])
         self.assertEqual([row.pk for row in response.context['codes']], [suggestion.pk])
         self.assertEqual(response.context['codes'][0].description, 'Synthetic code')
+        if coding_tab:
+            self.assertEqual([row.pk for row in response.context['coding']['legacy_codes']], [suggestion.pk])
+            self.assertContains(response, 'Earlier coding history')
+            self.assertContains(response, 'Synthetic code')
 
         following = self.get_without_document_processor()
         self.assertIn(transcript[0], following.context['encounter'].notes)
         self.assertEqual(following.context['encounter'].revision, old_revision+1)
         self.assertEqual([row.state for row in following.context['jobs']], ['succeeded'])
         self.assertEqual(list(following.context['codes']), [])
+        if coding_tab:
+            self.assertEqual(following.context['coding']['legacy_codes'], [])
+            self.assertNotContains(following, 'Earlier coding history')

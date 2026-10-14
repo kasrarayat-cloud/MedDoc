@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
@@ -24,7 +25,8 @@ TOKEN_PATTERN = r'\b(?:[A-Z][0-9A-Z]{2}(?:\.[0-9A-Z]{1,4})?|[0-9]{5}|[0-9]{4}[FT
 from core.context import integration_status
 from core.forms import EncounterForm
 from core.management.commands.import_terminology import save_release
-from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, Encounter, latest_service_date
+from core.models import AuditEvent, Code, CodeSet, CodeSuggestion, CodingDecision, CodingRun, Encounter, latest_service_date
+from core.tests.test_coding_imports import LicensedCptImportFixture
 from core.tests.test_security import SyntheticFixture
 
 FY26 = dict(system='ICD-10-CM', version='FY2026-April', effective_from=date(2026, 4, 1),
@@ -131,20 +133,25 @@ class AcceptanceReadsTheSameRuleAsSuggestion(SyntheticFixture, TestCase):
         self.suggestion = CodeSuggestion.objects.get(encounter=self.encounter)
         self.client.force_login(self.user)
 
-    def test_an_expired_fiscal_year_still_accepts_for_a_visit_inside_it(self):
-        """The release is not 'no longer current' for an encounter it covers."""
+    def test_retired_accept_endpoint_preserves_the_historical_dated_suggestion(self):
+        """A valid historical release remains evidence, not a new-style approval."""
+        before = CodeSuggestion.objects.filter(pk=self.suggestion.pk).values().get()
         with patch('core.coding.timezone.localdate', return_value=date(2027, 6, 1)):
+            self.assertEqual([r.version for r in applicable_releases(self.encounter)], ['FY2026-April'])
             response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f'/encounters/{self.encounter.pk}/?tab=coding')
         self.suggestion.refresh_from_db()
-        self.assertIsNotNone(self.suggestion.accepted_at)
-        self.assertEqual(AuditEvent.objects.filter(action='coding.accept').get().details['release'], 'FY2026-April')
+        self.assertIsNone(self.suggestion.accepted_at)
+        self.assertEqual(CodeSuggestion.objects.filter(pk=self.suggestion.pk).values().get(), before)
+        self.assertFalse(AuditEvent.objects.filter(action='coding.accept').exists())
+        self.assertFalse(CodingDecision.objects.exists())
 
     def test_a_suggestion_whose_release_does_not_cover_the_date_of_service_cannot_be_accepted(self):
         Encounter.objects.filter(pk=self.encounter.pk).update(service_date=date(2026, 10, 1))
         response = self.client.post(f'/encounters/{self.encounter.pk}/coding/{self.suggestion.pk}/accept/')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn(b'date of service', response.content)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, f'/encounters/{self.encounter.pk}/?tab=coding')
         self.suggestion.refresh_from_db()
         self.assertIsNone(self.suggestion.accepted_at)
         self.assertFalse(AuditEvent.objects.filter(action='coding.accept').exists())
@@ -174,7 +181,7 @@ class ANewFiscalYearIsAddedBesideItsPredecessor(TestCase):
 @override_settings(AI_MODE='fixture', CPT_LICENSE_ID='', CPT_LICENSE_EXPIRY='',
                    STORAGES={'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
                              'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
-class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
+class WhatTheRefutationPassFound(LicensedCptImportFixture, SyntheticFixture, TestCase):
     """Each test here is a defect a refutation lens demonstrated on the finished diff."""
 
     def setUp(self):
@@ -266,29 +273,33 @@ class WhatTheRefutationPassFound(SyntheticFixture, TestCase):
         self.assertFalse(shipped, 'the shipped lookahead must not match M25 inside M25.532')
         self.assertTrue(broken, 'the broken lookahead does match it — this is the discriminating case')
 
-    @override_settings(CPT_LICENSE_ID='synthetic-license', CPT_LICENSE_EXPIRY='2099-01-01')
-    def test_a_date_only_a_licensed_cpt_release_covers_is_not_reported_as_nothing_recorded(self):
-        """A message that denies a suggestion sitting on the same page is worse than no message."""
-        save_release({'99213': 'Synthetic office visit'},
-                     dict(system='CPT', version='CPT-2026', effective_from=date(2026, 1, 1),
-                          effective_until=date(2026, 3, 31), source_url='https://example.com/licensed',
-                          sha256='d' * 64, license_reference='synthetic-license'))
-        result = self.code_with_notes('Assessment: synthetic visit documented as 99213 in the record.',
+    def test_historical_licensed_cpt_result_survives_retirement_of_the_old_post_action(self):
+        """Real protected artificial entitlement, independently date-scoped from ICD."""
+        self.set_up_licensed_cpt()
+        self.manifest['content_release'].update(version='CPT-2026',effective_until='2026-03-31')
+        self.write_entitlement()
+        call_command('import_terminology', **{**self.args,'release_version':'CPT-2026','effective_until':'2026-03-31'})
+        result = self.code_with_notes('Assessment: synthetic procedure documented as 00000 in the record.',
                                       service_date=date(2026, 3, 31))
         self.assertEqual((result.count, result.covered, result.versions), (1, False, ['CPT CPT-2026']))
+        before = list(CodeSuggestion.objects.filter(encounter=self.encounter).values())
         response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
         text = ' '.join(str(m) for m in response.context['messages'])
-        self.assertIn('No ICD-10-CM release covers', text)
-        self.assertNotIn('no suggestion was recorded', text)
-        self.assertIn('CPT CPT-2026', text)
+        self.assertIn('Open the current coding record', text)
+        self.assertEqual(list(CodeSuggestion.objects.filter(encounter=self.encounter).values()), before)
         self.assertEqual(CodeSuggestion.objects.filter(encounter=self.encounter).count(), 1)
+        self.assertFalse(CodingRun.objects.exists())
+        self.assertFalse(CodingDecision.objects.exists())
 
-    def test_a_date_no_release_at_all_covers_still_says_nothing_was_recorded(self):
-        self.code_with_notes('Assessment: synthetic finding documented as M25.532.', service_date=date(2026, 3, 31))
+    def test_retired_post_does_not_create_work_when_no_release_covers_the_date(self):
+        result = self.code_with_notes('Assessment: synthetic finding documented as M25.532.', service_date=date(2026, 3, 31))
+        self.assertEqual((result.count,result.covered,result.versions),(0,False,[]))
         response = self.client.post(f'/encounters/{self.encounter.pk}/coding/', follow=True)
         text = ' '.join(str(m) for m in response.context['messages'])
-        self.assertIn('No terminology release covers', text)
-        self.assertIn('nothing was validated and no suggestion was recorded', text)
+        self.assertIn('Open the current coding record', text)
+        self.assertFalse(CodeSuggestion.objects.filter(encounter=self.encounter).exists())
+        self.assertFalse(CodingRun.objects.exists())
+        self.assertFalse(CodingDecision.objects.exists())
 
     def test_a_clinic_one_day_ahead_of_utc_can_record_the_visit_it_just_finished(self):
         """UTC is the stored zone; real offsets reach UTC+14, so the local date can lead by a day."""

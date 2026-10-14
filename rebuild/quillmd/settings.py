@@ -105,6 +105,10 @@ STRIPE_LIVE_ENABLED=False
 QUILLMD_PAYER_ROLE_GRANTED=os.getenv('QUILLMD_PAYER_ROLE_GRANTED','0')=='1'
 CPT_LICENSE_ID=os.getenv('CPT_LICENSE_ID','')
 CPT_LICENSE_EXPIRY=os.getenv('CPT_LICENSE_EXPIRY','')
+# Separate private copies let the importer and service verify identical evidence
+# under their own identities; the entitlement reader still enforces protection.
+CPT_ENTITLEMENT_MANIFEST=os.getenv('QUILLMD_CPT_ENTITLEMENT_MANIFEST',
+    '/opt/meddoc-pro/rebuild/.runtime/owner-contracts/cpt-entitlement-v1.json')
 LOGGING={'version':1,'disable_existing_loggers':False,'handlers':{'console':{'class':'logging.StreamHandler'}},'root':{'handlers':['console'],'level':'WARNING'},'loggers':{'django.request':{'handlers':['console'],'level':'CRITICAL','propagate':False}}}
 
 LOGGING['filters'] = {'account_csrf_redaction': {'()': 'core.preview_logging.AccountCSRFLogFilter'}}

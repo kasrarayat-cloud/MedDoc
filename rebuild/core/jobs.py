@@ -615,6 +615,8 @@ def run_semantic_job(job):
             job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind,
                   contract=semantic_generation.CONTRACT,stage_count=job.ai_stage_receipts.count())
+            from .coding_hooks import after_saved_document
+            after_saved_document(e.pk, job.user_id)
     except Exception as exc:
         rows=list(job.ai_stage_receipts.all())
         sent=any(row.started_at is not None for row in rows)
@@ -745,6 +747,9 @@ def run_one():
                 e.save()
             job.state='succeeded';job.provider=provider;job.provider_request_id=request_id;job.finished_at=timezone.now();job.save()
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind)
+            if job.kind == 'generation':
+                from .coding_hooks import after_saved_document
+                after_saved_document(e.pk, job.user_id)
     except Exception as exc:
         # A timeout can be billable. Never retry it or release its reservation as if cost were known.
         known=Usage.objects.filter(job=job).exists()

@@ -10,17 +10,10 @@ from .security import audit
 
 Suggestions=namedtuple('Suggestions','count covered versions')
 
-def cpt_licensed():
-    """A CPT release is usable only while the licence itself is current.
-
-    Deliberately judged against TODAY, not against the encounter's date of service: the
-    licence governs whether this product may display the content now, which is a different
-    question from which fiscal year's codes apply to the visit.
-    """
-    if not settings.CPT_LICENSE_ID or not settings.CPT_LICENSE_EXPIRY:return False
-    try:expiry=date.fromisoformat(settings.CPT_LICENSE_EXPIRY)
-    except ValueError:return False
-    return expiry>=timezone.localdate()
+def cpt_licensed(service_date=None):
+    """Current product rights plus the licensed release for the service date."""
+    from .coding_licensing import cpt_status
+    return cpt_status(service_date)['available']
 
 def applicable_releases(encounter):
     """The releases in effect on the encounter's date of service or discharge.
@@ -31,8 +24,10 @@ def applicable_releases(encounter):
     """
     covering=CodeSet.objects.filter(effective_from__lte=encounter.service_date,
                                     effective_until__gte=encounter.service_date)
-    if cpt_licensed():
-        return covering.filter(Q(system='ICD-10-CM')|Q(system='CPT',license_reference=settings.CPT_LICENSE_ID))
+    from .coding_licensing import cpt_status
+    licensed = cpt_status(encounter.service_date)
+    if licensed['available']:
+        return covering.filter(Q(system='ICD-10-CM')|Q(system='CPT',pk=licensed['release_id']))
     return covering.filter(system='ICD-10-CM')
 
 def suggest(encounter,user):

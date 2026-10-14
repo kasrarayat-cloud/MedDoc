@@ -53,3 +53,12 @@ urlpatterns += [
 
 from core.document_review import submit as document_review_submit
 urlpatterns += [path('encounters/<uuid:pk>/review/',document_review_submit,name='document_review')]
+
+from core import coding_views
+urlpatterns += [
+    path('encounters/<uuid:pk>/coding/status/', coding_views.status, name='coding_status'),
+    path('encounters/<uuid:pk>/coding/request/', coding_views.request_run, name='coding_request'),
+    path('encounters/<uuid:pk>/coding/context/', coding_views.context, name='coding_context'),
+    path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/selections/', coding_views.selections, name='coding_selections'),
+    path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/approve/', coding_views.approval, name='coding_approval'),
+]

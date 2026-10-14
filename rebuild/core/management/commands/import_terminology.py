@@ -160,15 +160,14 @@ class Command(BaseCommand):
             if options['expected_count'] < MIN_ICD_CODES:
                 raise CommandError('A full ICD-10-CM codes file is required; an addendum or subset is refused.')
         else:
-            license_reference = getattr(settings, 'CPT_LICENSE_ID', '').strip()
-            license_expiry = getattr(settings, 'CPT_LICENSE_EXPIRY', '').strip()
+            from core.coding_licensing import entitlement_for_release, EntitlementUnavailable
             try:
-                expiry = date.fromisoformat(license_expiry)
-            except ValueError as exc:
-                raise CommandError('CPT import requires CPT_LICENSE_ID and a valid CPT_LICENSE_EXPIRY.') from exc
-            if (not license_reference or len(license_reference) > 150
-                    or expiry < timezone.localdate() or expiry < end):
-                raise CommandError('CPT license must be current and cover the imported effective period.')
+                entitlement = entitlement_for_release(version=version, effective_from=start, effective_until=end,
+                    source_url=source, sha256=options['sha256'].lower(), code_count=options['expected_count'])
+            except EntitlementUnavailable as exc:
+                raise CommandError(exc.messages[0]) from exc
+            license_reference = entitlement['manifest']['license_id']
+            license_expiry = entitlement['manifest']['validity']['until']
         expected_hash = options['sha256'].lower()
         if not re.fullmatch('[0-9a-f]{64}', expected_hash):
             raise CommandError('Expected SHA-256 must contain 64 hexadecimal characters.')
@@ -184,7 +183,14 @@ class Command(BaseCommand):
             raise CommandError('Terminology row count differs from the declared full release count.')
         metadata = dict(system=system, version=version, effective_from=start, effective_until=end,
                         source_url=source, sha256=expected_hash, license_reference=license_reference)
-        release, created = save_release(rows, metadata, license_expiry)
+        if system == 'CPT':
+            from core.coding_licensing import save_licensed_release, EntitlementUnavailable
+            try:
+                release, created = save_licensed_release(rows, metadata, entitlement)
+            except EntitlementUnavailable as exc:
+                raise CommandError(exc.messages[0]) from exc
+        else:
+            release, created = save_release(rows, metadata, license_expiry)
         self.stdout.write(self.style.SUCCESS(
             f'{"Imported" if created else "Already verified"}: {release.system} {release.version}; '
             f'{len(rows)} codes; SHA-256 {release.sha256}.'))
