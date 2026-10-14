@@ -31,7 +31,9 @@ SOURCE_CONTEXT_SCOPE_CONTRACT = 'positioned-source-context-v5'
 SOURCE_BINDING_SCOPE_CONTRACT = 'positioned-source-binding-v6'
 REFERRAL_CITATION_SCOPE_CONTRACT = 'positioned-referral-citation-v7'
 OBSERVATION_CONTEXT_SCOPE_CONTRACT = 'positioned-observation-context-v8'
-REFERRAL_CITATION_SCOPE_CONTRACTS = (REFERRAL_CITATION_SCOPE_CONTRACT, OBSERVATION_CONTEXT_SCOPE_CONTRACT)
+CONSENT_CONTEXT_SCOPE_CONTRACT = 'positioned-consent-context-v9'
+OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, CONSENT_CONTEXT_SCOPE_CONTRACT)
+REFERRAL_CITATION_SCOPE_CONTRACTS = (REFERRAL_CITATION_SCOPE_CONTRACT, *OBSERVATION_CONTEXT_SCOPE_CONTRACTS)
 SOURCE_BINDING_SCOPE_CONTRACTS = (SOURCE_BINDING_SCOPE_CONTRACT, *REFERRAL_CITATION_SCOPE_CONTRACTS)
 SOURCE_CONTEXT_SCOPE_CONTRACTS = (SOURCE_CONTEXT_SCOPE_CONTRACT, *SOURCE_BINDING_SCOPE_CONTRACTS)
 SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT,
@@ -812,6 +814,91 @@ def _competing_assessment_units(units):
     return conflicts
 
 
+def _consent_context_issues(notes, units, facts, ownership):
+    """V9 source-position obligations; provider labels cannot bypass a consent head."""
+    from .semantic_source_context import (consent_qualifier_inventory,
+        observation_qualifier_inventory, parse_unit, alternatives, NUMBER)
+    obligations = consent_qualifier_inventory(units)
+    # Exempt positions proved to be names by the complete leading referral,
+    # never an arbitrary model identity tag or a matching word elsewhere.
+    identity_spans = []
+    if units and ownership is not None and ownership['allowed'].get(units[0]['start'], False):
+        first = units[0]
+        targets = [fact['value_evidence'] for fact in facts.values()
+            if fact['kind'] == 'identity' and fact['subject']['kind'] == 'patient'
+            and not fact['issues'] and fact['value_evidence'] == fact['subject']['name_evidence']
+            and fact['value_evidence']['start'] == first['start']
+            and _inside(fact['value_evidence'], [first])
+            and fact['value_evidence']['quote'].casefold() in ownership['names']]
+        if len(targets) == 1:
+            identity_spans.extend(targets)
+            for fact in facts.values():
+                name = fact['subject']['name_evidence']
+                if (fact['kind'] != 'identity' or fact['subject']['kind'] != 'other'
+                        or fact['issues'] or name is None or not _inside(name, [first])
+                        or not _source_person_name(name['quote'], referrer=True)
+                        or not (fact['value_evidence'] == name
+                            or _referrer_name_equivalent(notes, fact['value_evidence'], name))):
+                    continue
+                between = first['quote'][targets[0]['end']-first['start']:name['start']-first['start']]
+                if re.fullmatch(r'\s+(?:is\s+'+NUMBER+r'\s+years?\s+old\s+and\s+)?'
+                                r'(?:was|is)\s+referred\s+by\s+(?:(?:Dr\.?|Doctor)\s+)?', between, re.I):
+                    identity_spans.append(name)
+    # Complete source frames already admitted by independent referral binding
+    # establish the exact leading subject position, including observations and
+    # possessive family-history subjects. A literal name such as Consent or
+    # Verbal at that position is not a clinical head or type. This exemption
+    # never follows a model label or a matching token in the later predicate.
+    if ownership is not None and ownership['names']:
+        subject_pattern = (r'\s*(?:'+alternatives('On examination','On video')+r',\s+)?'
+            r'(?P<name>'+alternatives(*ownership['names'])+r')(?=\s|[\x27\u2019]s\b)')
+        for unit in units:
+            if not ownership['allowed'].get(unit['start'], False):
+                continue
+            match = re.match(subject_pattern, unit['quote'], re.I)
+            if match is not None:
+                start, end = match.span('name')
+                identity_spans.append({'start':unit['start']+start,
+                    'end':unit['start']+end, 'quote':unit['quote'][start:end]})
+    generic_units = {row['source_unit_id']
+        for row in obligations + observation_qualifier_inventory(units)
+        if row['recognized_complete_assertion']
+        and ' '.join(row['subject']['quote'].split()).casefold() == 'the patient'}
+    generic_context = ownership is None and all(
+        parse_unit(unit['quote']) is not None or unit['id'] in generic_units
+        for unit in units)
+    for fact in facts.values():
+        value = fact['value_evidence']
+        for row in obligations:
+            source_subject = (' '.join(row['subject']['quote'].split()).casefold()
+                if row['subject'] is not None else None)
+            bound_context = (ownership is not None
+                and ownership['allowed'].get(row['source']['start'], False))
+            owned_subject = row['recognized_complete_assertion'] and (
+                source_subject == 'the patient' and (bound_context or generic_context)
+                or bound_context and source_subject in ownership['names'])
+            heads = [head for head in row['consent_heads']
+                if not _inside(head, identity_spans)
+                and not (owned_subject and _inside(head, [row['subject']]))]
+            if not any(value['start'] < head['end'] and head['start'] < value['end']
+                       for head in heads):
+                continue
+            if not row['recognized_complete_assertion']:
+                fact['issues'].append('The consent belongs to an unresolved complete source assertion; clinician review is required.')
+                continue
+            if not owned_subject:
+                fact['issues'].append('The consent source subject is not independently bound to this patient; clinician review is required.')
+            elif fact['subject']['kind'] != 'patient':
+                fact['issues'].append('The consent source explicitly belongs to the patient; a different proposed fact subject requires clinician review.')
+            name = fact['subject']['name_evidence']
+            if name is not None and not (
+                    source_subject == 'the patient' and name == row['subject']
+                    or bound_context and name['quote'].casefold() in ownership['names']):
+                fact['issues'].append('The proposed consent name is not the owning source reference or an independently bound patient identity; clinician review is required.')
+            if not all(_inside(span, [value]) for span in (row['consent'], row['purpose'])):
+                fact['issues'].append('The selected consent value omits its documented type or purpose; retain one complete source phrase or leave it held.')
+
+
 def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONTRACT,
                    timing_reference_contract=None):
     if timing_reference_contract not in (None, TEMPORAL_REFERENCE_CONTRACT):
@@ -898,7 +985,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
         facts[fact['id']] = fact
     ownership = (_source_context_ownership(notes, units, facts, scope_contract=scope_contract)
                  if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS else None)
-    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in OBSERVATION_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import observation_qualifier_inventory, parse_unit
         obligations = observation_qualifier_inventory(units)
         generic_observations = {row['source_unit_id'] for row in obligations
@@ -940,6 +1027,8 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                         if any(not _inside(span, [value]) for span in
                                (row['subject'], observation, *row['qualifiers'])):
                             fact['issues'].append('The selected observation value omits part of its complete source assertion or explicitly documented modality; retain a complete source phrase or leave it held.')
+    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+        _consent_context_issues(notes, units, facts, ownership)
     if ownership is not None:
         for fact in facts.values():
             if fact['subject']['kind'] != 'patient':
@@ -1701,6 +1790,32 @@ OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS = (
     'No passing verdict may erase a deterministic hold. Unknown source scope or missing complete facts stays held.')
 
 
+CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS = (
+    'For this consent-context contract, consent_qualifier_inventory locates source consent heads, their '
+    'documented type and purpose, and complete source assertions. It does not establish patient ownership. '
+    'A consent value must retain its documented type together with its own attached purpose in one exact '
+    'contiguous source phrase, even for an atomic text answer. Evidence containing the purpose does not '
+    'repair a clipped value. Do not invent a purpose or borrow it from another occurrence. Separately '
+    'selectable modality facts inside a purpose remain distinct from consent values. Unknown or compound '
+    'assertions and unresolved source subjects require review; do not synthesize a replacement phrase. '
+    'An identical token in an independently source-bound name remains a name at that exact position; '
+    'an identity label alone cannot exempt a consent phrase. Continuation sources retain unfinished '
+    'cross-line type evidence; never join them into an invented source quotation.')
+CONSENT_CONTEXT_ASSIGN_INSTRUCTIONS = (
+    'For this consent-context contract, inspect consent_qualifier_inventory. A selected consent head or '
+    'type must retain its complete documented purpose within that same fact value. Another fact or field '
+    'cannot repay the omission. If extraction has no complete relevant value, leave it held; do not '
+    'override fact issues, join fragments to repair a consent fact, or insert source words in the answer. '
+    'A token belonging to an independently evidenced name is distinct from a consent head elsewhere; '
+    'do not transfer that positional name binding to another occurrence.')
+CONSENT_CONTEXT_CHECK_INSTRUCTIONS = (
+    'For this consent-context contract, compare the actual rendered or held candidate consent value with '
+    'its exact source type and purpose in consent_qualifier_inventory. Do not pass merely because the '
+    'evidence, metadata, another answer or your reason contains omitted words. A clipped consent value '
+    'requires a non-pass verdict and an explicit fact finding. A purpose-only modality fact is distinct '
+    'from the consent head. Unresolved source ownership and deterministic holds cannot be waived.')
+
+
 def _validate_current_subjects(notes, units, facts):
     """Refuse explicit relative apposition misattributed in a NEW extraction.
 
@@ -1897,9 +2012,12 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
             'Retain negative wording in the displayed value, distinguish the patient from other named people, '
             'and verify destination-specific narrative completeness. Earlier identity citations do not change '
             'the position of a later clinical value. Unresolved ownership, source scope and defective extraction remain held.')
-    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in OBSERVATION_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import observation_qualifier_inventory
         base['observation_qualifier_inventory'] = observation_qualifier_inventory(units)
+    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+        from .semantic_source_context import consent_qualifier_inventory
+        base['consent_qualifier_inventory'] = consent_qualifier_inventory(units)
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -1918,10 +2036,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += ' ' + SOURCE_BINDING_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + SOURCE_BINDING_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + SOURCE_BINDING_CHECK_INSTRUCTIONS
-    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in OBSERVATION_CONTEXT_SCOPE_CONTRACTS:
         instructions += ' ' + OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS
+    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+        instructions += ' ' + CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS
+        assign_instructions += ' ' + CONSENT_CONTEXT_ASSIGN_INSTRUCTIONS
+        check_instructions += ' ' + CONSENT_CONTEXT_CHECK_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),

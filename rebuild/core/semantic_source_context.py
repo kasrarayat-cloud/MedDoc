@@ -178,6 +178,129 @@ def observation_qualifier_inventory(units):
     return rows
 
 
+def consent_qualifier_inventory(units):
+    """Locate consent heads and their literal purposes, without granting ownership.
+
+    The complete positive frame is the existing verbal-consent assertion. A
+    consent noun in unfamiliar, conditional or compound syntax still creates a
+    review obligation; a failed full match must not erase it. Purpose-only
+    values (for example a separately selected modality) do not overlap a head.
+    One row per unit bounds repeated-head evidence without duplicating a long
+    source sentence for each occurrence. All offsets address untouched source.
+    """
+    from .generation import ABBREVIATION
+    # Canonical sentence splitting can cut a numbered parenthesis at "1.".
+    # Track literal open groups across those exact units; an unfinished group
+    # cannot terminate a type attachment. This never admits unknown syntax.
+    open_groups = []
+    unfinished_groups = set()
+    closing = {')':'(', ']':'[', '}':'{'}
+    for unit in units:
+        for char in unit['quote']:
+            if char in '([{':
+                open_groups.append(char)
+            elif char in closing and open_groups and open_groups[-1] == closing[char]:
+                open_groups.pop()
+        if open_groups:
+            unfinished_groups.add(unit['id'])
+    def terminal(unit):
+        quote = unit['quote'].rstrip()
+        # Local continuation-only abbreviations and list markers supplement
+        # canonical segmentation; the shared historical splitter is unchanged.
+        unfinished_label = re.search(r'\b(?:no|viz)\.$|(?:^|[:;])\s*[0-9]+\.$', quote, re.I)
+        return bool(re.search(r'[.!?]$', quote)
+            and not ABBREVIATION.search(quote) and not unfinished_label
+            and unit['id'] not in unfinished_groups)
+    types = r'\b(?:verbal|written|oral|informed|explicit)\b'
+    heads = (r'\b(?:(?:verbal|written|oral|informed|explicit)[\W_]+)*consent\b')
+    complete = (r'\s*(?P<subject>.+?)\s+gave\s+'
+                r'(?P<consent>verbal\s+consent)\s+'
+                r'(?P<purpose>for\s+this\s+'+MODALITY+r'\s+consultation)\s*\.?\s*')
+    rows = []
+    for index, unit in enumerate(units):
+        found = list(re.finditer(heads, unit['quote'], re.I))
+        if not found:
+            continue
+        def span(start, end):
+            return {'start': unit['start']+start, 'end': unit['start']+end,
+                    'quote': unit['quote'][start:end]}
+        match = re.fullmatch(complete, unit['quote'], re.I | re.S)
+        subject = consent = purpose = None
+        recognized = False
+        if match is not None:
+            subject, consent, purpose = (span(*match.span(group))
+                for group in ('subject', 'consent', 'purpose'))
+            words = ' '.join(subject['quote'].split()).split()
+            name_shape = (1 <= len(words) <= 3 and all(
+                re.fullmatch(r"[^\W\d_]+(?:[-'’][^\W\d_]+)*", word)
+                for word in words))
+            recognized = (' '.join(words).casefold() == 'the patient' or name_shape)
+            # A literal Consent token may also occur in the source subject's
+            # name. Syntax separates that position; admission still has to
+            # establish the subject independently before ignoring name tokens.
+            predicate_heads = [span(*head.span()) for head in found
+                if not subject['start'] <= unit['start']+head.start() < unit['start']+head.end() <= subject['end']]
+            recognized = recognized and predicate_heads == [consent]
+        trigger_heads = [span(*head.span()) for head in found]
+        # Unknown coordination or a postposed type must not detach the type
+        # from consent: both "verbal and informed consent" and "consent
+        # (verbal)" still govern the selected "verbal".
+        # These extra spans are obligations only, never positive admissions.
+        # Canonical units already account for abbreviation periods. Splitting
+        # them a second time at any period would detach "i.e. verbal".
+        for token in re.finditer(types, unit['quote'], re.I):
+            exact = span(*token.span())
+            if not any(head['start'] <= exact['start'] and exact['end'] <= head['end'] for head in trigger_heads):
+                trigger_heads.append(exact)
+        # Canonical source units split at newlines. Retain type tokens from an
+        # unfinished preceding unit as unresolved continuation evidence, rather
+        # than synthesizing a joined source span or dropping the obligation.
+        continuation = []
+        continuation_types = []
+        for previous in reversed(units[:index]):
+            if (terminal(previous)
+                    or re.search(heads, previous['quote'], re.I)
+                    or parse_unit(previous['quote']) is not None):
+                break
+            continuation.append({'source_unit_id': previous['id'],
+                **{key: previous[key] for key in ('start', 'end', 'quote')}})
+            for token in re.finditer(types, previous['quote'], re.I):
+                continuation_types.append({'start': previous['start']+token.start(),
+                    'end': previous['start']+token.end(), 'quote': token.group()})
+        # Postposed types can continue after a canonical newline too. Stop at
+        # a sentence boundary, another consent head, or a complete independent
+        # frame; preserve the original positions instead of joining source.
+        if not continuation_types:
+            continuation = []
+        following_sources = []
+        following_types = []
+        prior = unit
+        for following in units[index+1:]:
+            if (terminal(prior)
+                    or re.search(heads, following['quote'], re.I)
+                    or parse_unit(following['quote']) is not None):
+                break
+            following_sources.append({'source_unit_id': following['id'],
+                **{key: following[key] for key in ('start', 'end', 'quote')}})
+            for token in re.finditer(types, following['quote'], re.I):
+                following_types.append({'start': following['start']+token.start(),
+                    'end': following['start']+token.end(), 'quote': token.group()})
+            prior = following
+        trigger_heads.extend(continuation_types+following_types)
+        # Missing punctuation alone does not make the next complete assertion
+        # incomplete. These positions only attach an actually retained type;
+        # source ownership still decides whether the complete unit is usable.
+        if not following_types:
+            following_sources = []
+        rows.append({'source_unit_id': unit['id'],
+            'source': {key: unit[key] for key in ('start', 'end', 'quote')},
+            'consent_heads': sorted(trigger_heads, key=lambda head: (head['start'],head['end'])),
+            'continuation_sources': list(reversed(continuation))+following_sources,
+            'subject': subject, 'consent': consent, 'purpose': purpose,
+            'recognized_complete_assertion': recognized})
+    return rows
+
+
 def evaluate(units,context):
     """Track uninterrupted target scope from the bound leading referral.
 
