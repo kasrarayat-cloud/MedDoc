@@ -56,7 +56,7 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         with patch('core.jobs.Job.objects.create', side_effect=insert):
             job = enqueue(self.encounter, self.user)
         self.assertEqual(observed[0]['semantic_fact_reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.REFERRAL_CITATION_SCOPE_CONTRACT)
+        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT)
         self.assertEqual(job.config, observed[0])
         self.assertEqual(job.config['semantic_template_version'], str(self.version.pk))
         original = deepcopy(job.config)
@@ -75,14 +75,15 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.REFERRAL_CITATION_SCOPE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertEqual(first['payload']['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(first['payload']['fact_scope_contract'], semantic.REFERRAL_CITATION_SCOPE_CONTRACT)
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT)
         self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA)
         self.assertEqual(first['instructions'], semantic.EXTRACT_INVENTORY_INSTRUCTIONS
                          + ' ' + semantic.SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS
-                         + ' ' + semantic.SOURCE_BINDING_EXTRACT_INSTRUCTIONS)
+                         + ' ' + semantic.SOURCE_BINDING_EXTRACT_INSTRUCTIONS
+                         + ' ' + semantic.OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS)
         self.assertEqual(job.ai_stage_receipts.count(), 3)
         self.assertEqual(Usage.objects.get(job=job).actual_cost, 0)
         self.assertTrue(all(answer['status'] == 'missing' and not answer['reviewed']
