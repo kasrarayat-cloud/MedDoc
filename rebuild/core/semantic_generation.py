@@ -30,7 +30,9 @@ FAMILY_SCOPE_CONTRACT = 'positioned-family-context-v4'
 SOURCE_CONTEXT_SCOPE_CONTRACT = 'positioned-source-context-v5'
 SOURCE_BINDING_SCOPE_CONTRACT = 'positioned-source-binding-v6'
 REFERRAL_CITATION_SCOPE_CONTRACT = 'positioned-referral-citation-v7'
-SOURCE_BINDING_SCOPE_CONTRACTS = (SOURCE_BINDING_SCOPE_CONTRACT, REFERRAL_CITATION_SCOPE_CONTRACT)
+OBSERVATION_CONTEXT_SCOPE_CONTRACT = 'positioned-observation-context-v8'
+REFERRAL_CITATION_SCOPE_CONTRACTS = (REFERRAL_CITATION_SCOPE_CONTRACT, OBSERVATION_CONTEXT_SCOPE_CONTRACT)
+SOURCE_BINDING_SCOPE_CONTRACTS = (SOURCE_BINDING_SCOPE_CONTRACT, *REFERRAL_CITATION_SCOPE_CONTRACTS)
 SOURCE_CONTEXT_SCOPE_CONTRACTS = (SOURCE_CONTEXT_SCOPE_CONTRACT, *SOURCE_BINDING_SCOPE_CONTRACTS)
 SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT,
                    FAMILY_SCOPE_CONTRACT, *SOURCE_CONTEXT_SCOPE_CONTRACTS)
@@ -752,10 +754,10 @@ def _independent_patient_citation(fact, other, context, ownership, *, notes, sco
     patient_name = fact['subject']['name_evidence']
     name = other['subject']['name_evidence']
     same_name = (other['value_evidence'] == name
-        or scope_contract == REFERRAL_CITATION_SCOPE_CONTRACT
+        or scope_contract in REFERRAL_CITATION_SCOPE_CONTRACTS
         and _referrer_name_equivalent(notes, other['value_evidence'], name))
     # The complete ownership proof above already bounds the title exception.
-    # Only v7 applies it here too; saved v1-v6 facts keep their original holds.
+    # v7 and its successors apply it here too; saved v1-v6 keep their holds.
     if (other['kind'] != 'identity' or not same_name or patient_name is None
             or not _inside(patient_name, [context]) or not _inside(name, [context])
             or context['quote'][:patient_name['start']-context['start']].strip()
@@ -896,6 +898,48 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
         facts[fact['id']] = fact
     ownership = (_source_context_ownership(notes, units, facts, scope_contract=scope_contract)
                  if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS else None)
+    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+        from .semantic_source_context import observation_qualifier_inventory, parse_unit
+        obligations = observation_qualifier_inventory(units)
+        generic_observations = {row['source_unit_id'] for row in obligations
+            if row['recognized_complete_assertion']
+            and ' '.join(row['subject']['quote'].split()).casefold() == 'the patient'}
+        # A generic reference cannot choose among unknown or foreign named
+        # contexts. Without the independent referral binding, every source unit
+        # must be a complete recognized patient frame (including these exact
+        # observation assertions). Provider name annotations cannot create one.
+        generic_context = ownership is None and all(
+            parse_unit(unit['quote']) is not None or unit['id'] in generic_observations
+            for unit in units)
+        for fact in facts.values():
+            value = fact['value_evidence']
+            for row in obligations:
+                observation = row['observation']
+                if value['start'] < observation['end'] and observation['start'] < value['end']:
+                    # Source position, not a model kind/subject/concept, binds
+                    # the qualifier. Another occurrence or answer cannot repay
+                    # a qualifier omitted from this literal observation value.
+                    if not row['recognized_complete_assertion']:
+                        fact['issues'].append('The observation modality governs an unresolved complete source assertion; clinician review is required.')
+                    else:
+                        source_subject = ' '.join(row['subject']['quote'].split()).casefold()
+                        bound_context = (ownership is not None
+                            and ownership['allowed'].get(row['source']['start'], False))
+                        owned_subject = (source_subject == 'the patient'
+                            and (bound_context or generic_context)
+                            or bound_context and source_subject in ownership['names'])
+                        if not owned_subject:
+                            fact['issues'].append('The complete observation source subject is not independently bound to this patient; clinician review is required.')
+                        elif fact['subject']['kind'] != 'patient':
+                            fact['issues'].append('The observation source explicitly belongs to the patient; a different proposed fact subject requires clinician review.')
+                        name = fact['subject']['name_evidence']
+                        if name is not None and not (
+                                source_subject == 'the patient' and name == row['subject']
+                                or bound_context and name['quote'].casefold() in ownership['names']):
+                            fact['issues'].append('The proposed observation name is not the owning source reference or an independently bound patient identity; clinician review is required.')
+                        if any(not _inside(span, [value]) for span in
+                               (row['subject'], observation, *row['qualifiers'])):
+                            fact['issues'].append('The selected observation value omits part of its complete source assertion or explicitly documented modality; retain a complete source phrase or leave it held.')
     if ownership is not None:
         for fact in facts.values():
             if fact['subject']['kind'] != 'patient':
@@ -1635,6 +1679,28 @@ SOURCE_BINDING_CHECK_INSTRUCTIONS = (
     'excuse absent source content because the available selected facts are individually grounded.')
 
 
+OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS = (
+    'For this observation-context contract, observation_qualifier_inventory identifies exact source assertions '
+    'and their governing literal modality spans. It does not establish patient ownership or supply new facts. '
+    'A narrative value from an identified observation must retain its governing qualifier in that same exact '
+    'contiguous source value. The documented subject and complete observation clause may be included when '
+    'needed to retain a prefix qualifier; do not strip the prefix merely to shorten the value. Do not infer '
+    'modality from another sentence or concatenate an invented prefix. Retain separately selectable facts for '
+    'other destinations; incomplete or unrecognized complete assertions must remain held.')
+OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS = (
+    'For this observation-context contract, inspect observation_qualifier_inventory and select only complete '
+    'source-grounded values retaining the qualifier governing their own observation. A modality in another '
+    'answer or a separate fact does not repair a clipped observation fact. Do not override fact issues, '
+    'invent connecting text, or select unrelated observations to recover a qualifier. If no complete relevant '
+    'fact exists, leave the answer held for review.')
+OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS = (
+    'For this observation-context contract, compare each displayed or held candidate value with the exact '
+    'observation_qualifier_inventory source assertion and qualifier spans. Check the rendered value itself, '
+    'not just its evidence, fact metadata, another answer or your explanatory reason. An omitted governing '
+    'modality requires a non-pass verdict and an explicit fact finding when the extraction itself is clipped. '
+    'No passing verdict may erase a deterministic hold. Unknown source scope or missing complete facts stays held.')
+
+
 def _validate_current_subjects(notes, units, facts):
     """Refuse explicit relative apposition misattributed in a NEW extraction.
 
@@ -1831,6 +1897,9 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
             'Retain negative wording in the displayed value, distinguish the patient from other named people, '
             'and verify destination-specific narrative completeness. Earlier identity citations do not change '
             'the position of a later clinical value. Unresolved ownership, source scope and defective extraction remain held.')
+    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+        from .semantic_source_context import observation_qualifier_inventory
+        base['observation_qualifier_inventory'] = observation_qualifier_inventory(units)
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -1849,6 +1918,10 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += ' ' + SOURCE_BINDING_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + SOURCE_BINDING_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + SOURCE_BINDING_CHECK_INSTRUCTIONS
+    if scope_contract == OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+        instructions += ' ' + OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS
+        assign_instructions += ' ' + OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS
+        check_instructions += ' ' + OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),

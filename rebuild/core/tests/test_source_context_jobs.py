@@ -1,4 +1,4 @@
-"""New jobs freeze v7; retained jobs continue their original scope contract."""
+"""New jobs freeze v8; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.REFERRAL_CITATION_SCOPE_CONTRACT:
+        if stored_scope == semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -64,6 +64,10 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.SOURCE_BINDING_EXTRACT_INSTRUCTIONS,
                         semantic.SOURCE_BINDING_ASSIGN_INSTRUCTIONS,
                         semantic.SOURCE_BINDING_CHECK_INSTRUCTIONS)
+        if expected == semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT:
+            suffixes = (semantic.OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS,
+                        semantic.OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS,
+                        semantic.OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS)
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
             self.assertEqual(request['max_output_tokens'], 16000)
@@ -71,10 +75,15 @@ class SourceContextWorkerTests(TestCase):
             current = expected in semantic.SOURCE_CONTEXT_SCOPE_CONTRACTS
             self.assertEqual(request['instructions'].endswith(suffix), current)
             self.assertEqual('source_context_review' in request['payload'], current)
+            self.assertEqual('observation_qualifier_inventory' in request['payload'],
+                             expected == semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT)
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_new_enqueue_freezes_v7_and_worker_uses_it_without_extra_calls(self):
+    def test_new_enqueue_freezes_v8_and_worker_uses_it_without_extra_calls(self):
+        self.exercise(semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACT)
+
+    def test_retained_v7_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.REFERRAL_CITATION_SCOPE_CONTRACT)
 
     def test_retained_v6_job_keeps_old_requests_and_answer_contract(self):

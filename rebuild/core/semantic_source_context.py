@@ -128,6 +128,56 @@ def parse_unit(text, context=None):
         if matches(pattern):return Frame(kind,'preserve_target')
     return None
 
+def observation_qualifier_inventory(units):
+    """Bind literal modality to its source assertion without granting ownership.
+
+    Only direct observation predicates belong to this contract: a video history
+    of medication use, symptoms or occupation does not acquire an examination
+    qualifier. Recognizing a complete predicate and name shape does not establish
+    the subject's identity. Admission must bind that subject independently.
+    Unknown continuations remain held. All positions refer to untouched source.
+    """
+    rows = []
+    # These complete predicates mirror only the direct observations in the old
+    # parser, without changing its historical grammar or constructing a Context
+    # from an arbitrary captured clause. The wider lead catches unfamiliar or
+    # compound observations conservatively; it never authorizes their content.
+    complete = (r'(?:is\s+cooperative|was\s+pleasant\s+and\s+interactive'
+                r'|(?:is|was)\s+(?:alert,\s+oriented\s+and\s+)?in\s+no\s+acute\s+distress'
+                r'|appears\s+alert\s+and\s+comfortable'
+                r'|was\s+oriented\s+to\s+person,\s+place,\s+time\s+and\s+situation,\s+'
+                r'moved\s+all\s+extremities\s+spontaneously\s+and\s+had\s+a\s+nonfocal\s+neurologic\s+exam)')
+    lead = (r'(?:(?:appears|appeared|looks|looked|seems|seemed)\b'
+            r'|(?:is|are|was|were|remains|remained)\s+'
+            r'(?:alert|oriented|cooperative|pleasant|interactive|in\s+no\s+acute\s+distress)\b)')
+    qualifier = r'(?:(?:On|By|Via|Over)\s+'+MODALITY+r'|In\s+person)'
+    pattern = (r'\s*(?P<qualifier>'+qualifier+r')(?!\w)\s*(?:[:,]\s*)?'
+               r'(?P<subject>.+?)\s+(?P<observation>'+lead+r'.*?)\s*\.?\s*')
+    for unit in units:
+        match = re.fullmatch(pattern, unit['quote'], re.I | re.S)
+        if match is None:
+            continue
+        subject = ' '.join(match['subject'].split())
+        # This is syntax only. In particular, neither a relative noun phrase
+        # nor a clause containing another predicate can masquerade as a name.
+        tokens = subject.split()
+        name_shape = (1 <= len(tokens) <= 3 and all(
+            token[0].isupper() and re.fullmatch(r"[^\W\d_]+(?:[-'’][^\W\d_]+)*", token)
+            for token in tokens))
+        complete_subject = subject.casefold() == 'the patient' or name_shape
+        def span(group):
+            start, end = match.span(group)
+            return {'start': unit['start']+start, 'end': unit['start']+end,
+                    'quote': unit['quote'][start:end]}
+        rows.append({'source_unit_id': unit['id'],
+                     'source': {key: unit[key] for key in ('start', 'end', 'quote')},
+                     'subject': span('subject'), 'observation': span('observation'),
+                     'qualifiers': [{'kind': 'observation_modality', **span('qualifier')}],
+                     'recognized_complete_assertion': complete_subject
+                         and re.fullmatch(complete, match['observation'], re.I) is not None})
+    return rows
+
+
 def evaluate(units,context):
     """Track uninterrupted target scope from the bound leading referral.
 
