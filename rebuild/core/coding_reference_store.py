@@ -92,7 +92,7 @@ class _Projection:
     def read(self, expression, params=()):
         # Expressions are private constants; all identities, paths and values
         # are parameters. Size is checked on the server before JSON is returned.
-        query = f'''WITH picked AS (
+        query = f'''WITH picked AS MATERIALIZED (
             SELECT {expression} AS payload FROM {self.table}
             WHERE id = %s AND release_id = %s AND digest = %s
         ) SELECT CASE WHEN octet_length(payload::text) <= %s THEN payload ELSE NULL END,

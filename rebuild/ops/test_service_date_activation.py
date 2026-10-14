@@ -98,12 +98,40 @@ class OneRuleForBothReaders(unittest.TestCase):
     def test_no_reader_selects_a_release_by_todays_date(self):
         coding = (ROOT / 'rebuild/core/coding.py').read_text()
         views = (ROOT / 'rebuild/core/views.py').read_text()
+        service = (ROOT / 'rebuild/core/coding_service.py').read_text()
         self.assertIn('effective_from__lte=encounter.service_date', coding)
         self.assertIn('effective_until__gte=encounter.service_date', coding)
-        for source, name in ((coding, 'coding.py'), (views, 'views.py')):
+        for source, name in ((coding, 'coding.py'), (views, 'views.py'), (service, 'coding_service.py')):
             self.assertNotIn('effective_until__gte=timezone.localdate()', source, name)
             self.assertNotIn('effective_until<timezone.localdate()', source.replace(' ', ''), name)
-        self.assertEqual(views.count('applicable_releases'), 2)  # the import and its single use
+        # Coding display now uses the immutable service snapshot. Check that the
+        # actual date reaches both release bounds and the independent CPT gate,
+        # rather than counting the removed legacy view import.
+        from datetime import date
+        from types import SimpleNamespace
+        tree = ast.parse(service)
+        function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'release_snapshot')
+        filters, licensing_dates = [], []
+        class EmptyReleases:
+            def order_by(self, *args):
+                return []
+        def selected(**kwargs):
+            filters.append(kwargs)
+            return EmptyReleases()
+        def licensed(value):
+            licensing_dates.append(value)
+            return {'available': False}
+        scope = {'CodeSet': SimpleNamespace(objects=SimpleNamespace(filter=selected)),
+                 'CodingRelease': SimpleNamespace(objects=SimpleNamespace(
+                     filter=lambda **kwargs: SimpleNamespace(only=lambda *args: []))),
+                 'cpt_status': licensed}
+        exec(compile(ast.Module(body=[function], type_ignores=[]), '<release-snapshot>', 'exec'), scope)
+        dates = [date(2026, 9, 30), date(2026, 10, 1)]
+        for service_date in dates:
+            self.assertEqual(scope['release_snapshot'](SimpleNamespace(service_date=service_date)), [])
+        self.assertEqual(filters, [{'system': 'ICD-10-CM', 'effective_from__lte': value,
+                                    'effective_until__gte': value} for value in dates])
+        self.assertEqual(licensing_dates, dates)
 
     def test_the_effective_period_is_expressed_once(self):
         tree = ast.parse((ROOT / 'rebuild/core/coding.py').read_text())
@@ -153,7 +181,7 @@ if __name__ == '__main__':
 class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
     """The FY2027 import runs through with_db_role.py so it is not the one write using the superuser."""
 
-    def run_wrapper(self, command):
+    def run_wrapper(self, command, role='migrator'):
         import json as json_module
         import os
         import tempfile
@@ -166,10 +194,12 @@ class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
             credentials.chmod(0o600)
             source = root / 'source'
             source.mkdir()
-            (source / 'manage.py').write_text('import sys\nprint("REACHED", *sys.argv[1:])\n')
+            (source / 'manage.py').write_text(
+                'import os, sys\nprint("REACHED", *sys.argv[1:])\n'
+                'print("ROLE", os.environ.get("PGOPTIONS", ""))\n')
             return subprocess.run([sys.executable, str(ROOT / 'rebuild/ops/with_db_role.py'),
                                    '--credentials', str(credentials), '--source', str(source),
-                                   '--role', 'migrator', '--', *command],
+                                   '--role', role, '--', *command],
                                   capture_output=True, text=True, timeout=60, env=dict(os.environ))
 
     def test_the_verified_terminology_import_is_admitted(self):
@@ -180,6 +210,16 @@ class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
     def test_the_migration_commands_still_work(self):
         self.assertIn('REACHED migrate', self.run_wrapper(['migrate', 'core']).stdout)
 
+    def test_the_official_reference_import_requires_the_owner_role(self):
+        command = ['import_coding_reference', '--manifest', 'synthetic-pinned.json']
+        admitted = self.run_wrapper(command)
+        self.assertEqual(admitted.returncode, 0, admitted.stderr)
+        self.assertIn('REACHED import_coding_reference', admitted.stdout)
+        self.assertIn('ROLE -c role=quillmd_owner', admitted.stdout)
+        refused = self.run_wrapper(command, role='backup')
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertNotIn('REACHED', refused.stdout)
+
     def test_a_worker_or_provider_command_is_still_refused(self):
         for command in (['worker'], ['shell'], ['seed_private'], ['verify_live'], ['runserver']):
             with self.subTest(command=command[0]):
@@ -187,9 +227,15 @@ class TheNarrowRoleWrapperAdmitsTheImportAndNothingElse(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertNotIn('REACHED', result.stdout)
 
-    def test_the_allow_list_is_exactly_these_four(self):
+    def test_the_allow_list_is_exactly_these_five(self):
         source = (ROOT / 'rebuild/ops/with_db_role.py').read_text()
-        self.assertIn("('migrate', 'showmigrations', 'check', 'import_terminology')", source)
+        lists = [node.comparators[0] for node in ast.walk(ast.parse(source))
+                 if isinstance(node, ast.Compare) and len(node.ops) == 1
+                 and isinstance(node.ops[0], ast.In)
+                 and ast.unparse(node.left) == 'command[0]']
+        self.assertEqual(len(lists), 1)
+        self.assertEqual(ast.literal_eval(lists[0]),
+                         ('migrate', 'showmigrations', 'check', 'import_terminology', 'import_coding_reference'))
 
 
 class TheTreeHeadAndTheRunningReleaseAreDifferentFacts(unittest.TestCase):
