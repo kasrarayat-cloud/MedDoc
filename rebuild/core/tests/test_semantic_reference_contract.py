@@ -26,11 +26,13 @@ ABSENT = object()
 class SemanticReferenceContractDatabaseTests(TestCase):
     setUp = stage_fixtures.IndependentStageTests.setUp
 
-    def historical_job(self, marker=ABSENT, encounter=None):
-        """Insert the earlier configuration with today's ordinary reservations."""
+    def historical_job(self, marker=ABSENT, encounter=None, *,
+                       scope_contract=semantic.FAMILY_SCOPE_CONTRACT):
+        """Freeze the baseline v4 scope alongside the supplied reference marker."""
         create = Job.objects.create
         def insert(**values):
             values['config'] = deepcopy(values['config'])
+            values['config']['semantic_fact_scope_contract'] = scope_contract
             if marker is ABSENT:
                 values['config'].pop('semantic_fact_reference_contract')
             else:
@@ -54,6 +56,7 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         with patch('core.jobs.Job.objects.create', side_effect=insert):
             job = enqueue(self.encounter, self.user)
         self.assertEqual(observed[0]['semantic_fact_reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
         self.assertEqual(job.config, observed[0])
         self.assertEqual(job.config['semantic_template_version'], str(self.version.pk))
         original = deepcopy(job.config)
@@ -72,10 +75,13 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertEqual(first['payload']['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(first['schema'], semantic.API_FACT_INVENTORY_SCHEMA)
-        self.assertEqual(first['instructions'], semantic.EXTRACT_INVENTORY_INSTRUCTIONS)
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
+        self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA)
+        self.assertEqual(first['instructions'], semantic.EXTRACT_INVENTORY_INSTRUCTIONS
+                         + ' ' + semantic.SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS)
         self.assertEqual(job.ai_stage_receipts.count(), 3)
         self.assertEqual(Usage.objects.get(job=job).actual_cost, 0)
         self.assertTrue(all(answer['status'] == 'missing' and not answer['reviewed']
@@ -89,10 +95,12 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         self.assertEqual(replay.pk, job.pk)
         self.assertEqual(replay.config, original)
         self.assertNotIn('semantic_fact_reference_contract', replay.config)
+        self.assertEqual(replay.config['semantic_fact_scope_contract'], semantic.FAMILY_SCOPE_CONTRACT)
         with patch.object(semantic, 'run', wraps=semantic.run) as dispatch, \
              patch.object(ai_stages, 'execute_stage', wraps=ai_stages.execute_stage) as stages:
             self.assertTrue(run_one())
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.LEGACY_REFERENCE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.FAMILY_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertNotIn('reference_contract', first['payload'])
         self.assertEqual(first['schema'], semantic.API_FACT_SCHEMA)
@@ -115,6 +123,26 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.LEGACY_REFERENCE_CONTRACT)
         self.assertEqual(job.config['semantic_fact_reference_contract'], semantic.LEGACY_REFERENCE_CONTRACT)
+
+    def test_legacy_reference_marker_and_v5_scope_dispatch_independently(self):
+        job = self.historical_job(semantic.LEGACY_REFERENCE_CONTRACT,
+                                  scope_contract=semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
+        original = deepcopy(job.config)
+        with patch.object(semantic, 'run', wraps=semantic.run) as dispatch, \
+             patch.object(ai_stages, 'execute_stage', wraps=ai_stages.execute_stage) as stages:
+            self.assertTrue(run_one())
+        job.refresh_from_db()
+        self.assertEqual(job.state, 'succeeded', job.error)
+        self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.LEGACY_REFERENCE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
+        first = stages.call_args_list[0].kwargs
+        self.assertNotIn('reference_contract', first['payload'])
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.SOURCE_CONTEXT_SCOPE_CONTRACT)
+        self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_SCHEMA)
+        self.assertEqual(first['instructions'], semantic.EXTRACT_INSTRUCTIONS
+                         + ' ' + semantic.SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS)
+        self.assertEqual(job.ai_stage_receipts.count(), 3)
+        self.assertEqual(job.config, original)
 
     def test_explicit_null_and_unknown_markers_refuse_without_stage_cost_or_fallback(self):
         for marker in (None, 'unknown-reference-contract', ''):
