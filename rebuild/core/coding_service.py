@@ -430,6 +430,8 @@ def failure_message(exc, uncertain):
         return 'A provider outcome needs reconciliation. Contact your administrator. No automatic retry will be sent.'
     from .coding_provider import CodingNotSent, CodingFailure
     if isinstance(exc, CodingNotSent):
+        if exc.messages == ['Coding request exceeds its byte limit; nothing was truncated or sent.']:
+            return 'This coding stage exceeds the supported request size and was not sent. No content was truncated. Earlier request evidence and any known cost are retained. Contact your administrator to review this attempt.'
         return 'The coding stage was not sent. Contact your administrator to check provider availability and configuration. The attempt is retained.'
     if isinstance(exc, CodingFailure):
         return 'The provider response could not be validated. Contact your administrator. Its evidence and known cost are retained; no retry will be sent.'
