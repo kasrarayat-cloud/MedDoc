@@ -28,8 +28,10 @@ POSITIONED_SCOPE_CONTRACT = 'positioned-fact-scope-v2'
 DURATION_SCOPE_CONTRACT = 'dimension-aware-duration-scope-v3'
 FAMILY_SCOPE_CONTRACT = 'positioned-family-context-v4'
 SOURCE_CONTEXT_SCOPE_CONTRACT = 'positioned-source-context-v5'
+SOURCE_BINDING_SCOPE_CONTRACT = 'positioned-source-binding-v6'
+SOURCE_CONTEXT_SCOPE_CONTRACTS = (SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT)
 SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SCOPE_CONTRACT,
-                   FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT)
+                   FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT)
 MAX_CALLS = 5
 MAX_OUTPUT_TOKENS = 4000
 TYPES = ('text', 'integer', 'number', 'date', 'choice', 'person_name', 'identifier')
@@ -255,7 +257,7 @@ def _duration_fragment(before, after):
             and not re.search(r'\b(?:for|lasting|lasted|lasts|duration(?: is| of)?)\s+$', before, re.I)))
 
 
-def _literal_negative_context(value, own, bound_names=()):
+def _literal_negative_context(value, own, bound_names=(), *, scope_contract=SOURCE_CONTEXT_SCOPE_CONTRACT):
     """Additional negative idioms, admitted only in complete literal frames.
 
     The old profiles do not recognize these heads. The new profile must not
@@ -267,7 +269,10 @@ def _literal_negative_context(value, own, bound_names=()):
     speakers = [r'the\s+patient', *(re.escape(name) for name in bound_names)]
     social_negative = (r'(?:never\s+used\s+tobacco|never\s+smoked|does\s+not\s+drink\s+alcohol|'
                        r'does\s+not\s+use\s+(?:recreational\s+)?drugs)')
-    if re.fullmatch(social_negative, value['quote'], re.I):
+    selected_negative = social_negative
+    if scope_contract == SOURCE_BINDING_SCOPE_CONTRACT:
+        selected_negative = r'(?:'+social_negative+r'|has\s+never\s+smoked)'
+    if re.fullmatch(selected_negative, value['quote'], re.I):
         # This binds only the negative predicate, not patient ownership. The
         # separate source-attribution guard must establish any named target.
         occupation_word = r'(?!(?:and|but|who|that|has|had|is|was|may|might|could|probably|likely|presumably)\b)[^\W\d_]+'
@@ -308,7 +313,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     # new clause with its own subject/predicate starts a new local scope.
     clause = re.split(r'[,;]|\b(?:but|whereas|while)\b|\band\s+(?=(?:the\s+)?(?:patient|he|she|they)\b|(?:reports|denies|has|is|was)\b)', before, flags=re.I)[-1]
     negative_head = r'(?:no|not|without|denies|denied|negative for)'
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         # A second explicit subject and finite predicate ends the first
         # clause. A shared predicate ("denies fever and cough") does not.
         # This bounded coordination has two direct clinical predicates. Do not
@@ -324,10 +329,12 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
             if boundary is not None:
                 clause = clause[boundary.end():]
         negative_head = r'(?:no|not|without|denies|denied|negative for|never|does\s+not|did\s+not|in\s+no|non[- ](?:tender|distended))'
+    if scope_contract == SOURCE_BINDING_SCOPE_CONTRACT:
+        negative_head = r'(?:'+negative_head+r'|has\s+never\s+smoked)'
     negative = bool(re.search(r'\b'+negative_head+r'\b', clause, re.I)
                     or re.match(r'\s*'+negative_head+r'\b', value['quote'], re.I))
     clipped_non = False
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import SYMPTOMS
         # Commas do not terminate a shared denial. Bind the complete bounded
         # list to its source predicate before considering any selected member.
@@ -340,10 +347,10 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
                            and re.match(r'(?:tender|distended)\b', value['quote'], re.I))
         negative = negative or clipped_non
     uncertain = bool(re.search(r'\b(?:possible|possibly|suspected|may|might|could|if|hypothetical)\b', clause+' '+value['quote'], re.I))
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         uncertain = uncertain or bool(re.search(r'\b(?:perhaps|maybe|unclear|uncertain|allegedly)\b', clause+' '+value['quote'], re.I))
     issues = []
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import VISIT
         visit = re.fullmatch(r'\s*This was an?\s+(?P<visit>'+VISIT+
             r');\s+no telephone or telehealth encounter occurred\s*\.?\s*', own['quote'], re.I)
@@ -351,7 +358,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
             issues.append('The documented remote visit contradicts its explicit telephone/telehealth denial.')
     if clipped_non:
         issues.append('The selected value omits its documented non- prefix.')
-    mixed = scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT and fact['polarity'] == 'mixed'
+    mixed = scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS and fact['polarity'] == 'mixed'
     if mixed:
         # A complete documented assessment may assert a negative symptom state
         # and positive family history together. Preserve that single literal
@@ -364,7 +371,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
                 or not _mixed_assessment_value(value['quote'])
                 or not list(_retained_family_history(value, own, fact['subject'], fact['kind'], scope_contract))):
             issues.append('A mixed fact requires one complete, explicitly documented symptom and family-history assessment.')
-    if (scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT and fact['kind'] == 'assessment'
+    if (scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS and fact['kind'] == 'assessment'
             and _mixed_assessment_value(value['quote']) and not mixed):
         issues.append('The complete assessment contains both polarities and cannot be labelled wholly positive or negative.')
     if negative and fact['polarity'] != 'negated' and not mixed: issues.append('The source contains a local negation not preserved by this fact.')
@@ -374,7 +381,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
         issues.append('The negative answer must retain its documented negative phrase; an annotation cannot synthesize absence.')
     if re.search(r'\b(?:not\s+deny|no\s+change|not\s+without|no\s+evidence\s+against)\b', clause+' '+value['quote'], re.I):
         issues.append('Nested negation or unchanged symptoms require clinician interpretation.')
-    if (scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT
+    if (scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS
             and re.search(r'\b(?:never\s+(?:deny|denies|denied|without|negative\s+for)|not\s+only)\b', clause+' '+value['quote'], re.I)):
         issues.append('Nested negation or unchanged symptoms require clinician interpretation.')
     if fact['polarity'] == 'uncertain': issues.append('The fact is uncertain and needs clinician review.')
@@ -396,7 +403,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
         # negation, subject and timing checks above still apply.
         duration = (re.fullmatch(SOURCE_NUMBER_PATTERN+r'\s+(?:seconds?|minutes?|hours?|days?|weeks?|months?|years?)', value['quote'], re.I)
                     and re.search(r'\b(?:for|lasting|lasted|over)\s+$', before, re.I))
-        if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT) and _duration_value(value['quote']):
+        if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT) and _duration_value(value['quote']):
             duration = True
             if _duration_fragment(before, own['quote'][value['end']-own['start']:]):
                 issues.append('The duration omits its documented approximation, bound or range.')
@@ -501,7 +508,7 @@ def _retained_family_history(value, own, subject, kind, scope_contract=FAMILY_SC
     reported_assessment = re.fullmatch(
         r"\s*(?:my|the\s+(?:clinician|physician|doctor)['’]s)\s+(?:documented\s+)?"
         r'(?:impression|assessment)\s+(?:is|was)\s+', value_prefix, re.I)
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         if (re.search(r'\b(?:is|are|was|were|has|have|had|denies|denied|not|never|without)\b',
                       re.split(r'\bfamily\s+history\s+of\s+', value['quote'], flags=re.I)[-1], re.I)):
             return
@@ -538,7 +545,7 @@ def _annotation_issues(notes, value, contexts, subject, name, timing, time_span,
     if subject['kind'] != 'patient' and re.search(r'\b(?:the\s+)?patient\s+(?:reports?|has|had|denies|rates?|is|was)\b', clause, re.I):
         issues.append('The source explicitly attributes this value to the patient, rather than the proposed subject.')
     past_context = list(own['quote'])
-    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT):
+    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT):
         # A current family-history assertion is not an assertion that the
         # patient currently has the relative's disease. Retain that relationship
         # in the value; all other explicit past markers still require review.
@@ -600,7 +607,7 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
             for at in range(unit['start'], unit['end']):
                 if notes[at] not in '\r\n': offer_scope[at] = ' '
     example_frame = re.compile(r'\b(?:examples?|samples?|illustrations?|demonstrations?|fictional|pretend|test\s+case|case\s+study)\b', re.I)
-    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT) and not any(example_frame.search(r) for r in readings(scoped)):
+    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT) and not any(example_frame.search(r) for r in readings(scoped)):
         for fact in facts.values():
             value = fact['value_evidence']
             if fact['issues'] or governed_context(governance, notes, [value]):
@@ -634,7 +641,34 @@ def _source_person_name(text, *, referrer=False):
     return len(words) == 2 and person_name_value(text)
 
 
-def _source_context_ownership(notes, units, facts):
+def _referrer_name_equivalent(notes, value, name):
+    """A title may differ; the same complete source occurrence may not."""
+    if name is None:
+        return False
+    for span in (value, name):
+        if notes[span['start']:span['end']] != span['quote']:
+            return False
+    if value == name:
+        return True
+    if value['end'] != name['end']:
+        return False
+    outer, inner = sorted((value, name), key=lambda span: span['start'])
+    from .generation import source_units
+    from .semantic_source_context import PURPOSE, VISIT
+    own = next((unit for unit in source_units(notes, [])[0] if _inside(outer, [unit])), None)
+    # Exact nested spans can still both clip the same longer name. Admit the
+    # exception only for a complete referrer slot in the finite source frame.
+    if (own is None
+            or not re.search(r'\breferred\s+by\s*$', notes[own['start']:outer['start']], re.I)
+            or not re.fullmatch(r'\s*(?:for\s+an?\s+'+VISIT+r'\s+'+PURPOSE+r')?\s*\.?\s*',
+                                notes[outer['end']:own['end']], re.I)):
+        return False
+    return (outer['start'] < inner['start']
+        and bool(re.fullmatch(r'(?:Dr\.?|Doctor)\s+', notes[outer['start']:inner['start']], re.I))
+        and _source_person_name(inner['quote']))
+
+
+def _source_context_ownership(notes, units, facts, *, scope_contract=SOURCE_CONTEXT_SCOPE_CONTRACT):
     """Bind the new grammar to the leading, independently evidenced referral.
 
     This is a bounded repair of named-person context, not a general subject
@@ -666,9 +700,13 @@ def _source_context_ownership(notes, units, facts):
         return empty
     target = targets[0]['value_evidence']
     referrers = []
+    title_binding = False
     for other in named_others:
         name = other['subject']['name_evidence']
-        if (other['kind'] != 'identity' or other['value_evidence'] != name or other['issues']
+        same_name = (other['value_evidence'] == name
+            or scope_contract == SOURCE_BINDING_SCOPE_CONTRACT
+            and _referrer_name_equivalent(notes, other['value_evidence'], name))
+        if (other['kind'] != 'identity' or not same_name or other['issues']
                 or not _inside(name, [first]) or target['end'] >= name['start']
                 or not _source_person_name(name['quote'], referrer=True)):
             continue
@@ -676,6 +714,7 @@ def _source_context_ownership(notes, units, facts):
         if re.fullmatch(r'\s+(?:is\s+'+NUMBER+r'\s+years?\s+old\s+and\s+)?'
                         r'(?:was|is)\s+referred\s+by\s+(?:(?:Dr\.?|Doctor)\s+)?', between, re.I):
             referrers.append(name['quote'])
+            title_binding = title_binding or other['value_evidence'] != name
     if len(referrers) != 1:
         return empty
     if any(re.sub(r'^(?:Dr\.?|Doctor)\s+', '', name, flags=re.I).casefold()
@@ -689,6 +728,11 @@ def _source_context_ownership(notes, units, facts):
     if frame is None or frame.kind != 'patient_referral':
         return empty
     scope = evaluate(units, context)
+    if title_binding and not all(row['ownership_admitted'] for row in scope):
+        # A new title equivalence can release older held predicates too. Its
+        # permission therefore needs the complete source, not only the unit
+        # containing the selected fact. A line break is not proof a name ends.
+        return empty
     return {'allowed': {unit['start']: row['ownership_admitted'] for unit, row in zip(units, scope)},
             'names': tuple(name.casefold() for name in (target['quote'], *aliases)), 'starts_at': starts_at}
 
@@ -777,7 +821,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
     for raw in result['facts']:
         _object(raw, keys, 'atomic fact')
         _string(raw['id'], 'fact ID', 80); _string(raw['concept'], 'fact concept', 120)
-        polarities = SOURCE_CONTEXT_POLARITIES if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT else POLARITIES
+        polarities = SOURCE_CONTEXT_POLARITIES if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS else POLARITIES
         if raw['id'] in facts or raw['kind'] not in KINDS or raw['polarity'] not in polarities: _fail('Unknown or duplicate atomic fact.')
         ids = raw['source_unit_ids']
         if type(ids) is not list or not ids or any(type(i) is not int or i not in by_unit for i in ids) or len(ids) != len(set(ids)):
@@ -843,8 +887,8 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                     whole = {'start': 0, 'end': len(notes), 'quote': notes}
                     if whole not in fact['evidence']: fact['evidence'].append(whole)
         facts[fact['id']] = fact
-    ownership = (_source_context_ownership(notes, units, facts)
-                 if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT else None)
+    ownership = (_source_context_ownership(notes, units, facts, scope_contract=scope_contract)
+                 if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS else None)
     if ownership is not None:
         for fact in facts.values():
             if fact['subject']['kind'] != 'patient':
@@ -856,7 +900,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             if (not ownership['allowed'].get(own['start'], False)
                     or name is not None and name['quote'].casefold() not in ownership['names']):
                 fact['issues'].append('Complete source context does not establish this named encounter as the fact owner.')
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import parse_unit
         complete_context = (all(ownership['allowed'].get(unit['start'], False) for unit in units)
             if ownership is not None else all(parse_unit(unit['quote']) is not None for unit in units))
@@ -870,9 +914,15 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                                 if ownership is not None else complete_context)
             if prior_issues.difference(fact['issues']) and not context_admitted:
                 fact['issues'].append('Releasing an earlier local scope hold requires complete, independently bound source context.')
-            if re.match(r'\s*(?:never|does\s+not|did\s+not|in\s+no|non[- ])', value['quote'], re.I):
+            additional_negative = r'\s*(?:never|does\s+not|did\s+not|in\s+no|non[- ])'
+            if scope_contract == SOURCE_BINDING_SCOPE_CONTRACT:
+                additional_negative = r'\s*(?:never|does\s+not|did\s+not|in\s+no|non[- ]|has\s+never\s+smoked\b)'
+            if re.match(additional_negative, value['quote'], re.I):
                 if ((ownership is None and not complete_context)
-                        or not _literal_negative_context(value, own, bound_names)):
+                        or (scope_contract == SOURCE_BINDING_SCOPE_CONTRACT
+                            and re.fullmatch(r'has\s+never\s+smoked', value['quote'], re.I)
+                            and not complete_context)
+                        or not _literal_negative_context(value, own, bound_names, scope_contract=scope_contract)):
                     fact['issues'].append('This additional negative phrase needs complete, unqualified clinical source binding.')
             if fact['polarity'] == 'mixed' and not complete_context:
                 fact['issues'].append('A mixed assessment requires complete recognized source context; an omitted unfamiliar clause cannot resolve its components.')
@@ -887,7 +937,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
     for fact in facts.values():
         for old_id in fact['supersedes']:
             old = facts.get(old_id)
-            if (scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT and old is not None
+            if (scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS and old is not None
                     and 'mixed' in (fact['polarity'], old['polarity'])):
                 # Component-level corrections need clinician interpretation;
                 # one correction cannot silently retire a compound assessment.
@@ -941,7 +991,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             name = other['subject']['name_evidence']
             if other['subject']['kind'] == 'other' and name and fact['subject']['kind'] == 'patient':
                 if any(name['quote'] in e['quote'][:max(0, fact['value_evidence']['start']-e['start'])]
-                       and not (scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT
+                       and not (scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS
                                 and _independent_patient_citation(fact, other, e, ownership))
                        for e in fact['evidence']):
                     fact['issues'].append('Another named subject occurs before this value; attribution needs review.')
@@ -975,6 +1025,57 @@ def _render_fact(fact, definition=None):
         matches = [choice for choice in definition['choices'] if choice.casefold() == value.casefold()]
         if len(matches) == 1: return matches[0]
     return value[:1].upper()+value[1:]
+
+
+def _render_bound_fact(notes, facts, fact, definition, scope_contract):
+    """One prospective choice equivalence, grounded in an owned visit frame."""
+    rendered = _render_fact(fact, definition)
+    if (scope_contract != SOURCE_BINDING_SCOPE_CONTRACT or definition['value_type'] != 'choice'
+            or definition['scope']['subject'] != 'encounter'
+            or fact['issues'] or fact['subject']['kind'] != 'patient'
+            or fact['polarity'] != 'affirmed' or fact['timing']['kind'] != 'current'
+            or fact['unit'] is not None or fact['scale'] is not None
+            or fact['value_evidence']['quote'].casefold() != 'video'):
+        return rendered
+    # Never widen an unrelated enum or choose between duplicate alternatives.
+    choices = definition['choices']
+    if (not all(choice.casefold() in ('in-person', 'telephone', 'video telehealth') for choice in choices)
+            or len({choice.casefold() for choice in choices}) != len(choices)):
+        return rendered
+    matches = [choice for choice in choices if choice.casefold() == 'video telehealth']
+    if len(matches) != 1:
+        return rendered
+    from .generation import source_units
+    from .semantic_source_context import MODALITY, SPECIALTY, parse_unit
+    units, _ = source_units(notes, [])
+    own = next(e for e in fact['evidence'] if _inside(fact['value_evidence'], [e]))
+    visit = re.fullmatch(r'\s*This\s+was\s+an?\s+(?P<modality>video)\s+'
+        r'(?:'+SPECIALTY+r'\s+)?(?:visit|follow-up|consultation)\s*\.?\s*', own['quote'], re.I)
+    if (visit is None or fact['value_evidence']['start'] != own['start']+visit.start('modality')
+            or fact['value_evidence']['end'] != own['start']+visit.end('modality')):
+        return rendered
+    ownership = _source_context_ownership(notes, units, facts, scope_contract=scope_contract)
+    if ownership is None:
+        # Unbound named annotations cannot turn a generic statement into an
+        # independently owned visit. Unknown units never establish ownership.
+        if fact['subject']['name_evidence'] is not None or not all(parse_unit(u['quote']) is not None for u in units):
+            return rendered
+    elif not all(ownership['allowed'].get(unit['start'], False) for unit in units):
+        return rendered
+    # A competing documented visit cannot be hidden by omitting its fact.
+    for unit in units:
+        # Complete recognized units can state modality in the referral and
+        # consent frames too. Omission from the fact inventory changes none
+        # of those source assertions. Generic telehealth remains compatible
+        # with its explicitly documented video subtype.
+        for pattern in (
+                r'^\s*This\s+was\s+an?\s+(?P<modality>'+MODALITY+r')\s+',
+                r'\bgave\s+verbal\s+consent\s+for\s+this\s+(?P<modality>'+MODALITY+r')\s+consultation',
+                r'\bfor\s+an?\s+(?P<modality>'+MODALITY+r')\s+(?:'+SPECIALTY+r'\s+)?(?:visit|follow-up|consultation)'):
+            other = re.search(pattern, unit['quote'], re.I)
+            if other and ' '.join(other['modality'].lower().split()) not in ('video', 'video telehealth', 'telehealth'):
+                return rendered
+    return matches[0]
 
 
 def person_name_value(text):
@@ -1101,7 +1202,16 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         if d['value_type'] == 'person_name':
             for f in picked:
                 name = f['subject']['name_evidence']
-                if not name or name['quote'] != f['value_evidence']['quote']:
+                titled_other = (scope_contract == SOURCE_BINDING_SCOPE_CONTRACT
+                    and d['scope']['subject'] == 'other' and f['subject']['kind'] == 'other'
+                    and f['kind'] == 'identity' and _referrer_name_equivalent(notes, f['value_evidence'], name))
+                if titled_other and f['value_evidence'] != name:
+                    from .generation import source_units
+                    units, _ = source_units(notes, [])
+                    ownership = _source_context_ownership(notes, units, facts, scope_contract=scope_contract)
+                    titled_other = (ownership is not None and
+                        all(ownership['allowed'].get(unit['start'], False) for unit in units))
+                if not titled_other and (not name or name['quote'] != f['value_evidence']['quote']):
                     reasons.append('A person name must equal the exact documented subject name, without its evidence sentence.')
         if d['value_type'] == 'identifier':
             for f in picked:
@@ -1120,7 +1230,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 reasons.append('The fact timing does not match the approved field scope.')
             if d['scope']['polarity'] == 'positive' and f['polarity'] != 'affirmed' or d['scope']['polarity'] == 'negative' and f['polarity'] != 'negated':
                 reasons.append('The fact polarity does not match the approved field scope.')
-            if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+            if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
                 if f['polarity'] == 'mixed' and d['value_type'] != 'text':
                     reasons.append('A mixed assessment can populate only a text destination preserving its complete wording.')
                 compound_peers = [x for x in facts.values() if x['id'] != f['id']
@@ -1135,7 +1245,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if {'affirmed','negated'} <= {x['polarity'] for x in peers}:
                 reasons.append('The notes contain contradictory positive and negative facts for this concept.')
                 competing.extend(peers)
-        text = row['separator'].join(_render_fact(f, d) for f in picked)
+        text = row['separator'].join(_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked)
         typed = None
         try: typed = validate_value(d, text, field)
         except ValidationError as exc: reasons.extend(exc.messages)
@@ -1487,6 +1597,36 @@ SOURCE_CONTEXT_CHECK_INSTRUCTIONS = (
     'Check every separately documented positive and negative impression component against the original source.')
 
 
+SOURCE_BINDING_EXTRACT_INSTRUCTIONS = (
+    'For this source-binding contract, a documented Dr., Dr or Doctor title may prefix an other-person subject '
+    'reference while the person_name value retains the exact complete name without that title. Both references '
+    'must end at the same source position and differ only by that title and its following whitespace; preserve '
+    'every actual name component, including Synthetic. Never borrow a similar name from another occurrence. '
+    'Keep a complete literal has never smoked value when documented; do not remove its negative words. '
+    'Extract each documented visit purpose or type as a complete narrative fact when an approved history needs it, '
+    'in addition to the concise modality fact for a choice destination. Preserve examination context, including '
+    'an explicitly stated video modality, within a self-contained source phrase. Extract separately selectable '
+    'finding components when different approved destinations need different components; do not make an unrelated '
+    'finding inseparable from a relevant one. All values remain exact contiguous source quotations.')
+SOURCE_BINDING_ASSIGN_INSTRUCTIONS = (
+    'For this source-binding contract, code may render an independently source-bound video visit as the unique '
+    'approved video telehealth choice. Select the exact video source fact; never fabricate the choice words as '
+    'source evidence. Other choice equivalences are not authorized. A narrative history retains its documented '
+    'visit purpose as well as symptoms and negatives. Examination findings retain their documented modality and '
+    'other relevant qualifiers. Select only the components relevant to each approved destination. If the inventory '
+    'cannot supply a complete relevant value, leave the problem held for review; do not select unrelated content '
+    'merely to recover one desired component, and do not invent a replacement fact.')
+SOURCE_BINDING_CHECK_INSTRUCTIONS = (
+    'For this source-binding contract, distinguish the exact source modality from the permitted rendered choice: '
+    'an independently grounded video visit may render as the unique approved video telehealth alternative. '
+    'No other semantic choice substitution is authorized. Inspect narrative visit purpose and examination context '
+    'against the original notes, including stated video modality. Inspect every component of a combined answer '
+    'for relevance to its approved destination; a relevant component does not excuse unrelated accompanying text. '
+    'When a required purpose, qualifier or separately relevant component is absent from the extracted inventory, '
+    'return an explicit omission or other appropriate non-pass finding explaining the extraction gap. Do not '
+    'excuse absent source content because the available selected facts are individually grounded.')
+
+
 def _validate_current_subjects(notes, units, facts):
     """Refuse explicit relative apposition misattributed in a NEW extraction.
 
@@ -1668,17 +1808,17 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     base = {'notes': notes, 'approved_definitions': definitions,
             'timing_reference_contract': TEMPORAL_REFERENCE_CONTRACT,
             'fields': [{'key': f['key'], 'label': f['label'], 'protected_signing': protected(f)} for f in fields]}
-    if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT):
+    if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT):
         base['fact_scope_contract'] = scope_contract
         base['qualifier_review'] = ('Judge completeness against the approved field meaning. A duration is a complete time quantity; '
             'do not require it to repeat symptom laterality or body site. Preserve bounds, approximation and ranges. '
             'A symptom or finding must retain its relevant clinical qualifiers. Structured verdicts must agree with the cited facts; prose cannot override a hold.')
-    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT):
+    if scope_contract in (FAMILY_SCOPE_CONTRACT, SOURCE_CONTEXT_SCOPE_CONTRACT, SOURCE_BINDING_SCOPE_CONTRACT):
         base['family_history_review'] = ('A family-history answer must retain the documented relationship or family-history phrase. '
             'Do not assign a relative\'s disease to the patient. A current impression can include a family history without claiming '
             'the patient currently has that disease. Preserve complete documented impressions and all relevant source attribution; '
             'headings, hypothetical statements and unresolved scope still require review.')
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         base['source_context_review'] = (
             'Retain negative wording in the displayed value, distinguish the patient from other named people, '
             'and verify destination-specific narrative completeness. Earlier identity citations do not change '
@@ -1691,12 +1831,16 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         schema, instructions = API_FACT_INVENTORY_SCHEMA, EXTRACT_INVENTORY_INSTRUCTIONS
     assign_instructions = TEMPORAL_REFERENCE_INSTRUCTIONS + ASSIGN_INSTRUCTIONS
     check_instructions = TEMPORAL_REFERENCE_INSTRUCTIONS + CHECK_INSTRUCTIONS
-    if scope_contract == SOURCE_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         schema = (SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA if reference_contract == REFERENCE_INVENTORY_CONTRACT
                   else SOURCE_CONTEXT_API_FACT_SCHEMA)
         instructions += ' ' + SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + SOURCE_CONTEXT_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + SOURCE_CONTEXT_CHECK_INSTRUCTIONS
+    if scope_contract == SOURCE_BINDING_SCOPE_CONTRACT:
+        instructions += ' ' + SOURCE_BINDING_EXTRACT_INSTRUCTIONS
+        assign_instructions += ' ' + SOURCE_BINDING_ASSIGN_INSTRUCTIONS
+        check_instructions += ' ' + SOURCE_BINDING_CHECK_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
@@ -1903,7 +2047,7 @@ def validate_stored_answer(notes, field, definition, answer):
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]},
             scope_contract=scope_contract, timing_reference_contract=answer.get('timing_reference_contract'))[field['key']]
         if fresh['status'] != 'supported': _fail('The stored answer no longer satisfies its source, scope or type constraints.')
-        expected = answer['separator'].join(_render_fact(facts[i], definition) for i in ids)
+        expected = answer['separator'].join(_render_bound_fact(notes, facts, facts[i], definition, scope_contract) for i in ids)
         if answer.get('text') != expected: _fail('A generated answer differs from its grounded fact values.')
         typed=validate_value(definition, expected, field)
         if type(typed) is not type(answer.get('value')) or typed!=answer.get('value'): _fail('The stored typed value differs from its displayed answer.')
