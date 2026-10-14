@@ -612,7 +612,7 @@ def restore(args):
         # authentication failure and this label could never appear at all.
         result['stage'] = 'starting_the_isolated_database'
         run(['docker', 'run', '--pull=never', '--detach', '--name', name, '--label', LABEL + '=' + run_id,
-             '--network', 'none', '--read-only', '--memory', '768m', '--memory-swap', '768m', '--cpus', '1',
+             '--network', 'none', '--read-only', '--memory', '2048m', '--memory-swap', '2048m', '--cpus', '1',
              '--tmpfs', '/var/lib/postgresql/data:rw,size=512m,mode=0700',
              '--tmpfs', '/var/run/postgresql:rw,mode=0777', '--tmpfs', '/tmp:rw,mode=1777',
              '--env', 'POSTGRES_USER=restore_owner', '--env', 'POSTGRES_DB=quillmd_restore',

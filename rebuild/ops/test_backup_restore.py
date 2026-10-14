@@ -277,7 +277,7 @@ class BackupSecurityTests(unittest.TestCase):
         self.assertNotIn("/ 'files'", source)
         self.assertEqual(source.count('write_private('), 1)
         self.assertIn("write_private(restored / 'verification.json'", source)
-        self.assertIn("'--memory', '768m', '--memory-swap', '768m'", source)
+        self.assertIn("'--memory', '2048m', '--memory-swap', '2048m'", source)
         self.assertIn("'--tmpfs', '/var/lib/postgresql/data:", source)
         self.assertIn('decrypted_files_written=0', source)
         # The tmpfs/no-swap evidence is measured from HostConfig, where docker lists --tmpfs mounts, not written as a literal.
@@ -389,6 +389,30 @@ class RestoreCleanupFailureTests(unittest.TestCase):
 
     def evidence(self):
         return json.loads(next(self.root.glob('restore-*/verification.json')).read_text())
+
+    def test_restore_uses_qualified_reference_capacity_without_widening_isolation(self):
+        calls = []
+        def transport(argv, **kwargs):
+            calls.append(argv)
+            if argv[:2] == ['docker', 'run']:
+                # The complete official reference dump OOMs at the old 768 MiB cap.
+                for option, value in (('--memory', '2048m'), ('--memory-swap', '2048m'),
+                                      ('--cpus', '1'), ('--network', 'none'), ('--pull', 'never')):
+                    if option == '--pull':
+                        self.assertIn('--pull=never', argv)
+                    else:
+                        self.assertEqual(argv[argv.index(option) + 1], value)
+                self.assertIn('--read-only', argv)
+                self.assertIn('/var/lib/postgresql/data:rw,size=512m,mode=0700', argv)
+                self.assertNotIn('--publish', argv)
+                self.assertNotIn('--privileged', argv)
+                self.assertNotIn('--volume', argv)
+            return self.manifest['image_id'].encode()
+        with patch.object(b, 'run', side_effect=transport), patch.object(b, 'remove_owned_restore') as cleanup:
+            b.restore(self.args)
+        self.assertTrue(self.evidence()['complete'])
+        self.assertEqual(sum(argv[:2] == ['docker', 'run'] for argv in calls), 1)
+        cleanup.assert_called_once()
 
     def test_successful_comparison_with_failed_cleanup_is_not_success(self):
         with self.assertRaisesRegex(RuntimeError, 'cleanup failed'):
