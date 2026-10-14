@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from .models import Code, CodingRelease
 from . import coding_provider, coding_terminology
 
-CONTRACT = 'us-outpatient-index-tabular-v1'
+CONTRACT = 'us-outpatient-index-tabular-v2'
 GUIDELINES = 'ICD-10-CM Official Guidelines I.A.19, I.B.1-5, I.C.21 and Section IV'
 
 
@@ -110,6 +110,37 @@ def canonical(value):
 
 def digest(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def clinical_answers(answers):
+    """Copy saved answer text and its presentation context, without AI provenance.
+
+    Complete original answer objects remain in the immutable run inputs and their
+    digest. The provider needs the saved text, not repeated extraction facts,
+    earlier candidates, checker explanations or edit histories. In particular,
+    neither a typed value nor a candidate can fill an empty saved text field.
+    """
+    if not isinstance(answers, dict):
+        raise ValidationError('Saved coding answers must be a field mapping.')
+    result = {}
+    for key, answer in answers.items():
+        if not isinstance(key, str) or not isinstance(answer, dict):
+            raise ValidationError('Saved coding answers require named answer objects.')
+        row = {}
+        for name in ('text', 'status', 'unit'):
+            if name in answer:
+                value = answer[name]
+                if not isinstance(value, str) and not (name == 'unit' and value is None):
+                    raise ValidationError('Saved coding answer text and context must be strings.')
+                row[name] = value
+        if 'scale' in answer:
+            scale = answer['scale']
+            if scale is not None and not isinstance(scale, dict):
+                raise ValidationError('Saved coding answer scale must be an object or null.')
+            row['scale'] = None if scale is None else {
+                name: deepcopy(scale[name]) for name in ('scale_minimum', 'scale_maximum') if name in scale}
+        result[key] = row
+    return result
 
 
 def norm(value):
@@ -542,7 +573,7 @@ def generate(run):
         result['global_blockers'].append('Confirm that this is a US outpatient/office encounter before coding review.')
         result['questions'].append(question('setting','Is this a US outpatient/office encounter?',blocking=True))
         return result
-    extracted = coding_provider.execute(run, 'concepts', {'notes':notes, 'answers':run.inputs.get('answers',{}),
+    extracted = coding_provider.execute(run, 'concepts', {'notes':notes, 'answers':clinical_answers(run.inputs.get('answers',{})),
         'service_date':run.inputs['service_date'], 'setting':run.context['setting']}, Concepts, CONCEPT_INSTRUCTIONS)
     extraction = Concepts.model_validate(extracted, strict=True).model_dump()
     concepts = extraction['concepts']

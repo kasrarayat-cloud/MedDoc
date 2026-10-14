@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import coding_service as service
-from core.coding_provider import CodingUnknown
+from core.coding_provider import CodingUnknown, CodingNotSent
 from core.models import (AuditEvent, CodeSet, CodingContext, CodingDecision, CodingRelease,
                          CodingRun, Department, Encounter, Job, Membership, Organization,
                          Patient, Template, TemplateVersion, User)
@@ -101,6 +101,31 @@ class CodingWorkflow(TestCase):
         run=self.complete(); decision=self.approve(run)
         self.assertEqual(before, Encounter.objects.filter(pk=self.e.pk).values().get())
         self.assertEqual(decision.selections, run.selection)
+
+    def test_new_engine_version_retains_failed_zero_send_run_and_requests_once(self):
+        self.e.status='finalized'; self.e.finalized_at=timezone.now(); self.e.finalized_by=self.user
+        self.e.export_path='exports/synthetic.pdf'; self.e.export_sha256='e'*64; self.e.save()
+        clinical_before=Encounter.objects.filter(pk=self.e.pk).values().get()
+        with patch('core.coding_engine.CONTRACT', 'us-outpatient-index-tabular-v1'):
+            self.generate.side_effect=CodingNotSent('Coding request exceeds its byte limit; nothing was truncated or sent.')
+            old=service.ensure_run(self.e,self.user);service.run_one();old.refresh_from_db()
+        old_before=CodingRun.objects.filter(pk=old.pk).values().get()
+        self.assertEqual(old.state,'failed');self.assertEqual(old.requests,[]);self.assertEqual(old.actual_cost,0)
+        self.assertIn('This coding stage exceeds',old.error)
+        self.assertNotIn('provider availability',old.error)
+        view=service.snapshot(self.e,self.user)
+        self.assertEqual(view['state'],'stale');self.assertTrue(view['can_request']);self.assertFalse(view['can_approve'])
+        response=self.client.post(self.url+'request/', {'display_token':view['display_token']}, HTTP_ACCEPT='application/json')
+        self.assertEqual(response.status_code,200)
+        current=CodingRun.objects.exclude(pk=old.pk).get()
+        self.assertNotEqual(current.input_digest,old.input_digest)
+        self.assertEqual(current.inputs['engine_contract'],'us-outpatient-index-tabular-v2')
+        self.assertEqual(service.ensure_run(self.e,self.user).pk,current.pk)
+        self.assertEqual(CodingRun.objects.count(),2)
+        self.assertEqual(old_before,CodingRun.objects.filter(pk=old.pk).values().get())
+        self.assertEqual(clinical_before,Encounter.objects.filter(pk=self.e.pk).values().get())
+        self.assertEqual(CodingDecision.objects.count(),0)
+        self.assertEqual(CodingContext.objects.get(encounter=self.e).data,{**service.CONTEXT_DEFAULTS,'setting':'outpatient_office'})
 
     def test_draft_empty_and_active_clinical_job_are_ineligible(self):
         for field, value in [('status','draft'), ('notes',' '), ('answers',{})]:
@@ -222,6 +247,7 @@ class CodingWorkflow(TestCase):
         run=service.ensure_run(self.e,self.user);service.run_one();run.refresh_from_db()
         self.assertIn('does not exactly occur',run.error);self.assertIn('administrator',run.error)
         self.assertNotIn('synthetic-secret',service.failure_message(RuntimeError('synthetic-secret'),False))
+        self.assertNotIn('synthetic-secret',service.failure_message(CodingNotSent('synthetic-secret'),False))
 
     def test_evidence_context_requires_exact_saved_quote_and_synthetic_identity_attestation(self):
         with self.assertRaises(ValidationError):service.update_context(self.e,self.user,{'time_evidence':'Invented time evidence'})

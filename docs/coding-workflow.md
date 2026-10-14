@@ -53,6 +53,13 @@ configured rates and known costs are retained. A possibly charged unknown
 outcome remains unknown and is not automatically resent. No wallet charge is
 created by this synthetic coding purpose.
 
+Concept requests carry the exact saved, displayed answer text and its clinical
+status and units, rather than repeated internal generation proofs for every
+field. The complete original answers remain in the immutable input snapshot.
+The request byte limit still applies without truncating clinical text. This
+projection has a new engine version, so an earlier failed review is retained
+and an existing finalized encounter can explicitly request the current version.
+
 The UI distinguishes unrequested work, unavailable terminology, pending work,
 insufficient detail, a supported empty result, execution failure and an uncertain
 provider outcome. GET requests do not enqueue jobs or record approvals.

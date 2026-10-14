@@ -1,4 +1,6 @@
 """Source-boundary counterexamples; no provider, live DB or clinical generation."""
+from copy import deepcopy
+from datetime import date
 from types import SimpleNamespace
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
@@ -17,6 +19,121 @@ def run(notes, **inputs):
     return SimpleNamespace(inputs={'notes':notes,'answers':{},'service_date':'2026-10-14',
         'patient_identity':{'display_name':'Synthetic Test Patient'},**inputs},
         context={'setting':'outpatient_office','patient_status':'unknown','em_basis':'unknown'},releases=[])
+
+
+class CodingClinicalPayloadTests(SimpleTestCase):
+    def test_complete_saved_text_and_numeric_context_are_preserved(self):
+        answers = {
+            'identity': {'text':'Synthetic Patient Ω\r\nNo history of cancer.  ', 'status':'edited'},
+            'score': {'text':'0', 'value':0, 'status':'supported', 'unit':'points',
+                      'scale':{'scale_minimum':0, 'scale_maximum':10}},
+            'negative': {'text':'No', 'value':False, 'status':'edited', 'unit':None, 'scale':None},
+        }
+        original = deepcopy(answers)
+        expected = deepcopy(answers)
+        del expected['score']['value']; del expected['negative']['value']
+        projected = engine.clinical_answers(answers)
+        self.assertEqual(projected, expected)
+        projected['score']['scale']['scale_maximum'] = 5
+        self.assertEqual(answers, original)
+
+    def test_blank_missing_and_held_answers_never_use_proposed_or_typed_text(self):
+        answers = {
+            'blank': {'text':'', 'status':'left_blank', 'value':'Old diagnosis',
+                      'candidate_text':'Proposed diagnosis', 'facts':[{'text':'Unsupported disease'}],
+                      'independent_check':{'reason':'Old assertion'}, 'semantic_edit_history':['Earlier value']},
+            'missing': {'status':'missing', 'candidate_text':'Do not fill the blank'},
+            'conflict': {'text':'', 'status':'conflict', 'value':True},
+        }
+        self.assertEqual(engine.clinical_answers(answers), {
+            'blank':{'text':'','status':'left_blank'}, 'missing':{'status':'missing'},
+            'conflict':{'text':'','status':'conflict'}})
+
+    def test_scale_projection_excludes_unrelated_provenance(self):
+        self.assertEqual(engine.clinical_answers({'score':{'text':'2','scale':{
+            'scale_minimum':0,'scale_maximum':10,'facts':['unrelated']}}}),
+            {'score':{'text':'2','scale':{'scale_minimum':0,'scale_maximum':10}}})
+
+    def test_malformed_saved_answer_fields_are_not_silently_discarded(self):
+        for answers in [[], {'x':'diagnosis'}, {1:{'text':'diagnosis'}},
+                        {'x':{'text':False}}, {'x':{'text':None}}, {'x':{'unit':[]}},
+                        {'x':{'status':False}}, {'x':{'scale':'ten'}}]:
+            with self.subTest(answers=answers), self.assertRaises(ValidationError):
+                engine.clinical_answers(answers)
+
+    def test_generate_uses_projection_and_keeps_full_immutable_inputs(self):
+        notes = 'Synthetic Patient has no heartburn.\r\nMother had colon polyps.'
+        answers = {'finding':{'text':'No heartburn', 'status':'supported',
+                              'facts':['large retained provenance '*30000]}}
+        item = run(notes, answers=answers)
+        original = deepcopy(item.inputs)
+        reference = SimpleNamespace(release=SimpleNamespace(version='FY2027'))
+        extracted = {'documented_patient_name':'','patient_name_evidence':'','concepts':[]}
+        with patch.object(engine,'reference_for',return_value=reference), \
+             patch.object(engine.coding_provider,'execute',return_value=extracted) as send, \
+             patch('core.coding_licensing.cpt_status',return_value={'available':False}):
+            engine.generate(item)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[2], {'notes':notes, 'answers':{
+            'finding':{'text':'No heartburn','status':'supported'}},
+            'service_date':'2026-10-14','setting':'outpatient_office'})
+        self.assertEqual(item.inputs, original)
+
+    def test_provenance_reduction_passes_real_byte_guard_without_reserving_or_sending(self):
+        from core import coding_provider as provider
+        class BeforeReservation(Exception): pass
+        item = run('No heartburn.', answers={'x':{'text':'No heartburn.', 'status':'supported',
+            'facts':['retained provenance '*40000]}})
+        item.config = {}
+        raw_payload = {'notes':item.inputs['notes'],'answers':item.inputs['answers']}
+        with patch.object(provider,'_identity',return_value={'input_digest':'test'}), \
+             patch.object(provider.transaction,'atomic',side_effect=BeforeReservation) as reserve:
+            with self.assertRaisesMessage(provider.CodingNotSent,'exceeds its byte limit'):
+                provider.execute(item,'concepts',raw_payload,engine.Concepts,engine.CONCEPT_INSTRUCTIONS)
+            reserve.assert_not_called()
+            with self.assertRaises(BeforeReservation):
+                provider.execute(item,'concepts',{**raw_payload,'answers':engine.clinical_answers(
+                    item.inputs['answers'])},engine.Concepts,engine.CONCEPT_INSTRUCTIONS)
+            reserve.assert_called_once()
+
+    def test_large_clinical_text_is_preserved_then_refused_by_unchanged_byte_limit(self):
+        from core import coding_provider as provider
+        text = 'No heartburn. Ω\r\n' * 40000
+        answers = engine.clinical_answers({'x':{'text':text}})
+        self.assertEqual(answers['x']['text'],text)
+        item = run('No heartburn.'); item.config = {}
+        with patch.object(provider,'_identity',return_value={}), patch.object(provider.transaction,'atomic') as reserve:
+            with self.assertRaisesMessage(provider.CodingNotSent,'exceeds its byte limit'):
+                provider.execute(item,'concepts',{'answers':answers},engine.Concepts,engine.CONCEPT_INSTRUCTIONS)
+            reserve.assert_not_called()
+
+    def test_engine_version_changes_snapshot_digest_without_changing_saved_data(self):
+        from core import coding_service as service
+        encounter = SimpleNamespace(pk='encounter',department_id='department',patient_id='patient',
+            patient=SimpleNamespace(pk='patient',display_name='Synthetic Patient',reference='test'),
+            template_version_id='version',notes='No heartburn.',revision=2,service_date=date(2026,10,14),
+            answers={'x':{'text':'No heartburn.','facts':['retained complete proof']}},
+            template_version=SimpleNamespace(fields=[],semantic_definitions={},
+                template=SimpleNamespace(sha256='a'*64),prepared_sha256='b'*64))
+        original = deepcopy(encounter.answers)
+        with patch.object(service,'context_data',return_value={'setting':'outpatient_office'}), \
+             patch.object(service,'release_snapshot',return_value=[]):
+            with patch.object(engine,'CONTRACT','us-outpatient-index-tabular-v1'):
+                old = service.input_snapshot(encounter)
+            current = service.input_snapshot(encounter)
+            again = service.input_snapshot(encounter)
+            encounter.answers['x']['facts'].append('Additional retained proof')
+            changed_proof = service.input_snapshot(encounter)
+        self.assertEqual(current,again)
+        self.assertNotEqual(old[3],current[3])
+        self.assertEqual(current[0]['engine_contract'],'us-outpatient-index-tabular-v2')
+        self.assertEqual(old[0]['answers'],original)
+        self.assertEqual(current[0]['answers'],original)
+        old_inputs=deepcopy(old[0]);old_inputs['engine_contract']=engine.CONTRACT
+        self.assertEqual(old_inputs,current[0])
+        self.assertNotEqual(current[3],changed_proof[3])
+        self.assertEqual(engine.clinical_answers(current[0]['answers']),
+                         engine.clinical_answers(changed_proof[0]['answers']))
 
 
 @override_settings(SYNTHETIC_ONLY=True)
