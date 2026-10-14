@@ -542,7 +542,8 @@ class NativeAdapter:
         self.source = Path(plan['source_worktree'])
         self.publication = self.guard.make_plan(ROOT, BASE, plan['candidate'], frozenset(plan['source_sha256']),
             owner_uid=1000, owner_gid=1000, service_uid=996, service_gids=[988])
-        self.guard.validate_published(self.source, self.publication, plan['candidate'])
+        self.guard.validate_published(self.source, {**self.publication, 'repo': str(self.source)},
+                                      plan['candidate'])
         self.private_before = self.op.private_boundary()
         self.static = artifacts['static']
         self.static_preparation = None
