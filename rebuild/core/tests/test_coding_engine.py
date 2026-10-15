@@ -128,7 +128,7 @@ class CodingClinicalPayloadTests(SimpleTestCase):
             changed_proof = service.input_snapshot(encounter)
         self.assertEqual(current,again)
         self.assertNotEqual(old[3],current[3])
-        self.assertEqual(current[0]['engine_contract'],'us-outpatient-index-tabular-v3')
+        self.assertEqual(current[0]['engine_contract'],'us-outpatient-index-tabular-v4')
         self.assertEqual(old[0]['answers'],original)
         self.assertEqual(current[0]['answers'],original)
         old_inputs=deepcopy(old[0]);old_inputs['engine_contract']=engine.CONTRACT
@@ -140,6 +140,64 @@ class CodingClinicalPayloadTests(SimpleTestCase):
 
 @override_settings(SYNTHETIC_ONLY=True)
 class CodingEngineSourceTests(SimpleTestCase):
+    def test_unknown_attributes_do_not_negate_an_independently_affirmed_condition(self):
+        for term, attribute in [('constipation','subtype'), ('heartburn','cause'),
+                                ('headache','severity'), ('diabetes','type')]:
+            positive = f'The patient reports {term}.'
+            for detail in [f'No underlying cause or {term} {attribute} has been established.',
+                           f'The {attribute} of {term} is not established.',
+                           f'No {attribute} of severe {term} has been established.',
+                           f'The {term} {attribute} is uncertain.']:
+                note = positive+' '+detail
+                with self.subTest(note=note):
+                    self.assertEqual(engine.source_disposition(concept(term,positive),note),('eligible',''))
+                    # Attributes alone do not establish a present condition,
+                    # even if a provider calls the concept confirmed.
+                    self.assertNotEqual(engine.source_disposition(concept(term,detail),detail)[0],'eligible')
+                    self.assertNotEqual(engine.source_disposition(concept(term,term),detail)[0],'eligible')
+
+    def test_attribute_mentions_cannot_mask_condition_denials_or_uncertainty(self):
+        positive = 'The patient reports constipation.'
+        for detail in [
+            'No constipation subtype has been established and the patient denies constipation.',
+            'No constipation subtype or constipation has been established.',
+            'No evidence of constipation.', 'No signs of constipation.',
+            'No diagnosis of constipation.', 'Constipation has not been confirmed.',
+            'Constipation is suspected.', 'Constipation is absent.',
+            'No constipation-type symptoms are present.',
+        ]:
+            with self.subTest(detail=detail):
+                self.assertEqual(engine.source_disposition(concept('constipation',positive),positive+' '+detail)[0],'question')
+
+    def test_denied_uncertain_family_and_resolved_disease_stay_separate(self):
+        for note, changes in [
+            ('The patient denies constipation.', {'certainty':'negated'}),
+            ('Possible constipation is being evaluated.', {'certainty':'uncertain','kind':'diagnosis'}),
+            ('Constipation resolved in 2018.', {}),
+            ('The patient previously had constipation.', {'temporality':'historical'}),
+            ('Mother has constipation.', {'subject':'family','kind':'diagnosis'}),
+        ]:
+            with self.subTest(note=note):
+                self.assertNotEqual(engine.source_disposition(concept('constipation',note,**changes),note)[0],'eligible')
+        note='Mother has constipation. No constipation subtype has been established.'
+        self.assertEqual(engine.source_disposition(concept('constipation','Mother has constipation.',
+            subject='family',kind='family_history',temporality='historical'),note)[0],'eligible')
+        # A faulty provider affirmation cannot turn a source-only denial into
+        # a fabricated affirmative/negative contradiction.
+        note='The patient denies constipation.'
+        state,reason=engine.source_disposition(concept('constipation',note),note)
+        self.assertEqual(state,'excluded')
+        self.assertIn('source negates',reason)
+
+    def test_mixed_condition_assertions_and_specific_subtype(self):
+        for note in ['The patient denies nausea and reports constipation.',
+                     'Constipation is documented; nausea is denied.',
+                     'No nausea, but slow transit constipation is documented.']:
+            with self.subTest(note=note):
+                self.assertEqual(engine.source_disposition(concept('constipation',note),note)[0],'eligible')
+        note='Slow transit constipation is documented. No underlying cause has been established.'
+        self.assertEqual(engine.source_disposition(concept('slow transit constipation',note),note)[0],'eligible')
+
     def test_clipped_uncertainty_cannot_become_confirmed_disease(self):
         c=concept('GERD','GERD',kind='diagnosis')
         for source in ['Possible GERD is being evaluated.','GERD is suspected.']:
@@ -265,6 +323,8 @@ def regression_reference():
     index = '''<ICD10CM.index><version>2027</version><letter>
       <mainTerm><title>Heartburn</title><code>R12</code>
         <term><title>psychogenic</title><code>F45.8</code></term></mainTerm>
+      <mainTerm><title>Constipation<nemod>(atonic) (neurogenic) (simple) (spastic)</nemod></title><code>K59.00</code>
+        <term><title>slow transit</title><code>K59.01</code></term></mainTerm>
       <mainTerm><title>GERD<nemod>(gastroesophageal reflux disease)</nemod></title><code>K21.9</code></mainTerm>
       <mainTerm><title>Disease</title><term><title>gastroesophageal reflux</title><code>K21.9</code></term></mainTerm>
       <mainTerm><title>Polyp</title><term><title>colon</title><code>K63.5</code></term></mainTerm>
@@ -276,13 +336,14 @@ def regression_reference():
       <mainTerm><title>Screening<nemod>(for)</nemod></title><term><title>colonoscopy</title><code>Z12.11</code></term></mainTerm>
       </letter></ICD10CM.index>'''
     codes = {'R12':'Heartburn', 'F45.8':'Other somatoform disorders',
+             'K59.00':'Constipation, unspecified', 'K59.01':'Slow transit constipation',
              'K21.9':'Gastro-esophageal reflux disease without esophagitis', 'K63.5':'Polyp of colon',
              'Z83.719':'Family history of colon polyps, unspecified',
              'Z83.710':'Family history of adenomatous and serrated polyps',
              'Z86.0100':'Personal history of colon polyps, unspecified',
              'Z12.11':'Encounter for screening for malignant neoplasm of colon'}
     nodes = ''.join(f'<diag><name>{code}</name><desc>{codes[code]}</desc></diag>'
-                    for code in ('R12','F45.8','K21.9','K63.5'))
+                    for code in ('R12','F45.8','K21.9','K63.5','K59.00','K59.01'))
     tabular = f'''<ICD10CM.tabular><version>2027</version><chapter><name>1</name>
       <section id="synthetic-wrapper">{nodes}</section></chapter><chapter><name>21</name>
       <section id="Z00-Z13"><diag><name>Z12</name><desc>Encounter for screening for malignant neoplasms</desc>
@@ -335,6 +396,98 @@ class CodingEngineDemonstratedRegressionTests(SimpleTestCase):
         result = self.generate_rows(notes, [current], {current['id']:requested})
         self.assertEqual([r['code'] for r in result['suggestions']], expected)
         return result
+
+    def test_affirmed_condition_with_unspecified_attribute_reaches_resolution_and_approval(self):
+        # These two Index routes/descriptions were verified against retained
+        # official FY2027 XML; this reduced fixture tests orchestration only.
+        positive='The patient reports constipation.'
+        detail='No underlying cause or constipation subtype has been established.'
+        notes=positive+' '+detail
+        result=self.assert_codes(notes,concept('constipation',positive),'K59.00',['K59.00'])
+        check=result['source_checks']['c1']
+        self.assertEqual(check['disposition'],'eligible')
+        self.assertEqual([s['quote'] for s in check['condition_assertions']],[positive])
+        self.assertEqual([s['quote'] for s in check['attribute_assertions']],[detail])
+        self.assertFalse(any(q['system']=='ICD-10-CM' for q in result['questions']))
+        self.assertEqual([q['id'] for q in result['questions']],['office_em'])
+        row=result['suggestions'][0]
+        self.assertTrue(row['eligible'])
+        self.assertEqual(notes[row['evidence_span']['start']:row['evidence_span']['end']],positive)
+
+    def test_catalogue_membership_does_not_override_unsupported_assertion(self):
+        for notes, changes in [
+            ('No constipation.', {'certainty':'negated'}),
+            ('Possible constipation.', {'certainty':'uncertain','kind':'diagnosis'}),
+            ('Constipation resolved in 2018.', {}),
+            ('Mother has constipation.', {'kind':'diagnosis'}),
+            ('No constipation subtype is established.', {}),
+            ('The patient reports constipation. The patient denies constipation.', {}),
+        ]:
+            with self.subTest(notes=notes):
+                result=self.assert_codes(notes,concept('constipation',notes,**changes),'K59.00',[])
+                self.assertNotEqual(result['source_checks']['c1']['disposition'],'eligible')
+                self.assertNotIn('c1',result['candidates'])
+
+    def test_specific_subtype_requires_its_documented_index_route(self):
+        notes='The patient has slow transit constipation.'
+        self.assert_codes(notes,concept('constipation',notes,index_terms=['Constipation slow transit']),
+                          'K59.01',['K59.01'])
+        notes='The patient has constipation. The subtype is not documented.'
+        self.assert_codes(notes,concept('constipation',notes,index_terms=['Constipation slow transit']),
+                          'K59.01',[])
+
+    def test_default_cannot_discard_specific_subtype_in_complete_source(self):
+        for notes,evidence in [
+            ('The patient has slow transit constipation.','The patient has slow transit constipation.'),
+            ('The patient has constipation. Slow transit constipation is documented.','The patient has constipation.'),
+            ('The patient has constipation. The subtype of constipation is slow transit.','The patient has constipation.'),
+        ]:
+            with self.subTest(notes=notes):
+                result=self.assert_codes(notes,concept('Constipation',evidence),'K59.00',[])
+                self.assertTrue(result['source_checks']['c1']['specificity_holds'])
+        note='The patient has slow transit constipation.'
+        for label in ['Unspecified constipation','Difficulty passing stool','Slow transit constipation']:
+            with self.subTest(label=label):
+                self.assert_codes(note,concept(label,note,index_terms=['Constipation']),'K59.00',[])
+
+    def test_another_subjects_attribute_does_not_supply_patient_specificity(self):
+        quote='The patient reports constipation.'
+        for owner in ["The nurse's", "The husband's", "The mother's", 'The physician’s']:
+            note=quote+' '+owner+' constipation type is slow transit.'
+            with self.subTest(owner=owner):
+                self.assert_codes(note,concept('Constipation',quote),'K59.00',['K59.00'])
+        note=quote+' The nurse denies constipation.'
+        self.assert_codes(note,concept('Constipation',quote),'K59.00',['K59.00'])
+        for reporter in ['The doctor has confirmed that the patient', 'The physician reports that the patient']:
+            note=quote+' '+reporter+' has no constipation.'
+            with self.subTest(reporter=reporter):
+                result=self.assert_codes(note,concept('Constipation',quote),'K59.00',[])
+                self.assertEqual(result['source_checks']['c1']['disposition'],'question')
+
+    def test_negated_index_subtype_does_not_negate_affirmed_parent(self):
+        quote='The patient reports constipation.'
+        for suffix in ['Slow transit constipation is not established.',
+                       'Slow transit constipation is suspected.', 'No slow transit constipation.']:
+            with self.subTest(suffix=suffix):
+                result=self.assert_codes(quote+' '+suffix,concept('Constipation',quote),'K59.00',['K59.00'])
+                self.assertEqual(result['source_checks']['c1']['disposition'],'eligible')
+                self.assertEqual(result['source_checks']['c1']['attribute_assertions'][0]['quote'],suffix)
+                self.assert_codes(quote+' '+suffix,concept('Constipation',quote,
+                    index_terms=['Constipation','Slow transit constipation']),'K59.00',['K59.00'])
+        note='The patient has constipation and slow transit nausea.'
+        self.assert_codes(note,concept('Constipation',note),'K59.00',['K59.00'])
+
+    def test_conflicting_extractions_have_one_consistent_source_verdict(self):
+        notes='The patient reports constipation. The patient denies constipation.'
+        concepts=[concept('constipation','The patient reports constipation.'),
+                  concept('constipation','The patient denies constipation.',id='c2',certainty='negated')]
+        result=self.generate_rows(notes,concepts,{'c1':'K59.00','c2':'K59.00'})
+        self.assertEqual(result['suggestions'],[])
+        self.assertEqual(result['excluded'],[])
+        for key in ('c1','c2'):
+            check=result['source_checks'][key]
+            self.assertEqual(check['disposition'],'question')
+            self.assertEqual([q['question'] for q in result['questions'] if q['id']==key],[check['reason']])
 
     def test_bare_symptom_cannot_select_psychogenic_child_or_disease_route(self):
         for terms, code in [(['Heartburn'],'F45.8'), (['Disease gastroesophageal reflux'],'K21.9')]:
@@ -537,4 +690,4 @@ class CodingConceptValidationTests(SimpleTestCase):
         self.assertIn('c1, c2', request['system'])
         self.assertIn('whitespace', request['system'].lower())
         self.assertIn('placeholder', request['system'])
-        self.assertEqual(engine.CONTRACT, 'us-outpatient-index-tabular-v3')
+        self.assertEqual(engine.CONTRACT, 'us-outpatient-index-tabular-v4')

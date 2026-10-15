@@ -60,6 +60,18 @@ def saved_selection(reference, choices):
 
 
 class SparseReferenceInputTests(SimpleTestCase):
+    def test_assertion_scope_ids_are_bound_and_validated_before_reference_reads(self):
+        reference=fixture()
+        run,selected=saved_selection(reference,[('A00.0','A00.0')])
+        child=next(e for e in reference['index'] if e['code']=='A00.1')
+        run.result['source_checks']={'finding0':{'index_scope_entry_ids':[child['id']]}}
+        self.assertIn(child['id'],store._requested(run,selected)[1])
+        for value in ['not-a-list', ["idx:' OR true --"], [None], ['idx:'+'a'*64]*2049]:
+            run.result['source_checks']['finding0']['index_scope_entry_ids']=value
+            with self.subTest(value=str(value)[:80]),patch.object(store,'_Projection') as projection:
+                with self.assertRaises(ValidationError):store.selection_reference(None,run,selected)
+                projection.assert_not_called()
+
     def test_invalid_selection_refuses_before_any_reference_read(self):
         reference = fixture()
         run, selected = saved_selection(reference, [('A00.0','A00.0')])
@@ -145,6 +157,17 @@ class SparseReferencePostgresTests(TestCase):
         run.result['candidates']['finding0'][0]['source_aliases']=[alias['id']]
         sparse=store.selection_reference(self.reference,run,selected)
         self.assertEqual(sparse._index_lookup[alias['id']],alias)
+
+    def test_assertion_subtype_scope_survives_sparse_approval_projection(self):
+        from core.coding_engine import index_subtypes
+        run,selected=saved_selection(self.full,[('A00.0','A00.0')])
+        child=next(e for e in self.full['index'] if e['code']=='A00.1')
+        run.result['source_checks']={'finding0':{'index_scope_entry_ids':[child['id']]}}
+        sparse=store.selection_reference(self.reference,run,selected)
+        self.assertEqual(sparse._index_lookup[child['id']],child)
+        self.assertEqual(index_subtypes(sparse,{'term':'Synthetic alpha'}),
+                         index_subtypes(SimpleNamespace(index=self.full['index']),{'term':'Synthetic alpha'}))
+        self.assertEqual(set(sparse.tabular['codes']),{'A00.0'})
 
     def test_unknown_reportable_code_and_entry_identity_refuse(self):
         run,selected=saved_selection(self.full,[('A00','A00.0')])

@@ -88,6 +88,20 @@ The UI distinguishes unrequested work, unavailable terminology, pending work,
 insufficient detail, a supported empty result, execution failure and an uncertain
 provider outcome. GET requests do not enqueue jobs or record approvals.
 
+The v4 source check separates a condition from its attributes. For example,
+an absent or undetermined subtype does not deny an independently documented
+condition, and an attribute-only mention cannot establish a condition. All
+occurrences still participate in direct-denial, uncertainty, subject and timing
+checks. Each new result retains source-check verdicts and exact condition and
+attribute evidence spans separately from Index/Tabular validation. Passing a
+source check or finding a catalogue entry alone does not establish eligibility.
+
+The retained Linden failure occurred before terminology resolution: extraction
+affirmed constipation, but the previous clause-wide negation check interpreted
+the missing subtype as symptom denial and withheld its Index candidates. The
+original run, approval, note and Word export remain unchanged. The new engine
+contract requires fresh coding review; it does not regenerate finalized notes.
+
 ## Installation and verification
 
 `rebuild/ops/activate_outpatient_coding.py` is inert by default. Its declared
