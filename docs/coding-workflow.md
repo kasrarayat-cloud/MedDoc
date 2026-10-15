@@ -26,6 +26,13 @@ replacement with a reason. Saving choices does not approve them. One explicit
 approval records all displayed selections, including exclusions. Existing
 clinical approval never approves newly prepared codes.
 
+The review summary separately counts approved selections, suggestions awaiting
+review and unresolved questions for the exact saved revision. An approved
+decision supplies both its included and excluded rows; exclusions are reviewed,
+not pending. Approval does not resolve questions or mark the entire coding task
+complete. Earlier approvals are labeled as history and never count toward a
+changed revision.
+
 Every run binds the note, saved answers, revision, patient identity, service date,
 setting, other coding context, and exact terminology release/digest. A changed
 input makes the previous review stale. Decisions and finished execution evidence
@@ -44,7 +51,8 @@ available. See [the reference guide](coding-reference-guide.md).
 CPT is independently gated by applicable rights and dated licensed content and
 criteria. Its absence does not block ICD review or ordinary export. Office E/M
 requires the setting, patient status and a qualifying documented basis; minutes
-alone are insufficient. See [CPT integration](coding-cpt-integration.md).
+alone are insufficient. See [CPT integration](coding-cpt-integration.md) and the
+[prepared licensing handoff](coding-cpt-licensing-handoff.md).
 
 The new coding purpose reuses the configured provider and shared send lock.
 Each run permits at most one concept call and one resolution call, with SDK

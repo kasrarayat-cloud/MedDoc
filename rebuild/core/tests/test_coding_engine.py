@@ -201,6 +201,43 @@ class CodingEngineSourceTests(SimpleTestCase):
         self.assertEqual(engine.identity_blockers(item,result),[])
         with override_settings(SYNTHETIC_ONLY=False): self.assertTrue(engine.identity_blockers(item,result))
 
+    def test_matching_extracted_identity_needs_no_reuse_exception(self):
+        name = 'Synthetic Coding Linden Ash'
+        note = name + ' reports heartburn and constipation.'
+        item = run(note, patient_identity={'display_name':name},
+                   patient_name_answers=[{'key':'name','label':'Patient name','text':name}])
+        original = deepcopy(item.inputs)
+        self.assertEqual(engine.identity_blockers(item, {
+            'documented_patient_name':name, 'patient_name_evidence':note}), [])
+        self.assertNotIn('identity_review_reason', item.context)
+        self.assertEqual(item.inputs, original)
+
+    def test_extracted_identity_mismatch_is_not_a_general_synthetic_bypass(self):
+        name = 'Synthetic Different Patient'
+        note = name + ' reports heartburn.'
+        item = run(note)
+        extracted = {'documented_patient_name':name, 'patient_name_evidence':note}
+        for reason in ['', '   ', 'test']:
+            with self.subTest(reason=reason):
+                item.context['identity_review_reason'] = reason
+                self.assertTrue(engine.identity_blockers(item, extracted))
+        item.context['identity_review_reason'] = 'Owner confirms this specific intentional synthetic source reuse.'
+        self.assertEqual(engine.identity_blockers(item, extracted), [])
+        with override_settings(SYNTHETIC_ONLY=False):
+            self.assertTrue(engine.identity_blockers(item, extracted))
+        fresh = run(note)
+        self.assertTrue(engine.identity_blockers(fresh, extracted))
+
+    def test_identity_exception_does_not_waive_exact_source_evidence(self):
+        item = run('Synthetic Different Patient reports heartburn.')
+        item.context['identity_review_reason'] = 'Owner confirms this specific intentional synthetic source reuse.'
+        for extracted in [
+            {'documented_patient_name':'Synthetic Different Patient', 'patient_name_evidence':'reports heartburn.'},
+            {'documented_patient_name':'Synthetic Invented Patient', 'patient_name_evidence':'Synthetic Invented Patient reports heartburn.'},
+        ]:
+            with self.subTest(extracted=extracted), self.assertRaises(ValidationError):
+                engine.identity_blockers(item, extracted)
+
     def test_source_quote_is_exact_and_offsets_are_retained(self):
         self.assertEqual(engine.evidence_span('A. A.','A.')['occurrences'],[0,3])
         with self.assertRaises(ValidationError): engine.evidence_span('Heartburn.','heartburn')
