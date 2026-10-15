@@ -224,6 +224,67 @@ class CodingWorkflow(TestCase):
         self.assertEqual(response.status_code,409);self.assertEqual(CodingDecision.objects.count(),0)
         with self.assertRaises(ValidationError):service.update_selection(run,self.user,{'selected_ids':['finding'],'overrides':{}},0)
 
+    def test_selective_approval_counts_persist_and_questions_remain_open(self):
+        result=copy.deepcopy(RESULT)
+        result['suggestions'].append({**result['suggestions'][0], 'id':'second'})
+        result['questions']=[{'system':'CPT','question':'Confirm the E/M basis.','blocking':True},
+                             {'system':'ICD-10-CM','question':'Clarify another symptom.','blocking':False}]
+        self.generate.side_effect=lambda _:copy.deepcopy(result)
+        run=service.ensure_run(self.e,self.user);service.run_one();run.refresh_from_db()
+        pending=service.snapshot(self.e,self.user)
+        self.assertEqual(pending['summary'],{'approved':0,'awaiting_review':2,'not_included':0,'unresolved_questions':2})
+        run=service.update_selection(run,self.user,{'selected_ids':['finding'],'overrides':{}},run.selection_revision)
+        self.assertEqual(service.snapshot(self.e,self.user)['summary']['awaiting_review'],2)
+        decision=self.approve(run)
+        before=(CodingRun.objects.count(),CodingDecision.objects.count(),AuditEvent.objects.count())
+        for _ in range(2):
+            view=service.snapshot(self.e,self.user)
+            self.assertEqual(view['summary'],{'approved':1,'awaiting_review':0,'not_included':1,'unresolved_questions':2})
+            self.assertEqual(view['decision'].pk,decision.pk)
+            self.assertEqual(view['state_label'],'Selections approved; questions remain')
+            self.assertEqual({s['id'] for s in view['suggestions'] if s['selected']},set(decision.selections['selected_ids']))
+            response=self.client.get(self.url+'status/',HTTP_ACCEPT='application/json')
+            self.assertEqual(response.status_code,200)
+            html=response.json()['html']
+            for text in ['1 approved selection','0 suggestions awaiting review','2 unresolved questions',
+                         '1 not included','Reviewed; not included','questions below remain unresolved']:
+                self.assertIn(text,html)
+            self.assertNotIn('to review</span>',html)
+            self.assertNotIn('data-coding-form="approval"',html)
+        self.assertEqual(before,(CodingRun.objects.count(),CodingDecision.objects.count(),AuditEvent.objects.count()))
+        run.refresh_from_db();self.assertEqual(run.state,'needs_detail')
+        self.generate.assert_called_once()
+
+    def test_excluding_every_suggestion_is_a_reviewed_decision_not_pending_work(self):
+        run=self.complete()
+        run=service.update_selection(run,self.user,{'selected_ids':[],'overrides':{}},run.selection_revision)
+        self.approve(run)
+        view=service.snapshot(self.e,self.user)
+        self.assertEqual(view['summary'],{'approved':0,'awaiting_review':0,'not_included':1,'unresolved_questions':0})
+        self.assertEqual(view['state_label'],'Selections approved')
+
+    def test_earlier_approval_never_counts_toward_a_changed_saved_revision(self):
+        run=self.complete();decision=self.approve(run)
+        for field,value in [('revision',3),('service_date',date(2026,10,2)),
+                            ('answers',{'finding':{'text':'Changed saved answer'}})]:
+            original=getattr(self.e,field);setattr(self.e,field,value);self.e.save(update_fields=[field])
+            view=service.snapshot(self.e,self.user)
+            self.assertEqual(view['state'],'stale')
+            self.assertFalse(view['current']);self.assertIsNone(view['decision'])
+            self.assertEqual(view['historical_decision'].pk,decision.pk)
+            self.assertEqual(view['summary'],{'approved':0,'awaiting_review':0,'not_included':0,'unresolved_questions':0})
+            html=self.client.get(self.url+'status/',HTTP_ACCEPT='application/json').json()['html']
+            self.assertIn('This approval does not cover the current saved revision.',html)
+            self.assertNotIn('data-coding-summary',html)
+            setattr(self.e,field,original);self.e.save(update_fields=[field])
+        self.e.revision+=1;self.e.save(update_fields=['revision'])
+        self.complete()
+        current=service.snapshot(self.e,self.user)
+        self.assertIsNone(current['decision']);self.assertIsNone(current['historical_decision'])
+        self.assertEqual(current['summary']['approved'],0)
+        self.assertEqual(current['summary']['awaiting_review'],1)
+        self.assertEqual(CodingDecision.objects.get(pk=decision.pk).selections,decision.selections)
+
     def test_tenant_actor_role_and_methods_are_scoped(self):
         run=self.complete();view=service.snapshot(self.e,self.user)
         other=User.objects.create_user(username='other-coding',email='other@synthetic.invalid',verified_at=timezone.now())

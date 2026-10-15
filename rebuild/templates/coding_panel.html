@@ -13,13 +13,19 @@
       {% if coding.error %}<p class="notice warning">{{ coding.error }}</p>{% endif %}
       {% if coding.state == 'unrequested' %}<p>Coding has not been requested for this saved document.</p>{% elif coding.state == 'documentation_pending' %}<p>Save your notes, generate the document, and wait for its request to finish. Coding then starts for the saved result.</p>{% elif coding.state == 'queued' %}<p role="status">The saved document is queued for coding. Results will appear here automatically.</p>{% elif coding.state == 'running' %}<p role="status">Checking the saved documentation against the applicable coding references. You can keep this panel open.</p>{% elif coding.state == 'empty' %}<p>No supported codes were found in this documentation. No codes have been approved.</p>{% elif coding.state == 'terminology_unavailable' %}<p>No verified coding reference covers this date of service. Contact your administrator to load the appropriate release.</p>{% elif coding.state == 'needs_detail' %}<p>Some coding details still need clarification. Review the questions below; supported selections can be reviewed independently.</p>{% elif coding.state == 'uncertain' %}<p>A provider outcome needs reconciliation. This request will not be sent again automatically.</p>{% endif %}
       {% if coding.can_request %}<form method="post" action="{% url 'coding_request' encounter.pk %}" data-coding-form="request">{% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><button type="submit">{% if coding.run %}Code current saved document{% else %}Create coding record{% endif %}</button></form>{% endif %}
+      {% if coding.current %}<div class="notice" data-coding-summary aria-label="Coding review for this saved revision">
+        <strong>Review for this saved revision</strong>
+        <p class="small"><span data-coding-approved-count>{{ coding.summary.approved }} approved selection{{ coding.summary.approved|pluralize }}</span> · <span data-coding-awaiting-count>{{ coding.summary.awaiting_review }} suggestion{{ coding.summary.awaiting_review|pluralize }} awaiting review</span> · <span data-coding-question-count>{{ coding.summary.unresolved_questions }} unresolved question{{ coding.summary.unresolved_questions|pluralize }}</span>{% if coding.decision %} · <span data-coding-excluded-count>{{ coding.summary.not_included }} not included</span>{% endif %}</p>
+        {% if coding.decision and coding.questions %}<p class="small">Approval covers the displayed selections. The questions below remain unresolved.</p>{% endif %}
+      </div>{% endif %}
       {% if coding.global_blockers %}<div class="notice warning"><h3>Review required</h3><ul>{% for blocker in coding.global_blockers %}<li>{{ blocker.message|default:blocker }}</li>{% endfor %}</ul></div>{% endif %}
-      {% if coding.questions %}<section class="coding-questions"><h3>Details needed</h3><ul>{% for question in coding.questions %}<li><span class="badge">{{ question.system }}</span> {{ question.question }}</li>{% endfor %}</ul></section>{% endif %}
+      {% if coding.questions %}<section class="coding-questions"><h3>{% if coding.current %}Unresolved questions{% else %}Questions from earlier documentation{% endif %}</h3><ul>{% for question in coding.questions %}<li><span class="badge">{{ question.system }}</span> {{ question.question }}</li>{% endfor %}</ul></section>{% endif %}
       {% if coding.decision %}<div class="notice success"><strong>Approved by {{ coding.decision.user.email }}</strong><p class="small">{{ coding.decision.approved_at|date:'j M Y, H:i' }}. The approved selections are retained with this saved coding context.</p></div>{% endif %}
+      {% if coding.historical_decision %}<div class="notice"><strong>Earlier selections approved by {{ coding.historical_decision.user.email }}</strong><p class="small">{{ coding.historical_decision.approved_at|date:'j M Y, H:i' }}. This approval does not cover the current saved revision.</p></div>{% endif %}
       {% if coding.suggestions %}
       <form method="post" action="{% url 'coding_selections' encounter.pk coding.run.pk %}" data-coding-form="selections">
         {% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><input type="hidden" name="selection_revision" value="{{ coding.run.selection_revision }}">
-        <div class="section-heading"><h3>Suggested codes</h3><span class="small muted">{{ coding.suggestions|length }} to review</span></div>
+        <div class="section-heading"><h3>{% if not coding.current %}Earlier code suggestions{% elif coding.decision %}Reviewed code selections{% else %}Suggested codes{% endif %}</h3>{% if coding.current and not coding.decision %}<span class="small muted">{{ coding.summary.awaiting_review }} awaiting review</span>{% endif %}</div>
         {% for suggestion in coding.suggestions %}
         <article class="coding-code" data-coding-item data-suggestion-id="{{ suggestion.id }}">
           <div class="coding-code-heading"><h3><span class="mono">{{ suggestion.code }}</span> · {{ suggestion.description }}</h3><span class="badge">{{ suggestion.system }}</span></div>
@@ -34,7 +40,7 @@
             <label for="reason-{{ suggestion.id }}">Reason supported by the saved documentation</label><textarea id="reason-{{ suggestion.id }}" name="reason_{{ suggestion.id }}" rows="2" maxlength="500" data-code-reason>{{ suggestion.override_reason }}</textarea>
             <p class="helptext">A correction must pass the same coding reference and source checks.</p>
           </details>
-          {% else %}<p class="small"><strong>{% if suggestion.selected %}Included{% else %}Not included{% endif %}</strong>{% if suggestion.override_code %} · Corrected code: <span class="mono">{{ suggestion.override_code }}</span> · {{ suggestion.override_reason }}{% endif %}</p>{% endif %}
+          {% else %}<p class="small"><strong>{% if coding.decision %}{% if suggestion.selected %}Approved selection{% else %}Reviewed; not included{% endif %}{% elif coding.historical_decision %}{% if suggestion.selected %}Previously approved{% else %}Previously not included{% endif %}{% else %}Awaiting review{% endif %}</strong>{% if suggestion.override_code %} · Corrected code: <span class="mono">{{ suggestion.override_code }}</span> · {{ suggestion.override_reason }}{% endif %}</p>{% endif %}
         </article>
         {% endfor %}
         {% if coding.can_review %}<button class="secondary" type="submit">Save code selections</button><p class="helptext">Saving selections does not approve the coding record.</p>{% endif %}
@@ -42,9 +48,9 @@
       {% if coding.can_review %}
       <form class="coding-approval" method="post" action="{% url 'coding_approval' encounter.pk coding.run.pk %}" data-coding-form="approval">
         {% csrf_token %}<input type="hidden" name="display_token" value="{{ coding.display_token }}"><input type="hidden" name="input_digest" value="{{ coding.run.input_digest }}"><input type="hidden" name="selection_digest" value="{{ coding.selection_digest }}">
-        <h3>Approve the complete coding record</h3><p class="small">Review the included and excluded codes above. Approval records all saved selections together, independently of your clinical document.</p>
+        <h3>Approve displayed selections</h3><p class="small">Review the included and excluded codes above. Approval records all saved selections together, independently of your clinical document. Unresolved questions remain open.</p>
         {% if coding.approval_error %}<p class="notice warning">{{ coding.approval_error }}</p>{% endif %}
-        <button type="submit" {% if not coding.can_approve %}disabled{% endif %}>Approve coding record</button>
+        <button type="submit" {% if not coding.can_approve %}disabled{% endif %}>Approve code selections</button>
       </form>{% endif %}
       {% endif %}
       {% if coding.excluded %}<details class="coding-excluded"><summary>Not suggested from this documentation</summary><ul>{% for item in coding.excluded %}<li>{{ item.reason|default:item }}</li>{% endfor %}</ul></details>{% endif %}

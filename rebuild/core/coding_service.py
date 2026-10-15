@@ -276,7 +276,9 @@ def snapshot(encounter, user):
     run = CodingRun.objects.filter(encounter=e, input_digest=key).first()
     latest = run or CodingRun.objects.filter(encounter=e).order_by('-created_at', '-pk').first()
     stale = latest is not None and run is None
-    decision = CodingDecision.objects.filter(run=latest).select_related('user').first() if latest else None
+    saved_decision = CodingDecision.objects.filter(run=latest).select_related('user').first() if latest else None
+    current = bool(run and eligible(e))
+    decision = saved_decision if current and saved_decision and saved_decision.input_digest == key else None
     state = ('stale' if stale else 'approved' if decision else latest.state if latest else 'unrequested')
     if not eligible(e):
         state = 'documentation_pending'
@@ -291,12 +293,15 @@ def snapshot(encounter, user):
               'running': 'Reviewing the saved documentation', 'succeeded': 'Ready for coding review',
               'needs_detail': 'More detail is needed', 'failed': 'Coding could not complete',
               'uncertain': 'Coding outcome needs reconciliation', 'stale': 'Saved documentation or context changed',
-              'approved': 'Coding record approved', 'empty': 'No supported codes found',
+              'approved': 'Selections approved', 'empty': 'No supported codes found',
               'terminology_unavailable': 'Coding reference unavailable for this date',
               'documentation_pending': 'Save and generate the document before coding'}
     can_edit = bool(membership(user, e.department).role in ('owner', 'clinician'))
-    selected = (latest.selection or {}).get('selected_ids', []) if latest else []
-    overrides = (latest.selection or {}).get('overrides', {}) if latest else {}
+    # An approval describes the persisted decision, including its exclusions.
+    # Earlier decisions remain history and never approve the current revision.
+    selections = saved_decision.selections if saved_decision else latest.selection if latest else {}
+    selected = (selections or {}).get('selected_ids', [])
+    overrides = (selections or {}).get('overrides', {})
     suggestions = []
     for item in result.get('suggestions', []):
         if item.get('system') == 'CPT' and not any(r['system'] == 'CPT' for r in releases):
@@ -312,8 +317,16 @@ def snapshot(encounter, user):
         suggestions.append({**displayed, 'selected': item['id'] in selected,
                             'override_code': overrides.get(item['id'], {}).get('code', ''),
                             'override_reason': overrides.get(item['id'], {}).get('reason', '')})
-    can_review = bool(can_edit and run and not decision and eligible(e)
+    can_review = bool(can_edit and current and not saved_decision
                       and run.state in ('succeeded', 'needs_detail') and suggestions)
+    summary = {
+        'approved': sum(item['selected'] for item in suggestions) if decision else 0,
+        'awaiting_review': len(suggestions) if current and not saved_decision else 0,
+        'not_included': sum(not item['selected'] for item in suggestions) if decision else 0,
+        'unresolved_questions': len(result.get('questions', [])) if current else 0,
+    }
+    if decision and summary['unresolved_questions']:
+        labels['approved'] = 'Selections approved; questions remain'
     can_approve = False
     approval_error = ''
     if can_review:
@@ -330,6 +343,8 @@ def snapshot(encounter, user):
             'run_id': str(latest.pk) if latest else '', 'suggestions': suggestions,
             'questions': result.get('questions', []), 'excluded': result.get('excluded', []),
             'global_blockers': result.get('global_blockers', []), 'decision': decision,
+            'historical_decision': saved_decision if not decision else None,
+            'summary': summary, 'current': current,
             'can_request': can_edit and eligible(e) and not run, 'can_edit': can_edit,
             'can_review': can_review, 'can_approve': can_approve, 'approval_error': approval_error,
             'selection_digest': selection_digest(latest) if latest else '',
