@@ -107,6 +107,8 @@ class DocumentIdentityTests(SimpleTestCase):
                  ('Alex Morgan reports heartburn.', 'Morgan'),
                  ('Nurse Alex Morgan reports heartburn. The patient reports constipation.', 'Alex Morgan'),
                  ('Dr. Alex Morgan reports that the patient has heartburn.', 'Alex Morgan'),
+                 ('Alex Morgan is the nurse. The patient reports heartburn.', 'Alex Morgan'),
+                 ('Alex Morgan reports that his patient has heartburn.', 'Alex Morgan'),
                  ('Patient name: Alex Morgan.', 'Alex'),
                  ('Patient name: Alex Morgan.', 'Morgan')]
         for notes, name in cases:
@@ -134,14 +136,16 @@ class DocumentIdentityTests(SimpleTestCase):
         self.assertEqual(answers['subjective']['status'], 'ambiguous')
 
     def test_omitted_competing_source_name_does_not_manufacture_uniqueness(self):
-        notes = 'Patient name: Alex Morgan. Patient name: Jamie Rivers. The patient reports heartburn.'
-        fields = deepcopy(self.fields); definitions = soap_definitions(fields)
-        facts = [fact(notes, fields, 'identity', 'Alex Morgan', kind='identity', name_quote='Alex Morgan'),
-                 fact(notes, fields, 'symptom', 'heartburn', kind='history')]
-        answers, _ = self.generate(notes, fields, definitions, facts, {'subjective':['identity','symptom']})
-        check = answers['subjective']['patient_name_check']
-        self.assertEqual(answers['subjective']['status'], 'ambiguous')
-        self.assertEqual(check['unrepresented_source_names'][0]['quote'], 'Jamie Rivers')
+        for label in ('Patient name', 'Patient'):
+            with self.subTest(label=label):
+                notes = label+': Alex Morgan. '+label+': Jamie Rivers. The patient reports heartburn.'
+                fields = deepcopy(self.fields); definitions = soap_definitions(fields)
+                facts = [fact(notes, fields, 'identity', 'Alex Morgan', kind='identity', name_quote='Alex Morgan'),
+                         fact(notes, fields, 'symptom', 'heartburn', kind='history')]
+                answers, _ = self.generate(notes, fields, definitions, facts, {'subjective':['identity','symptom']})
+                check = answers['subjective']['patient_name_check']
+                self.assertEqual(answers['subjective']['status'], 'ambiguous')
+                self.assertEqual(check['unrepresented_source_names'][0]['quote'], 'Jamie Rivers')
         notes, fields, definitions, facts = self.case()
         facts[0]['subject']['kind'] = 'uncertain'
         answers, _ = self.generate(notes, fields, definitions, facts, {'subjective':['identity','symptom']})

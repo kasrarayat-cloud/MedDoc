@@ -1477,7 +1477,11 @@ def _complete_patient_identity(notes, fact):
     # A sentence splitter's title stop is not a new anonymous patient frame.
     if not explicit and re.search(r'\b(?:Dr|Prof|Mr|Mrs|Ms)\.\s*$', notes[:name['start']], re.I):
         return False
-    if re.match(r'\s+(?:reports?|states?|says?|reported|stated|said)\s+(?:that\s+)?(?:the\s+)?patient\b', after, re.I):
+    if re.search(r'\b(?:his|her|their|my|our|the|another|a)\s+patient\b', after, re.I) and not re.match(
+            r'\s+(?:is|was)\s+(?:the|this)\s+patient\b', after, re.I):
+        return False
+    if re.match(r'\s+(?:is|was)\b', after, re.I) and not re.match(
+            r'\s+(?:is|was)\s+(?:(?:the|this)\s+patient\b|(?:referred|born)\b|\d+\s+years?\s+old\b)', after, re.I):
         return False
     # A leading bare name needs a documented patient predicate; an explicit
     # patient-name label also permits a complete value ending at punctuation.
@@ -1508,7 +1512,7 @@ def patient_name_check(notes, definition, facts, selected_ids):
     # Omitting one competing identity fact cannot manufacture a unique name.
     source_slots = []
     labels = re.compile(r'\b(?:the\s+)?patient(?:[\'’]s)?\s+(?:full\s+)?name\s*(?::|is\b)\s*'
-                        r'(?P<name>[^\r\n;.!?]+)|(?:^|[\n;])\s*patient\s*:\s*(?P<short>[^\r\n;.!?]+)', re.I)
+                        r'(?P<name>[^\r\n;.!?]+)|(?:^|[\n;.!?])\s*patient\s*:\s*(?P<short>[^\r\n;.!?]+)', re.I)
     for match in labels.finditer(notes):
         group = 'name' if match.group('name') is not None else 'short'
         value = match[group]
