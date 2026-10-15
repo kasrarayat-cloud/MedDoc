@@ -44,7 +44,8 @@ def posted_definitions(prep, post):
             'scope': {name: post.get(prefix+name, '') for name in ('subject', 'temporality', 'polarity')},
             'permitted_destination': destination(field),
             'constraints': {name: post.get(prefix+name, '').strip() or None for name in CONSTRAINT_KEYS}}
-        if version == 2: values[field['key']]['answer_mode'] = post.get(prefix+'answer_mode', '')
+        if version in (2, 3): values[field['key']]['answer_mode'] = post.get(prefix+'answer_mode', '')
+        if version == 3: values[field['key']]['patient_name_requirement'] = post.get(prefix+'patient_name_requirement', '')
     return values
 
 
@@ -88,7 +89,7 @@ def context(prep, member, *, definitions=None, error='', post=None):
             and prep.error_code!='provider_unknown'
             and all(row.state in ('succeeded','failed') and row.actual_cost is not None for row in receipts),
         'definition_version':workflow.definition_version(prep.config), 'answer_modes':ANSWER_MODES,
-        'value_types': ANSWER_TYPES if workflow.definition_version(prep.config)==2 else VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
+        'value_types': ANSWER_TYPES if workflow.definition_version(prep.config) in (2, 3) else VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
         'error': error, 'correction_reason': post.get('correction_reason', '') if post else '',
         'approved_version': prep.versions.order_by('number').first() if prep.state == 'approved' else None}
 

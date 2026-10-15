@@ -21,6 +21,7 @@ TIMING_LABELS = {'current': 'Current', 'past': 'Past', 'future': 'Future', 'any'
 POLARITY_LABELS = {'any': 'Include positive and negative statements',
                    'positive': 'Positive statements only', 'negative': 'Negative statements only'}
 MODE_LABELS = {'atomic': 'One concise value', 'narrative': 'Relevant narrative facts'}
+PATIENT_NAME_LABELS = {'none': 'No additional requirement', 'documented': 'Include documented patient name'}
 
 
 def review_items(prep, items):
@@ -135,9 +136,10 @@ def rows(items, labels=None):
                    reason=row.get('reason', '').replace('Save doctor corrections', 'Save decisions'),
                    location=location, name_question=row.get('name_question_type', kind) == 'person_name' and row.get('state') == 'unresolved',
                    numeric=kind in {'integer', 'number'}, choice=kind == 'choice', constraints_summary=' · '.join(limits),
-                   type_options=[(k,v) for k,v in TYPE_LABELS.items() if definition.get('version') == 2 or k not in {'person_name', 'identifier'}], subject_options=list(SUBJECT_LABELS.items()),
+                   type_options=[(k,v) for k,v in TYPE_LABELS.items() if definition.get('version') in (2, 3) or k not in {'person_name', 'identifier'}], subject_options=list(SUBJECT_LABELS.items()),
                    timing_options=list(TIMING_LABELS.items()), polarity_options=list(POLARITY_LABELS.items()),
-                   mode_options=list(MODE_LABELS.items()))
+                   mode_options=list(MODE_LABELS.items()), patient_name_options=list(PATIENT_NAME_LABELS.items()),
+                   patient_name_summary=PATIENT_NAME_LABELS.get(definition.get('patient_name_requirement'), ''))
         result.append(row)
     return result
 
@@ -174,7 +176,8 @@ def submitted(prep, items, user, post, operation):
         raise ValidationError('Answer definitions are not available for this review.')
     for key, definition in baseline.items():
         names = ['meaning', 'value_type', 'unit', 'choices', 'subject', 'temporality', 'polarity', *CONSTRAINT_KEYS]
-        if definition['version'] == 2: names.append('answer_mode')
+        if definition['version'] in (2, 3): names.append('answer_mode')
+        if definition['version'] == 3: names.append('patient_name_requirement')
         if any(len(post.getlist('field_'+key+'_'+name)) != 1 for name in names):
             raise ValidationError('A definition control is missing or repeated. Reload before reviewing this form.')
     from .semantic_preparation_views import posted_definitions

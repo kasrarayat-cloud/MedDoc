@@ -5,6 +5,7 @@
   {% if row.constraints_summary %}<p class="review-choices">{{ row.constraints_summary }}</p>{% endif %}
   <p class="review-destination">{{ row.location }}{% if row.subject_label %} · <span data-subject-summary>{{ row.subject_label }}{% if row.name_question %} (suggested){% endif %}</span>{% endif %}</p>
   {% if row.scope_summary %}<p class="review-choices">{{ row.scope_summary }}</p>{% endif %}
+  {% if row.patient_name_summary %}<p class="review-choices">Patient name in this answer: {{ row.patient_name_summary }}</p>{% endif %}
   {% if row.protected %}<p class="small">Protected signing area. Existing signing and identity checks still apply.</p>{% endif %}
   {% if editable %}
     {% if row.state == 'unresolved' %}<div class="review-question">
@@ -25,7 +26,8 @@
 {{ row.definition.meaning }}</textarea>
       <label for="type-{{ row.field.key }}">Answer type</label><select id="type-{{ row.field.key }}" name="field_{{ row.field.key }}_value_type" data-value-type>{% for value,label in row.type_options %}<option value="{{ value }}" {% if value == row.definition.value_type %}selected{% endif %}>{{ label }}</option>{% endfor %}</select>
       <div data-control-group="unit" {% if not row.numeric and not row.definition.unit %}hidden{% endif %}><label for="unit-{{ row.field.key }}">Unit</label><input id="unit-{{ row.field.key }}" name="field_{{ row.field.key }}_unit" maxlength="80" value="{{ row.definition.unit|default_if_none:'' }}"></div>
-      {% if definition_version == 2 %}<div data-control-group="mode" {% if row.definition.value_type != 'text' %}hidden{% endif %}><label for="mode-{{ row.field.key }}">Answer length</label><select id="mode-{{ row.field.key }}" name="field_{{ row.field.key }}_answer_mode">{% for value,label in row.mode_options %}<option value="{{ value }}" {% if value == row.definition.answer_mode %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>{% endif %}
+      {% if definition_version >= 2 %}<div data-control-group="mode" {% if row.definition.value_type != 'text' %}hidden{% endif %}><label for="mode-{{ row.field.key }}">Answer length</label><select id="mode-{{ row.field.key }}" name="field_{{ row.field.key }}_answer_mode">{% for value,label in row.mode_options %}<option value="{{ value }}" {% if value == row.definition.answer_mode %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>{% endif %}
+      {% if definition_version == 3 %}<label for="patient-name-{{ row.field.key }}">Patient name in this answer</label><select id="patient-name-{{ row.field.key }}" name="field_{{ row.field.key }}_patient_name_requirement">{% for value,label in row.patient_name_options %}<option value="{{ value }}" {% if value == row.definition.patient_name_requirement %}selected{% endif %}>{{ label }}</option>{% endfor %}</select><p class="small muted">Use the name documented in the clinical source. This never fills a name from the patient record.</p>{% endif %}
       <div data-control-group="choices" {% if not row.choice %}hidden{% endif %}><label for="choices-{{ row.field.key }}">Allowed choices · one per line</label><textarea id="choices-{{ row.field.key }}" name="field_{{ row.field.key }}_choices" rows="3">
 {% for choice in row.definition.choices %}{{ choice }}{% if not forloop.last %}
 {% endif %}{% endfor %}</textarea></div>

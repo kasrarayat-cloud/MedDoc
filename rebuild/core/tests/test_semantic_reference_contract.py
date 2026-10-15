@@ -11,7 +11,7 @@ from django.test import TestCase, override_settings
 
 from core import ai_stages, semantic_generation as semantic
 from core.jobs import enqueue, run_one
-from core.models import Encounter, Job, ProviderReceipt, Usage
+from core.models import Encounter, Job, ProviderReceipt, TemplateDefinitionPreparation, Usage
 from core.tests import test_ai_stages as stage_fixtures
 
 
@@ -24,7 +24,16 @@ ABSENT = object()
         'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
         'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class SemanticReferenceContractDatabaseTests(TestCase):
-    setUp = stage_fixtures.IndependentStageTests.setUp
+    def setUp(self):
+        # Reference-protocol replay needs a genuinely historical definition
+        # contract, supplied before insertion rather than rewriting approval.
+        create = TemplateDefinitionPreparation.objects.create
+        def insert(**values):
+            values['config'] = {**values['config'], 'semantic_definition_version': 2}
+            return create(**values)
+        with patch('core.semantic_preparation.TemplateDefinitionPreparation.objects.create', side_effect=insert):
+            stage_fixtures.IndependentStageTests.setUp(self)
+        self.assertEqual({d['version'] for d in self.version.semantic_definitions.values()}, {2})
 
     def historical_job(self, marker=ABSENT, encounter=None, *,
                        scope_contract=semantic.FAMILY_SCOPE_CONTRACT):
@@ -56,7 +65,7 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         with patch('core.jobs.Job.objects.create', side_effect=insert):
             job = enqueue(self.encounter, self.user)
         self.assertEqual(observed[0]['semantic_fact_reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.CONSENT_CONTEXT_SCOPE_CONTRACT)
+        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
         self.assertEqual(job.config, observed[0])
         self.assertEqual(job.config['semantic_template_version'], str(self.version.pk))
         original = deepcopy(job.config)
@@ -75,16 +84,17 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.CONSENT_CONTEXT_SCOPE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertEqual(first['payload']['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(first['payload']['fact_scope_contract'], semantic.CONSENT_CONTEXT_SCOPE_CONTRACT)
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
         self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA)
         self.assertEqual(first['instructions'], semantic.EXTRACT_INVENTORY_INSTRUCTIONS
                          + ' ' + semantic.SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS
                          + ' ' + semantic.SOURCE_BINDING_EXTRACT_INSTRUCTIONS
                          + ' ' + semantic.OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS
-                         + ' ' + semantic.CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS)
+                         + ' ' + semantic.CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS
+                         + ' ' + semantic.DOCUMENT_IDENTITY_INSTRUCTIONS)
         self.assertEqual(job.ai_stage_receipts.count(), 3)
         self.assertEqual(Usage.objects.get(job=job).actual_cost, 0)
         self.assertTrue(all(answer['status'] == 'missing' and not answer['reviewed']

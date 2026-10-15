@@ -93,6 +93,18 @@ class CodingWorkflow(TestCase):
         self.assertEqual(service.ensure_run(self.e, self.user).pk, first.pk)
         self.assertEqual(CodingRun.objects.count(), 1); self.generate.assert_called_once()
 
+    def test_historical_approval_stays_current_without_new_identity_bridge(self):
+        run=self.complete();before=copy.deepcopy(run.inputs);decision=self.approve(run)
+        current=service.input_snapshot(self.e)
+        self.assertEqual(current[0],before)
+        self.assertEqual(current[3],run.input_digest)
+        self.assertNotIn('documented_patient_name_evidence',current[0])
+        view=service.snapshot(self.e,self.user)
+        self.assertTrue(view['current']);self.assertFalse(view['stale'])
+        self.assertEqual(view['decision'].pk,decision.pk)
+        self.assertEqual(service.ensure_run(self.e,self.user).pk,run.pk)
+        self.assertEqual(CodingRun.objects.count(),1)
+
     def test_finalized_explicit_request_does_not_mutate_clinical_record(self):
         self.e.status='finalized'; self.e.finalized_at=timezone.now(); self.e.finalized_by=self.user
         self.e.export_path='exports/synthetic.pdf'; self.e.export_sha256='e'*64; self.e.save()
