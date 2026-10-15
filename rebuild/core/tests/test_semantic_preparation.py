@@ -15,13 +15,73 @@ from django.urls import reverse
 from django.utils import timezone
 from documents import inspect_template
 from documents.semantic_preparation_roles import (build_inventory, default_definitions, digest,
-    fixture_role, validate_definitions)
+    fixture_role, validate_definitions, role_schema, role_instructions, TEMPORAL_REFERENCE_CONTRACT)
 from core import semantic_preparation as workflow
 from core.models import AIStageReceipt, Department, Membership, Organization, Template, TemplateVersion, User
 from core.semantic_preparation_views import posted_definitions
 
 
 class DefinitionPreparationPureTests(SimpleTestCase):
+    def test_historical_definition_role_envelopes_remain_byte_equivalent(self):
+        fields = [{'key':'cell_0', 'label':'Subjective', 'kind':'text', 'locator':{'cell':0}}]
+        inventory = build_inventory(fields, source_version_id='synthetic-source', source_sha256='a'*64,
+            original={'stories':[{'texts':['Subjective']}], 'questions':[]})
+        # Sealed from the unchanged installed v1/v2 implementation before adding v3.
+        expected = {1:'8b3666588a8a09ae16daa559d8301f034ca459ceaea3b8ca35fe7906cf1ecc91',
+                    2:'b23d94f07d623616a857d706748ed9efaf82b57a9970fd4b24f3a9208cbb064b'}
+        for version, sha in expected.items():
+            envelope = {role:{'schema':role_schema(role,version),
+                'instructions':role_instructions(role,version),
+                'timed_instructions':role_instructions(role,version,timing_reference=TEMPORAL_REFERENCE_CONTRACT),
+                'fixture':fixture_role(fields,inventory,role,definition_version=version)}
+                for role in ('proposer','checker')}
+            self.assertEqual(digest(envelope), sha)
+
+    def test_documented_name_requirement_is_closed_and_bound_to_an_eligible_existing_field(self):
+        fields = self.fields()
+        values = default_definitions(fields)
+        for value in values.values():
+            value.update(version=3, answer_mode='narrative' if value['value_type']=='text' else 'atomic',
+                         patient_name_requirement='none')
+        key = 'field_2'
+        values[key]['patient_name_requirement'] = 'documented'
+        self.assertEqual(validate_definitions(fields, values), values)
+        name = deepcopy(values); name[key].update(value_type='person_name', answer_mode='atomic')
+        self.assertEqual(validate_definitions(fields, name), name)
+        mutations = [lambda d:d.pop('patient_name_requirement'),
+            lambda d:d.update(patient_name_requirement=True), lambda d:d.update(patient_name_requirement=[]),
+            lambda d:d.update(patient_name_requirement='registry'), lambda d:d.update(answer_mode='atomic'),
+            lambda d:d.update(value_type='identifier',answer_mode='atomic'),
+            lambda d:d['scope'].update(subject='clinician'), lambda d:d['scope'].update(subject='unspecified'),
+            lambda d:d['permitted_destination'].update(field_key='field_0')]
+        for mutation in mutations:
+            changed = deepcopy(values); mutation(changed[key])
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                validate_definitions(fields, changed)
+        protected = deepcopy(fields); protected[2]['label'] = 'Patient signature'
+        with self.assertRaises(ValueError): validate_definitions(protected, values)
+        # Meaning alone never changes the explicit requirement or old schemas.
+        values[key]['patient_name_requirement'] = 'none'
+        values[key]['meaning'] = 'Include the patient name and symptoms.'
+        self.assertEqual(validate_definitions(fields, values)[key]['patient_name_requirement'], 'none')
+        for version in (1,2):
+            old = default_definitions(fields)
+            if version == 2:
+                for value in old.values(): value.update(version=2, answer_mode='narrative' if value['value_type']=='text' else 'atomic')
+            old[key]['patient_name_requirement'] = 'documented'
+            with self.assertRaises(ValueError): validate_definitions(fields, old)
+
+    def test_v3_provider_schema_and_both_instructions_disclose_source_only_identity_requirement(self):
+        for role in ('proposer','checker'):
+            schema = role_schema(role,3)['properties']['fields']['items']['properties']['definition']
+            self.assertFalse(schema['additionalProperties'])
+            self.assertIn('patient_name_requirement',schema['required'])
+            self.assertEqual(schema['properties']['patient_name_requirement']['enum'],['none','documented'])
+            instructions=role_instructions(role,3)
+            self.assertIn('Use definition version 3',instructions)
+            self.assertIn('exact unambiguous patient name stated in the clinical source',instructions)
+            self.assertIn('never authorizes a registry or demographic fallback',instructions)
+
     def test_advanced_word_adapter_cannot_enter_unqualified_semantic_preparation(self):
         prep=self.prep()
         prep.source_version.document_backend={'backend':'wm-iov-foss-v2'}
@@ -81,6 +141,8 @@ class DefinitionPreparationPureTests(SimpleTestCase):
             prefix = 'field_'+key+'_'
             for name in ('meaning', 'value_type', 'unit'):
                 post[prefix+name] = definition[name] or ''
+            if definition['version'] in (2, 3): post[prefix+'answer_mode'] = definition['answer_mode']
+            if definition['version'] == 3: post[prefix+'patient_name_requirement'] = definition['patient_name_requirement']
             post[prefix+'choices'] = '\n'.join(definition['choices'])
             for name, value in {**definition['scope'], **definition['constraints']}.items():
                 post[prefix+name] = '' if value is None else value
@@ -97,6 +159,13 @@ class DefinitionPreparationPureTests(SimpleTestCase):
         reparsed = QueryDict(encoded)
         self.assertEqual(posted_definitions(prep, reparsed), values)
         self.assertEqual(len(reparsed.getlist('reviewed_field')), 100)
+        prep.config['semantic_definition_version'] = 3
+        for value in values.values():
+            value.update(version=3, answer_mode='narrative' if value['value_type']=='text' else 'atomic',
+                         patient_name_requirement='none')
+        encoded = self.post(values).urlencode()
+        self.assertLess(len(encoded.split('&')), settings.DATA_UPLOAD_MAX_NUMBER_FIELDS)
+        self.assertEqual(posted_definitions(prep, QueryDict(encoded)), values)
         with self.assertRaises(ValueError): default_definitions(self.fields(101))
 
     def test_every_field_must_be_explicitly_reviewed_once(self):
@@ -210,6 +279,33 @@ class DefinitionPreparationDatabaseTests(TestCase):
         from core.template_source import source_for_version
         self.assertEqual(source_for_version(version), self.root/'blank.docx')
         self.assertFalse(workflow.run_one()); self.assertEqual(AIStageReceipt.objects.count(), 2)
+
+    def test_documented_name_requires_saved_new_definition_version_without_changing_physical_source(self):
+        prep = self.prepared()
+        self.assertEqual(prep.config['semantic_definition_version'], 3)
+        first_version = self.approve(prep)
+        old_definitions = deepcopy(first_version.semantic_definitions)
+        original = (self.root/'blank.docx').read_bytes()
+        new_prep = workflow.create_preparation(first_version, self.user)
+        self.assertTrue(workflow.run_one()); new_prep.refresh_from_db()
+        proposed = deepcopy((new_prep.proposal, new_prep.checker))
+        values = workflow.corrected_definitions(new_prep)
+        key = first_version.fields[2]['key']  # Existing narrative History destination.
+        values[key]['meaning'] = 'The documented patient name and the reported symptom history.'
+        values[key]['patient_name_requirement'] = 'documented'
+        corrected = workflow.correct(new_prep.pk, self.user, 0, values, list(values),
+            'Require the documented patient name with the history at its existing answer destination.')
+        new_version = self.approve(corrected)
+        first_version.refresh_from_db(); corrected.refresh_from_db()
+        self.assertEqual(first_version.semantic_definitions, old_definitions)
+        self.assertEqual(new_version.semantic_definitions[key]['patient_name_requirement'], 'documented')
+        self.assertEqual((corrected.proposal, corrected.checker), proposed)
+        self.assertEqual(len(corrected.correction_history), 1)
+        for name in workflow.PHYSICAL_ATTRIBUTES:
+            self.assertEqual(getattr(new_version, name), getattr(first_version, name))
+        self.assertEqual((self.root/'blank.docx').read_bytes(), original)
+        self.assertEqual(workflow.validated_semantic_definitions(new_version), values)
+        self.assertEqual(corrected.ai_stage_receipts.count(), 2)
 
     def test_repeated_start_reuses_request_and_cannot_create_provider_replay(self):
         prep = self.prepared()

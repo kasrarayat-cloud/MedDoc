@@ -702,10 +702,85 @@ def specificity_errors(concept, code, description, *, default_description=''):
     return errors
 
 
+def semantic_patient_name_evidence(notes, fields, definitions, answers):
+    """Project required v3 identities only after replaying the saved clinical proof.
+
+    The full narrative is not a person name. Held or manually changed answers
+    cannot silently contribute old selected facts as a newly verified identity.
+    """
+    from . import semantic_generation as semantic
+    from documents.semantic_preparation_roles import validate_definitions, DefinitionError
+    if type(answers) is not dict:
+        raise ValidationError('The saved patient-name answers must be a field mapping.')
+    try:
+        validate_definitions(fields, definitions)
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+    rows = []
+    for field in fields:
+        definition = definitions[field['key']]
+        if definition['version'] != 3 or not semantic.requires_patient_name(definition):
+            continue
+        answer = answers.get(field['key'])
+        if answer is None:
+            rows.append({'field':deepcopy(field), 'definition':deepcopy(definition),
+                'finding':{'verdict':'unavailable', 'reason':'The required patient-name answer has not been generated.'},
+                'names':[]})
+            continue
+        if not isinstance(answer, dict):
+            raise ValidationError('A required patient-name answer is missing from the saved coding source.')
+        semantic.validate_stored_answer(notes, field, definition, answer)
+        names = []
+        if answer.get('semantic_review_mode') == 'manual':
+            finding = {'verdict':'manual', 'reason':'The required patient name has no validated generated identity proof after a manual answer decision.'}
+        else:
+            facts = {fact['id']:fact for fact in answer['facts']}
+            finding = semantic.patient_name_check(notes, definition, facts, answer['fact_ids'])
+            if finding['verdict'] == 'pass' and answer.get('status') == 'supported':
+                for identifier in finding['fact_ids']:
+                    if identifier in answer['fact_ids']:
+                        names.append({'fact_id':identifier,
+                            'name_evidence':deepcopy(facts[identifier]['subject']['name_evidence'])})
+            elif finding['verdict'] == 'pass':
+                finding = {'verdict':'held', 'reason':'The required patient-name answer remains held for clinical review.'}
+        rows.append({'field':deepcopy(field), 'definition':deepcopy(definition),
+                     'finding':deepcopy(finding), 'names':names})
+    return rows
+
+
+def checked_patient_name_evidence(inputs):
+    """Recheck the small snapshot bridge against the complete retained answers."""
+    if 'documented_patient_name_evidence' not in inputs:
+        return []
+    bridge = inputs['documented_patient_name_evidence']
+    if (type(bridge) is not dict or set(bridge) != {'contract', 'fields'}
+            or bridge['contract'] != 'approved-semantic-patient-name-v1'
+            or type(bridge['fields']) is not list or not bridge['fields']):
+        raise ValidationError('The saved patient-name evidence contract is invalid.')
+    fields, definitions = [], {}
+    for row in bridge['fields']:
+        if type(row) is not dict or set(row) != {'field', 'definition', 'finding', 'names'}:
+            raise ValidationError('The saved patient-name evidence row is invalid.')
+        field = row['field']
+        if type(field) is not dict or not isinstance(field.get('key'), str) or field['key'] in definitions:
+            raise ValidationError('The saved patient-name destinations are invalid or repeated.')
+        fields.append(field); definitions[field['key']] = row['definition']
+    expected = semantic_patient_name_evidence(inputs['notes'], fields, definitions, inputs['answers'])
+    if expected != bridge['fields']:
+        raise ValidationError('The saved patient-name evidence differs from the validated clinical answers.')
+    return expected
+
+
 def identity_blockers(run, extraction):
     name = extraction.get('documented_patient_name', '')
     evidence = extraction.get('patient_name_evidence', '')
     names = []
+    blockers = []
+    for row in checked_patient_name_evidence(run.inputs):
+        if not row['names']:
+            blockers.append('The required documented patient name in '+row['field']['label']+
+                ' remains unresolved. Resolve the clinical source identity before approving coding; registry details cannot fill it.')
+        names.extend(item['name_evidence']['quote'] for item in row['names'])
     if name:
         if name not in evidence:
             raise ValidationError('The extracted patient name is not contained in its source evidence.')
@@ -719,10 +794,10 @@ def identity_blockers(run, extraction):
     if conflicts:
         reviewed = run.context.get('identity_review_reason', '').strip()
         if settings.SYNTHETIC_ONLY and len(reviewed) >= 12:
-            return []
-        return ['The saved documentation names '+', '.join(conflicts)+' but the encounter belongs to '+registered+
-                '. Resolve this identity conflict before approving coding. The finalized note has not been changed.']
-    return []
+            return blockers
+        blockers.append('The saved documentation names '+', '.join(conflicts)+' but the encounter belongs to '+registered+
+                '. Resolve this identity conflict before approving coding. The finalized note has not been changed.')
+    return blockers
 
 
 def generate(run):
@@ -735,8 +810,18 @@ def generate(run):
         result['global_blockers'].append('Confirm that this is a US outpatient/office encounter before coding review.')
         result['questions'].append(question('setting','Is this a US outpatient/office encounter?',blocking=True))
         return result
-    extracted = coding_provider.execute(run, 'concepts', {'notes':notes, 'answers':clinical_answers(run.inputs.get('answers',{})),
-        'service_date':run.inputs['service_date'], 'setting':run.context['setting']}, Concepts, CONCEPT_INSTRUCTIONS)
+    concept_payload = {'notes':notes, 'answers':clinical_answers(run.inputs.get('answers',{})),
+        'service_date':run.inputs['service_date'], 'setting':run.context['setting']}
+    concept_instructions = CONCEPT_INSTRUCTIONS
+    if 'documented_patient_name_evidence' in run.inputs:
+        bridge = checked_patient_name_evidence(run.inputs)
+        concept_payload['approved_patient_names'] = [
+            {'field_key':row['field']['key'], 'fact_id':item['fact_id'], 'name_evidence':deepcopy(item['name_evidence'])}
+            for row in bridge for item in row['names']]
+        concept_instructions += ('The approved_patient_names entries are exact clinical-source name spans from validated '
+            'saved answers. Preserve that documented patient identity and its exact source evidence; these entries '
+            'are not registry demographics and do not authorize another person or an invented name.\n')
+    extracted = coding_provider.execute(run, 'concepts', concept_payload, Concepts, concept_instructions)
     extraction = Concepts.model_validate(extracted, strict=True).model_dump()
     concepts = extraction['concepts']
     if len({c['id'] for c in concepts}) != len(concepts):

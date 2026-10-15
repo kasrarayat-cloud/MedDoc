@@ -139,6 +139,112 @@ class CodingClinicalPayloadTests(SimpleTestCase):
 
 
 @override_settings(SYNTHETIC_ONLY=True)
+class CodingSemanticIdentityTests(SimpleTestCase):
+    def case(self, *, missing=False, label='Subjective'):
+        from core import semantic_generation as semantic
+        from core.tests.test_document_identity import soap_definitions
+        from core.tests.test_semantic_generation import FixtureSender, assignments, fact
+        name='Synthetic Avery Sen'
+        notes=('The patient reports heartburn.' if missing else name+' reports heartburn. '
+               'Referring clinician: Dr. Priya Chen. The patient’s mother, Synthetic Elin Sen, has diabetes.')
+        fields=[{'key':'subjective','label':label,'kind':'text','locator':{'cell':0}}]
+        definitions=soap_definitions(fields)
+        facts=[fact(notes,fields,'symptom','heartburn',kind='history')]
+        if not missing:
+            facts += [fact(notes,fields,'identity',name,kind='identity',name_quote=name),
+                fact(notes,fields,'referrer','Priya Chen',kind='identity',subject='clinician',name_quote='Priya Chen'),
+                fact(notes,fields,'relative','Synthetic Elin Sen',kind='identity',subject='other',name_quote='Synthetic Elin Sen')]
+        selected={'subjective':['symptom'] if missing else ['identity','symptom']}
+        answers=semantic.run(notes,fields,definitions,FixtureSender(facts,assignments(fields,selected)),
+            scope_contract=semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
+        bridge={'contract':'approved-semantic-patient-name-v1',
+            'fields':engine.semantic_patient_name_evidence(notes,fields,definitions,answers)}
+        item=run(notes,answers=answers,patient_identity={'display_name':name},documented_patient_name_evidence=bridge)
+        return item,fields,definitions
+
+    def test_exact_patient_fact_bridges_narrative_without_relative_or_referrer_or_registry_fallback(self):
+        item,_,_=self.case();raw={'documented_patient_name':'','patient_name_evidence':''}
+        before=deepcopy((item.inputs,raw))
+        rows=engine.checked_patient_name_evidence(item.inputs)
+        self.assertEqual([n['name_evidence']['quote'] for r in rows for n in r['names']],['Synthetic Avery Sen'])
+        self.assertNotEqual(item.inputs['answers']['subjective']['text'],'Synthetic Avery Sen')
+        self.assertEqual(engine.identity_blockers(item,raw),[])
+        self.assertEqual((item.inputs,raw),before)
+        item.inputs['patient_identity']['display_name']='Synthetic Another Patient'
+        self.assertTrue(engine.identity_blockers(item,raw))
+        item.context['identity_review_reason']='Owner confirms this specific synthetic source reuse.'
+        self.assertEqual(engine.identity_blockers(item,raw),[])
+        with override_settings(SYNTHETIC_ONLY=False):self.assertTrue(engine.identity_blockers(item,raw))
+
+    def test_missing_identity_remains_blocked_even_with_matching_registry_and_synthetic_reason(self):
+        item,fields,definitions=self.case(missing=True)
+        item.context['identity_review_reason']='Owner confirms this specific synthetic source reuse.'
+        raw={'documented_patient_name':'','patient_name_evidence':''}
+        self.assertTrue(engine.identity_blockers(item,raw))
+        self.assertEqual(item.inputs['documented_patient_name_evidence']['fields'][0]['names'],[])
+        empty=engine.semantic_patient_name_evidence(item.inputs['notes'],fields,definitions,{})
+        self.assertEqual(empty[0]['finding']['verdict'],'unavailable')
+        self.assertEqual(empty[0]['names'],[])
+
+    def test_corrupt_or_unvalidated_identity_proof_and_changed_bridge_refuse(self):
+        original,_,_=self.case()
+        mutations=[lambda i:i['answers']['subjective'].update(text='Synthetic Invented Patient'),
+            lambda i:i['answers']['subjective'].pop('semantic_proof_sha256'),
+            lambda i:i['answers']['subjective'].update(fact_ids=['symptom']),
+            lambda i:i['answers']['subjective']['facts'][1]['subject']['name_evidence'].update(quote='Synthetic Invented Patient'),
+            lambda i:i['documented_patient_name_evidence']['fields'][0]['names'][0].update(fact_id='relative'),
+            lambda i:i['documented_patient_name_evidence']['fields'][0]['names'][0]['name_evidence'].update(quote='Synthetic Elin Sen'),
+            lambda i:i['documented_patient_name_evidence']['fields'][0]['definition'].update(patient_name_requirement='none'),
+            lambda i:i['documented_patient_name_evidence']['fields'].append(deepcopy(i['documented_patient_name_evidence']['fields'][0]))]
+        for mutate in mutations:
+            item=deepcopy(original);mutate(item.inputs)
+            with self.subTest(mutation=mutate),self.assertRaises(ValidationError):engine.checked_patient_name_evidence(item.inputs)
+
+    def test_concepts_payload_gets_only_compact_validated_name_and_raw_extraction_stays_empty(self):
+        item,_,_=self.case();original=deepcopy(item.inputs)
+        raw={'documented_patient_name':'','patient_name_evidence':'','concepts':[]}
+        with patch.object(engine,'reference_for',return_value=SimpleNamespace(release=SimpleNamespace(version='FY2027'))), \
+             patch.object(engine.coding_provider,'execute',return_value=raw) as send, \
+             patch('core.coding_licensing.cpt_status',return_value={'available':False}):
+            result=engine.generate(item)
+        send.assert_called_once();payload=send.call_args.args[2]
+        self.assertEqual(set(payload),{'notes','answers','service_date','setting','approved_patient_names'})
+        self.assertEqual(payload['approved_patient_names'],[{'field_key':'subjective','fact_id':'identity',
+            'name_evidence':{'start':0,'end':19,'quote':'Synthetic Avery Sen'}}])
+        self.assertNotIn('facts',payload['answers']['subjective'])
+        self.assertEqual(result['global_blockers'],[])
+        self.assertEqual(raw,{'documented_patient_name':'','patient_name_evidence':'','concepts':[]})
+        self.assertEqual(item.inputs,original)
+
+    def test_snapshot_adds_only_new_approved_v3_evidence_and_does_not_treat_narrative_label_as_name(self):
+        from core import coding_service as service
+        item,fields,definitions=self.case(label='Patient name')
+        version=SimpleNamespace(fields=fields,semantic_definitions=definitions,
+            template=SimpleNamespace(sha256='a'*64),prepared_sha256='')
+        encounter=SimpleNamespace(pk='encounter',department_id='department',patient_id='patient',
+            patient=SimpleNamespace(pk='patient',display_name='Synthetic Avery Sen',reference='test'),
+            template_version_id='version',notes=item.inputs['notes'],revision=0,service_date=date(2026,10,15),
+            answers=item.inputs['answers'],template_version=version)
+        with patch.object(service,'context_data',return_value={}),patch.object(service,'release_snapshot',return_value=[]), \
+             patch('core.semantic_preparation.validated_semantic_definitions',return_value=definitions) as approval:
+            inputs,_,_,key=service.input_snapshot(encounter)
+        approval.assert_called_once_with(version)
+        self.assertEqual(inputs['patient_name_answers'],[])
+        self.assertEqual(inputs['documented_patient_name_evidence'],item.inputs['documented_patient_name_evidence'])
+        self.assertEqual(inputs['engine_contract'],'us-outpatient-index-tabular-v4')
+        with patch.object(service,'context_data',return_value={}),patch.object(service,'release_snapshot',return_value=[]), \
+             patch('core.semantic_preparation.validated_semantic_definitions',side_effect=ValidationError('Unapproved version')):
+            with self.assertRaisesMessage(ValidationError,'Unapproved version'):service.input_snapshot(encounter)
+        version.semantic_definitions={}
+        with patch.object(service,'context_data',return_value={}),patch.object(service,'release_snapshot',return_value=[]), \
+             patch('core.semantic_preparation.validated_semantic_definitions') as approval:
+            legacy=service.input_snapshot(encounter)
+        approval.assert_not_called()
+        self.assertNotIn('documented_patient_name_evidence',legacy[0])
+        self.assertNotEqual(key,legacy[3])
+
+
+@override_settings(SYNTHETIC_ONLY=True)
 class CodingEngineSourceTests(SimpleTestCase):
     def test_unknown_attributes_do_not_negate_an_independently_affirmed_condition(self):
         for term, attribute in [('constipation','subtype'), ('heartburn','cause'),

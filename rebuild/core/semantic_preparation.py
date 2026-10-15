@@ -161,7 +161,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
         config = testing_authority.bind_actor_config(config, actor, template.department_id)
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
-    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 2}
+    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 3}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -184,7 +184,7 @@ def _inventory(prep):
 
 def definition_version(config):
     value = config.get('semantic_definition_version', 1)
-    if type(value) is not int or value not in (1, 2):
+    if type(value) is not int or value not in (1, 2, 3):
         raise ValidationError('Unsupported explicit answer-definition version.')
     return value
 

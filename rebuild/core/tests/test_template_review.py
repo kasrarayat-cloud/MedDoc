@@ -189,6 +189,75 @@ class SeparateDefinitionRetryTests(TestCase):
         self.assertTrue(semantic_preparation.run_one());self.prep.refresh_from_db()
         self.client.force_login(self.user)
 
+    def definition_post(self, page):
+        from core.tests.test_semantic_preparation import DefinitionPreparationPureTests
+        values={r['field']['key']:r['definition'] for r in page.context['definition_rows']}
+        post=DefinitionPreparationPureTests.post(values)
+        del post['reviewed_field']
+        post.update(compact_review='on',revision=str(self.prep.revision),review_summary='on',
+            inventory_sha256=self.prep.inventory['inventory_sha256'],
+            review_token_save=page.context['review_token_save'],
+            review_token_approve=page.context['review_token_approve'])
+        return post
+
+    def test_documented_patient_name_round_trips_one_summary_and_saved_immutable_approval(self):
+        page=self.client.get(reverse('template_definitions',args=[self.prep.pk]))
+        self.assertContains(page,'Patient name in this answer')
+        self.assertContains(page,'No additional requirement')
+        self.assertContains(page,'name="review_summary" required>',count=1)
+        self.assertNotContains(page,'name="reviewed_field"')
+        key=self.source.fields[2]['key']
+        self.assertContains(page,'for="patient-name-'+key+'"')
+        post=self.definition_post(page)
+        post['field_'+key+'_patient_name_requirement']='documented'
+        post['field_'+key+'_meaning']='The documented patient name and reported symptom history.'
+        approve=reverse('template_definitions_approve',args=[self.prep.pk])
+        self.assertContains(self.client.post(approve,post),'Save your edited definitions',status_code=409)
+        self.assertEqual(self.template.versions.count(),1)
+        self.assertEqual(self.client.post(reverse('template_definitions_correct',args=[self.prep.pk]),post).status_code,302)
+        self.prep.refresh_from_db()
+        page=self.client.get(reverse('template_definitions',args=[self.prep.pk]))
+        self.assertContains(page,'Patient name in this answer: Include documented patient name')
+        self.assertContains(self.client.post(approve,post),'changed since this review opened',status_code=409)
+        self.assertEqual(self.client.post(approve,self.definition_post(page)).status_code,302)
+        approved=self.template.versions.order_by('-number').first()
+        self.assertEqual(approved.semantic_definitions[key]['patient_name_requirement'],'documented')
+        self.assertEqual(approved.fields,self.source.fields)
+        self.assertEqual(self.prep.ai_stage_receipts.count(),2)
+
+    def test_patient_name_control_missing_repeated_and_incompatible_scope_are_refused(self):
+        page=self.client.get(reverse('template_definitions',args=[self.prep.pk]))
+        post=self.definition_post(page);key=self.source.fields[2]['key']
+        control='field_'+key+'_patient_name_requirement'
+        url=reverse('template_definitions_correct',args=[self.prep.pk])
+        missing=post.copy();del missing[control]
+        self.assertContains(self.client.post(url,missing),'missing or repeated',status_code=409)
+        repeated=post.copy();repeated.appendlist(control,'documented')
+        self.assertContains(self.client.post(url,repeated.urlencode(),content_type='application/x-www-form-urlencoded'),
+            'missing or repeated',status_code=409)
+        post[control]='documented';post['field_'+key+'_subject']='clinician'
+        post['field_'+key+'_meaning']='The clinician name and history.'
+        self.assertContains(self.client.post(url,post),'existing patient name or narrative answer',status_code=409)
+        self.prep.refresh_from_db()
+        self.assertEqual(self.prep.revision,0)
+        self.assertFalse(self.prep.corrections)
+
+    def test_patient_name_requirement_is_in_review_snapshot_and_historical_controls_stay_absent(self):
+        from django.template.loader import render_to_string
+        page=self.client.get(reverse('template_definitions',args=[self.prep.pk]))
+        items=page.context['definition_rows'];post=self.definition_post(page)
+        changed=deepcopy(items);changed[2]['definition']['patient_name_requirement']='documented'
+        with self.assertRaisesMessage(ValidationError,'changed since this review opened'):
+            template_review.submitted(self.prep,changed,self.user,post,'approve')
+        for version in (1,2):
+            row=deepcopy(items[2]);row['definition'].pop('patient_name_requirement')
+            row['definition']['version']=version
+            if version==1:row['definition'].pop('answer_mode')
+            displayed=template_review.rows([row])[0]
+            html=render_to_string('template_review_field.html',{'row':displayed,'editable':True,'definition_version':version})
+            self.assertNotIn('patient_name_requirement',html)
+            self.assertNotIn('Patient name in this answer',html)
+
     def test_error_form_keeps_edits_and_issues_a_retryable_retained_baseline_token(self):
         from core.tests.test_semantic_preparation import DefinitionPreparationPureTests
         from core import semantic_preparation

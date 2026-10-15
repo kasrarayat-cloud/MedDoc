@@ -87,6 +87,54 @@ class DocumentApprovalTests(TestCase):
         self.assertEqual(self.encounter.export_sha256,sha)
         self.assertEqual(AuditEvent.objects.filter(action='encounter.document_approve').count(),1)
 
+    def test_approved_soap_name_persists_through_review_finalization_and_download(self):
+        from io import BytesIO
+        from core.tests.test_document_identity import soap_definitions
+        document=Document();table=document.add_table(rows=4,cols=2)
+        labels=['Subjective','Objective','Assessment','Plan']
+        for row,label in zip(table.rows,labels):row.cells[0].text=label
+        self.original=private_path('soap.docx')
+        document.save(self.original)
+        original_bytes=self.original.read_bytes()
+        self.fields=inspect_template(self.original)['fields']
+        self.definitions.clear();self.definitions.update(soap_definitions(self.fields))
+        template=Template.objects.create(department=self.department,created_by=self.actor,name='SOAP fixture',
+            format='docx',original_name='soap.docx',original_path='soap.docx',sha256=hashlib.sha256(original_bytes).hexdigest())
+        version=TemplateVersion.objects.create(template=template,number=1,fields=self.fields,created_by=self.actor)
+        self.encounter.template_version=version
+        patient=self.encounter.patient;patient.display_name='Synthetic Avery Sen';patient.save(update_fields=['display_name'])
+        notes='Synthetic Avery Sen reports heartburn and constipation.'
+        facts=[fact(notes,self.fields,'name','Synthetic Avery Sen',kind='identity',name_quote='Synthetic Avery Sen'),
+               fact(notes,self.fields,'symptoms','heartburn and constipation',kind='history')]
+        generated=semantic.run(notes,self.fields,self.definitions,FixtureSender(facts,
+            assignments(self.fields,{'cell_0':['name','symptoms']})),
+            scope_contract=semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
+        self.encounter.notes=notes;self.encounter.answers=generated;self.encounter.save()
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.answers,generated)
+        self.assertEqual(generated['cell_0']['text'],'Synthetic Avery Sen; Heartburn and constipation')
+        response=self.client.get(f'/encounters/{self.encounter.pk}/')
+        self.assertContains(response,generated['cell_0']['text'])
+        self.assertEqual(response.content.decode().count('name="intent" value="approve"'),1)
+        self.assertEqual(self.client.post(self.route,self.post()).status_code,302)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.answers,generated)
+        self.assertEqual(self.encounter.status,'finalized')
+        receipt=self.encounter.template_review['document_approval']
+        self.assertEqual(receipt['answers_sha256'],semantic.digest(generated))
+        self.assertEqual(receipt['approved_revision'],self.encounter.revision)
+        download=self.client.get(f'/encounters/{self.encounter.pk}/export/')
+        self.assertEqual(download.status_code,200)
+        downloaded=b''.join(download.streaming_content)
+        self.assertEqual(hashlib.sha256(downloaded).hexdigest(),self.encounter.export_sha256)
+        word=Document(BytesIO(downloaded))
+        self.assertEqual([r.cells[0].text for r in word.tables[0].rows],labels)
+        self.assertEqual([r.cells[1].text for r in word.tables[0].rows],
+                         [generated[f['key']]['text'] for f in self.fields])
+        self.assertEqual(len(word.tables),1)
+        self.assertEqual(self.original.read_bytes(),original_bytes)
+        self.assertFalse(any(a.get('reviewed') or a.get('semantic_edit_history') for a in generated.values()))
+
     def test_same_revision_new_valid_answers_and_same_text_metadata_refuse_old_review(self):
         for newer in [self.answers[1],{**self.answers[0],self.fields[0]['key']:{**self.answers[0][self.fields[0]['key']], 'reviewed_by':str(self.actor.pk)}}]:
             self.encounter.answers=deepcopy(self.answers[0]);self.encounter.save()

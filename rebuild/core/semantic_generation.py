@@ -32,7 +32,9 @@ SOURCE_BINDING_SCOPE_CONTRACT = 'positioned-source-binding-v6'
 REFERRAL_CITATION_SCOPE_CONTRACT = 'positioned-referral-citation-v7'
 OBSERVATION_CONTEXT_SCOPE_CONTRACT = 'positioned-observation-context-v8'
 CONSENT_CONTEXT_SCOPE_CONTRACT = 'positioned-consent-context-v9'
-OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, CONSENT_CONTEXT_SCOPE_CONTRACT)
+DOCUMENT_IDENTITY_SCOPE_CONTRACT = 'positioned-document-identity-v10'
+CONSENT_CONTEXT_SCOPE_CONTRACTS = (CONSENT_CONTEXT_SCOPE_CONTRACT, DOCUMENT_IDENTITY_SCOPE_CONTRACT)
+OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, *CONSENT_CONTEXT_SCOPE_CONTRACTS)
 REFERRAL_CITATION_SCOPE_CONTRACTS = (REFERRAL_CITATION_SCOPE_CONTRACT, *OBSERVATION_CONTEXT_SCOPE_CONTRACTS)
 SOURCE_BINDING_SCOPE_CONTRACTS = (SOURCE_BINDING_SCOPE_CONTRACT, *REFERRAL_CITATION_SCOPE_CONTRACTS)
 SOURCE_CONTEXT_SCOPE_CONTRACTS = (SOURCE_CONTEXT_SCOPE_CONTRACT, *SOURCE_BINDING_SCOPE_CONTRACTS)
@@ -197,7 +199,7 @@ def validate_definitions(fields, definitions):
         _fail('Every approved field needs exactly one semantic definition.')
     for field in fields:
         d = definitions[field['key']]  # Closed v1/v2 shape was validated above.
-        if type(d['version']) is not int or d['version'] not in (1, 2) or d['value_type'] not in TYPES:
+        if type(d['version']) is not int or d['version'] not in (1, 2, 3) or d['value_type'] not in TYPES:
             _fail('Unsupported semantic definition version or value type.')
         _string(d['meaning'], 'field meaning')
         if d['unit'] is not None: _string(d['unit'], 'unit', 80)
@@ -1027,7 +1029,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                         if any(not _inside(span, [value]) for span in
                                (row['subject'], observation, *row['qualifiers'])):
                             fact['issues'].append('The selected observation value omits part of its complete source assertion or explicitly documented modality; retain a complete source phrase or leave it held.')
-    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in CONSENT_CONTEXT_SCOPE_CONTRACTS:
         _consent_context_issues(notes, units, facts, ownership)
     if ownership is not None:
         for fact in facts.values():
@@ -1394,7 +1396,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if len(picked) != 1: reasons.append('A numeric field needs one unambiguous fact.')
             for f in picked:
                 if f['polarity'] != 'affirmed': reasons.append('A numeric value cannot discard negation or uncertainty.')
-                same_unit = (unit_identity(d['unit']) == unit_identity(f['unit']) if d['version'] == 2 else d['unit'] == f['unit'])
+                same_unit = (unit_identity(d['unit']) == unit_identity(f['unit']) if d['version'] >= 2 else d['unit'] == f['unit'])
                 if not same_unit: reasons.append('The source and approved measurement units differ; no conversion was authorized.')
                 b = d['constraints']
                 e = f['value_evidence']
@@ -1423,6 +1425,11 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         status = row['status']
         if reasons: status = 'conflict' if picked else 'missing'
         if status == 'supported' and not picked: status = 'missing'
+        identity_check = (patient_name_check(notes, d, facts, row['fact_ids'])
+                          if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT else None)
+        if identity_check and identity_check['verdict'] != 'pass':
+            reasons.append(identity_check['reason'])
+            status = 'ambiguous'
         answer = {'text': text if status == 'supported' else '', 'value': typed if status == 'supported' else None,
                   'status': status, 'evidence': evidence, 'reviewed': False, 'evidence_contract': CONTRACT,
                   'fact_ids': row['fact_ids'], 'facts': list(facts.values()), 'separator': row['separator'],
@@ -1433,9 +1440,100 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             answer['fact_scope_contract'] = scope_contract
         if timing_reference_contract is not None:
             answer['timing_reference_contract'] = timing_reference_contract
+        if identity_check is not None:
+            answer['patient_name_check'] = identity_check
         answer['semantic_proof_sha256'] = _fact_proof(answer)
         answers[key] = answer
     return answers
+
+
+def requires_patient_name(definition):
+    """Only an approved type or explicit v3 requirement grants this obligation.
+
+    A narrative's label or free-text meaning cannot create a name destination.
+    Historical definitions retain their original interpretation and proof reader.
+    """
+    return (definition['scope']['subject'] == 'patient' and (
+        definition['value_type'] == 'person_name'
+        or definition.get('version') == 3 and definition.get('patient_name_requirement') == 'documented'))
+
+
+def _complete_patient_identity(notes, fact):
+    """Admit a complete source name slot, not a model's arbitrary substring.
+
+    This finite source frame deliberately holds unrecognized constructions.
+    It neither expands the supplied span nor fills from another record. A
+    clinician/relative label cannot become a patient slot by changing metadata.
+    """
+    from .generation import source_units
+    name = fact['value_evidence']
+    own = next((unit for unit in source_units(notes, [])[0] if _inside(name, [unit])), None)
+    if own is None:
+        return False
+    before, after = notes[own['start']:name['start']], notes[name['end']:own['end']]
+    explicit = re.fullmatch(r'\s*(?:the\s+)?patient(?:[\'’]s)?(?:\s+(?:full\s+)?name)?\s*(?::|is)?\s*', before, re.I)
+    if not explicit and before.strip():
+        return False
+    # A sentence splitter's title stop is not a new anonymous patient frame.
+    if not explicit and re.search(r'\b(?:Dr|Prof|Mr|Mrs|Ms)\.\s*$', notes[:name['start']], re.I):
+        return False
+    if re.match(r'\s+(?:reports?|states?|says?|reported|stated|said)\s+(?:that\s+)?(?:the\s+)?patient\b', after, re.I):
+        return False
+    # A leading bare name needs a documented patient predicate; an explicit
+    # patient-name label also permits a complete value ending at punctuation.
+    end = bool(re.fullmatch(r'\s*[.;:]?\s*', after))
+    predicate = bool(re.match(r'\s+(?:reports?|reported|presents?|presented|attended|attends|'
+        r'visited|visits|arrived|arrives|came|comes|rates|rated|states|stated|requests?|requested|'
+        r'has|had|is|was)\b', after, re.I))
+    return bool((explicit and end) or predicate)
+
+
+def patient_name_check(notes, definition, facts, selected_ids):
+    if not requires_patient_name(definition):
+        return None
+    superseded = {i for fact in facts.values() if not fact['issues'] for i in fact['supersedes']}
+    names, unresolved = {}, []
+    for fact in facts.values():
+        name = fact['subject']['name_evidence']
+        if (fact['id'] in superseded or fact['kind'] != 'identity'
+                or fact['subject']['kind'] not in ('patient', 'uncertain')
+                or not name or name != fact['value_evidence'] or not person_name_value(name['quote'])):
+            continue
+        if (fact['issues'] or fact['subject']['kind'] != 'patient' or fact['polarity'] != 'affirmed'
+                or fact['timing']['kind'] not in ('current', 'unspecified') or not _complete_patient_identity(notes, fact)):
+            unresolved.append(fact['id'])
+        else:
+            names.setdefault(name['quote'], []).append(fact['id'])
+    # Explicit labelled source slots are independent of the extractor inventory.
+    # Omitting one competing identity fact cannot manufacture a unique name.
+    source_slots = []
+    labels = re.compile(r'\b(?:the\s+)?patient(?:[\'’]s)?\s+(?:full\s+)?name\s*(?::|is\b)\s*'
+                        r'(?P<name>[^\r\n;.!?]+)|(?:^|[\n;])\s*patient\s*:\s*(?P<short>[^\r\n;.!?]+)', re.I)
+    for match in labels.finditer(notes):
+        group = 'name' if match.group('name') is not None else 'short'
+        value = match[group]
+        predicate = re.search(r'\s+(?:reports?|reported|presents?|presented|attended|attends|'
+            r'visited|visits|arrived|arrives|came|comes|rates|rated|states|stated|requests?|requested|'
+            r'has|had|is|was)\b', value, re.I)
+        value = value[:predicate.start()] if predicate else value
+        stripped = value.strip()
+        start = match.start(group) + len(value) - len(value.lstrip())
+        source_slots.append({'start': start, 'end': start+len(stripped), 'quote': stripped})
+    unrepresented = [slot for slot in source_slots if not any(
+        fact['kind'] == 'identity' and fact['value_evidence'] == slot
+        and fact['subject']['kind'] == 'patient' for fact in facts.values())]
+    ids = sorted(i for group in names.values() for i in group)
+    if unresolved or unrepresented or len(names) > 1:
+        verdict, reason = 'ambiguous', 'The documented patient name has incomplete source boundaries, competing names or unresolved ownership. Clarify the source identity; registry demographics cannot resolve it.'
+    elif not names:
+        verdict, reason = 'missing', 'This approved answer requires the documented patient name, but no complete unambiguous patient identity fact is available. Clarify the source; do not substitute registry demographics.'
+    elif not set(selected_ids).intersection(ids):
+        verdict, reason = 'omission', 'The approved answer omits the documented patient name. Select its complete source-backed identity fact along with the other required answer facts.'
+    else:
+        verdict, reason = 'pass', 'The complete documented patient name is selected for this approved destination.'
+    return {'contract': 'documented-patient-name-v1', 'verdict': verdict,
+            'fact_ids': ids, 'unresolved_fact_ids': sorted(unresolved),
+            'unrepresented_source_names': unrepresented, 'reason': reason}
 
 
 def _check(fields, facts, result):
@@ -1702,6 +1800,19 @@ CHECK_INSTRUCTIONS = ('You are an INDEPENDENT answer checker. Inspect the ORIGIN
     'not both by default. If a field needs additional or different facts, return omission, incorrect or another appropriate non-pass verdict and explain it; '
     'do not silently revise the selection under pass. Non-pass fact_ids identify the relevant finding, and may include unselected facts for an omission. '
     'Report fact_findings for incorrect or ambiguous extracted facts. The application and clinician remain authoritative.')
+
+DOCUMENT_IDENTITY_INSTRUCTIONS = (
+    'The approved_patient_name_destinations are explicit approved obligations, not inferred from field labels. '
+    'Extract the complete documented patient identity as an affirmed identity fact, with the same exact '
+    'source reference for its value and subject name. Keep patient, referring clinician and relative identities distinct. '
+    'For each listed destination select that complete patient identity fact. A narrative destination must ALSO '
+    'retain its other required documented components; a name-only answer does not replace symptoms or history. '
+    'A name that appears only in evidence or an unselected fact does not appear in the clinical document. '
+    'Missing, uncertain or competing patient identities must remain explicitly unresolved. Never use registry '
+    'demographics or a different person to fill a missing name, and never change the approved destination. '
+    'The checker must report omission when an available required identity is unselected; if extraction omitted '
+    'the identity, identify the missing source fact. Local patient-name findings remain holds until the exact '
+    'source-backed identity is selected and independently checked. Do not call an incomplete answer passing.')
 
 
 SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS = (
@@ -1992,6 +2103,8 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract; nothing was sent.')
     validate_definitions(fields, definitions)
+    if any(d['version'] == 3 for d in definitions.values()) and scope_contract != DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+        _fail('These approved identity requirements need the document-identity generation contract; nothing was sent.')
     if not isinstance(notes, str) or len(notes) > 50000: _fail('Notes exceed the supported source limit; nothing was truncated.')
     units, _ = source_units(notes, fields)
     base = {'notes': notes, 'approved_definitions': definitions,
@@ -2015,9 +2128,11 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     if scope_contract in OBSERVATION_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import observation_qualifier_inventory
         base['observation_qualifier_inventory'] = observation_qualifier_inventory(units)
-    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in CONSENT_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import consent_qualifier_inventory
         base['consent_qualifier_inventory'] = consent_qualifier_inventory(units)
+    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+        base['approved_patient_name_destinations'] = [key for key, d in definitions.items() if requires_patient_name(d)]
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -2040,10 +2155,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += ' ' + OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS
-    if scope_contract == CONSENT_CONTEXT_SCOPE_CONTRACT:
+    if scope_contract in CONSENT_CONTEXT_SCOPE_CONTRACTS:
         instructions += ' ' + CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + CONSENT_CONTEXT_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + CONSENT_CONTEXT_CHECK_INSTRUCTIONS
+    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+        instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
+        assign_instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
+        check_instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
@@ -2062,12 +2181,17 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     checks, bad = _check(fields, facts, check_result)
     repair = [key for key, row in checks.items() if row['verdict'] in ('incorrect', 'omission', 'unrelated', 'conflict', 'ambiguous')
               and not any(i in bad for i in answers[key]['fact_ids'])]
+    identity_findings = {key: answer['patient_name_check'] for key, answer in answers.items()
+                         if answer.get('patient_name_check', {}).get('verdict') == 'omission'}
+    repair += [key for key, finding in identity_findings.items() if key not in repair
+               and not any(i in bad for i in answers[key]['fact_ids'] + finding['fact_ids'])]
     if repair:
         previous_checks, previous_bad = checks, bad
-        changed = send('assigner', 2, {**base, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'checker_findings': check_result, 'repair_keys': repair}, ASSIGN_SCHEMA, assign_instructions)
+        local_findings = {'local_patient_name_findings': identity_findings} if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT else {}
+        changed = send('assigner', 2, {**base, **local_findings, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'checker_findings': check_result, 'repair_keys': repair}, ASSIGN_SCHEMA, assign_instructions)
         answers.update(_assign(notes, fields, definitions, facts, changed, only=repair, scope_contract=scope_contract,
                                timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT))
-        check_result = send('checker', 2, {**base, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'prior_findings': check_result}, CHECK_SCHEMA, check_instructions)
+        check_result = send('checker', 2, {**base, **local_findings, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'prior_findings': check_result}, CHECK_SCHEMA, check_instructions)
         checks, bad = _check(fields, facts, check_result)
         # An assignment repair cannot repair an incorrect extracted fact.
         bad = {**previous_bad, **bad}
@@ -2188,6 +2312,8 @@ def _fact_proof(answer):
         keys += ('fact_scope_contract',)
     if 'timing_reference_contract' in answer:
         keys += ('timing_reference_contract',)
+    if 'patient_name_check' in answer:
+        keys += ('patient_name_check',)
     return digest({k: answer.get(k) for k in keys})
 
 
@@ -2199,6 +2325,8 @@ def validate_stored_answer(notes, field, definition, answer):
     scope_contract = answer.get('fact_scope_contract', LEGACY_SCOPE_CONTRACT)
     if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract.')
+    if definition['version'] == 3 and scope_contract != DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+        _fail('The stored answer does not enforce its approved patient-name requirement.')
     if answer.get('source_sha256') != hashlib.sha256(notes.encode()).hexdigest() or answer.get('definition_sha256') != definition_digest(definition):
         _fail('The semantic answer source or approved definition changed.')
     if answer.get('semantic_review_mode') == 'manual':
@@ -2245,6 +2373,13 @@ def validate_stored_answer(notes, field, definition, answer):
         _fail('Stored answer fact references do not match its proof.')
     proof = _fact_proof(answer)
     if proof != answer.get('semantic_proof_sha256'): _fail('Stored semantic fact proof changed.')
+    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+        _validate_current_subjects(notes, units, facts)
+        identity_check = patient_name_check(notes, definition, facts, ids)
+        if answer.get('patient_name_check') != identity_check:
+            _fail('The stored patient-name finding differs from its approved requirement and source facts.')
+        if identity_check and identity_check['verdict'] != 'pass' and answer.get('status') not in ('conflict', 'ambiguous'):
+            _fail('The required documented patient identity remains unresolved.')
     if answer.get('status') == 'supported':
         fresh = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]},

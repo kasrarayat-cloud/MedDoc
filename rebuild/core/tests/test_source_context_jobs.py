@@ -1,4 +1,4 @@
-"""New jobs freeze v9; retained jobs continue their original scope contract."""
+"""New jobs freeze v10; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -18,8 +18,8 @@ from core.security import private_path
         'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class SourceContextWorkerTests(TestCase):
     def setUp(self):
-        from core.tests.test_ai_stages import IndependentStageTests
-        IndependentStageTests.setUp(self)
+        from core.tests.test_semantic_reference_contract import SemanticReferenceContractDatabaseTests
+        SemanticReferenceContractDatabaseTests.setUp(self)
 
     def exercise(self, stored_scope):
         from core.tests.test_ai_stages import IndependentStageTests
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.CONSENT_CONTEXT_SCOPE_CONTRACT:
+        if stored_scope == semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -68,10 +68,12 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.OBSERVATION_CONTEXT_EXTRACT_INSTRUCTIONS,
                         semantic.OBSERVATION_CONTEXT_ASSIGN_INSTRUCTIONS,
                         semantic.OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS)
-        if expected == semantic.CONSENT_CONTEXT_SCOPE_CONTRACT:
+        if expected in semantic.CONSENT_CONTEXT_SCOPE_CONTRACTS:
             suffixes = (semantic.CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS,
                         semantic.CONSENT_CONTEXT_ASSIGN_INSTRUCTIONS,
                         semantic.CONSENT_CONTEXT_CHECK_INSTRUCTIONS)
+        if expected == semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+            suffixes = (semantic.DOCUMENT_IDENTITY_INSTRUCTIONS,) * 3
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
             self.assertEqual(request['max_output_tokens'], 16000)
@@ -82,11 +84,14 @@ class SourceContextWorkerTests(TestCase):
             self.assertEqual('observation_qualifier_inventory' in request['payload'],
                              expected in semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACTS)
             self.assertEqual('consent_qualifier_inventory' in request['payload'],
-                             expected == semantic.CONSENT_CONTEXT_SCOPE_CONTRACT)
+                             expected in semantic.CONSENT_CONTEXT_SCOPE_CONTRACTS)
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_new_enqueue_freezes_v9_and_worker_uses_it_without_extra_calls(self):
+    def test_new_enqueue_freezes_v10_and_worker_uses_it_without_extra_calls(self):
+        self.exercise(semantic.DOCUMENT_IDENTITY_SCOPE_CONTRACT)
+
+    def test_retained_v9_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.CONSENT_CONTEXT_SCOPE_CONTRACT)
 
     def test_retained_v8_job_keeps_old_requests_and_answer_contract(self):
