@@ -60,6 +60,22 @@ The request byte limit still applies without truncating clinical text. This
 projection has a new engine version, so an earlier failed review is retained
 and an existing finalized encounter can explicitly request the current version.
 
+One actual concept response contained blank identifiers and source evidence.
+The complete saved note reached the provider; local validation rejected the
+response and retained its receipt and known cost. The provider SDK moves some
+string constraints into schema descriptions, so transport validation alone
+does not establish a usable clinical response. Concept fields now carry explicit
+source and nonblank requirements, with local whitespace rejection that preserves
+accepted strings exactly. Empty concept lists remain valid when no concepts are
+supported; placeholder objects are invalid.
+
+This correction has a distinct engine contract. A finalized encounter requires
+an explicit request for that contract, and repeated requests reuse its one run.
+Previous terminal failures, provider receipts and costs are preserved. There is
+no automatic resend of a failed request. These checks do not guarantee that a
+future provider response will pass clinical validation; served acceptance must
+verify the actual response separately.
+
 The UI distinguishes unrequested work, unavailable terminology, pending work,
 insufficient detail, a supported empty result, execution failure and an uncertain
 provider outcome. GET requests do not enqueue jobs or record approvals.

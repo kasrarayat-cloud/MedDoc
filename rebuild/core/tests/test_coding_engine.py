@@ -5,7 +5,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, override_settings
-from core import coding_engine as engine
+from anthropic import transform_schema
+from pydantic import ValidationError as PydanticValidationError
+from core import ai_stages, coding_engine as engine
 from core.coding_terminology import parse_reference
 
 
@@ -126,7 +128,7 @@ class CodingClinicalPayloadTests(SimpleTestCase):
             changed_proof = service.input_snapshot(encounter)
         self.assertEqual(current,again)
         self.assertNotEqual(old[3],current[3])
-        self.assertEqual(current[0]['engine_contract'],'us-outpatient-index-tabular-v2')
+        self.assertEqual(current[0]['engine_contract'],'us-outpatient-index-tabular-v3')
         self.assertEqual(old[0]['answers'],original)
         self.assertEqual(current[0]['answers'],original)
         old_inputs=deepcopy(old[0]);old_inputs['engine_contract']=engine.CONTRACT
@@ -383,3 +385,119 @@ class CodingEngineDemonstratedRegressionTests(SimpleTestCase):
         self.assert_codes(quote,current,'Z86.0100',['Z86.0100'])
         result=self.assert_codes(quote+' This is a follow-up examination after completed treatment.',current,'Z86.0100',[])
         self.assertTrue(any('follow-up examination after treatment' in q['question'] for q in result['questions']))
+
+
+def complete_concept(**changes):
+    return {'id':'c1', 'term':'heartburn', 'index_terms':['Heartburn'],
+            'evidence':'The patient has heartburn.', 'kind':'symptom',
+            'certainty':'confirmed', 'temporality':'current', 'subject':'patient',
+            'relevant':True, 'missing_detail':'', 'integral_to':'', **changes}
+
+
+def extraction(concepts):
+    return {'documented_patient_name':'', 'patient_name_evidence':'', 'concepts':concepts}
+
+
+class CodingConceptValidationTests(SimpleTestCase):
+    def test_retained_empty_placeholder_reply_is_rejected(self):
+        # Exact nonclinical placeholder shape from the retained invalid reply.
+        reply = extraction([{'certainty':'confirmed', 'evidence':'', 'id':'',
+            'index_terms':[' '], 'integral_to':' ', 'kind':'reason', 'missing_detail':' ',
+            'relevant':True, 'subject':'patient', 'temporality':'current', 'term':' '}])
+        original = deepcopy(reply)
+        with self.assertRaises(PydanticValidationError) as caught:
+            engine.Concepts.model_validate(reply, strict=True)
+        locations = {tuple(e['loc']) for e in caught.exception.errors()}
+        for name in ('id', 'term', 'evidence', 'index_terms'):
+            self.assertIn(('concepts', 0, name), locations)
+        self.assertEqual(reply, original)
+
+    def test_required_clinical_strings_reject_blank_and_unicode_whitespace(self):
+        for blank in ('', ' ', '\t\r\n', '\u00a0\u2003'):
+            for field in ('term', 'evidence', 'index_terms'):
+                value = [blank] if field == 'index_terms' else blank
+                with self.subTest(field=field, value=blank), self.assertRaises(PydanticValidationError):
+                    engine.Concept.model_validate(complete_concept(**{field:value}), strict=True)
+
+    def test_each_index_term_must_be_nonblank(self):
+        for terms in (['Heartburn', ' '], ['\t', 'Heartburn']):
+            with self.subTest(terms=terms), self.assertRaises(PydanticValidationError):
+                engine.Concept.model_validate(complete_concept(index_terms=terms), strict=True)
+
+    def test_supported_complete_concept_preserves_exact_source_strings(self):
+        notes = '\tThe patient has heartburn.\r\n'
+        concept = complete_concept(term=' heartburn ', index_terms=[' Heartburn\t'], evidence=notes)
+        reply = extraction([concept])
+        original = deepcopy(reply)
+        parsed = engine.Concepts.model_validate(reply, strict=True).model_dump()
+        self.assertEqual(parsed, original)
+        self.assertEqual(reply, original)
+        self.assertEqual(engine.source_disposition(parsed['concepts'][0], notes)[0], 'eligible')
+        self.assertEqual(parsed['concepts'][0]['evidence'].encode(), notes.encode())
+
+    def test_empty_extraction_and_optional_absent_details_are_not_fabricated(self):
+        self.assertEqual(engine.Concepts.model_validate(extraction([]), strict=True).model_dump(), extraction([]))
+        concept = complete_concept()
+        self.assertEqual(engine.Concept.model_validate(concept, strict=True).model_dump(), concept)
+
+    def test_closed_schema_and_strict_types_remain_required(self):
+        for change in ({'term':False}, {'evidence':None}, {'index_terms':'Heartburn'},
+                       {'index_terms':[1]}, {'code':'R12'}, {'id':'placeholder'}):
+            with self.subTest(change=change), self.assertRaises(PydanticValidationError):
+                engine.Concept.model_validate(complete_concept(**change), strict=True)
+
+    def test_invalid_extraction_cannot_reach_resolution_or_change_saved_input(self):
+        item = SimpleNamespace(inputs={'notes':'The patient has heartburn.', 'answers':{},
+            'service_date':'2026-10-14'}, context={'setting':'outpatient_office'}, releases=[])
+        original = deepcopy(item.inputs)
+        reference = SimpleNamespace(release=SimpleNamespace(version='synthetic-reference'))
+        reply = extraction([complete_concept(index_terms=[' '])])
+        with patch.object(engine, 'reference_for', return_value=reference), \
+             patch.object(engine.coding_provider, 'execute', return_value=reply) as send:
+            with self.assertRaises(PydanticValidationError):
+                engine.generate(item)
+        send.assert_called_once()
+        self.assertEqual(send.call_args.args[1], 'concepts')
+        self.assertEqual(item.inputs, original)
+
+    def test_anthropic_wire_schema_preserves_guidance_but_local_constraints_still_apply(self):
+        local = engine.Concepts.model_json_schema()
+        original = deepcopy(local)
+        wire = transform_schema(local)
+        local_fields = local['$defs']['Concept']['properties']
+        wire_fields = wire['$defs']['Concept']['properties']
+        for name in ('id', 'term', 'index_terms', 'evidence'):
+            with self.subTest(field=name):
+                self.assertTrue(local_fields[name].get('description'))
+                self.assertIn(local_fields[name]['description'], wire_fields[name]['description'])
+        self.assertNotIn('pattern', wire_fields['id'])
+        self.assertIn('pattern', wire_fields['id']['description'])
+        self.assertNotIn('minLength', wire_fields['evidence'])
+        self.assertIn('minLength', wire_fields['evidence']['description'])
+        self.assertEqual(local, original)
+        with self.assertRaises(PydanticValidationError):
+            engine.Concept.model_validate(complete_concept(evidence=' '), strict=True)
+
+    def test_transport_gets_complete_data_and_explicit_guidance_once_without_network(self):
+        class SendBoundary(Exception): pass
+        payload = {'notes':'The patient has heartburn.\r\nNo dysphagia.',
+                   'answers':{'finding':{'text':'Heartburn; no dysphagia', 'status':'supported'}},
+                   'service_date':'2026-10-14', 'setting':'outpatient_office'}
+        original = deepcopy(payload)
+        with patch('anthropic.Anthropic') as client:
+            client.return_value.messages.create.side_effect = SendBoundary
+            with self.assertRaises(SendBoundary):
+                ai_stages._response(payload, engine.Concepts, engine.CONCEPT_INSTRUCTIONS,
+                    {'provider':'anthropic', 'model':'offline-synthetic-model'}, 8000, 120,
+                    lambda _: self.fail('No response or transport was authorized.'))
+        client.assert_called_once_with(timeout=120, max_retries=0)
+        client.return_value.messages.create.assert_called_once()
+        request = client.return_value.messages.create.call_args.kwargs
+        import json
+        self.assertEqual(json.loads(request['messages'][0]['content']), original)
+        self.assertEqual(payload, original)
+        self.assertEqual(request['output_config']['format']['schema'], transform_schema(engine.Concepts))
+        self.assertIn('c1, c2', request['system'])
+        self.assertIn('whitespace', request['system'].lower())
+        self.assertIn('placeholder', request['system'])
+        self.assertEqual(engine.CONTRACT, 'us-outpatient-index-tabular-v3')
