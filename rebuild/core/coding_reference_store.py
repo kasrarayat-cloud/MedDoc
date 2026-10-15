@@ -70,7 +70,16 @@ def _requested(run, selections):
         aliases = candidate.get('source_aliases', [])
         if type(aliases) is not list or len(aliases) > MAX_SELECTIONS:
             raise ValidationError('Invalid saved Index aliases.')
-        wanted = [candidate.get('entry_id'), *aliases]
+        # Source negation may refer to a rejected specific subtype of an
+        # affirmed parent. Read its dated Index entries again at approval;
+        # persisted strings and the selected entry alone are insufficient.
+        checks = run.result.get('source_checks', {})
+        if type(checks) is not dict or type(checks.get(key, {})) is not dict:
+            raise ValidationError('Invalid saved source checks.')
+        scope_entries = checks.get(key, {}).get('index_scope_entry_ids', [])
+        if type(scope_entries) is not list or len(scope_entries) > MAX_IDENTITIES:
+            raise ValidationError('Invalid saved Index assertion scopes.')
+        wanted = [candidate.get('entry_id'), *aliases, *scope_entries]
         if any(type(value) is not str or not INDEX_ID.fullmatch(value) for value in wanted):
             raise ValidationError('Invalid authoritative Index identity.')
         entries.update(wanted)

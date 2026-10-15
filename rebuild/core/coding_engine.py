@@ -21,7 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .models import Code, CodingRelease
 from . import coding_provider, coding_terminology
 
-CONTRACT = 'us-outpatient-index-tabular-v3'
+CONTRACT = 'us-outpatient-index-tabular-v4'
 GUIDELINES = 'ICD-10-CM Official Guidelines I.A.19, I.B.1-5, I.C.21 and Section IV'
 
 
@@ -92,6 +92,9 @@ Read the entire note, including negation, uncertainty, conflicts, family subject
 Include contradictory or negated mentions needed to check an affirmative concept; never silently choose
 one conflicting statement. Mark suspected/probable/possible/rule-out outpatient disease uncertain.
 Documented signs/symptoms can be current even when a suspected cause is not established.
+Keep assertions about a condition separate from its attributes: an unknown cause, subtype,
+severity or other qualifier does not deny an independently documented condition. Conversely,
+mentioning an attribute alone does not establish the condition. Retain both source assertions.
 Each evidence string must be an exact contiguous sentence or clause in the provided source notes,
 including the subject, negation/uncertainty and temporal context needed to interpret it.
 Separate a patient's condition from a relative's condition. Family history stays family history.
@@ -174,8 +177,8 @@ def question(key, text, *, system='ICD-10-CM', blocking=False):
     return {'id': key, 'system': system, 'question': text, 'blocking': blocking}
 
 
-def evidence_span(notes, quote):
-    if not isinstance(quote, str) or not quote or len(quote) > 4000:
+def evidence_span(notes, quote, *, limit=4000):
+    if not isinstance(quote, str) or not quote or len(quote) > limit:
         raise ValidationError('Coding evidence is missing or exceeds the bounded source clause.')
     start = notes.find(quote)
     if start < 0:
@@ -211,14 +214,50 @@ def anchors(concept):
 def mention_clauses(text, concept):
     # A denial following an affirmed symptom gets its own clause, preserving
     # "bloating ... and denies abdominal pain" instead of negating both.
-    chunks = re.split(r'(?<=[.!?;])\s+|\r?\n|\b(?:but|whereas)\b|\band (?=denies?\b|no\b|a (?:family|personal) history\b)', text, flags=re.I)
+    chunks = re.split(r'(?<=[.!?;])\s+|\r?\n|\b(?:but|whereas)\b|'
+                     r'\band (?=(?:(?:the )?patient )?(?:denies?|reports?|has|notes?|endorses?)\b|no\b|a (?:family|personal) history\b)',
+                     text, flags=re.I)
     for clause in chunks:
         normalized = norm(clause)
-        for term in anchors(concept):
-            match = re.search(r'(?<![a-z0-9])'+re.escape(term)+r'(?:s)?(?![a-z0-9])', normalized)
-            if match:
+        occupied = []
+        # Inspect every occurrence, including a denial later in the same clause.
+        # Prefer the longest anchor when a specific term contains its main term.
+        for term in sorted(anchors(concept), key=len, reverse=True):
+            for match in re.finditer(r'(?<![a-z0-9])'+re.escape(term)+r'(?:s)?(?![a-z0-9])', normalized):
+                if any(start < match.end() and match.start() < end for start, end in occupied):
+                    continue
+                occupied.append(match.span())
                 yield clause, normalized[:match.start()], normalized[match.end():]
-                break
+
+
+# These are attributes of a finding, not clinical assertion heads such as
+# "evidence", "diagnosis", "signs" or "symptoms". Those still carry negation
+# of the condition ("no evidence of disease"). No disease names/codes appear here.
+ATTRIBUTE_HEAD = r'(?:subtype|type|cause|etiology|aetiology|severity|grade|stage|laterality|site|location|duration|frequency|histology)'
+
+
+def attribute_mention(before, after, qualifiers=()):
+    """Recognize the nominal head: 'condition subtype' / 'subtype of condition'.
+
+    Such a mention proves neither presence nor absence of the condition. It may
+    still constrain an Index route; this helper changes only assertion scope.
+    """
+    # The attribute must be the noun head, not an adjective in a condition
+    # assertion such as "no disease-type symptoms".
+    nominal = bool(re.match(r'\s+(?:s\s+)?'+ATTRIBUTE_HEAD+
+        r'(?=\s*$|\s+(?:is|was|are|were|has|have|had|remains?|and|or|not|unknown|uncertain|unspecified|undetermined|unestablished|information|details?)\b)', after) or re.search(
+        r'\b'+ATTRIBUTE_HEAD+r'\s+(?:of|for)\s+(?:(?:the|this|that|a|an|documented|patient s|mild|moderate|severe)\s+)*$', before))
+    # A rejected/uncertain official subtype is not a denial of an independently
+    # affirmed parent. Qualifiers come from this date's Index, never model memory.
+    qualified = any(re.search(r'\b'+re.escape(value)+r'\s*$', before) for value in qualifiers)
+    bounded = NEGATION.search(before) or UNCERTAIN.search(before) or re.match(
+        r'\s*(?:(?:is|was|are|were|has|have|been|remains|being)\s+)*'
+        r'(?:ruled out|absent|denied|not\b|suspected|possible|probable|uncertain|unconfirmed)', after)
+    return nominal or bool(qualified and bounded)
+
+
+def condition_mentions(text, concept, qualifiers=()):
+    return [item for item in mention_clauses(text, concept) if not attribute_mention(item[1], item[2], qualifiers)]
 
 
 def enclosing_clauses(notes, quote):
@@ -257,7 +296,39 @@ def affirmative_word(source, word):
     return False
 
 
-def source_disposition(concept, notes):
+def source_owner_question(concept, surrounding):
+    """Ownership applies equally to a condition and its documented attributes."""
+    kind = concept['kind']
+    has_family = [bool(FAMILY.search(clause)) for clause in surrounding]
+    if kind == 'family_history' and (not has_family or not all(has_family)):
+        return 'The complete source assertion must establish the relative for '+concept['term']+'.'
+    if kind != 'family_history' and any(has_family):
+        return 'The complete source assertion concerns a relative; clarify the patient subject for '+concept['term']+'.'
+    for clause in surrounding:
+        other = re.search(r'\b(?:referring doctor|referring physician|referrer|physician|doctor|clinician|friend|caregiver|nurse|spouse|partner|wife|husband)\b'
+                          r'(?:.{0,30}?\b(?:has|had|reports|diagnosed|with|denies|denied)\b|[’\']s\b)',clause,re.I)
+        if other:
+            before = norm(clause[:other.start()])
+            after = norm(clause[other.end():])
+            patient_occupation = re.search(r'\bpatient (?:is |was )?(?:a |an )?$', before+' ')
+            patient_report = re.search(r'\b(?:reports|denies|denied)$', other.group(), re.I) and re.match(r'(?:that )?(?:the )?patient\b',after)
+            patient_report = patient_report or re.match(
+                r'(?:confirmed|documented|noted|reported|stated|determined|diagnosed) (?:that )?(?:the )?patient\b',after)
+            if not patient_occupation and not patient_report:
+                return 'The complete source assertion may concern someone other than the patient; clarify ownership of '+concept['term']+'.'
+    return ''
+
+
+def explicit_other_subject(before):
+    # Only a direct other-person clinical predicate proves foreign ownership.
+    # An ambiguous reporter ("doctor has confirmed that the patient ...")
+    # must still participate in patient contradiction checks.
+    return bool(re.search(r'\b(?:doctor|physician|clinician|friend|caregiver|nurse|spouse|partner|wife|husband)\s+'
+                          r'(?:has|had|denies|denied)\s+(?:(?:no|any|current)\s+)*$', before)
+                and not re.search(r'\bpatient\b', before))
+
+
+def source_disposition(concept, notes, *, qualifiers=()):
     """Conservative source vetoes, independent of model assertions or code choice."""
     evidence_span(notes, concept['evidence'])
     kind, subject = concept['kind'], concept['subject']
@@ -275,45 +346,44 @@ def source_disposition(concept, notes):
         return 'excluded', 'A planned or historical procedure is not a performed service at this encounter.'
     if kind in ('diagnosis', 'symptom') and concept['temporality'] != 'current':
         return 'excluded', 'A historical or planned finding is not established as a current condition.'
-    source_mentions = list(mention_clauses(notes, concept))
-    evidence_mentions = list(mention_clauses(concept['evidence'], concept))
-    if not evidence_mentions:
+    source_mentions = condition_mentions(notes, concept, qualifiers)
+    evidence_mentions = condition_mentions(concept['evidence'], concept, qualifiers)
+    surrounding = enclosing_clauses(notes, concept['evidence'])
+    if not evidence_mentions or not source_mentions or not any(
+            condition_mentions(clause, concept, qualifiers) for clause in surrounding):
         # Semantic synonyms may be proposed, but a missing lexical source link
         # is explicitly held rather than using a model's confidence as proof.
         return 'question', 'Clarify the source wording for '+concept['term']+' before selecting a code.'
-    surrounding = enclosing_clauses(notes, concept['evidence'])
-    has_family = [bool(FAMILY.search(clause)) for clause in surrounding]
-    if kind == 'family_history' and (not has_family or not all(has_family)):
-        return 'question', 'The complete source assertion must establish the relative for '+concept['term']+'.'
-    if kind != 'family_history' and any(has_family):
-        return 'question', 'The complete source assertion concerns a relative; clarify the patient subject for '+concept['term']+'.'
+    ownership = source_owner_question(concept, surrounding)
+    if ownership:
+        return 'question', ownership
     for clause in surrounding:
-        other = re.search(r'\b(?:referring doctor|referring physician|referrer|physician|doctor|clinician|friend|caregiver|nurse|spouse|partner|wife|husband)\b.{0,30}?\b(?:has|had|reports|diagnosed|with)\b',clause,re.I)
-        if other:
-            before = norm(clause[:other.start()])
-            after = norm(clause[other.end():])
-            patient_occupation = re.search(r'\bpatient (?:is |was )?(?:a |an )?$', before+' ')
-            patient_report = other.group().lower().endswith('reports') and re.match(r'(?:that )?(?:the )?patient\b',after)
-            if not patient_occupation and not patient_report:
-                return 'question', 'The complete source assertion may concern someone other than the patient; clarify ownership of '+concept['term']+'.'
         if kind in ('diagnosis','symptom') and affirmative_word(clause,'resolved'):
             return 'excluded', 'The source explicitly describes a resolved finding, not a current condition.'
-    negative = []
+    negative, affirmative = [], []
     for clause, before, after in source_mentions:
         family = bool(FAMILY.search(clause))
         if kind == 'family_history' and not family or kind != 'family_history' and family:
+            continue
+        if kind != 'family_history' and explicit_other_subject(before):
             continue
         # Explicitly resolved historical symptoms and a current denial agree.
         if PAST.search(clause) and concept['temporality'] == 'current' and 'resolved' in norm(clause):
             continue
         if NEGATION.search(before) or re.match(r'\s*(?:(?:is|was|are|were|has|have|been|remains|being)\s+)*(?:ruled out|absent|denied|not\b)', after):
             negative.append(clause)
+        else:
+            affirmative.append(clause)
     if negative:
+        if not affirmative:
+            return 'excluded', 'The source negates this finding; no affirmative current-condition recommendation.'
         return 'question', 'Clarify the affirmative and negative documentation for '+concept['term']+'.'
     for clause, before, after in source_mentions:
         if kind != 'family_history' and FAMILY.search(clause):
             continue
-        if kind == 'diagnosis' and (UNCERTAIN.search(before) or re.match(
+        if kind != 'family_history' and explicit_other_subject(before):
+            continue
+        if kind in ('diagnosis', 'symptom') and (UNCERTAIN.search(before) or re.match(
                 r'\s*(?:(?:is|was|has|have|been|remains?|may be|could be|being)\s+)*(?:suspected|possible|probable|uncertain|unconfirmed|not confirmed)\b', after)):
             return 'question', 'The source qualifies '+concept['term']+' as uncertain; clarify before coding it as confirmed.'
         if kind == 'procedure' and (FUTURE.search(clause) or PAST.search(clause)):
@@ -437,6 +507,75 @@ def index_route_errors(entry, concept, entries, aliases=()):
         elif required and not supported(required):
             errors.append('The qualified Index branch requires affirmative source wording: '+term+'.')
     return errors
+
+
+def index_subtypes(reference, concept):
+    """Dated child routes for a lexical main-term concept, not taxonomy guesses."""
+    lookup = index_lookup(reference)
+    lexical_heads = anchors({**concept, 'index_terms':concept.get('index_terms', [])})
+    heads = {entry['id'] for entry in lookup.values() if not entry.get('parent_id')
+             and norm(entry.get('term', '')) in lexical_heads
+             and norm(entry.get('term', '')) not in TAXONOMY_HEADS}
+    if not heads:
+        return []
+    result = []
+    for entry in lookup.values():
+        chain, node = [], entry
+        while node and node.get('parent_id'):
+            chain.append(node)
+            node = lookup.get(node['parent_id'])
+        if node and node['id'] in heads and chain:
+            qualifier = ' '.join(norm(child.get('term', '')) for child in reversed(chain))
+            # Only lexical subtype modifiers. Relational/negative Index routes
+            # keep their existing checks, and are not assertion-scope exceptions.
+            if qualifier and not set(qualifier.split()) & (ROUTE_WORDS | TAXONOMY_HEADS):
+                result.append({'entry':entry, 'head_id':node['id'], 'head_term':node['term'], 'qualifier':qualifier})
+    return result
+
+
+def assertion_concept(concept, subtypes):
+    # Lookup phrases may contain a subtype. They must not consume its words
+    # when checking assertions about an explicitly extracted parent concept.
+    if any(norm(row['head_term']) == norm(concept['term']) for row in subtypes):
+        return {**concept, 'index_terms':[concept['term']]}
+    return concept
+
+
+def more_specific_source_routes(entry, concept, notes, reference, subtypes):
+    """A default cannot erase a separately documented affirmative subtype.
+
+    This veto never manufactures an alternative quote or selects a replacement.
+    A clipped extraction may therefore need a focused review instead.
+    """
+    lookup = index_lookup(reference)
+    qualifiers = [row['qualifier'] for row in subtypes]
+    result = []
+    for row in subtypes:
+        child = row['entry']
+        if child.get('code') == entry.get('code') or not code_variants(reference, child):
+            continue
+        parent = lookup.get(child.get('parent_id'))
+        while parent and parent['id'] != entry['id']:
+            parent = lookup.get(parent.get('parent_id'))
+        if not parent:
+            continue
+        parent_concept = {**concept, 'term':row['head_term'], 'index_terms':[row['head_term']]}
+        for clause, before, after in mention_clauses(notes, parent_concept):
+            qualifier = re.escape(row['qualifier'])
+            adjacent = re.search(r'\b'+qualifier+r'\s*$', before)
+            current_attribute = re.match(r'\s+(?:(?:type|subtype)\s+)?is\s+'+qualifier+r'\b', after)
+            if not adjacent and not current_attribute:
+                continue
+            local = {**parent_concept, 'evidence':clause}
+            affirmed = source_disposition(local, clause, qualifiers=qualifiers)[0] == 'eligible'
+            if (current_attribute and not source_owner_question(concept, [clause])
+                    and not any(pattern.search(clause) for pattern in (NEGATION, UNCERTAIN, PAST))):
+                affirmed = True
+            if (affirmed
+                    and not index_route_errors(child, local, lookup)):
+                result.append(child['id'])
+                break
+    return result
 
 
 def integral_parent(concept, concepts, dispositions, notes):
@@ -589,7 +728,7 @@ def identity_blockers(run, extraction):
 def generate(run):
     reference = reference_for(run)
     notes = run.inputs['notes']
-    result = {'contract':CONTRACT, 'suggestions':[], 'questions':[], 'excluded':[],
+    result = {'contract':CONTRACT, 'suggestions':[], 'questions':[], 'excluded':[], 'source_checks':{},
               'global_blockers':[], 'concepts':[], 'candidates':{}, 'terminology_release':reference.release.version,
               'guidelines':GUIDELINES, 'claims_submitted':False}
     if run.context.get('setting') != 'outpatient_office':
@@ -608,9 +747,23 @@ def generate(run):
     availability = cpt_status(date.fromisoformat(run.inputs['service_date']))
     result['cpt'] = availability
     dispositions = {}
+    subtype_routes = {concept['id']:index_subtypes(reference, concept) for concept in concepts}
     for concept in concepts:
-        state, reason = source_disposition(concept, notes)
+        subtypes = subtype_routes[concept['id']]
+        qualifiers = [row['qualifier'] for row in subtypes]
+        source_concept = assertion_concept(concept, subtypes)
+        state, reason = source_disposition(source_concept, notes, qualifiers=qualifiers)
         dispositions[concept['id']] = state
+        mentions = list(mention_clauses(notes, source_concept))
+        result['source_checks'][concept['id']] = {
+            'disposition':state, 'reason':reason or 'The documented condition passes the source assertion checks; terminology validation is still required.',
+            'index_scope_entry_ids':[row['entry']['id'] for row in subtypes],
+            'evidence':evidence_span(notes, concept['evidence']),
+            'condition_assertions':[evidence_span(notes, clause, limit=len(notes)) for clause in dict.fromkeys(
+                clause for clause, before, after in mentions if not attribute_mention(before, after, qualifiers))],
+            'attribute_assertions':[evidence_span(notes, clause, limit=len(notes)) for clause in dict.fromkeys(
+                clause for clause, before, after in mentions if attribute_mention(before, after, qualifiers))],
+        }
         if state == 'question':
             result['questions'].append(question(concept['id'],reason))
         elif state == 'excluded':
@@ -624,7 +777,11 @@ def generate(run):
         if len({c['certainty'] for c in current}) > 1:
             for concept in current:
                 dispositions[concept['id']] = 'question'
-                result['questions'].append(question(concept['id'],'Clarify conflicting statements about '+concept['term']+'.'))
+                reason = 'Clarify conflicting statements about '+concept['term']+'.'
+                result['source_checks'][concept['id']].update(disposition='question',reason=reason)
+                result['questions'] = [q for q in result['questions'] if q['id'] != concept['id']]
+                result['excluded'] = [row for row in result['excluded'] if row['concept_id'] != concept['id']]
+                result['questions'].append(question(concept['id'],reason))
     eligible = []
     for concept in concepts:
         if dispositions[concept['id']] != 'eligible':continue
@@ -658,6 +815,12 @@ def generate(run):
                      for target in cross['resolved_ids']}
             for entry in entries:
                 if index_route_errors(entry,concept,lookup,aliases):continue
+                specific = more_specific_source_routes(entry,concept,notes,reference,subtype_routes[concept['id']])
+                if specific:
+                    result['source_checks'][concept['id']].setdefault('specificity_holds', []).append(
+                        {'entry_id':entry['id'], 'documented_entry_ids':specific,
+                         'reason':'A documented more specific Index route prevents this less specific selection.'})
+                    continue
                 for code in code_variants(reference, entry):
                     check = coding_terminology.validate_code(reference, code)
                     if not check['valid']:continue
@@ -784,7 +947,9 @@ def validate_selection(run,selections):
             if not catalog or catalog.description!=checked.get('description'):
                 raise ValidationError('The authoritative code description no longer matches its bound release.')
         errors=specificity_errors(row['concept'],code,checked.get('description',row['description']))
-        state,_=source_disposition(row['concept'],run.inputs['notes']) if key!='office_em' else ('eligible','')
+        subtypes=index_subtypes(reference,row['concept']) if key!='office_em' else []
+        state,_=source_disposition(assertion_concept(row['concept'],subtypes),run.inputs['notes'], qualifiers=[
+            item['qualifier'] for item in subtypes]) if key!='office_em' else ('eligible','')
         if state!='eligible' or not checked['valid'] or checked.get('requires_review') or checked.get('errors') or errors:
             raise ValidationError('This selection needs source or coding-instruction clarification before approval.')
     if len(selected_codes)!=len(set(selected_codes)):
