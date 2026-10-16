@@ -25,3 +25,7 @@ QUILLMD_OWNER_NORMAL_ORIGIN_ENABLED = True
 CORTI_CREDENTIALS_FILE = ''
 RESEND_API_KEY = STRIPE_SECRET_KEY = STRIPE_WEBHOOK_SECRET = ''
 CPT_ENTITLEMENT_MANIFEST = str(STATE_DIR / 'unavailable-cpt/entitlement.json')
+# Separate case-bound API-output permission and selection assessment. This is
+# neither a CPT catalogue nor a replacement for its entitlement gate.
+CORTI_OUTPUT_REVIEW_FILE = str(BASE_DIR / 'ops/fixtures/corti_output_review.json')
+CORTI_OUTPUT_REVIEW_SHA256 = '1c8206e14b5f01ee83b964f73197807365c0f56d1d0960db36d80864975218d6'

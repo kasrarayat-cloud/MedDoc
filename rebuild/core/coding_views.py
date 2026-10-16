@@ -160,3 +160,19 @@ def approval(request, pk, run_pk):
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
+
+
+@require_POST
+@transaction.atomic
+def output_decision(request, pk, run_pk):
+    from . import coding_output
+    e = encounter_for(request, pk)
+    run = run_for(request, e, run_pk)
+    try:
+        data = payload(request)
+        confirmation = data.get('confirm_note_facts')
+        coding_output.decide(e, run, request.user, data.get('output_display_token', ''),
+                             data.get('outcome'), confirmation is True or confirmation == 'true')
+        return response(request, e)
+    except ValidationError as exc:
+        return response(request, e, '; '.join(exc.messages), 409)

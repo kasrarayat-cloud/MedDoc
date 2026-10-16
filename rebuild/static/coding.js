@@ -36,7 +36,7 @@
       baselines.set(form, value(form));
       form.querySelectorAll('input, select, textarea').forEach(control => { control.dataset.serverDisabled = String(control.disabled); });
       form.querySelectorAll('button[type="submit"]').forEach(button => { button.dataset.serverDisabled = String(button.disabled); });
-      if (['context', 'selections'].includes(form.dataset.codingForm)) {
+      if (['context', 'selections', 'output-decision'].includes(form.dataset.codingForm)) {
         const reset = document.createElement('button');
         reset.type = 'button'; reset.className = 'quiet'; reset.dataset.codingUndo = 'true'; reset.textContent = 'Undo unsaved changes';
         reset.addEventListener('click', () => { form.reset(); error(''); basis(); updateControls(); });
@@ -129,6 +129,13 @@
     const url = new URL(form.action, location.href);
     if (url.origin !== location.origin) return;
     const body = new FormData(form);
+    // FormData(form) omits the clicked action. Preserve the explicit choice;
+    // an absent submitter must never silently default to clinical acceptance.
+    const submitter = event.submitter;
+    if (submitter && submitter.form === form && submitter.name && !submitter.disabled) body.append(submitter.name, submitter.value);
+    if (form.dataset.codingForm === 'output-decision' && !['accepted', 'rejected'].includes(body.get('outcome'))) {
+      error('Choose Accept or Reject to record your decision.'); return;
+    }
     posting = true; epoch++; clearTimeout(timer); error(''); updateControls();
     try {
       const {response, data} = await fetchJSON(url, {method:'POST', body});

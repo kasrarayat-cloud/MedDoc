@@ -19,7 +19,7 @@ from . import coding_service as service
 from .coding_export import DRAFT_TAG, append_review
 from .corti_coding import CONTRACT as CORTI_CONTRACT, SYSTEMS, terminology
 from .corti_response import adapt_response
-from .models import CodingDecision, CodingRun, Encounter
+from .models import CodingDecision, CodingOutputDecision, CodingRun, Encounter
 from .security import audit, membership, private_path, scoped
 
 CONTRACT = 'synthetic-retained-coding-draft-v1'
@@ -31,6 +31,26 @@ TERM_STATUS = {
     'ambiguous_release': 'The applicable terminology release is ambiguous.',
     'unknown_code': 'The code is absent from the applicable authorized release.',
 }
+
+
+def bounded_review(encounter, run):
+    """Read the separate number-only assessment without creating a decision."""
+    from .coding_output import accepted_output_rows, reviewed
+    try:
+        assessment, review, base = reviewed(encounter, run)
+        decision = CodingOutputDecision.objects.filter(
+            run=run, review_digest=service.digest(review)).first()
+        if decision and (decision.review != review or decision.base_decision_id != base.pk
+                         or decision.outcome not in ('accepted', 'rejected')):
+            return None
+        if decision and decision.outcome == 'accepted':
+            # The same current binding used by approved export governs this
+            # status. A draft cannot manufacture or rehabilitate acceptance.
+            accepted_output_rows(encounter, run, base)
+        return {'assessment': assessment, 'review': review,
+                'state': decision.outcome if decision else 'pending'}
+    except ValidationError:
+        return None
 
 
 def draft_review(encounter):
@@ -61,6 +81,7 @@ def draft_review(encounter):
     if (len(saved) != len(run.result.get('suggestions', []))
             or set(saved) != {row['id'] for row in proposals}):
         raise ValidationError('Retained selected codes do not match the saved review.')
+    supplemental = bounded_review(encounter, run)
     paragraphs = [(TITLE, True),
         ('Fictional encounter. Retained-response replay; no new prediction was requested. '
          'This inspection draft is not an approved coding document and must not be used for billing.', False),
@@ -74,7 +95,14 @@ def draft_review(encounter):
         if row.get('code') != proposal['code'] or row.get('system') != system:
             raise ValidationError('A retained code differs from its saved review.')
         selected = proposal['id'] in run.selection.get('selected_ids', [])
-        if row.get('eligible') is not True or term['status'] != 'verified' or proposal['evidence_status'] != 'valid':
+        output = supplemental if supplemental and proposal['id'] == supplemental['review']['identifier'] else None
+        if output:
+            status = {
+                'pending': 'Supported code number — clinician acceptance pending; excluded from approved export.',
+                'accepted': 'Code number and note evidence accepted in the separate saved review; descriptor withheld. This draft remains unapproved.',
+                'rejected': 'Code number rejected in the supplemental review; excluded from approved export.',
+            }[output['state']]
+        elif row.get('eligible') is not True or term['status'] != 'verified' or proposal['evidence_status'] != 'valid':
             status = 'Held — excluded from approved export.'
         elif decision:
             status = ('Accepted in the separate saved approval.' if selected else 'Rejected in the saved review.')
@@ -82,7 +110,14 @@ def draft_review(encounter):
             status = ('Saved selection — approval pending.' if selected else 'Not selected — no saved approval.')
         paragraphs.extend([(system + ' ' + proposal['code'] + ' — provider-selected suggestion', True),
                            ('Decision status: ' + status, False)])
-        if term['status'] == 'verified':
+        if output:
+            paragraphs.extend([
+                ('Description withheld — known provider defect; upstream description and terminology version remain unresolved.', False),
+                ('Selection-source assessment: ' + output['assessment']['source_summary'], False),
+                ('API-output permission basis: ' + output['assessment']['permission_summary'], False),
+                ('This inspection draft records current review status. It is not the approved export; acceptance never verifies the withheld description.', False),
+            ])
+        elif term['status'] == 'verified':
             paragraphs.extend([('Verified reference description: ' + term['description'], False),
                 ('Reference: ' + term['source'] + '; release ' + term['version'] + '; effective '
                  + term['effective_from'] + ' through ' + term['effective_until'] + '.', False)])

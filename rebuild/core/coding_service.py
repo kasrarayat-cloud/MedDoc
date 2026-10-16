@@ -384,10 +384,25 @@ def snapshot(encounter, user):
     view['legacy_codes']=list(CodeSuggestion.objects.filter(encounter=e).filter(
         models.Q(terminology__release__system='ICD-10-CM') | models.Q(terminology__release_id__in=entitled_ids)
     ).select_related('terminology__release','accepted_by').order_by('created_at','pk'))
+    from . import coding_output
+    output_review = coding_output.view(e, latest, user)
+    view['output_review'] = output_review
+    if output_review and output_review.get('available'):
+        outcome = output_review['state']
+        view['questions'] = [({**question, 'question': output_review['code'] +
+            ': description and upstream terminology version remain unresolved. The code number has a separate, case-bound review below.'}
+            if question.get('id') == output_review['identifier'] else question) for question in view['questions']]
+        summary['approved'] += int(outcome == 'accepted')
+        summary['awaiting_review'] += int(outcome == 'pending')
+        summary['not_included'] -= int(outcome == 'accepted')
+        view['state_label'] = ('Selections approved; CPT number accepted with description withheld' if outcome == 'accepted'
+                               else 'ICD decision saved; CPT number awaiting confirmation' if outcome == 'pending'
+                               else 'Coding decisions saved; CPT number rejected')
     view['version'] = digest({'context': key, 'run': view['run_id'], 'state': state,
                               'selection': view['selection_digest'], 'result': digest(result),
                               'decision': str(decision.pk) if decision else None,
-                              'can_edit': can_edit, 'can_review': can_review, 'can_approve': can_approve})
+                              'can_edit': can_edit, 'can_review': can_review, 'can_approve': can_approve,
+                              'output_review': {k: output_review.get(k) for k in ('available', 'reason', 'state', 'review_digest')} if output_review else None})
     return view
 
 

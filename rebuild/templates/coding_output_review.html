@@ -1,0 +1,35 @@
+<section class="coding-approval" data-coding-output-review data-output-review-state="{{ review.state }}" aria-labelledby="coding-output-heading">
+  <h3 id="coding-output-heading">Review CPT {{ review.code }} for this fictional note</h3>
+  <p class="small">This review covers the selected code number and original-note evidence. Accepting it does not verify or repair the withheld provider description or its terminology version.</p>
+  <div class="notice" data-output-review-basis>
+    <p class="small"><strong>Selection:</strong> Supported for this saved note and date of service. {{ review.source_summary }}</p>
+    <p class="small"><strong>Description:</strong> Defective provider wording withheld; upstream description and terminology version remain unresolved.</p>
+    <p class="small"><strong>Permission:</strong> {{ review.permission_summary }}</p>
+    <p class="small"><strong>Your decision:</strong> {% if review.state == 'accepted' %}Accepted code number and note evidence.{% elif review.state == 'rejected' %}Rejected; excluded from the approved appendix.{% else %}Pending. This code cannot enter the approved appendix until you accept it.{% endif %}</p>
+  </div>
+  <h4>Facts documented in the saved note</h4>
+  <p class="small">These read-only facts come from the note. Confirm that they support your time-based selection; no confirmation has been filled in for you.</p>
+  {% for fact in review.facts %}
+  <div class="evidence" data-output-note-fact>
+    <span class="evidence-label">{{ fact.label }}: {{ fact.value }}</span>
+    <blockquote>{{ fact.quote }}</blockquote>
+    <p class="small muted">Source: {{ fact.source }} · characters {{ fact.start }}–{{ fact.end }}.</p>
+  </div>
+  {% endfor %}
+  <details class="coding-provider-diagnostic">
+    <summary>Dated-source review and permission basis</summary>
+    <ul class="small">{% for source in review.sources %}<li><a href="{{ source.url }}" target="_blank" rel="noreferrer">{{ source.title }}</a>{% if source.edition %} · {{ source.edition }}{% endif %}{% if source.date_limit %} · {{ source.date_limit }}{% endif %}</li>{% endfor %}</ul>
+    <p class="small">{{ review.permission_summary }} This is a bounded API-output review, not permission to import an independent CPT catalogue. The original provider response and failure verdict remain in diagnostics.</p>
+  </details>
+  {% if review.can_decide %}
+  <form method="post" action="{% url 'coding_output_decision' encounter.pk coding.run.pk %}" data-coding-form="output-decision">
+    {% csrf_token %}<input type="hidden" name="output_display_token" value="{{ review.display_token }}">
+    <label class="check-label" for="coding-output-confirm"><input id="coding-output-confirm" type="checkbox" name="confirm_note_facts" value="true" required> <span>I have reviewed the documented facts and confirm that they support this code for the saved fictional encounter.</span></label>
+    <button type="submit" name="outcome" value="accepted">Confirm note facts and accept {{ review.code }}</button>
+    <button type="submit" name="outcome" value="rejected" class="secondary" formnovalidate>Reject {{ review.code }}</button>
+    <p class="helptext">Your decision is saved against this encounter revision. Acceptance includes only the code number and note evidence; the incorrect descriptor stays excluded.</p>
+  </form>
+  {% elif review.decision %}
+  <p class="notice {% if review.state == 'accepted' %}success{% endif %}" data-output-persisted-decision><strong>{{ review.state|capfirst }} by {{ review.decision.user.email }}</strong> · {{ review.decision.approved_at|date:'j M Y, H:i' }}. This decision is retained separately from the earlier ICD review.</p>
+  {% elif review.reason %}<p class="notice warning">{{ review.reason }}</p>{% endif %}
+</section>

@@ -65,4 +65,5 @@ urlpatterns += [
     path('encounters/<uuid:pk>/coding/context/', coding_views.context, name='coding_context'),
     path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/selections/', coding_views.selections, name='coding_selections'),
     path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/approve/', coding_views.approval, name='coding_approval'),
+    path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/output-decision/', coding_views.output_decision, name='coding_output_decision'),
 ]

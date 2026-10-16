@@ -6,6 +6,7 @@ download, including downloads of a previously materialized variant.
 """
 import copy
 import hashlib
+import re
 from io import BytesIO
 from xml.parsers import expat
 from zipfile import BadZipFile, ZipFile
@@ -91,7 +92,57 @@ def eligible_codes(encounter):
                         'release_version': catalog.release.version, 'source_url': catalog.release.source_url,
                         'effective_from': catalog.release.effective_from.isoformat(),
                         'effective_until': catalog.release.effective_until.isoformat()})
+    # The original approval and catalogue path above remain independent. A
+    # bounded API-output decision does not alter that approval or turn an
+    # unverified provider description into licensed terminology.
+    from .coding_output import accepted_output_rows
+    supplements = accepted_output_rows(encounter, run, decision)
+    if supplements:
+        for output in supplements:
+            if (not isinstance(output, dict) or output.get('system') != 'CPT'
+                    or not re.fullmatch(r'[0-9]{5}', str(output.get('code', '')))
+                    or output.get('description_status') != 'withheld_defective_provider_text'):
+                raise ValidationError('The accepted API output has an unsupported export shape.')
+            matches = [row for row in suggestions
+                       if row.get('system') == output['system'] and row.get('code') == output['code']]
+            if len(matches) != 1:
+                raise ValidationError('Only a retained selected code can enter the API-output appendix.')
+            identity = (output['system'], output['code'])
+            if identity in seen:
+                raise ValidationError('The accepted selections contain a repeated code.')
+            evidence = _note_evidence(output.get('evidence_spans'), run.inputs['notes'])
+            if not evidence:
+                raise ValidationError('The accepted API output has no original-note evidence.')
+            seen.add(identity)
+            exports.append({**copy.deepcopy(output), 'description': '',
+                            'export_route': 'bounded_api_output', 'evidence_spans': evidence})
+        # Preserve the byte-identical historical ICD-only variant until an
+        # additional output decision is actually accepted. The combined review
+        # also carries the original-note evidence for its accepted ICD rows.
+        for exported in exports:
+            if exported.get('export_route') == 'bounded_api_output':
+                continue
+            matched = [row for row in suggestions
+                       if row.get('system') == exported['system'] and row.get('code') == exported['code']]
+            if len(matched) == 1 and matched[0].get('evidence_spans'):
+                exported['evidence_spans'] = _note_evidence(matched[0]['evidence_spans'], run.inputs['notes'])
     return run, decision, sorted(exports, key=lambda row: (row['system'] != 'ICD-10-CM', row['code']))
+
+
+def _note_evidence(spans, notes):
+    """Project exact note quotations only, never generated diagnostic prose."""
+    if not isinstance(spans, list):
+        raise ValidationError('The accepted output evidence cannot be verified.')
+    evidence = []
+    for span in spans:
+        if not isinstance(span, dict):
+            raise ValidationError('The accepted output evidence cannot be verified.')
+        quote = span.get('quote', span.get('text'))
+        if (not isinstance(quote, str) or not quote.strip() or quote not in notes
+                or span.get('status', 'valid') != 'valid'):
+            raise ValidationError('The accepted output evidence does not match the original note.')
+        evidence.append({'quote': quote})
+    return evidence
 
 
 def export_status(encounter):
@@ -171,11 +222,24 @@ def _paragraph(parent, text, heading=False):
 def append_codes(original, rows):
     """Return a fresh variant, preserving all clinical body bytes and assets."""
     paragraphs = [('Diagnosis and procedure codes', True)]
+    bounded = any(row.get('export_route') == 'bounded_api_output' for row in rows)
+    if bounded:
+        paragraphs.append(('Synthetic retained-response review. AI-assisted code selections were reviewed and accepted '
+            'by the clinician. CPT is exported as a code number with original-note evidence; its defective provider '
+            'description is withheld and is not verified. This document is not for billing or real-patient use.', False))
     for system, label in (('ICD-10-CM', 'ICD-10-CM'), ('CPT', 'CPT')):
         group = [row for row in rows if row['system'] == system]
         if group:
             paragraphs.append((label, True))
-            paragraphs.extend((row['code'] + ' — ' + row['description'], False) for row in group)
+            for row in group:
+                if row.get('export_route') == 'bounded_api_output':
+                    paragraphs.extend([(row['code'] + ' — clinician-accepted code number', False),
+                                       ('Description withheld; upstream description and terminology version remain unresolved.', False)])
+                else:
+                    paragraphs.append((row['code'] + ' — ' + row['description'], False))
+                if bounded:
+                    for span in row.get('evidence_spans', []):
+                        paragraphs.append(('Original-note evidence: ' + span['quote'], False))
     return append_review(original, paragraphs, tag=TAG)
 
 
