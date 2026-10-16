@@ -38,7 +38,8 @@ async function download(locator,name){
  assert.equal(await page.locator('[data-code-held]').count(),1);
  const cpt=page.locator('[data-coding-item]').filter({has:page.locator('.mono',{hasText:'99213'})});
  assert.match(await cpt.locator('.coding-code-heading').innerText(),/Description unverified/);
- assert.equal(await cpt.locator('select').isDisabled(),true);
+ assert.ok((await cpt.locator('select').count())===0 || await cpt.locator('select').isDisabled());
+ assert.equal(await cpt.locator('[data-code-held]').count(),1);
  assert.match(await page.locator('[data-corti-replay]').innerText(),/Synthetic replay/);
  const cookies=await context.cookies();report.cookies=cookies.map(({name,path,secure,httpOnly,sameSite})=>({name,path,secure,httpOnly,sameSite}));
  assert.ok(cookies.every(c=>['quillmd_corti_session','quillmd_corti_csrf'].includes(c.name)&&c.path==='/synthetic/corti/'&&c.secure));
