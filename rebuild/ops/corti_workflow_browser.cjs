@@ -90,7 +90,10 @@ async function geometry(){return page.evaluate(()=>({viewport:innerWidth,body_wi
   page.on('request',r=>{if(r.url().includes('/export-with-codes/'))exportRequests++;});
   await page.locator('#coding-time').fill('25');
   assert.equal(await page.locator('[data-export-with-codes]').getAttribute('aria-disabled'),'true');
-  await page.locator('[data-export-with-codes]').click();
+  // Exercise the click guard even though Playwright correctly recognizes the
+  // aria-disabled link. This bypasses only its enabled-element wait; the app
+  // handler must still prevent the request and explain the unsaved edit.
+  await page.locator('[data-export-with-codes]').click({force:true});
   assert.match(await page.locator('[data-coding-error]').innerText(),/Save or undo/);
   assert.equal(exportRequests,0);
   await page.locator('[data-coding-form=context] [data-coding-undo]').click();
