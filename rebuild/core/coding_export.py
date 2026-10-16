@@ -26,6 +26,7 @@ from .security import audit, membership, private_path, scoped
 
 W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
 TAG = 'quillmd-coding-appendix-v1'
+DRAFT_TAG = 'quillmd-synthetic-coding-draft-v1'
 CONTRACT = 'finalized-word-with-codes-v1'
 
 
@@ -111,7 +112,7 @@ def _body_boundary(xml):
         raise ValidationError('The finalized Word XML contains an unsupported document type.')
 
     def start(name, attrs):
-        if name == W + '}tag' and attrs.get(W + '}val') == TAG:
+        if name == W + '}tag' and attrs.get(W + '}val') in (TAG, DRAFT_TAG):
             raise ValidationError('This document already contains a coding appendix; download from the original finalized document.')
         if stack == [W + '}document', W + '}body']:
             boundary['last_child'] = name
@@ -169,6 +170,19 @@ def _paragraph(parent, text, heading=False):
 
 def append_codes(original, rows):
     """Return a fresh variant, preserving all clinical body bytes and assets."""
+    paragraphs = [('Diagnosis and procedure codes', True)]
+    for system, label in (('ICD-10-CM', 'ICD-10-CM'), ('CPT', 'CPT')):
+        group = [row for row in rows if row['system'] == system]
+        if group:
+            paragraphs.append((label, True))
+            paragraphs.extend((row['code'] + ' — ' + row['description'], False) for row in group)
+    return append_review(original, paragraphs, tag=TAG)
+
+
+def append_review(original, paragraphs, *, tag):
+    """Share preserving assembly without changing approved export semantics."""
+    if tag not in (TAG, DRAFT_TAG):
+        raise ValidationError('Unsupported coding appendix variant.')
     try:
         with ZipFile(BytesIO(original)) as source:
             if len(source.namelist()) != len(set(source.namelist())):
@@ -190,15 +204,10 @@ def append_codes(original, rows):
             kind.set('{' + W + '}val', 'nextPage')
             appendix_section.insert(position, kind)
             appendix = etree.Element('{' + W + '}sdt', nsmap={'q': W})
-            _element(_element(appendix, 'sdtPr'), 'tag', val=TAG)
+            _element(_element(appendix, 'sdtPr'), 'tag', val=tag)
             content = _element(appendix, 'sdtContent')
-            _paragraph(content, 'Diagnosis and procedure codes', heading=True)
-            for system, label in (('ICD-10-CM', 'ICD-10-CM'), ('CPT', 'CPT')):
-                group = [row for row in rows if row['system'] == system]
-                if group:
-                    _paragraph(content, label, heading=True)
-                    for row in group:
-                        _paragraph(content, row['code'] + ' — ' + row['description'])
+            for text, heading in paragraphs:
+                _paragraph(content, text, heading=heading)
             boundary = ('<q:p xmlns:q="' + W + '"><q:pPr>'
                         '<q:spacing q:before="0" q:after="0" q:line="1" q:lineRule="exact"/>'
                         '<q:rPr><q:sz q:val="2"/></q:rPr>').encode() + original_section + b'</q:pPr></q:p>'
