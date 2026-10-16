@@ -39,7 +39,7 @@
       if (['context', 'selections'].includes(form.dataset.codingForm)) {
         const reset = document.createElement('button');
         reset.type = 'button'; reset.className = 'quiet'; reset.dataset.codingUndo = 'true'; reset.textContent = 'Undo unsaved changes';
-        reset.addEventListener('click', () => { form.reset(); basis(); updateControls(); });
+        reset.addEventListener('click', () => { form.reset(); error(''); basis(); updateControls(); });
         form.append(reset);
       }
     });

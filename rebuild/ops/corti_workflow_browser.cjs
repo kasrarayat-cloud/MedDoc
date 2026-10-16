@@ -98,6 +98,7 @@ async function geometry(){return page.evaluate(()=>({viewport:innerWidth,body_wi
   assert.equal(exportRequests,0);
   await page.locator('[data-coding-form=context] [data-coding-undo]').click();
   assert.equal(await page.locator('[data-export-with-codes]').getAttribute('aria-disabled'),'false');
+  assert.equal(await page.locator('[data-coding-error]').isVisible(),false);
   report.steps.push('Unsaved coding context blocks export without a request; undo restores the persisted approval.');
   report.with_codes=await download(page.locator('[data-export-with-codes]'),'synthetic-with-codes.docx');
   report.repeat=await download(page.locator('[data-export-with-codes]'),'synthetic-with-codes-repeat.docx');
