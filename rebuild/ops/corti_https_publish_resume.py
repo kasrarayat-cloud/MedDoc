@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 import urllib.request
 from ops import managed_helper
 
@@ -48,7 +49,7 @@ def check_and_reload(label):
     for args, name in [(['sudo', '-n', '/usr/sbin/nginx', '-t'], 'syntax'),
                        (['sudo', '-n', '/usr/bin/systemctl', 'reload', 'nginx'], 'reload')]:
         result = subprocess.run(args, capture_output=True, timeout=30)
-        target = OUT / (label + '-' + name + '.log')
+        target = OUT / (label + '-02-' + name + '.log')
         with target.open('xb') as handle:
             os.chmod(target, 0o600)
             handle.write(result.stdout + result.stderr)
@@ -74,13 +75,30 @@ def main():
         health = json.load(response)
     assert health == {'status': 'ok', 'data_mode': 'synthetic-only', 'surface': 'doctor', 'release': INSTALLED}
     before = identity()
-    (OUT / 'resume-baseline.json').write_text(json.dumps({'native_units': before,
+    (OUT / 'resume-baseline-02.json').write_text(json.dumps({'native_units': before,
         'nginx_sha256': digest(original), 'health': health}, indent=2))
     replace(original, candidate)
     try:
         check_and_reload('published')
-        with urllib.request.urlopen('https://app.quillmd.com/synthetic/corti/health/', timeout=10) as response:
-            assert json.load(response) == health
+        # nginx reload is asynchronous. Observe the new worker generation with
+        # bounded read-only requests; an old worker may still answer briefly.
+        probes = []
+        for attempt in range(30):
+            matched = False
+            try:
+                with urllib.request.urlopen('https://app.quillmd.com/synthetic/corti/health/', timeout=2) as response:
+                    content_type = response.headers.get('Content-Type', '')
+                    value = json.load(response) if content_type.startswith('application/json') else None
+                    matched = value == health
+                    probes.append({'attempt': attempt, 'status': response.status,
+                        'content_type': content_type, 'matched_installed_health': matched})
+            except (OSError, ValueError) as exc:
+                probes.append({'attempt': attempt, 'error_type': type(exc).__name__})
+            if matched:
+                break
+            time.sleep(.25)
+        (OUT / 'https-publication-probes-02.json').write_text(json.dumps(probes, indent=2))
+        assert matched, 'New nginx worker generation did not serve installed candidate health.'
     except BaseException:
         replace(candidate, original)
         check_and_reload('rollback')
@@ -95,7 +113,8 @@ def main():
         'provider_calls': 0, 'builds': 0, 'production_source_or_database_modified': False,
         'preserved_installation_failure': 'First invocation lacked module path and performed no action. '
             'Second installed candidate units; read-only helper nginx validation failed and restored original ingress. '
-            'This exact resume publishes only the prepared prefix using host nginx validation/reload.'}
+            'First ingress resume validated and reloaded but its immediate public health probe received HTML; it restored original ingress. '
+            'This exact second resume observes asynchronous nginx reload with bounded read-only health probes, and publishes only the prepared prefix.'}
     with (OUT / 'installation.json').open('x') as handle:
         json.dump(result, handle, indent=2)
     print(json.dumps({'installed_revision': INSTALLED, 'url': result['url'], 'receipt': str(OUT / 'installation.json')}))
