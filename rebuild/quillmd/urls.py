@@ -55,7 +55,9 @@ from core.document_review import submit as document_review_submit
 urlpatterns += [path('encounters/<uuid:pk>/review/',document_review_submit,name='document_review')]
 
 from core import coding_views
+from core.coding_export import export_with_codes
 urlpatterns += [
+    path('encounters/<uuid:pk>/export-with-codes/', export_with_codes, name='export_with_codes'),
     path('encounters/<uuid:pk>/coding/status/', coding_views.status, name='coding_status'),
     path('encounters/<uuid:pk>/coding/request/', coding_views.request_run, name='coding_request'),
     path('encounters/<uuid:pk>/coding/context/', coding_views.context, name='coding_context'),

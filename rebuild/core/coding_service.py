@@ -59,7 +59,8 @@ def release_snapshot(encounter):
 
 def input_snapshot(encounter):
     patient = encounter.patient
-    from .coding_engine import CONTRACT as ENGINE_CONTRACT
+    from .coding_dispatch import contract
+    ENGINE_CONTRACT = contract()
     inputs = {'workflow_contract': CONTRACT, 'engine_contract': ENGINE_CONTRACT, 'encounter_id': str(encounter.pk),
               'department_id': str(encounter.department_id), 'patient_id': str(encounter.patient_id),
               'patient_identity': {'id': str(patient.pk), 'display_name': patient.display_name,
@@ -132,7 +133,7 @@ def ensure_run(encounter, user, automatic=False):
         state, error_code = 'needs_detail', 'terminology_unavailable'
         error = 'No verified coding reference covers this date of service. Contact your administrator.'
     else:
-        from .coding_provider import configuration
+        from .coding_dispatch import configuration
         try:
             config = configuration(user, e)
         except ValidationError:
@@ -230,7 +231,7 @@ def update_selection(run, user, selections, expected_selection_revision):
         raise ValidationError('This coding record has already been approved. Its approval is retained unchanged.')
     if type(expected_selection_revision) is not int or expected_selection_revision != run.selection_revision:
         raise ValidationError('These selections changed in another window. Review the saved selections.')
-    from .coding_engine import validate_selection
+    from .coding_dispatch import validate_selection
     value = validate_selection(run, selections)
     if value != run.selection:
         run.selection = value
@@ -248,7 +249,7 @@ def approve(run, user, expected_input_digest, expected_selection_digest):
     assert_current(run, e)
     if expected_input_digest != run.input_digest or expected_selection_digest != selection_digest(run):
         raise ValidationError('This coding review changed. Review the current displayed selections before approving.')
-    from .coding_engine import validate_selection
+    from .coding_dispatch import validate_selection
     approval_ready(run)
     selections = validate_selection(run, run.selection)
     if selections != run.selection:
@@ -316,7 +317,8 @@ def snapshot(encounter, user):
     overrides = (selections or {}).get('overrides', {})
     suggestions = []
     for item in result.get('suggestions', []):
-        if item.get('system') == 'CPT' and not any(r['system'] == 'CPT' for r in releases):
+        if (item.get('system') == 'CPT' and not any(r['system'] == 'CPT' for r in releases)
+                and latest.config.get('provider') != 'corti'):
             continue
         displayed = dict(item)
         replacement = overrides.get(item['id'], {}).get('code')
@@ -342,7 +344,7 @@ def snapshot(encounter, user):
     can_approve = False
     approval_error = ''
     if can_review:
-        from .coding_engine import validate_selection
+        from .coding_dispatch import validate_selection
         try:
             approval_ready(run)
             validate_selection(run, run.selection)
@@ -362,7 +364,10 @@ def snapshot(encounter, user):
             'selection_digest': selection_digest(latest) if latest else '',
             'display_token': signing.dumps(display_binding(e, user, latest), salt=CONTRACT, compress=True),
             'cpt_available': any(r['system'] == 'CPT' and r['coding_digest'] for r in releases),
-            'releases': releases, 'error': latest.error if latest else ''}
+            'releases': releases, 'error': latest.error if latest else '',
+            'corti': bool(latest and latest.config.get('provider') == 'corti'),
+            'replay': bool(latest and latest.config.get('mode') == 'replay'),
+            'diagnostics': result.get('diagnostics_summary', {})}
     view['mdm_rows'] = [{'key': k, 'label': label, 'value': context[k], 'evidence': context[k + '_evidence']}
                         for k, label in [('mdm_problems', 'Problems addressed'), ('mdm_data', 'Data reviewed'), ('mdm_risk', 'Risk of management')]]
     view['levels'] = ['unknown', 'straightforward', 'low', 'moderate', 'high']
@@ -413,7 +418,7 @@ def run_one():
         run.state = 'running'; run.started_at = timezone.now()
         run.save(update_fields=['state', 'started_at'])
     try:
-        from .coding_engine import generate
+        from .coding_dispatch import generate
         result = generate(run)
         with transaction.atomic():
             e = locked_encounter(e, run.user)

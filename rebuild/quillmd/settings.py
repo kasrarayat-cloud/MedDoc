@@ -109,6 +109,11 @@ CPT_LICENSE_EXPIRY=os.getenv('CPT_LICENSE_EXPIRY','')
 # under their own identities; the entitlement reader still enforces protection.
 CPT_ENTITLEMENT_MANIFEST=os.getenv('QUILLMD_CPT_ENTITLEMENT_MANIFEST',
     '/opt/meddoc-pro/rebuild/.runtime/owner-contracts/cpt-entitlement-v1.json')
+# A coding-only candidate switch; clinical generation and existing deployments
+# keep their configured provider. No secret values are copied into coding rows.
+CODING_PROVIDER=os.getenv('QUILLMD_CODING_PROVIDER','existing')
+CORTI_CODING_MODE=os.getenv('QUILLMD_CORTI_CODING_MODE','disabled')
+CORTI_CREDENTIALS_FILE=os.getenv('QUILLMD_CORTI_CREDENTIALS_FILE','')
 LOGGING={'version':1,'disable_existing_loggers':False,'handlers':{'console':{'class':'logging.StreamHandler'}},'root':{'handlers':['console'],'level':'WARNING'},'loggers':{'django.request':{'handlers':['console'],'level':'CRITICAL','propagate':False}}}
 
 LOGGING['filters'] = {'account_csrf_redaction': {'()': 'core.preview_logging.AccountCSRFLogFilter'}}

@@ -31,3 +31,6 @@
 }
 
 .coding-code-heading > .badge { flex-shrink: 0; white-space: nowrap; }
+.coding-provenance, .coding-provider-diagnostic, .coding-code blockquote { overflow-wrap: anywhere; }
+.coding-export { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 20px; }
+.coding-code select:disabled { opacity: .7; cursor: not-allowed; }
