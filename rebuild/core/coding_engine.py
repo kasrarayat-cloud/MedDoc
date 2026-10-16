@@ -467,7 +467,7 @@ TAXONOMY_HEADS = {'disease','diseased','history','syndrome','condition','conditi
 ROUTE_WORDS = {'with','without','of','and','or','in','the','a','an','at','due','to','by','from'}
 
 
-def index_route_errors(entry, concept, entries, aliases=()):
+def index_route_errors(entry, concept, entries, aliases=(), *, code_description=''):
     """A qualified Index branch adds source obligations to its parent's default."""
     chain=[]; node=entry
     while node:
@@ -496,6 +496,28 @@ def index_route_errors(entry, concept, entries, aliases=()):
         def supported(words):
             return all(affirmative_word(source,w) or w=='colonic' and affirmative_word(source,'colon')
                        or w=='gastroesophageal' and affirmative_word(source,'gastro oesophageal') for w in words)
+        # Some official branches list synonymous site names separated by a
+        # comma. Do not interpret every comma as OR: an independently bound
+        # Tabular description must itself be a complete affirmative phrase in
+        # this source. Separate site and symptom words do not establish their
+        # relationship ("epigastric fullness and shoulder pain" is not enough),
+        # and one complete comma-delimited branch must be affirmed. This lets
+        # the dated Index/Tabular pair corroborate its own vocabulary without
+        # adding a local medical-synonym or expected-code table.
+        description_words = [w for w in re.findall(r'[a-z]+', norm(code_description))
+                             if w not in ROUTE_WORDS]
+        description_phrase = r'(?<!\w)' + r'\s+'.join(re.escape(w) for w in code_description.split()) + r'(?!\w)'
+        description_affirmed = bool(code_description.strip()) and any(
+            re.search(description_phrase, clause, re.I) and affirmative_word(clause, code_description)
+            for clause in re.split(r'[.!?;\r\n]', source))
+        head_words = set(norm(re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)).split()) - ROUTE_WORDS
+        comma_alias = (len(chain) == 2 and ',' in term and description_words and description_affirmed
+                       and any(part_words and set(description_words) == head_words | set(part_words)
+                               and supported(part_words)
+                               for part in term.split(',')
+                               if (part_words := [w for w in norm(part).split() if w not in ROUTE_WORDS])))
+        if comma_alias:
+            continue
         if norm(term).startswith('without '):
             if required and not all(re.search(r'\b(?:without|no)\s+(?:any\s+)?'+re.escape(w)+r'\b',norm(source)) for w in required):
                 errors.append('The Index without-condition qualifier needs documented absence.')
@@ -899,7 +921,8 @@ def generate(run):
                      for cross in e.get('cross_references',[]) if cross.get('resolved')
                      for target in cross['resolved_ids']}
             for entry in entries:
-                if index_route_errors(entry,concept,lookup,aliases):continue
+                if index_route_errors(entry,concept,lookup,aliases,
+                        code_description=reference.tabular['codes'].get(entry.get('code'), '')):continue
                 specific = more_specific_source_routes(entry,concept,notes,reference,subtype_routes[concept['id']])
                 if specific:
                     result['source_checks'][concept['id']].setdefault('specificity_holds', []).append(
@@ -1024,7 +1047,8 @@ def validate_selection(run,selections):
             candidate=next((c for c in run.result.get('candidates',{}).get(key,[])
                             if c['code']==code and c['system']=='ICD-10-CM'),None)
             entry=lookup.get(candidate['entry_id']) if candidate else None
-            if not entry or index_route_errors(entry,row['concept'],lookup,candidate.get('source_aliases',())):
+            if not entry or index_route_errors(entry,row['concept'],lookup,candidate.get('source_aliases',()),
+                    code_description=reference.tabular['codes'].get(code, '')):
                 raise ValidationError('The selected Index route requires unsupported source qualifiers.')
             checked=contextual_validation(run,reference,code,row['concept'],
                 [overrides.get(k,{}).get('code',rows[k]['code']) for k in ids if rows[k]['system']=='ICD-10-CM'])

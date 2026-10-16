@@ -223,7 +223,13 @@ def append_codes(original, rows):
     """Return a fresh variant, preserving all clinical body bytes and assets."""
     paragraphs = [('Diagnosis and procedure codes', True)]
     bounded = any(row.get('export_route') == 'bounded_api_output' for row in rows)
-    if bounded:
+    automated = any(row.get('review_execution') == 'agent_executed_synthetic' for row in rows)
+    if bounded and automated:
+        paragraphs.append(('Synthetic live API-output review. The code decisions were executed by an authorized '
+            'automated test agent using a synthetic clinician account; this is not human clinical review. CPT is '
+            'exported as an accepted code number with independently checked original-note evidence. Its defective '
+            'provider description and upstream terminology version remain unresolved. Not for billing or real-patient use.', False))
+    elif bounded:
         paragraphs.append(('Synthetic retained-response review. AI-assisted code selections were reviewed and accepted '
             'by the clinician. CPT is exported as a code number with original-note evidence; its defective provider '
             'description is withheld and is not verified. This document is not for billing or real-patient use.', False))
@@ -233,7 +239,9 @@ def append_codes(original, rows):
             paragraphs.append((label, True))
             for row in group:
                 if row.get('export_route') == 'bounded_api_output':
-                    paragraphs.extend([(row['code'] + ' — clinician-accepted code number', False),
+                    accepted_label = (' — accepted synthetic code number' if row.get('review_execution') == 'agent_executed_synthetic'
+                                      else ' — clinician-accepted code number')
+                    paragraphs.extend([(row['code'] + accepted_label, False),
                                        ('Description withheld; upstream description and terminology version remain unresolved.', False)])
                 else:
                     paragraphs.append((row['code'] + ' — ' + row['description'], False))

@@ -7,6 +7,10 @@
     <p class="small"><strong>Permission:</strong> {{ review.permission_summary }}</p>
     <p class="small"><strong>Your decision:</strong> {% if review.state == 'accepted' %}Accepted code number and note evidence.{% elif review.state == 'rejected' %}Rejected; excluded from the approved appendix.{% else %}Pending. This code cannot enter the approved appendix until you accept it.{% endif %}</p>
   </div>
+  {% if review.provider_citation_adequacy.status == 'insufficient_for_time_review' %}
+  <p class="notice warning" data-provider-citation-inadequate><strong>Provider citations are insufficient for E/M selection.</strong> Exact text matches alone do not establish the service. The independent full-note facts below supply the separate support for this bounded review; the original provider citations remain in diagnostics.</p>
+  {% endif %}
+  {% if review.review_execution == 'agent_executed_synthetic' %}<p class="notice" data-synthetic-agent-review>This dedicated synthetic test records agent-executed review decisions. These decisions do not represent human clinical review.</p>{% endif %}
   <h4>Facts documented in the saved note</h4>
   <p class="small">These read-only facts come from the note. Confirm that they support your time-based selection; no confirmation has been filled in for you.</p>
   {% for fact in review.facts %}

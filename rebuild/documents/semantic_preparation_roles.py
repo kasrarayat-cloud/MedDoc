@@ -350,6 +350,10 @@ def role_instructions(role, definition_version=1, *, timing_reference=None):
         if timing_reference is not None else '')
     additions = (
         'Use definition version 2 and answer_mode atomic for specific values, narrative only for descriptive fields. '
+        'Composite questions that ask for setting AND patient status require narrative mode, as do Assessment or '
+        'impression sections that admit multiple findings with diagnostic uncertainty and explicit exclusions. '
+        'A concise statement of the documented E/M selection basis is narrative text; concise does not mean atomic. '
+        'Preserve the uncertainty and negation requested by assessment fields in their meaning. '
         'Use person_name for a person name, identifier for a single reference/code, choice for the complete printed '
         'alternatives, integer/number for measurements, date for a calendar-date question, and text for durations, '
         'concerns, impressions and relative review intervals. Never use narrative text as a fallback for a specific '

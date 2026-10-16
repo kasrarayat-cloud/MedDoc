@@ -33,7 +33,14 @@ REFERRAL_CITATION_SCOPE_CONTRACT = 'positioned-referral-citation-v7'
 OBSERVATION_CONTEXT_SCOPE_CONTRACT = 'positioned-observation-context-v8'
 CONSENT_CONTEXT_SCOPE_CONTRACT = 'positioned-consent-context-v9'
 DOCUMENT_IDENTITY_SCOPE_CONTRACT = 'positioned-document-identity-v10'
-CONSENT_CONTEXT_SCOPE_CONTRACTS = (CONSENT_CONTEXT_SCOPE_CONTRACT, DOCUMENT_IDENTITY_SCOPE_CONTRACT)
+LITERAL_SOURCE_SCOPE_CONTRACT = 'positioned-literal-source-v11'
+LITERAL_SOURCE_INSTRUCTIONS = (' Preserve complete explicitly documented diagnostic non-establishment in Assessment, '
+    'including cause not established and conditions not diagnosed. A negative postfix must remain in the actual '
+    'value, not only polarity metadata. Composite narrative fields may select all requested facts. '
+    'For total physician time select the number explicitly attached to physician time, never symptom duration. '
+    'Use concise source wording for the E/M selection basis; preserve its distinction from symptom timing.')
+DOCUMENT_IDENTITY_SCOPE_CONTRACTS = (DOCUMENT_IDENTITY_SCOPE_CONTRACT, LITERAL_SOURCE_SCOPE_CONTRACT)
+CONSENT_CONTEXT_SCOPE_CONTRACTS = (CONSENT_CONTEXT_SCOPE_CONTRACT, *DOCUMENT_IDENTITY_SCOPE_CONTRACTS)
 OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, *CONSENT_CONTEXT_SCOPE_CONTRACTS)
 REFERRAL_CITATION_SCOPE_CONTRACTS = (REFERRAL_CITATION_SCOPE_CONTRACT, *OBSERVATION_CONTEXT_SCOPE_CONTRACTS)
 SOURCE_BINDING_SCOPE_CONTRACTS = (SOURCE_BINDING_SCOPE_CONTRACT, *REFERRAL_CITATION_SCOPE_CONTRACTS)
@@ -312,6 +319,62 @@ def _mixed_assessment_value(text):
     return bool(re.fullmatch(MIXED_ASSESSMENT+r'\.?', text, re.I))
 
 
+def _diagnostic_limit(text):
+    """A complete literal non-establishment predicate, never a positive diagnosis.
+
+    This is a grammatical source boundary, not a terminology list. Unknown
+    predicates, attribution, quoted examples and clipped values remain held.
+    """
+    value = text.strip().removesuffix('.').strip()
+    cause = re.fullmatch(r'(?:the\s+)?(?:cause|etiology)\s+of\s+(?:these|the)\s+'
+        r'symptoms\s+has\s+not\s+been\s+(?:established|determined)', value, re.I)
+    diagnoses = re.fullmatch(r'(?P<names>[A-Za-z][A-Za-z ,/-]{0,300}?)\s+'
+        r'(?:has|have)\s+not\s+been\s+diagnosed', value, re.I)
+    if diagnoses and re.search(r'\b(?:patient|father|mother|brother|sister|wife|husband|'
+            r'friend|daughter|son|family|his|her|their|my|our|example|fictional|hypothetical|'
+            r'if|could|might|would|not|no|without|never)\b', diagnoses['names'], re.I):
+        diagnoses = None
+    if diagnoses:
+        # "X has not been diagnosed" can name a person, not a diagnosis.
+        # Require affirmative diagnostic noun grammar, rather than trusting
+        # the model's patient/concept annotations. Acronyms are admitted only
+        # in a parallel diagnostic list independently containing such a noun.
+        # Unfamiliar subjects stay held; this is not a medical term catalogue.
+        subjects = re.split(r'\s*,\s*|\s+and\s+', diagnoses['names'])
+        diagnostic_noun = re.compile(r'(?:[A-Za-z][A-Za-z/-]*\s+){0,7}'
+            r'(?:[A-Za-z]+itis|disease|syndrome|disorder|condition|diagnosis|infection|injury)', re.I)
+        nouns = [bool(diagnostic_noun.fullmatch(subject)) for subject in subjects]
+        if (not any(nouns) or not all(noun or len(subjects)>1 and re.fullmatch(r'[A-Z]{2,12}', subject)
+                                     for subject, noun in zip(subjects, nouns))):
+            diagnoses = None
+    return bool(cause or diagnoses)
+
+
+def _retained_diagnostic_limit(fact, own):
+    value = fact['value_evidence']
+    return (fact['kind'] == 'assessment' and fact['subject']['kind'] == 'patient'
+        and fact['unit'] is None and fact['scale'] is None
+        and _inside(value, [own]) and _diagnostic_limit(own['quote'])
+        and value['quote'].strip().removesuffix('.') == own['quote'].strip().removesuffix('.'))
+
+
+def _assessment_limits(notes):
+    """Literal diagnostic limits under an explicit assessment heading."""
+    from .generation import source_units
+    active, ranges, offset = False, [], 0
+    for line in notes.splitlines(keepends=True):
+        heading = re.fullmatch(r'\s*(?:[SOAP]\s*[-–:]\s*)?'
+            r'(Subjective|Objective|Assessment|Impression|Plan)\s*:?\s*', line, re.I)
+        if heading:
+            active = heading[1].casefold() in ('assessment', 'impression')
+        elif active:
+            ranges.append((offset, offset+len(line)))
+        offset += len(line)
+    return [unit for unit in source_units(notes, [])[0]
+        if any(start <= unit['start'] < unit['end'] <= end for start, end in ranges)
+        and _diagnostic_limit(unit['quote'])]
+
+
 def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     """Conservative local guards, never sentence-wide negation of another fact."""
     value = fact['value_evidence']
@@ -366,6 +429,8 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
             issues.append('The documented remote visit contradicts its explicit telephone/telehealth denial.')
     if clipped_non:
         issues.append('The selected value omits its documented non- prefix.')
+    literal_limit = scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT and _retained_diagnostic_limit(fact, own)
+    negative = negative or literal_limit
     mixed = scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS and fact['polarity'] == 'mixed'
     if mixed:
         # A complete documented assessment may assert a negative symptom state
@@ -385,7 +450,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     if negative and fact['polarity'] != 'negated' and not mixed: issues.append('The source contains a local negation not preserved by this fact.')
     if uncertain and fact['polarity'] != 'uncertain': issues.append('The source contains uncertainty not preserved by this fact.')
     if fact['polarity'] == 'negated' and not negative: issues.append('The proposed negation is not explicitly grounded in its source clause.')
-    if fact['polarity'] == 'negated' and not re.match(r'\s*'+negative_head+r'\b', value['quote'], re.I):
+    if fact['polarity'] == 'negated' and not literal_limit and not re.match(r'\s*'+negative_head+r'\b', value['quote'], re.I):
         issues.append('The negative answer must retain its documented negative phrase; an annotation cannot synthesize absence.')
     if re.search(r'\b(?:not\s+deny|no\s+change|not\s+without|no\s+evidence\s+against)\b', clause+' '+value['quote'], re.I):
         issues.append('Nested negation or unchanged symptoms require clinician interpretation.')
@@ -625,12 +690,27 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
                 continue
             for start, end in _retained_family_history(value, own, fact['subject'], fact['kind'], scope_contract):
                 offer_scope[start:end] = ' ' * (end-start)
+    if scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT:
+        # A complete local diagnostic limitation is not a denial heading. The
+        # legacy note-wide reader combined its 'these' pointer with 'not' and
+        # vetoed every unrelated answer. Only this complete literal frame is
+        # removed from that blanket test; positioned governors and quotations
+        # still run over the untouched source.
+        for unit in units:
+            if all(_diagnostic_limit(reading) for reading in readings(unit['quote'])):
+                for at in range(unit['start'], unit['end']):
+                    if notes[at] not in '\r\n': offer_scope[at] = ' '
     filtered = ''.join(offer_scope)
+    determiner = (r'(?:(?:of\s+)?(?:the|these|those)\s+)?'
+        if scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT else r'(?:of\s+the\s+)?')
     broad_denial = re.compile(
-        r'\b(?:all|every|each)\s+(?:of\s+the\s+)?(?:facts?|findings?|statements?|entries|values|measurements)\b'
+        r'\b(?:all|every|each)\s+'+determiner+r'(?:facts?|findings?|statements?|entries|values|measurements)\b'
         r'[^.!?;:\r\n]{0,80}\b(?:denied|incorrect|false|invalid|not\s+true)\b', re.I)
+    foreign_patient_label = (scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT and any(
+        re.search(r'(?im)^\s*(?:other|another|different)\s+patient(?:\s+name)?\s*:', reading)
+        for reading in readings(scoped)))
     withheld = governance[6] or bool(INLINE_BREAK.search(scoped)) or any(
-        not _plain_pointer_only(r) or broad_denial.search(r) for r in readings(filtered))
+        not _plain_pointer_only(r) or broad_denial.search(r) for r in readings(filtered)) or foreign_patient_label
     return (*governance[:8], bool(withheld), *governance[9:])
 
 
@@ -1054,7 +1134,8 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             prior_issues = set(_scope_issues(fact, fact['evidence'], FAMILY_SCOPE_CONTRACT))
             context_admitted = (ownership['allowed'].get(own['start'], False)
                                 if ownership is not None else complete_context)
-            if prior_issues.difference(fact['issues']) and not context_admitted:
+            literal_limit = scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT and _retained_diagnostic_limit(fact, own)
+            if prior_issues.difference(fact['issues']) and not context_admitted and not literal_limit:
                 fact['issues'].append('Releasing an earlier local scope hold requires complete, independently bound source context.')
             additional_negative = r'\s*(?:never|does\s+not|did\s+not|in\s+no|non[- ])'
             if scope_contract in SOURCE_BINDING_SCOPE_CONTRACTS:
@@ -1388,6 +1469,12 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if {'affirmed','negated'} <= {x['polarity'] for x in peers}:
                 reasons.append('The notes contain contradictory positive and negative facts for this concept.')
                 competing.extend(peers)
+        if (scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT and picked
+                and d['value_type'] == 'text'
+                and re.search(r'\b(?:assessment|impression)\b', d['meaning'], re.I)):
+            for limit in _assessment_limits(notes):
+                if not any(f['polarity'] == 'negated' and _retained_diagnostic_limit(f, limit) for f in picked):
+                    reasons.append('The assessment omits a documented diagnostic limitation: '+limit['quote'])
         text = row['separator'].join(_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked)
         typed = None
         try: typed = validate_value(d, text, field)
@@ -1400,6 +1487,13 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 if not same_unit: reasons.append('The source and approved measurement units differ; no conversion was authorized.')
                 b = d['constraints']
                 e = f['value_evidence']
+                if (scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT
+                        and re.search(r'\b(?:physician|clinician)\s+time\b', d['meaning'], re.I)):
+                    own = next(c for c in f['evidence'] if _inside(e, [c]))
+                    before = own['quote'][:e['start']-own['start']]
+                    if not re.fullmatch(r'\s*(?:total\s+)?(?:physician|clinician)\s+time\s*'
+                            r'(?:on\s+the\s+date\s+of\s+service\s*)?(?:was|is|:)\s*', before, re.I):
+                        reasons.append('The selected duration is not explicitly documented physician time; symptom episodes cannot fill this destination.')
                 if (not re.fullmatch(NUMERIC_LITERAL, e['quote'].strip()) and b['scale_maximum'] is None
                         and (notes[:e['start']].rstrip().endswith('/') or notes[e['end']:].lstrip().startswith('/'))):
                     reasons.append('A source ratio requires its explicitly documented matching approved measurement scale.')
@@ -1426,7 +1520,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         if reasons: status = 'conflict' if picked else 'missing'
         if status == 'supported' and not picked: status = 'missing'
         identity_check = (patient_name_check(notes, d, facts, row['fact_ids'])
-                          if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT else None)
+                          if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS else None)
         if identity_check and identity_check['verdict'] != 'pass':
             reasons.append(identity_check['reason'])
             status = 'ambiguous'
@@ -2107,7 +2201,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract; nothing was sent.')
     validate_definitions(fields, definitions)
-    if any(d['version'] == 3 for d in definitions.values()) and scope_contract != DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+    if any(d['version'] == 3 for d in definitions.values()) and scope_contract not in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         _fail('These approved identity requirements need the document-identity generation contract; nothing was sent.')
     if not isinstance(notes, str) or len(notes) > 50000: _fail('Notes exceed the supported source limit; nothing was truncated.')
     units, _ = source_units(notes, fields)
@@ -2135,7 +2229,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     if scope_contract in CONSENT_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import consent_qualifier_inventory
         base['consent_qualifier_inventory'] = consent_qualifier_inventory(units)
-    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+    if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         base['approved_patient_name_destinations'] = [key for key, d in definitions.items() if requires_patient_name(d)]
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
@@ -2163,10 +2257,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += ' ' + CONSENT_CONTEXT_EXTRACT_INSTRUCTIONS
         assign_instructions += ' ' + CONSENT_CONTEXT_ASSIGN_INSTRUCTIONS
         check_instructions += ' ' + CONSENT_CONTEXT_CHECK_INSTRUCTIONS
-    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+    if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
         assign_instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
         check_instructions += ' ' + DOCUMENT_IDENTITY_INSTRUCTIONS
+    if scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT:
+        instructions += LITERAL_SOURCE_INSTRUCTIONS
+        assign_instructions += LITERAL_SOURCE_INSTRUCTIONS
+        check_instructions += LITERAL_SOURCE_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
@@ -2189,9 +2287,17 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
                          if answer.get('patient_name_check', {}).get('verdict') == 'omission'}
     repair += [key for key, finding in identity_findings.items() if key not in repair
                and not any(i in bad for i in answers[key]['fact_ids'] + finding['fact_ids'])]
+    literal_findings = ({key: answer['review_reasons'] for key, answer in answers.items()
+        if any(reason.startswith('The assessment omits a documented diagnostic limitation:')
+               for reason in answer['review_reasons'])}
+        if scope_contract == LITERAL_SOURCE_SCOPE_CONTRACT else {})
+    repair += [key for key in literal_findings if key not in repair
+               and not any(i in bad for i in answers[key]['fact_ids'])]
     if repair:
         previous_checks, previous_bad = checks, bad
-        local_findings = {'local_patient_name_findings': identity_findings} if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT else {}
+        local_findings = {'local_patient_name_findings': identity_findings} if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS else {}
+        if literal_findings:
+            local_findings['local_literal_source_findings'] = literal_findings
         changed = send('assigner', 2, {**base, **local_findings, 'facts': list(facts.values()), 'proposed_answers': _answer_preview(answers), 'checker_findings': check_result, 'repair_keys': repair}, ASSIGN_SCHEMA, assign_instructions)
         answers.update(_assign(notes, fields, definitions, facts, changed, only=repair, scope_contract=scope_contract,
                                timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT))
@@ -2329,7 +2435,7 @@ def validate_stored_answer(notes, field, definition, answer):
     scope_contract = answer.get('fact_scope_contract', LEGACY_SCOPE_CONTRACT)
     if scope_contract not in SCOPE_CONTRACTS:
         _fail('Unsupported semantic fact scope contract.')
-    if definition['version'] == 3 and scope_contract != DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+    if definition['version'] == 3 and scope_contract not in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         _fail('The stored answer does not enforce its approved patient-name requirement.')
     if answer.get('source_sha256') != hashlib.sha256(notes.encode()).hexdigest() or answer.get('definition_sha256') != definition_digest(definition):
         _fail('The semantic answer source or approved definition changed.')
@@ -2377,7 +2483,7 @@ def validate_stored_answer(notes, field, definition, answer):
         _fail('Stored answer fact references do not match its proof.')
     proof = _fact_proof(answer)
     if proof != answer.get('semantic_proof_sha256'): _fail('Stored semantic fact proof changed.')
-    if scope_contract == DOCUMENT_IDENTITY_SCOPE_CONTRACT:
+    if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         _validate_current_subjects(notes, units, facts)
         identity_check = patient_name_check(notes, definition, facts, ids)
         if answer.get('patient_name_check') != identity_check:

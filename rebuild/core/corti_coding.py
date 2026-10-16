@@ -15,6 +15,7 @@ from . import coding_engine as engine, coding_terminology, corti_prediction
 from .corti_response import CatalogRelease, DatedTerminology, adapt_response
 from .coding_licensing import cpt_status
 from .models import Code, CodeSet
+from . import corti_semantics
 
 CONTRACT = 'corti-selected-dated-review-v1'
 SYSTEMS = {'icd10cm-outpatient': 'ICD-10-CM', 'cpt': 'CPT'}
@@ -109,7 +110,9 @@ def _icd_source(run, reference, proposal, selected_codes):
         head = entry
         while head.get('parent_id') in lookup:
             head = lookup[head['parent_id']]
-        term = head.get('term', '')
+        # Official Index main terms may carry a grammatical optional plural
+        # (e.g. "Pain(s)"). It is not part of the patient's literal wording.
+        term = re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)
         if not term or engine.norm(term) in engine.TAXONOMY_HEADS:
             continue
         for span in proposal['evidence']:
@@ -118,7 +121,9 @@ def _icd_source(run, reference, proposal, selected_codes):
             if not engine.affirmative_word(span['text'], term):
                 continue
             for clause in engine.enclosing_clauses(notes, span['text']):
-                concept = dict(id=proposal['id'], term=term, index_terms=[term], evidence=clause,
+                description = proposal['terminology']['description']
+                anchor = description if engine.affirmative_word(span['text'], description) else term
+                concept = dict(id=proposal['id'], term=anchor, index_terms=[anchor], evidence=clause,
                     kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
                     certainty='confirmed', temporality='current', subject='patient', relevant=True,
                     missing_detail='', integral_to='')
@@ -127,7 +132,7 @@ def _icd_source(run, reference, proposal, selected_codes):
                 assertion = engine.assertion_concept(concept, subtypes)
                 disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers)
                 check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
-                errors = (engine.index_route_errors(entry, concept, lookup)
+                errors = (engine.index_route_errors(entry, concept, lookup, code_description=description)
                           + engine.specificity_errors(concept, proposal['code'], proposal['terminology']['description']))
                 if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
                         or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes)):
@@ -188,7 +193,24 @@ def generate(run):
             'rejected_selected_count': len(parsed['diagnostics']['rejected_selected'])})
     if run.context.get('setting') != 'outpatient_office':
         result['global_blockers'].append('Confirm the US outpatient office setting before coding approval.')
-    if parsed['diagnostics']['rejected_selected']:
+    quarantined = []
+    for rejected in parsed['diagnostics']['rejected_selected']:
+        raw = rejected.get('raw')
+        classification = corti_semantics.classify_selected(raw)
+        if classification['system'] != 'HCPCS Level II':
+            continue
+        spans, status = corti_semantics.checked_spans(raw.get('evidences'), run.inputs['notes'])
+        reason = ('Provider-labelled CPT selection has HCPCS Level II syntax. Dated HCPCS membership and '
+                  'applicable service/quality-measure denominator, exclusions and reporting requirements '
+                  'are unverified. A matching blood-pressure span alone does not establish quality-measure eligibility.')
+        quarantined.append(dict(id=rejected['id'], system='HCPCS Level II', code=raw['code'].strip().upper(),
+            description='', terminology={'status':'unavailable', 'reason':reason},
+            provider_display=raw.get('display'), evidence_spans=spans, evidence_status=status,
+            evidence=next((s['text'] for s in spans if s['status']=='valid'), ''), eligible=False,
+            instructions=[], explanation=reason, hold_reasons=[reason], release_id='', release_version='',
+            classification=classification, semantic_support={'status':'unverified_quality_or_service_eligibility'}))
+    quarantined_ids = {r['id'] for r in quarantined}
+    if any(r['id'] not in quarantined_ids for r in parsed['diagnostics']['rejected_selected']):
         result['global_blockers'].append('Malformed or duplicate provider selections require diagnostic review.')
     icds = [p['code'] for p in parsed['proposed_selections'] if p['system'] == 'icd10cm-outpatient']
     for proposal in parsed['proposed_selections']:
@@ -200,6 +222,13 @@ def generate(run):
             evidence_status=proposal['evidence_status'], eligible=False, instructions=[],
             explanation='Selected by Corti. The provider returned source spans without a narrative explanation.',
             hold_reasons=[], release_id='', release_version=term.get('version') or '')
+        row['classification'] = corti_semantics.classify_selected({'code':proposal['code'], 'system':proposal['system']})
+        if row['classification']['mismatch']:
+            row['hold_reasons'].append('The selected procedure identifier does not have supported CPT syntax.')
+        if system == 'CPT':
+            support = corti_semantics.office_time_facts(run.inputs['notes'])
+            row['semantic_support'] = {'status':'requires_dated_criteria', 'documented_time_facts':support,
+                'provider_citation_adequacy':corti_semantics.citation_adequacy(row['evidence_spans'], support['facts'])}
         if proposal['evidence_status'] != 'valid':
             row['hold_reasons'].append('Supporting evidence is ' + proposal['evidence_status'] + '.')
         if term['status'] != 'verified':
@@ -228,6 +257,11 @@ def generate(run):
             result['questions'].append({'id': row['id'], 'system': system, 'blocking': False,
                 'question': 'Held ' + row['code'] + ': ' + ' '.join(row['hold_reasons'])})
         result['suggestions'].append(row)
+    result['suggestions'].extend(quarantined)
+    result['suggestions'].sort(key=lambda row: int(row['id'].split(':')[1]))
+    for row in quarantined:
+        result['questions'].append({'id':row['id'], 'system':row['system'], 'blocking':False,
+            'question':'Held '+row['code']+': '+row['explanation']})
     for key, parent in integral_holds(result['suggestions'], run.inputs['notes']).items():
         row = next(row for row in result['suggestions'] if row['id'] == key)
         row['eligible'] = False

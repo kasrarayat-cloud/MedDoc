@@ -87,13 +87,11 @@ def configuration(actor, encounter):
 
 
 def payload(run):
-    from .coding_engine import clinical_answers
     contexts = [{'type': 'text', 'text': run.inputs['notes']}]
-    # Preserve exact saved text. Never send internal generation proofs or held
-    # candidate answers. A separate context keeps provider offsets unambiguous.
-    for key, answer in clinical_answers(run.inputs.get('answers', {})).items():
-        if answer.get('text', '').strip():
-            contexts.append({'type': 'text', 'text': answer['text']})
+    # The clinician's exact source note is the clinical provider input. Generated
+    # answer fragments would repeat the same observations and create competing
+    # citation contexts. Answers remain bound to the run's revision/digest; they
+    # never become new source facts or expected-code hints in the prediction.
     if run.config.get('mode') == 'replay':
         original = settings.CORTI_REPLAY_FIXTURE['request']
         # Replay may only reuse the exact original synthetic note. Saved answers
@@ -106,7 +104,8 @@ def payload(run):
 
 
 def _admit(run, identity):
-    if run.state != 'running' or run.config != configuration(run.user, run.encounter):
+    from .coding_dispatch import configuration as configured
+    if run.state != 'running' or run.config != configured(run.user, run.encounter):
         raise CodingNotSent('Corti configuration or authority changed before sending.')
     if receipts._identity(run) != identity:
         raise CodingNotSent('Corti input identity changed before sending.')

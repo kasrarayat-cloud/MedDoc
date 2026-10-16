@@ -38,7 +38,20 @@ def digest(value):
 
 def context_data(encounter):
     row = CodingContext.objects.filter(encounter=encounter).first()
-    return {**CONTEXT_DEFAULTS, **(row.data if row else {})}
+    if row is not None:
+        return {**CONTEXT_DEFAULTS, **row.data}
+    # Source facts are suggestions, not clinician time attestations. They permit
+    # one direct request from a new documented office encounter without a second
+    # prediction merely to populate setting/status. Confirmation remains explicit
+    # in the separately bound output review; all time attestations stay false.
+    from .coding_dispatch import provider, source_context_enabled
+    if provider(encounter) == 'corti' and source_context_enabled(encounter):
+        from .corti_semantics import office_time_facts
+        observed = office_time_facts(encounter.notes)
+        if observed['status'] == 'documented':
+            facts = {f['key']: f['value'] for f in observed['facts']}
+            return {**CONTEXT_DEFAULTS, **{k: facts[k] for k in ('setting', 'patient_status', 'em_basis')}}
+    return dict(CONTEXT_DEFAULTS)
 
 
 def release_snapshot(encounter):
@@ -60,7 +73,7 @@ def release_snapshot(encounter):
 def input_snapshot(encounter):
     patient = encounter.patient
     from .coding_dispatch import contract
-    ENGINE_CONTRACT = contract()
+    ENGINE_CONTRACT = contract(encounter)
     inputs = {'workflow_contract': CONTRACT, 'engine_contract': ENGINE_CONTRACT, 'encounter_id': str(encounter.pk),
               'department_id': str(encounter.department_id), 'patient_id': str(encounter.patient_id),
               'patient_identity': {'id': str(patient.pk), 'display_name': patient.display_name,
@@ -368,6 +381,8 @@ def snapshot(encounter, user):
             'corti': bool(latest and latest.config.get('provider') == 'corti'),
             'replay': bool(latest and latest.config.get('mode') == 'replay'),
             'diagnostics': result.get('diagnostics_summary', {})}
+    view['context_derived'] = bool(view['corti'] and context['setting'] != 'unknown'
+        and not CodingContext.objects.filter(encounter=e).exists())
     view['mdm_rows'] = [{'key': k, 'label': label, 'value': context[k], 'evidence': context[k + '_evidence']}
                         for k, label in [('mdm_problems', 'Problems addressed'), ('mdm_data', 'Data reviewed'), ('mdm_risk', 'Risk of management')]]
     view['levels'] = ['unknown', 'straightforward', 'low', 'moderate', 'high']
