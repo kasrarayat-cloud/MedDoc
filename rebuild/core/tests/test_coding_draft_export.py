@@ -4,6 +4,7 @@ import hashlib
 from io import BytesIO
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest.mock import patch
 from zipfile import ZipFile
 
@@ -79,6 +80,17 @@ class SyntheticDraftExport(TestCase):
         request.user = self.actor if user is None else user
         return export_synthetic_coding_draft(request, self.encounter.pk)
 
+    def current_result_copy(self, changed):
+        actual_filter = CodingRun.objects.filter
+        def retained_copy(*args, **kwargs):
+            # Only replace the draft's exact current-result lookup. The shared
+            # model manager is also used to pin historical provider/context
+            # contracts; those queries must still read the real saved run.
+            if not args and kwargs == {'encounter': self.encounter, 'input_digest': self.run.input_digest}:
+                return SimpleNamespace(first=lambda: changed)
+            return actual_filter(*args, **kwargs)
+        return retained_copy
+
     def test_draft_selected_only_all_spans_statuses_and_no_defective_description(self):
         run, decision, rows, paragraphs = draft_review(self.encounter)
         self.assertEqual([row['code'] for row in rows], ['R12', 'K59.00', '99213'])
@@ -133,8 +145,9 @@ class SyntheticDraftExport(TestCase):
     def test_live_stale_and_original_integrity_fail_closed(self):
         changed = deepcopy(self.run)
         changed.config['mode'] = 'live'
-        with patch('core.coding_draft_export.CodingRun.objects.filter') as query:
-            query.return_value.first.return_value = changed
+        with patch('core.coding_draft_export.CodingRun.objects.filter', side_effect=self.current_result_copy(changed)):
+            with self.assertRaisesMessage(ValidationError, 'restricted to retained Corti synthetic replay'):
+                draft_review(self.encounter)
             self.assertEqual(self.download().status_code, 409)
         for field, value in [('revision', self.encounter.revision + 1), ('notes', 'Changed synthetic source.')]:
             encounter = deepcopy(self.encounter); setattr(encounter, field, value)
@@ -149,9 +162,8 @@ class SyntheticDraftExport(TestCase):
         changed.result['adapter']['diagnostics']['provider_response']['codes'][2]['evidences'][0]['text'] = 'Invented evidence'
         # Defensive parsing is tested with returned copies; immutable historical
         # results and approvals are never rewritten to manufacture this case.
-        with patch('core.coding_draft_export.CodingRun.objects.filter') as query, \
+        with patch('core.coding_draft_export.CodingRun.objects.filter', side_effect=self.current_result_copy(changed)), \
                 patch('core.coding_draft_export.CodingDecision.objects.filter', return_value=[]):
-            query.return_value.first.return_value = changed
             _, _, rows, paragraphs = draft_review(self.encounter)
         content = '\n'.join(text for text, _ in paragraphs)
         self.assertNotIn('Invented evidence', content)

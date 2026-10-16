@@ -16,6 +16,9 @@ patient labels and quoted examples remain held, and physician-time destinations
 require their own numeric source binding. Composite visit/status, Assessment and
 concise E/M-basis meanings require an explicitly reviewed narrative definition
 version; no validator silently changes an approved atomic definition.
+New reusable definition preparations freeze the explicit
+`composite-answer-meanings-v1` instruction contract. Preparations without that
+contract retain their historical instruction bytes and schemas.
 
 The official FY2027 Index route `Pain(s) → epigastric, epigastrium` previously
 required both comma-separated synonyms. The repair requires independent matching
