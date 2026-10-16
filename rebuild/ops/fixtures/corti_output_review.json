@@ -1,0 +1,150 @@
+{
+  "contract": "synthetic-api-output-review-v1",
+  "scope": {
+    "encounter_id": "a724dfab-59fe-45ac-87de-88cbc9d92d17",
+    "patient_id": "9559bc2e-c070-4e98-9f11-a393b7f1601a",
+    "run_id": "8ceaf596-c5fe-4958-a2a8-910c7599ec52",
+    "input_digest": "7dec2cbc373b8095b710be9b9748e6015602e6feb672549a584ee4aaf732cf72",
+    "result_digest": "6f9eca87ac557ee77da21600f13afce266b242202fe81436738f6a37f425b945",
+    "requests_digest": "f1c98ce979d20054255b8196d15122553e7568befa5b049c59ff8dde88e5557b",
+    "notes_sha256": "e276a3126eeef3db041d054942688ce0f96878b6320e845a8d649fe17973ba77",
+    "service_date": "2026-10-16"
+  },
+  "response_sha256": "560b4c979bf734a3b6ad6cf2aafaeadfc67226e3c5463da0959bd80181e5dc7f",
+  "identifier": "selected:2",
+  "description_status": "withheld_defective_provider_text",
+  "selection": {
+    "status": "supported",
+    "code": "99213",
+    "basis": "documented_total_time",
+    "minimum_minutes": 20,
+    "maximum_minutes": 29
+  },
+  "coverage": {
+    "service_date": "2026-10-16",
+    "status": "dated_code_presence_and_case_criteria",
+    "cms_code_status": "A",
+    "cms_release": "CMS RVU26D October 2026",
+    "cms_release_date": "2026-08-26",
+    "criteria_source": "CMS MLN006764 May 2026 and AMA code-specific guidance reviewed 2026-10-16",
+    "date_limit": "CMS October release covers the encounter date; AMA page does not state an annual CPT edition/effective interval. Upstream Corti terminology version remains unknown. This case assessment is not a full CPT release."
+  },
+  "permission": {
+    "status": "bounded_api_output",
+    "scope": "internal_fictional_review",
+    "terms_version": "4",
+    "sections": [
+      "2.6.1.1",
+      "2.6.2",
+      "2.7"
+    ],
+    "source_url": "https://www.corti.ai/legal/master-terms-of-service",
+    "record_sha256": "53326ec1f8ac968efb54a5d1385f56b4bf95991d4fd055e5727718f89e1d82ac",
+    "contradictory_restriction": null,
+    "account_specific_terms": "No separate account agreement found in available protected records; no accepted-version receipt fabricated.",
+    "conditions": "AI-generated output identified; actual human confirmation required; credentials/API access protected; internal fictional evaluation only; no endorsement, catalogue import, real-patient or external end-customer activation."
+  },
+  "facts": [
+    {
+      "key": "setting",
+      "label": "Setting",
+      "value": "outpatient_office",
+      "quote": "Synthetic Taylor Reed, age 44, attends an in-person gastroenterology office visit.",
+      "source": "saved note",
+      "start": 35,
+      "end": 117
+    },
+    {
+      "key": "patient_status",
+      "label": "Patient status",
+      "value": "established",
+      "quote": "This is an established patient seen by the same gastroenterologist six months ago.",
+      "source": "saved note",
+      "start": 118,
+      "end": 200
+    },
+    {
+      "key": "time_minutes",
+      "label": "Total physician minutes",
+      "value": 25,
+      "quote": "Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services.",
+      "source": "saved note",
+      "start": 474,
+      "end": 655
+    },
+    {
+      "key": "time_same_day",
+      "label": "Time on date of service",
+      "value": true,
+      "quote": "Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services.",
+      "source": "saved note",
+      "start": 474,
+      "end": 655
+    },
+    {
+      "key": "time_qualified_clinician",
+      "label": "Physician time",
+      "value": true,
+      "quote": "Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services.",
+      "source": "saved note",
+      "start": 474,
+      "end": 655
+    },
+    {
+      "key": "time_excludes_staff",
+      "label": "Staff time excluded",
+      "value": true,
+      "quote": "Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services.",
+      "source": "saved note",
+      "start": 474,
+      "end": 655
+    },
+    {
+      "key": "time_excludes_separately_reported",
+      "label": "Separately reported services excluded",
+      "value": true,
+      "quote": "Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services.",
+      "source": "saved note",
+      "start": 474,
+      "end": 655
+    },
+    {
+      "key": "em_basis",
+      "label": "Selection basis",
+      "value": "time",
+      "quote": "Office E/M selection is explicitly based on total time.",
+      "source": "saved note",
+      "start": 656,
+      "end": 711
+    }
+  ],
+  "source_summary": "The retained CMS October 2026 release lists the code as active on this service date. CMS May 2026 E/M guidance and AMA code-specific guidance support the documented time pathway for this fictional case. The upstream descriptor and CPT release remain unresolved.",
+  "permission_summary": "Corti Master Terms v4 §§2.6.1.1, 2.6.2 and 2.7 permit API-output incorporation under their stated conditions. This bounded internal fictional review exports a code number and original-note evidence; it grants no independent CPT catalogue rights.",
+  "sources": [
+    {
+      "role": "dated_code_presence",
+      "title": "CMS October 2026 physician fee schedule",
+      "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+      "edition": "RVU26D; released 2026-08-26; October 2026",
+      "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+      "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+    },
+    {
+      "role": "em_rules",
+      "title": "CMS E/M guidance",
+      "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+      "edition": "MLN006764 May 2026, pages 23–25",
+      "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+      "date_limit": "General office/outpatient selection criteria."
+    },
+    {
+      "role": "code_specific_time",
+      "title": "AMA code-specific time guidance",
+      "url": "https://www.ama-assn.org/practice-management/cpt/cpt-code-99213-established-patient-office-visit-20-29-minutes",
+      "edition": "Official page inspected 2026-10-16",
+      "evidence_sha256": "3cf46efad0897d55fc33fe3a46efb0aa41b5fdc8da0a34880cdb81a02ff39e07",
+      "date_limit": "Source reassessment provenance hash; public page has no annual CPT edition or explicit effective interval."
+    }
+  ],
+  "source_reassessment_sha256": "5af0b487c0d712bf31c5052c7fd3fa79cbdd1f381363124a99ef6e4ad56f1c51"
+}

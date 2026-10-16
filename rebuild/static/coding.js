@@ -27,16 +27,19 @@
     panel.querySelectorAll('[data-coding-undo]').forEach(button => { button.hidden = !dirty().includes(button.closest('form')); });
     panel.querySelector('[data-coding-dirty]').hidden = !edited;
     panel.querySelector('[data-coding-update]').hidden = !staged && !uncertain;
+    panel.querySelectorAll('[data-export-with-codes]').forEach(link => {
+      link.setAttribute('aria-disabled', String(edited || posting || uncertain || Boolean(staged)));
+    });
   };
   const bind = () => {
     panel.querySelectorAll('[data-coding-form]').forEach(form => {
       baselines.set(form, value(form));
       form.querySelectorAll('input, select, textarea').forEach(control => { control.dataset.serverDisabled = String(control.disabled); });
       form.querySelectorAll('button[type="submit"]').forEach(button => { button.dataset.serverDisabled = String(button.disabled); });
-      if (['context', 'selections'].includes(form.dataset.codingForm)) {
+      if (['context', 'selections', 'output-decision'].includes(form.dataset.codingForm)) {
         const reset = document.createElement('button');
         reset.type = 'button'; reset.className = 'quiet'; reset.dataset.codingUndo = 'true'; reset.textContent = 'Undo unsaved changes';
-        reset.addEventListener('click', () => { form.reset(); basis(); updateControls(); });
+        reset.addEventListener('click', () => { form.reset(); error(''); basis(); updateControls(); });
         form.append(reset);
       }
     });
@@ -103,6 +106,10 @@
     if (panel.contains(event.target)) { basis(); updateControls(); }
   });
   document.addEventListener('click', event => {
+    const download = event.target.closest('[data-export-with-codes]');
+    if (download && panel.contains(download) && download.getAttribute('aria-disabled') === 'true') {
+      event.preventDefault(); error('Save or undo your unsaved coding changes before exporting saved selections.'); return;
+    }
     if (event.target.closest('[data-coding-load]') && panel.contains(event.target)) {
       if (staged) { apply(staged); error(''); }
       else { uncertain = false; updateControls(); poll(); }
@@ -122,6 +129,13 @@
     const url = new URL(form.action, location.href);
     if (url.origin !== location.origin) return;
     const body = new FormData(form);
+    // FormData(form) omits the clicked action. Preserve the explicit choice;
+    // an absent submitter must never silently default to clinical acceptance.
+    const submitter = event.submitter;
+    if (submitter && submitter.form === form && submitter.name && !submitter.disabled) body.append(submitter.name, submitter.value);
+    if (form.dataset.codingForm === 'output-decision' && !['accepted', 'rejected'].includes(body.get('outcome'))) {
+      error('Choose Accept or Reject to record your decision.'); return;
+    }
     posting = true; epoch++; clearTimeout(timer); error(''); updateControls();
     try {
       const {response, data} = await fetchJSON(url, {method:'POST', body});

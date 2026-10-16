@@ -261,6 +261,8 @@ def maximum_cost(payload, config,max_output=MAX_OUTPUT):
     return (Decimal(input_bound)*r['input_per_million'] + Decimal(max_output)*r['output_per_million'])/1000000
 
 def provider_request(inventory, role, config, proposal=None):
+    from documents.semantic_preparation_roles import configured_meaning_contract
+    meaning_contract = configured_meaning_contract(config)
     payload = role_payload(inventory, role, proposal,
         source_review_context=source_review_mode(config), config=config)
     from anthropic import transform_schema
@@ -320,7 +322,8 @@ def provider_request(inventory, role, config, proposal=None):
         instructions += (' Separately return answer_definitions from answer_definition_inventory. Physical metadata '
                          'describes existing document controls; semantic definitions describe the values requested. '
                          'Physical generic text MUST NOT erase semantic types or constraints. ' +
-                         role_instructions(role, 2, timing_reference=word_contract.timing_reference(config)))
+                         role_instructions(role, 2, timing_reference=word_contract.timing_reference(config),
+                                           meaning_contract=meaning_contract))
     if finite_identities(inventory, config):
         instructions += (' Source identity values are application-owned, not semantic decisions. '
             'Copy each corresponding field key, locator digest, story ID and content digest from '
@@ -633,7 +636,9 @@ def create_preparation(template, actor):
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
+        from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOSITE_MEANING_CONTRACT
         config[word_contract.CONFIG_KEY] = word_contract.PROFILE
+        config[MEANING_CONTRACT_KEY] = COMPOSITE_MEANING_CONTRACT
         config['word_signing_context'] = SIGNING_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
     from . import testing_authority

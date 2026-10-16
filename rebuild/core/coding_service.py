@@ -38,7 +38,20 @@ def digest(value):
 
 def context_data(encounter):
     row = CodingContext.objects.filter(encounter=encounter).first()
-    return {**CONTEXT_DEFAULTS, **(row.data if row else {})}
+    if row is not None:
+        return {**CONTEXT_DEFAULTS, **row.data}
+    # Source facts are suggestions, not clinician time attestations. They permit
+    # one direct request from a new documented office encounter without a second
+    # prediction merely to populate setting/status. Confirmation remains explicit
+    # in the separately bound output review; all time attestations stay false.
+    from .coding_dispatch import provider, source_context_enabled
+    if provider(encounter) == 'corti' and source_context_enabled(encounter):
+        from .corti_semantics import office_time_facts
+        observed = office_time_facts(encounter.notes)
+        if observed['status'] == 'documented':
+            facts = {f['key']: f['value'] for f in observed['facts']}
+            return {**CONTEXT_DEFAULTS, **{k: facts[k] for k in ('setting', 'patient_status', 'em_basis')}}
+    return dict(CONTEXT_DEFAULTS)
 
 
 def release_snapshot(encounter):
@@ -59,7 +72,8 @@ def release_snapshot(encounter):
 
 def input_snapshot(encounter):
     patient = encounter.patient
-    from .coding_engine import CONTRACT as ENGINE_CONTRACT
+    from .coding_dispatch import contract
+    ENGINE_CONTRACT = contract(encounter)
     inputs = {'workflow_contract': CONTRACT, 'engine_contract': ENGINE_CONTRACT, 'encounter_id': str(encounter.pk),
               'department_id': str(encounter.department_id), 'patient_id': str(encounter.patient_id),
               'patient_identity': {'id': str(patient.pk), 'display_name': patient.display_name,
@@ -132,7 +146,7 @@ def ensure_run(encounter, user, automatic=False):
         state, error_code = 'needs_detail', 'terminology_unavailable'
         error = 'No verified coding reference covers this date of service. Contact your administrator.'
     else:
-        from .coding_provider import configuration
+        from .coding_dispatch import configuration
         try:
             config = configuration(user, e)
         except ValidationError:
@@ -230,7 +244,7 @@ def update_selection(run, user, selections, expected_selection_revision):
         raise ValidationError('This coding record has already been approved. Its approval is retained unchanged.')
     if type(expected_selection_revision) is not int or expected_selection_revision != run.selection_revision:
         raise ValidationError('These selections changed in another window. Review the saved selections.')
-    from .coding_engine import validate_selection
+    from .coding_dispatch import validate_selection
     value = validate_selection(run, selections)
     if value != run.selection:
         run.selection = value
@@ -248,7 +262,7 @@ def approve(run, user, expected_input_digest, expected_selection_digest):
     assert_current(run, e)
     if expected_input_digest != run.input_digest or expected_selection_digest != selection_digest(run):
         raise ValidationError('This coding review changed. Review the current displayed selections before approving.')
-    from .coding_engine import validate_selection
+    from .coding_dispatch import validate_selection
     approval_ready(run)
     selections = validate_selection(run, run.selection)
     if selections != run.selection:
@@ -316,7 +330,8 @@ def snapshot(encounter, user):
     overrides = (selections or {}).get('overrides', {})
     suggestions = []
     for item in result.get('suggestions', []):
-        if item.get('system') == 'CPT' and not any(r['system'] == 'CPT' for r in releases):
+        if (item.get('system') == 'CPT' and not any(r['system'] == 'CPT' for r in releases)
+                and latest.config.get('provider') != 'corti'):
             continue
         displayed = dict(item)
         replacement = overrides.get(item['id'], {}).get('code')
@@ -342,7 +357,7 @@ def snapshot(encounter, user):
     can_approve = False
     approval_error = ''
     if can_review:
-        from .coding_engine import validate_selection
+        from .coding_dispatch import validate_selection
         try:
             approval_ready(run)
             validate_selection(run, run.selection)
@@ -362,7 +377,12 @@ def snapshot(encounter, user):
             'selection_digest': selection_digest(latest) if latest else '',
             'display_token': signing.dumps(display_binding(e, user, latest), salt=CONTRACT, compress=True),
             'cpt_available': any(r['system'] == 'CPT' and r['coding_digest'] for r in releases),
-            'releases': releases, 'error': latest.error if latest else ''}
+            'releases': releases, 'error': latest.error if latest else '',
+            'corti': bool(latest and latest.config.get('provider') == 'corti'),
+            'replay': bool(latest and latest.config.get('mode') == 'replay'),
+            'diagnostics': result.get('diagnostics_summary', {})}
+    view['context_derived'] = bool(view['corti'] and context['setting'] != 'unknown'
+        and not CodingContext.objects.filter(encounter=e).exists())
     view['mdm_rows'] = [{'key': k, 'label': label, 'value': context[k], 'evidence': context[k + '_evidence']}
                         for k, label in [('mdm_problems', 'Problems addressed'), ('mdm_data', 'Data reviewed'), ('mdm_risk', 'Risk of management')]]
     view['levels'] = ['unknown', 'straightforward', 'low', 'moderate', 'high']
@@ -379,10 +399,25 @@ def snapshot(encounter, user):
     view['legacy_codes']=list(CodeSuggestion.objects.filter(encounter=e).filter(
         models.Q(terminology__release__system='ICD-10-CM') | models.Q(terminology__release_id__in=entitled_ids)
     ).select_related('terminology__release','accepted_by').order_by('created_at','pk'))
+    from . import coding_output
+    output_review = coding_output.view(e, latest, user)
+    view['output_review'] = output_review
+    if output_review and output_review.get('available'):
+        outcome = output_review['state']
+        view['questions'] = [({**question, 'question': output_review['code'] +
+            ': description and upstream terminology version remain unresolved. The code number has a separate, case-bound review below.'}
+            if question.get('id') == output_review['identifier'] else question) for question in view['questions']]
+        summary['approved'] += int(outcome == 'accepted')
+        summary['awaiting_review'] += int(outcome == 'pending')
+        summary['not_included'] -= int(outcome == 'accepted')
+        view['state_label'] = ('Selections approved; CPT number accepted with description withheld' if outcome == 'accepted'
+                               else 'ICD decision saved; CPT number awaiting confirmation' if outcome == 'pending'
+                               else 'Coding decisions saved; CPT number rejected')
     view['version'] = digest({'context': key, 'run': view['run_id'], 'state': state,
                               'selection': view['selection_digest'], 'result': digest(result),
                               'decision': str(decision.pk) if decision else None,
-                              'can_edit': can_edit, 'can_review': can_review, 'can_approve': can_approve})
+                              'can_edit': can_edit, 'can_review': can_review, 'can_approve': can_approve,
+                              'output_review': {k: output_review.get(k) for k in ('available', 'reason', 'state', 'review_digest')} if output_review else None})
     return view
 
 
@@ -413,7 +448,7 @@ def run_one():
         run.state = 'running'; run.started_at = timezone.now()
         run.save(update_fields=['state', 'started_at'])
     try:
-        from .coding_engine import generate
+        from .coding_dispatch import generate
         result = generate(run)
         with transaction.atomic():
             e = locked_encounter(e, run.user)

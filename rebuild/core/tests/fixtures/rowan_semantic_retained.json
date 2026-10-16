@@ -1,0 +1,1777 @@
+{
+  "provenance": {
+    "source_sha256": "462613fe7482464d9cfdd73e0cf7dea28b532f7416e1e428aaa4a49143ef0f08",
+    "captured_failed_case_sha256": "d0c53d82d55b1e6eb2710ca0dbc899ba698e044243332ad3bc80e96a4eb31afc",
+    "kind": "retained failed synthetic provider responses; no new inference"
+  },
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Rowan Blake\r\nAge: 52 years\r\nClinic record number: SYN-RB-1016\r\nDate of service: 16 October 2026\r\nVisit: In-person gastroenterology office visit. This is an established patient who was seen by this same gastroenterologist five months ago.\r\n\r\nS - Subjective\r\nSynthetic Rowan Blake reports intermittent epigastric pain after large meals for 10 days. Episodes last about 20 minutes and the pain is rated 4 out of 10. The patient also reports abdominal bloating for three weeks. The patient denies heartburn, constipation, diarrhea, difficulty swallowing, vomiting, hematemesis, black stools, rectal bleeding and unintentional weight loss. No daily medicines or supplements are reported.\r\n\r\nO - Objective\r\nBlood pressure 118/74 mmHg, pulse 72 beats per minute, temperature 36.7 degrees Celsius. The patient is alert and in no acute distress. The abdomen is soft with mild epigastric tenderness. There is no rebound tenderness or guarding. No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.\r\n\r\nA - Assessment\r\n1. Epigastric pain.\r\n2. Abdominal bloating.\r\nBoth epigastric pain and bloating were evaluated and discussed during this encounter.\r\nThe cause of these symptoms has not been established. GERD, gastritis, peptic ulcer disease and irritable bowel syndrome have not been diagnosed.\r\n\r\nP - Plan\r\nDiscussed smaller meals and keeping a food and symptom diary. Requested the previous gastroenterology records. No medication was prescribed today. Further testing will be considered after review of the prior records; no procedure has been ordered or performed today. Follow up in three weeks. The patient was advised to seek prompt assessment for severe or worsening pain, vomiting blood, black stools or fainting.\r\n\r\nTotal physician time on the date of service was 24 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation. This total excludes clinical staff time and time for separately reported services. Office E/M selection is based on total physician time.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Patient full name",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "Age in years",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "Clinic record number",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "Date of service",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "Visit setting and patient status",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "Subjective",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "Objective",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Assessment",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "Plan and follow up",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Current medicines",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "Allergies",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "Family history",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "Total physician time on date of service in minutes",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "E M selection basis",
+      "locator": {
+        "cell": 13
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's full name only, as a person name.",
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_1": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's age as a whole number of years, as printed in the question 'Age in years'.",
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": "years",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_10": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "List of the patient's allergies; documented absence of allergies is also a valid answer.",
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_11": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's family history; documented absence of relevant family history is also a valid answer.",
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_12": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Total physician time on the date of service, as a whole number of minutes.",
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": "minutes",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_13": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The stated basis for the E M (evaluation and management) selection, as a concise statement.",
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_2": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The single clinic record number (reference code) identifying the patient's record.",
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "identifier",
+      "version": 2
+    },
+    "cell_3": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The calendar date of service of the documented encounter. No format is printed, so only a complete unambiguous calendar date with an explicit year is accepted, preserving the documented spelling.",
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "date",
+      "version": 2
+    },
+    "cell_4": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The visit setting and the patient's status for the documented encounter, as a concise statement.",
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_5": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The subjective portion of the SOAP consultation: a description of the patient's reported history and symptoms.",
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_6": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The objective portion of the SOAP consultation: a description of examination and measured findings.",
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_7": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The clinician's concise clinical assessment (impression) for the documented encounter.",
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_8": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The care plan and follow-up arrangements, including any relative follow-up interval, described in text.",
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_9": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "List of the patient's current medicines at the documented encounter; documented absence of medicines is also a valid answer.",
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    }
+  },
+  "extractor": {
+    "reference_contract": "exact-source-reference-inventory-v2",
+    "facts": [
+      {
+        "id": "f1",
+        "kind": "identity",
+        "concept": "patient full name",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Synthetic Rowan Blake",
+          "source_unit_id": 2,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f2",
+        "kind": "identity",
+        "concept": "patient age",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "52",
+          "source_unit_id": 3,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": "years",
+        "unit_span": {
+          "quote": "years",
+          "source_unit_id": 3,
+          "occurrence": 1
+        },
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f3",
+        "kind": "identity",
+        "concept": "clinic record number",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "SYN-RB-1016",
+          "source_unit_id": 4,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f4",
+        "kind": "identity",
+        "concept": "date of service",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "16 October 2026",
+          "source_unit_id": 5,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f5",
+        "kind": "other",
+        "concept": "visit setting",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "In-person gastroenterology office visit",
+          "source_unit_id": 6,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f6",
+        "kind": "other",
+        "concept": "patient status for visit",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "established patient",
+          "source_unit_id": 7,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f7",
+        "kind": "history",
+        "concept": "epigastric pain history",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "intermittent epigastric pain after large meals for 10 days",
+          "source_unit_id": 9,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f8",
+        "kind": "history",
+        "concept": "epigastric pain episode duration",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Episodes last about 20 minutes",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f9",
+        "kind": "history",
+        "concept": "pain severity",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "the pain is rated 4 out of 10",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f10",
+        "kind": "measurement",
+        "concept": "epigastric pain severity score",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "4",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": {
+          "minimum": null,
+          "maximum": "10",
+          "span": {
+            "quote": "out of 10",
+            "source_unit_id": 10,
+            "occurrence": 1
+          }
+        },
+        "supersedes": []
+      },
+      {
+        "id": "f11",
+        "kind": "history",
+        "concept": "abdominal bloating history",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "abdominal bloating for three weeks",
+          "source_unit_id": 11,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f12",
+        "kind": "history",
+        "concept": "denied symptoms",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "denies heartburn, constipation, diarrhea, difficulty swallowing, vomiting, hematemesis, black stools, rectal bleeding and unintentional weight loss",
+          "source_unit_id": 12,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f13",
+        "kind": "history",
+        "concept": "current medicines and supplements",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "No daily medicines or supplements are reported",
+          "source_unit_id": 13,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f14",
+        "kind": "finding",
+        "concept": "blood pressure",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Blood pressure 118/74 mmHg",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f15",
+        "kind": "finding",
+        "concept": "pulse",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "pulse 72 beats per minute",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f16",
+        "kind": "finding",
+        "concept": "body temperature",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "temperature 36.7 degrees Celsius",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f17",
+        "kind": "finding",
+        "concept": "general appearance distress",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "alert and in no acute distress",
+          "source_unit_id": 16,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f18",
+        "kind": "finding",
+        "concept": "abdominal examination",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "The abdomen is soft with mild epigastric tenderness",
+          "source_unit_id": 17,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f19",
+        "kind": "finding",
+        "concept": "rebound tenderness or guarding",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "no rebound tenderness or guarding",
+          "source_unit_id": 18,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f20",
+        "kind": "finding",
+        "concept": "testing or procedures performed at encounter",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter",
+          "source_unit_id": 19,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f21",
+        "kind": "assessment",
+        "concept": "epigastric pain assessment",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Epigastric pain",
+          "source_unit_id": 22,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f22",
+        "kind": "assessment",
+        "concept": "abdominal bloating assessment",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Abdominal bloating",
+          "source_unit_id": 24,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f23",
+        "kind": "assessment",
+        "concept": "cause of symptoms",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "The cause of these symptoms has not been established",
+          "source_unit_id": 26,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f24",
+        "kind": "assessment",
+        "concept": "undiagnosed conditions",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "GERD, gastritis, peptic ulcer disease and irritable bowel syndrome have not been diagnosed",
+          "source_unit_id": 27,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f25",
+        "kind": "plan",
+        "concept": "dietary counseling",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Discussed smaller meals and keeping a food and symptom diary",
+          "source_unit_id": 29,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f26",
+        "kind": "plan",
+        "concept": "request for previous records",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Requested the previous gastroenterology records",
+          "source_unit_id": 30,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f27",
+        "kind": "plan",
+        "concept": "medication prescribed",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "No medication was prescribed today",
+          "source_unit_id": 31,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f28",
+        "kind": "plan",
+        "concept": "further testing consideration",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Further testing will be considered after review of the prior records",
+          "source_unit_id": 32,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "future",
+          "span": {
+            "quote": "will be considered",
+            "source_unit_id": 32,
+            "occurrence": 1
+          }
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f29",
+        "kind": "plan",
+        "concept": "procedure ordered or performed",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "no procedure has been ordered or performed today",
+          "source_unit_id": 32,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f30",
+        "kind": "follow_up",
+        "concept": "follow up interval",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Follow up in three weeks",
+          "source_unit_id": 33,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "future",
+          "span": {
+            "quote": "in three weeks",
+            "source_unit_id": 33,
+            "occurrence": 1
+          }
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f31",
+        "kind": "plan",
+        "concept": "return precautions",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "advised to seek prompt assessment for severe or worsening pain, vomiting blood, black stools or fainting",
+          "source_unit_id": 34,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f32",
+        "kind": "measurement",
+        "concept": "total physician time on date of service",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "24",
+          "source_unit_id": 35,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": "minutes",
+        "unit_span": {
+          "quote": "minutes",
+          "source_unit_id": 35,
+          "occurrence": 1
+        },
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f33",
+        "kind": "other",
+        "concept": "E/M selection basis",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Office E/M selection is based on total physician time",
+          "source_unit_id": 37,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      }
+    ]
+  },
+  "assigner": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "fact_ids": [
+          "f1"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_1",
+        "fact_ids": [
+          "f2"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_2",
+        "fact_ids": [
+          "f3"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_3",
+        "fact_ids": [
+          "f4"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_4",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_5",
+        "fact_ids": [
+          "f7",
+          "f8",
+          "f9",
+          "f11",
+          "f12"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_6",
+        "fact_ids": [
+          "f14",
+          "f15",
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_7",
+        "fact_ids": [
+          "f21",
+          "f22"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_8",
+        "fact_ids": [
+          "f25",
+          "f26",
+          "f27",
+          "f28",
+          "f29",
+          "f30",
+          "f31"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_9",
+        "fact_ids": [
+          "f13"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_10",
+        "fact_ids": [],
+        "status": "missing",
+        "separator": ""
+      },
+      {
+        "key": "cell_11",
+        "fact_ids": [],
+        "status": "missing",
+        "separator": ""
+      },
+      {
+        "key": "cell_12",
+        "fact_ids": [
+          "f32"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_13",
+        "fact_ids": [
+          "f33"
+        ],
+        "status": "supported",
+        "separator": ""
+      }
+    ]
+  },
+  "checker": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "verdict": "pass",
+        "fact_ids": [
+          "f1"
+        ],
+        "reason": "The complete name 'Synthetic Rowan Blake', including the synthetic prefix, appears at the 'Patient:' line and again in the Subjective narrative. The source shows only one patient name, with no competing or incomplete identity. The stated boundary or ownership concern is not supported by the notes."
+      },
+      {
+        "key": "cell_1",
+        "verdict": "pass",
+        "fact_ids": [
+          "f2"
+        ],
+        "reason": "The source states 'Age: 52 years', so 52 is correct for the patient."
+      },
+      {
+        "key": "cell_2",
+        "verdict": "pass",
+        "fact_ids": [
+          "f3"
+        ],
+        "reason": "The source states 'Clinic record number: SYN-RB-1016', which matches the proposed value."
+      },
+      {
+        "key": "cell_3",
+        "verdict": "pass",
+        "fact_ids": [
+          "f4"
+        ],
+        "reason": "The source states 'Date of service: 16 October 2026', a complete date with explicit year, kept in its documented spelling."
+      },
+      {
+        "key": "cell_4",
+        "verdict": "pass",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "reason": "The source documents an in-person gastroenterology office visit for an established patient. These two components together cover the approved visit setting and patient status."
+      },
+      {
+        "key": "cell_5",
+        "verdict": "pass",
+        "fact_ids": [
+          "f7",
+          "f8",
+          "f9",
+          "f11",
+          "f12"
+        ],
+        "reason": "The answer keeps the documented current complaints: epigastric pain with its pattern, 10-day duration, 20-minute episodes and 4/10 severity, and bloating for three weeks. It also keeps the full list of denied symptoms with the denial wording intact. The reason for the visit is retained."
+      },
+      {
+        "key": "cell_6",
+        "verdict": "pass",
+        "fact_ids": [
+          "f14",
+          "f15",
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20"
+        ],
+        "reason": "The answer covers the vitals, general appearance, abdominal exam, the negative rebound and guarding finding, and the statement that no testing or procedure was done. It matches the Objective section of the notes."
+      },
+      {
+        "key": "cell_7",
+        "verdict": "omission",
+        "fact_ids": [
+          "f21",
+          "f22",
+          "f23",
+          "f24"
+        ],
+        "reason": "Only the two positive impressions (epigastric pain and abdominal bloating) are selected. The assessment also documents that the cause has not been established (f23) and that GERD, gastritis, peptic ulcer disease and IBS have not been diagnosed (f24). The proposed answer leaves out these negative components. The explicit negative wording appears in the source, so f23 and f24 are source-backed."
+      },
+      {
+        "key": "cell_8",
+        "verdict": "pass",
+        "fact_ids": [
+          "f25",
+          "f26",
+          "f27",
+          "f28",
+          "f29",
+          "f30",
+          "f31"
+        ],
+        "reason": "The answer covers diet counseling and the symptom diary, the records request, no medication prescribed, further testing to be considered after record review, and no procedure ordered. It also includes follow-up in three weeks and the return precautions."
+      },
+      {
+        "key": "cell_9",
+        "verdict": "pass",
+        "fact_ids": [
+          "f13"
+        ],
+        "reason": "The source states 'No daily medicines or supplements are reported', a documented absence of current medicines. The statement 'No medication was prescribed today' concerns the plan, not current medicines."
+      },
+      {
+        "key": "cell_10",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "The notes do not mention allergies, either present or absent."
+      },
+      {
+        "key": "cell_11",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "The notes do not document any family history."
+      },
+      {
+        "key": "cell_12",
+        "verdict": "pass",
+        "fact_ids": [
+          "f32"
+        ],
+        "reason": "The source states 'Total physician time on the date of service was 24 minutes', so 24 minutes is correct."
+      },
+      {
+        "key": "cell_13",
+        "verdict": "pass",
+        "fact_ids": [
+          "f33"
+        ],
+        "reason": "The source states 'Office E/M selection is based on total physician time', which is the documented basis for the E/M selection."
+      }
+    ],
+    "fact_findings": []
+  },
+  "repair_assigner": {
+    "fields": [
+      {
+        "key": "cell_7",
+        "fact_ids": [
+          "f21",
+          "f22",
+          "f23",
+          "f24"
+        ],
+        "status": "supported",
+        "separator": "; "
+      }
+    ]
+  },
+  "repair_checker": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "verdict": "pass",
+        "fact_ids": [
+          "f1"
+        ],
+        "reason": "The complete name 'Synthetic Rowan Blake', including the synthetic prefix, is at the 'Patient:' line (span 56-77) and repeats in the Subjective section. No competing or incomplete identity appears in the notes."
+      },
+      {
+        "key": "cell_1",
+        "verdict": "pass",
+        "fact_ids": [
+          "f2"
+        ],
+        "reason": "The notes state 'Age: 52 years'."
+      },
+      {
+        "key": "cell_2",
+        "verdict": "pass",
+        "fact_ids": [
+          "f3"
+        ],
+        "reason": "The notes state 'Clinic record number: SYN-RB-1016'."
+      },
+      {
+        "key": "cell_3",
+        "verdict": "pass",
+        "fact_ids": [
+          "f4"
+        ],
+        "reason": "The notes state 'Date of service: 16 October 2026', a complete date with explicit year."
+      },
+      {
+        "key": "cell_4",
+        "verdict": "pass",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "reason": "The notes document an in-person gastroenterology office visit for an established patient seen by the same gastroenterologist five months earlier. The proposed answer covers the setting and the patient status."
+      },
+      {
+        "key": "cell_5",
+        "verdict": "pass",
+        "fact_ids": [
+          "f7",
+          "f8",
+          "f9",
+          "f11",
+          "f12"
+        ],
+        "reason": "The answer keeps the epigastric pain pattern, 10-day duration, 20-minute episodes, 4/10 severity, bloating for three weeks, and the full list of denied symptoms with the denial wording intact. This covers the current symptoms and the reason for the visit."
+      },
+      {
+        "key": "cell_6",
+        "verdict": "pass",
+        "fact_ids": [
+          "f14",
+          "f15",
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20"
+        ],
+        "reason": "The answer covers the vitals, general appearance, abdominal exam, the negative rebound and guarding finding, and the statement that no testing or procedure was done. All are current to the encounter and match the Objective section."
+      },
+      {
+        "key": "cell_7",
+        "verdict": "pass",
+        "fact_ids": [
+          "f21",
+          "f22",
+          "f23",
+          "f24"
+        ],
+        "reason": "The prior omission finding is wrong: the proposed answer already includes f23 and f24. The answer contains both positive impressions, the cause not being established, and the four conditions not being diagnosed. The source states each negation explicitly, and the candidate text keeps the negative wording."
+      },
+      {
+        "key": "cell_8",
+        "verdict": "pass",
+        "fact_ids": [
+          "f25",
+          "f26",
+          "f27",
+          "f28",
+          "f29",
+          "f30",
+          "f31"
+        ],
+        "reason": "The answer covers diet counseling and the symptom diary, the records request, no medication prescribed, further testing to be considered after record review, no procedure ordered, follow-up in three weeks, and the return precautions."
+      },
+      {
+        "key": "cell_9",
+        "verdict": "pass",
+        "fact_ids": [
+          "f13"
+        ],
+        "reason": "The notes state 'No daily medicines or supplements are reported', a documented absence of current medicines."
+      },
+      {
+        "key": "cell_10",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "The notes do not mention allergies, either present or absent."
+      },
+      {
+        "key": "cell_11",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "The notes do not document any family history."
+      },
+      {
+        "key": "cell_12",
+        "verdict": "pass",
+        "fact_ids": [
+          "f32"
+        ],
+        "reason": "The notes state total physician time of 24 minutes."
+      },
+      {
+        "key": "cell_13",
+        "verdict": "pass",
+        "fact_ids": [
+          "f33"
+        ],
+        "reason": "The notes state 'Office E/M selection is based on total physician time'."
+      }
+    ],
+    "fact_findings": []
+  }
+}

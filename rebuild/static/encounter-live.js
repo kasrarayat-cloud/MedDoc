@@ -8,6 +8,11 @@
   if (!root || !window.fetch || !window.quillmdFormState) return;
   const statusURL = new URL(root.dataset.statusUrl, location.href);
   if (statusURL.origin !== location.origin) return;
+  let loginURL;
+  try { loginURL = new URL(root.dataset.loginUrl || "/login/", location.href); }
+  catch (_) { return; }
+  if (loginURL.origin !== location.origin) return;
+  const loginPath = loginURL.pathname + loginURL.search;
   const latest = root.querySelector("[data-latest-job]");
   const pendingNotice = root.querySelector("[data-pending-job]");
   const connection = root.querySelector("[data-live-connection]");
@@ -30,7 +35,7 @@
     if (link) {
       const anchor = document.createElement("a");
       anchor.href = link;
-      anchor.textContent = link === "/login/" ? " Sign in again" : " Open the current document";
+      anchor.textContent = link === loginPath ? " Sign in again" : " Open the current document";
       errorNotice.append(anchor);
     }
     errorNotice.hidden = false;
@@ -194,7 +199,7 @@
         headers:{Accept:"application/json"}});
       if (response.redirected || [401,403,404].includes(response.status)) {
         stopped = true;
-        showError("Your session or access ended. Your unsaved edits are kept; sign in again before continuing.", "/login/");
+        showError("Your session or access ended. Your unsaved edits are kept; sign in again before continuing.", loginPath);
         updateControls();
         return;
       }
@@ -231,7 +236,7 @@
         headers:{Accept:"application/json"}, body:new FormData(generationForm), signal:controller.signal});
       if (response.redirected || [401,403,404].includes(response.status)) {
         stopped = true;
-        showError("Your session or access ended. Your unsaved edits are kept; sign in again before continuing.", "/login/");
+        showError("Your session or access ended. Your unsaved edits are kept; sign in again before continuing.", loginPath);
         return;
       }
       if (!(response.headers.get("content-type") || "").includes("application/json")) throw new Error("submission_outcome_unknown");

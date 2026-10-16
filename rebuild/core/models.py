@@ -457,6 +457,24 @@ class CodingDecision(Entity):
         super().save(*args,**kwargs)
     def delete(self,*args,**kwargs):raise ValidationError('Coding approvals are append-only.')
 
+class CodingOutputDecision(Entity):
+    """Append-only supplemental decision; never rewrites a provider run or approval."""
+    run=models.ForeignKey(CodingRun,on_delete=models.PROTECT,related_name='output_decisions')
+    base_decision=models.ForeignKey(CodingDecision,on_delete=models.PROTECT)
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    review_digest=models.CharField(max_length=64)
+    outcome=models.CharField(max_length=8,choices=[('accepted','Accepted'),('rejected','Rejected')])
+    review=models.JSONField(default=dict)
+    facts_confirmed=models.BooleanField(default=False)
+    approved_at=models.DateTimeField(default=timezone.now)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['run','review_digest'],name='coding_output_decision_once'),
+            models.CheckConstraint(condition=models.Q(outcome='rejected')|models.Q(outcome='accepted',facts_confirmed=True),name='coding_output_confirmation')]
+    def save(self,*args,**kwargs):
+        if not self._state.adding:raise ValidationError('Output decisions are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs):raise ValidationError('Output decisions are append-only.')
+
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)

@@ -14,6 +14,7 @@ from documents.semantic_preparation_roles import (
     PROTOCOL, DefinitionError, build_inventory, definitions_from_role, digest, fixture_role,
     role_instructions, role_schema, validate_definitions, validate_inventory, validate_role_result,
     identity_scope_issues, require_identity_scopes,
+    COMPOSITE_MEANING_CONTRACT, MEANING_CONTRACT_KEY, configured_meaning_contract,
 )
 from . import ai_stages, testing_authority
 from .generation import configuration
@@ -73,6 +74,7 @@ def _validate_source(prep, *, current=False):
 
 def _validate_roles(prep):
     fields = prep.source_version.fields
+    instruction_contract(prep.config)
     for role, response in (('proposer', prep.proposal), ('checker', prep.checker)):
         validate_role_result(fields, prep.inventory, response, role)
         _require_definition_version(response, definition_version(prep.config))
@@ -161,7 +163,8 @@ def create_preparation(source_version, actor, *, retry_of=None):
         config = testing_authority.bind_actor_config(config, actor, template.department_id)
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
-    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 3}
+    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 3,
+              MEANING_CONTRACT_KEY: COMPOSITE_MEANING_CONTRACT}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -189,6 +192,16 @@ def definition_version(config):
     return value
 
 
+def instruction_contract(config):
+    try:
+        value = configured_meaning_contract(config)
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+    if value is not None and definition_version(config) not in (2, 3):
+        raise ValidationError('Unsupported explicit answer-meaning instruction contract.')
+    return value
+
+
 def _require_definition_version(response, expected):
     if any(row['definition']['version'] != expected for row in response['fields']):
         raise DefinitionError('The returned answer definitions do not match the requested schema version. Review a new preparation; no older contract was adopted.')
@@ -204,7 +217,8 @@ def _call_role(prep, role):
     if prep.config.get('mode') != 'live':
         options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal, version)
     response = ai_stages.execute_stage(definition_preparation=prep, stage='definition_'+role,
-        payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version),
+        payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version,
+            meaning_contract=instruction_contract(prep.config)),
         config=prep.config, **options)
     return _require_definition_version(
         validate_role_result(prep.source_version.fields, prep.inventory, response, role), version)

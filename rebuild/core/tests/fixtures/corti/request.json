@@ -1,0 +1,12 @@
+{
+  "system": [
+    "icd10cm-outpatient",
+    "cpt"
+  ],
+  "context": [
+    {
+      "type": "text",
+      "text": "Date of service: October 16, 2026. Synthetic Taylor Reed, age 44, attends an in-person gastroenterology office visit. This is an established patient seen by the same gastroenterologist six months ago. Symptoms are intermittent heartburn after meals and constipation for two weeks. Assessment: heartburn; GERD has not been established. Constipation, unspecified; no specific subtype has been established. Evaluation and counseling were completed. No procedure was performed. Total physician time on the date of service was 25 minutes, including record review, evaluation, counseling and documentation, excluding staff time and separately reported services. Office E/M selection is explicitly based on total time."
+    }
+  ]
+}
