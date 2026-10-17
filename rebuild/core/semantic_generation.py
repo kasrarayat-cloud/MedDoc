@@ -41,7 +41,9 @@ CLINICAL_CONTEXT_SCOPE_CONTRACT = 'positioned-clinical-context-v15'
 MIXED_OBSERVATION_SCOPE_CONTRACT = 'positioned-mixed-observation-v16'
 SUPPORT_CLOSURE_SCOPE_CONTRACT = 'positioned-support-closure-v17'
 SOURCE_GOVERNANCE_SCOPE_CONTRACT = 'positioned-source-governance-v18'
-SUPPORT_CLOSURE_SCOPE_CONTRACTS = (SUPPORT_CLOSURE_SCOPE_CONTRACT, SOURCE_GOVERNANCE_SCOPE_CONTRACT)
+SCOPED_DENIAL_SCOPE_CONTRACT = 'positioned-scoped-denial-v19'
+SOURCE_GOVERNANCE_SCOPE_CONTRACTS = (SOURCE_GOVERNANCE_SCOPE_CONTRACT, SCOPED_DENIAL_SCOPE_CONTRACT)
+SUPPORT_CLOSURE_SCOPE_CONTRACTS = (SUPPORT_CLOSURE_SCOPE_CONTRACT, *SOURCE_GOVERNANCE_SCOPE_CONTRACTS)
 MIXED_OBSERVATION_SCOPE_CONTRACTS = (MIXED_OBSERVATION_SCOPE_CONTRACT, *SUPPORT_CLOSURE_SCOPE_CONTRACTS)
 CLINICAL_CONTEXT_SCOPE_CONTRACTS = (CLINICAL_CONTEXT_SCOPE_CONTRACT, *MIXED_OBSERVATION_SCOPE_CONTRACTS)
 ENCOUNTER_SUPPORT_SCOPE_CONTRACTS = (ENCOUNTER_SUPPORT_SCOPE_CONTRACT, *CLINICAL_CONTEXT_SCOPE_CONTRACTS)
@@ -164,6 +166,18 @@ SOURCE_GOVERNANCE_INSTRUCTIONS = (
     'annotation on a source-bound time exclusion does not move prior-day work into the same-day total. '
     'source_governance_inventory gives source obligations, never new extracted facts or permission '
     'to overwrite annotations. Missing or invalid extracted support remains held.')
+SCOPED_DENIAL_INSTRUCTIONS = (
+    ' A complete patient-owned explicit denial may contain coordinated nominal complements, including '
+    'a noun governing an action and its object. Retain the negative predicate and every full object, '
+    'modifier and qualifier as one literal negative narrative; do not infer absence of an underlying '
+    'disease, remove a positive assertion after a predicate shift, or project an atomic answer. '
+    'scoped_denial_inventory identifies required source statements, not replacement extracted facts. '
+    'Select the existing complete eligible denial when the approved symptom-negative narrative requests it. '
+    'An explicit historical encounter contrast may retain both its affirmative outside-visit component '
+    'and its denial of a visit with the current clinician/group, as mixed history in a narrative requesting '
+    'that distinction. Keep its complete wording, historical timing and independent patient/clinician '
+    'ownership. Other mixed histories, attribution, uncertainty, corrections and incomplete extraction '
+    'remain held. A checker hold still requires review; no instruction overrides it.')
 DOCUMENT_IDENTITY_SCOPE_CONTRACTS = (DOCUMENT_IDENTITY_SCOPE_CONTRACT, *LITERAL_SOURCE_SCOPE_CONTRACTS)
 CONSENT_CONTEXT_SCOPE_CONTRACTS = (CONSENT_CONTEXT_SCOPE_CONTRACT, *DOCUMENT_IDENTITY_SCOPE_CONTRACTS)
 OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, *CONSENT_CONTEXT_SCOPE_CONTRACTS)
@@ -501,11 +515,349 @@ def _negative_object_list(text):
     return (match['objects'],match['qualifier']) if match and _literal_nominal_list(match['objects']) else None
 
 
+_DENIAL_MODIFIER = (r'(?:'+_LITERAL_ADJECTIVE+r'|[A-Za-z-]+(?:ant|ent|able|ible)|intense|faint|'
+    r'blue|green|yellow|brown|purple|pink|orange|gr[ae]y)')
+
+
+def _denial_nominal_guard(text):
+    # Guard the whole phrase before recognizing a modifier. In particular,
+    # suffix-shaped words such as "patient" or "apparent" are not permission
+    # to discard an owner or unresolved qualification and parse the remainder.
+    return not re.search(r'\b(?:he|she|they|it|patient|is|are|was|were|has|have|had|does|do|'
+            r'can|will|would|may|might|could|should|no|not|never|without|absence|lack|'
+            r'yet|despite|although|except|unless|if|whether|that|which|who|whose|'
+            r'every|each|often|sometimes|always|currently|today|now|tomorrow|yesterday|'
+            r'possible|possibly|probable|probably|apparent|apparently|alleged|allegedly|suspected|uncertain|'
+            r'unclear|assumed|presumed|expected|anticipated|unverified|unconfirmed|reported)\b',text,re.I)
+
+
+def _denial_modifier_heads(text):
+    # v19-only prenominal adjective morphology and bounded ordinary intensity
+    # and color adjectives. The source and destination
+    # retain these exact tokens; no modifier is removed from the assertion.
+    # A complete existing nominal head is still required, so an independent
+    # finite predicate cannot become an object merely by following "no".
+    if not _denial_nominal_guard(text):return ()
+    words=text.split();heads=[]
+    for count in range(1,min(4,len(words)-1)+1):
+        if not re.fullmatch(_DENIAL_MODIFIER,words[count-1],re.I):break
+        head=' '.join(words[count:])
+        if _literal_nominal_phrase(head):heads.append(head)
+    return tuple(heads)
+
+
+def _denial_nominal_phrase(text):
+    """v19 bounded nominal complements, not a symptom vocabulary.
+
+    A complement-taking noun may govern a gerund and its complete object.
+    Determiners and material adjectives belong to that object, not a new
+    predicate. Unknown tails, attribution and finite coordination stay held.
+    The caller retains the entire denial; this never derives a disease absence.
+    """
+    if not _denial_nominal_guard(text):return False
+    if _literal_nominal_phrase(text) or _denial_modifier_heads(text):return True
+    complement=re.fullmatch(r'(?P<head>difficulty|difficulties|trouble|problems?|pain|discomfort|inability)\s+'
+        r'(?P<action>[A-Za-z]+ing)\s+(?:(?:a|an|the)\s+)?(?P<object>.+)',text.strip(),re.I)
+    if not complement:
+        purpose=re.fullmatch(r'(?P<event>(?:(?:'+_NOMINAL_ADJECTIVE+r'|nighttime|daytime)\s+)*[A-Za-z]+ing)\s+'
+            r'to\s+(?P<verb>[A-Za-z]+)(?:\s+(?:an?\s+|the\s+)?(?P<object>.+))?',text.strip(),re.I)
+        return bool(purpose and not re.search(r'\b(?:not|never|be|have|seem|appear|possibly|only)\b',purpose['verb'],re.I)
+            and (purpose['object'] is None or _literal_nominal_phrase(purpose['object'])))
+    obj=complement['object']
+    if re.match(r'^(?:solid|liquid)\s+',obj,re.I):
+        obj=re.sub(r'^(?:solid|liquid)\s+','',obj,flags=re.I)
+    return _literal_nominal_phrase(obj)
+
+
+def _scoped_denial_frame(text):
+    value=text.strip().removesuffix('.')
+    frame=re.fullmatch(r'(?:he|she|they|the\s+patient)\s+(?:(?P<reporting>reports?)\s+)?(?P<predicate>denies?|no)\s+'
+        r'(?P<objects>[A-Za-z][A-Za-z ,/-]{1,600})',value,re.I)
+    if not frame or bool(frame['reporting'])!=(frame['predicate'].casefold()=='no'):return None
+    parts=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',frame['objects'],flags=re.I)
+    return frame if parts and all(_denial_nominal_phrase(part) for part in parts) else None
+
+
+def _scoped_denial_objects(fact,own):
+    frame=_scoped_denial_frame(own['quote'])
+    value=fact['value_evidence']['quote'].strip().removesuffix('.')
+    eligible=(fact['kind'] in ('history','finding') and fact['subject']['kind']=='patient'
+        and fact['timing']['kind']=='current' and fact['polarity']=='negated'
+        and fact['unit'] is None and fact['scale'] is None
+        and frame is not None)
+    if not eligible:return None
+    if value in (frame[0],frame[0][frame.start('predicate'):]):return frame['objects']
+    # The first complete object can retain its own contiguous negative
+    # predicate. Later bare objects cannot acquire an invented "no" prefix.
+    first=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',frame['objects'])[0]
+    head=frame[0][frame.start('predicate'):frame.start('objects')]
+    return first if value==head+first else None
+
+
+def _scoped_denial_literal(fact,own):
+    return _scoped_denial_objects(fact,own) is not None
+
+
+# Directed topic relevance for whole, unchanged negative literals. These are
+# not assertion equivalences: black stool, for example, need not be bleeding.
+# NCI SEER names the swallowing terms; MedlinePlus names the bleeding terms.
+# No relation strips a source/request modifier or converts the rendered text.
+_DENIAL_TOPIC_SUPPORT = {
+    'dysphagia':frozenset(('difficulty swallowing',)),
+    'odynophagia':frozenset(('painful swallowing',)),
+    'hematemesis':frozenset(('vomiting blood',)),
+    'melena':frozenset(('black stool','black stools')),
+    'hematochezia':frozenset(('blood in the stool','rectal bleeding')),
+    'unintentional weight loss':frozenset(('unintended weight loss',)),
+}
+
+
+def _denial_topic_coverage(d,objects, *, complete):
+    from .semantic_source_context import SYMPTOM_DOMAINS
+    meaning=d['meaning'].strip().removesuffix('.')
+    listed=re.fullmatch(r'Documented\s+(?P<primary>GI|gastrointestinal|digestive)\s+symptoms\s+'
+        r'and\s+pertinent\s+negatives\s*\((?P<items>[^()]+)\),\s*including\s+documented\s+absence',meaning,re.I)
+    broad=re.fullmatch(r'(?:Description\s+of\s+the|Describe\s+the|Document|Summarize)\s+(?:documented\s+)?'
+        r'(?P<items>[^.!?;()]+),\s*including\s+documented\s+absence\s+as\s+well\s+as\s+presence',meaning,re.I)
+    if not objects or not (listed or broad):return False
+    source=[' '.join(value.casefold().split()) for value in re.split(
+        r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',objects)]
+    gi=set(SYMPTOM_DOMAINS['gastrointestinal'])|set(_DENIAL_TOPIC_SUPPORT)|{'fever'}
+    gi.update(item for values in _DENIAL_TOPIC_SUPPORT.values() for item in values)
+    if listed:
+        requested={' '.join(item.casefold().split()) for item in re.split(
+            r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',listed['items'])}
+        # These are approved topics, not source assertions. Preserve the
+        # existing change/status/function syntax for validation only; the
+        # entire requested phrase still controls coverage below.
+        if not requested or not all(_denial_nominal_phrase(re.sub(
+                r'\s+(?:change|status|function)$','',item)) for item in requested):return False
+        # Both the explicit list and its primary category constrain each
+        # source object. A parenthetical subset cannot inherit the domain.
+        primary=lambda item:item in gi or any(head.casefold() in gi for head in _denial_modifier_heads(item))
+        allowed={item for item in requested if primary(item)}
+        if d.get('answer_mode')=='narrative':
+            allowed.update(item for topic in requested for item in _DENIAL_TOPIC_SUPPORT.get(topic,()) if primary(item))
+    else:
+        items=[' '.join(value.casefold().split()) for value in re.split(r'\s*,\s*(?:and\s+)?|\s+and\s+',broad['items'])]
+        bowel=lambda value:bool(re.fullmatch(r'(?:stool|bowel)\s+(?:pattern|habits|movements)',value))
+        associated=lambda value:bool(re.fullmatch(r'associated\s+(?:abdominal|GI|gastrointestinal|digestive)\s+symptoms',value,re.I))
+        intake=lambda value:bool(re.fullmatch(r'(?:oral|food)\s+intake',value))
+        if not (all(bowel(value) or associated(value) or intake(value) for value in items)
+                and any(bowel(value) for value in items) and any(associated(value) for value in items)):return False
+        # This combined bowel/associated-symptom history explicitly includes
+        # presence and absence. NIDDK and Merck diarrhea histories cover these
+        # associated warning topics; this is relevance, never a diagnosis.
+        allowed=gi|{'fever','nighttime awakening to pass stool'}
+    if complete:return bool(source) and all(item in allowed or broad and any(
+        head.casefold() in allowed for head in _denial_modifier_heads(item)) for item in source)
+    # Detection is deliberately broader than permission. A known requested
+    # topic inside an unparsed qualifier must still require complete evidence.
+    return any(re.search(r'\b'+re.escape(item)+r'\b',part,re.I) for part in source for item in allowed)
+
+
+def _denial_destination(d, objects=None, *, complete=True):
+    """Unrestricted negative narrative intent, never a keyword mention alone.
+
+    Closed affirmative headings and preservation instructions qualify. Narrow
+    lists and unfamiliar instructions cannot acquire broad literal permission.
+    Restricted topics separately require whole-object source containment.
+    """
+    if (d.get('answer_mode') not in ('narrative','atomic') or d['value_type']!='text'
+            or d['scope']['subject']!='patient' or d['scope']['temporality'] not in ('any','current')
+            or d['scope']['polarity'] not in ('any','negative')):return False
+    value=d['meaning'].strip()
+    value=re.sub(r'\s*Leave\s+blank\s+if\s+not\s+documented\.\s*$','',value,flags=re.I).strip().removesuffix('.')
+    prefix=(r'(?:(?:document|record|describe|summarize)\s+(?:all\s+|the\s+)?)?'
+        r'(?:(?:documented|reported|current)\s+)?')
+    topic=re.sub('^'+prefix,'',value,flags=re.I)
+    topic=re.sub(r'\s+only$','',topic,flags=re.I)
+    topic=re.sub(r'^absence\s+of\s+|\s+absence$|\s+(?:is\s+)?absent$','',topic,flags=re.I)
+    topic=' '.join(topic.casefold().split())
+    if objects and _denial_nominal_phrase(topic):
+        source=[' '.join(item.casefold().split()) for item in re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',objects)]
+        covered=[item==topic if complete else bool(re.search(r'\b'+re.escape(topic)+r'\b',item)) for item in source]
+        if (all(covered) if complete else any(covered)):return True
+    if d.get('answer_mode')=='atomic':
+        # Clinical topic relations never widen an atomic meaning. A single
+        # explicitly requested literal object remains eligible as before.
+        return bool(objects and _denial_nominal_phrase(objects)
+            and _denial_topic_coverage(d,objects,complete=complete))
+    if re.search(r'\b(?:only|alone|omit\w*|exclud\w*|except|other\s+than|apart\s+from|not|never|optional)\b',value,re.I):return False
+    head=r'(?:(?:pertinent|relevant|explicitly)\s+)?(?:symptom\s+negatives|negative\s+symptoms|denied\s+symptoms|pertinent\s+negatives)'
+    history=r'(?:\s+and\s+(?:prior|past|previous)\s+[A-Za-z-]+\s+history)?'
+    preservation=(r'(?:,\s*retaining\s+the\s+scope\s+of\s+(?:any|each|every)\s+negative'
+        r'(?:\s*\(e\.g\.,\s*no\s+[A-Za-z -]+\))?'
+        r'(?:\s+without\s+negating\s+the\s+positive\s+[A-Za-z -]+)?'
+        r'|,\s*i\.e\.\s*symptoms\s+explicitly\s+recorded\s+as\s+absent'
+        r'|\s+as\s+documented)?')
+    if re.fullmatch(prefix+head+history+preservation,value,re.I):return True
+    if re.fullmatch(r'The\s+pertinent\s+negatives:\s*relevant\s+symptoms\s+or\s+findings\s+'
+            r'documented\s+as\s+absent\s+or\s+denied,\s*listed\s+as\s+documented',value,re.I):return True
+    if re.fullmatch(r'(?:Description\s+of\s+the\s+)?history\s+of\s+present\s+illness'
+            r'(?:,\s*including\s+the\s+reason\s+for\s+[A-Za-z-]+\s+evaluation,\s*as\s+documented)?',value,re.I):return True
+    return _denial_topic_coverage(d,objects,complete=complete)
+
+
+_DENIAL_REFERENCE = r'(?:(?:reported|documented)\s+)?(?:symptom\s+)?denials?\s+(?:above|earlier|previously(?:\s+documented)?)'
+
+
+def _denial_integrity(text):
+    # Permission consumes the whole assertion. An outer qualification or a
+    # second predicate must not turn its embedded denial into an affirmation.
+    return bool(re.fullmatch(r'(?:The\s+)?'+_DENIAL_REFERENCE+r'\s+(?:is|are|remain|remains)\s+'
+        r'(?:accurate|correct|valid|not\s+(?:false|incorrect|erroneous))',
+        text.strip().removesuffix('.'),re.I))
+
+
+def _denial_references(notes,units,context):
+    """Current owned backward references qualify the earlier denial account.
+
+    Unknown predicates remain unresolved, while a complete negated retraction
+    affirms the account. Known foreign/past owners keep their own references.
+    """
+    from .clinical_source_context import owned_current,PERSON
+    references=[]
+    for unit in units:
+        text=unit['quote'].strip().removesuffix('.')
+        if not re.search(r'\b'+_DENIAL_REFERENCE+r'\b',text,re.I):continue
+        if not owned_current(context,unit):continue
+        if re.match(r'(?:(?:his|her|their|the)\s+)?'+PERSON+r"['’]s\s+",text,re.I):continue
+        if re.match(r'(?:In|At|During)\s+(?:the\s+)?(?:previous|prior|past|earlier)\s+(?:visit|encounter)\b',text,re.I):continue
+        if re.match(r'(?:The\s+)?(?:previous|prior|past|earlier)\s+(?:visit|encounter)[\x27’]s\s+',text,re.I):continue
+        if not _denial_integrity(text):references.append(unit)
+    return references
+
+
+def _encounter_contrast_frame(text):
+    # A complete historical encounter identity contrast, not a general mixed
+    # assertion. Named clinician and patient ownership are checked separately.
+    return re.fullmatch(r'(?:This|That|It)\s+was\s+an?\s+(?:outside|external|unrelated)\s+'
+        r'(?:(?:primary[- ]care|family[- ]medicine|[A-Za-z]+(?:ology|iatry))\s+)?(?:visit|encounter|consultation),\s*'
+        r'not\s+an?\s+(?:previous|prior)\s+(?:visit|encounter|consultation)\s+with\s+'
+        r'(?P<actor>(?:Dr\.?|Doctor)\s+[A-Za-z][A-Za-z -]{0,80}?)\s+or\s+this\s+'
+        r'(?:[A-Za-z-]+\s+){0,2}(?:group|practice)\s*\.?',text.strip(),re.I)
+
+
+def _encounter_contrast_literal(fact,own):
+    return (fact['kind']=='history' and fact['subject']['kind']=='patient'
+        and fact['timing']['kind']=='past' and fact['polarity']=='mixed'
+        and fact['unit'] is None and fact['scale'] is None
+        and fact['value_evidence']['quote'].strip().removesuffix('.')==own['quote'].strip().removesuffix('.')
+        and _encounter_contrast_frame(own['quote']) is not None)
+
+
+def _encounter_treatment_step(text,actor,state):
+    """A complete intervening treatment assertion, bound to the same course.
+
+    Unknown events cannot be skipped to recover a distant demonstrative
+    antecedent. These statements establish only reference continuity; their
+    original clinical facts retain their independent validation and timing.
+    """
+    value=text.strip().removesuffix('.')
+    subject=r'(?:he|she|they|the\s+patient)'
+    date=r'\d{1,2}\s+[A-Za-z]+(?:\s+\d{4})?'
+    prescription=re.fullmatch(r'(?P<actor>(?:Dr\.?|Doctor)\s+[A-Za-z][A-Za-z -]{0,80}?)\s+'
+        r'(?:recommended|prescribed|advised)\s+(?:an?\s+)?(?:'+SOURCE_NUMBER_PATTERN+r'[- ]day\s+)?'
+        r'(?:trial|course)\s+(?:of|with)\s+(?P<medicine>[A-Za-z][A-Za-z0-9-]*)\s+'
+        +SOURCE_NUMBER_PATTERN+r'\s+(?:mg|g|mcg|micrograms?|milligrams?|mL)\s+'
+        r'(?:by\s+mouth|orally)\s+(?:once|twice|three\s+times|four\s+times)\s+(?:daily|a\s+day)',value,re.I)
+    if prescription:
+        name=re.sub(r'^(?:Dr\.?|Doctor)\s+','',prescription['actor'],flags=re.I).casefold()
+        aliases={actor.casefold(),actor.split()[-1].casefold()}
+        if name not in aliases or state:return None
+        return {'medicine':prescription['medicine']}
+    if not state:return None
+    medicine=re.escape(state['medicine'])
+    reference=r'(?:it|that\s+(?:medicine|medication)|'+medicine+r')'
+    use=re.fullmatch(subject+r'\s+(?:took|used)\s+'+reference+r'\s+from\s+'+date+r'\s+(?:through|until|to)\s+'+date,value,re.I)
+    if use:return state
+    response=re.fullmatch(reference+r'\s+(?:(?:partially|fully|completely)\s+)?(?:reduced|relieved|improved)\s+'
+        r'(?:his|her|their|the)\s+(?P<benefit>.+?)(?:,?\s+but\s+'+subject+r'\s+developed\s+(?P<adverse>.+))?',value,re.I)
+    if response and _literal_nominal_phrase(response['benefit']) and (
+            response['adverse'] is None or _literal_nominal_phrase(response['adverse'])):return state
+    stopped=re.fullmatch(subject+r'\s+(?:stopped|ceased|discontinued)\s+'+medicine+
+        r'(?:\s+on\s+'+date+r')?(?:\s+because\s+of\s+(?:the\s+)?(?P<reason>[^;]+))?'
+        r'(?:;\s*(?:the\s+)?(?P<resolved>.+?)\s+resolved\s+after\s+stopping)?',value,re.I)
+    if stopped and all(item is None or _literal_nominal_phrase(item) for item in (stopped['reason'],stopped['resolved'])):
+        if stopped['resolved'] and stopped['resolved'].casefold()!=str(stopped['reason']).casefold():return None
+        return state
+    cessation=re.fullmatch(subject+r'\s+(?:is|are)\s+no\s+longer\s+(?:taking|using)\s+'+medicine,value,re.I)
+    return state if cessation else None
+
+
+def _encounter_contrast_owned(fact,own,context,units):
+    from .clinical_source_context import clinician_matches,owned_current
+    frame=_encounter_contrast_frame(own['quote'])
+    if not frame or not _context_fact_owned(fact,own,context,historical=True):return False
+    actor=re.sub(r'^(?:Dr\.?|Doctor)\s+','',frame['actor'],flags=re.I)
+    if not clinician_matches(context,actor):return False
+    # Every intervening unit must preserve a complete, source-owned treatment
+    # chain. Unknown statements invalidate the link rather than disappearing
+    # because a finite list of encounter verbs did not recognize them.
+    candidate=None
+    treatment=None
+    for unit in units:
+        if unit['start']>=own['start']:break
+        row=context['units'][unit['start']]
+        if row['section']!=context['units'][own['start']]['section']:
+            candidate=None;treatment=None;continue
+        antecedent=re.fullmatch(r'\s*On\s+\d{1,2}\s+[A-Za-z]+\s+\d{4}\s+(?:he|she|they|the\s+patient)\s+'
+            r'(?:saw|visited|consulted)\s+(?:Dr\.?|Doctor)\s+(?P<actor>[A-Za-z][A-Za-z -]{0,80}),\s+an?\s+'
+            r'(?:[A-Za-z-]+\s+){0,2}(?:clinician|physician|doctor)\s+at\s+an?\s+(?:unrelated|outside|external)\s+'
+            r'(?:[A-Za-z-]+\s+){0,2}practice,\s+for\s+(?P<reason>[^.!?]+)\.?',unit['quote'],re.I)
+        eligible=owned_current(context,unit,historical_support=True)
+        if antecedent:
+            candidate=antecedent if eligible and _literal_nominal_phrase(antecedent['reason']) else None
+            treatment=None
+        elif candidate:
+            treatment=_encounter_treatment_step(unit['quote'],candidate['actor'],treatment) if eligible else None
+            if treatment is None:candidate=None
+    return candidate is not None
+
+
+def _encounter_contrast_destination(d):
+    meaning=d['meaning']
+    return (d.get('answer_mode')=='narrative' and d['value_type']=='text'
+        and d['scope']['subject']=='patient' and d['scope']['temporality'] in ('past','any')
+        and d['scope']['polarity']=='any'
+        and (re.search(r'\b(?:distinguish\w*|distinction)\b[^.;]*\bfrom\s+(?:this|the\s+current)\b[^.;]*\b(?:clinician|group|practice)\b',meaning,re.I)
+            or re.search(r'\bnew\s+or\s+established\b',meaning,re.I) and re.search(r'\bdistinguish\w*\b',meaning,re.I))
+        and re.search(r'\b(?:outside|external|unrelated)\b',meaning,re.I)
+        and re.search(r'\b(?:encounter|visit|practice|group)\b',meaning,re.I)
+        and not re.search(r'\b(?:only|alone|omit\w*|not|without|exclud\w*|except|other\s+than|apart\s+from)\b',meaning,re.I))
+
+
+def _scoped_denial_inventory(notes,definitions):
+    from .generation import source_units
+    from .clinical_source_context import source_context,owned_current
+    units,_=source_units(notes,[])
+    context=source_context(notes,units,profile=_source_profile(SCOPED_DENIAL_SCOPE_CONTRACT))
+    rows=[]
+    for unit in units:
+        # Obligation detection is broader than rendering permission: an
+        # unparsed qualifier cannot disappear with a missing extraction fact.
+        denial=re.match(r'\s*(?:he|she|they|the\s+patient)\s+(?:denies?|reports?\s+no)\s+(?P<objects>.+)',unit['quote'],re.I)
+        if not denial:continue
+        if not owned_current(context,unit):continue
+        for key,d in definitions.items():
+            if _denial_destination(d,denial['objects'],complete=False):
+                frame=_scoped_denial_frame(unit['quote'])
+                start=unit['start']+(frame.start('predicate') if frame else 0)
+                end=unit['start']+len(unit['quote'].rstrip().removesuffix('.'))
+                if frame and not _denial_destination(d,frame['objects']):
+                    first=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',frame['objects'])[0]
+                    if _denial_destination(d,first):end=unit['start']+frame.start('objects')+len(first)
+                rows.append({'field_key':key,'kind':'reported_absence','source':{
+                    'start':start,'end':end,'quote':notes[start:end]},'polarities':['negated']})
+    return rows
+
+
 def _observation_components(text, scope_contract=None):
     # Every predicate and tail must be consumed. Prepositional attribution,
     # independent finite clauses and unknown qualifications cannot inherit
     # observation permission from the first present-tense predicate.
-    modern=scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT
+    modern=scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
     adjective_grammar=(r'(?:'+_LITERAL_ADJECTIVE+r'|[A-Za-z-]+ble|moist|damp|pale|pink|cool|firm|tender|nontender)'
         if modern else _LITERAL_ADJECTIVE)
     chunks=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+and\s+|\s+(?=without\b)',text.strip(),flags=re.I)
@@ -836,7 +1188,7 @@ def _medication_antecedent_selected(fact, picked, dependency, context):
 def _mixed_observation_destination(definition, *, include_restricted=False, scope_contract=None):
     meaning=definition['meaning']
     prospective=None
-    if (scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT
+    if (scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
             and re.match(r'\s*(?:the\s+)?(?:documented\s+|current\s+)?objective\s+(?:findings|observations)\b',meaning,re.I)):
         # An inverse wording can name the same complete observation topic.
         # Consume the whole instruction: an exclusion or narrow component may
@@ -1346,7 +1698,7 @@ def _context_literal_kind(text, section=None):
 
 def _source_profile(scope_contract):
     from .clinical_source_context import SOURCE_GOVERNANCE_PROFILE
-    return SOURCE_GOVERNANCE_PROFILE if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT else None
+    return SOURCE_GOVERNANCE_PROFILE if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS else None
 
 
 def _governance_literal(text):
@@ -1566,7 +1918,10 @@ def _source_governance_inventory(notes,definitions):
 
 def _complete_context_literal(fact, own, scope_contract=None):
     from .clinical_source_context import literal_segments
-    if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+    if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+        if _scoped_denial_literal(fact,own):return 'reported_absence'
+        if _encounter_contrast_literal(fact,own):return 'encounter_contrast'
+    if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
         kind=_governance_fact_literal(fact,own)
         if kind:return kind
     if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS:
@@ -1655,7 +2010,7 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
     for unit in units:
         if not owned_current(context,unit,historical_support=True): continue
         section=context['units'][unit['start']]['section']
-        modern=_governance_literal(unit['quote']) if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT else None
+        modern=_governance_literal(unit['quote']) if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS else None
         kind=(modern['kind'] if modern else None) or requirement_kind(unit['quote'],section) or _context_literal_kind(unit['quote'],section)
         if section in ('assessment','impression') and kind in ('uncertainty','diagnostic_limit','assessment_content'):
             add(assessment_keys,kind,unit,('uncertain',) if kind=='uncertainty' else ('negated',) if kind=='diagnostic_limit' else ('affirmed','negated','uncertain','mixed'))
@@ -1981,7 +2336,8 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     observation = scope_contract in MIXED_OBSERVATION_SCOPE_CONTRACTS and _complete_mixed_observation(fact, own, scope_contract)
     if observation and fact['polarity'] == 'negated':
         issues.append('The complete examination observation contains affirmative and negative components and cannot be wholly negated.')
-    if mixed and not observation:
+    contrast=scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT and _encounter_contrast_literal(fact,own)
+    if mixed and not observation and not contrast:
         # A complete documented assessment may assert a negative symptom state
         # and positive family history together. Preserve that single literal
         # assessment, not a synthesized join or a whole-value negative label.
@@ -2220,9 +2576,17 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
             visible[at] = ' '
     scoped = ''.join(visible)
     if scope_contract in CLINICAL_CONTEXT_SCOPE_CONTRACTS:
-        from .clinical_source_context import source_context, account_clauses, account_reference, _integrity_assertion
+        from .clinical_source_context import source_context, owned_current, account_clauses, account_reference, _integrity_assertion
         context = source_context(notes, units,profile=_source_profile(scope_contract))
-        if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+        if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+            # The scoped denial reader owns this complete integrity assertion.
+            # Retain the source and every unknown/foreign qualifier, while
+            # preventing legacy "above" + "not" from reversing its meaning.
+            for unit in units:
+                if owned_current(context,unit) and all(_denial_integrity(r) for r in readings(unit['quote'])):
+                    for at in range(unit['start'],unit['end']):
+                        if notes[at] not in '\r\n':visible[at]=' '
+        if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
             # The modern reader binds complete whole-account integrity clauses
             # even before the first patient header. Keep original evidence,
             # but prevent the legacy denial reader from reversing their not.
@@ -2313,7 +2677,7 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
                 for at in range(unit['start'],unit['end']):
                     if notes[at] not in '\r\n':offer_scope[at]=' '
     filtered = ''.join(offer_scope)
-    if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
         # An independently complete assertion boundary is not a scope link.
         # The old offer-only reader paired a denial in one sentence with an
         # unrelated pointer later on the same physical line. Positioned
@@ -2756,6 +3120,13 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             own=next(e for e in fact['evidence'] if _inside(fact['value_evidence'],[e]))
             fact['issues'].extend(issue for issue in context_source['units'][own['start']]['issues']
                 if issue=='A later source statement retracts, reassigns or retimes this clinical account.')
+        if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+            references=_denial_references(notes,units,context_source)
+            for fact in facts.values():
+                own=next(e for e in fact['evidence'] if _inside(fact['value_evidence'],[e]))
+                if (re.search(r'\b(?:he|she|they|the\s+patient)\s+(?:denies?|reports?\s+no)\b',own['quote'],re.I)
+                        and any(reference['start']>own['start'] for reference in references)):
+                    fact['issues'].append('A later source reference retracts or leaves unresolved the reported symptom denial account.')
     if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import parse_unit
         complete_context = (all(ownership['allowed'].get(unit['start'], False) for unit in units)
@@ -2777,7 +3148,15 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             if context_source is not None:
                 context_kind = _complete_context_literal(fact,own,scope_contract)
                 time_statement = time_kind(own['quote'],profile=_source_profile(scope_contract))
-                if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT and _governance_candidate(own['quote']):
+                if (scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT
+                        and re.search(r'\b(?:he|she|they|the\s+patient)\s+(?:denies?|reports?\s+no)\b',own['quote'],re.I)
+                        and context_kind!='reported_absence'):
+                    fact['issues'].append('The explicit denial must preserve its complete owned negative predicate and objects; nested, clipped or qualified assertions remain held.')
+                if (scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT
+                        and re.search(r'\b(?:This|That|It)\s+was\s+an?\s+(?:outside|external|unrelated)\b',own['quote'],re.I)
+                        and not _encounter_contrast_literal(fact,own)):
+                    fact['issues'].append('The encounter contrast must preserve its complete affirmative and negative components as patient-owned mixed historical evidence.')
+                if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS and _governance_candidate(own['quote']):
                     frame=_governance_literal(own['quote'])
                     overlaps=(not frame or any(value['start']<own['start']+end and value['end']>own['start']+start
                         for start,end in frame['values']))
@@ -2789,7 +3168,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                 if (scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS
                         and re.match(r'.+?\s+(?:is|are|remains?|remain)\s+(?:unchanged|stable)\b',own['quote'],re.I)
                         and not _stable_state_frame(own['quote'])
-                        and not (scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT and context_kind=='observation_comparison')):
+                        and not (scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS and context_kind=='observation_comparison')):
                     fact['issues'].append('The stability statement contains an unresolved complete-source qualification.')
                 if (scope_contract in MIXED_OBSERVATION_SCOPE_CONTRACTS and fact['kind']=='finding'
                         and context_source['units'][own['start']]['section'] in _OBSERVATION_SECTIONS
@@ -2798,14 +3177,14 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                     fact['issues'].append('The examination observation contains an unresolved predicate, attribution or qualification.')
                 if context_kind or time_statement or observation:
                     section = context_source['units'][own['start']]['section']
-                    literal_context = ((_governance_literal_owned(fact,own,context_source,units)
-                            if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT else _context_fact_owned(fact,own,context_source))
+                    literal_context = ((_encounter_contrast_owned(fact,own,context_source,units) if context_kind=='encounter_contrast' else _governance_literal_owned(fact,own,context_source,units)
+                            if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS else _context_fact_owned(fact,own,context_source))
                         and (fact['timing']['kind']==('future' if context_kind in ('conditional_plan','conditional_follow_up') else 'current')
                             or scope_contract in MIXED_OBSERVATION_SCOPE_CONTRACTS
                             and context_kind in ('documented_absence','lifetime_absence')
                             and fact['timing']['kind'] in ('past','unspecified')
-                            or scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT
-                            and (context_kind=='service_history_absence' and fact['timing']['kind']=='past'
+                            or scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
+                            and (context_kind in ('service_history_absence','encounter_contrast') and fact['timing']['kind']=='past'
                                 or time_statement in ('basis','exclusion','qualification') and fact['timing']['kind']=='unspecified')
                             or scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS
                             and context_kind=='social_absence' and fact['timing']['kind']=='unspecified')
@@ -2849,7 +3228,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                             and not complete_context)
                         or not _literal_negative_context(value, own, bound_names, scope_contract=scope_contract)):
                     fact['issues'].append('This additional negative phrase needs complete, unqualified clinical source binding.')
-            if fact['polarity'] == 'mixed' and not complete_context and not (observation and literal_context):
+            if fact['polarity'] == 'mixed' and not complete_context and not ((observation or scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT and context_kind=='encounter_contrast') and literal_context):
                 fact['issues'].append('A mixed assessment requires complete recognized source context; an omitted unfamiliar clause cannot resolve its components.')
         assessment_units = _competing_assessment_units(units)
         for fact in facts.values():
@@ -2929,7 +3308,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
         # of this clinical value relative to an erratum or a heading.
         context = governed_context(governance, notes, [fact['value_evidence']]) or []
         positioned = [e for e in context if 'start' in e]
-        if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT and context_source is not None:
+        if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS and context_source is not None:
             own=next(unit for unit in units if _inside(fact['value_evidence'],[unit]))
             if owned_current(context_source,own):
                 # The prospective source reader independently established a
@@ -3204,7 +3583,9 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
     stable_states = (_stable_state_inventory(notes,definitions)
         if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS else [])
     governed_support=(_source_governance_inventory(notes,definitions)
-        if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT else [])
+        if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS else [])
+    if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+        governed_support += _scoped_denial_inventory(notes,definitions)
     for field in fields:
         key = field['key']
         if key not in selected: continue
@@ -3240,7 +3621,12 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if f['id'] in superseded: reasons.append('This fact was explicitly corrected by later source documentation.')
             if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS:
                 own=next(e for e in f['evidence'] if _inside(f['value_evidence'],[e]))
-                if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+                if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+                    if _scoped_denial_literal(f,own) and not _denial_destination(d,_scoped_denial_objects(f,own)):
+                        reasons.append('The reported denial must fit the complete approved topic scope; its selected content includes an unrelated, excluded or unsupported component for this destination.')
+                    if _encounter_contrast_literal(f,own) and not _encounter_contrast_destination(d):
+                        reasons.append('An encounter identity contrast requires the requested complete narrative distinction, not a current-only or restricted field.')
+                if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
                     kind=_governance_fact_literal(f,own)
                     if (_complete_context_literal(f,own,scope_contract)=='medication_absence'
                             and d['scope']['temporality']=='current'
@@ -3291,7 +3677,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 and f['timing']['kind']=='unspecified' and d['scope']['temporality']=='current'
                 and _complete_context_literal(f,next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),scope_contract)=='social_absence'
                 and not f['issues'])
-            cessation_support=(scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT
+            cessation_support=(scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
                 and _historical_cessation_support(f,d,assignment_context,picked,notes,support_units))
             if d['scope']['temporality'] != 'any' and f['timing']['kind'] != d['scope']['temporality'] and not medication_support and not present_social and not cessation_support:
                 reasons.append('The fact timing does not match the approved field scope.')
@@ -4160,8 +4546,10 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         base['atomic_status_inventory'] = _atomic_status_inventory(notes, definitions)
     if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS:
         base['stable_state_inventory'] = _stable_state_inventory(notes, definitions)
-    if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
         base['source_governance_inventory'] = _source_governance_inventory(notes,definitions)
+    if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+        base['scoped_denial_inventory'] = _scoped_denial_inventory(notes,definitions)
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -4217,10 +4605,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += SUPPORT_CLOSURE_INSTRUCTIONS
         assign_instructions += SUPPORT_CLOSURE_INSTRUCTIONS
         check_instructions += SUPPORT_CLOSURE_INSTRUCTIONS
-    if scope_contract==SOURCE_GOVERNANCE_SCOPE_CONTRACT:
+    if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
         instructions += SOURCE_GOVERNANCE_INSTRUCTIONS
         assign_instructions += SOURCE_GOVERNANCE_INSTRUCTIONS
         check_instructions += SOURCE_GOVERNANCE_INSTRUCTIONS
+    if scope_contract==SCOPED_DENIAL_SCOPE_CONTRACT:
+        instructions += SCOPED_DENIAL_INSTRUCTIONS
+        assign_instructions += SCOPED_DENIAL_INSTRUCTIONS
+        check_instructions += SCOPED_DENIAL_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
