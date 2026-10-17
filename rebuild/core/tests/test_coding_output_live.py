@@ -80,8 +80,14 @@ class LiveOutputReferenceTests(ReferenceMixin,SimpleTestCase):
             selection_digest=service.selection_digest(self.run))
 
     def reviewed(self):
-        with patch.object(service,'assert_current'),patch.object(CodingDecision.objects,'filter',return_value=[self.base]):
+        with patch.object(service,'assert_current',return_value=self.run),patch.object(CodingDecision.objects,'filter',return_value=[self.base]):
             return output.reviewed(self.encounter,self.run)
+
+    def test_unavailable_supplemental_review_does_not_reconstruct_source_before_base_approval(self):
+        with patch.object(CodingDecision.objects,'filter') as decisions,patch.object(output,'reviewed') as proof:
+            decisions.return_value.exists.return_value=False
+            result=output.view(self.encounter,self.run,SimpleNamespace())
+        self.assertFalse(result['available']);proof.assert_not_called()
 
     def test_inadequate_provider_citations_remain_diagnostic_and_full_note_support_is_separate(self):
         assessment,review,_=self.reviewed()

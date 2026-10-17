@@ -235,7 +235,8 @@ def assert_current(run, encounter):
         raise ValidationError('Wait for a completed coding result before reviewing selections.')
     if run.config.get('mode') == 'retained_live':
         from .coding_recovery import source_for
-        source_for(run)
+        return source_for(run)
+    return run
 
 
 @transaction.atomic
@@ -300,7 +301,10 @@ def verify_display(encounter, user, token, run=None):
 
 @transaction.atomic
 def snapshot(encounter, user):
-    e = locked_encounter(encounter, user)
+    # A read-only panel must not hold the encounter row while it validates
+    # retained evidence. Mutations independently lock and rebind every token.
+    e = Encounter.objects.select_related('patient', 'department', 'template_version__template').get(pk=encounter.pk)
+    membership(user, e.department)
     inputs, context, releases, key = input_snapshot(e)
     run = CodingRun.objects.filter(encounter=e, input_digest=key).first()
     latest = run or CodingRun.objects.filter(encounter=e).order_by('-created_at', '-pk').first()

@@ -14,8 +14,11 @@ from .models import CodingRun, Encounter
 from .security import scoped
 
 
-def encounter_for(request, pk):
-    return get_object_or_404(scoped(Encounter, request.user).select_for_update(of=('self',)), pk=pk)
+def encounter_for(request, pk, *, lock=True):
+    rows = scoped(Encounter, request.user)
+    if lock:
+        rows = rows.select_for_update(of=('self',))
+    return get_object_or_404(rows, pk=pk)
 
 
 def unique(items):
@@ -77,7 +80,7 @@ def response(request, encounter, error='', status=200):
 @never_cache
 @transaction.atomic
 def status(request, pk):
-    return response(request, encounter_for(request, pk))
+    return response(request, encounter_for(request, pk, lock=False))
 
 
 @require_POST

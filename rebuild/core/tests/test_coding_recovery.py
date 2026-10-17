@@ -59,6 +59,21 @@ class RetainedPredictionProvenanceTests(live.LiveOutputReferenceTests):
             mocked = patch(target, return_value=value)
             mocked.start(); self.addCleanup(mocked.stop)
 
+    def test_each_output_review_proves_one_source_afresh_without_cross_request_cache(self):
+        base=SimpleNamespace(pk=uuid4(),input_digest=self.derived.input_digest,
+            selections=deepcopy(self.derived.selection),selection_digest=service.selection_digest(self.derived))
+        with patch.object(service,'eligible',return_value=True),\
+             patch.object(service,'input_snapshot',return_value=(None,None,None,self.derived.input_digest)),\
+             patch.object(coding_output.CodingDecision.objects,'filter',return_value=[base]),\
+             patch.object(recovery,'source_for',wraps=recovery.source_for) as proof:
+            first=coding_output.reviewed(self.encounter,self.derived)
+            second=coding_output.reviewed(self.encounter,self.derived)
+            self.assertEqual(proof.call_count,2)
+            self.assertEqual(first,second)
+            self.source.requests[0]['response_sha256']='0'*64
+            with self.assertRaises(ValidationError):coding_output.reviewed(self.encounter,self.derived)
+            self.assertEqual(proof.call_count,3)
+
     def test_original_receipt_identity_remains_only_on_source_run(self):
         original = deepcopy(self.source.requests)
         with patch('core.corti_prediction.execute', side_effect=AssertionError('No prediction allowed')) as send:
