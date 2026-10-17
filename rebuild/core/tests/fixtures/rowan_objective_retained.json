@@ -1,0 +1,1822 @@
+{
+  "provenance": {
+    "kind": "retained actual synthetic provider responses; no new inference",
+    "encounter_id": "7752b8fa-dbfb-4e03-a6c3-3af2a581feef",
+    "source_sha256": "462613fe7482464d9cfdd73e0cf7dea28b532f7416e1e428aaa4a49143ef0f08",
+    "provider_response_sha256": {
+      "extractor": "3bbb302e2fe90585a4caa1a304556b33b9784f2b733706fa0a7e80ab775c5b87",
+      "assigner": "123bdd509f1e3294371242069ae61e15a850a13c65b074fdf6151d4b5cc78f85",
+      "checker": "37cbfc86c68600eeac24d29a05b1bdc42345eb5ceb648256b2fa181b2efe5efd",
+      "repair_assigner": "4beb51274a499aa8fc07deb4802d28a394bb23fd5f8a8d7c3d81c631197c7b40",
+      "repair_checker": "f5b1fad9afc2390fca80bb478e04ef6c5af1e5a8628590bf1ae85ea73593b732"
+    }
+  },
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Rowan Blake\r\nAge: 52 years\r\nClinic record number: SYN-RB-1016\r\nDate of service: 16 October 2026\r\nVisit: In-person gastroenterology office visit. This is an established patient who was seen by this same gastroenterologist five months ago.\r\n\r\nS - Subjective\r\nSynthetic Rowan Blake reports intermittent epigastric pain after large meals for 10 days. Episodes last about 20 minutes and the pain is rated 4 out of 10. The patient also reports abdominal bloating for three weeks. The patient denies heartburn, constipation, diarrhea, difficulty swallowing, vomiting, hematemesis, black stools, rectal bleeding and unintentional weight loss. No daily medicines or supplements are reported.\r\n\r\nO - Objective\r\nBlood pressure 118/74 mmHg, pulse 72 beats per minute, temperature 36.7 degrees Celsius. The patient is alert and in no acute distress. The abdomen is soft with mild epigastric tenderness. There is no rebound tenderness or guarding. No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.\r\n\r\nA - Assessment\r\n1. Epigastric pain.\r\n2. Abdominal bloating.\r\nBoth epigastric pain and bloating were evaluated and discussed during this encounter.\r\nThe cause of these symptoms has not been established. GERD, gastritis, peptic ulcer disease and irritable bowel syndrome have not been diagnosed.\r\n\r\nP - Plan\r\nDiscussed smaller meals and keeping a food and symptom diary. Requested the previous gastroenterology records. No medication was prescribed today. Further testing will be considered after review of the prior records; no procedure has been ordered or performed today. Follow up in three weeks. The patient was advised to seek prompt assessment for severe or worsening pain, vomiting blood, black stools or fainting.\r\n\r\nTotal physician time on the date of service was 24 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation. This total excludes clinical staff time and time for separately reported services. Office E/M selection is based on total physician time.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Patient full name",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "Age in years",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "Clinic record number",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "Date of service",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "Visit setting and patient status",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "Subjective",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "Objective",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Assessment",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "Plan and follow up",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Current medicines",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "Allergies",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "Family history",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "Total physician time on date of service in minutes",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "E M selection basis",
+      "locator": {
+        "cell": 13
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The patient's full name only, exactly as documented and unambiguously stated in the clinical source. This destination requires the documented patient name; no registry, demographic fallback or signature may be used.",
+      "version": 3,
+      "value_type": "person_name",
+      "answer_mode": "atomic",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "patient_name_requirement": "documented"
+    },
+    "cell_1": {
+      "unit": "years",
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "The patient's age as a whole number of years, as documented in the clinical source.",
+      "version": 3,
+      "value_type": "integer",
+      "answer_mode": "atomic",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_2": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The single clinic record number or identifier for the patient, exactly as documented in the clinical source.",
+      "version": 3,
+      "value_type": "identifier",
+      "answer_mode": "atomic",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_3": {
+      "unit": null,
+      "scope": {
+        "subject": "encounter",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The calendar date of the service or consultation. Accept only a complete, unambiguous calendar date with an explicit year, preserving the documented spelling. No printed date format is specified.",
+      "version": 3,
+      "value_type": "date",
+      "answer_mode": "atomic",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_4": {
+      "unit": null,
+      "scope": {
+        "subject": "encounter",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "A concise narrative stating both the setting of the visit as documented and the patient's status for the visit as documented. Both parts are required; no printed choices are provided, so none are assumed.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_5": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The Subjective section of the SOAP note: the patient's reported symptoms, concerns, reason for visit and relevant history as documented in the clinical source, including reported negatives. Contains only what is documented.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_6": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "The Objective section of the SOAP note: examination findings, measurements and results documented as observed at this encounter, including documented normal or negative findings. No normal ranges are inferred.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_7": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "The clinician's assessment or impression: one or more documented findings or diagnoses, preserving any stated diagnostic uncertainty (such as suspected, probable or possible) and any explicitly excluded or ruled-out conditions. Only the relevant clinical answer, not unrelated note content.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_8": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The documented plan of care and follow-up: planned investigations, treatments, advice and referrals. Any follow-up timing is recorded as relative text as documented (for example a review interval), never as an invented calendar date.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_9": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "The medicines the patient is currently taking, as documented in the clinical source, including dose or frequency where documented. Past or discontinued medicines are not included unless documented as current.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_10": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The patient's documented allergies, including reactions where documented, or an explicitly documented statement that no allergies are known. Absence of documentation is not a negative statement.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_11": {
+      "unit": null,
+      "scope": {
+        "subject": "patient",
+        "polarity": "any",
+        "temporality": "any"
+      },
+      "choices": [],
+      "meaning": "The patient's documented family history: conditions documented in the patient's relatives, with the relationship where documented, or an explicitly documented statement of no relevant family history.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_12": {
+      "unit": "minutes",
+      "scope": {
+        "subject": "encounter",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "The total physician time spent on the date of service, as a whole number of minutes, as documented in the clinical source.",
+      "version": 3,
+      "value_type": "integer",
+      "answer_mode": "atomic",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "patient_name_requirement": "none"
+    },
+    "cell_13": {
+      "unit": null,
+      "scope": {
+        "subject": "encounter",
+        "polarity": "any",
+        "temporality": "current"
+      },
+      "choices": [],
+      "meaning": "A concise statement of the documented basis for the evaluation and management (E/M) level selection, such as the medical decision making or total time documented. Only the documented basis is stated; no level is inferred.",
+      "version": 3,
+      "value_type": "text",
+      "answer_mode": "narrative",
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "patient_name_requirement": "none"
+    }
+  },
+  "extractor": {
+    "reference_contract": "exact-source-reference-inventory-v2",
+    "facts": [
+      {
+        "id": "f1",
+        "kind": "identity",
+        "concept": "patient full name",
+        "subject": {
+          "kind": "patient",
+          "name_span": {
+            "quote": "Synthetic Rowan Blake",
+            "source_unit_id": 2,
+            "occurrence": 1
+          }
+        },
+        "value_span": {
+          "quote": "Synthetic Rowan Blake",
+          "source_unit_id": 2,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "unspecified",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f2",
+        "kind": "identity",
+        "concept": "patient age",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "52",
+          "source_unit_id": 3,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": "years",
+        "unit_span": {
+          "quote": "years",
+          "source_unit_id": 3,
+          "occurrence": 1
+        },
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f3",
+        "kind": "identity",
+        "concept": "clinic record number",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "SYN-RB-1016",
+          "source_unit_id": 4,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "unspecified",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f4",
+        "kind": "other",
+        "concept": "date of service",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "16 October 2026",
+          "source_unit_id": 5,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f5",
+        "kind": "other",
+        "concept": "visit setting",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "In-person gastroenterology office visit",
+          "source_unit_id": 6,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f6",
+        "kind": "other",
+        "concept": "patient status for visit",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "established patient",
+          "source_unit_id": 7,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f7",
+        "kind": "history",
+        "concept": "previous visit with same gastroenterologist",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "seen by this same gastroenterologist five months ago",
+          "source_unit_id": 7,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "past",
+          "span": {
+            "quote": "five months ago",
+            "source_unit_id": 7,
+            "occurrence": 1
+          }
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f8",
+        "kind": "reason",
+        "concept": "epigastric pain after large meals",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "intermittent epigastric pain after large meals for 10 days",
+          "source_unit_id": 9,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f9",
+        "kind": "history",
+        "concept": "epigastric pain duration",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "10 days",
+          "source_unit_id": 9,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f10",
+        "kind": "history",
+        "concept": "epigastric pain episode duration",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Episodes last about 20 minutes",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f11",
+        "kind": "history",
+        "concept": "epigastric pain severity narrative",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "the pain is rated 4 out of 10",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f12",
+        "kind": "measurement",
+        "concept": "epigastric pain severity score",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "4",
+          "source_unit_id": 10,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": {
+          "minimum": null,
+          "maximum": "10",
+          "span": {
+            "quote": "out of 10",
+            "source_unit_id": 10,
+            "occurrence": 1
+          }
+        },
+        "supersedes": []
+      },
+      {
+        "id": "f13",
+        "kind": "history",
+        "concept": "abdominal bloating",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "abdominal bloating for three weeks",
+          "source_unit_id": 11,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f14",
+        "kind": "history",
+        "concept": "denied gastrointestinal symptoms",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "denies heartburn, constipation, diarrhea, difficulty swallowing, vomiting, hematemesis, black stools, rectal bleeding and unintentional weight loss",
+          "source_unit_id": 12,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f15",
+        "kind": "history",
+        "concept": "daily medicines or supplements",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "No daily medicines or supplements are reported",
+          "source_unit_id": 13,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f16",
+        "kind": "finding",
+        "concept": "blood pressure",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Blood pressure 118/74 mmHg",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f17",
+        "kind": "finding",
+        "concept": "pulse",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "pulse 72 beats per minute",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f18",
+        "kind": "finding",
+        "concept": "body temperature",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "temperature 36.7 degrees Celsius",
+          "source_unit_id": 15,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f19",
+        "kind": "finding",
+        "concept": "general appearance alertness",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "alert",
+          "source_unit_id": 16,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f20",
+        "kind": "finding",
+        "concept": "acute distress",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "in no acute distress",
+          "source_unit_id": 16,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f21",
+        "kind": "finding",
+        "concept": "abdominal examination",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "The abdomen is soft with mild epigastric tenderness",
+          "source_unit_id": 17,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f22",
+        "kind": "finding",
+        "concept": "rebound tenderness or guarding",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "There is no rebound tenderness or guarding",
+          "source_unit_id": 18,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f23",
+        "kind": "finding",
+        "concept": "testing or procedures performed at encounter",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter",
+          "source_unit_id": 19,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f24",
+        "kind": "assessment",
+        "concept": "epigastric pain assessment",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Epigastric pain",
+          "source_unit_id": 22,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f25",
+        "kind": "assessment",
+        "concept": "abdominal bloating assessment",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Abdominal bloating",
+          "source_unit_id": 24,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f26",
+        "kind": "assessment",
+        "concept": "symptoms evaluated and discussed",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Both epigastric pain and bloating were evaluated and discussed during this encounter",
+          "source_unit_id": 25,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f27",
+        "kind": "assessment",
+        "concept": "cause of symptoms not established",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "The cause of these symptoms has not been established",
+          "source_unit_id": 26,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f28",
+        "kind": "assessment",
+        "concept": "conditions not diagnosed",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "GERD, gastritis, peptic ulcer disease and irritable bowel syndrome have not been diagnosed",
+          "source_unit_id": 27,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f29",
+        "kind": "plan",
+        "concept": "dietary advice and symptom diary",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Discussed smaller meals and keeping a food and symptom diary",
+          "source_unit_id": 29,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f30",
+        "kind": "plan",
+        "concept": "request for previous records",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Requested the previous gastroenterology records",
+          "source_unit_id": 30,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f31",
+        "kind": "plan",
+        "concept": "medication prescribed",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "No medication was prescribed today",
+          "source_unit_id": 31,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f32",
+        "kind": "plan",
+        "concept": "further testing consideration",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Further testing will be considered after review of the prior records",
+          "source_unit_id": 32,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "future",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f33",
+        "kind": "plan",
+        "concept": "procedure ordered or performed",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "no procedure has been ordered or performed today",
+          "source_unit_id": 32,
+          "occurrence": 1
+        },
+        "polarity": "negated",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f34",
+        "kind": "follow_up",
+        "concept": "follow up interval",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Follow up in three weeks",
+          "source_unit_id": 33,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "future",
+          "span": {
+            "quote": "in three weeks",
+            "source_unit_id": 33,
+            "occurrence": 1
+          }
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f35",
+        "kind": "plan",
+        "concept": "safety-net advice",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "The patient was advised to seek prompt assessment for severe or worsening pain, vomiting blood, black stools or fainting",
+          "source_unit_id": 34,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f36",
+        "kind": "measurement",
+        "concept": "total physician time on date of service",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "24",
+          "source_unit_id": 35,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": "minutes",
+        "unit_span": {
+          "quote": "minutes",
+          "source_unit_id": 35,
+          "occurrence": 1
+        },
+        "scale": null,
+        "supersedes": []
+      },
+      {
+        "id": "f37",
+        "kind": "other",
+        "concept": "E/M selection basis",
+        "subject": {
+          "kind": "patient",
+          "name_span": null
+        },
+        "value_span": {
+          "quote": "Office E/M selection is based on total physician time",
+          "source_unit_id": 37,
+          "occurrence": 1
+        },
+        "polarity": "affirmed",
+        "timing": {
+          "kind": "current",
+          "span": null
+        },
+        "unit": null,
+        "unit_span": null,
+        "scale": null,
+        "supersedes": []
+      }
+    ]
+  },
+  "assigner": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "fact_ids": [
+          "f1"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_1",
+        "fact_ids": [
+          "f2"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_2",
+        "fact_ids": [
+          "f3"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_3",
+        "fact_ids": [
+          "f4"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_4",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_5",
+        "fact_ids": [
+          "f8",
+          "f10",
+          "f11",
+          "f13",
+          "f14",
+          "f15"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_6",
+        "fact_ids": [
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f21",
+          "f23"
+        ],
+        "status": "ambiguous",
+        "separator": "; "
+      },
+      {
+        "key": "cell_7",
+        "fact_ids": [
+          "f24",
+          "f25",
+          "f26",
+          "f27",
+          "f28"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_8",
+        "fact_ids": [
+          "f29",
+          "f30",
+          "f31",
+          "f32",
+          "f33",
+          "f34",
+          "f35"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_9",
+        "fact_ids": [
+          "f15"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_10",
+        "fact_ids": [],
+        "status": "missing",
+        "separator": ""
+      },
+      {
+        "key": "cell_11",
+        "fact_ids": [],
+        "status": "missing",
+        "separator": ""
+      },
+      {
+        "key": "cell_12",
+        "fact_ids": [
+          "f36"
+        ],
+        "status": "supported",
+        "separator": ""
+      },
+      {
+        "key": "cell_13",
+        "fact_ids": [
+          "f37"
+        ],
+        "status": "supported",
+        "separator": ""
+      }
+    ]
+  },
+  "checker": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "verdict": "pass",
+        "fact_ids": [
+          "f1"
+        ],
+        "reason": "Complete name with the synthetic prefix is documented and selected."
+      },
+      {
+        "key": "cell_1",
+        "verdict": "pass",
+        "fact_ids": [
+          "f2"
+        ],
+        "reason": "Age 52 years is documented."
+      },
+      {
+        "key": "cell_2",
+        "verdict": "pass",
+        "fact_ids": [
+          "f3"
+        ],
+        "reason": "Record number SYN-RB-1016 matches the source."
+      },
+      {
+        "key": "cell_3",
+        "verdict": "pass",
+        "fact_ids": [
+          "f4"
+        ],
+        "reason": "Date of service 16 October 2026 is documented with an explicit year."
+      },
+      {
+        "key": "cell_4",
+        "verdict": "pass",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "reason": "The setting (in-person gastroenterology office visit) and patient status (established patient) are both documented and selected."
+      },
+      {
+        "key": "cell_5",
+        "verdict": "omission",
+        "fact_ids": [
+          "f8",
+          "f10",
+          "f11",
+          "f13",
+          "f14",
+          "f15",
+          "f9",
+          "f12"
+        ],
+        "reason": "The Subjective answer is mostly correct, with negatives retained. However, it drops the established-patient and prior-visit history (f7), which is relevant history, and the visit-level context. It is also not clearly marked as a clinical narrative with the patient name. The most defensible gap is the omission of f7, the earlier visit five months ago, which counts as relevant history. This is a minor but real omission."
+      },
+      {
+        "key": "cell_6",
+        "verdict": "omission",
+        "fact_ids": [
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20",
+          "f21",
+          "f22",
+          "f23"
+        ],
+        "reason": "The answer is held as ambiguous. It omits the documented negatives 'in no acute distress' (f20) and 'no rebound tenderness or guarding' (f22). Those facts carry extraction issues and need review, but the selected objective answer is incomplete without them. The 'Alert' wording is also clipped."
+      },
+      {
+        "key": "cell_7",
+        "verdict": "pass",
+        "fact_ids": [
+          "f24",
+          "f25",
+          "f26",
+          "f27",
+          "f28"
+        ],
+        "reason": "Both impressions, the evaluation statement, the cause not established and the conditions not diagnosed are all retained with negation in the displayed text."
+      },
+      {
+        "key": "cell_8",
+        "verdict": "pass",
+        "fact_ids": [
+          "f29",
+          "f30",
+          "f31",
+          "f32",
+          "f33",
+          "f34",
+          "f35"
+        ],
+        "reason": "All plan actions, negatives, the follow-up interval and the safety-net advice are retained."
+      },
+      {
+        "key": "cell_9",
+        "verdict": "incorrect",
+        "fact_ids": [
+          "f15"
+        ],
+        "reason": "The source says no daily medicines or supplements are reported. This is a statement of none reported, not a list of current medicines. It is borderline, but the text is source-backed and keeps the negation. It may not be an affirmative current medication answer, so it needs review."
+      },
+      {
+        "key": "cell_10",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "No allergy information is documented."
+      },
+      {
+        "key": "cell_11",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "No family history is documented."
+      },
+      {
+        "key": "cell_12",
+        "verdict": "pass",
+        "fact_ids": [
+          "f36"
+        ],
+        "reason": "Total physician time of 24 minutes is explicitly documented."
+      },
+      {
+        "key": "cell_13",
+        "verdict": "pass",
+        "fact_ids": [
+          "f37"
+        ],
+        "reason": "The basis is total physician time, as documented."
+      }
+    ],
+    "fact_findings": [
+      {
+        "fact_id": "f20",
+        "verdict": "ambiguous",
+        "reason": "The negative phrase 'in no acute distress' carries an unresolved local scope hold, so it needs independent source binding."
+      },
+      {
+        "fact_id": "f22",
+        "verdict": "ambiguous",
+        "reason": "The source clearly states 'There is no rebound tenderness or guarding', but the extraction flagged the negation as not explicitly grounded, so it stays held for review."
+      }
+    ]
+  },
+  "repair_assigner": {
+    "fields": [
+      {
+        "key": "cell_5",
+        "fact_ids": [
+          "f8",
+          "f10",
+          "f11",
+          "f13",
+          "f14",
+          "f15",
+          "f7"
+        ],
+        "status": "supported",
+        "separator": "; "
+      },
+      {
+        "key": "cell_6",
+        "fact_ids": [
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20",
+          "f21",
+          "f22",
+          "f23"
+        ],
+        "status": "ambiguous",
+        "separator": "; "
+      },
+      {
+        "key": "cell_9",
+        "fact_ids": [
+          "f15"
+        ],
+        "status": "supported",
+        "separator": ""
+      }
+    ]
+  },
+  "repair_checker": {
+    "fields": [
+      {
+        "key": "cell_0",
+        "verdict": "pass",
+        "fact_ids": [
+          "f1"
+        ],
+        "reason": "The complete documented name, including the 'Synthetic' prefix, is selected."
+      },
+      {
+        "key": "cell_1",
+        "verdict": "pass",
+        "fact_ids": [
+          "f2"
+        ],
+        "reason": "Age 52 years is documented."
+      },
+      {
+        "key": "cell_2",
+        "verdict": "pass",
+        "fact_ids": [
+          "f3"
+        ],
+        "reason": "Record number SYN-RB-1016 matches the source."
+      },
+      {
+        "key": "cell_3",
+        "verdict": "pass",
+        "fact_ids": [
+          "f4"
+        ],
+        "reason": "The date '16 October 2026' is documented with an explicit year."
+      },
+      {
+        "key": "cell_4",
+        "verdict": "pass",
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "reason": "The in-person gastroenterology office setting and the established-patient status are both documented and selected."
+      },
+      {
+        "key": "cell_5",
+        "verdict": "pass",
+        "fact_ids": [
+          "f8",
+          "f10",
+          "f11",
+          "f13",
+          "f14",
+          "f15",
+          "f7"
+        ],
+        "reason": "The answer keeps the epigastric pain with its post-meal trigger, 10-day duration, 20-minute episodes and 4/10 severity. It also keeps the bloating for three weeks, the full list of denied symptoms, the absence of daily medicines or supplements, and the prior visit five months ago. The prior omission finding was wrong because f7 is already selected."
+      },
+      {
+        "key": "cell_6",
+        "verdict": "ambiguous",
+        "fact_ids": [
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20",
+          "f21",
+          "f22",
+          "f23"
+        ],
+        "reason": "The candidate text matches the source, but the field is held with status conflict. f20 and f22 carry unresolved extraction issues about negation binding and local scope. A deterministic hold cannot be erased by a pass, so the field stays held for review."
+      },
+      {
+        "key": "cell_7",
+        "verdict": "pass",
+        "fact_ids": [
+          "f24",
+          "f25",
+          "f26",
+          "f27",
+          "f28"
+        ],
+        "reason": "Both impressions, the evaluated-and-discussed statement, the cause not established and the conditions not diagnosed are all retained with negation in the displayed text."
+      },
+      {
+        "key": "cell_8",
+        "verdict": "pass",
+        "fact_ids": [
+          "f29",
+          "f30",
+          "f31",
+          "f32",
+          "f33",
+          "f34",
+          "f35"
+        ],
+        "reason": "All plan actions, the negatives, the three-week follow-up and the safety-net advice are retained."
+      },
+      {
+        "key": "cell_9",
+        "verdict": "pass",
+        "fact_ids": [
+          "f15"
+        ],
+        "reason": "The source explicitly states that no daily medicines or supplements are reported. The answer reproduces this with its negation and does not invent any medicine."
+      },
+      {
+        "key": "cell_10",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "No allergy information is documented."
+      },
+      {
+        "key": "cell_11",
+        "verdict": "missing",
+        "fact_ids": [],
+        "reason": "No family history is documented."
+      },
+      {
+        "key": "cell_12",
+        "verdict": "pass",
+        "fact_ids": [
+          "f36"
+        ],
+        "reason": "Total physician time of 24 minutes is explicitly documented."
+      },
+      {
+        "key": "cell_13",
+        "verdict": "pass",
+        "fact_ids": [
+          "f37"
+        ],
+        "reason": "The documented basis is total physician time."
+      }
+    ],
+    "fact_findings": [
+      {
+        "fact_id": "f20",
+        "verdict": "ambiguous",
+        "reason": "The source says 'in no acute distress', but the extraction carries unresolved scope and negation-binding issues, so the fact stays held."
+      },
+      {
+        "fact_id": "f22",
+        "verdict": "ambiguous",
+        "reason": "The source says 'There is no rebound tenderness or guarding', but the extraction flagged the negation as not explicitly grounded, so the fact stays held."
+      }
+    ]
+  }
+}
