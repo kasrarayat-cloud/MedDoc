@@ -6,8 +6,9 @@ The new entrypoint is `python -B -m ops.activate_rowan_response`; without
 `--execute` it reads no operational inputs and performs no action.
 
 The exact installed base is `057d65db7ddb97289e01e85da42cb48eb475c76f`. The
-prospective source delta is limited to coding views/output, `coding.js`, focused
-coding tests and this operator's files. No migration, settings, provider, billing,
+prospective source delta is limited to coding views/service/output, `coding.js`,
+focused coding tests, the poll/save browser check and this operator's files.
+No migration, settings, provider, billing,
 credential, service or unrelated runtime file is admitted. Configuration changes
 only the release line; every other environment byte remains fixed.
 

@@ -20,10 +20,11 @@ from .activate_rowan_followup import snapshot
 BASE = '057d65db7ddb97289e01e85da42cb48eb475c76f'
 SOURCE = Path(__file__).resolve().parents[2]
 FORMAT = 'quillmd-rowan-review-response-native-install-v1'
-RUNTIME = frozenset({'rebuild/core/coding_views.py', 'rebuild/core/coding_output.py',
+RUNTIME = frozenset({'rebuild/core/coding_views.py', 'rebuild/core/coding_service.py', 'rebuild/core/coding_output.py',
                      'rebuild/static/coding.js'})
 SUPPORT = frozenset({'rebuild/ops/activate_rowan_response.py',
-    'rebuild/ops/test_activate_rowan_response.py', 'docs/runbooks/rowan-response-install-20261017.md'})
+    'rebuild/ops/test_activate_rowan_response.py', 'rebuild/ops/test_coding_poll_save.cjs',
+    'docs/runbooks/rowan-response-install-20261017.md'})
 require, Refusal = prior.require, prior.Refusal
 
 

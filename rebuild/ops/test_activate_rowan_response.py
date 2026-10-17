@@ -39,6 +39,9 @@ class ResponseInstallTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); root.chmod(0o700)
             plan = self.plan(root); op.validate_plan(plan)
+            plan['source_sha256'].update({'rebuild/core/coding_service.py': 'd' * 64,
+                                         'rebuild/ops/test_coding_poll_save.cjs': 'e' * 64})
+            op.validate_plan(plan)
             for name in ('rebuild/core/migrations/0032_extra.py', 'rebuild/quillmd/settings.py',
                          'rebuild/core/jobs.py', 'rebuild/core/billing.py', 'rebuild/.env',
                          '/rebuild/core/coding_views.py', 'rebuild/core/../coding_views.py'):
