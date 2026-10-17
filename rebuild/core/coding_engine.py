@@ -481,9 +481,113 @@ def code_variants(reference, entry):
 TAXONOMY_HEADS = {'disease','diseased','history','syndrome','condition','conditions','status',
                   'absence','screening','encounter','examination','abnormal','abnormality'}
 ROUTE_WORDS = {'with','without','of','and','or','in','the','a','an','at','due','to','by','from'}
+SOURCE_CONTRACT = 'source-bound-clinical-coding-v2'
 
 
-def index_route_errors(entry, concept, entries, aliases=(), *, code_description=''):
+def index_head_terms(head, description=''):
+    """Literal vocabulary from the bound Index, corroborated by its Tabular.
+
+    A comma title is not generally an OR operator. Only a complete lexical
+    alternative also present in this code's official description is exposed.
+    This does not invent synonyms or discard qualified/relational branches.
+    """
+    term = re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)
+    result = [term] if term else []
+    if ',' in term:
+        parts = [part.strip() for part in term.split(',')]
+        first = parts[0]
+        # Lexical variants such as a noun and its adjectival inflection may
+        # share a title. A qualifier list ("condition, due to ...") is not
+        # that shape and cannot lose its second half through this route.
+        variants = (all(re.fullmatch(r'[A-Za-z]+', part) for part in parts)
+                    and all(part.casefold().startswith(first[:4].casefold()) for part in parts[1:])
+                    and len(first) >= 4)
+        if (variants and re.search(r'(?<!\w)' + re.escape(norm(first)) + r'(?!\w)', norm(description))):
+            result.append(first)
+    return list(dict.fromkeys(result))
+
+
+def tabular_specific_route(chain, source, description):
+    """The exact specific Tabular phrase may imply lexical Index parents.
+
+    Its terminal qualifier and main condition must both occur in the official
+    description and in one connected source phrase. Only words belonging to
+    intervening Index parents may intervene; unrelated findings cannot join.
+    Relational, history, taxonomy and comma branches retain their own checks.
+    """
+    if len(chain) < 2 or not description or ',' in description:
+        return False
+    leaf, head = chain[0], chain[-1]
+    words = norm(description).split()
+    head_words = set(norm(re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)).split())
+    leaf_words = set(norm(leaf.get('term', '')).split())
+    parts = [norm(node.get('term', '')).split() for node in chain[:-1]]
+    if (not head_words or not leaf_words or not head_words <= set(words) or not leaf_words <= set(words)
+            or any(',' in node.get('term', '') for node in chain)
+            or any(set(part) & (ROUTE_WORDS | TAXONOMY_HEADS | {'history', 'family', 'personal'}) for part in parts)
+            or set(words) & {'unspecified', 'other', 'without', 'with', 'history'}):
+        return False
+    intervening = set(word for part in parts[1:] for word in part) - set(words)
+    between = (r'(?:\s+(?:' + '|'.join(re.escape(w) for w in sorted(intervening)) + r'))*\s+'
+               if intervening else r'\s+')
+    pattern = r'(?<!\w)' + between.join(re.escape(word) for word in words) + r'(?!\w)'
+    return any(affirmative_word(source, match.group()) for match in re.finditer(pattern, norm(source)))
+
+
+def _condition_assertion_qualifiers(before, after):
+    """Read modifiers of the condition assertion, not an unrelated noun/date.
+
+    The prospective source contract cannot replace assertion modality with a
+    provider's fixed ``confirmed/current`` labels. Dates on a medication or a
+    symptom's ongoing duration are not dates of a prior clinical assertion.
+    """
+    state = r'(?:(?:is|was|are|were|has|have|had|been|being|remains?|only|still)\s+)*'
+    uncertain = bool(re.search(r'\b(?:possibility|possibilities|suspicion)\s+of\s*$', before)
+        or re.match(r'\s*' + state + r'(?:(?:a|an|the)\s+)?'
+            r'(?:possibility|possibilities|potential (?:diagnosis|symptom|condition)|under consideration)\b', after)
+        or re.match(r'\s*' + state + r'not\s+(?:(?:an?|the|currently|yet|established|confirmed)\s+)*'
+            r'(?:established|confirmed|diagnosed|symptom|diagnosis|condition)\b', after))
+    past_time = r'(?:yesterday|last\s+(?:week|month|year)|(?:\d+|[a-z]+)\s+(?:days?|weeks?|months?|years?)\s+ago|in\s+(?:19|20)\d\d|at\s+(?:the\s+)?(?:previous|prior|earlier)\s+(?:visit|encounter))'
+    predicate = r'(?:(?:is|was|are|were|had|been|previously|last|evaluated|assessed|reported|documented|diagnosed|treated|present|noted|seen|for|at|on)\s+)*'
+    historical = bool(re.search(r'\b(?:history of|previously (?:had|reported|experienced)|past (?:episode|diagnosis) of)\s*$', before)
+        or re.search(r'\b(?:previously|formerly)\s+(?:(?:had|reported|experienced|was|evaluated|assessed|treated|seen|diagnosed|documented|for|with)\s+)*$', before)
+        or re.match(r'\s*' + predicate + past_time + r'\b', after)
+        or re.match(r'\s*' + past_time + r'\b', before) and not re.search(r'\b(?:today|now|currently|current)\b', before))
+    return uncertain, historical
+
+
+def current_source_scope_errors(notes, concept):
+    """Bind new current-condition routes to source-owned, actual assertions."""
+    from .clinical_source_context import source_context, owned_current
+    from .generation import source_units
+    units, _ = source_units(notes, [])
+    context = source_context(notes, units)
+    if context['issues']:
+        return list(context['issues'])
+    quote = concept['evidence']
+    occurrences = list(re.finditer(re.escape(quote), notes))
+    for occurrence in occurrences:
+        covered = [unit for unit in units if unit['start'] < occurrence.end() and occurrence.start() < unit['end']]
+        if not covered or any(not owned_current(context, unit) for unit in covered):
+            return ['The current-condition evidence has foreign, historical or unresolved source scope.']
+    if concept['kind'] in ('diagnosis', 'symptom'):
+        for _clause, before, after in condition_mentions(quote, concept):
+            uncertain, historical = _condition_assertion_qualifiers(before, after)
+            if uncertain or historical:
+                return ['The selected condition is qualified as uncertain or historical in its source assertion.']
+        for unit in units:
+            if not owned_current(context, unit):
+                continue
+            for clause, before, after in condition_mentions(unit['quote'], concept):
+                if FAMILY.search(clause) or explicit_other_subject(before):
+                    continue
+                uncertain, historical = _condition_assertion_qualifiers(before, after)
+                if uncertain and not historical:
+                    return ['The complete current source questions whether the selected condition is established.']
+    return [] if occurrences else ['The selected assertion is absent from the complete source.']
+
+
+def index_route_errors(entry, concept, entries, aliases=(), *, code_description='', source_contract=None):
     """A qualified Index branch adds source obligations to its parent's default."""
     chain=[]; node=entry
     while node:
@@ -497,6 +601,8 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
         if not any(affirmative_word(source,w) for w in words) and not any(
                 norm(m).strip() and norm(m) in norm(source) for m in modifiers):
             errors.append('The Index main term is not established in the source assertion.')
+    specific_phrase = (source_contract == SOURCE_CONTRACT
+                       and tabular_specific_route(chain, source, code_description))
     for node in chain[:-1]:
         term=node.get('term',node.get('title',''))
         normalized=norm(term)
@@ -542,18 +648,24 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
             alternatives=[[w for w in part.split() if w not in ROUTE_WORDS] for part in normalized.split(' and ')]
             if not any(supported(words) for words in alternatives):
                 errors.append('The Index title requires a documented alternative: '+term+'.')
-        elif required and not supported(required):
+        elif required and not supported(required) and not specific_phrase:
             errors.append('The qualified Index branch requires affirmative source wording: '+term+'.')
     return errors
 
 
-def index_subtypes(reference, concept):
+def index_subtypes(reference, concept, *, source_contract=None):
     """Dated child routes for a lexical main-term concept, not taxonomy guesses."""
     lookup = index_lookup(reference)
     lexical_heads = anchors({**concept, 'index_terms':concept.get('index_terms', [])})
-    heads = {entry['id'] for entry in lookup.values() if not entry.get('parent_id')
-             and norm(entry.get('term', '')) in lexical_heads
-             and norm(entry.get('term', '')) not in TAXONOMY_HEADS}
+    heads = {}
+    for entry in lookup.values():
+        if entry.get('parent_id'):
+            continue
+        terms = (index_head_terms(entry, reference.tabular['codes'].get(entry.get('code'), ''))
+                 if source_contract == SOURCE_CONTRACT else [entry.get('term', '')])
+        matched = next((term for term in terms if norm(term) in lexical_heads and norm(term) not in TAXONOMY_HEADS), None)
+        if matched:
+            heads[entry['id']] = matched
     if not heads:
         return []
     result = []
@@ -567,7 +679,7 @@ def index_subtypes(reference, concept):
             # Only lexical subtype modifiers. Relational/negative Index routes
             # keep their existing checks, and are not assertion-scope exceptions.
             if qualifier and not set(qualifier.split()) & (ROUTE_WORDS | TAXONOMY_HEADS):
-                result.append({'entry':entry, 'head_id':node['id'], 'head_term':node['term'], 'qualifier':qualifier})
+                result.append({'entry':entry, 'head_id':node['id'], 'head_term':heads[node['id']], 'qualifier':qualifier})
     return result
 
 
@@ -1035,6 +1147,7 @@ def validate_selection(run,selections):
     ids=selections['selected_ids'];overrides=selections['overrides']
     if type(ids) is not list or any(type(value) is not str for value in ids) or len(ids)!=len(set(ids)) or type(overrides) is not dict:
         raise ValidationError('Invalid or repeated coding selection.')
+    source_contract = getattr(run, 'config', {}).get('clinical_source_contract')
     rows={r['id']:r for r in run.result.get('suggestions',[])}
     if any(key not in rows for key in ids) or any(key not in ids for key in overrides):
         raise ValidationError('Selections must refer to currently displayed recommendations.')
@@ -1060,12 +1173,16 @@ def validate_selection(run,selections):
             from .coding_cpt import validate_cpt_selection
             checked=validate_cpt_selection(run,code,row['evidence'])
         else:
+            if (source_contract == SOURCE_CONTRACT
+                    and current_source_scope_errors(run.inputs['notes'], row['concept'])):
+                raise ValidationError('The selected condition is not established in this patient’s current source encounter.')
             lookup=index_lookup(reference)
             candidate=next((c for c in run.result.get('candidates',{}).get(key,[])
                             if c['code']==code and c['system']=='ICD-10-CM'),None)
             entry=lookup.get(candidate['entry_id']) if candidate else None
             if not entry or index_route_errors(entry,row['concept'],lookup,candidate.get('source_aliases',()),
-                    code_description=reference.tabular['codes'].get(code, '')):
+                    code_description=reference.tabular['codes'].get(code, ''),
+                    source_contract=source_contract):
                 raise ValidationError('The selected Index route requires unsupported source qualifiers.')
             checked=contextual_validation(run,reference,code,row['concept'],
                 [overrides.get(k,{}).get('code',rows[k]['code']) for k in ids if rows[k]['system']=='ICD-10-CM'])
@@ -1073,7 +1190,7 @@ def validate_selection(run,selections):
             if not catalog or catalog.description!=checked.get('description'):
                 raise ValidationError('The authoritative code description no longer matches its bound release.')
         errors=specificity_errors(row['concept'],code,checked.get('description',row['description']))
-        subtypes=index_subtypes(reference,row['concept']) if key!='office_em' else []
+        subtypes=index_subtypes(reference,row['concept'], source_contract=source_contract) if key!='office_em' else []
         state,_=source_disposition(assertion_concept(row['concept'],subtypes),run.inputs['notes'], qualifiers=[
             item['qualifier'] for item in subtypes]) if key!='office_em' else ('eligible','')
         if state!='eligible' or not checked['valid'] or checked.get('requires_review') or checked.get('errors') or errors:

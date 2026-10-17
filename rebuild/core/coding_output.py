@@ -102,13 +102,14 @@ def _live_assessment(encounter, run, source_run):
     except (ValueError, KeyError, TypeError) as exc:
         raise ValidationError('The retained selected-code collection is unavailable.') from exc
     need(type(selected) is list, 'The retained selected-code collection is malformed.')
-    support = office_time_facts(encounter.notes)
+    support = office_time_facts(encounter.notes, contract=run.config.get('clinical_source_contract'))
     need(support['status'] == 'documented', '; '.join(support['blockers']) or 'Office time support is unresolved.')
     facts = [{**fact, 'label': FACT_LABELS[fact['key']]} for fact in support['facts']]
     values = {fact['key']:fact['value'] for fact in facts}
     if prospective:
         errors = (confirmed_time_context(run.context, encounter.notes, facts)
-                  + office_service_eligibility(encounter.notes, encounter.service_date))
+                  + office_service_eligibility(encounter.notes, encounter.service_date,
+                        contract=run.config.get('clinical_source_contract')))
         need(not errors, '; '.join(errors))
     entries = bundle.get('entries', [])
     need(type(entries) is list and all(type(e) is dict for e in entries)
