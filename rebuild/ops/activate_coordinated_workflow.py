@@ -6,6 +6,7 @@ not reopen any saved clinical or coding decision.
 """
 import argparse
 from contextlib import ExitStack, contextmanager
+import hashlib
 import io
 import json
 import os
@@ -17,11 +18,12 @@ import sys
 from dotenv import dotenv_values
 from dotenv.parser import parse_stream
 from . import activate_rowan_corti as prior
-from .activate_rowan_followup import snapshot
 
 BASE = '7e2db4f2b16db806a5953427a8e8c11483bcf086'
 SOURCE = Path(__file__).resolve().parents[2]
 FORMAT = 'quillmd-coordinated-workflow-native-install-v1'
+TABLE_FINGERPRINT_CONTRACT = 'sha256-sorted-jsonb-row-sha256-count-v1'
+ROW_HASH_BATCH_SIZE = 128
 RUNTIME = frozenset({'rebuild/core/semantic_generation.py', 'rebuild/core/jobs.py',
     'rebuild/core/clinical_source_context.py', 'rebuild/core/corti_coding.py',
     'rebuild/core/corti_semantics.py', 'rebuild/core/coding_engine.py',
@@ -103,6 +105,89 @@ def render_environment(original, revision, environment):
 def unchanged(before, after):
     require(before == after, 'all_current_database_state_unchanged')
     require(not any(after['pending'].values()), 'no_provider_work_during_install')
+
+
+def fold_row_hashes(rows):
+    """Fold a sorted multiset of fixed-width digests without retaining the rows."""
+    digest = hashlib.sha256(TABLE_FINGERPRINT_CONTRACT.encode() + b'\0')
+    count, previous = 0, None
+    for row in rows:
+        require(len(row) == 1 and type(row[0]) is bytes and len(row[0]) == 32,
+                'complete_sha256_row_fingerprint')
+        value = row[0]
+        require(previous is None or previous <= value, 'sorted_row_fingerprints')
+        digest.update(value)
+        previous = value
+        count += 1
+    digest.update(count.to_bytes(8, 'big'))
+    return [count, digest.hexdigest()]
+
+
+def table_fingerprint(connection, name, *, schema='public'):
+    """Sort only 32-byte hashes; one canonical row is serialized at a time.
+
+    The server can spill the small hash sort to disk under work_mem. A named
+    cursor bounds client buffering. This avoids whole-table JSON aggregation;
+    it does not claim a fixed memory ceiling for an arbitrarily large row.
+    """
+    from psycopg import sql
+    query = sql.SQL("SELECT sha256(convert_to(to_jsonb(t)::text, 'UTF8')) AS row_hash "
+                    "FROM {} t ORDER BY row_hash").format(sql.Identifier(schema, name))
+    with connection.cursor(name='quillmd_preservation_row_hashes') as cursor:
+        cursor.itersize = ROW_HASH_BATCH_SIZE
+        cursor.execute(query)
+        return fold_row_hashes(cursor)
+
+
+def snapshot(original):
+    """Capture the complete existing watched set in one read-only transaction.
+
+    This new contract is deliberately distinct from historical aggregate MD5
+    receipts. Old receipts/controllers remain unchanged and are not rehashed.
+    """
+    import psycopg
+    from psycopg import sql
+    with psycopg.connect(**prior.database_options(original)) as connection:
+        connection.execute('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+        require(connection.execute("SELECT current_database(),current_user,current_setting('transaction_read_only')").fetchone()
+                == ('quillmd_fresh', 'quillmd_runtime', 'on'), 'readonly_snapshot')
+        connection.execute("SET LOCAL statement_timeout='90s'")
+        connection.execute("SET LOCAL work_mem='4MB'")
+        tables = [x[0] for x in connection.execute("SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename")]
+        rows = {name: table_fingerprint(connection, name) for name in tables}
+        migration_rows = [list(x) for x in connection.execute('SELECT app,name FROM public.django_migrations ORDER BY app,name')]
+        migration_ledger = [[str(v) for v in row] for row in connection.execute(
+            'SELECT id,app,name,applied FROM public.django_migrations ORDER BY id')]
+        pending = {}
+        for table, states in [('core_job', ('queued', 'running')), ('core_codingrun', ('queued', 'running')),
+                ('core_aistagereceipt', ('reserved', 'sending', 'received')),
+                ('core_templatepreparation', ('queued', 'inventory', 'proposer', 'checker')),
+                ('core_templatedefinitionpreparation', ('queued', 'inventory', 'proposer', 'checker'))]:
+            pending[table] = connection.execute(sql.SQL('SELECT count(*) FROM {} WHERE state=ANY(%s)').format(
+                sql.Identifier('public', table)), (list(states),)).fetchone()[0]
+        schema = [list(x) for x in connection.execute("""SELECT c.relname,pg_get_userbyid(c.relowner),c.relacl::text,
+            a.attname,format_type(a.atttypid,a.atttypmod),a.attnotnull
+            FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
+            WHERE n.nspname='public' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped ORDER BY c.relname,a.attnum""")]
+        triggers = [list(x) for x in connection.execute("""SELECT c.relname,t.tgname,pg_get_triggerdef(t.oid),t.tgenabled
+            FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' AND NOT t.tgisinternal ORDER BY c.relname,t.tgname""")]
+        constraints = [list(x) for x in connection.execute("""SELECT c.relname,k.conname,pg_get_constraintdef(k.oid)
+            FROM pg_constraint k JOIN pg_class c ON c.oid=k.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+            WHERE n.nspname='public' ORDER BY c.relname,k.conname""")]
+        indexes = [list(x) for x in connection.execute("SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY tablename,indexname")]
+        functions = [list(x) for x in connection.execute("""SELECT p.proname,pg_get_function_identity_arguments(p.oid),
+            md5(pg_get_functiondef(p.oid)),pg_get_userbyid(p.proowner),p.proacl::text
+            FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace WHERE n.nspname='public' AND p.prokind='f'
+            ORDER BY p.proname,pg_get_function_identity_arguments(p.oid)""")]
+        sequences = {}
+        for (name,) in connection.execute("SELECT sequencename FROM pg_sequences WHERE schemaname='public' ORDER BY sequencename"):
+            sequences[name] = list(connection.execute(sql.SQL('SELECT last_value,is_called FROM {}').format(
+                sql.Identifier('public', name))).fetchone())
+        return dict(table_fingerprint_contract=TABLE_FINGERPRINT_CONTRACT, tables=rows,
+            migrations=migration_rows, migration_ledger=migration_ledger, schema=schema, triggers=triggers,
+            constraints=constraints, indexes=indexes, functions=functions, sequences=sequences, pending=pending,
+            latest_enrolled_encounter=str(connection.execute("SELECT max(created_at) FROM public.core_encounter WHERE created_by_id='5f4d1a3d-eeb6-4207-b1df-4597dc696e82'").fetchone()[0]))
 
 
 def failure_diagnostics(error):

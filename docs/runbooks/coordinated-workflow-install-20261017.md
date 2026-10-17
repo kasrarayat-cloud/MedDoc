@@ -35,6 +35,26 @@ All clinical files, static bytes, unrelated configuration and unrelated services
 remain fixed. Only the existing doctor, admin and worker units restart. Pending
 generation/provider work refuses installation.
 
+This controller uses the explicit snapshot contract
+`sha256-sorted-jsonb-row-sha256-count-v1`. PostgreSQL serializes each complete row
+with `to_jsonb`, hashes its UTF-8 text to 32 bytes, and sorts only those hashes.
+A named cursor fetches at most 128 hashes per batch. Python folds every sorted
+digest, including duplicates, into a domain-separated SHA-256 and appends the
+eight-byte row count. No whole-table JSON concatenation or client hash list is
+built. The sort uses 4 MB `work_mem` and may spill to disk; an individual row
+still requires serialization memory, so this is not a fixed ceiling for an
+arbitrarily large row. All row, catalog, migration-ledger and pending-work
+observations share one read-only repeatable-read transaction. Watched tables
+and sequences are explicitly qualified with the public schema.
+
+The new snapshot contract is not hash-compatible with historical aggregate-MD5
+receipts. Preserve those receipts and historical controllers unchanged; take
+fresh baseline/after-stop/before-resume snapshots with this one contract. The
+contract marker participates in strict equality. The failed aggregate baseline
+is retained as a failure, not relabeled as a completed baseline. Changing the
+fingerprint method does not expand the watched catalog properties or authorize
+any data repair.
+
 Preserve the original Elias failure, Nadia's original failure and both completed
 successors, and Rowan's saved review: source/template bytes, raw stages, answers,
 validation history, approvals, reviewer/timestamps, coding facts, audits, usage,
@@ -103,3 +123,10 @@ new prospective recovery act.
 Focused offline controls (temporary Git repository and mocked operational
 transports; no native database, provider or service mutations):
 `PYTHONPATH=rebuild python -B -m unittest ops.test_activate_coordinated_workflow`.
+Optional real-SQL tests require `QUILLMD_SNAPSHOT_TEST_DSN` with exactly localhost
+`127.0.0.1:55449`; other hosts, ports and connection-routing options are refused
+before connecting. They use a temporary table and never call the native snapshot
+identity boundary. The large-row control additionally requires
+`QUILLMD_SNAPSHOT_TEST_REFERENCE` pointing to the private retained coding-reference
+JSON. The release owner runs this isolated proof separately; unset variables
+skip it, and a skipped integration check is not a passing database proof.
