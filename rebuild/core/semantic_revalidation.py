@@ -12,6 +12,8 @@ from django.conf import settings
 from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import TextField
+from django.db.models.functions import Cast, MD5
 from django.utils import timezone
 
 from . import ai_stages, generation, semantic_generation as semantic, testing_authority
@@ -19,6 +21,8 @@ from .models import CodingRun, Encounter, Job, Usage
 from .security import audit, membership, private_path
 
 CONTRACT = 'retained-facts-independent-check-v1'
+INDEPENDENT_CONTRACT = 'retained-facts-independent-check-v2'
+CONTRACTS = (CONTRACT, INDEPENDENT_CONTRACT)
 STAGE = 'revalidation_checker'
 SALT = 'quillmd-retained-generation-revalidation-v1'
 INSTRUCTIONS = (
@@ -27,6 +31,15 @@ INSTRUCTIONS = (
     'The prior checker findings are historical evidence, not passing findings. The new local proposal is not '
     'a clinician decision. Verify every proposed field and fact, including omitted, negative, uncertain and '
     'wrong-person content. Return a hold for any unresolved issue; never pass merely because the local rule changed.')
+INDEPENDENT_INSTRUCTIONS = (
+    ' This is a new independent source check under retained-facts-independent-check-v2. '
+    'Evaluate the complete original notes, unchanged approved definitions, current atomic facts and current '
+    'proposed answers. Historical checks are retained separately; integrity references are not findings or approvals. '
+    'An explicitly documented negative or qualified report is information: preserve its exact scope without '
+    'broadening it or treating genuinely undocumented information as a negative. An unselected duplicate atomic '
+    'fact does not by itself establish an omission when its complete relevant content is already retained in the '
+    'displayed answer. Independently report any actual omission, contradiction, unsupported assertion or unresolved '
+    'source issue. The current proposal is not a clinician decision and does not establish a passing verdict.')
 SEQUENCE = (('extractor',1),('assigner',1),('checker',1),('assigner',2),('checker',2))
 
 
@@ -81,8 +94,10 @@ def _retained(parent):
     return result, requests, outputs, manifest
 
 
-def prepare(notes, fields, definitions, requests, outputs, original_answers, original_config):
+def prepare(notes, fields, definitions, requests, outputs, original_answers, original_config, *, contract=CONTRACT):
     """Pure deterministic proposal. No provider call and no old verdict promoted."""
+    if contract not in CONTRACTS:
+        _fail('Unknown retained revalidation contract.')
     if len(requests) != 5 or len(outputs) != 5:
         _fail('The complete original stage chain is required.')
     counter = 0
@@ -120,6 +135,30 @@ def prepare(notes, fields, definitions, requests, outputs, original_answers, ori
         timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)
     if any(a['status'] not in ('supported','missing') for a in answers.values()):
         _fail('A deterministic source or assignment issue remains; no new checker may be sent.')
+    if contract == INDEPENDENT_CONTRACT:
+        # Construct the current-check surface explicitly. Copying the previous
+        # repair request leaked its top-level prior_findings into v1 even though
+        # current facts no longer carried those old local holds. Historical
+        # bodies remain in server-bound receipts, never this provider surface.
+        from .semantic_source_context import observation_qualifier_inventory,consent_qualifier_inventory
+        payload={'notes':notes,'approved_definitions':deepcopy(definitions),
+            'fields':deepcopy(requests[4]['payload']['fields']),
+            'fact_scope_contract':semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,
+            'timing_reference_contract':semantic.TEMPORAL_REFERENCE_CONTRACT,
+            'observation_qualifier_inventory':observation_qualifier_inventory(units),
+            'consent_qualifier_inventory':consent_qualifier_inventory(units),
+            'approved_patient_name_destinations':[key for key,d in definitions.items() if semantic.requires_patient_name(d)],
+            'local_patient_name_findings':{key:a['patient_name_check'] for key,a in answers.items()
+                if a.get('patient_name_check',{}).get('verdict')=='omission'},
+            'facts':list(facts.values()),'proposed_answers':semantic._answer_preview(answers),
+            'retained_revalidation':{'contract':contract,
+                'source_sha256':hashlib.sha256(notes.encode()).hexdigest(),
+                'definitions_sha256':semantic.digest(definitions),
+                'original_requests_sha256':[semantic.digest(row) for row in requests],
+                'original_outputs_sha256':[semantic.digest(row) for row in outputs]}}
+        return {'answers':answers,'facts':facts,'payload':payload,
+            'schema':semantic.CHECK_SCHEMA,
+            'instructions':requests[4]['instructions']+INDEPENDENT_INSTRUCTIONS}
     payload=deepcopy(requests[4]['payload'])
     payload.update(fact_scope_contract=semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,
                    facts=list(facts.values()),proposed_answers=semantic._answer_preview(answers))
@@ -132,12 +171,15 @@ def prepare(notes, fields, definitions, requests, outputs, original_answers, ori
             'schema':semantic.CHECK_SCHEMA,'instructions':requests[4]['instructions']+INSTRUCTIONS}
 
 
-def _origin(encounter, user, parent_id=None, *, require_current=True, admitted=True):
+def _origin(encounter, user, parent_id=None, *, require_current=True, admitted=True, contract=CONTRACT):
+    if contract not in CONTRACTS:
+        _fail('Unknown retained revalidation contract.')
     membership(user,encounter.department,roles=['owner','clinician'])
     if admitted:
         if not settings.SYNTHETIC_ONLY:
             _fail('Retained revalidation is available only in the authorized synthetic workflow.')
-        ids=getattr(settings,'SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS',())
+        ids=getattr(settings,('SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS' if contract == INDEPENDENT_CONTRACT
+                              else 'SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS'),())
     else:
         ids=[parent_id]
     query=Job.objects.filter(pk__in=ids,encounter=encounter,user=user,kind='generation',state='succeeded')
@@ -158,12 +200,12 @@ def _origin(encounter, user, parent_id=None, *, require_current=True, admitted=T
                             or encounter.template_review):
         _fail('Saved clinical edits or review decisions changed; recovery cannot overwrite them.')
     proposal=prepare(encounter.notes,encounter.template_version.fields,definitions,requests,outputs,
-                     result['answers'],parent.config)
+                     result['answers'],parent.config,contract=contract)
     return parent,result,manifest,proposal,definitions
 
 
-def _binding(encounter,user,parent,result,manifest,parent_run_id):
-    return {'parent_job_id':str(parent.pk),'parent_run_id':str(parent_run_id),
+def _binding(encounter,user,parent,result,manifest,parent_run_id,*,contract=CONTRACT):
+    value={'parent_job_id':str(parent.pk),'parent_run_id':str(parent_run_id),
         'parent_answers_sha256':semantic.digest(result['answers']),
         'source_sha256':hashlib.sha256(encounter.notes.encode()).hexdigest(),
         'definitions_sha256':parent.config['semantic_definitions_sha256'],
@@ -171,14 +213,20 @@ def _binding(encounter,user,parent,result,manifest,parent_run_id):
         'patient_id':str(encounter.patient_id),'revision':encounter.revision,
         'parent_result_sha256':parent.result_sha256,'parent_receipts_digest':semantic.digest(manifest),
         'target_scope_contract':semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,'actor_id':str(user.pk)}
+    if contract == INDEPENDENT_CONTRACT:
+        value['contract']=contract
+        value['prior_revalidation']=_predecessor(encounter,user,parent.pk,parent_run_id)
+    elif contract != CONTRACT:
+        _fail('Unknown retained revalidation contract.')
+    return value
 
 
-def _new_config(encounter,user,binding):
+def _new_config(encounter,user,binding,*,contract=CONTRACT):
     config=testing_authority.active_config(generation.configuration(),'generation')
     if not testing_authority.identity(config):
         _fail('A new standing synthetic testing authority is required; old allowances cannot be reused.')
     testing_authority.admit_encounter(user,encounter)
-    config=ai_stages.revalidation_config(config)
+    config=ai_stages.revalidation_config(config,contract=contract)
     config.update(semantic_revalidation=binding,semantic_template_version=binding['template_version_id'],
         semantic_source_sha256=binding['source_sha256'],semantic_definitions_sha256=binding['definitions_sha256'],
         semantic_fact_scope_contract=binding['target_scope_contract'],
@@ -188,14 +236,14 @@ def _new_config(encounter,user,binding):
     return config
 
 
-def _key(parent_id):
-    return f'semantic-revalidation:{parent_id}:{CONTRACT}'
+def _key(parent_id,contract=CONTRACT):
+    return f'semantic-revalidation:{parent_id}:{contract}'
 
 
-def _prior(parent_id):
+def _prior(parent_id,contract=CONTRACT):
     # Other worker refusal paths may release the active request key. The immutable
     # config binding still identifies the consumed recovery and cannot buy a retry.
-    return Job.objects.filter(config__semantic_revalidation_contract=CONTRACT,
+    return Job.objects.filter(config__semantic_revalidation_contract=contract,
         config__semantic_revalidation__parent_job_id=str(parent_id)).order_by('created_at','pk').first()
 
 
@@ -213,9 +261,16 @@ def _coding_source(encounter,user,parent_run_id,*,completed=False):
     return source
 
 
+def _prospective_contract(encounter,user):
+    ids=getattr(settings,'SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS',())
+    return (INDEPENDENT_CONTRACT if Job.objects.filter(pk__in=ids,encounter=encounter,user=user,
+            kind='generation',state='succeeded').exists() else CONTRACT)
+
+
 def _offer(encounter,user):
-    parent,result,manifest,proposal,definitions=_origin(encounter,user)
-    prior=_prior(parent.pk)
+    contract=_prospective_contract(encounter,user)
+    parent,result,manifest,proposal,definitions=_origin(encounter,user,contract=contract)
+    prior=_prior(parent.pk,contract)
     if prior:
         return {'available':False,'reason':'The one independent recheck already has a retained attempt.',
                 'prior_job_id':str(prior.pk),'prior_job_state':prior.state,'provider_calls':0}
@@ -228,11 +283,16 @@ def _offer(encounter,user):
     run=_coding_source(encounter,user,runs[0].pk)
     if run.inputs.get('answers')!=result['answers'] or run.inputs.get('notes')!=encounter.notes:
         _fail('The retained coding prediction belongs to different source answers.')
-    binding=_binding(encounter,user,parent,result,manifest,run.pk)
-    config=_new_config(encounter,user,binding)
+    binding=_binding(encounter,user,parent,result,manifest,run.pk,contract=contract)
+    config=_new_config(encounter,user,binding,contract=contract)
     quoted=str(ai_stages.maximum_cost(config))
-    token=signing.dumps({'binding':binding,'config_digest':semantic.digest(config)},salt=SALT,compress=True)
-    return {'available':True,'reason':'One new independent check of unchanged retained facts; no extraction or coding call.',
+    token_data={'binding':binding,'config_digest':semantic.digest(config)}
+    if contract==INDEPENDENT_CONTRACT:token_data['contract']=contract
+    token=signing.dumps(token_data,salt=SALT,compress=True)
+    reason=('One distinct v2 independent check with corrected current-evidence input. The failed v1 attempt stays '
+            'consumed and preserved; no extraction or coding call.' if contract==INDEPENDENT_CONTRACT else
+            'One new independent check of unchanged retained facts; no extraction or coding call.')
+    return {'available':True,'reason':reason,
         'display_token':token,'revision':encounter.revision,'parent_job_id':str(parent.pk),
         'parent_run_id':str(run.pk),'quote_usd':quoted,'provider_calls':1,'stage':STAGE}
 
@@ -250,25 +310,27 @@ def enqueue(encounter,user,display_token,expected_revision):
     except signing.BadSignature:_fail('The recovery quote expired or changed. Reload before requesting the one check.')
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department,roles=['owner','clinician'])
+    contract=shown.get('contract',CONTRACT)
+    if contract not in CONTRACTS:_fail('Unknown retained revalidation contract.')
     binding=shown.get('binding',{})
     if (binding.get('encounter_id')!=str(e.pk) or binding.get('actor_id')!=str(user.pk)
             or type(expected_revision) is not int or e.revision!=expected_revision):
         _fail('The recovery quote belongs to a different actor, encounter or revision.')
-    old=_prior(binding.get('parent_job_id'))
+    old=_prior(binding.get('parent_job_id'),contract)
     if old:
         old.reused=True;return old
-    parent,result,manifest,proposal,definitions=_origin(e,user,binding.get('parent_job_id'))
-    if binding!=_binding(e,user,parent,result,manifest,binding.get('parent_run_id')):
+    parent,result,manifest,proposal,definitions=_origin(e,user,binding.get('parent_job_id'),contract=contract)
+    if binding!=_binding(e,user,parent,result,manifest,binding.get('parent_run_id'),contract=contract):
         _fail('The retained recovery evidence changed after the quote.')
     current=_offer(e,user)
     if not current['available'] or current['parent_run_id']!=binding.get('parent_run_id'):
         _fail('This recovery is no longer eligible.')
-    config=_new_config(e,user,binding)
+    config=_new_config(e,user,binding,contract=contract)
     if semantic.digest(config)!=shown.get('config_digest'):
         _fail('The independent-check configuration or estimate changed. Reload before requesting it.')
     config['queued_release_sha']=settings.RELEASE_SHA
     job=Job.objects.create(encounter=e,user=user,kind='generation',revision=e.revision,
-                           request_key=_key(parent.pk),config=config)
+                           request_key=_key(parent.pk,contract),config=config)
     from .billing import reserve
     reserve(job,ai_stages.maximum_cost(config))
     audit(user,'semantic.revalidation_queued',job.pk,department=e.department,parent_job_id=str(parent.pk),
@@ -280,13 +342,14 @@ def enqueue(encounter,user,display_token,expected_revision):
 
 def _bound_proposal(job,*,completed=False):
     job.encounter=Encounter.objects.get(pk=job.encounter_id)
-    if job.config.get('semantic_revalidation_contract')!=CONTRACT:
+    contract=job.config.get('semantic_revalidation_contract')
+    if contract not in CONTRACTS:
         _fail('Unknown retained revalidation contract.')
     binding=job.config.get('semantic_revalidation',{})
     parent,result,manifest,proposal,definitions=_origin(job.encounter,job.user,binding.get('parent_job_id'),
-        require_current=not completed,admitted=not completed)
-    if (binding!=_binding(job.encounter,job.user,parent,result,manifest,binding.get('parent_run_id'))
-            or job.revision!=binding['revision'] or job.request_key!=_key(parent.pk)
+        require_current=not completed,admitted=not completed,contract=contract)
+    if (binding!=_binding(job.encounter,job.user,parent,result,manifest,binding.get('parent_run_id'),contract=contract)
+            or job.revision!=binding['revision'] or job.request_key!=_key(parent.pk,contract)
             or job.config.get('semantic_fact_scope_contract')!=binding['target_scope_contract']):
         _fail('The independent check no longer matches its immutable parent and source.')
     _coding_source(job.encounter,job.user,binding.get('parent_run_id'),completed=completed)
@@ -311,9 +374,8 @@ def _finish(encounter,proposal,definitions,check):
     return answers
 
 
-def validate_completed(job,answers):
-    """Read-only proof revalidation for a derived coding run or Word export."""
-    if job.state!='succeeded':_fail('The retained recheck did not complete successfully.')
+def _checked_result(job):
+    """Reconstruct an actual check, including a failed one, without changing its verdict."""
     proposal,definitions=_bound_proposal(job,completed=True)
     rows=list(job.ai_stage_receipts.all())
     if len(rows)!=1 or rows[0].stage!=STAGE or rows[0].attempt!=1 or rows[0].state!='succeeded':
@@ -328,9 +390,46 @@ def validate_completed(job,answers):
         _fail('The independent checker receipt does not bind its exact retained proposal.')
     checked=_finish(job.encounter,proposal,definitions,_output(_read(row.result_path,row.result_sha256)))
     retained=_read(job.result_path,job.result_sha256)
-    if (checked!=answers or any(a['status'] not in ('supported','missing') for a in checked.values())
-            or retained!={'contract':semantic.CONTRACT,'answers':checked,'stages':[str(row.pk)],
+    if (retained!={'contract':semantic.CONTRACT,'answers':checked,'stages':[str(row.pk)],
                           'revalidation':deepcopy(job.config['semantic_revalidation'])}):
+        _fail('The saved recovery answers do not match their independent checker and source proof.')
+    return checked,row
+
+
+def _predecessor(encounter,user,parent_id,parent_run_id):
+    rows=list(Job.objects.filter(config__semantic_revalidation_contract=CONTRACT,
+        config__semantic_revalidation__parent_job_id=str(parent_id)).annotate(
+            config_database_md5=MD5(Cast('config',TextField()))))
+    if len(rows)!=1:_fail('A v2 check requires exactly one retained v1 predecessor.')
+    prior=rows[0]
+    if (str(prior.encounter_id)!=str(encounter.pk) or str(prior.user_id)!=str(user.pk) or prior.revision!=encounter.revision
+            or prior.state!='failed' or prior.finished_at is None
+            or prior.config.get('semantic_revalidation',{}).get('parent_run_id')!=str(parent_run_id)):
+        _fail('The v1 predecessor must be a completed failed check of this unchanged source and coding receipt.')
+    checked,receipt=_checked_result(prior)
+    if not any(a['status'] not in ('supported','missing') for a in checked.values()):
+        _fail('The v1 predecessor must retain an actual unresolved checker verdict.')
+    usage=list(Usage.objects.filter(job=prior))
+    cost,units,rates,provider,request_id,simulated=ai_stages.aggregate(prior)
+    if (len(usage)!=1 or usage[0].actual_cost!=receipt.actual_cost
+            or str(usage[0].user_id)!=str(user.pk) or usage[0].department_id!=encounter.department_id
+            or (usage[0].actual_cost,usage[0].units,usage[0].rates,usage[0].provider,usage[0].simulated)
+               !=(cost,units,rates,provider,simulated)):
+        _fail('The v1 predecessor requires its known settled usage before a distinct v2 check.')
+    item=usage[0]
+    return {'job_id':str(prior.pk),'contract':CONTRACT,'state':prior.state,
+        'config_sha256':semantic.digest(prior.config),'result_sha256':prior.result_sha256,
+        'config_database_md5':prior.config_database_md5,
+        'receipt_id':str(receipt.pk),'request_sha256':receipt.request_sha256,
+        'response_sha256':receipt.result_sha256,'receipt_config_sha256':semantic.digest(receipt.config),
+        'usage_id':str(item.pk),'actual_cost':format(item.actual_cost,'f')}
+
+
+def validate_completed(job,answers):
+    """Read-only proof revalidation for a derived coding run or Word export."""
+    if job.state!='succeeded':_fail('The retained recheck did not complete successfully.')
+    checked,_=_checked_result(job)
+    if checked!=answers or any(a['status'] not in ('supported','missing') for a in checked.values()):
         _fail('The saved recovery answers do not match their independent checker and source proof.')
     return True
 
