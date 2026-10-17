@@ -602,7 +602,7 @@ def index_lookup(reference):
     return reference._index_lookup
 
 
-def reference_for(run, selections=None):
+def reference_for(run, selections=None, *, prediction_codes=None):
     global _ACTIVE_REFERENCE_KEY
     matches = [r for r in run.releases if r.get('system') == 'ICD-10-CM']
     if len(matches) != 1:
@@ -614,6 +614,12 @@ def reference_for(run, selections=None):
     if (metadata.digest != item['coding_digest'] or release.sha256 != item['sha256']
             or not release.effective_from <= service_date <= release.effective_until):
         raise ValidationError('The bound coding reference or service-date release has changed.')
+    if selections is not None and prediction_codes is not None:
+        raise ValidationError('A coding reference projection must have one purpose.')
+    if prediction_codes is not None:
+        from .coding_reference_store import prediction_reference
+        return prediction_reference(metadata, prediction_codes,
+            source_contract=getattr(run, 'config', {}).get('clinical_source_contract'))
     if selections is not None:
         from .coding_reference_store import selection_reference
         return selection_reference(metadata,run,selections)

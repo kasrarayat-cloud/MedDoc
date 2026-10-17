@@ -198,7 +198,8 @@ def retained_result(run, request, response, response_sha256):
     parsed = adapt_response(response, request, service_date=date.fromisoformat(run.inputs['service_date']),
         terminology=terms, original_verdict=original_verdict,
         source_response_sha256=response_sha256)
-    reference = engine.reference_for(run)
+    icds = [p['code'] for p in parsed['proposed_selections'] if p['system'] == 'icd10cm-outpatient']
+    reference = engine.reference_for(run, prediction_codes=icds)
     result = dict(contract=CONTRACT, suggestions=[], candidates={}, source_checks={},
         questions=[], excluded=[], global_blockers=identity_blockers(run),
         cpt=cpt, adapter=parsed, provider_request=request, replay=replay,
@@ -227,7 +228,6 @@ def retained_result(run, request, response, response_sha256):
     quarantined_ids = {r['id'] for r in quarantined}
     if any(r['id'] not in quarantined_ids for r in parsed['diagnostics']['rejected_selected']):
         result['global_blockers'].append('Malformed or duplicate provider selections require diagnostic review.')
-    icds = [p['code'] for p in parsed['proposed_selections'] if p['system'] == 'icd10cm-outpatient']
     for proposal in parsed['proposed_selections']:
         term, system = proposal['terminology'], SYSTEMS[proposal['system']]
         row = dict(id=proposal['id'], system=system, code=proposal['code'],
