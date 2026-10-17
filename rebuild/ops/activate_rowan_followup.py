@@ -5,6 +5,7 @@ its reviewed publication/snapshot primitives, with a new exact release boundary.
 It admits one guard migration and one origin-job setting, not another activation.
 """
 import argparse
+import ast
 from contextlib import contextmanager
 import io
 import json
@@ -112,6 +113,44 @@ def snapshot(original):
     return result
 
 
+def validate_migration_source(plan, root):
+    """Admit only two literal SQL strings and one exact RunSQL operation.
+
+    The catalog snapshot is not a universal DDL detector. This source boundary
+    prevents an unwatched ALTER, RunPython, import or extra SQL statement from
+    entering the migration at all. A trigger body is installed, never invoked.
+    """
+    relative = 'rebuild/core/migrations/' + MIGRATION + '.py'
+    raw = (root / relative).read_bytes()
+    require(prior.sha(raw) == plan['source_sha256'].get(relative), 'migration_source_pin')
+    tree = ast.parse(raw)
+    nodes = list(tree.body)
+    if nodes and isinstance(nodes[0], ast.Expr) and isinstance(nodes[0].value, ast.Constant) \
+            and isinstance(nodes[0].value.value, str):
+        nodes.pop(0)
+    require(len(nodes) == 4 and isinstance(nodes[1], ast.Assign) and isinstance(nodes[2], ast.Assign),
+            'literal_migration_module')
+    for node, name in zip(nodes[1:3], ('REVALIDATION_SQL', 'REVALIDATION_REVERSE')):
+        require(len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and node.targets[0].id == name
+                and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str), 'literal_migration_sql')
+        sql = node.value.value
+        require(sql.count('$$') == 2 and re.fullmatch(r'\s*CREATE OR REPLACE FUNCTION '
+            r'quillmd_ai_stage_guard\(\) RETURNS trigger LANGUAGE plpgsql AS \$\$.*\$\$;\s*', sql, re.S),
+            'sole_guard_function_statement')
+        node.value = ast.Constant(value='SQL')
+    expected = ast.parse("""from django.db import migrations
+REVALIDATION_SQL = 'SQL'
+REVALIDATION_REVERSE = 'SQL'
+class Migration(migrations.Migration):
+    dependencies = [('core', '0029_bounded_output_decision')]
+    operations = [migrations.RunSQL(REVALIDATION_SQL, REVALIDATION_REVERSE)]
+""")
+    require(ast.dump(ast.Module(body=nodes, type_ignores=[]), include_attributes=False)
+            == ast.dump(expected, include_attributes=False), 'sole_runsql_migration_shape')
+    return dict(source_sha256=prior.sha(raw), operation='one_literal_RunSQL', function=FUNCTION,
+                table_ddl=False, row_dml=False, runpython=False)
+
+
 def verify_migration(before, after, plan):
     require(set(before) == set(after), 'same_snapshot_scope')
     require(set(after['tables']) == set(before['tables']), 'no_new_or_removed_tables')
@@ -164,9 +203,11 @@ def execute(plan, digest):
     require(prior.sha(original) == plan['environment_before_sha256'], 'environment_before_pin')
     active = render_environment(original, plan['candidate'])
     guard = prior.source_guard(); prepared = prior.source_plan(plan, guard)
+    migration_admission = validate_migration_source(plan, SOURCE)
     prior.command(['bash', str(SOURCE / 'scripts/check-citation.sh'), plan['candidate']], cwd=SOURCE, timeout=120)
     out = Path(plan['evidence_directory']); out.mkdir(mode=0o700)
     prior.write_new(out / 'plan.json', plan)
+    prior.write_new(out / 'migration-source-admission.json', migration_admission)
     cipher = prior.backup_restore.key_at(prior.legacy.KEY)
     prior.write_new(out / 'environment-before.fernet', cipher.encrypt(original))
     prior.write_new(out / 'environment-after.fernet', cipher.encrypt(active))
@@ -196,7 +237,9 @@ def execute(plan, digest):
             before = snapshot(original)
             require(before == baseline['database'], 'no_pre_stop_database_race')
             stage_name = 'source_publication'; prior.publish_source(plan, guard, prepared)
-            stage_name = 'one_guard_migration'; migrate(original)
+            stage_name = 'one_guard_migration'
+            require(validate_migration_source(plan, prior.ROOT) == migration_admission, 'installed_migration_matches_admission')
+            migrate(original)
             after = snapshot(original); verify_migration(before, after, plan)
             prior.write_new(out / 'migration-preservation.json', after)
             stage_name = 'static_publication'

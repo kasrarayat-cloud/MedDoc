@@ -31,6 +31,13 @@ ledger row. The migration sequence advances once. Installation creates no
 clinician decision and sends no provider request. The later ordinary-dashboard
 recheck is a separate, bounded action; installation does not execute it.
 
+The catalog snapshot covers the named table/column, constraint, index, trigger,
+function and sequence properties; it is not a universal catalog fingerprint.
+Before stopping and again before migration, the hash-bound migration must parse
+as exactly one `RunSQL` with literal forward/reverse replacements of the one
+named function. Additional SQL, imports, executable Python, operations or other
+DDL are refused, including column-default changes outside the snapshot's scope.
+
 ## Execution preparation
 
 1. Review the finished clinical and migration diff, with its required refutation

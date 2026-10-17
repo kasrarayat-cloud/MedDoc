@@ -143,5 +143,36 @@ class FollowupInstallTests(unittest.TestCase):
         self.assertNotIn('post_migrate', code)
         self.assertIn('with transaction.atomic():e.migrate(target)', code)
 
+    def test_migration_admission_rejects_unwatched_ddl_executable_python_and_extra_operations(self):
+        valid = '''"""Reviewed migration."""
+from django.db import migrations
+REVALIDATION_SQL = "CREATE OR REPLACE FUNCTION quillmd_ai_stage_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$;"
+REVALIDATION_REVERSE = "CREATE OR REPLACE FUNCTION quillmd_ai_stage_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END; $$;"
+class Migration(migrations.Migration):
+    dependencies = [('core', '0029_bounded_output_decision')]
+    operations = [migrations.RunSQL(REVALIDATION_SQL, REVALIDATION_REVERSE)]
+'''
+        variants = [valid.replace('END; $$;', 'END; $$; ALTER TABLE core_job ALTER COLUMN state SET DEFAULT \'queued\';'),
+            valid.replace('END; $$;', 'END; $$; SELECT 1; DO $$ BEGIN NULL; END; $$;'),
+            valid.replace('from django.db import migrations', 'from django.db import migrations\nimport os'),
+            valid.replace("dependencies = [('core', '0029_bounded_output_decision')]", "dependencies = [('core', '0028_outpatient_coding')]"),
+            valid.replace('operations = [migrations.RunSQL(', 'operations = [migrations.RunPython(print), migrations.RunSQL('),
+            valid.replace('quillmd_ai_stage_guard()', 'unrelated_guard()'),
+            valid.replace('class Migration(migrations.Migration):', 'class Migration(migrations.Migration):\n    print("unexpected action")')]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); path = root / 'rebuild/core/migrations' / (op.MIGRATION + '.py')
+            path.parent.mkdir(parents=True)
+            def bind(text):
+                path.write_text(text)
+                return {'source_sha256': {path.relative_to(root).as_posix(): op.prior.sha(path.read_bytes())}}
+            result = op.validate_migration_source(bind(valid), root)
+            self.assertEqual(result['operation'], 'one_literal_RunSQL')
+            for index, invalid in enumerate(variants):
+                with self.subTest(index=index), self.assertRaises(op.Refusal):
+                    op.validate_migration_source(bind(invalid), root)
+            stale = bind(valid); path.write_text(valid + '\n')
+            with self.assertRaisesRegex(op.Refusal, 'migration_source_pin'):
+                op.validate_migration_source(stale, root)
+
 
 if __name__ == '__main__': unittest.main()
