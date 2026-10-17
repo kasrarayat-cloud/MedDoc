@@ -9,8 +9,9 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, connection, transaction
 from django.test import TestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from core import coding_service as service
@@ -78,8 +79,11 @@ class CodingWorkflow(TestCase):
     def test_read_only_poll_never_creates_run_context_approval_or_audit(self):
         before = (CodingRun.objects.count(), CodingContext.objects.count(), CodingDecision.objects.count(), AuditEvent.objects.count())
         for _ in range(2):
-            response = self.client.get(self.url+'status/', HTTP_ACCEPT='application/json')
+            with CaptureQueriesContext(connection) as queries:
+                response = self.client.get(self.url+'status/', HTTP_ACCEPT='application/json')
             self.assertEqual(response.status_code, 200)
+            self.assertFalse(any('FOR UPDATE' in row['sql'].upper() for row in queries),
+                             'A read-only coding poll must not lock the encounter against its save.')
             self.assertIn('no-store', response['Cache-Control'])
             self.assertEqual(response.json()['state'], 'unrequested')
             self.assertIn('data-coding-panel', response.json()['html'])

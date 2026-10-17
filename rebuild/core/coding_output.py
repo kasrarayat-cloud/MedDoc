@@ -50,6 +50,14 @@ def assessment():
 
 
 def live_assessment(encounter, run):
+    source_run = run
+    if run.config.get('mode') == 'retained_live':
+        from .coding_recovery import source_for
+        source_run = source_for(run)
+    return _live_assessment(encounter, run, source_run)
+
+
+def _live_assessment(encounter, run, source_run):
     """Apply a small dated source assessment to a new selected API output.
 
     The bundle is an integrity-pinned internal synthetic evaluation scope. It
@@ -83,10 +91,6 @@ def live_assessment(encounter, run):
          and run.result.get('replay') is False and not run.result.get('global_blockers')
          and run.state in ('succeeded', 'needs_detail') and encounter.status == 'finalized',
          'Only a finalized supported synthetic direct-prediction result is covered.')
-    source_run = run
-    if run.config.get('mode') == 'retained_live':
-        from .coding_recovery import source_for
-        source_run = source_for(run)
     need(len(source_run.requests) == 1, 'The synthetic result must have one retained prediction receipt.')
     receipt = source_run.requests[0]
     request = corti_prediction.payload(run)
@@ -178,9 +182,11 @@ def live_assessment(encounter, run):
 def reviewed(encounter, run, base_decision=None):
     """Validate every binding again on display, decision and download."""
     need(run is not None and run.encounter_id == encounter.pk, 'No retained result belongs to this encounter.')
-    service.assert_current(run, encounter)
+    # Retained-source validation is expensive and recursive. Reuse its result
+    # only within this call; every display/decision/export calls it afresh.
+    source_run = service.assert_current(run, encounter)
     live = run.config.get('mode') in ('live', 'retained_live')
-    a = live_assessment(encounter, run) if live else assessment()
+    a = _live_assessment(encounter, run, source_run) if live else assessment()
     scope = a.get('scope', {})
     need(scope == {'encounter_id': str(encounter.pk), 'patient_id': str(encounter.patient_id),
                    'run_id': str(run.pk), 'input_digest': run.input_digest,
@@ -193,10 +199,6 @@ def reviewed(encounter, run, base_decision=None):
         need(run.config.get('provider') == 'corti' and run.config.get('mode') == 'replay'
              and run.result.get('replay') is True and not run.result.get('global_blockers')
              and encounter.status == 'finalized', 'Only the finalized, supported synthetic replay is covered.')
-    source_run = run
-    if run.config.get('mode') == 'retained_live':
-        from .coding_recovery import source_for
-        source_run = source_for(run)
     need(len(source_run.requests) == 1 and source_run.requests[0].get('response_sha256') == a.get('response_sha256'),
          'The retained response does not match the assessed output.')
     rows = [r for r in run.result.get('suggestions', []) if r.get('id') == a.get('identifier')]
@@ -292,6 +294,10 @@ def view(encounter, run, user):
     if not (getattr(settings, 'CORTI_OUTPUT_REVIEW_FILE', '')
             or getattr(settings, 'CORTI_OUTPUT_REFERENCE_FILE', '')):
         return None
+    # The supplemental review cannot be offered before the separate base
+    # decision. Avoid proving unavailable output repeatedly on status polls.
+    if run is None or not CodingDecision.objects.filter(run=run).exists():
+        return {'available': False, 'reason': 'Save the ICD coding decision before reviewing the separate CPT code number.'}
     try:
         a, review, base = reviewed(encounter, run)
     except ValidationError as exc:

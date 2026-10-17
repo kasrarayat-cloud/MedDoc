@@ -8,7 +8,7 @@
   const statusURL = new URL(panel.dataset.statusUrl, location.href);
   if (statusURL.origin !== location.origin) return;
   const baselines = new WeakMap();
-  let timer, polling = false, posting = false, uncertain = false, staged = null, stopped = false;
+  let timer, pollController, polling = false, posting = false, uncertain = false, staged = null, stopped = false;
   let epoch = 0, failures = 0;
   const value = form => JSON.stringify([...form.elements].filter(el => el.name && el.name !== 'csrfmiddlewaretoken' && !['submit', 'button'].includes(el.type) && (!['checkbox', 'radio'].includes(el.type) || el.checked)).map(el => [el.name, el.value]));
   const dirty = () => [...panel.querySelectorAll('[data-coding-form]')].filter(f => baselines.get(f) !== value(f));
@@ -61,8 +61,7 @@
     bind();
     if (focusID) document.getElementById(focusID)?.focus({preventScroll:true});
   };
-  const fetchJSON = async (url, options = {}) => {
-    const controller = new AbortController();
+  const fetchJSON = async (url, options = {}, controller = new AbortController()) => {
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(url, {...options, headers:{Accept:'application/json', ...options.headers},
@@ -82,7 +81,8 @@
     polling = true;
     const ticket = epoch;
     try {
-      const {data} = await fetchJSON(statusURL);
+      pollController = new AbortController();
+      const {data} = await fetchJSON(statusURL, {}, pollController);
       if (ticket !== epoch || posting) return;
       failures = 0;
       panel.querySelector('[data-coding-connection]').hidden = true;
@@ -97,7 +97,7 @@
         connection.textContent = 'Status connection interrupted. Your unsaved edits are kept; checking again shortly.';
         connection.hidden = false;
       }
-    } finally { polling = false; schedule(); }
+    } finally { pollController = null; polling = false; schedule(); }
   }
   document.addEventListener('input', event => {
     if (panel.contains(event.target)) updateControls();
@@ -136,7 +136,7 @@
     if (form.dataset.codingForm === 'output-decision' && !['accepted', 'rejected'].includes(body.get('outcome'))) {
       error('Choose Accept or Reject to record your decision.'); return;
     }
-    posting = true; epoch++; clearTimeout(timer); error(''); updateControls();
+    posting = true; epoch++; clearTimeout(timer); pollController?.abort(); error(''); updateControls();
     try {
       const {response, data} = await fetchJSON(url, {method:'POST', body});
       if (response.status === 409) {
