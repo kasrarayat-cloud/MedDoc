@@ -22,6 +22,7 @@ CONTRACT = 'retained-live-prediction-revalidation-v1'
 MODE = 'retained_live'
 REVALIDATION_CONTRACT = 'retained-facts-independent-check-v1'
 REVALIDATION_CONTRACTS = (REVALIDATION_CONTRACT,'retained-facts-independent-check-v2')
+CONTEXT_CONTRACT = 'retained-live-context-review-v1'
 
 
 def need(value, message):
@@ -58,6 +59,8 @@ def source_for(run):
          and run.config.get('mode') == MODE and run.requests == [] and run.actual_cost == 0
          and run.state in ('succeeded', 'needs_detail'), 'This retained prediction is not a completed synthetic derivative.')
     binding = run.config.get('retained_prediction')
+    if isinstance(binding, dict) and binding.get('contract') == CONTEXT_CONTRACT:
+        return context_source_for(run, binding)
     need(isinstance(binding, dict) and set(binding) == {'contract', 'source_run_id',
          'source_input_digest', 'source_requests_digest', 'source_result_digest',
          'recovery_job_id', 'recovery_result_sha256', 'approved_answers_digest'}
@@ -106,6 +109,75 @@ def source_for(run):
          'The derived result does not retain its provenance.')
     live_receipt(source)
     return source
+
+
+def context_source_for(run, binding):
+    """Only saved review context may differ; source, answers and receipt cannot."""
+    need(set(binding) == {'contract', 'source_run_id', 'source_input_digest',
+                         'source_requests_digest', 'source_result_digest', 'review_context_digest'},
+         'The context review provenance is malformed.')
+    try:
+        source = CodingRun.objects.get(pk=binding['source_run_id'], encounter_id=run.encounter_id)
+    except (ValueError, CodingRun.DoesNotExist) as exc:
+        raise ValidationError('The original prediction for this context review is unavailable.') from exc
+    need(source.config.get('context_review_contract') == CONTEXT_CONTRACT
+         and str(source.user_id) == str(run.user_id) and source.inputs == run.inputs and source.releases == run.releases
+         and source.context != run.context and source.input_digest == binding['source_input_digest']
+         and service.digest(source.requests) == binding['source_requests_digest']
+         and service.digest(source.result) == binding['source_result_digest']
+         and service.digest(run.context) == binding['review_context_digest']
+         and source.input_digest == service.digest({'inputs': source.inputs, 'context': source.context,
+                                                   'releases': source.releases})
+         and run.input_digest == service.digest({'inputs': run.inputs, 'context': run.context,
+                                                'releases': run.releases}),
+         'A context review cannot change source, patient, answers, date, reference or original prediction.')
+    need(run.config == {**deepcopy(source.config), 'mode': MODE, 'max_calls': 0, 'retained_prediction': binding}
+         and run.result.get('retained_prediction') == binding
+         and corti_prediction.payload(source) == corti_prediction.payload(run),
+         'The retained context review configuration or provider payload changed.')
+    live_receipt(source)
+    return source
+
+
+def reuse_for_context(encounter, user, inputs, context, releases, key):
+    """Revalidate a known successful request when only review context changed.
+
+    Called under the ordinary encounter save lock. Unknown, running and legacy
+    requests cannot be relabelled as successful retained predictions.
+    """
+    if not settings.SYNTHETIC_ONLY:
+        return None
+    sources = CodingRun.objects.filter(encounter=encounter, user=user,
+        config__provider='corti', config__mode='live',
+        config__context_review_contract=CONTEXT_CONTRACT).order_by('-created_at', '-pk')
+    source = next((row for row in sources if row.inputs == inputs and row.releases == releases
+                   and row.context != context), None)
+    if source is None:
+        return None
+    need(source.state in ('succeeded', 'needs_detail'),
+         'The existing prediction is unfinished or requires reconciliation. No new request was sent; review it before saving changed coding context.')
+    # An invalid retained receipt is a hard stop, never an automatic paid retry.
+    receipt = live_receipt(source)
+    binding = {'contract': CONTEXT_CONTRACT, 'source_run_id': str(source.pk),
+        'source_input_digest': source.input_digest, 'source_requests_digest': service.digest(source.requests),
+        'source_result_digest': service.digest(source.result), 'review_context_digest': service.digest(context)}
+    config = {**deepcopy(source.config), 'mode': MODE, 'max_calls': 0, 'retained_prediction': binding}
+    run = CodingRun(encounter=encounter, user=user, inputs=inputs, context=context, releases=releases,
+        input_digest=key, config=config, requests=[], actual_cost=Decimal('0'), state='needs_detail',
+        started_at=timezone.now(), finished_at=timezone.now())
+    result = corti_coding.retained_result(run, corti_prediction.payload(run),
+        json.loads(receipt['raw_response']['body']), receipt['response_sha256'])
+    result['retained_prediction'] = binding
+    run.result = result
+    run.selection = {'selected_ids': sorted(row['id'] for row in result['suggestions'] if row.get('eligible') is True),
+                     'overrides': {}}
+    run.selection_revision = 1
+    run.save(force_insert=True)
+    source_for(run)
+    audit(user, 'coding.retained_context_revalidated', run.pk, department=encounter.department,
+          source_run_id=str(source.pk), input_digest=key, new_provider_calls=0,
+          original_usage_retained_on_source=True)
+    return run
 
 
 @transaction.atomic

@@ -21,6 +21,8 @@ from .security import audit, membership
 
 CONTRACT = 'synthetic-api-output-review-v1'
 DESCRIPTION_STATUS = 'withheld_defective_provider_text'
+UNVERIFIED_DESCRIPTION_STATUS = 'withheld_unverified_provider_text'
+DESCRIPTION_STATUSES = (DESCRIPTION_STATUS, UNVERIFIED_DESCRIPTION_STATUS)
 REFERENCE_CONTRACT = 'synthetic-api-output-reference-v2'
 FACT_LABELS = {'setting':'Setting', 'patient_status':'Patient status', 'time_minutes':'Total physician minutes',
     'time_same_day':'Time on date of service', 'time_qualified_clinician':'Physician time',
@@ -65,28 +67,13 @@ def _live_assessment(encounter, run, source_run):
     """
     from . import corti_prediction
     from .corti_response import adapt_response
-    from .corti_semantics import classify_selected, office_time_facts, citation_adequacy
-    path = getattr(settings, 'CORTI_OUTPUT_REFERENCE_FILE', '')
-    need(getattr(settings, 'SYNTHETIC_ONLY', False) and path,
-         'No dated synthetic output reference is installed.')
-    try:
-        raw = Path(path).read_bytes()
-        need(hashlib.sha256(raw).hexdigest() == getattr(settings, 'CORTI_OUTPUT_REFERENCE_SHA256', ''),
-             'The synthetic output reference failed its integrity check.')
-        bundle = json.loads(raw)
-    except (OSError, ValueError, TypeError) as exc:
-        raise ValidationError('The dated synthetic output reference is unavailable.') from exc
-    need(type(bundle) is dict and bundle.get('contract') == REFERENCE_CONTRACT,
-         'Unknown synthetic output reference contract.')
+    from . import coding_output_reference as references
+    from .corti_semantics import (classify_selected, office_time_facts, citation_adequacy,
+                                 confirmed_time_context, office_service_eligibility)
+    bundle, authorized_actor_ids = references.load(encounter, run)
+    prospective = bundle['contract'] == references.CONTRACT
     need(bundle.get('review_execution') == 'agent_executed_synthetic',
          'This dedicated synthetic campaign must identify its automated review execution.')
-    bounded = bundle.get('scope', {})
-    need(type(bounded) is dict, 'The synthetic source scope is malformed.')
-    need(str(encounter.created_by_id) in bounded.get('actor_ids', [])
-         and str(run.user_id) in bounded.get('actor_ids', [])
-         and hashlib.sha256(encounter.notes.encode()).hexdigest() in bounded.get('notes_sha256', [])
-         and encounter.service_date.isoformat() in bounded.get('service_dates', []),
-         'This actor, source note or service date is outside the authorized synthetic assessment.')
     need(run.config.get('provider') == 'corti' and run.config.get('mode') in ('live', 'retained_live')
          and run.result.get('replay') is False and not run.result.get('global_blockers')
          and run.state in ('succeeded', 'needs_detail') and encounter.status == 'finalized',
@@ -119,6 +106,10 @@ def _live_assessment(encounter, run, source_run):
     need(support['status'] == 'documented', '; '.join(support['blockers']) or 'Office time support is unresolved.')
     facts = [{**fact, 'label': FACT_LABELS[fact['key']]} for fact in support['facts']]
     values = {fact['key']:fact['value'] for fact in facts}
+    if prospective:
+        errors = (confirmed_time_context(run.context, encounter.notes, facts)
+                  + office_service_eligibility(encounter.notes, encounter.service_date))
+        need(not errors, '; '.join(errors))
     entries = bundle.get('entries', [])
     need(type(entries) is list and all(type(e) is dict for e in entries)
          and len({e.get('code') for e in entries}) == len(entries),
@@ -148,7 +139,7 @@ def _live_assessment(encounter, run, source_run):
                 != [{key: span.get(key) for key in keys} for span in row.get('evidence_spans', [])]):
             continue
         entry = next((e for e in entries if e.get('code') == row['code'] and e.get('system') == 'CPT'), None)
-        if entry is None or encounter.service_date.isoformat() not in entry.get('service_dates', []):
+        if entry is None or not references.covers(entry, encounter.service_date):
             continue
         criteria = entry.get('criteria', {})
         if (criteria.get('basis') != 'documented_total_time'
@@ -160,7 +151,7 @@ def _live_assessment(encounter, run, source_run):
         matches.append((row, entry, criteria))
     need(len(matches) == 1, 'No unique provider-selected code meets the bounded dated source criteria.')
     row, entry, criteria = matches[0]
-    need(entry.get('description_status') == DESCRIPTION_STATUS,
+    need(entry.get('description_status') in DESCRIPTION_STATUSES,
          'This source route cannot verify or reproduce the provider description.')
     scope = {'encounter_id': str(encounter.pk), 'patient_id': str(encounter.patient_id),
              'run_id': str(run.pk), 'input_digest': run.input_digest,
@@ -168,11 +159,11 @@ def _live_assessment(encounter, run, source_run):
              'notes_sha256': hashlib.sha256(encounter.notes.encode()).hexdigest(),
              'service_date': encounter.service_date.isoformat()}
     return {'contract': CONTRACT, 'binding_kind': 'live_synthetic_reference',
-        'reference_digest': service.digest(bundle), 'authorized_actor_ids': bounded['actor_ids'],
+        'reference_digest': service.digest(bundle), 'authorized_actor_ids': authorized_actor_ids,
         'review_execution': bundle['review_execution'],
         'scope': scope, 'identifier': row['id'], 'response_sha256': receipt['response_sha256'],
         'selection': {'status':'supported', 'code':row['code'], **criteria},
-        'description_status': DESCRIPTION_STATUS, 'facts': facts,
+        'description_status': entry['description_status'], 'facts': facts,
         'coverage': {**entry['coverage'], 'service_date': encounter.service_date.isoformat()},
         'sources': entry['sources'], 'permission': bundle.get('permission', {}),
         'source_summary': bundle['source_summary'], 'permission_summary': bundle['permission_summary'],
@@ -208,7 +199,7 @@ def reviewed(encounter, run, base_decision=None):
     need(row.get('system') == 'CPT' and row.get('code') == selection.get('code')
          and selection.get('status') == 'supported' and selection.get('basis') == 'documented_total_time'
          and row.get('evidence_status') == 'valid', 'This selected code lacks a supported assessment.')
-    need(a.get('description_status') == DESCRIPTION_STATUS, 'The descriptor remains withheld, never verified by this route.')
+    need(a.get('description_status') in DESCRIPTION_STATUSES, 'The descriptor remains withheld, never verified by this route.')
     coverage = a.get('coverage', {})
     need(coverage.get('service_date') == encounter.service_date.isoformat()
          and coverage.get('status') == 'dated_code_presence_and_case_criteria'
@@ -230,7 +221,8 @@ def reviewed(encounter, run, base_decision=None):
     need(len(facts) == len(required) and {f.get('key') for f in facts} == required,
          'The documented time-review facts are incomplete.')
     values = {f['key']: f.get('value') for f in facts}
-    need(values['setting'] == 'outpatient_office' and values['patient_status'] == 'established'
+    need(values['setting'] == 'outpatient_office' and values['patient_status'] in ('new', 'established')
+         and values['patient_status'] == selection.get('patient_status', 'established')
          and values['em_basis'] == 'time' and type(values['time_minutes']) is int
          and type(selection.get('minimum_minutes')) is int and type(selection.get('maximum_minutes')) is int
          and selection['minimum_minutes'] <= values['time_minutes'] <= selection['maximum_minutes']
@@ -273,7 +265,7 @@ def reviewed(encounter, run, base_decision=None):
     review = {'contract': CONTRACT, 'assessment_digest': service.digest(a), 'scope': scope,
               'base_decision_id': str(base.pk), 'base_selection_digest': base.selection_digest,
               'identifier': a['identifier'], 'code': row['code'], 'system': 'CPT',
-              'selection': selection, 'description_status': DESCRIPTION_STATUS,
+              'selection': selection, 'description_status': a['description_status'],
               'coverage': coverage, 'sources': sources, 'permission': permission,
               'facts': facts, 'evidence_spans': spans}
     if live:
@@ -310,7 +302,7 @@ def view(encounter, run, user):
     can_edit = (membership(user, encounter.department).role in ('owner', 'clinician')
         and ('authorized_actor_ids' not in review or str(user.pk) in review['authorized_actor_ids']))
     return {'available': True, 'reason': '', 'code': review['code'], 'identifier': review['identifier'],
-            'selection_status': 'supported', 'description_status': DESCRIPTION_STATUS,
+            'selection_status': 'supported', 'description_status': review['description_status'],
             'permission_status': 'bounded_api_output', 'state': decision.outcome if decision else 'pending',
             'facts': review['facts'], 'evidence_spans': review['evidence_spans'],
             'provider_citation_adequacy': review.get('provider_citation_adequacy'),
@@ -359,7 +351,7 @@ def accepted_output_rows(encounter, run, base_decision):
                and d.base_decision_id == base.pk and d.facts_confirmed]
     need(len(matches) == 1 and len(decisions) == 1, 'The accepted output review no longer matches its source assessment.')
     return [{'system': 'CPT', 'code': review['code'], 'description': '',
-             'description_status': DESCRIPTION_STATUS, 'evidence_spans': copy.deepcopy(review['evidence_spans']),
+             'description_status': review['description_status'], 'evidence_spans': copy.deepcopy(review['evidence_spans']),
              'selection_support': review['selection'], 'sources': review['sources'],
              'permission_basis': review['permission'], 'review_digest': matches[0].review_digest,
              'review_execution': review.get('review_execution', 'clinician_recorded'),

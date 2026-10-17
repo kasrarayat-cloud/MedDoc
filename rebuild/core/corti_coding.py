@@ -248,7 +248,8 @@ def retained_result(run, request, response, response_sha256):
                 if candidate:
                     row.update(concept=concept, release_id=candidate['release_id'],
                         instructions=candidate['instructions'], evidence=concept['evidence'],
-                        index_entry_id=candidate['entry_id'], index_path=candidate['path'], eligible=True)
+                        index_entry_id=candidate['entry_id'], index_path=candidate['path'], eligible=True,
+                        explanation=engine.source_explanation(run.inputs['notes'], concept, candidate))
                     # This is an independently checked route for the SAME selected
                     # code, never a provider candidate or nested alternative.
                     result['candidates'][row['id']] = [candidate]

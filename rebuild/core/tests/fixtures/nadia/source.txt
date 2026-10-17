@@ -1,0 +1,23 @@
+FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY
+
+Patient: Synthetic Nadia Fenwick
+Age: 46 years
+Clinic record number: SYN-NF-1017
+Date of service: 17 October 2026
+Visit: In-person gastroenterology office consultation. This is an established patient who was seen by this same gastroenterologist eight months ago.
+
+History
+Synthetic Nadia Fenwick reports right upper quadrant abdominal pain after fatty meals for six days. Episodes last about 15 minutes. The pain is rated 5 out of 10. There has also been intermittent nausea for three days. The patient denies vomiting, heartburn, constipation, diarrhea, difficulty swallowing, vomiting blood, black stools, rectal bleeding, fever and unintentional weight loss.
+
+Current medicine is lisinopril 10 mg orally once daily. Penicillin causes a rash.
+
+Examination
+Blood pressure is 126/78 mmHg, pulse 76 beats per minute and temperature 36.8 degrees Celsius. The patient is alert and in no acute distress. The abdomen is soft with mild right upper quadrant tenderness. There is no rebound tenderness or guarding.
+
+Assessment
+Right upper quadrant abdominal pain and nausea were both evaluated during this encounter. The cause remains uncertain. Gallstones, cholecystitis and pancreatitis have not been established.
+
+Plan
+Discussed smaller low-fat meals and maintaining hydration. A right upper quadrant ultrasound was ordered for a later date. The ultrasound was not performed today. No other investigation or procedure was performed today. No medication changes were made. Review in two weeks. The patient was advised to seek urgent assessment for severe or worsening pain, fever, jaundice or persistent vomiting.
+
+Total physician time on the date of service was 36 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation. This total excludes clinical staff time and time for separately reported services. Office E/M selection is based on total physician time.

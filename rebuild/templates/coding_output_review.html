@@ -6,7 +6,7 @@
   {% if review.state == 'accepted' %}<p class="small">The code number and original-note evidence are accepted for this saved fictional encounter and included in its approved coding appendix. The withheld provider description and its terminology version remain unresolved.</p>{% elif review.state == 'rejected' %}<p class="small">This saved rejection excludes the code from the approved coding appendix. The note evidence and review basis remain available below; the withheld provider description and its terminology version remain unresolved.</p>{% else %}<p class="small">This review covers the selected code number and original-note evidence. Accepting it does not verify or repair the withheld provider description or its terminology version.</p>{% endif %}
   <div class="notice" data-output-review-basis>
     <p class="small"><strong>Selection:</strong> Supported for this saved note and date of service. {{ review.source_summary }}</p>
-    <p class="small"><strong>Description:</strong> Defective provider wording withheld; upstream description and terminology version remain unresolved.</p>
+    <p class="small"><strong>Description:</strong> {% if review.description_status == 'withheld_unverified_provider_text' %}Unverified provider wording withheld; upstream description and terminology version remain unresolved.{% else %}Defective provider wording withheld; upstream description and terminology version remain unresolved.{% endif %}</p>
     <p class="small"><strong>Permission:</strong> {{ review.permission_summary }}</p>
     <p class="small"><strong>{% if review.decision %}Saved decision:{% else %}Your decision:{% endif %}</strong> {% if review.state == 'accepted' %}Accepted code number and note evidence.{% elif review.state == 'rejected' %}Rejected; excluded from the approved appendix.{% else %}Pending. This code cannot enter the approved appendix until you accept it.{% endif %}</p>
   </div>
@@ -34,7 +34,7 @@
     <label class="check-label" for="coding-output-confirm"><input id="coding-output-confirm" type="checkbox" name="confirm_note_facts" value="true" required> <span>I have reviewed the documented facts and confirm that they support this code for the saved fictional encounter.</span></label>
     <button type="submit" name="outcome" value="accepted">Confirm note facts and accept {{ review.code }}</button>
     <button type="submit" name="outcome" value="rejected" class="secondary" formnovalidate>Reject {{ review.code }}</button>
-    <p class="helptext">Your decision is saved against this encounter revision. Acceptance includes only the code number and note evidence; the incorrect descriptor stays excluded.</p>
+    <p class="helptext">Your decision is saved against this encounter revision. Acceptance includes only the code number and note evidence; the {% if review.description_status == 'withheld_unverified_provider_text' %}unverified{% else %}incorrect{% endif %} descriptor stays excluded.</p>
   </form>
   {% elif review.reason %}<p class="notice warning">{{ review.reason }}</p>{% endif %}
 </section>

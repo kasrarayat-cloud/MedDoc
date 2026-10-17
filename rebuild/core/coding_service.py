@@ -139,6 +139,10 @@ def ensure_run(encounter, user, automatic=False):
     old = CodingRun.objects.filter(input_digest=key, encounter=e).first()
     if old:
         return old
+    from .coding_recovery import reuse_for_context
+    reused = reuse_for_context(e, user, inputs, context, releases, key)
+    if reused is not None:
+        return reused
     available = any(r['coding_digest'] for r in releases)
     config = {}
     state, error_code, error = 'queued', '', ''

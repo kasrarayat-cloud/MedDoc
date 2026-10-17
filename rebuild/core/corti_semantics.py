@@ -4,6 +4,7 @@ These checks do not identify a code, supply terminology, establish permission or
 record clinician approval. Dated selection rules are applied by the caller.
 """
 import re
+from datetime import datetime
 
 CLASSIFICATION_SOURCE = 'https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system'
 REQUIRED_TIME_FACTS = ('setting', 'patient_status', 'time_minutes', 'time_same_day',
@@ -73,7 +74,9 @@ def _unsafe(notes, start, text):
     context = (heading + ' ' if heading.endswith(':') else '') + text
     return bool(re.search(r'[“”"]|\b(?:example|hypothetical|quoted|quotation|template text|'
         r'another patient|other patient|mother|father|sister|brother|yesterday|tomorrow|'
-        r'last (?:week|month|year)|next (?:week|month|year)|would|will|might)\b', context, re.I))
+        r'(?:previous|prior|earlier) (?:visit|encounter)|'
+        r'last (?:week|month|year)|next (?:week|month|year)|would|will|might|'
+        r'planned|scheduled|future|hypothetically)\b', context, re.I))
 
 
 def office_time_facts(notes):
@@ -97,7 +100,7 @@ def office_time_facts(notes):
         if _unsafe(notes, start, text):
             continue
         negative = bool(re.search(r'\b(?:no|not|never|denies?|without)\b', low))
-        if re.search(r'\boffice visit\b', low) and not negative:
+        if re.search(r'\b(?:office (?:visit|consultation|encounter)|outpatient (?:office )?visit)\b', low) and not negative:
             add('setting', 'outpatient_office', start, end, text)
         if re.search(r'\b(?:new|established) patient\b', low):
             if negative:
@@ -162,6 +165,103 @@ def office_time_facts(notes):
             facts.append(candidates[0])
     return {'status': 'documented' if not blockers else 'requires_clarification',
             'facts': facts, 'blockers': list(dict.fromkeys(blockers)), 'clinician_confirmed': False}
+
+
+def confirmed_time_context(context, notes, facts):
+    """Saved context confirms source facts; UI checkboxes cannot create evidence."""
+    values = {fact['key']: fact['value'] for fact in facts}
+    errors = []
+    for key in ('setting', 'patient_status', 'em_basis'):
+        if context.get(key) != values.get(key):
+            errors.append('The saved ' + key.replace('_', ' ') + ' conflicts with the complete source.')
+    if str(context.get('time_minutes', '')) != str(values.get('time_minutes', '')):
+        errors.append('Saved physician minutes do not match the documented total.')
+    if any(context.get(key) is not True for key in
+           ('time_same_day', 'time_qualified_clinician', 'time_excludes_separately_reported')):
+        errors.append('Confirm all three documented physician-time conditions in coding context.')
+    evidence = context.get('time_evidence', '')
+    time = next((fact for fact in facts if fact['key'] == 'time_minutes'), None)
+    if (not isinstance(evidence, str) or not evidence or evidence not in notes or time is None
+            or not any(at <= time['start'] and at + len(evidence) >= time['end']
+                       for at in (m.start() for m in re.finditer(re.escape(evidence), notes)))):
+        errors.append('Saved time evidence must quote the complete physician-time assertion.')
+    return errors
+
+
+def office_service_eligibility(notes, service_date=None):
+    """Veto full-source contradictions and require an actual evaluated service.
+
+    This bounded reader supports explicit current office documentation. It does
+    not infer an encounter from a numeric time quote or a scheduled appointment.
+    Unrecognized competing practitioner totals require clarification.
+    """
+    errors, evaluated = [], False
+    if service_date is not None:
+        for raw_date in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes):
+            parsed = None
+            for format in ('%Y-%m-%d', '%d %B %Y', '%B %d, %Y'):
+                try:
+                    parsed = datetime.strptime(raw_date.strip(), format).date()
+                    break
+                except ValueError:
+                    pass
+            if parsed != service_date:
+                errors.append('The source service date is unresolved or conflicts with the saved encounter date.')
+    total = r'\b(?:total\s+)?(?:physician|practitioner|qualified health care professional)\s+(?:total\s+)?time\b'
+    for start, _end, text in _sentences(notes):
+        low = text.casefold()
+        # A retraction can refer to a prior/copied statement. Inspect it before
+        # discarding foreign/historical fact scope, or the retraction itself
+        # disappears while the original assertion survives as a false positive.
+        service = r'\b(?:time|minutes|encounter|visit|appointment|consultation|evaluation|examination)\b'
+        retracted = r'\b(?:copied|incorrect\w*|erroneous|invalid|unreliable|mistake|wrong|retract\w*|disregard\w*)\b'
+        if (re.search(service, low) and (re.search(retracted, low)
+                or re.search(r'\b(?:must|should|can)\s+not\s+(?:be\s+)?(?:used|counted|relied)\b', low))):
+            errors.append('The complete source retracts or questions the documented service or time.')
+        if (re.search(r'\b(?:encounter|visit|appointment|consultation)\b[^.;]*'
+                      r'\b(?:did not|didn.t|never)\s+(?:occur|take place|happen)\b', low)
+                or re.search(r'\b(?:did not|didn.t|never)\s+(?:see|evaluate|examine)\b[^.;]*\bpatient\b', low)
+                or re.search(r'\bpatient\b[^.;]*\b(?:was not|wasn.t|not)\s+(?:seen|evaluated|examined)\b', low)):
+            errors.append('The complete source denies that the patient encounter or evaluation occurred.')
+        if (re.search(r'\b(?:(?:clinical )?staff|separately reported services)\b', low)
+                and (re.search(r'\b(?:is|are|was|were)\s+(?:(?:also|already)\s+)?(?:included|counted)\b', low)
+                     or re.search(r'\b(?:minutes|time)\b[^.;]*\b(?:spent|provided|performed)\s+by\b', low)
+                     or re.search(r'\bof (?:these|the)\s+[^.;]*\bminutes\b', low))):
+            errors.append('A component of the documented total includes staff time or separately reported services.')
+        if _unsafe(notes, start, text):
+            continue
+        if (re.search(total, low) or re.search(r'\b(?:physician|practitioner)\s+(?:spent|provided)\b', low)
+                or re.search(r'\b(?:correction|corrected|amended|actual|actually)\b', low)) and re.search(r'\b(?:minutes?|hours?)\b', low):
+            if not re.match(r'total (?:physician|practitioner|qualified health care professional) time'
+                            r'(?: on (?:the )?date of service)?\s*(?:was|is|:)\s*\d+\s+minutes\b', low):
+                errors.append('A competing or qualified practitioner-time statement requires clarification.')
+        # This finite contract recognizes the complete total, its explicit
+        # exclusions, and the E/M basis. An additional assertion about that same
+        # total must not disappear merely because its number is written in words
+        # or the author uses an anaphor instead of repeating "physician time".
+        linked_time = re.search(total + r'|\b(?:this|the|documented) total(?: time)?\b|\btime (?:above|below)\b', low)
+        known_time = (re.match(r'total (?:physician|practitioner|qualified health care professional) time'
+                              r'(?: on (?:the )?date of service)?\s*(?:was|is|:)\s*\d+\s+minutes\b', low)
+            or re.match(r'(?:this|the) total\s+(?:excludes?|does not include)\b', low)
+            or re.search(r'\be/m\s+selection\b.*\bbased on total (?:physician )?time\b', low))
+        if linked_time and not known_time:
+            errors.append('An additional assertion about the practitioner total requires clarification.')
+        if (re.search(r'\b(?:no|not|never|without)\b[^.;]*\b(?:office (?:visit|consultation)|evaluation|examination)\b', low)
+                or re.search(r'\b(?:office (?:visit|consultation)|evaluation|examination)\b[^.;]*'
+                             r'\b(?:not (?:performed|completed|provided)|cancelled|canceled)\b', low)
+                or re.search(r'\b(?:appointment|visit|consultation)\b[^.;]*\b(?:cancelled|canceled|did not occur)\b', low)
+                or re.search(r'\bno (?:office )?(?:visit|consultation|appointment)\b', low)):
+            errors.append('The complete source also denies a completed office evaluation or examination.')
+        # A clinical assertion about the encounter, or the qualifying activities
+        # of its same-day total, establishes that a service actually occurred.
+        if (re.search(r'\b(?:examined|history (?:was )?obtained|examination (?:was )?performed)\b[^.;]*'
+                      r'\b(?:this (?:encounter|visit)|today)\b', low)
+                or re.search(r'\bincluding\b[^.;]*\b(?:obtaining (?:the )?history|performing (?:the )?examination)\b', low)):
+            if not re.search(r'\b(?:no|not|never|without|denies?)\b', low):
+                evaluated = True
+    if not evaluated:
+        errors.append('The complete source must document evaluation with history or examination during this encounter.')
+    return list(dict.fromkeys(errors))
 
 
 def citation_adequacy(spans, facts):
