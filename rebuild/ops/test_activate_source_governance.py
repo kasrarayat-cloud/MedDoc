@@ -73,7 +73,7 @@ class SourceGovernanceInstallTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); root.chmod(0o700); plan = self.plan(root)
             plan['source_sha256'].update({name: 'e' * 64 for name in op.RUNTIME | op.SUPPORT | op.FIXTURES})
-            self.assertEqual(len(plan['source_sha256']), 21)
+            self.assertEqual(len(plan['source_sha256']), 22)
             op.validate_plan(plan)
             plan['source_sha256'] = {'rebuild/core/semantic_generation.py': 'b' * 64}
             for name in ('rebuild/core/migrations/0032_extra.py', 'rebuild/templates/coding_panel.html',
@@ -86,7 +86,8 @@ class SourceGovernanceInstallTests(unittest.TestCase):
                     'rebuild/core/semantic_source_context.py', 'rebuild/core/coding_recovery.py', 'rebuild/core/semantic_revalidation.py',
                     '/rebuild/core/jobs.py', 'rebuild/core/../jobs.py', 'rebuild/static/app.js',
                     'rebuild/ops/fixtures/corti_office_time_output_reference.json',
-                    'rebuild/core/tests/test_unrelated.py',
+                    'rebuild/core/tests/test_unrelated.py', '.github/workflows/unrelated.yml',
+                    '.github/workflows/../test.yml', '.github/.hidden/test.yml',
                     'rebuild/core/tests/fixtures/iris_unreviewed.json'):
                 bad = deepcopy(plan); bad['source_sha256'][name] = 'b' * 64
                 with self.subTest(name=name), self.assertRaisesRegex(op.Refusal, 'only_source_governance_source'):
@@ -108,6 +109,7 @@ class SourceGovernanceInstallTests(unittest.TestCase):
             'rebuild/core/corti_semantics.py', 'rebuild/core/coding_nec.py',
             'rebuild/core/coding_reference_store.py'})
         self.assertEqual(op.SUPPORT, {
+            '.github/workflows/test.yml',
             'rebuild/ops/activate_source_governance.py', 'rebuild/ops/test_activate_source_governance.py',
             'docs/runbooks/source-governance-install-20261017.md',
             'rebuild/core/tests/test_source_governance_generation.py',
@@ -120,7 +122,7 @@ class SourceGovernanceInstallTests(unittest.TestCase):
             'rebuild/core/tests/fixtures/nadia_source_governance_retained.json',
             'rebuild/core/tests/fixtures/tessa_coding_retained.json',
             'rebuild/core/data/mesh2026_clinical_concepts.json'})
-        self.assertEqual(len(op.RUNTIME | op.SUPPORT | op.FIXTURES), 21)
+        self.assertEqual(len(op.RUNTIME | op.SUPPORT | op.FIXTURES), 22)
 
     def test_release_stamp_only_preserves_every_other_byte_and_line_ending(self):
         original = self.original_environment()

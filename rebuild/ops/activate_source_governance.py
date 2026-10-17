@@ -28,7 +28,7 @@ RUNTIME = frozenset({'rebuild/core/semantic_generation.py',
     'rebuild/core/coding_engine.py', 'rebuild/core/corti_coding.py',
     'rebuild/core/corti_semantics.py', 'rebuild/core/coding_nec.py',
     'rebuild/core/coding_reference_store.py'})
-SUPPORT = frozenset({'rebuild/ops/activate_source_governance.py',
+SUPPORT = frozenset({'.github/workflows/test.yml', 'rebuild/ops/activate_source_governance.py',
     'rebuild/ops/test_activate_source_governance.py',
     'docs/runbooks/source-governance-install-20261017.md',
     'rebuild/core/tests/test_source_governance_generation.py',
@@ -74,7 +74,8 @@ def validate_plan(plan):
     for name, digest in paths.items():
         path = PurePosixPath(name)
         require(name == str(path) and not path.is_absolute()
-                and not any(part.startswith('.') for part in path.parts)
+                and (name == '.github/workflows/test.yml'
+                     or not any(part.startswith('.') for part in path.parts))
                 and name in RUNTIME | SUPPORT | FIXTURES
                 and re.fullmatch('[a-f0-9]{64}', digest), 'only_source_governance_source')
     require(type(plan['environment']) is dict and plan['environment'] == {}, 'release_stamp_only')

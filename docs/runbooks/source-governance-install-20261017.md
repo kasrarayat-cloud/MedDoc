@@ -7,8 +7,11 @@ controller starts from `f017ef8a8270ced08c90c9a6c6a2827237616e51`. Never rerun a
 consumed support-closure or earlier controller, plan, declaration or attempt.
 
 The finite source boundary is `RUNTIME | SUPPORT | FIXTURES` in this controller.
-It contains twenty-one explicitly enumerated runtime, test, retained-fixture, public
-terminology-resource and release paths. The new clinical scope covers the semantic generator, current
+It contains twenty-two explicitly enumerated runtime, test, retained-fixture, public
+terminology-resource, CI and release paths. The sole CI change is the Python job
+timeout in `.github/workflows/test.yml`, from 20 to 30 minutes. It allows the existing
+operations checks to finish after the application and document suites; no test or
+required check is removed. No other workflow path is admitted. The new clinical scope covers the semantic generator, current
 source-context helper and job contract. The coding scope covers engine, Corti
 validation, source semantics and a bounded public clinical-concept relation
 reader, plus the existing bounded metadata projection for the exact guideline hash.
