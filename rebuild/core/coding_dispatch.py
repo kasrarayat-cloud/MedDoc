@@ -90,13 +90,13 @@ def configuration(actor, encounter):
             from .coding_recovery import CONTEXT_CONTRACT
             result['context_review_contract'] = CONTEXT_CONTRACT
         from .models import CodingRun
-        from .coding_engine import SOURCE_CONTRACT
+        from .coding_engine import CURRENT_SOURCE_CONTRACT, SOURCE_CONTRACTS
         first = CodingRun.objects.filter(encounter=encounter).order_by('created_at', 'pk').first()
         # Pin old encounters to the contract on their first immutable run.
         # Context-only derivatives already copy that run's configuration.
-        contract = first.config.get('clinical_source_contract') if first is not None else SOURCE_CONTRACT
+        contract = first.config.get('clinical_source_contract') if first is not None else CURRENT_SOURCE_CONTRACT
         if contract is not None:
-            if contract != SOURCE_CONTRACT:
+            if contract not in SOURCE_CONTRACTS:
                 raise ValidationError('Unknown clinical coding source contract.')
             result['clinical_source_contract'] = contract
     return result

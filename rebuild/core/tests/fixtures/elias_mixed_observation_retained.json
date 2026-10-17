@@ -1,0 +1,2263 @@
+{
+  "provenance": {
+    "kind": "retained synthetic source and actual fresh v15 stage replies; prospective test proposals are constructed, not provider output",
+    "source_sha256": "8cca237ca9ccda3b8f8ea1172f8bbcf64302d5be53bc6f070954ece0968141fd",
+    "scope_contract": "positioned-clinical-context-v15"
+  },
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Elias Mercer\r\nAge and sex: 46-year-old man\r\nClinic record number: SYN-EM-1017\r\nDate of service: 17 October 2026\r\nTreating clinician: Dr. Leena Farrow\r\nVisit: Established-patient, in-person gastrointestinal outpatient visit.\r\n\r\nS - Subjective\r\nSynthetic Elias Mercer's chief concern is watery diarrhea lasting 11 days. He reports three to five loose or watery stools daily, with intermittent mild periumbilical cramping that improves after a bowel movement. He is eating and drinking and can keep fluids down. He denies blood in the stool, black stools, fever, vomiting, nighttime awakening to pass stool and unintentional weight loss.\r\nHe previously saw this same clinician, Dr. Leena Farrow, in this same GI clinic on 21 August 2026 for intermittent constipation. At that visit she recommended a four-week trial of psyllium and increased dietary fiber. His constipation resolved, and he completed the psyllium trial in September. He is no longer taking psyllium.\r\nHis relevant medical history is intermittent heartburn. He has no known history of inflammatory bowel disease or celiac disease and no prior abdominal surgery. His current medication is famotidine 20 mg by mouth as needed for heartburn. He reports an allergy to amoxicillin, which causes hives.\r\n\r\nO - Objective\r\nBlood pressure is 118/74 mmHg, pulse 76 beats per minute, temperature 36.8 degrees Celsius and weight 78 kg. He appears comfortable and well hydrated. His abdomen is soft, with mild periumbilical tenderness, normal bowel sounds and no guarding or rebound.\r\n\r\nA - Assessment\r\nDiarrhea and periumbilical abdominal pain were both evaluated during this encounter. The cause remains uncertain. Infectious and inflammatory causes remain possibilities; neither has been established. No definitive underlying disease is diagnosed at this encounter.\r\n\r\nP - Plan\r\nA stool bacterial pathogen PCR panel and fecal calprotectin are ordered today for sample collection after this visit. No stool sample was collected today, neither test was performed today and no results are available. No procedure was performed during this encounter.\r\nThe plan is oral hydration and food as tolerated while awaiting the stool studies. No new prescription medication is started. Follow-up is planned in two weeks, with earlier contact when results become available. He is advised to seek prompt assessment for bloody or black stools, fever, worsening abdominal pain or inability to maintain hydration.\r\n\r\nOffice E/M selection is based on total physician time on the date of service. Dr. Farrow personally spent 37 minutes on the encounter date: six minutes reviewing prior records, 24 minutes obtaining the history, performing the examination and counseling the patient, and seven minutes entering orders and documenting the visit. The 37 minutes exclude nine minutes of nursing rooming work and five minutes of physician record review performed on the preceding day. The total also excludes any time for separately reported services.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Patient full name",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "Age and sex",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "Encounter date, treating clinician, setting and visit status",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "Chief concern and duration",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "Stool pattern, associated abdominal symptoms and oral intake",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "Pertinent symptom negatives",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "Prior visit with the same clinician including clinician, date, clinic, reason, recommendation and subsequent outcome",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Relevant medical history and disease history negatives",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "Abdominal surgical history",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Current medicines with dose, route, frequency and indication",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "Medication allergy and reaction",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "Vital signs and weight",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "Physical examination",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "Assessment including evaluated symptoms and diagnostic uncertainty",
+      "locator": {
+        "cell": 13
+      }
+    },
+    {
+      "key": "cell_14",
+      "kind": "text",
+      "label": "Investigations ordered, collection timing, performed status and results",
+      "locator": {
+        "cell": 14
+      }
+    },
+    {
+      "key": "cell_15",
+      "kind": "text",
+      "label": "Immediate management and medication decisions",
+      "locator": {
+        "cell": 15
+      }
+    },
+    {
+      "key": "cell_16",
+      "kind": "text",
+      "label": "Follow up, result communication and return precautions",
+      "locator": {
+        "cell": 16
+      }
+    },
+    {
+      "key": "cell_17",
+      "kind": "text",
+      "label": "E M selection basis and total physician time on the encounter date including every timed activity and all time exclusions",
+      "locator": {
+        "cell": 17
+      }
+    },
+    {
+      "key": "cell_18",
+      "kind": "text",
+      "label": "Referring clinician",
+      "locator": {
+        "cell": 18
+      }
+    },
+    {
+      "key": "cell_19",
+      "kind": "text",
+      "label": "Preferred pharmacy",
+      "locator": {
+        "cell": 19
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's full name only, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_1": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's age and sex as documented, with no unit or format printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_10": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented medication allergy and the associated reaction, including documented absence of known medication allergy.",
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_11": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented vital signs and weight with their values and any units as documented; no units or ranges are printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_12": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented physical examination findings, including normal or absent findings as well as abnormal ones.",
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_13": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented assessment including evaluated symptoms, possible or uncertain diagnoses and explicitly excluded conditions, preserving diagnostic uncertainty and negation.",
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_14": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented investigations ordered, collection timing, performed status and results, preserving what was or was not performed.",
+      "permitted_destination": {
+        "field_key": "cell_14",
+        "locator_sha256": "39acde59594128ff59afd0bc87ccc84ac3363f7b0cd78e2c37172d9b4b812ea6"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_15": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented immediate management and medication decisions, including medicines started, changed, stopped or not changed.",
+      "permitted_destination": {
+        "field_key": "cell_15",
+        "locator_sha256": "d5b9d6fab52b29c02d8d4b423c7e0abcd5f769b420f1248482f718992aaa26b3"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_16": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented follow up plan, how results will be communicated and return precautions, preserving documented qualifications.",
+      "permitted_destination": {
+        "field_key": "cell_16",
+        "locator_sha256": "14d093df536e5d87ccf1c49eb75610cc0bf829611e9ba5b85c53f4728b82f9de"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_17": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Concise statement of the documented E/M selection basis and total physician time on the encounter date, including every timed activity and all time exclusions.",
+      "permitted_destination": {
+        "field_key": "cell_17",
+        "locator_sha256": "e16bb4d5760a8fd18f7e00791df3f828deeb177b3602ba4857d0edc57f889410"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_18": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The referring clinician’s name only when explicitly documented as the referring clinician. A treating clinician’s name is not a referring-clinician name unless that role is also explicitly documented.",
+      "permitted_destination": {
+        "field_key": "cell_18",
+        "locator_sha256": "a234e0753fdebe9174c1fdc26c9a5f1de16052380f225a0b942239acd4331901"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "clinician",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_19": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's preferred pharmacy name or identification as documented.",
+      "permitted_destination": {
+        "field_key": "cell_19",
+        "locator_sha256": "504145417dcbc2c521b4919169a27a0b03f24968aa9691c47a083aef686d8152"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_2": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The documented encounter date, treating clinician, care setting and patient visit status for the target encounter, preserving documented qualifications.",
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_3": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The documented chief concern and its duration, concisely stated.",
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_4": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Description of the documented stool pattern, associated abdominal symptoms and oral intake, including documented absence as well as presence.",
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_5": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented pertinent symptom negatives, i.e. symptoms explicitly recorded as absent.",
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "scope": {
+        "polarity": "negative",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_6": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Description of the earlier prior visit with the same clinician: clinician, date, clinic, reason, recommendation and subsequent outcome. Restricted to a visit before the target encounter; its facts must not be moved into the target encounter.",
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "past"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_7": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented relevant medical history, including disease history negatives (conditions documented as absent) as well as present conditions.",
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_8": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented abdominal surgical history, including documentation of no prior abdominal surgery.",
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_9": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "List of current medicines at the target encounter with dose, route, frequency and indication, including documented absence of medicines.",
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    }
+  },
+  "stages": [
+    {
+      "stage": "extractor",
+      "attempt": 1,
+      "output": {
+        "reference_contract": "exact-source-reference-inventory-v2",
+        "facts": [
+          {
+            "id": "f1",
+            "kind": "identity",
+            "concept": "patient_full_name",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Synthetic Elias Mercer",
+              "source_unit_id": 2,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f2",
+            "kind": "identity",
+            "concept": "patient_age_and_sex",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "46-year-old man",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f3",
+            "kind": "other",
+            "concept": "encounter_date_of_service",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "17 October 2026",
+              "source_unit_id": 5,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f4",
+            "kind": "other",
+            "concept": "treating_clinician",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Leena Farrow",
+                "source_unit_id": 6,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Leena Farrow",
+              "source_unit_id": 6,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f5",
+            "kind": "other",
+            "concept": "visit_setting_and_status",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Established-patient, in-person gastrointestinal outpatient visit",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f6",
+            "kind": "reason",
+            "concept": "chief_concern_with_duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "watery diarrhea lasting 11 days",
+              "source_unit_id": 9,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f7",
+            "kind": "finding",
+            "concept": "stool_pattern",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "three to five loose or watery stools daily",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f8",
+            "kind": "finding",
+            "concept": "abdominal_cramping",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "intermittent mild periumbilical cramping that improves after a bowel movement",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f9",
+            "kind": "finding",
+            "concept": "oral_intake",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "He is eating and drinking and can keep fluids down",
+              "source_unit_id": 11,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f10",
+            "kind": "finding",
+            "concept": "pertinent_symptom_negatives",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "denies blood in the stool, black stools, fever, vomiting, nighttime awakening to pass stool and unintentional weight loss",
+              "source_unit_id": 12,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f11",
+            "kind": "history",
+            "concept": "prior_visit_same_clinician_reason",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "He previously saw this same clinician, Dr. Leena Farrow, in this same GI clinic on 21 August 2026 for intermittent constipation",
+              "source_unit_id": 13,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "21 August 2026",
+                "source_unit_id": 13,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f12",
+            "kind": "history",
+            "concept": "prior_visit_recommendation",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "At that visit she recommended a four-week trial of psyllium and increased dietary fiber",
+              "source_unit_id": 14,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "At that visit",
+                "source_unit_id": 14,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f13",
+            "kind": "history",
+            "concept": "prior_visit_outcome",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "His constipation resolved, and he completed the psyllium trial in September",
+              "source_unit_id": 15,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "in September",
+                "source_unit_id": 15,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f14",
+            "kind": "finding",
+            "concept": "psyllium_current_use",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "He is no longer taking psyllium",
+              "source_unit_id": 16,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f15",
+            "kind": "history",
+            "concept": "relevant_medical_history_heartburn",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "intermittent heartburn",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f16",
+            "kind": "history",
+            "concept": "history_of_inflammatory_bowel_or_celiac_disease",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "no known history of inflammatory bowel disease or celiac disease",
+              "source_unit_id": 18,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f17",
+            "kind": "history",
+            "concept": "abdominal_surgical_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "no prior abdominal surgery",
+              "source_unit_id": 18,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f18",
+            "kind": "history",
+            "concept": "current_medication",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "famotidine 20 mg by mouth as needed for heartburn",
+              "source_unit_id": 19,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f19",
+            "kind": "history",
+            "concept": "medication_allergy_and_reaction",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "allergy to amoxicillin, which causes hives",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f20",
+            "kind": "finding",
+            "concept": "vital_signs_and_weight",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Blood pressure is 118/74 mmHg, pulse 76 beats per minute, temperature 36.8 degrees Celsius and weight 78 kg",
+              "source_unit_id": 22,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f21",
+            "kind": "finding",
+            "concept": "general_appearance_exam",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "He appears comfortable and well hydrated",
+              "source_unit_id": 23,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f22",
+            "kind": "finding",
+            "concept": "abdominal_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "His abdomen is soft, with mild periumbilical tenderness, normal bowel sounds and no guarding or rebound",
+              "source_unit_id": 24,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f23",
+            "kind": "assessment",
+            "concept": "evaluated_symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Diarrhea and periumbilical abdominal pain were both evaluated during this encounter",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f24",
+            "kind": "assessment",
+            "concept": "cause_of_symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The cause remains uncertain",
+              "source_unit_id": 27,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f25",
+            "kind": "assessment",
+            "concept": "possible_infectious_or_inflammatory_causes",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Infectious and inflammatory causes remain possibilities; neither has been established",
+              "source_unit_id": 28,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f26",
+            "kind": "assessment",
+            "concept": "definitive_underlying_disease_diagnosis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No definitive underlying disease is diagnosed at this encounter",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f27",
+            "kind": "plan",
+            "concept": "stool_investigations_ordered",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "A stool bacterial pathogen PCR panel and fecal calprotectin are ordered today for sample collection after this visit",
+              "source_unit_id": 31,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f28",
+            "kind": "plan",
+            "concept": "stool_sample_and_test_performance",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No stool sample was collected today, neither test was performed today and no results are available",
+              "source_unit_id": 32,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f29",
+            "kind": "plan",
+            "concept": "procedure_performed",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No procedure was performed during this encounter",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f30",
+            "kind": "plan",
+            "concept": "immediate_management",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The plan is oral hydration and food as tolerated while awaiting the stool studies",
+              "source_unit_id": 34,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f31",
+            "kind": "plan",
+            "concept": "new_prescription_medication",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No new prescription medication is started",
+              "source_unit_id": 35,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f32",
+            "kind": "follow_up",
+            "concept": "follow_up_plan_and_result_communication",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Follow-up is planned in two weeks, with earlier contact when results become available",
+              "source_unit_id": 36,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": {
+                "quote": "in two weeks",
+                "source_unit_id": 36,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f33",
+            "kind": "follow_up",
+            "concept": "return_precautions",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Elias Mercer",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "He is advised to seek prompt assessment for bloody or black stools, fever, worsening abdominal pain or inability to maintain hydration",
+              "source_unit_id": 37,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f34",
+            "kind": "other",
+            "concept": "em_selection_basis",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Farrow",
+                "source_unit_id": 39,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Office E/M selection is based on total physician time on the date of service",
+              "source_unit_id": 38,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f35",
+            "kind": "other",
+            "concept": "physician_time_total_and_activities",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Farrow",
+                "source_unit_id": 39,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Farrow personally spent 37 minutes on the encounter date: six minutes reviewing prior records, 24 minutes obtaining the history, performing the examination and counseling the patient, and seven minutes entering orders and documenting the visit",
+              "source_unit_id": 39,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f36",
+            "kind": "other",
+            "concept": "physician_time_exclusions_nursing_and_prior_day",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Farrow",
+                "source_unit_id": 39,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The 37 minutes exclude nine minutes of nursing rooming work and five minutes of physician record review performed on the preceding day",
+              "source_unit_id": 40,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f37",
+            "kind": "other",
+            "concept": "physician_time_exclusions_separately_reported_services",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Farrow",
+                "source_unit_id": 39,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The total also excludes any time for separately reported services",
+              "source_unit_id": 41,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "ace48e0e59d09de0978f286f88da508e0f6880a6553e24af68b710b57ac4f11a",
+        "schema": "76e5af06c7fc37357490f7b2fa707d2bd422087908b1ebbfd2788c03d5dc45ba",
+        "instructions": "91a7076940c891ea1f56f5595a07e2013ece492abb7631d166e08351fc9eefa4"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "fact_ids": [
+              "f1"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_1",
+            "fact_ids": [
+              "f2"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_2",
+            "fact_ids": [
+              "f3",
+              "f4",
+              "f5",
+              "f11"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_3",
+            "fact_ids": [
+              "f6"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_4",
+            "fact_ids": [
+              "f7",
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_5",
+            "fact_ids": [
+              "f10"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_6",
+            "fact_ids": [
+              "f11",
+              "f12",
+              "f13"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_7",
+            "fact_ids": [
+              "f15",
+              "f16"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_8",
+            "fact_ids": [
+              "f17"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_9",
+            "fact_ids": [
+              "f18",
+              "f14"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_10",
+            "fact_ids": [
+              "f19"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_11",
+            "fact_ids": [
+              "f20"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f21"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_13",
+            "fact_ids": [
+              "f23",
+              "f24",
+              "f25",
+              "f26"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_14",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_15",
+            "fact_ids": [
+              "f30",
+              "f31"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_16",
+            "fact_ids": [
+              "f32",
+              "f33"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_17",
+            "fact_ids": [
+              "f34",
+              "f35",
+              "f36",
+              "f37"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_18",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_19",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "0694d54f9e8a38369b36c94758da482a697c3a4a14ab265f881421f764abfbce",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "ff7d439da1c7a737588b28a9bf5959233a14d266f9afb638161fcb41230e87de"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete patient name, including the 'Synthetic' prefix, matches the source."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "Age and sex are documented as '46-year-old man'."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3",
+              "f4",
+              "f5",
+              "f11"
+            ],
+            "reason": "The date, treating clinician, in-person setting and established status match the source. The prior same-clinician visit is kept as past, supporting established status."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f6"
+            ],
+            "reason": "The chief concern and its 11-day duration match the source."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "pass",
+            "fact_ids": [
+              "f7",
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "reason": "Stool pattern, cramping, oral intake and the documented symptom negatives are all retained with negation intact."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f10"
+            ],
+            "reason": "The full list of denied symptoms is retained with 'Denies' in the rendered text."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f11",
+              "f12",
+              "f13"
+            ],
+            "reason": "The prior visit's clinician, date, clinic, reason, recommendation and outcome are all present and kept as past."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f15",
+              "f16"
+            ],
+            "reason": "Heartburn history and the negated IBD/celiac history match the source."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "pass",
+            "fact_ids": [
+              "f17"
+            ],
+            "reason": "'No prior abdominal surgery' is retained."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18",
+              "f14"
+            ],
+            "reason": "Famotidine with dose, route, frequency and indication is present. Current psyllium cessation is retained."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f19"
+            ],
+            "reason": "The amoxicillin allergy and its hives reaction match the source."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "pass",
+            "fact_ids": [
+              "f20"
+            ],
+            "reason": "All vital signs and weight appear with their documented units."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "omission",
+            "fact_ids": [
+              "f21",
+              "f22"
+            ],
+            "reason": "The answer is ambiguous/held with no committed text, and its candidate omits the documented abdominal exam (soft, mild periumbilical tenderness, normal bowel sounds, no guarding or rebound; f22). f22 also carries local issues on its mixed polarity that keep this field held for review."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f23",
+              "f24",
+              "f25",
+              "f26"
+            ],
+            "reason": "The evaluated symptoms, uncertain cause, unestablished possibilities and non-diagnosis are all retained with their negative and uncertain wording."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29"
+            ],
+            "reason": "The orders, collection timing, non-collection and non-performance, absent results and no procedure are all retained."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "pass",
+            "fact_ids": [
+              "f30",
+              "f31"
+            ],
+            "reason": "The hydration and food plan and the negated new prescription are retained."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32",
+              "f33"
+            ],
+            "reason": "The two-week follow-up, earlier contact when results are available, and the return precautions match the source."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "pass",
+            "fact_ids": [
+              "f34",
+              "f35",
+              "f36",
+              "f37"
+            ],
+            "reason": "The time-based selection basis, 37 minutes with every timed activity, and all exclusions are retained in complete narrative facts."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring clinician is documented. Dr. Farrow is explicitly the treating clinician only."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No preferred pharmacy is documented."
+          }
+        ],
+        "fact_findings": []
+      },
+      "request_digests": {
+        "payload": "0639f3d4a01429ec9fef826ab130e03bd8370dca6e77cc392ccdd16342d182ad",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "1831732421e9881f3b3a640b5939e328ba6ec8ff35d51e154884d9447a188c2e"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f21",
+              "f22"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "c3bdea4ee4fcba24e3fe53df8b323e7b91e15737e90cccf62a466a43940dbc8c",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "ff7d439da1c7a737588b28a9bf5959233a14d266f9afb638161fcb41230e87de"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete name, including the 'Synthetic' prefix, matches the source."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "'46-year-old man' matches the documented age and sex."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3",
+              "f4",
+              "f5",
+              "f11"
+            ],
+            "reason": "The date of service, treating clinician, in-person outpatient GI setting and established-patient status match the source. The prior same-clinician visit is kept as historical support for established status."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f6"
+            ],
+            "reason": "The chief concern, watery diarrhea, and its 11-day duration match the source."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "pass",
+            "fact_ids": [
+              "f7",
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "reason": "The stool pattern, cramping, oral intake and the denied symptoms (shown with 'Denies') match the source."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f10"
+            ],
+            "reason": "The full list of denied symptoms keeps its negation in the rendered text and matches the source."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f11",
+              "f12",
+              "f13"
+            ],
+            "reason": "The prior visit's clinician, date, clinic, reason, recommendation and outcome are present and kept as past."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f15",
+              "f16"
+            ],
+            "reason": "The heartburn history and the negated IBD/celiac history match the source."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "pass",
+            "fact_ids": [
+              "f17"
+            ],
+            "reason": "'No prior abdominal surgery' matches the source."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18",
+              "f14"
+            ],
+            "reason": "Famotidine with dose, route, frequency and indication is present, and current psyllium cessation is retained."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f19"
+            ],
+            "reason": "The amoxicillin allergy and its hives reaction match the source."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "pass",
+            "fact_ids": [
+              "f20"
+            ],
+            "reason": "All vital signs and the weight appear with their documented units."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "conflict",
+            "fact_ids": [
+              "f21",
+              "f22"
+            ],
+            "reason": "The answer is held: no committed text, status conflict, and f22 carries unresolved local issues on its mixed polarity. The held candidate text does include the abdominal exam, so the earlier omission claim was wrong. The deterministic hold cannot be waived, so this field is not a pass."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f23",
+              "f24",
+              "f25",
+              "f26"
+            ],
+            "reason": "The evaluated symptoms, uncertain cause, unestablished possibilities and non-diagnosis are retained with negation and uncertainty intact."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29"
+            ],
+            "reason": "The orders, collection timing, non-collection, non-performance, absent results and no-procedure statement are all retained."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "pass",
+            "fact_ids": [
+              "f30",
+              "f31"
+            ],
+            "reason": "The hydration and food plan and the negated new prescription are retained."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32",
+              "f33"
+            ],
+            "reason": "The two-week follow-up, earlier contact when results are available, and the return precautions match the source."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "pass",
+            "fact_ids": [
+              "f34",
+              "f35",
+              "f36",
+              "f37"
+            ],
+            "reason": "The time-based selection basis, 37 minutes with every timed activity, and all exclusions are retained in complete narrative facts."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring clinician is documented. Dr. Farrow is documented only as the treating clinician."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No preferred pharmacy is documented."
+          }
+        ],
+        "fact_findings": [
+          {
+            "fact_id": "f22",
+            "verdict": "ambiguous",
+            "reason": "The fact carries a 'mixed' polarity and unresolved local issues. These refer to symptom/family-history assessment context, which does not fit a physical-exam finding, so the polarity stays unresolved and the field is held."
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "22cd191a2b43713ac4277234d90c187eef18736f9a1d9db8e8628b9e12fcf1b5",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "1831732421e9881f3b3a640b5939e328ba6ec8ff35d51e154884d9447a188c2e"
+      }
+    }
+  ],
+  "saved_answers_sha256": "b198192fe97cc2f1ffdc721a98dfb55afe3bc1cc85c3101804b341d5e0a240db"
+}

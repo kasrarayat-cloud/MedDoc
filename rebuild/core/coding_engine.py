@@ -344,7 +344,164 @@ def explicit_other_subject(before):
                 and not re.search(r'\bpatient\b', before))
 
 
-def source_disposition(concept, notes, *, qualifiers=()):
+def _exception_summary_mention(notes, clause, concept, context, units):
+    """A bounded ROS exception refers back; it does not assert or deny it.
+
+    Require the complete source predicate and its current patient-owned ROS
+    position. Extra predicates, uncertain exceptions and unresolved referents
+    keep their normal checks. This never establishes a condition by itself.
+    """
+    from .clinical_source_context import owned_current
+    value = clause.strip().removesuffix('.').strip()
+    terms = '|'.join(re.escape(term) for term in sorted(anchors(concept), key=len, reverse=True))
+    if not terms or not re.fullmatch(
+            r'(?:there\s+(?:are|were)\s+)?no\s+(?:additional|other)\s+'
+            r'(?:findings|symptoms|complaints)\s+(?:beyond|except(?:\s+for)?|apart\s+from|other\s+than)\s+'
+            r'(?:the\s+)?(?:' + terms + r')'
+            r'(?:\s+(?:already\s+)?(?:described|documented|reported|noted)(?:\s+(?:above|earlier))?)?',
+            value, re.I):
+        return False
+    matching = [unit for unit in units if unit['quote'].strip() == clause.strip()]
+    return bool(matching and not context['issues'] and all(
+        owned_current(context, unit) and context['units'][unit['start']]['section'] == 'review of systems'
+        for unit in matching))
+
+
+def _condition_integrity_mention(clause, concept, context, units):
+    """A complete denial of a documentation error is not a symptom denial."""
+    from .clinical_source_context import owned_current
+    terms = '|'.join(re.escape(term) for term in sorted(anchors(concept), key=len, reverse=True))
+    if not terms or not re.fullmatch(r'(?:the\s+)?(?:' + terms + r')\s+(?:is|are|was|were)\s+not\s+'
+            r'(?:erroneous|incorrect|wrong|invalid|retracted|withdrawn|'
+            r'(?:documented|recorded|entered|reported|included)\s+(?:in error|erroneously))',
+            clause.strip().removesuffix('.').strip(), re.I):
+        return False
+    matching = [unit for unit in units if clause.strip() in unit['quote']]
+    for unit in matching:
+        tail = unit['quote'].split(clause.strip(), 1)[1].strip()
+        if tail:
+            # A conjunction with an omitted/pronominal subject still qualifies
+            # this same condition. Only an explicit new subject owns its own
+            # predicate; all of its condition mentions are checked separately.
+            separate = re.fullmatch(r'(?:but|whereas)\s+(?P<subject>[A-Za-z][A-Za-z ]{0,100}?)\s+'
+                r'(?:is|are|was|were)\s+(?:not\s+)?(?:erroneous|incorrect|wrong|invalid|retracted|withdrawn|'
+                r'(?:documented|recorded|entered|reported|included)\s+(?:in error|erroneously))\.?', tail, re.I)
+            # An explicit patient subject does not establish a new clinical
+            # object: "the patient has none" still refers to this symptom.
+            # Likewise, generic condition nouns and deictics cannot prove an
+            # independent subject merely by appearing before a verb.
+            if not separate or re.search(r'\b(?:it|this|that|these|those|he|she|they|there|patient|'
+                    r'symptoms?|conditions?|complaints?|findings?|diagnos[ei]s|problems?|account|report)\b',
+                    norm(separate['subject'])):
+                return False
+    return bool(matching and not context['issues'] and all(owned_current(context, unit) for unit in matching))
+
+
+def _complete_presence_tail(tail):
+    """Complete ordinary symptom timing/triggers, never arbitrary attribution.
+
+    Unknown adjuncts are unresolved qualifications. A patient reporting a
+    subjective symptom is itself an assertion; it does not need a second
+    external report to corroborate it.
+    """
+    count = r'(?:\d+(?:\.\d+)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
+    count += r'several|a few|(?:thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)(?: [a-z]+)?)'
+    duration = r'(?:for|lasting|persisting for)\s+(?:(?:about|approximately)\s+)?' + count + r'\s+(?:minutes?|hours?|days?|weeks?|months?|years?)'
+    timing = r'(?:today|currently|now|at present|at this encounter|daily|nightly|intermittently|since yesterday)'
+    trigger = r'(?:after|with)\s+(?:(?:large|fatty|spicy)\s+)?(?:meals|eating|food)'
+    patient_report = r'(?:according to|as reported by)\s+(?:the patient|her|him|them)'
+    part = r'(?:' + '|'.join((duration, timing, trigger, patient_report)) + r')'
+    return not tail or bool(re.fullmatch(part + r'(?:(?:\s*,?\s+|\s+and\s+)' + part + r'){0,3}', tail))
+
+
+def _current_condition_assertion(clause, before, after, context, row):
+    """Finite affirmative source predicates, independent of provider labels.
+
+    A condition appearing as the object of a question, screening or future risk
+    is not its presence. Bare condition statements require an assessment
+    destination; an evaluation alone is not an affirmative finding. None means
+    an affirmative head has an unresolved trailing qualification, which must
+    not be laundered by a second shorter assertion elsewhere in the source.
+    """
+    value = norm(clause)
+    patient = norm(context.get('patient_name') or '')
+    subject = r'(?:the patient|patient|he|she|they' + ('|' + re.escape(patient) if patient else '') + r')'
+    modifiers = r'(?:(?:a|an|the|current|ongoing|persistent|recurrent|intermittent|acute|chronic|mild|moderate|severe|watery)\s+)*'
+    before, after = before.lstrip(), after.strip()
+    if re.fullmatch(subject + r'\s+(?:(?:also|currently|still)\s+)?(?:has|have|reports?|reported|experiences?|experienced|endorses?|'
+            r'describes?|complains? of|presents? with|is experiencing|are experiencing)\s*' + modifiers, before):
+        return True if _complete_presence_tail(after) else None
+    complaint = r'(?:current |present |chief )?(?:complaint|concern|symptom)'
+    if re.fullmatch(r'(?:(?:the|his|her|their)|' + subject + r'(?: s)?)\s+' + complaint
+            + r'\s+is\s*' + modifiers, before):
+        return True if _complete_presence_tail(after) else None
+    # The source itself states presence or continuing symptoms. Evaluation-for
+    # wording may accompany presence; it cannot replace the presence predicate.
+    prefix = re.fullmatch(modifiers, before) or re.fullmatch(subject +
+        r'\s+(?:is being evaluated for|was evaluated for|is evaluated for)\s*' + modifiers, before)
+    presence = re.match(r'(?:(?:is|are|was|were)\s+)?present\b|'
+            r'(?:(?:has|have)\s+)?(?:persisted|persists|continued|continues|lasted|lasts)\b', after)
+    if prefix and presence:
+        return True if _complete_presence_tail(after[presence.end():].strip()) else None
+    if row['section'] in ('assessment', 'impression'):
+        if not before.strip() and not after:
+            return True
+        # A complete assessment of coordinated findings is an affirmative
+        # assertion, with no clinical vocabulary or code allowlist.
+        evaluated = re.fullmatch(r'(?P<findings>[a-z][a-z ,/-]*)\s+(?:was|were)\s+(?:both\s+)?'
+            r'(?:evaluated|assessed)(?:\s+and\s+discussed)?\s+(?:during|at)\s+(?:this|the current)\s+encounter', value)
+        if evaluated and not re.search(r'\b(?:patient|he|she|they|whether|if|risk|possibility|question|screening)\b',
+                                      evaluated['findings']):
+            return True
+    return False
+
+
+def _condition_assertion_errors(notes, concept, mentions, context, units):
+    """Require current presence and honor source-owned condition corrections."""
+    from .clinical_source_context import owned_current
+    affirmed = False
+    for clause, before, after in mentions:
+        matching = [unit for unit in units if clause.strip() in unit['quote']]
+        if not matching:
+            continue
+        for unit in matching:
+            row = context['units'][unit['start']]
+            if FAMILY.search(clause) or explicit_other_subject(before):
+                continue
+            owned = owned_current(context, unit)
+            previous = next((prior for prior in reversed(units) if prior['start'] < unit['start']), None)
+            # A correction can itself introduce a foreign-scope event. Its
+            # condition-specific backward reference belongs to the preceding
+            # current account, not to that newly named target patient.
+            correction_owner = (row['section_timing'] == 'current' and row['subject'] == 'ambiguous'
+                and previous is not None and owned_current(context, previous))
+            prior_frame = re.match(r'\s*(?:for|during|in|at|regarding)\s+(?:(?:the|his|her)\s+)?'
+                r'(?:prior|previous|earlier|past)\s+(?:visit|encounter|appointment)\b', before)
+            predicate = re.sub(r'^(?:(?:actually|also|now|in fact)\s+)+', '', after.strip())
+            invalid = re.match(r'(?:(?:is|are|was|were)\s+)?'
+                r'(?:(?:documented|recorded|entered|reported|included)\s+(?:in error|erroneously)|'
+                r'erroneous|incorrect|wrong|invalid|retracted|withdrawn)\b', predicate)
+            reassigned = re.match(r'(?:belongs? to|belonged to|refers? to|referred to|concerns?|concerned|describes?|described)\s+'
+                r'(?:(?:another|a different|the other)\s+patient|yesterday(?: s)?(?: appointment| visit| encounter)?|'
+                r'(?:the\s+)?(?:previous|prior|earlier)\s+(?:visit|encounter|appointment))\b', predicate)
+            if not prior_frame and (owned or correction_owner) and (invalid or reassigned):
+                return ['The complete source retracts, reassigns or retimes the selected condition.']
+            if not owned:
+                continue
+            # These qualifiers govern the existence of this condition, rather
+            # than an independently documented cause/type/location attribute.
+            if ('?' in clause or re.search(r'\b(?:whether|if)\b.*\b(?:has|have|is|are)\s*$', before)
+                    or re.match(r'\s*(?:is|was|remains?)\s+(?:a\s+)?risk\b.*\bnot\s+(?:a\s+)?current\s+(?:symptom|condition|diagnosis)', after)):
+                return ['The source questions or denies current presence of the selected condition.']
+            assertion = _current_condition_assertion(clause, before, after, context, row)
+            if assertion is None:
+                return ['The source assertion has an unresolved qualification of the selected condition.']
+            if assertion:
+                affirmed = True
+    return [] if affirmed else ['The source does not independently affirm the condition as currently present.']
+
+
+def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
     """Conservative source vetoes, independent of model assertions or code choice."""
     evidence_span(notes, concept['evidence'])
     kind, subject = concept['kind'], concept['subject']
@@ -362,17 +519,32 @@ def source_disposition(concept, notes, *, qualifiers=()):
         return 'excluded', 'A planned or historical procedure is not a performed service at this encounter.'
     if kind in ('diagnosis', 'symptom') and concept['temporality'] != 'current':
         return 'excluded', 'A historical or planned finding is not established as a current condition.'
-    source_mentions = condition_mentions(notes, concept, qualifiers)
-    evidence_mentions = condition_mentions(concept['evidence'], concept, qualifiers)
+    if source_contract == CURRENT_SOURCE_CONTRACT:
+        from .clinical_source_context import source_context
+        from .generation import source_units
+        units, _ = source_units(notes, [])
+        context = source_context(notes, units)
+    def mentions(text):
+        rows = condition_mentions(text, concept, qualifiers)
+        if source_contract == CURRENT_SOURCE_CONTRACT:
+            rows = [row for row in rows if not (_exception_summary_mention(notes, row[0], concept, context, units)
+                or _condition_integrity_mention(row[0], concept, context, units))]
+        return rows
+    source_mentions = mentions(notes)
+    evidence_mentions = mentions(concept['evidence'])
     surrounding = enclosing_clauses(notes, concept['evidence'])
     if not evidence_mentions or not source_mentions or not any(
-            condition_mentions(clause, concept, qualifiers) for clause in surrounding):
+            mentions(clause) for clause in surrounding):
         # Semantic synonyms may be proposed, but a missing lexical source link
         # is explicitly held rather than using a model's confidence as proof.
         return 'question', 'Clarify the source wording for '+concept['term']+' before selecting a code.'
     ownership = source_owner_question(concept, surrounding)
     if ownership:
         return 'question', ownership
+    if source_contract == CURRENT_SOURCE_CONTRACT and kind in ('diagnosis', 'symptom'):
+        assertion_errors = _condition_assertion_errors(notes, concept, source_mentions, context, units)
+        if assertion_errors:
+            return 'question', assertion_errors[0]
     for clause in surrounding:
         if kind in ('diagnosis','symptom') and affirmative_word(clause,'resolved'):
             return 'excluded', 'The source explicitly describes a resolved finding, not a current condition.'
@@ -482,6 +654,8 @@ TAXONOMY_HEADS = {'disease','diseased','history','syndrome','condition','conditi
                   'absence','screening','encounter','examination','abnormal','abnormality'}
 ROUTE_WORDS = {'with','without','of','and','or','in','the','a','an','at','due','to','by','from'}
 SOURCE_CONTRACT = 'source-bound-clinical-coding-v2'
+CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v3'
+SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT))
 
 
 def index_head_terms(head, description=''):
@@ -601,7 +775,7 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
         if not any(affirmative_word(source,w) for w in words) and not any(
                 norm(m).strip() and norm(m) in norm(source) for m in modifiers):
             errors.append('The Index main term is not established in the source assertion.')
-    specific_phrase = (source_contract == SOURCE_CONTRACT
+    specific_phrase = (source_contract in SOURCE_CONTRACTS
                        and tabular_specific_route(chain, source, code_description))
     for node in chain[:-1]:
         term=node.get('term',node.get('title',''))
@@ -662,7 +836,7 @@ def index_subtypes(reference, concept, *, source_contract=None):
         if entry.get('parent_id'):
             continue
         terms = (index_head_terms(entry, reference.tabular['codes'].get(entry.get('code'), ''))
-                 if source_contract == SOURCE_CONTRACT else [entry.get('term', '')])
+                 if source_contract in SOURCE_CONTRACTS else [entry.get('term', '')])
         matched = next((term for term in terms if norm(term) in lexical_heads and norm(term) not in TAXONOMY_HEADS), None)
         if matched:
             heads[entry['id']] = matched
@@ -1173,7 +1347,7 @@ def validate_selection(run,selections):
             from .coding_cpt import validate_cpt_selection
             checked=validate_cpt_selection(run,code,row['evidence'])
         else:
-            if (source_contract == SOURCE_CONTRACT
+            if (source_contract in SOURCE_CONTRACTS
                     and current_source_scope_errors(run.inputs['notes'], row['concept'])):
                 raise ValidationError('The selected condition is not established in this patient’s current source encounter.')
             lookup=index_lookup(reference)
@@ -1192,7 +1366,7 @@ def validate_selection(run,selections):
         errors=specificity_errors(row['concept'],code,checked.get('description',row['description']))
         subtypes=index_subtypes(reference,row['concept'], source_contract=source_contract) if key!='office_em' else []
         state,_=source_disposition(assertion_concept(row['concept'],subtypes),run.inputs['notes'], qualifiers=[
-            item['qualifier'] for item in subtypes]) if key!='office_em' else ('eligible','')
+            item['qualifier'] for item in subtypes], source_contract=source_contract) if key!='office_em' else ('eligible','')
         if state!='eligible' or not checked['valid'] or checked.get('requires_review') or checked.get('errors') or errors:
             raise ValidationError('This selection needs source or coding-instruction clarification before approval.')
     if len(selected_codes)!=len(set(selected_codes)):

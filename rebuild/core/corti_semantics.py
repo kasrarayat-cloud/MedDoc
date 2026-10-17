@@ -86,7 +86,7 @@ def office_time_facts(notes, *, contract=None):
     conflicting total, missing exclusion or missing service date cannot supply
     a same-day practitioner time fact.
     """
-    if contract == 'source-bound-clinical-coding-v2':
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3'):
         return _source_time_analysis(notes)[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
@@ -197,7 +197,7 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     not infer an encounter from a numeric time quote or a scheduled appointment.
     Unrecognized competing practitioner totals require clarification.
     """
-    if contract == 'source-bound-clinical-coding-v2':
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3'):
         support, errors = _source_time_analysis(notes)
         if service_date is not None:
             for raw_date in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes):
