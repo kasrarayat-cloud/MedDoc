@@ -36,8 +36,10 @@ DOCUMENT_IDENTITY_SCOPE_CONTRACT = 'positioned-document-identity-v10'
 LITERAL_SOURCE_SCOPE_CONTRACT = 'positioned-literal-source-v11'
 OBJECTIVE_NEGATION_SCOPE_CONTRACT = 'positioned-objective-negation-v12'
 CLINICAL_LITERAL_SCOPE_CONTRACT = 'positioned-clinical-literal-v13'
+ENCOUNTER_SUPPORT_SCOPE_CONTRACT = 'positioned-encounter-support-v14'
+CLINICAL_LITERAL_SCOPE_CONTRACTS = (CLINICAL_LITERAL_SCOPE_CONTRACT, ENCOUNTER_SUPPORT_SCOPE_CONTRACT)
 LITERAL_SOURCE_SCOPE_CONTRACTS = (LITERAL_SOURCE_SCOPE_CONTRACT, OBJECTIVE_NEGATION_SCOPE_CONTRACT,
-                                  CLINICAL_LITERAL_SCOPE_CONTRACT)
+                                  *CLINICAL_LITERAL_SCOPE_CONTRACTS)
 LITERAL_SOURCE_INSTRUCTIONS = (' Preserve complete explicitly documented diagnostic non-establishment in Assessment, '
     'including cause not established and conditions not diagnosed. A negative postfix must remain in the actual '
     'value, not only polarity metadata. Composite narrative fields may select all requested facts. '
@@ -57,6 +59,25 @@ CLINICAL_LITERAL_INSTRUCTIONS = (
     'and approved meaning. On targeted repair address every local_assignment_findings entry and the '
     'checker findings using the original facts; do not repeat a locally rejected selection when an eligible '
     'grounded alternative resolves it. Retain every documented uncertainty and negative in the final wording.')
+ENCOUNTER_SUPPORT_INSTRUCTIONS = (
+    ' A standalone narrative answer must retain the source facts directly supporting its approved meaning. '
+    'For a visit/patient-status destination, an explicitly linked prior encounter with the same clinician '
+    'and its elapsed interval explain established status; preserve them as historical support, not a current '
+    'visit or unrelated past history. Do not add unrelated surgeries, family history, another clinician or '
+    'another patient merely because they are historical facts. For a documented time-based E/M selection '
+    'basis, retain the clinician activities and explicit time exclusions alongside the selection-basis '
+    'statement. The numeric physician-minutes field remains a single measurement. Extract separate complete '
+    'narrative facts for the physician-time statement and for its explicit exclusions, with null unit/scale '
+    'metadata; the numeric measurement fact alone carries measurement metadata. Text present only in the '
+    'evidence of a bare number is not displayed narrative content. An explicit "This total excludes ..." '
+    'statement affirms the documented exclusions; retain its complete wording. '
+    'encounter_support_inventory contains source-bound completeness obligations for specific approved '
+    'destinations, not facts or permission to assert ownership, timing or billing eligibility. Extract all '
+    'relevant complete facts, select them for those destinations, and independently check the final displayed '
+    'text. A source qualifier may be covered by a complete composite fact or separately selected facts from '
+    'the same source occurrence; preserve their subject and timing. Never copy an evidence sentence into an '
+    'answer without a validated selected fact. If extraction omitted required supporting facts, assignment '
+    'repair cannot invent them: leave the answer held for a new supported generation or source clarification.')
 DOCUMENT_IDENTITY_SCOPE_CONTRACTS = (DOCUMENT_IDENTITY_SCOPE_CONTRACT, *LITERAL_SOURCE_SCOPE_CONTRACTS)
 CONSENT_CONTEXT_SCOPE_CONTRACTS = (CONSENT_CONTEXT_SCOPE_CONTRACT, *DOCUMENT_IDENTITY_SCOPE_CONTRACTS)
 OBSERVATION_CONTEXT_SCOPE_CONTRACTS = (OBSERVATION_CONTEXT_SCOPE_CONTRACT, *CONSENT_CONTEXT_SCOPE_CONTRACTS)
@@ -458,6 +479,254 @@ def _clinical_qualification_inventory(notes):
     return result
 
 
+def _encounter_support_destinations(definitions, *, include_restricted=False):
+    """Only approved narrative meanings grant supporting-content obligations."""
+    status_keys, basis_keys = [], []
+    for key, definition in definitions.items():
+        meaning = definition['meaning']
+        if (definition['value_type'] != 'text' or definition.get('answer_mode') != 'narrative'
+                or definition['scope']['subject'] != 'encounter'):
+            continue
+        # A restriction must identify the answer content it narrows. Isolated
+        # words such as "only when documented", "do not omit", or "without
+        # inferring billing eligibility" do not remove supporting obligations.
+        def narrowed(content, excluded):
+            clauses = re.split(r'[.;]', meaning)
+            prefix = r'(?:the\s+|(?:return|report|record|document|provide)\s+(?:the\s+)?)?'
+            excluded = r'(?:the\s+)?(?:'+excluded+r')'
+            return any(re.fullmatch(r'\s*'+prefix+content+r'\s+only(?:\s*,\s*without\s+'+excluded+r')?\s*', clause, re.I)
+                or re.fullmatch(r'\s*(?:return\s+)?only\s+(?:the\s+)?'+content+r'\s*', clause, re.I)
+                or re.fullmatch(r'\s*(?:omit|exclude)\s+'+excluded+r'\s*', clause, re.I)
+                for clause in clauses)
+        status_item = r'(?:visit\s+setting|patient\s+status(?:\s*:\s*new\s+or\s+established)?)'
+        status_narrowed = narrowed(status_item+r'(?:\s+(?:and|&)\s+(?:the\s+)?'+status_item+r')*',
+            r'supporting\s+(?:history|details|source\s+facts)|prior\s+encounter\s+history')
+        basis_narrowed = narrowed(r'(?:E\s*/?\s*M|evaluation\s+and\s+management)\s+selection\s+basis',
+            r'supporting\s+(?:activities|details|source\s+facts)|physician\s+time\s+(?:activities|exclusions)')
+        affirmative_meaning = '. '.join(clause for clause in re.split(r'[.;]', meaning)
+            if not re.match(r"\s*(?:do\s+not|don't|never)\s+(?:limit|restrict|return|provide|give|use|answer)\b", clause, re.I))
+        if ((include_restricted or not status_narrowed) and definition['scope']['temporality'] == 'any'
+                and re.search(r"\b(?:patient(?:['’]s)?\s+status|status\s+of\s+the\s+patient)\b", affirmative_meaning, re.I)
+                and re.search(r'\b(?:visit|consultation|encounter|established)\b', affirmative_meaning, re.I)):
+            status_keys.append(key)
+        if ((include_restricted or not basis_narrowed) and definition['scope']['temporality'] in ('any', 'current')
+                and re.search(r'\b(?:E\s*/?\s*M|evaluation\s+and\s+management)\b', affirmative_meaning, re.I)
+                and re.search(r'\b(?:basis|supporting|elements)\b', affirmative_meaning, re.I)):
+            basis_keys.append(key)
+    return status_keys, basis_keys
+
+
+_ENCOUNTER_FOREIGN_PERSON = (r'(?:(?:another|other)\s+patient|family(?:\s+(?:history|member))?|'
+    r'(?:(?:maternal|paternal)\s+)?(?:mother|father|grandmother|grandfather|grandparent|'
+    r'aunt|uncle|cousin|niece|nephew|sibling|brother|sister|daughter|son|child|'
+    r'husband|wife|partner|spouse|friend|relative))')
+
+
+_ENCOUNTER_SECTION_NOUN = (r'(?:(?:medical|clinical)\s+)?history|'
+    r'(?:encounters?|visits?|consultations?)(?:\s+(?:history|notes?|records?))?|notes?|records?')
+
+
+def _encounter_support_context(units):
+    """Track source owner and encounter time independently across sections.
+
+    A blank line or ordinary clinical heading resets neither state. Explicit
+    current encounter/visit wording resets time only; an explicit target patient
+    header resets ownership only. A current-patient header states both. The
+    initial header is only a section boundary, never authority to choose among
+    distinct patient names, which continue to hold all support destinations.
+    """
+    headers, events = {}, {}
+    section = r'(?:'+_ENCOUNTER_SECTION_NOUN+r')'
+    encounter_section = r'(?:(?:encounters?|visits?|consultations?)(?:\s+(?:history|notes?|records?))?|notes?|records?)'
+    person = r"(?:(?:the\s+)?patient['’]s\s+|(?:the|her|his|their)\s+)?"+_ENCOUNTER_FOREIGN_PERSON
+    foreign_heading = (r'(?:'+person+r"(?:['’]s)?(?:\s+(?:(?:previous|prior|current|past)\s+)?"+section+r')?|'
+        +section+r'\s+(?:of|for)\s+(?:the\s+)?'+person+r')')
+    for index, unit in enumerate(units):
+        text = unit['quote'].strip()
+        header = re.fullmatch(r"(?:(?P<current>current|today['’]s)\s+)?"
+            r'patient(?:\s+(?:full\s+)?name)?\s*:\s*(?P<name>.+?)\s*\.?', text, re.I)
+        if header:
+            headers[index] = ' '.join(header['name'].split()).casefold()
+            if header['current']:
+                events[index] = 'current'
+            continue
+        if re.fullmatch(foreign_heading+r'(?:\s*:\s*[^\r\n]*)?\s*\.?', text, re.I):
+            events[index] = 'foreign'
+        elif re.fullmatch(r'[Pp]atient\s+(?:[-–—]\s*)?[A-Z][A-Za-z\x27’\-]*'
+                r'(?:\s+[A-Z][A-Za-z\x27’\-]*){0,5}(?:\s+'+section+r')?\s*:?\s*', text):
+            # A named patient heading outside the supported colon form cannot
+            # silently inherit the initial patient's ownership.
+            events[index] = 'foreign'
+        elif re.fullmatch(r'(?:the\s+)?(?:previous|prior|historical|past|earlier|old|last|'
+                r'future|upcoming|next|planned)\s+(?:(?:office|clinical)\s+)?'+encounter_section+
+                r'(?:\s*:\s*[^\r\n]*)?\s*\.?', text, re.I):
+            events[index] = 'non_current'
+        elif re.fullmatch(encounter_section+r'\s+(?:from\s+)?'+SOURCE_NUMBER_PATTERN+
+                r'\s+(?:days?|weeks?|months?|years?)\s+ago\s*:?\s*\.?', text, re.I):
+            events[index] = 'non_current'
+        elif re.fullmatch(r"(?:the\s+)?(?:current|present|today['’]s)\s+"
+                r'(?:office\s+)?(?:encounter|visit|consultation)(?:\s*:\s*)?\.?', text, re.I):
+            events[index] = 'current'
+    initial_name = next(iter(headers.values()), None)
+    target_owner, current_encounter, eligible = True, True, []
+    for index in range(len(units)):
+        if index in headers:
+            target_owner = headers[index] == initial_name
+        event = events.get(index)
+        if event == 'foreign':
+            target_owner = False
+        elif event == 'non_current':
+            current_encounter = False
+        elif event == 'current':
+            current_encounter = True
+        eligible.append(target_owner and current_encounter)
+    conflicting = next((index for index, name in headers.items() if name != initial_name), None)
+    return eligible, conflicting
+
+
+def _encounter_support_inventory(notes, definitions, *, include_restricted=False):
+    """Source-local obligations for explicitly approved encounter narratives.
+
+    This inventory adds withholding checks; it does not extract or render facts.
+    In particular a number's wider evidence cannot repay missing narrative text.
+    Current-only/atomic destinations and unrelated history never gain scope.
+    """
+    from .generation import source_units
+    units, _ = source_units(notes, [])
+    status_keys, basis_keys = _encounter_support_destinations(definitions, include_restricted=include_restricted)
+    result = []
+    def add(keys, kind, unit, start=0, end=None):
+        end = len(unit['quote'].rstrip().removesuffix('.')) if end is None else end
+        source = {'start':unit['start']+start, 'end':unit['start']+end,
+                  'quote':unit['quote'][start:end], 'source_unit_id':unit['id']}
+        for key in keys:
+            result.append({'field_key':key, 'kind':kind, 'source':source,
+                'polarity': 'negated' if re.search(r'\bdoes\s+not\s+include\b', source['quote'], re.I) else 'affirmed'})
+    duration = SOURCE_NUMBER_PATTERN+r'\s+(?:days?|weeks?|months?|years?)\s+ago'
+    clinician = r'(?:[a-z]+ologist|physician|clinician|doctor)'
+    status_pattern = (r'\s*(?:this\s+is\s+an?\s+)?established\s+patient\s*(?:[,;:]\s*|\s+)'
+        r'(?:who\s+was\s+|who\s+had\s+been\s+)?(?P<history>(?:previously\s+|last\s+)?'
+        r'seen\s+by\s+(?:this\s+|the\s+)?same\s+'+clinician+r'\s+'+duration+r')\s*\.?\s*')
+    # Ownership failure is an explicit hold, never an empty inventory.
+    owned, conflicting = _encounter_support_context(units)
+    if conflicting is not None:
+        add([*status_keys, *basis_keys], 'patient_identity_ambiguity', units[conflicting])
+    def locally_attributed(index):
+        # A preceding attribution in the same paragraph can change the referent
+        # of "this patient" or "this total". Do not borrow the primary patient.
+        left = index
+        while left > 0 and not re.search(r'\r?\n\s*\r?\n', notes[units[left-1]['end']:units[left]['start']]):
+            left -= 1
+        prefix = notes[units[left]['start']:units[index]['start']]
+        return bool(re.search(r'\b(?:'+_ENCOUNTER_FOREIGN_PERSON+
+            r'|example|hypothetical|previous\s+encounter|prior\s+encounter)\b', prefix, re.I))
+    for index, unit in enumerate(units):
+        match = re.fullmatch(status_pattern, unit['quote'], re.I)
+        if match and owned[index] and not locally_attributed(index):
+            add(status_keys, 'patient_status_history', unit, *match.span('history'))
+    if not basis_keys:
+        return result
+    em = r'(?:E\s*/?\s*M|evaluation\s+and\s+management)'
+    basis_pattern = (r'\s*(?:(?:office\s+)?'+em+r'\s+(?:selection|level)\s+'
+        r'(?:is|was)\s+based\s+on\s+(?:total\s+)?(?:physician|clinician)\s+time|'
+        r'time[- ]based\s+(?:office\s+)?'+em+r'\s+selection|'
+        r'(?:office\s+)?'+em+r'\s+selection\s*(?:is\s+|:\s*)time[- ]based)\s*\.?\s*')
+    total_pattern = (r'\s*(?:total\s+(?:physician|clinician)\s+time\s*'
+        r'(?:on\s+the\s+date\s+of\s+service\s*|today\s*)?(?:was|is|:)\s*'
+        +SOURCE_NUMBER_PATTERN+r'\s+minutes|the\s+(?:physician|clinician)\s+spent\s+'
+        +SOURCE_NUMBER_PATTERN+r'\s+minutes\s+(?:on\s+the\s+date\s+of\s+service|today))'
+        r'(?P<activities>\s*[,;]\s*(?:including|spent\s+on)\s+[^\r\n]+?)?\s*\.?\s*')
+    exclusion_pattern = r'\s*(?:this|the)\s+total\s+(?:excludes|does\s+not\s+include)\s+[^\r\n]+?\s*\.?\s*'
+    classified = []
+    for index, unit in enumerate(units):
+        total = re.fullmatch(total_pattern, unit['quote'], re.I)
+        kind = ('basis' if re.fullmatch(basis_pattern, unit['quote'], re.I) else
+                'activities' if total and total['activities'] else 'total' if total else
+                'exclusions' if re.fullmatch(exclusion_pattern, unit['quote'], re.I) else None)
+        classified.append(kind if owned[index] else None)
+    for at, kind in enumerate(classified):
+        if kind != 'basis' or locally_attributed(at):
+            continue
+        left, right = at, at
+        def adjacent(a, b):
+            gap = notes[units[a]['end']:units[b]['start']]
+            return not gap.strip() and not re.search(r'\r?\n\s*\r?\n', gap)
+        while left > 0 and classified[left-1] and adjacent(left-1,left):
+            left -= 1
+        while right+1 < len(units) and classified[right+1] and adjacent(right,right+1):
+            right += 1
+        # A deictic "this total" belongs only to an immediately preceding
+        # explicit physician total, not to an arbitrary nearby time/amount.
+        for index in range(left,right+1):
+            if classified[index] == 'activities':
+                add(basis_keys, 'physician_time_activities', units[index])
+            elif (classified[index] == 'exclusions' and index > left
+                    and classified[index-1] in ('activities','total')):
+                add(basis_keys, 'physician_time_exclusions', units[index])
+    # Multiple basis declarations must not multiply identical obligations.
+    return list({(row['field_key'],row['kind'],row['source']['start'],row['source']['end']):row
+                 for row in result}.values())
+
+
+def _encounter_support_covered(notes, obligation, picked):
+    """Cover exact source words using valid selected values at this occurrence.
+
+    Separate facts can jointly cover a sentence. Wider evidence, the same words
+    elsewhere, changed subject/timing and missing linking words cannot do so.
+    """
+    if obligation['kind'] == 'patient_identity_ambiguity':
+        return False
+    source = obligation['source']
+    spans = []
+    for fact in picked:
+        value = fact['value_evidence']
+        subject_matches = (fact['subject']['kind'] == 'patient'
+            if obligation['kind'] == 'patient_status_history' else _time_support_subject(fact))
+        if (fact['issues'] or not subject_matches
+                or fact['polarity'] != obligation['polarity']
+                or value['end'] <= source['start'] or value['start'] >= source['end']):
+            continue
+        if obligation['kind'] == 'patient_status_history':
+            # A full status sentence has a current established-status predicate
+            # and a literal past relative clause. A separate history fact is past.
+            composite = (value['start'] < source['start'] and _inside(source, [value])
+                and re.match(r'\s*(?:this\s+is\s+an?\s+)?established\s+patient\b', value['quote'], re.I))
+            if fact['timing']['kind'] != ('current' if composite else 'past'):
+                continue
+        elif fact['timing']['kind'] != 'current':
+            continue
+        spans.append((max(source['start'], value['start']), min(source['end'], value['end'])))
+    cursor = source['start']
+    for start, end in sorted(spans):
+        if re.search(r'\w', notes[cursor:start]):
+            return False
+        cursor = max(cursor, end)
+    return not re.search(r'\w', notes[cursor:source['end']])
+
+
+def _time_support_subject(fact):
+    # The recognized total explicitly names the physician/clinician role, not
+    # an individual clinician. Either encounter-patient or unnamed clinician
+    # attribution preserves that source; attaching an unrelated name does not.
+    return (fact['subject']['kind'] == 'patient'
+        or fact['subject']['kind'] == 'clinician' and fact['subject']['name_evidence'] is None)
+
+
+# A complete negative time-exclusion clause is documentation of an excluded
+# activity, never a claim that the service occurred. New-contract only.
+_TIME_EXCLUSION_ITEMS = (r'(?:(?:clinical\s+)?staff\s+time|nursing\s+time|'
+    r'time\s+for\s+separately\s+(?:reported|billed)\s+services|separately\s+(?:reported|billed)\s+(?:services|procedures))')
+_TIME_NEGATIVE_EXCLUSION = (r'(?:this|the)\s+total\s+does\s+not\s+include\s+'
+    +_TIME_EXCLUSION_ITEMS+r'(?:(?:\s*,\s*|\s+and\s+)'+_TIME_EXCLUSION_ITEMS+r')*')
+
+
+def _retained_time_exclusion(fact, own):
+    return (fact['kind'] == 'other' and _time_support_subject(fact)
+        and fact['timing']['kind'] == 'current' and fact['unit'] is None and fact['scale'] is None
+        and fact['value_evidence']['quote'].strip().removesuffix('.') == own['quote'].strip().removesuffix('.')
+        and bool(re.fullmatch(_TIME_NEGATIVE_EXCLUSION+r'\s*\.?', own['quote'].strip(), re.I)))
+
+
 def _assessment_limits(notes):
     """Literal diagnostic limits under an explicit assessment heading."""
     from .generation import source_units
@@ -497,7 +766,7 @@ def _retained_objective_negative(fact, own):
         or re.fullmatch(_OBJECTIVE_ABSENCE, whole, re.I) and selected == whole)
 
 
-def _objective_negative_owners(notes, units, facts, *, clinical=False):
+def _objective_negative_owners(notes, units, facts, *, clinical=False, encounter_support=False):
     """Bind Objective negatives within a finite, independently owned SOAP source.
 
     No model name annotation, fact omission or unrelated section can supply
@@ -609,6 +878,8 @@ def _objective_negative_owners(notes, units, facts, *, clinical=False):
             r'(?:review|follow\s+up)\s+in\s+'+duration,
             r'the\s+patient\s+was\s+advised\s+to\s+seek\s+(?:prompt|urgent)\s+assessment\s+for\s+'+warnings,
         )
+    if encounter_support:
+        suffix_frames += (_TIME_NEGATIVE_EXCLUSION,)
     suffix = r'(?:'+'|'.join(suffix_frames)+r')\s*\.?'
     if any(not re.fullmatch(suffix, unit['quote'].strip(), re.I)
            and not (_clinical_diagnostic_limit(unit['quote']) or _clinical_uncertainty(unit['quote'])
@@ -707,15 +978,16 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
             issues.append('The documented remote visit contradicts its explicit telephone/telehealth denial.')
     if clipped_non:
         issues.append('The selected value omits its documented non- prefix.')
-    clinical = scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT
+    clinical = scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS
     literal_limit = scope_contract in LITERAL_SOURCE_SCOPE_CONTRACTS and _retained_diagnostic_limit(fact, own)
     if clinical:
         literal_limit = _retained_clinical_literal(fact, own, _clinical_diagnostic_limit, ('assessment',))
     literal_uncertainty = clinical and _retained_clinical_literal(fact, own, _clinical_uncertainty, ('assessment',))
     literal_procedure = clinical and _retained_clinical_literal(fact, own, _clinical_nonperformance, ('plan', 'finding', 'other'))
-    literal_exam = (scope_contract in (OBJECTIVE_NEGATION_SCOPE_CONTRACT, CLINICAL_LITERAL_SCOPE_CONTRACT)
+    literal_exam = (scope_contract in (OBJECTIVE_NEGATION_SCOPE_CONTRACT, *CLINICAL_LITERAL_SCOPE_CONTRACTS)
         and _retained_objective_negative(fact, own))
-    negative = negative or literal_limit or literal_exam or literal_procedure
+    literal_time = scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT and _retained_time_exclusion(fact, own)
+    negative = negative or literal_limit or literal_exam or literal_procedure or literal_time
     uncertain = uncertain or literal_uncertainty
     mixed = scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS and fact['polarity'] == 'mixed'
     if mixed:
@@ -736,7 +1008,7 @@ def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     if negative and fact['polarity'] != 'negated' and not mixed: issues.append('The source contains a local negation not preserved by this fact.')
     if uncertain and fact['polarity'] != 'uncertain': issues.append('The source contains uncertainty not preserved by this fact.')
     if fact['polarity'] == 'negated' and not negative: issues.append('The proposed negation is not explicitly grounded in its source clause.')
-    if fact['polarity'] == 'negated' and not (literal_limit or literal_exam or literal_procedure) and not re.match(r'\s*'+negative_head+r'\b', value['quote'], re.I):
+    if fact['polarity'] == 'negated' and not (literal_limit or literal_exam or literal_procedure or literal_time) and not re.match(r'\s*'+negative_head+r'\b', value['quote'], re.I):
         issues.append('The negative answer must retain its documented negative phrase; an annotation cannot synthesize absence.')
     if re.search(r'\b(?:not\s+deny|no\s+change|not\s+without|no\s+evidence\s+against)\b', clause+' '+value['quote'], re.I):
         issues.append('Nested negation or unchanged symptoms require clinician interpretation.')
@@ -1408,9 +1680,10 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             if (not ownership['allowed'].get(own['start'], False)
                     or name is not None and name['quote'].casefold() not in ownership['names']):
                 fact['issues'].append('Complete source context does not establish this named encounter as the fact owner.')
-    clinical = scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT
-    objective_owners = (_objective_negative_owners(notes, units, facts, clinical=clinical)
-        if scope_contract in (OBJECTIVE_NEGATION_SCOPE_CONTRACT, CLINICAL_LITERAL_SCOPE_CONTRACT) else set())
+    clinical = scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS
+    objective_owners = (_objective_negative_owners(notes, units, facts, clinical=clinical,
+            encounter_support=scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT)
+        if scope_contract in (OBJECTIVE_NEGATION_SCOPE_CONTRACT, *CLINICAL_LITERAL_SCOPE_CONTRACTS) else set())
     clinical_sections = _clinical_sections(units) if clinical else {}
     if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         from .semantic_source_context import parse_unit
@@ -1427,6 +1700,10 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             literal_limit = scope_contract in LITERAL_SOURCE_SCOPE_CONTRACTS and _retained_diagnostic_limit(fact, own)
             literal_exam = (own['start'] in objective_owners and _retained_objective_negative(fact, own))
             literal_clinical = False
+            literal_time = scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT and _retained_time_exclusion(fact, own)
+            if literal_time and own['start'] not in objective_owners:
+                fact['issues'].append('The time exclusion requires complete patient-owned source context.')
+                literal_time = False
             if clinical:
                 section = clinical_sections.get(own['start'])
                 diagnostic = _retained_clinical_literal(fact, own, _clinical_diagnostic_limit, ('assessment',))
@@ -1442,7 +1719,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                 # stand-alone permission to release an ownership hold.
                 literal_limit = literal_limit and literal_clinical
                 literal_exam = literal_exam and section in ('objective', 'examination', 'physical examination')
-            if prior_issues.difference(fact['issues']) and not context_admitted and not literal_limit and not literal_exam and not literal_clinical:
+            if prior_issues.difference(fact['issues']) and not context_admitted and not literal_limit and not literal_exam and not literal_clinical and not literal_time:
                 fact['issues'].append('Releasing an earlier local scope hold requires complete, independently bound source context.')
             additional_negative = r'\s*(?:never|does\s+not|did\s+not|in\s+no|non[- ])'
             if scope_contract in SOURCE_BINDING_SCOPE_CONTRACTS:
@@ -1606,7 +1883,7 @@ def _concise_score_phrase(notes, fact, definition):
 
 def _render_bound_fact(notes, facts, fact, definition, scope_contract):
     """One prospective choice equivalence, grounded in an owned visit frame."""
-    if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS:
         score = _concise_score_phrase(notes, fact, definition)
         if score is not None:
             return score
@@ -1771,6 +2048,16 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         selected[key] = row
     if set(selected) != expected: _fail('The assigner omitted approved field keys.')
     answers = {}
+    support_keys, support_units, support_owned, restricted_support = set(), [], [], []
+    support_conflict = None
+    if scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
+        from .generation import source_units
+        support_keys = set(sum(_encounter_support_destinations(definitions, include_restricted=True), []))
+        restricted_keys = support_keys - set(sum(_encounter_support_destinations(definitions), []))
+        restricted_support = [row for row in _encounter_support_inventory(notes, definitions, include_restricted=True)
+            if row['field_key'] in restricted_keys and row['kind'] != 'patient_identity_ambiguity']
+        support_units, _ = source_units(notes, [])
+        support_owned, support_conflict = _encounter_support_context(support_units)
     for field in fields:
         key = field['key']
         if key not in selected: continue
@@ -1804,7 +2091,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         for f in picked:
             if f['id'] in superseded: reasons.append('This fact was explicitly corrected by later source documentation.')
             concise_score = (_concise_score_phrase(notes, f, d)
-                if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT else None)
+                if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS else None)
             if d['value_type']=='text' and _source_number(f['value_evidence']['quote']) is not None and concise_score is None:
                 reasons.append('A narrative answer needs the complete documented measurement phrase, preserving its clinical label, units and scale; a bare numeric fact is insufficient.')
             if concise_score is not None:
@@ -1844,7 +2131,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             for limit in _assessment_limits(notes):
                 if not any(f['polarity'] == 'negated' and _retained_diagnostic_limit(f, limit) for f in picked):
                     reasons.append('The assessment omits a documented diagnostic limitation: '+limit['quote'])
-        if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT and d['value_type'] == 'text':
+        if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS and d['value_type'] == 'text':
             for obligation in _clinical_qualification_inventory(notes):
                 applicable = (re.search(r'\b(?:assessment|impression)\b', d['meaning'], re.I)
                     if obligation['destination'] == 'assessment' else
@@ -1858,6 +2145,30 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                     and f['value_evidence']['quote'].strip().removesuffix('.') == source['quote'].strip().removesuffix('.')
                     for f in picked):
                     reasons.append('The answer omits a documented clinical qualification: '+source['quote'])
+        if scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
+            if key in support_keys and support_conflict is not None:
+                reasons.append('Distinct patient headers leave encounter-support ownership unresolved; '
+                    'neither a selected identity nor a passing checker may choose the source owner.')
+            for restriction in restricted_support:
+                source = restriction['source']
+                if restriction['field_key'] == key and any(
+                        fact['value_evidence']['start'] < source['end']
+                        and fact['value_evidence']['end'] > source['start'] for fact in picked):
+                    reasons.append('The approved narrative excludes this supporting source content: '+source['quote'])
+            if key in support_keys and any(not support_owned[index]
+                    and _inside(fact['value_evidence'], [unit])
+                    for fact in picked for index, unit in enumerate(support_units)):
+                reasons.append('Selected encounter support belongs to a foreign patient or relative section, or a non-current encounter section; '
+                    'source attribution and timing cannot be changed by fact metadata.')
+            for obligation in _encounter_support_inventory(notes, definitions):
+                if obligation['field_key'] != key:
+                    continue
+                if obligation['kind'] == 'patient_identity_ambiguity':
+                    continue
+                source = obligation['source']
+                if not _encounter_support_covered(notes, obligation, picked):
+                    reasons.append('The answer omits documented encounter support ('
+                        +obligation['kind']+'): '+source['quote'])
         text = row['separator'].join(_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked)
         typed = None
         try: typed = validate_value(d, text, field)
@@ -2614,6 +2925,8 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         base['consent_qualifier_inventory'] = consent_qualifier_inventory(units)
     if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS:
         base['approved_patient_name_destinations'] = [key for key, d in definitions.items() if requires_patient_name(d)]
+    if scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
+        base['encounter_support_inventory'] = _encounter_support_inventory(notes, definitions)
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -2648,10 +2961,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += LITERAL_SOURCE_INSTRUCTIONS
         assign_instructions += LITERAL_SOURCE_INSTRUCTIONS
         check_instructions += LITERAL_SOURCE_INSTRUCTIONS
-    if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS:
         instructions += CLINICAL_LITERAL_INSTRUCTIONS
         assign_instructions += CLINICAL_LITERAL_INSTRUCTIONS
         check_instructions += CLINICAL_LITERAL_INSTRUCTIONS
+    if scope_contract == ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
+        instructions += ENCOUNTER_SUPPORT_INSTRUCTIONS
+        assign_instructions += ENCOUNTER_SUPPORT_INSTRUCTIONS
+        check_instructions += ENCOUNTER_SUPPORT_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
@@ -2664,7 +2981,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
                 'No answers were adopted. Review the retained attempt and original notes.') from exc
         raise
     _validate_current_subjects(notes, units, facts)
-    if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS:
         base['clinical_qualification_inventory'] = _clinical_qualification_inventory(notes)
         base['atomic_measurement_options'] = {
             key: [{'fact_id': fact['id'], 'rendered_value': rendered}
@@ -2689,7 +3006,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     repair += [key for key in literal_findings if key not in repair
                and not any(i in bad for i in answers[key]['fact_ids'])]
     assignment_findings = ({key: answer['review_reasons'] for key, answer in answers.items()
-        if answer['review_reasons']} if scope_contract == CLINICAL_LITERAL_SCOPE_CONTRACT else {})
+        if answer['review_reasons']} if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS else {})
     repair += [key for key in assignment_findings if key not in repair
         and not any(i in bad for i in answers[key]['fact_ids'])]
     if repair:
