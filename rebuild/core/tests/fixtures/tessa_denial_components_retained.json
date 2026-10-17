@@ -1,0 +1,3015 @@
+{
+  "provenance": "Actual retained synthetic clinical generation under v18; no constructed provider output.",
+  "source_snapshot_sha256": "86ede5135300a3db61df99035f3aa42cbd44c6c87fd55c0b1fb0239eae220b44",
+  "source_sha256": "7c13f05da3d55b78a0f73024866d18ae850c647eb7756f9c739ea1f15642d7ad",
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Tessa Calder\r\nClinic record number: SYN-TC-1017\r\nAge and sex: 43-year-old woman\r\nDate of service: 17 October 2026\r\nTreating clinician: Dr. Samira Voss\r\nEncounter: New-patient, in-person visit in a U.S. gastrointestinal office.\r\nNew-patient history: During the preceding three years, she has received no professional services from Dr. Voss or from any physician or qualified health professional of the same specialty and subspecialty in this same group practice. The earlier family-medicine visit described below was at an unrelated practice.\r\n\r\nS - Subjective\r\nSynthetic Tessa Calder reports esophageal dysphagia for six weeks and heartburn for four months. Two or three times a week, bread or meat feels stuck behind her lower sternum after she swallows. The sensation settles within several minutes after sips of water. Her heartburn occurs about three evenings per week, usually after the evening meal.\r\nShe denies difficulty initiating a swallow, difficulty swallowing liquids, painful swallowing, vomiting, vomiting blood, black stools and unintentional weight loss. She has not had a food impaction requiring an emergency intervention.\r\nOn 20 August 2026 she saw Dr. Nora Hale, a family-medicine clinician at an unrelated primary-care practice, for heartburn. Dr. Hale recommended a 14-day trial of omeprazole 20 mg by mouth once daily. She took it from 21 August through 3 September 2026. It partially reduced her heartburn, but she developed headaches. She stopped omeprazole on 3 September because of the headaches; the headaches resolved after stopping. She is no longer taking omeprazole. This was an outside primary-care visit, not a previous visit with Dr. Voss or this GI group.\r\nHer current medication is famotidine 20 mg by mouth each evening for heartburn, started on 18 September 2026. Her relevant medical history is seasonal allergic rhinitis. She has no known previous esophageal disease, no history of upper gastrointestinal surgery and no prior upper endoscopy. Her documented medication allergy is trimethoprim-sulfamethoxazole, which caused an itchy rash.\r\n\r\nO - Objective\r\nBlood pressure is 116/72 mmHg, pulse 72 beats per minute, temperature 36.7 degrees Celsius and weight 64.2 kg. She appears comfortable and clinically stable. The oropharynx is moist without a visible lesion. The abdomen is soft and nontender, with normal bowel sounds and no guarding or rebound. The abdominal examination is stable and unchanged on repeat examination at the end of this same visit, compared with the initial examination today.\r\n\r\nA - Assessment\r\nEsophageal dysphagia and heartburn were both evaluated today. The underlying etiology remains uncertain. Reflux-associated mucosal irritation and a structural esophageal cause are considerations, not established diagnoses. No definitive underlying disease is diagnosed at this visit.\r\n\r\nP - Plan\r\nUpper endoscopy is ordered today for a later outpatient appointment to investigate the esophageal dysphagia and heartburn. It was not performed today, and no upper-endoscopy results are available. No procedure was performed during this encounter.\r\nNo medication change is made today. The plan is to arrange the ordered investigation and record symptom frequency while awaiting it. Follow-up is planned after the endoscopy to discuss its findings, with earlier contact if symptoms worsen.\r\n\r\nOffice E/M selection is based on total physician time on the date of service. Dr. Voss personally spent 47 minutes on 17 October 2026: seven minutes reviewing the available outside records, 31 minutes obtaining the history, performing the examination and counseling the patient, and nine minutes entering the investigation order and documenting the encounter. These are all physician activities on the encounter date. The 47 minutes exclude eight minutes of staff intake work and six minutes of physician record review performed on the preceding day. The total also excludes any time for separately reported services.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Patient full name",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "Clinic record number",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "Age and sex",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "Encounter date, treating clinician, country, clinical setting and visit modality",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "New or established patient status and documented three-year professional-service history (this clinician and the same specialty/subspecialty in this group; distinguish the unrelated primary-care practice)",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "Both chief concerns and how long each has been present",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "Dysphagia pattern (food type, frequency, location, timing after swallowing, episode resolution and relief)",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Heartburn frequency and relation to meals",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "Documented symptom negatives and prior impaction history (retain the scope of no liquid-swallowing difficulty; do not negate the positive solid-food dysphagia)",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Prior outside encounter (clinician, specialty, unrelated practice, date, reason, treatment trial recommendation and response; distinguish it from this GI clinician/group)",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "Relevant medical history, prior esophageal disease, upper gastrointestinal surgery and prior upper endoscopy",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "Current medicine (name, dose, route, frequency, indication and start date; exclude discontinued therapy)",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "Stopped historical medicine (name, dose, route, frequency, trial dates, response, stopping reason, outcome after stopping and explicit current non-use)",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "Documented medication allergy and reaction (do not recast the separate historical headache side effect as a documented allergy)",
+      "locator": {
+        "cell": 13
+      }
+    },
+    {
+      "key": "cell_14",
+      "kind": "text",
+      "label": "Vital signs and weight with units",
+      "locator": {
+        "cell": 14
+      }
+    },
+    {
+      "key": "cell_15",
+      "kind": "text",
+      "label": "Physical examination, including stable/unchanged wording and its exact comparison (repeat abdominal examination versus the initial examination during this same visit)",
+      "locator": {
+        "cell": 15
+      }
+    },
+    {
+      "key": "cell_16",
+      "kind": "text",
+      "label": "Both evaluated symptoms, underlying etiologic uncertainty and unconfirmed considerations (preserve uncertain status; do not promote a consideration to an established disease)",
+      "locator": {
+        "cell": 16
+      }
+    },
+    {
+      "key": "cell_17",
+      "kind": "text",
+      "label": "Investigation ordered, reasons, intended timing, performance status today and availability of results",
+      "locator": {
+        "cell": 17
+      }
+    },
+    {
+      "key": "cell_18",
+      "kind": "text",
+      "label": "Procedure performance during this encounter (retain the explicitly documented no-procedure statement)",
+      "locator": {
+        "cell": 18
+      }
+    },
+    {
+      "key": "cell_19",
+      "kind": "text",
+      "label": "Immediate plan and medication decision",
+      "locator": {
+        "cell": 19
+      }
+    },
+    {
+      "key": "cell_20",
+      "kind": "text",
+      "label": "Follow-up timing, purpose and condition for earlier contact",
+      "locator": {
+        "cell": 20
+      }
+    },
+    {
+      "key": "cell_21",
+      "kind": "text",
+      "label": "E/M selection basis and total same-day physician time (each included activity and minutes, encounter date, staff/prior-day exclusions with minutes, and separately reported service time exclusion)",
+      "locator": {
+        "cell": 21
+      }
+    },
+    {
+      "key": "cell_22",
+      "kind": "text",
+      "label": "Referring clinician (leave the answer empty if not documented; a treating or previous clinician is not automatically a referrer)",
+      "locator": {
+        "cell": 22
+      }
+    },
+    {
+      "key": "cell_23",
+      "kind": "text",
+      "label": "Preferred pharmacy (leave the answer empty if not documented)",
+      "locator": {
+        "cell": 23
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's full name only, as documented; leave empty if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_1": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The single clinic record number (reference/code) of the patient as documented; leave empty if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "identifier",
+      "version": 2
+    },
+    "cell_10": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Relevant medical history, including prior esophageal disease, upper gastrointestinal surgery and prior upper endoscopy; documented absence is also acceptable.",
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_11": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Current medicine within the target encounter: name, dose, route, frequency, indication and start date as documented; excludes discontinued therapy. Documented absence of current medicine is also acceptable.",
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_12": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Stopped historical medicine before the target encounter: name, dose, route, frequency, trial dates, response, stopping reason, outcome after stopping and explicit current non-use. Documented absence is also acceptable.",
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "past"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_13": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented medication allergy and its reaction; documented absence of allergy is also acceptable. A separate historical side effect must not be recorded as an allergy.",
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_14": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented vital signs and weight, each with its documented unit; no units or ranges are printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_14",
+        "locator_sha256": "39acde59594128ff59afd0bc87ccc84ac3363f7b0cd78e2c37172d9b4b812ea6"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_15": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Physical examination findings from the target encounter, including any stable/unchanged wording and its exact comparison (repeat abdominal examination versus the initial examination during this same visit).",
+      "permitted_destination": {
+        "field_key": "cell_15",
+        "locator_sha256": "d5b9d6fab52b29c02d8d4b423c7e0abcd5f769b420f1248482f718992aaa26b3"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_16": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Assessment of both evaluated symptoms, underlying etiologic uncertainty and unconfirmed considerations; preserve uncertain status and explicit exclusions, and do not promote a consideration to an established disease.",
+      "permitted_destination": {
+        "field_key": "cell_16",
+        "locator_sha256": "14d093df536e5d87ccf1c49eb75610cc0bf829611e9ba5b85c53f4728b82f9de"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_17": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Investigation ordered, reasons, intended timing, performance status today and availability of results, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_17",
+        "locator_sha256": "e16bb4d5760a8fd18f7e00791df3f828deeb177b3602ba4857d0edc57f889410"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_18": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Whether any procedure was performed during the target encounter and what it was; retain the explicitly documented no-procedure statement.",
+      "permitted_destination": {
+        "field_key": "cell_18",
+        "locator_sha256": "a234e0753fdebe9174c1fdc26c9a5f1de16052380f225a0b942239acd4331901"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_19": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Immediate plan and medication decision as documented, including continuation, change or stopping of treatment.",
+      "permitted_destination": {
+        "field_key": "cell_19",
+        "locator_sha256": "504145417dcbc2c521b4919169a27a0b03f24968aa9691c47a083aef686d8152"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_2": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's age and sex as documented; no unit or format is printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_20": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Follow-up timing as a relative interval after the target encounter, its purpose and the condition for earlier contact; not an invented calendar date.",
+      "permitted_destination": {
+        "field_key": "cell_20",
+        "locator_sha256": "71862461fb120a443240ed40cf530f5339789cea66ed895e324eaf6ff88009f5"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "future"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_21": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Concise documented E/M selection basis and total same-day physician time: each included activity with minutes, encounter date as documented, staff/prior-day exclusions with minutes, and separately reported service time exclusion.",
+      "permitted_destination": {
+        "field_key": "cell_21",
+        "locator_sha256": "4b5e0da837a21f4d2f29a4a394b729c60c15ba0f9b13c3b7710d8c934404e08b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_22": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Referring clinician (leave the answer empty if not documented; a treating or previous clinician is not automatically a referrer): the clinician\u2019s name, as requested by this form.",
+      "permitted_destination": {
+        "field_key": "cell_22",
+        "locator_sha256": "4146b4482865ea49ea41f31e4fa16adc04e168ad5e5b4322c1d4567f5d075ada"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "clinician",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_23": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's preferred pharmacy as documented; leave empty if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_23",
+        "locator_sha256": "cae25add22df0253a1a7d49a67464a9b3e51c085af425af5dcb20cbb55c7e1aa"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_3": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented encounter date, treating clinician, country, clinical setting and visit modality for the target encounter; each element as documented, with the date spelled as documented.",
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_4": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Whether the patient is new or established, and the documented three-year professional-service history with this clinician and the same specialty/subspecialty in this group, distinguishing the unrelated primary-care practice. The three-year look-back is relative to the target encounter.",
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_5": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Both chief concerns and the documented duration each has been present.",
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_6": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Description of the dysphagia pattern: food type, frequency, location, timing after swallowing, episode resolution and relief, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_7": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented heartburn frequency and its relation to meals; documented absence of heartburn is also acceptable.",
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_8": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented symptom negatives and prior impaction history, retaining the scope of any negative (e.g., no liquid-swallowing difficulty) without negating the positive solid-food dysphagia.",
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_9": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Prior outside encounter before the target encounter: clinician, specialty, unrelated practice, date as documented, reason, treatment trial recommendation and response; distinguished from this GI clinician/group.",
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "past"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    }
+  },
+  "stages": [
+    {
+      "stage": "extractor",
+      "attempt": 1,
+      "output": {
+        "reference_contract": "exact-source-reference-inventory-v2",
+        "facts": [
+          {
+            "id": "f1",
+            "kind": "identity",
+            "concept": "patient_full_name",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Synthetic Tessa Calder",
+              "source_unit_id": 2,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f2",
+            "kind": "identity",
+            "concept": "clinic_record_number",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "SYN-TC-1017",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f3",
+            "kind": "identity",
+            "concept": "patient_age_and_sex",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "43-year-old woman",
+              "source_unit_id": 4,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f4",
+            "kind": "other",
+            "concept": "encounter_date",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "17 October 2026",
+              "source_unit_id": 5,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f5",
+            "kind": "identity",
+            "concept": "treating_clinician",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Dr. Samira Voss",
+                "source_unit_id": 6,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Samira Voss",
+              "source_unit_id": 6,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f6",
+            "kind": "other",
+            "concept": "encounter_setting_and_type",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "New-patient, in-person visit in a U.S. gastrointestinal office",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f7",
+            "kind": "other",
+            "concept": "visit_modality",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "in-person",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f8",
+            "kind": "other",
+            "concept": "new_or_established_patient_status",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "New-patient",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f9",
+            "kind": "history",
+            "concept": "three_year_professional_service_history_same_group",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "During the preceding three years, she has received no professional services from Dr. Voss or from any physician or qualified health professional of the same specialty and subspecialty in this same group practice",
+              "source_unit_id": 8,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "During the preceding three years",
+                "source_unit_id": 8,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f10",
+            "kind": "history",
+            "concept": "earlier_family_medicine_visit_unrelated_practice",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The earlier family-medicine visit described below was at an unrelated practice",
+              "source_unit_id": 9,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "earlier",
+                "source_unit_id": 9,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f11",
+            "kind": "history",
+            "concept": "outside_visit_distinct_from_gi_group",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "This was an outside primary-care visit, not a previous visit with Dr. Voss or this GI group",
+              "source_unit_id": 23,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f12",
+            "kind": "history",
+            "concept": "chief_concerns_and_durations",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "esophageal dysphagia for six weeks and heartburn for four months",
+              "source_unit_id": 11,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f13",
+            "kind": "history",
+            "concept": "dysphagia_pattern_food_frequency_location_timing",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Two or three times a week, bread or meat feels stuck behind her lower sternum after she swallows",
+              "source_unit_id": 12,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f14",
+            "kind": "history",
+            "concept": "dysphagia_episode_resolution_and_relief",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The sensation settles within several minutes after sips of water",
+              "source_unit_id": 13,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f15",
+            "kind": "history",
+            "concept": "heartburn_frequency_and_meal_relation",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Her heartburn occurs about three evenings per week, usually after the evening meal",
+              "source_unit_id": 14,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f16",
+            "kind": "history",
+            "concept": "denied_symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She denies difficulty initiating a swallow, difficulty swallowing liquids, painful swallowing, vomiting, vomiting blood, black stools and unintentional weight loss",
+              "source_unit_id": 15,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f17",
+            "kind": "history",
+            "concept": "prior_food_impaction_requiring_emergency_intervention",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She has not had a food impaction requiring an emergency intervention",
+              "source_unit_id": 16,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f18",
+            "kind": "history",
+            "concept": "prior_outside_primary_care_visit",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "On 20 August 2026 she saw Dr. Nora Hale, a family-medicine clinician at an unrelated primary-care practice, for heartburn",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "20 August 2026",
+                "source_unit_id": 17,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f19",
+            "kind": "identity",
+            "concept": "outside_family_medicine_clinician",
+            "subject": {
+              "kind": "other",
+              "name_span": {
+                "quote": "Dr. Nora Hale",
+                "source_unit_id": 17,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Nora Hale",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f20",
+            "kind": "history",
+            "concept": "omeprazole_trial_recommendation",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Hale recommended a 14-day trial of omeprazole 20 mg by mouth once daily",
+              "source_unit_id": 18,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f21",
+            "kind": "history",
+            "concept": "omeprazole_trial_dates",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She took it from 21 August through 3 September 2026",
+              "source_unit_id": 19,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f22",
+            "kind": "history",
+            "concept": "omeprazole_response",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "It partially reduced her heartburn, but she developed headaches",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f23",
+            "kind": "history",
+            "concept": "omeprazole_stopping_reason",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She stopped omeprazole on 3 September because of the headaches",
+              "source_unit_id": 21,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f24",
+            "kind": "history",
+            "concept": "headache_outcome_after_stopping_omeprazole",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "the headaches resolved after stopping",
+              "source_unit_id": 21,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f25",
+            "kind": "history",
+            "concept": "omeprazole_current_use",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She is no longer taking omeprazole",
+              "source_unit_id": 22,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": {
+                "quote": "no longer",
+                "source_unit_id": 22,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f26",
+            "kind": "history",
+            "concept": "current_medication_famotidine",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "famotidine 20 mg by mouth each evening for heartburn, started on 18 September 2026",
+              "source_unit_id": 24,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f27",
+            "kind": "history",
+            "concept": "relevant_medical_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "seasonal allergic rhinitis",
+              "source_unit_id": 25,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f28",
+            "kind": "history",
+            "concept": "previous_esophageal_disease",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "no known previous esophageal disease",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f29",
+            "kind": "history",
+            "concept": "upper_gastrointestinal_surgery_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "no history of upper gastrointestinal surgery",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f30",
+            "kind": "history",
+            "concept": "prior_upper_endoscopy",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "no prior upper endoscopy",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f31",
+            "kind": "history",
+            "concept": "medication_allergy_and_reaction",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "trimethoprim-sulfamethoxazole, which caused an itchy rash",
+              "source_unit_id": 27,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f32",
+            "kind": "finding",
+            "concept": "vital_signs_and_weight",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Blood pressure is 116/72 mmHg, pulse 72 beats per minute, temperature 36.7 degrees Celsius and weight 64.2 kg",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f33",
+            "kind": "measurement",
+            "concept": "pulse",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "72",
+              "source_unit_id": 29,
+              "occurrence": 2
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "beats per minute",
+            "unit_span": {
+              "quote": "beats per minute",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f34",
+            "kind": "measurement",
+            "concept": "body_temperature",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "36.7",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "degrees Celsius",
+            "unit_span": {
+              "quote": "degrees Celsius",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f35",
+            "kind": "measurement",
+            "concept": "body_weight",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "64.2",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "kg",
+            "unit_span": {
+              "quote": "kg",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f36",
+            "kind": "finding",
+            "concept": "general_appearance",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "She appears comfortable and clinically stable",
+              "source_unit_id": 30,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f37",
+            "kind": "finding",
+            "concept": "oropharynx_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The oropharynx is moist without a visible lesion",
+              "source_unit_id": 31,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f38",
+            "kind": "finding",
+            "concept": "abdominal_examination_initial",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The abdomen is soft and nontender, with normal bowel sounds and no guarding or rebound",
+              "source_unit_id": 32,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f39",
+            "kind": "finding",
+            "concept": "abdominal_examination_repeat_comparison",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The abdominal examination is stable and unchanged on repeat examination at the end of this same visit, compared with the initial examination today",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f40",
+            "kind": "assessment",
+            "concept": "evaluated_symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Esophageal dysphagia and heartburn were both evaluated today",
+              "source_unit_id": 35,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f41",
+            "kind": "assessment",
+            "concept": "underlying_etiology_uncertainty",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The underlying etiology remains uncertain",
+              "source_unit_id": 36,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f42",
+            "kind": "assessment",
+            "concept": "unconfirmed_diagnostic_considerations",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Reflux-associated mucosal irritation and a structural esophageal cause are considerations, not established diagnoses",
+              "source_unit_id": 37,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f43",
+            "kind": "assessment",
+            "concept": "definitive_underlying_disease_diagnosis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No definitive underlying disease is diagnosed at this visit",
+              "source_unit_id": 38,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f44",
+            "kind": "plan",
+            "concept": "upper_endoscopy_order",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Upper endoscopy is ordered today for a later outpatient appointment to investigate the esophageal dysphagia and heartburn",
+              "source_unit_id": 40,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f45",
+            "kind": "plan",
+            "concept": "upper_endoscopy_performance_and_results",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "It was not performed today, and no upper-endoscopy results are available",
+              "source_unit_id": 41,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f46",
+            "kind": "plan",
+            "concept": "procedure_performed_during_encounter",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No procedure was performed during this encounter",
+              "source_unit_id": 42,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f47",
+            "kind": "plan",
+            "concept": "medication_change_decision",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No medication change is made today",
+              "source_unit_id": 43,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f48",
+            "kind": "plan",
+            "concept": "immediate_management_plan",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The plan is to arrange the ordered investigation and record symptom frequency while awaiting it",
+              "source_unit_id": 44,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f49",
+            "kind": "follow_up",
+            "concept": "follow_up_plan",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Follow-up is planned after the endoscopy to discuss its findings, with earlier contact if symptoms worsen",
+              "source_unit_id": 45,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": {
+                "quote": "after the endoscopy",
+                "source_unit_id": 45,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f50",
+            "kind": "other",
+            "concept": "em_selection_basis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Office E/M selection is based on total physician time on the date of service",
+              "source_unit_id": 46,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f51",
+            "kind": "other",
+            "concept": "total_physician_time_and_activities",
+            "subject": {
+              "kind": "clinician",
+              "name_span": {
+                "quote": "Dr. Voss",
+                "source_unit_id": 47,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Voss personally spent 47 minutes on 17 October 2026: seven minutes reviewing the available outside records, 31 minutes obtaining the history, performing the examination and counseling the patient, and nine minutes entering the investigation order and documenting the encounter",
+              "source_unit_id": 47,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": {
+                "quote": "17 October 2026",
+                "source_unit_id": 47,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f52",
+            "kind": "other",
+            "concept": "physician_time_qualification",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "These are all physician activities on the encounter date",
+              "source_unit_id": 48,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f53",
+            "kind": "other",
+            "concept": "physician_time_staff_and_prior_day_exclusions",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The 47 minutes exclude eight minutes of staff intake work and six minutes of physician record review performed on the preceding day",
+              "source_unit_id": 49,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f54",
+            "kind": "other",
+            "concept": "physician_time_separately_reported_services_exclusion",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Tessa Calder",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The total also excludes any time for separately reported services",
+              "source_unit_id": 50,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "1e06ac645d0791ec01de65693623c1a0fa44487eaa773e766e0f434ad339c43f",
+        "schema": "76e5af06c7fc37357490f7b2fa707d2bd422087908b1ebbfd2788c03d5dc45ba",
+        "instructions": "4fd65c6f6cf07081ca8881dd576fb4615f22ef052b27046b96a72ec6bdb7a643"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "fact_ids": [
+              "f1"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_1",
+            "fact_ids": [
+              "f2"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_2",
+            "fact_ids": [
+              "f3"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_3",
+            "fact_ids": [
+              "f4",
+              "f5",
+              "f6"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_4",
+            "fact_ids": [
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_5",
+            "fact_ids": [
+              "f12"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_6",
+            "fact_ids": [
+              "f13",
+              "f14"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_7",
+            "fact_ids": [
+              "f15"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_8",
+            "fact_ids": [
+              "f17"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_9",
+            "fact_ids": [
+              "f18",
+              "f20",
+              "f22"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_10",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29",
+              "f30"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_11",
+            "fact_ids": [
+              "f26"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f20",
+              "f21",
+              "f22",
+              "f23",
+              "f24",
+              "f25"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_13",
+            "fact_ids": [
+              "f31"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_14",
+            "fact_ids": [
+              "f32"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_15",
+            "fact_ids": [
+              "f36",
+              "f37",
+              "f38",
+              "f39"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_16",
+            "fact_ids": [
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_17",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f46"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_18",
+            "fact_ids": [
+              "f45",
+              "f46"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_19",
+            "fact_ids": [
+              "f44",
+              "f47",
+              "f48"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_20",
+            "fact_ids": [
+              "f49"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_21",
+            "fact_ids": [
+              "f50",
+              "f51",
+              "f52",
+              "f53",
+              "f54"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_22",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_23",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "03138cc0dfd7384c52a12f6486407428726c9afc966ef8f7e711a816754e6c83",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "33cf246b7a2dd9a6e284e1ac8a6889f1f88ac73c2a2def92c7dfe454aaf10001"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete patient name, including the 'Synthetic' prefix, is documented and selected."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "The clinic record number SYN-TC-1017 matches the source."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3"
+            ],
+            "reason": "The source documents a 43-year-old woman."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f4",
+              "f5",
+              "f6"
+            ],
+            "reason": "Date 17 October 2026, treating clinician Dr. Samira Voss, and the in-person visit in a U.S. gastrointestinal office are all source-backed. The 'New-patient' wording is part of the same documented encounter description."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "pass",
+            "fact_ids": [
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "reason": "New-patient status, the negated three-year service history with Dr. Voss and the same specialty in this group, and the unrelated earlier family-medicine practice are all retained."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f12"
+            ],
+            "reason": "Both concerns and their durations (six weeks, four months) are present."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f13",
+              "f14"
+            ],
+            "reason": "Food type, frequency, location, timing after swallowing, and resolution with sips of water are all covered."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f15"
+            ],
+            "reason": "Heartburn frequency and its relation to the evening meal match the source."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "omission",
+            "fact_ids": [
+              "f16",
+              "f17"
+            ],
+            "reason": "The held candidate contains only the absence of food impaction (f17). It omits the documented symptom negatives in f16, including no difficulty swallowing liquids, and no final text is supplied. f16 carries unresolved validation issues about negation grounding even though the source says 'She denies', so it needs review before use."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18",
+              "f20",
+              "f22"
+            ],
+            "reason": "The 20 August 2026 visit with Dr. Nora Hale (family medicine, unrelated primary-care practice), its reason, the omeprazole trial recommendation and the response are retained. 'Unrelated primary-care practice' distinguishes it from the GI group."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29",
+              "f30"
+            ],
+            "reason": "Seasonal allergic rhinitis and the negated esophageal disease, upper GI surgery and prior endoscopy history are retained with their negative wording."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "pass",
+            "fact_ids": [
+              "f26"
+            ],
+            "reason": "The current famotidine entry has name, dose, route, frequency, indication and start date, and excludes discontinued omeprazole."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "pass",
+            "fact_ids": [
+              "f20",
+              "f21",
+              "f22",
+              "f23",
+              "f24",
+              "f25"
+            ],
+            "reason": "The omeprazole recommendation, dose, route, frequency, trial dates, response, stopping reason, outcome after stopping and explicit current non-use are all present."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f31"
+            ],
+            "reason": "The trimethoprim-sulfamethoxazole allergy and its itchy rash are retained. The omeprazole headaches are not recast as an allergy."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32"
+            ],
+            "reason": "Blood pressure, pulse, temperature and weight are given with their units."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "pass",
+            "fact_ids": [
+              "f36",
+              "f37",
+              "f38",
+              "f39"
+            ],
+            "reason": "General appearance, oropharynx, abdomen, and the repeat-versus-initial abdominal comparison within the same visit are retained with their positive and negative components."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "pass",
+            "fact_ids": [
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "reason": "Both evaluated symptoms, the uncertain etiology, the considerations that are not established diagnoses, and the statement that no definitive disease is diagnosed are all preserved."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "pass",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f46"
+            ],
+            "reason": "The endoscopy order, its reason and timing, non-performance today, absence of results, and the no-procedure statement are all retained."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "pass",
+            "fact_ids": [
+              "f45",
+              "f46"
+            ],
+            "reason": "Non-performance of the endoscopy today and the explicit no-procedure statement are retained."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "omission",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f47",
+              "f48"
+            ],
+            "reason": "The plan includes the endoscopy order (f44) but omits the documented statement that it was not performed today and that no results are available (f45). A plan that orders a later investigation must retain that statement."
+          },
+          {
+            "key": "cell_20",
+            "verdict": "pass",
+            "fact_ids": [
+              "f49"
+            ],
+            "reason": "Follow-up after the endoscopy, its purpose of discussing findings, and earlier contact if symptoms worsen are retained."
+          },
+          {
+            "key": "cell_21",
+            "verdict": "pass",
+            "fact_ids": [
+              "f50",
+              "f51",
+              "f52",
+              "f53",
+              "f54"
+            ],
+            "reason": "The time-based selection basis, 47 minutes with each activity and its minutes, the encounter date, the staff and prior-day exclusions with minutes, and the separately reported services exclusion are all retained."
+          },
+          {
+            "key": "cell_22",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring clinician is documented. Dr. Voss is the treating clinician and Dr. Hale is a prior outside clinician."
+          },
+          {
+            "key": "cell_23",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No preferred pharmacy is documented."
+          }
+        ],
+        "fact_findings": [
+          {
+            "fact_id": "f16",
+            "verdict": "ambiguous",
+            "reason": "The source says 'She denies difficulty initiating a swallow, difficulty swallowing liquids...' and the value span retains the negative wording. However, the extraction carries unresolved issues claiming the negation is not grounded. The fact stays on hold until the metadata is reconciled."
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "68ae2c52368bc1f6f35d7fcabb23c1ba9ba55dff3b578a7e5d577a5e7c892a98",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "0d09bb28e3158455314e1f7768dcde7bdbd7beaf73ad234779761f743c91aabe"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_8",
+            "fact_ids": [
+              "f16",
+              "f17"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_19",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f47",
+              "f48"
+            ],
+            "status": "supported",
+            "separator": "; "
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "8d2623067a1b975795f2b83e41b142dc559c308f0a9cd938cc84bc73d92d1e19",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "33cf246b7a2dd9a6e284e1ac8a6889f1f88ac73c2a2def92c7dfe454aaf10001"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete patient name with its 'Synthetic' prefix is documented and selected."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "SYN-TC-1017 matches the clinic record number in the source."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3"
+            ],
+            "reason": "The source documents a 43-year-old woman."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f4",
+              "f5",
+              "f6"
+            ],
+            "reason": "The date 17 October 2026, treating clinician Dr. Samira Voss, and the in-person visit in a U.S. gastrointestinal office are all source-backed."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "pass",
+            "fact_ids": [
+              "f8",
+              "f9",
+              "f10"
+            ],
+            "reason": "New-patient status, the negated three-year service history with Dr. Voss and the same specialty in this group, and the unrelated earlier family-medicine practice are all retained."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f12"
+            ],
+            "reason": "Both concerns and their durations (six weeks, four months) are present."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f13",
+              "f14"
+            ],
+            "reason": "Food type, frequency, location, timing after swallowing, and resolution with sips of water are covered."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f15"
+            ],
+            "reason": "Heartburn frequency and its relation to the evening meal match the source."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "conflict",
+            "fact_ids": [
+              "f16",
+              "f17"
+            ],
+            "reason": "The answer is held with no final value. f16 carries unresolved validation issues saying its negation is not grounded, and a deterministic hold cannot be waived. The candidate text does contain both the symptom negatives (f16) and the no-impaction statement (f17), so the earlier finding that it held only f17 was wrong. The answer stays held until the f16 metadata is reconciled."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18",
+              "f20",
+              "f22"
+            ],
+            "reason": "The 20 August 2026 visit with Dr. Nora Hale (family medicine, unrelated primary-care practice), its reason, the omeprazole trial recommendation and the response are retained. The unrelated-practice wording distinguishes it from the GI group."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29",
+              "f30"
+            ],
+            "reason": "Seasonal allergic rhinitis and the three negated histories are retained with their negative wording."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "pass",
+            "fact_ids": [
+              "f26"
+            ],
+            "reason": "The current famotidine entry has name, dose, route, frequency, indication and start date. Discontinued omeprazole is excluded."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "pass",
+            "fact_ids": [
+              "f20",
+              "f21",
+              "f22",
+              "f23",
+              "f24",
+              "f25"
+            ],
+            "reason": "The omeprazole dose, route, frequency, trial dates, response, stopping reason, outcome after stopping and explicit current non-use are all present."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f31"
+            ],
+            "reason": "The trimethoprim-sulfamethoxazole allergy with itchy rash is retained. The omeprazole headaches are not recast as an allergy."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32"
+            ],
+            "reason": "Blood pressure, pulse, temperature and weight are given with their units."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "pass",
+            "fact_ids": [
+              "f36",
+              "f37",
+              "f38",
+              "f39"
+            ],
+            "reason": "General appearance, oropharynx and abdominal findings are retained with their positive and negative components. The repeat-versus-initial abdominal comparison within the same visit is also retained."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "pass",
+            "fact_ids": [
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "reason": "Both evaluated symptoms, the uncertain etiology, the unestablished considerations and the statement that no definitive disease is diagnosed are all preserved."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "pass",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f46"
+            ],
+            "reason": "The endoscopy order, its reason and timing, non-performance today, absence of results and the no-procedure statement are all retained."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "pass",
+            "fact_ids": [
+              "f45",
+              "f46"
+            ],
+            "reason": "Both linked non-performance statements required by the inventory for this destination are selected, along with the explicit no-procedure statement."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "pass",
+            "fact_ids": [
+              "f44",
+              "f45",
+              "f47",
+              "f48"
+            ],
+            "reason": "The earlier omission finding was wrong, because f45 is selected and the text includes that the endoscopy was not performed today and no results are available. The order, the no-medication-change decision and the management plan are all present."
+          },
+          {
+            "key": "cell_20",
+            "verdict": "pass",
+            "fact_ids": [
+              "f49"
+            ],
+            "reason": "Follow-up after the endoscopy, its purpose and the condition for earlier contact are retained, with no invented calendar date."
+          },
+          {
+            "key": "cell_21",
+            "verdict": "pass",
+            "fact_ids": [
+              "f50",
+              "f51",
+              "f52",
+              "f53",
+              "f54"
+            ],
+            "reason": "The time-based selection basis, 47 minutes with each activity and its minutes, the encounter date, the staff and prior-day exclusions with minutes, and the separately reported services exclusion are all retained."
+          },
+          {
+            "key": "cell_22",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring clinician is documented. Dr. Voss is the treating clinician and Dr. Hale is a prior outside clinician."
+          },
+          {
+            "key": "cell_23",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No preferred pharmacy is documented."
+          }
+        ],
+        "fact_findings": [
+          {
+            "fact_id": "f16",
+            "verdict": "ambiguous",
+            "reason": "The source says 'She denies ...' and the value span keeps that wording, but the extraction carries unresolved issues claiming the negation is not grounded. The fact stays held until the metadata is reconciled."
+          },
+          {
+            "fact_id": "f11",
+            "verdict": "ambiguous",
+            "reason": "The fact is tagged mixed polarity with unresolved validation issues, although the source sentence is a plain statement that the visit was outside primary care and not with this GI group. It is unselected and needs review before any use."
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "d8818f3cf447097e18f0e8d832e7c8aedc957f54f8be43c7e9319f09a1e8e559",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "0d09bb28e3158455314e1f7768dcde7bdbd7beaf73ad234779761f743c91aabe"
+      }
+    }
+  ],
+  "saved_answers_sha256": "6be34a6bb967e6755da5dbfef1e84808a1d400e451efb02f39f506eed2540a64",
+  "scope_contract": "positioned-source-governance-v18"
+}
