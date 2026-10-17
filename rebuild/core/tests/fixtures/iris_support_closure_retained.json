@@ -1,0 +1,3229 @@
+{
+  "provenance": {
+    "kind": "retained synthetic source and actual v16 stage replies; prospective proposals in tests are constructed offline",
+    "source_sha256": "dc8bd95fb99f267d69b1d386ffbf4d63c8494c87f902849e552ea1dee4db1fdd",
+    "scope_contract": "positioned-mixed-observation-v16"
+  },
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Iris Vale\r\nAge: 52 years\r\nClinic record number: SYN-IV-1017\r\nDate of service: 17 October 2026\r\nTreating clinician: Dr. Mara Keene\r\nVisit type: In-person gastrointestinal outpatient office visit. This is an established patient.\r\n\r\nHistory of present illness\r\nSynthetic Iris Vale is being evaluated for heartburn present for three weeks. Burning rises behind the breastbone after meals and lasts about 12 minutes at a time. Swallowing and appetite are unchanged. She reports no difficulty swallowing, painful swallowing, nausea, vomiting, abdominal pain, diarrhea, constipation, vomiting blood, black stool, blood in the stool or unintended weight loss.\r\nHer medical history is seasonal allergic rhinitis. She has never had abdominal surgery. She uses cetirizine 10 mg orally once daily as needed for allergy symptoms. A two-week trial of an over-the-counter antacid ended last month; she is no longer taking that antacid. Sulfonamide antibiotics cause a rash. Medications were reviewed and reconciled in the EHR today.\r\nShe has never smoked and does not use alcohol or recreational drugs. She is married and works as a librarian.\r\n\r\nReview of systems\r\nA 14-point review of systems was performed. There are no additional findings beyond the heartburn described above.\r\n\r\nExamination\r\nShe is alert, oriented and in no distress. Her head is normocephalic, pupils are equal, sclerae are anicteric and the oropharynx is clear. Her neck is supple without lymphadenopathy. Lungs are clear bilaterally. Heart rhythm is regular without a murmur. The abdomen is soft and not distended, with normal bowel sounds and no tenderness, rebound or guarding. Her extremities are warm and well perfused without edema. She moves all limbs and has no focal neurologic deficit. Mood and affect are normal. The rectal examination was deferred.\r\n\r\nImpression\r\nHeartburn.\r\n\r\nPlan\r\nUpper endoscopy is requested for a later date if symptoms persist. Endoscopy was not performed today, no specimen was obtained and there are no investigation results from this visit. No procedure was performed today. She will avoid meals within three hours of bedtime and keep a symptom diary. No prescription is started today. Review is planned in three weeks. She should contact the clinic earlier for difficulty swallowing, bleeding, persistent vomiting or worsening symptoms.\r\n\r\nOffice E/M selection is based on total physician time on the date of service. Dr. Keene personally spent 32 minutes on the encounter date: four minutes reviewing the chart before the visit, 22 minutes directly with the patient obtaining history, examining and counseling her, and six minutes entering orders and documenting the visit. The 32 minutes exclude eight minutes of staff rooming and three minutes of physician preparation on the preceding day. They also exclude time for separately reported services.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Who is the referring physician?",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "What is the patient's full name?",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "How old is the patient?Age in years.",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "What type of visit took place?In-person, telephone or video telehealth.",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "What is the history of present illness?Include the reason for gastroenterology evaluation.",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "What is the past medical history?",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "What is the past surgical history?",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Which allergies and reactions are documented?",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "What medications is the patient taking?Include documented doses and frequency, if provided.",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Were medications reviewed and reconciled in the EHR?Record the documented reconciliation status.",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "What is the patient's tobacco history?",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "What is the patient's alcohol history?",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "What recreational drug use is documented?",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "What is the patient's marital status?",
+      "locator": {
+        "cell": 13
+      }
+    },
+    {
+      "key": "cell_14",
+      "kind": "text",
+      "label": "What is the patient's occupation?",
+      "locator": {
+        "cell": 14
+      }
+    },
+    {
+      "key": "cell_15",
+      "kind": "text",
+      "label": "What is the relevant family history?",
+      "locator": {
+        "cell": 15
+      }
+    },
+    {
+      "key": "cell_16",
+      "kind": "text",
+      "label": "What telehealth consent was documented?For telephone or video visits only. Leave blank for in-person visits.",
+      "locator": {
+        "cell": 16
+      }
+    },
+    {
+      "key": "cell_17",
+      "kind": "text",
+      "label": "What GI symptoms and pertinent negatives are documented?Heartburn, odynophagia, dysphagia, nausea, vomiting, abdominal pain, diarrhea, constipation, hematemesis, melena, hematochezia, unintentional weight loss and appetite change.",
+      "locator": {
+        "cell": 17
+      }
+    },
+    {
+      "key": "cell_18",
+      "kind": "text",
+      "label": "Was a 14-point review of systems performed, and what additional findings were documented?",
+      "locator": {
+        "cell": 18
+      }
+    },
+    {
+      "key": "cell_19",
+      "kind": "text",
+      "label": "What are the general examination findings?Alertness, orientation and distress.",
+      "locator": {
+        "cell": 19
+      }
+    },
+    {
+      "key": "cell_20",
+      "kind": "text",
+      "label": "What are the HEENT examination findings?Head, pupils, icterus and oropharynx.",
+      "locator": {
+        "cell": 20
+      }
+    },
+    {
+      "key": "cell_21",
+      "kind": "text",
+      "label": "What are the neck examination findings?",
+      "locator": {
+        "cell": 21
+      }
+    },
+    {
+      "key": "cell_22",
+      "kind": "text",
+      "label": "What are the lung examination findings?",
+      "locator": {
+        "cell": 22
+      }
+    },
+    {
+      "key": "cell_23",
+      "kind": "text",
+      "label": "What are the cardiovascular examination findings?",
+      "locator": {
+        "cell": 23
+      }
+    },
+    {
+      "key": "cell_24",
+      "kind": "text",
+      "label": "What are the abdominal examination findings?Bowel sounds, tenderness, distension, rebound and guarding.",
+      "locator": {
+        "cell": 24
+      }
+    },
+    {
+      "key": "cell_25",
+      "kind": "text",
+      "label": "What are the extremity examination findings?Warmth, perfusion and edema.",
+      "locator": {
+        "cell": 25
+      }
+    },
+    {
+      "key": "cell_26",
+      "kind": "text",
+      "label": "What are the neurologic examination findings?Orientation, movement and focal findings.",
+      "locator": {
+        "cell": 26
+      }
+    },
+    {
+      "key": "cell_27",
+      "kind": "text",
+      "label": "What are the psychological examination findings?",
+      "locator": {
+        "cell": 27
+      }
+    },
+    {
+      "key": "cell_28",
+      "kind": "text",
+      "label": "What was the rectal examination status or finding?Record findings, or deferred if explicitly documented.",
+      "locator": {
+        "cell": 28
+      }
+    },
+    {
+      "key": "cell_29",
+      "kind": "text",
+      "label": "What is the clinician's impression?",
+      "locator": {
+        "cell": 29
+      }
+    },
+    {
+      "key": "cell_30",
+      "kind": "text",
+      "label": "What is the clinician's documented plan?",
+      "locator": {
+        "cell": 30
+      }
+    },
+    {
+      "key": "cell_31",
+      "kind": "text",
+      "label": "How many minutes were spent directly with the patient?Minutes with the patient.",
+      "locator": {
+        "cell": 31
+      }
+    },
+    {
+      "key": "cell_32",
+      "kind": "text",
+      "label": "What was the total time spent on today's encounter?Total encounter minutes, including documented work outside direct patient contact.",
+      "locator": {
+        "cell": 32
+      }
+    },
+    {
+      "key": "cell_33",
+      "kind": "text",
+      "label": "Which activities were included in the documented total time?Visit preparation and chart review; obtaining or reviewing separately obtained history; examination or evaluation; independent interpretation and communication of results not separately reported; EHR documentation on the encounter day.",
+      "locator": {
+        "cell": 33
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Name of the referring physician (a person other than the patient; role: referring physician), as documented.",
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "other",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_1": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's full name only, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_10": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's documented tobacco history, including documented non-use.",
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_11": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's documented alcohol history, including documented non-use.",
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_12": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented recreational drug use, including documented absence of use.",
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_13": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's marital status, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_14": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's occupation, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_14",
+        "locator_sha256": "39acde59594128ff59afd0bc87ccc84ac3363f7b0cd78e2c37172d9b4b812ea6"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_15": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The relevant family history of the patient as documented, including documented absence of relevant conditions.",
+      "permitted_destination": {
+        "field_key": "cell_15",
+        "locator_sha256": "d5b9d6fab52b29c02d8d4b423c7e0abcd5f769b420f1248482f718992aaa26b3"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_16": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The telehealth consent documented for the visit, for telephone or video visits only; left blank for in-person visits.",
+      "permitted_destination": {
+        "field_key": "cell_16",
+        "locator_sha256": "14d093df536e5d87ccf1c49eb75610cc0bf829611e9ba5b85c53f4728b82f9de"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_17": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented GI symptoms and pertinent negatives (heartburn, odynophagia, dysphagia, nausea, vomiting, abdominal pain, diarrhea, constipation, hematemesis, melena, hematochezia, unintentional weight loss and appetite change), including documented absence.",
+      "permitted_destination": {
+        "field_key": "cell_17",
+        "locator_sha256": "e16bb4d5760a8fd18f7e00791df3f828deeb177b3602ba4857d0edc57f889410"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_18": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Whether a 14-point review of systems was performed, and any additional findings documented.",
+      "permitted_destination": {
+        "field_key": "cell_18",
+        "locator_sha256": "a234e0753fdebe9174c1fdc26c9a5f1de16052380f225a0b942239acd4331901"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_19": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "General examination findings (alertness, orientation and distress) as documented.",
+      "permitted_destination": {
+        "field_key": "cell_19",
+        "locator_sha256": "504145417dcbc2c521b4919169a27a0b03f24968aa9691c47a083aef686d8152"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_2": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's age as a whole number of years, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": "years",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_20": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "HEENT examination findings (head, pupils, icterus and oropharynx) as documented.",
+      "permitted_destination": {
+        "field_key": "cell_20",
+        "locator_sha256": "71862461fb120a443240ed40cf530f5339789cea66ed895e324eaf6ff88009f5"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_21": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Neck examination findings as documented.",
+      "permitted_destination": {
+        "field_key": "cell_21",
+        "locator_sha256": "4b5e0da837a21f4d2f29a4a394b729c60c15ba0f9b13c3b7710d8c934404e08b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_22": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Lung examination findings as documented.",
+      "permitted_destination": {
+        "field_key": "cell_22",
+        "locator_sha256": "4146b4482865ea49ea41f31e4fa16adc04e168ad5e5b4322c1d4567f5d075ada"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_23": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Cardiovascular examination findings as documented.",
+      "permitted_destination": {
+        "field_key": "cell_23",
+        "locator_sha256": "cae25add22df0253a1a7d49a67464a9b3e51c085af425af5dcb20cbb55c7e1aa"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_24": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Abdominal examination findings (bowel sounds, tenderness, distension, rebound and guarding) as documented.",
+      "permitted_destination": {
+        "field_key": "cell_24",
+        "locator_sha256": "d2625536931db744077249736fd4873f8f9dda4fdce8c99491f5145df25c685c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_25": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Extremity examination findings (warmth, perfusion and edema) as documented.",
+      "permitted_destination": {
+        "field_key": "cell_25",
+        "locator_sha256": "7dad743f5ce729fe6079dbe0ec99f4643e38e653b6526392db44314258c82c12"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_26": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Neurologic examination findings (orientation, movement and focal findings) as documented.",
+      "permitted_destination": {
+        "field_key": "cell_26",
+        "locator_sha256": "27c592828a60a15627df016680a1cf7b37b29578d52fe904e0fd47e515a19fdd"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_27": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Psychological examination findings as documented.",
+      "permitted_destination": {
+        "field_key": "cell_27",
+        "locator_sha256": "2419fa36fabc6e1dda2776ae87f1225e1c496fcc4d422681eb30768a4b67066f"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_28": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Rectal examination status or findings as documented, or 'deferred' if explicitly documented.",
+      "permitted_destination": {
+        "field_key": "cell_28",
+        "locator_sha256": "6de4d3ab1117c3733be8c2ceded7b08df903a025e55e5e43cd759d507cd95b86"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_29": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The clinician's documented impression of the patient.",
+      "permitted_destination": {
+        "field_key": "cell_29",
+        "locator_sha256": "f2760500bf184f4d37ada62739f650a4bca1c6b6413405d35a942f76be494bba"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_3": {
+      "answer_mode": "atomic",
+      "choices": [
+        "In-person",
+        "telephone",
+        "video telehealth"
+      ],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Type of visit that took place, one of the printed alternatives.",
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "choice",
+      "version": 2
+    },
+    "cell_30": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The clinician's documented plan for the patient.",
+      "permitted_destination": {
+        "field_key": "cell_30",
+        "locator_sha256": "ba2a2fb8552b24389bdfccf8adf5cc1051595f5c0fe66a1bcc8d12ea7a59a30b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_31": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Number of minutes spent directly with the patient, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_31",
+        "locator_sha256": "02ac18839cefe245dc2c4ea6480af26106ae336db7a8a112f5818109adff857d"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": "minutes",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_32": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Total minutes spent on the target encounter ('today's encounter'), including documented work outside direct patient contact.",
+      "permitted_destination": {
+        "field_key": "cell_32",
+        "locator_sha256": "27c202e4b480239c345bbd3de2af7995bf80be736ba287764418ecea99d91251"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "current"
+      },
+      "unit": "minutes",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_33": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Activities included in the documented total time (visit preparation and chart review; obtaining or reviewing separately obtained history; examination or evaluation; independent interpretation and communication of results not separately reported; EHR documentation on the encounter day).",
+      "permitted_destination": {
+        "field_key": "cell_33",
+        "locator_sha256": "be32effc4b7d9ff110f9ba7738f262a54abb39b14a99dbf2ca6b713b2bbf0402"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_4": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Description of the history of present illness, including the reason for gastroenterology evaluation, as documented.",
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_5": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's documented past medical history, including documented absence of conditions.",
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_6": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's documented past surgical history, including documented absence of prior surgery.",
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_7": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented allergies and their reactions, including documented absence of allergies.",
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_8": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Medications the patient is currently taking at the documented target encounter, including documented doses and frequency if provided, or documented absence of medications.",
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_9": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Documented status of medication review and reconciliation in the EHR.",
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    }
+  },
+  "stages": [
+    {
+      "stage": "extractor",
+      "attempt": 1,
+      "output": {
+        "reference_contract": "exact-source-reference-inventory-v2",
+        "facts": [
+          {
+            "id": "f1",
+            "kind": "identity",
+            "concept": "patient_name",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Synthetic Iris Vale",
+              "source_unit_id": 2,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f2",
+            "kind": "measurement",
+            "concept": "patient_age",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "52",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "years",
+            "unit_span": {
+              "quote": "years",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f3",
+            "kind": "other",
+            "concept": "visit_type",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "In-person",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f4",
+            "kind": "reason",
+            "concept": "reason_for_gastroenterology_evaluation",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "heartburn",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f5",
+            "kind": "history",
+            "concept": "history_of_present_illness_heartburn",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Synthetic Iris Vale is being evaluated for heartburn present for three weeks",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f6",
+            "kind": "history",
+            "concept": "heartburn_duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "three weeks",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f7",
+            "kind": "history",
+            "concept": "heartburn_character_and_episode_duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Burning rises behind the breastbone after meals and lasts about 12 minutes at a time",
+              "source_unit_id": 11,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f8",
+            "kind": "finding",
+            "concept": "swallowing_and_appetite",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Swallowing and appetite are unchanged",
+              "source_unit_id": 12,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f9",
+            "kind": "finding",
+            "concept": "gi_pertinent_negatives",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She reports no difficulty swallowing, painful swallowing, nausea, vomiting, abdominal pain, diarrhea, constipation, vomiting blood, black stool, blood in the stool or unintended weight loss",
+              "source_unit_id": 13,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f10",
+            "kind": "history",
+            "concept": "past_medical_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Her medical history is seasonal allergic rhinitis",
+              "source_unit_id": 14,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f11",
+            "kind": "history",
+            "concept": "past_surgical_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She has never had abdominal surgery",
+              "source_unit_id": 15,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f12",
+            "kind": "history",
+            "concept": "allergy_and_reaction",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Sulfonamide antibiotics cause a rash",
+              "source_unit_id": 18,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f13",
+            "kind": "history",
+            "concept": "current_medication_cetirizine",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She uses cetirizine 10 mg orally once daily as needed for allergy symptoms",
+              "source_unit_id": 16,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f14",
+            "kind": "history",
+            "concept": "prior_antacid_trial",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "A two-week trial of an over-the-counter antacid ended last month",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "last month",
+                "source_unit_id": 17,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f15",
+            "kind": "history",
+            "concept": "current_antacid_use",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "she is no longer taking that antacid",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f16",
+            "kind": "other",
+            "concept": "medication_reconciliation_status",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "reviewed and reconciled",
+              "source_unit_id": 19,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f17",
+            "kind": "other",
+            "concept": "medication_reconciliation_statement",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Medications were reviewed and reconciled in the EHR today",
+              "source_unit_id": 19,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f18",
+            "kind": "history",
+            "concept": "tobacco_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She has never smoked",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f19",
+            "kind": "history",
+            "concept": "alcohol_history",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "does not use alcohol",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f20",
+            "kind": "history",
+            "concept": "recreational_drug_use",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "does not use alcohol or recreational drugs",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f21",
+            "kind": "other",
+            "concept": "marital_status",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "married",
+              "source_unit_id": 21,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f22",
+            "kind": "other",
+            "concept": "occupation",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "librarian",
+              "source_unit_id": 21,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f23",
+            "kind": "finding",
+            "concept": "review_of_systems_performed",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "A 14-point review of systems was performed",
+              "source_unit_id": 23,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f24",
+            "kind": "finding",
+            "concept": "review_of_systems_additional_findings",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "There are no additional findings beyond the heartburn described above",
+              "source_unit_id": 24,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f25",
+            "kind": "finding",
+            "concept": "general_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She is alert, oriented and in no distress",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f26",
+            "kind": "finding",
+            "concept": "neurologic_orientation",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "oriented",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f27",
+            "kind": "finding",
+            "concept": "heent_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Her head is normocephalic, pupils are equal, sclerae are anicteric and the oropharynx is clear",
+              "source_unit_id": 27,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f28",
+            "kind": "finding",
+            "concept": "neck_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Her neck is supple without lymphadenopathy",
+              "source_unit_id": 28,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f29",
+            "kind": "finding",
+            "concept": "lung_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Lungs are clear bilaterally",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f30",
+            "kind": "finding",
+            "concept": "cardiovascular_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Heart rhythm is regular without a murmur",
+              "source_unit_id": 30,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f31",
+            "kind": "finding",
+            "concept": "abdominal_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "The abdomen is soft and not distended, with normal bowel sounds and no tenderness, rebound or guarding",
+              "source_unit_id": 31,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f32",
+            "kind": "finding",
+            "concept": "extremity_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Her extremities are warm and well perfused without edema",
+              "source_unit_id": 32,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f33",
+            "kind": "finding",
+            "concept": "neurologic_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She moves all limbs and has no focal neurologic deficit",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "polarity": "mixed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f34",
+            "kind": "finding",
+            "concept": "psychological_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Mood and affect are normal",
+              "source_unit_id": 34,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f35",
+            "kind": "finding",
+            "concept": "rectal_examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "The rectal examination was deferred",
+              "source_unit_id": 35,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f36",
+            "kind": "assessment",
+            "concept": "clinician_impression",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Heartburn",
+              "source_unit_id": 37,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f37",
+            "kind": "plan",
+            "concept": "plan_upper_endoscopy_conditional",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Upper endoscopy is requested for a later date if symptoms persist",
+              "source_unit_id": 39,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "future",
+              "span": {
+                "quote": "later date",
+                "source_unit_id": 39,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f38",
+            "kind": "plan",
+            "concept": "endoscopy_specimen_results_nonperformance",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Endoscopy was not performed today, no specimen was obtained and there are no investigation results from this visit",
+              "source_unit_id": 40,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f39",
+            "kind": "plan",
+            "concept": "procedure_nonperformance",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "No procedure was performed today",
+              "source_unit_id": 41,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f40",
+            "kind": "plan",
+            "concept": "plan_lifestyle_measures",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She will avoid meals within three hours of bedtime and keep a symptom diary",
+              "source_unit_id": 42,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f41",
+            "kind": "plan",
+            "concept": "plan_prescription",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "No prescription is started today",
+              "source_unit_id": 43,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f42",
+            "kind": "follow_up",
+            "concept": "plan_review_interval",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "Review is planned in three weeks",
+              "source_unit_id": 44,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": {
+                "quote": "in three weeks",
+                "source_unit_id": 44,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f43",
+            "kind": "plan",
+            "concept": "plan_return_precautions",
+            "subject": {
+              "kind": "patient",
+              "name_span": null
+            },
+            "value_span": {
+              "quote": "She should contact the clinic earlier for difficulty swallowing, bleeding, persistent vomiting or worsening symptoms",
+              "source_unit_id": 45,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f44",
+            "kind": "other",
+            "concept": "em_selection_basis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Office E/M selection is based on total physician time on the date of service",
+              "source_unit_id": 46,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f45",
+            "kind": "measurement",
+            "concept": "total_physician_time_encounter",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "32",
+              "source_unit_id": 47,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "minutes",
+            "unit_span": {
+              "quote": "minutes",
+              "source_unit_id": 47,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f46",
+            "kind": "measurement",
+            "concept": "physician_time_directly_with_patient",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "22",
+              "source_unit_id": 47,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "minutes",
+            "unit_span": {
+              "quote": "minutes",
+              "source_unit_id": 47,
+              "occurrence": 3
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f47",
+            "kind": "other",
+            "concept": "physician_time_activities_included",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Dr. Keene personally spent 32 minutes on the encounter date: four minutes reviewing the chart before the visit, 22 minutes directly with the patient obtaining history, examining and counseling her, and six minutes entering orders and documenting the visit",
+              "source_unit_id": 47,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f48",
+            "kind": "other",
+            "concept": "physician_time_exclusions_staff_and_preceding_day",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The 32 minutes exclude eight minutes of staff rooming and three minutes of physician preparation on the preceding day",
+              "source_unit_id": 48,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f49",
+            "kind": "other",
+            "concept": "physician_time_exclusions_separately_reported_services",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Iris Vale",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "They also exclude time for separately reported services",
+              "source_unit_id": 49,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "fb6188c1e6ac7362cc81eb429b808a0e94fc02630c1e6bfcd129d126223de48c",
+        "schema": "76e5af06c7fc37357490f7b2fa707d2bd422087908b1ebbfd2788c03d5dc45ba",
+        "instructions": "474de33fc6e5c1347eb01571da0b49e7e5213e8b4fb471fddf751bc7f3c9aed1"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_1",
+            "fact_ids": [
+              "f1"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_2",
+            "fact_ids": [
+              "f2"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_3",
+            "fact_ids": [
+              "f3"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_4",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_5",
+            "fact_ids": [
+              "f10"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_6",
+            "fact_ids": [
+              "f11"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_7",
+            "fact_ids": [
+              "f12"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_8",
+            "fact_ids": [
+              "f13",
+              "f14",
+              "f15"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_9",
+            "fact_ids": [
+              "f16"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_10",
+            "fact_ids": [
+              "f18"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_11",
+            "fact_ids": [
+              "f19"
+            ],
+            "status": "ambiguous",
+            "separator": ""
+          },
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f20"
+            ],
+            "status": "ambiguous",
+            "separator": ""
+          },
+          {
+            "key": "cell_13",
+            "fact_ids": [
+              "f21"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_14",
+            "fact_ids": [
+              "f22"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_15",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_16",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_17",
+            "fact_ids": [
+              "f7",
+              "f9"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_18",
+            "fact_ids": [
+              "f23",
+              "f24"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_19",
+            "fact_ids": [
+              "f25"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_20",
+            "fact_ids": [
+              "f27"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_21",
+            "fact_ids": [
+              "f28"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_22",
+            "fact_ids": [
+              "f29"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_23",
+            "fact_ids": [
+              "f30"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_24",
+            "fact_ids": [
+              "f31"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_25",
+            "fact_ids": [
+              "f32"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_26",
+            "fact_ids": [
+              "f26",
+              "f33"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_27",
+            "fact_ids": [
+              "f34"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_28",
+            "fact_ids": [
+              "f35"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_29",
+            "fact_ids": [
+              "f36"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_30",
+            "fact_ids": [
+              "f37",
+              "f38",
+              "f39",
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_31",
+            "fact_ids": [
+              "f46"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_32",
+            "fact_ids": [
+              "f45"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_33",
+            "fact_ids": [
+              "f44",
+              "f47",
+              "f48",
+              "f49"
+            ],
+            "status": "supported",
+            "separator": "; "
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "1b379b7d76180bab7c3eeb6f7348a68726c5c448a33f1be799ceb6feffea15c9",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "962f549ffe792faeed1fb9cd96bcfb105502b1aae3ac54c6c7f2b0b3d1a05a5a"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 1,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring physician is documented. Dr. Keene is the treating clinician, not a referrer."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The full patient name with its synthetic prefix is documented."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "Age 52 years is documented."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3"
+            ],
+            "reason": "The visit is documented as in-person."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "omission",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9",
+              "f8"
+            ],
+            "reason": "The HPI omits the documented current symptom state 'Swallowing and appetite are unchanged' (f8). The selected facts f5, f7 and f9 are otherwise grounded and carry the reason for evaluation."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f10"
+            ],
+            "reason": "Seasonal allergic rhinitis is the documented medical history."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f11"
+            ],
+            "reason": "The source documents that she has never had abdominal surgery, and the answer keeps the 'never' wording."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f12"
+            ],
+            "reason": "The sulfonamide antibiotic allergy with rash reaction is documented."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "pass",
+            "fact_ids": [
+              "f13",
+              "f14",
+              "f15"
+            ],
+            "reason": "Current cetirizine with dose and frequency is retained. The antacid cessation and its separately timed prior trial are both kept, with the past timing explicit."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f16"
+            ],
+            "reason": "The source says medications were reviewed and reconciled in the EHR today."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18"
+            ],
+            "reason": "'Never smoked' is documented and retained."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "ambiguous",
+            "fact_ids": [
+              "f19"
+            ],
+            "reason": "The answer is held by a deterministic scope or ownership hold on f19 and is blank as supplied. The source documents that she does not use alcohol, but the hold cannot be waived and it stays unresolved for review."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "ambiguous",
+            "fact_ids": [
+              "f20"
+            ],
+            "reason": "The answer is held by a deterministic scope or ownership hold on f20 and is blank as supplied. The source documents that she does not use recreational drugs, but the hold cannot be waived and it stays unresolved for review."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f21"
+            ],
+            "reason": "Married is documented."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f22"
+            ],
+            "reason": "Librarian is documented."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No family history is documented."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "The visit is in-person, so the field is correctly blank."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "omission",
+            "fact_ids": [
+              "f7",
+              "f9",
+              "f5",
+              "f6",
+              "f8"
+            ],
+            "reason": "The answer leaves out the documented heartburn with its three-week duration (f5, f6) and the unchanged swallowing and appetite (f8). Appetite change is an approved component of this field."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "pass",
+            "fact_ids": [
+              "f23",
+              "f24"
+            ],
+            "reason": "The 14-point review of systems was performed. The statement of no additional findings beyond the heartburn is preserved."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "pass",
+            "fact_ids": [
+              "f25"
+            ],
+            "reason": "Alert, oriented and in no distress is the complete observation."
+          },
+          {
+            "key": "cell_20",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27"
+            ],
+            "reason": "All four HEENT components (head, pupils, sclerae, oropharynx) are retained."
+          },
+          {
+            "key": "cell_21",
+            "verdict": "pass",
+            "fact_ids": [
+              "f28"
+            ],
+            "reason": "The neck finding, including the negative lymphadenopathy, is complete."
+          },
+          {
+            "key": "cell_22",
+            "verdict": "pass",
+            "fact_ids": [
+              "f29"
+            ],
+            "reason": "The lung finding is complete."
+          },
+          {
+            "key": "cell_23",
+            "verdict": "pass",
+            "fact_ids": [
+              "f30"
+            ],
+            "reason": "The cardiovascular finding keeps both the regular rhythm and the absent murmur."
+          },
+          {
+            "key": "cell_24",
+            "verdict": "pass",
+            "fact_ids": [
+              "f31"
+            ],
+            "reason": "The abdominal finding is complete, with all positive and negative components."
+          },
+          {
+            "key": "cell_25",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32"
+            ],
+            "reason": "The extremity finding is complete."
+          },
+          {
+            "key": "cell_26",
+            "verdict": "pass",
+            "fact_ids": [
+              "f26",
+              "f33"
+            ],
+            "reason": "Orientation, movement and the absence of a focal deficit are all retained."
+          },
+          {
+            "key": "cell_27",
+            "verdict": "pass",
+            "fact_ids": [
+              "f34"
+            ],
+            "reason": "Mood and affect are documented as normal."
+          },
+          {
+            "key": "cell_28",
+            "verdict": "pass",
+            "fact_ids": [
+              "f35"
+            ],
+            "reason": "The rectal examination was deferred, as documented."
+          },
+          {
+            "key": "cell_29",
+            "verdict": "pass",
+            "fact_ids": [
+              "f36"
+            ],
+            "reason": "The impression is heartburn."
+          },
+          {
+            "key": "cell_30",
+            "verdict": "pass",
+            "fact_ids": [
+              "f37",
+              "f38",
+              "f39",
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "reason": "The plan retains the conditional endoscopy, all non-performance statements, lifestyle measures, no prescription, the review interval and the return precautions."
+          },
+          {
+            "key": "cell_31",
+            "verdict": "pass",
+            "fact_ids": [
+              "f46"
+            ],
+            "reason": "22 minutes directly with the patient is documented."
+          },
+          {
+            "key": "cell_32",
+            "verdict": "pass",
+            "fact_ids": [
+              "f45"
+            ],
+            "reason": "Total physician time on the encounter date is 32 minutes."
+          },
+          {
+            "key": "cell_33",
+            "verdict": "pass",
+            "fact_ids": [
+              "f44",
+              "f47",
+              "f48",
+              "f49"
+            ],
+            "reason": "The selection basis, the timed activities and both exclusion statements are retained."
+          }
+        ],
+        "fact_findings": [
+          {
+            "fact_id": "f8",
+            "verdict": "incorrect",
+            "reason": "'Swallowing and appetite are unchanged' is tagged negated, but the source does not state an absence. The negation is not grounded."
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "0ee8082677230b27680f3575f04104c7d790ffe0b0f24a0eb6e19929796d3f23",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "4995545194a29e52e178fadfdac78ed9709ed25a407de8c85ad08b238b7cc4f2"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_4",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_11",
+            "fact_ids": [
+              "f19"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f20"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          },
+          {
+            "key": "cell_17",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9"
+            ],
+            "status": "ambiguous",
+            "separator": "; "
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "3c0a0cb7125869cd2d3c091258d29bc2ceae6940402c0e0fb1b40e9738704dac",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "962f549ffe792faeed1fb9cd96bcfb105502b1aae3ac54c6c7f2b0b3d1a05a5a"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 2,
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring physician is documented. Dr. Mara Keene is the treating clinician, not a referrer."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete patient name, including the synthetic prefix, is documented as 'Synthetic Iris Vale'."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "The source documents age 52 years."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3"
+            ],
+            "reason": "The source documents an in-person visit."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "omission",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9",
+              "f8"
+            ],
+            "reason": "The held candidate carries the reason for evaluation, the symptom character and the negatives. It omits the documented current symptom state 'Swallowing and appetite are unchanged' (f8)."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f10"
+            ],
+            "reason": "Seasonal allergic rhinitis is the documented medical history."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f11"
+            ],
+            "reason": "The source says she has never had abdominal surgery, and the 'never' wording is retained."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f12"
+            ],
+            "reason": "The sulfonamide antibiotic allergy with its rash reaction is documented."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "pass",
+            "fact_ids": [
+              "f13",
+              "f14",
+              "f15"
+            ],
+            "reason": "Current cetirizine with dose, route and frequency is retained. The antacid cessation is kept with its separately timed prior trial ('ended last month'), so past and current times stay distinct."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f16"
+            ],
+            "reason": "The source says medications were reviewed and reconciled in the EHR today."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18"
+            ],
+            "reason": "'Never smoked' is documented and retained."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "ambiguous",
+            "fact_ids": [
+              "f19"
+            ],
+            "reason": "The source documents that she does not use alcohol. The answer is blank and held by a deterministic ownership/scope hold on f19, which cannot be waived, so it stays unresolved."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "ambiguous",
+            "fact_ids": [
+              "f20"
+            ],
+            "reason": "The answer is blank and held by a deterministic ownership/scope hold on f20, which cannot be waived. The held candidate also includes an unrelated alcohol clause for a recreational-drug destination."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f21"
+            ],
+            "reason": "Married is documented."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f22"
+            ],
+            "reason": "Librarian is documented."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No family history is documented."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "The visit is in-person, so the telehealth consent field is correctly blank."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "omission",
+            "fact_ids": [
+              "f5",
+              "f7",
+              "f9",
+              "f8"
+            ],
+            "reason": "The answer is blank and held, and the candidate omits the documented unchanged swallowing and appetite (f8). Appetite change is an approved component of this field. The heartburn and its three-week duration are in f5."
+          },
+          {
+            "key": "cell_18",
+            "verdict": "pass",
+            "fact_ids": [
+              "f23",
+              "f24"
+            ],
+            "reason": "The 14-point review of systems was performed, and the statement of no additional findings beyond the heartburn is preserved."
+          },
+          {
+            "key": "cell_19",
+            "verdict": "pass",
+            "fact_ids": [
+              "f25"
+            ],
+            "reason": "'Alert, oriented and in no distress' is the complete documented observation."
+          },
+          {
+            "key": "cell_20",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27"
+            ],
+            "reason": "All four HEENT components (head, pupils, sclerae, oropharynx) are retained."
+          },
+          {
+            "key": "cell_21",
+            "verdict": "pass",
+            "fact_ids": [
+              "f28"
+            ],
+            "reason": "The neck finding is complete, including 'without lymphadenopathy'."
+          },
+          {
+            "key": "cell_22",
+            "verdict": "pass",
+            "fact_ids": [
+              "f29"
+            ],
+            "reason": "The lung finding is complete."
+          },
+          {
+            "key": "cell_23",
+            "verdict": "pass",
+            "fact_ids": [
+              "f30"
+            ],
+            "reason": "The cardiovascular finding retains both the regular rhythm and the absent murmur."
+          },
+          {
+            "key": "cell_24",
+            "verdict": "pass",
+            "fact_ids": [
+              "f31"
+            ],
+            "reason": "The abdominal finding is complete, with every positive and negative component."
+          },
+          {
+            "key": "cell_25",
+            "verdict": "pass",
+            "fact_ids": [
+              "f32"
+            ],
+            "reason": "The extremity finding is complete, including 'without edema'."
+          },
+          {
+            "key": "cell_26",
+            "verdict": "pass",
+            "fact_ids": [
+              "f26",
+              "f33"
+            ],
+            "reason": "Orientation, movement and the absence of a focal neurologic deficit are all retained."
+          },
+          {
+            "key": "cell_27",
+            "verdict": "pass",
+            "fact_ids": [
+              "f34"
+            ],
+            "reason": "Mood and affect are documented as normal."
+          },
+          {
+            "key": "cell_28",
+            "verdict": "pass",
+            "fact_ids": [
+              "f35"
+            ],
+            "reason": "The rectal examination was deferred, as documented."
+          },
+          {
+            "key": "cell_29",
+            "verdict": "pass",
+            "fact_ids": [
+              "f36"
+            ],
+            "reason": "The documented impression is heartburn."
+          },
+          {
+            "key": "cell_30",
+            "verdict": "pass",
+            "fact_ids": [
+              "f37",
+              "f38",
+              "f39",
+              "f40",
+              "f41",
+              "f42",
+              "f43"
+            ],
+            "reason": "The plan retains the conditional endoscopy, the non-performance statements, the lifestyle measures, no prescription started, the review interval and the return precautions."
+          },
+          {
+            "key": "cell_31",
+            "verdict": "pass",
+            "fact_ids": [
+              "f46"
+            ],
+            "reason": "22 minutes directly with the patient is documented."
+          },
+          {
+            "key": "cell_32",
+            "verdict": "pass",
+            "fact_ids": [
+              "f45"
+            ],
+            "reason": "Total physician time on the encounter date is documented as 32 minutes."
+          },
+          {
+            "key": "cell_33",
+            "verdict": "pass",
+            "fact_ids": [
+              "f44",
+              "f47",
+              "f48",
+              "f49"
+            ],
+            "reason": "The selection basis, the timed activities and both exclusion statements are retained in full."
+          }
+        ],
+        "fact_findings": [
+          {
+            "fact_id": "f8",
+            "verdict": "incorrect",
+            "reason": "'Swallowing and appetite are unchanged' is tagged negated, but the source states no absence of a symptom. The negation is not grounded, and the fact describes a current symptom state."
+          }
+        ]
+      },
+      "request_digests": {
+        "payload": "d5ad9c3bee83e777a9a067d871dfc420ba28213b3ce93f0191f110ff91ecdbd3",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "4995545194a29e52e178fadfdac78ed9709ed25a407de8c85ad08b238b7cc4f2"
+      }
+    }
+  ],
+  "saved_answers_sha256": "eb01bee786ddf6008335d1fbcbefa431a9372fd3e3501d180fdf56e842990e16"
+}

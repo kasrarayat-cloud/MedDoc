@@ -1,4 +1,4 @@
-"""New jobs freeze v16; retained jobs continue their original scope contract."""
+"""New jobs freeze v17; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.MIXED_OBSERVATION_SCOPE_CONTRACT:
+        if stored_scope == semantic.SUPPORT_CLOSURE_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -84,6 +84,8 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.CLINICAL_CONTEXT_INSTRUCTIONS,) * 3
         if expected == semantic.MIXED_OBSERVATION_SCOPE_CONTRACT:
             suffixes = (semantic.MIXED_OBSERVATION_INSTRUCTIONS,) * 3
+        if expected == semantic.SUPPORT_CLOSURE_SCOPE_CONTRACT:
+            suffixes = (semantic.SUPPORT_CLOSURE_INSTRUCTIONS,) * 3
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
             self.assertEqual(request['max_output_tokens'], 16000)
@@ -96,11 +98,16 @@ class SourceContextWorkerTests(TestCase):
             self.assertEqual('consent_qualifier_inventory' in request['payload'],
                              expected in semantic.CONSENT_CONTEXT_SCOPE_CONTRACTS)
             self.assertEqual('atomic_status_inventory' in request['payload'],
-                             expected == semantic.MIXED_OBSERVATION_SCOPE_CONTRACT)
+                             expected in semantic.MIXED_OBSERVATION_SCOPE_CONTRACTS)
+            self.assertEqual('stable_state_inventory' in request['payload'],
+                             expected == semantic.SUPPORT_CLOSURE_SCOPE_CONTRACT)
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_new_enqueue_freezes_v16_and_worker_uses_it_without_extra_calls(self):
+    def test_new_enqueue_freezes_v17_and_worker_uses_it_without_extra_calls(self):
+        self.exercise(semantic.SUPPORT_CLOSURE_SCOPE_CONTRACT)
+
+    def test_retained_v16_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.MIXED_OBSERVATION_SCOPE_CONTRACT)
 
     def test_retained_v15_job_keeps_old_requests_and_answer_contract(self):
