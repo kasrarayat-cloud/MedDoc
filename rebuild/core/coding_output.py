@@ -277,8 +277,10 @@ def reviewed(encounter, run, base_decision=None):
     if live:
         review.update(reference_digest=a['reference_digest'], authorized_actor_ids=a['authorized_actor_ids'],
             evidence_origin=a['evidence_origin'], provider_evidence_spans=provider_spans,
-            provider_citation_adequacy=a['provider_citation_adequacy'], provider_mode='live',
+            provider_citation_adequacy=a['provider_citation_adequacy'], provider_mode=run.config['mode'],
             review_execution=a['review_execution'])
+        if run.config.get('mode') == 'retained_live':
+            review['retained_prediction'] = copy.deepcopy(run.config['retained_prediction'])
     return a, review, base
 
 
