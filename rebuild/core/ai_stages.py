@@ -79,16 +79,18 @@ def definition_pipeline_config(config):
 def call_limit(config):
     if 'semantic_revalidation_contract' not in config:
         return MAX_CALLS
-    from .semantic_revalidation import CONTRACT
-    if config['semantic_revalidation_contract'] != CONTRACT:
+    from .semantic_revalidation import CONTRACTS
+    if config['semantic_revalidation_contract'] not in CONTRACTS:
         raise StageNotSent('Unknown retained revalidation contract; nothing was sent.')
     return 1
 
 
-def revalidation_config(config):
-    from .semantic_revalidation import CONTRACT
+def revalidation_config(config,*,contract='retained-facts-independent-check-v1'):
+    from .semantic_revalidation import CONTRACTS
+    if contract not in CONTRACTS:
+        raise StageNotSent('Unknown retained revalidation contract; nothing was sent.')
     prospective=pipeline_config(config)
-    prospective.update(semantic_revalidation_contract=CONTRACT,semantic_max_calls=1)
+    prospective.update(semantic_revalidation_contract=contract,semantic_max_calls=1)
     prospective['semantic_maximum_cost']=str(maximum_cost(prospective))
     return prospective
 
@@ -339,7 +341,7 @@ def assert_installed_guards():
     from django.db import connection
     module=importlib.import_module('core.migrations.0026_semantic_stage_receipts')
     bodies=dict(re.findall(r'CREATE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',module.SEMANTIC_SQL,re.S))
-    recovery=importlib.import_module('core.migrations.0030_retained_semantic_revalidation')
+    recovery=importlib.import_module('core.migrations.0031_retained_semantic_revalidation_v2')
     bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',recovery.REVALIDATION_SQL,re.S)))
     triggers={name:(f'CREATE TRIGGER {name} BEFORE {events} ON public.{table} FOR EACH ROW EXECUTE FUNCTION {function}()')
         for name,table,events,function in (

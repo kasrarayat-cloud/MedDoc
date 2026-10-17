@@ -21,6 +21,7 @@ from .security import audit, private_path
 CONTRACT = 'retained-live-prediction-revalidation-v1'
 MODE = 'retained_live'
 REVALIDATION_CONTRACT = 'retained-facts-independent-check-v1'
+REVALIDATION_CONTRACTS = (REVALIDATION_CONTRACT,'retained-facts-independent-check-v2')
 
 
 def need(value, message):
@@ -67,7 +68,7 @@ def source_for(run):
         job = Job.objects.get(pk=binding['recovery_job_id'], encounter_id=run.encounter_id)
     except (KeyError, ValueError, CodingRun.DoesNotExist, Job.DoesNotExist) as exc:
         raise ValidationError('The retained prediction provenance is unavailable.') from exc
-    need(job.config.get('semantic_revalidation_contract') == REVALIDATION_CONTRACT and job.state == 'succeeded'
+    need(job.config.get('semantic_revalidation_contract') in REVALIDATION_CONTRACTS and job.state == 'succeeded'
          and job.result_sha256 and job.result_sha256 == binding.get('recovery_result_sha256')
          and job.user_id == run.user_id == source.user_id and job.revision == run.inputs.get('revision'),
          'The independent answer revalidation does not cover this coding record.')
@@ -114,7 +115,7 @@ def derive(encounter, recovery_job, parent_run_id):
     need(settings.SYNTHETIC_ONLY and e.status == 'review'
          and recovery_job.encounter_id == e.pk and recovery_job.revision == e.revision
          and recovery_job.state == 'succeeded' and recovery_job.result_sha256
-         and recovery_job.config.get('semantic_revalidation_contract') == REVALIDATION_CONTRACT,
+         and recovery_job.config.get('semantic_revalidation_contract') in REVALIDATION_CONTRACTS,
          'A completed independent synthetic revalidation is required.')
     source = CodingRun.objects.select_for_update().get(pk=parent_run_id, encounter=e)
     receipt = live_receipt(source)

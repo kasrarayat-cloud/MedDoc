@@ -1,0 +1,169 @@
+{
+  "binding": {
+    "actor_id": "5f4d1a3d-eeb6-4207-b1df-4597dc696e82",
+    "definitions_sha256": "03916894d8aa0a0e7e8e99c86086990426049c72cfb041856ab85802023e7963",
+    "encounter_id": "7752b8fa-dbfb-4e03-a6c3-3af2a581feef",
+    "parent_answers_sha256": "b3a2a7c6072e6e76ff9276ab430133c6ebdff52a280e1eb376166e2fad8c8f0b",
+    "parent_job_id": "1e56aac0-69ae-4927-bd75-168beb8b4a95",
+    "parent_receipts_digest": "6c152302dc2652cee63a1ace281b67dcd71a9874dcc52307a1c20ac88a9ffba2",
+    "parent_result_sha256": "43d408d3651de2b2a8a70bc23e258af510dfb9fe3c9b91b856181a2c31e31eb4",
+    "parent_run_id": "6c961f73-3a4d-4edc-a573-633f9eb645fe",
+    "patient_id": "f2b78993-82f7-40ca-bfad-1ea52cad2914",
+    "revision": 0,
+    "source_sha256": "462613fe7482464d9cfdd73e0cf7dea28b532f7416e1e428aaa4a49143ef0f08",
+    "target_scope_contract": "positioned-objective-negation-v12",
+    "template_version_id": "b5587c7e-f337-42e6-b979-003cb2900596"
+  },
+  "check": {
+    "fact_findings": [
+      {
+        "fact_id": "f20",
+        "reason": "The source says 'in no acute distress', but the negation binding and local scope remain unresolved in the extraction, so the fact stays held.",
+        "verdict": "ambiguous"
+      },
+      {
+        "fact_id": "f22",
+        "reason": "The source says 'There is no rebound tenderness or guarding', but the extraction flagged the negation as not explicitly grounded, so the fact stays held.",
+        "verdict": "ambiguous"
+      }
+    ],
+    "fields": [
+      {
+        "fact_ids": [
+          "f1"
+        ],
+        "key": "cell_0",
+        "reason": "The full documented name with the 'Synthetic' prefix is selected and matches the source.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f2"
+        ],
+        "key": "cell_1",
+        "reason": "Age 52 years is documented for the patient.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f3"
+        ],
+        "key": "cell_2",
+        "reason": "Record number SYN-RB-1016 matches the source.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f4"
+        ],
+        "key": "cell_3",
+        "reason": "The date of service 16 October 2026 has an explicit year and is preserved exactly.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f5",
+          "f6"
+        ],
+        "key": "cell_4",
+        "reason": "The in-person gastroenterology office setting and established-patient status are both documented and selected.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f8",
+          "f10",
+          "f11",
+          "f13",
+          "f14",
+          "f15",
+          "f7",
+          "f9",
+          "f12"
+        ],
+        "key": "cell_5",
+        "reason": "The answer keeps the symptoms, the severity, the denied symptoms, the no-medicines statement and the prior visit. The rendered text starts with 'Intermittent epigastric pain after large meals for 10 days' and states the 4/10 rating, so no clinical content is lost. The prior visit five months ago is also retained. However, the Subjective answer does not state the reason for visit in terms of the previous-record request. That omission is minor, so the main concern is that the checks hold: the answer is otherwise complete, but fact f15 is a negated medication statement that appears in the Subjective text, and that is acceptable there. On closer review, the answer is substantively complete against the source, so the omission finding applies only to the unselected duplicate facts f9 and f12. Those restate content already present in f8 and f11 and add nothing. Reviewed independently, the answer is source-backed, but the extraction should be confirmed by the clinician.",
+        "verdict": "omission"
+      },
+      {
+        "fact_ids": [
+          "f16",
+          "f17",
+          "f18",
+          "f19",
+          "f20",
+          "f21",
+          "f22",
+          "f23"
+        ],
+        "key": "cell_6",
+        "reason": "The rendered text matches the source, including the negations in 'in no acute distress' and 'no rebound tenderness or guarding'. The field carries a deterministic hold from the extraction scope issues on f20 and f22, and the previous checkers flagged those negation bindings. A pass cannot erase that hold, so the field stays held for review.",
+        "verdict": "ambiguous"
+      },
+      {
+        "fact_ids": [
+          "f24",
+          "f25",
+          "f26",
+          "f27",
+          "f28"
+        ],
+        "key": "cell_7",
+        "reason": "Both impressions, the evaluated-and-discussed statement, the cause not established and the conditions not diagnosed are all retained with their negation in the displayed text.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f29",
+          "f30",
+          "f31",
+          "f32",
+          "f33",
+          "f34",
+          "f35"
+        ],
+        "key": "cell_8",
+        "reason": "All plan actions, the negatives (no medication, no procedure), the three-week follow-up and the safety-net advice are retained.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f15"
+        ],
+        "key": "cell_9",
+        "reason": "The approved meaning is the medicines the patient is currently taking. The source says only 'No daily medicines or supplements are reported', which is a statement that none are reported, not a documented current-medicine list. Rendering it as a current-medicines answer is not supported, so the answer is incorrect for this destination.",
+        "verdict": "incorrect"
+      },
+      {
+        "fact_ids": [],
+        "key": "cell_10",
+        "reason": "No allergy information is documented, and missing information is not a negative.",
+        "verdict": "missing"
+      },
+      {
+        "fact_ids": [],
+        "key": "cell_11",
+        "reason": "No family history is documented in the notes.",
+        "verdict": "missing"
+      },
+      {
+        "fact_ids": [
+          "f36"
+        ],
+        "key": "cell_12",
+        "reason": "Total physician time of 24 minutes is explicitly attached to physician time on the date of service.",
+        "verdict": "pass"
+      },
+      {
+        "fact_ids": [
+          "f37"
+        ],
+        "key": "cell_13",
+        "reason": "The documented basis is total physician time, stated concisely and distinct from symptom duration.",
+        "verdict": "pass"
+      }
+    ]
+  },
+  "provenance": "Retained synthetic Rowan failed v1 independent check, 17 October 2026. No verdict changed; original raw evidence remains private and unchanged.",
+  "request_sha256": "89dcfc184b53e697d86d0b990fb6e9a45b8618de392a576dc31e7d8bcef41db5"
+}
