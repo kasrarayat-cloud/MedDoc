@@ -1,17 +1,173 @@
-"""Offline installation controls; operational transports are mocked."""
+"""Offline installation controls; optional DB controls admit only isolated 55449."""
 from contextlib import ExitStack, contextmanager, nullcontext, redirect_stdout
 from copy import deepcopy
 import io
+import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import psycopg
 from ops import activate_coordinated_workflow as op
+
+
+class BoundedSnapshotTests(unittest.TestCase):
+    def test_empty_duplicate_and_changed_rows_have_distinct_counted_fingerprints(self):
+        a, b = hashlib.sha256(b'first').digest(), hashlib.sha256(b'second').digest()
+        inputs = [[], [a], [a, a], [a, b], [b], [a, a, b]]
+        results = [op.fold_row_hashes((v,) for v in sorted(values)) for values in inputs]
+        self.assertEqual([v[0] for v in results], [0, 1, 2, 2, 1, 3])
+        self.assertEqual(len({v[1] for v in results}), len(inputs))
+        self.assertEqual(results[3], op.fold_row_hashes((v,) for v in sorted([b, a])))
+        expected = hashlib.sha256(op.TABLE_FINGERPRINT_CONTRACT.encode() + b'\0' + (0).to_bytes(8, 'big'))
+        self.assertEqual(results[0], [0, expected.hexdigest()])
+
+    def test_malformed_unsorted_and_interrupted_streams_never_return_a_fingerprint(self):
+        for row in [(None,), ('a' * 32,), (b'a' * 31,), (b'a' * 33,), (b'a' * 32, b'b' * 32)]:
+            with self.subTest(row=row), self.assertRaises(op.Refusal): op.fold_row_hashes([row])
+        with self.assertRaisesRegex(op.Refusal, 'sorted_row_fingerprints'):
+            op.fold_row_hashes([(b'z' * 32,), (b'a' * 32,)])
+        def interrupted():
+            yield (b'a' * 32,)
+            raise psycopg.OperationalError('synthetic interrupted read')
+        with self.assertRaises(psycopg.OperationalError): op.fold_row_hashes(interrupted())
+
+    def test_query_streams_complete_row_digests_through_a_bounded_named_cursor(self):
+        cursor = MagicMock(); cursor.__enter__.return_value = cursor
+        cursor.__iter__.return_value = iter([(b'a' * 32,), (b'b' * 32,)])
+        connection = Mock(); connection.cursor.return_value = cursor
+        actual = op.table_fingerprint(connection, 'mixed " table')
+        connection.cursor.assert_called_once_with(name='quillmd_preservation_row_hashes')
+        self.assertEqual(cursor.itersize, 128)
+        query = cursor.execute.call_args.args[0].as_string(None)
+        self.assertIn('sha256(convert_to(to_jsonb(t)::text, \'UTF8\'))', query)
+        self.assertIn('FROM "public"."mixed "" table" t ORDER BY row_hash', query)
+        self.assertNotIn('string_agg', query); self.assertNotIn('DISTINCT', query)
+        self.assertEqual(actual, op.fold_row_hashes([(b'a' * 32,), (b'b' * 32,)]))
+        cursor.fetchall.assert_not_called(); cursor.__exit__.assert_called_once()
+
+    def test_snapshot_keeps_every_catalog_and_ledger_in_one_readonly_repeatable_read_connection(self):
+        class Rows(list):
+            def fetchone(self): return self[0]
+        queries = []
+        def execute(query, params=None):
+            query = query if isinstance(query, str) else query.as_string(None)
+            queries.append((query, params))
+            if query.startswith('SET '): return Rows()
+            if 'current_database()' in query: return Rows([('quillmd_fresh', 'quillmd_runtime', 'on')])
+            if 'SELECT tablename FROM pg_tables' in query: return Rows([('core_encounter',), ('core_usage',)])
+            if 'SELECT app,name' in query: return Rows([('core', 'retained')])
+            if 'SELECT id,app,name,applied' in query: return Rows([(49, 'core', 'retained', 'original-applied-time')])
+            if 'SELECT count(*)' in query: return Rows([(0,)])
+            if 'JOIN pg_attribute' in query: return Rows([('table', 'owner', 'acl', 'column', 'text', False)])
+            if 'FROM pg_trigger' in query: return Rows([('table', 'trigger', 'definition', 'O')])
+            if 'FROM pg_constraint' in query: return Rows([('table', 'constraint', 'definition')])
+            if 'FROM pg_indexes' in query: return Rows([('table', 'index', 'definition')])
+            if 'FROM pg_proc' in query: return Rows([('function', 'args', 'body-md5', 'owner', 'acl')])
+            if 'FROM pg_sequences' in query: return Rows([('retained_sequence',)])
+            if 'SELECT last_value,is_called' in query: return Rows([(17, True)])
+            if 'SELECT max(created_at)' in query: return Rows([('latest-enrolled-time',)])
+            self.fail('unexpected snapshot query')
+        connection = MagicMock(); connection.__enter__.return_value = connection
+        connection.execute.side_effect = execute
+        def table_digest(actual_connection, table):
+            self.assertIs(actual_connection, connection)
+            return [1, table + '-digest']
+        with patch.object(op.prior, 'database_options', return_value={'synthetic': 'transport'}) as options, \
+                patch('psycopg.connect', return_value=connection) as connect, \
+                patch.object(op, 'table_fingerprint', side_effect=table_digest) as rows:
+            actual = op.snapshot(b'unread-synthetic-env')
+        options.assert_called_once_with(b'unread-synthetic-env')
+        connect.assert_called_once_with(synthetic='transport'); self.assertEqual(rows.call_count, 2)
+        self.assertEqual(queries[0][0], 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY')
+        self.assertIn(("SET LOCAL work_mem='4MB'", None), queries)
+        self.assertEqual(actual, dict(table_fingerprint_contract=op.TABLE_FINGERPRINT_CONTRACT,
+            tables={'core_encounter': [1, 'core_encounter-digest'], 'core_usage': [1, 'core_usage-digest']},
+            migrations=[['core', 'retained']], migration_ledger=[['49', 'core', 'retained', 'original-applied-time']],
+            schema=[['table', 'owner', 'acl', 'column', 'text', False]],
+            triggers=[['table', 'trigger', 'definition', 'O']], constraints=[['table', 'constraint', 'definition']],
+            indexes=[['table', 'index', 'definition']], functions=[['function', 'args', 'body-md5', 'owner', 'acl']],
+            sequences={'retained_sequence': [17, True]}, pending={name: 0 for name in
+                ('core_job', 'core_codingrun', 'core_aistagereceipt', 'core_templatepreparation', 'core_templatedefinitionpreparation')},
+            latest_enrolled_encounter='latest-enrolled-time'))
+        pending = [(q, p) for q, p in queries if 'SELECT count(*)' in q]
+        self.assertEqual([p[0] for _, p in pending], [['queued', 'running'], ['queued', 'running'],
+            ['reserved', 'sending', 'received'], ['queued', 'inventory', 'proposer', 'checker'],
+            ['queued', 'inventory', 'proposer', 'checker']])
+        self.assertTrue(all('"public".' in q for q, _ in pending))
+        self.assertIn(('SELECT last_value,is_called FROM "public"."retained_sequence"', None), queries)
+
+    def test_snapshot_refuses_wrong_database_role_or_readonly_mode_before_row_reads(self):
+        for identity in [('other', 'quillmd_runtime', 'on'), ('quillmd_fresh', 'owner', 'on'),
+                         ('quillmd_fresh', 'quillmd_runtime', 'off')]:
+            connection = MagicMock(); connection.__enter__.return_value = connection
+            connection.execute.return_value.fetchone.return_value = identity
+            with self.subTest(identity=identity), patch.object(op.prior, 'database_options', return_value={}), \
+                    patch('psycopg.connect', return_value=connection), patch.object(op, 'table_fingerprint') as rows:
+                with self.assertRaisesRegex(op.Refusal, 'readonly_snapshot'): op.snapshot(b'synthetic')
+                rows.assert_not_called()
+
+
+@unittest.skipUnless(os.environ.get('QUILLMD_SNAPSHOT_TEST_DSN'), 'opt-in isolated PostgreSQL 55449 only')
+class BoundedSnapshotPostgresTests(unittest.TestCase):
+    def setUp(self):
+        options = psycopg.conninfo.conninfo_to_dict(os.environ['QUILLMD_SNAPSHOT_TEST_DSN'])
+        self.assertTrue(set(options) <= {'host', 'port', 'dbname', 'user', 'password', 'connect_timeout'})
+        self.assertEqual((options.get('host'), options.get('port')), ('127.0.0.1', '55449'))
+        options['connect_timeout'] = '5'
+        self.connection = psycopg.connect(**options)
+        self.addCleanup(self.connection.close)
+        self.connection.execute("SET LOCAL work_mem='4MB'")
+        self.connection.execute("SET LOCAL statement_timeout='90s'")
+        self.connection.execute('CREATE TEMP TABLE snapshot_probe (value text, payload jsonb, raw bytea) ON COMMIT DROP')
+
+    def fingerprint(self):
+        return op.table_fingerprint(self.connection, 'snapshot_probe', schema='pg_temp')
+
+    def test_real_sql_order_duplicates_nulls_and_every_column(self):
+        from psycopg.types.json import Jsonb
+        self.assertEqual(self.fingerprint()[0], 0)
+        rows = [('a|b', Jsonb({'x': 1, 'y': [None, '']}), b'\0|'),
+                (None, Jsonb({'y': [None, ''], 'x': 1}), b''), ('', None, None)]
+        for row in rows: self.connection.execute('INSERT INTO snapshot_probe VALUES (%s,%s,%s)', row)
+        original = self.fingerprint()
+        self.connection.execute('TRUNCATE snapshot_probe')
+        for row in reversed(rows): self.connection.execute('INSERT INTO snapshot_probe VALUES (%s,%s,%s)', row)
+        self.assertEqual(self.fingerprint(), original)
+        self.connection.execute('INSERT INTO snapshot_probe SELECT * FROM snapshot_probe LIMIT 1')
+        duplicate = self.fingerprint(); self.assertEqual(duplicate[0], 4); self.assertNotEqual(duplicate, original)
+        for column, value in [('value', 'changed'), ('payload', Jsonb({'x': 2})), ('raw', b'changed')]:
+            self.connection.execute('SAVEPOINT before_change')
+            from psycopg import sql
+            self.connection.execute(sql.SQL('UPDATE snapshot_probe SET {}=%s').format(sql.Identifier(column)), (value,))
+            self.assertNotEqual(self.fingerprint(), duplicate)
+            self.connection.execute('ROLLBACK TO SAVEPOINT before_change')
+        self.connection.execute("UPDATE snapshot_probe SET value='' WHERE value IS NULL")
+        self.assertNotEqual(self.fingerprint(), duplicate)
+
+    @unittest.skipUnless(os.environ.get('QUILLMD_SNAPSHOT_TEST_REFERENCE'), 'opt-in retained large JSON input')
+    def test_large_retained_json_is_hashed_without_whole_table_aggregation(self):
+        from psycopg.types.json import Jsonb
+        path = Path(os.environ['QUILLMD_SNAPSHOT_TEST_REFERENCE'])
+        raw = path.read_bytes(); self.assertGreater(len(raw), 75_000_000)
+        retained = json.loads(raw)['coding_releases'][0]
+        self.assertGreater(len(retained['index']), 80_000)
+        self.connection.execute('INSERT INTO snapshot_probe VALUES (%s,%s,%s)', ('retained', Jsonb(retained), None))
+        one = self.fingerprint()
+        self.connection.execute('INSERT INTO snapshot_probe SELECT * FROM snapshot_probe')
+        two = self.fingerprint()
+        self.connection.execute('INSERT INTO snapshot_probe SELECT * FROM snapshot_probe LIMIT 1')
+        three = self.fingerprint()
+        self.assertEqual([one[0], two[0], three[0]], [1, 2, 3])
+        self.assertEqual(len({one[1], two[1], three[1]}), 3)
+        self.connection.execute("UPDATE snapshot_probe SET payload=jsonb_set(payload,'{digest}', '\"altered\"') "
+                                'WHERE ctid=(SELECT ctid FROM snapshot_probe LIMIT 1)')
+        changed = self.fingerprint(); self.assertEqual(changed[0], 3); self.assertNotEqual(changed, three)
 
 
 class CoordinatedWorkflowInstallTests(unittest.TestCase):
@@ -105,7 +261,8 @@ class CoordinatedWorkflowInstallTests(unittest.TestCase):
                     op.render_environment(self.original_environment(), 'a' * 40, environment)
 
     def database(self):
-        return dict(tables={'core_encounter': [3, 'elias-nadia-failures-and-three-completed'],
+        return dict(table_fingerprint_contract=op.TABLE_FINGERPRINT_CONTRACT,
+            tables={'core_encounter': [3, 'elias-nadia-failures-and-three-completed'],
             'core_codingdecision': [2, 'approved-ICD'], 'core_codingoutputdecision': [2, 'accepted-CPT'],
             'core_auditevent': [11, 'retained-history'], 'core_usage': [7, 'retained-usage'],
             'django_migrations': [49, 'retained-ledger']}, migration_ledger=[['49', 'core', 'retained', 'time']],
