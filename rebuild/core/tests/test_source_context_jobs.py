@@ -1,4 +1,4 @@
-"""New jobs freeze v14; retained jobs continue their original scope contract."""
+"""New jobs freeze v15; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
+        if stored_scope == semantic.CLINICAL_CONTEXT_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -80,6 +80,8 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.CLINICAL_LITERAL_INSTRUCTIONS,) * 3
         if expected == semantic.ENCOUNTER_SUPPORT_SCOPE_CONTRACT:
             suffixes = (semantic.ENCOUNTER_SUPPORT_INSTRUCTIONS,) * 3
+        if expected == semantic.CLINICAL_CONTEXT_SCOPE_CONTRACT:
+            suffixes = (semantic.CLINICAL_CONTEXT_INSTRUCTIONS,) * 3
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
             self.assertEqual(request['max_output_tokens'], 16000)
@@ -94,7 +96,10 @@ class SourceContextWorkerTests(TestCase):
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_new_enqueue_freezes_v14_and_worker_uses_it_without_extra_calls(self):
+    def test_new_enqueue_freezes_v15_and_worker_uses_it_without_extra_calls(self):
+        self.exercise(semantic.CLINICAL_CONTEXT_SCOPE_CONTRACT)
+
+    def test_retained_v14_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.ENCOUNTER_SUPPORT_SCOPE_CONTRACT)
 
     def test_retained_v13_job_keeps_old_requests_and_answer_contract(self):

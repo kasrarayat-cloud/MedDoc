@@ -96,53 +96,58 @@ def terminology(run):
 
 
 def _icd_source(run, reference, proposal, selected_codes):
-    """Conservative exact Index routes; unsupported lexical routes stay held.
+    """Bind the selected code to dated lexical routes and the complete source.
 
-    This does not synthesize an extraction or ask a second model. A provider
-    quote must anchor the main term, and the entire saved clinical source is
-    checked for contradictory assertions and documented subtype specificity.
+    New runs recognize reference-owned head vocabulary and specific Tabular
+    phrases. Historical runs retain their original route contract. Neither
+    branch promotes a provider alternative or treats membership as eligibility.
     """
     lookup = engine.index_lookup(reference)
     notes = run.inputs['notes']
+    contract = run.config.get('clinical_source_contract') if hasattr(run, 'config') else None
+    modern = contract == engine.SOURCE_CONTRACT
     matching = [entry for entry in reference.index if entry.get('code') == proposal['code']
                 and not entry.get('requires_review')]
     for entry in matching:
         head = entry
         while head.get('parent_id') in lookup:
             head = lookup[head['parent_id']]
-        # Official Index main terms may carry a grammatical optional plural
-        # (e.g. "Pain(s)"). It is not part of the patient's literal wording.
-        term = re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)
-        if not term or engine.norm(term) in engine.TAXONOMY_HEADS:
-            continue
-        for span in proposal['evidence']:
-            if span['status'] != 'valid' or span['context_index'] != 0:
+        description = proposal['terminology']['description']
+        terms = (engine.index_head_terms(head, description) if modern else
+                 [re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)])
+        for term in terms:
+            if not term or engine.norm(term) in engine.TAXONOMY_HEADS:
                 continue
-            if not engine.affirmative_word(span['text'], term):
-                continue
-            for clause in engine.enclosing_clauses(notes, span['text']):
-                description = proposal['terminology']['description']
-                anchor = description if engine.affirmative_word(span['text'], description) else term
-                concept = dict(id=proposal['id'], term=anchor, index_terms=[anchor], evidence=clause,
-                    kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
-                    certainty='confirmed', temporality='current', subject='patient', relevant=True,
-                    missing_detail='', integral_to='')
-                subtypes = engine.index_subtypes(reference, concept)
-                qualifiers = [item['qualifier'] for item in subtypes]
-                assertion = engine.assertion_concept(concept, subtypes)
-                disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers)
-                check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
-                errors = (engine.index_route_errors(entry, concept, lookup, code_description=description)
-                          + engine.specificity_errors(concept, proposal['code'], proposal['terminology']['description']))
-                if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
-                        or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes)):
+            for span in proposal['evidence']:
+                if span['status'] != 'valid' or span['context_index'] != 0:
                     continue
-                candidate = dict(code=proposal['code'], system='ICD-10-CM', entry_id=entry['id'],
-                    description=proposal['terminology']['description'], path=entry.get('path', []),
-                    release_id=str(reference.release_id), release_version=reference.release.version,
-                    instructions=check.get('instructions', []))
-                return concept, candidate, {'disposition': disposition, 'reason': reason,
-                    'index_scope_entry_ids': [row['entry']['id'] for row in subtypes]}
+                if not engine.affirmative_word(span['text'], term):
+                    continue
+                for clause in engine.enclosing_clauses(notes, span['text']):
+                    anchor = description if engine.affirmative_word(span['text'], description) else term
+                    concept = dict(id=proposal['id'], term=anchor, index_terms=[anchor], evidence=clause,
+                        kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
+                        certainty='confirmed', temporality='current', subject='patient', relevant=True,
+                        missing_detail='', integral_to='')
+                    if modern and engine.current_source_scope_errors(notes, concept):
+                        continue
+                    subtypes = engine.index_subtypes(reference, concept, source_contract=contract)
+                    qualifiers = [item['qualifier'] for item in subtypes]
+                    assertion = engine.assertion_concept(concept, subtypes)
+                    disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers)
+                    check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
+                    errors = (engine.index_route_errors(entry, concept, lookup, code_description=description,
+                                  source_contract=contract)
+                              + engine.specificity_errors(concept, proposal['code'], description))
+                    if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
+                            or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes)):
+                        continue
+                    candidate = dict(code=proposal['code'], system='ICD-10-CM', entry_id=entry['id'],
+                        description=description, path=entry.get('path', []),
+                        release_id=str(reference.release_id), release_version=reference.release.version,
+                        instructions=check.get('instructions', []))
+                    return concept, candidate, {'disposition': disposition, 'reason': reason,
+                        'index_scope_entry_ids': [row['entry']['id'] for row in subtypes]}
     return None, None, None
 
 
@@ -235,7 +240,8 @@ def retained_result(run, request, response, response_sha256):
         if row['classification']['mismatch']:
             row['hold_reasons'].append('The selected procedure identifier does not have supported CPT syntax.')
         if system == 'CPT':
-            support = corti_semantics.office_time_facts(run.inputs['notes'])
+            support = corti_semantics.office_time_facts(run.inputs['notes'],
+                contract=run.config.get('clinical_source_contract'))
             row['semantic_support'] = {'status':'requires_dated_criteria', 'documented_time_facts':support,
                 'provider_citation_adequacy':corti_semantics.citation_adequacy(row['evidence_spans'], support['facts'])}
         if proposal['evidence_status'] != 'valid':

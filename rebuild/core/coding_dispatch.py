@@ -89,6 +89,16 @@ def configuration(actor, encounter):
         if getattr(settings, 'CORTI_NEW_ENCOUNTER_SCOPE', '') == AUTHORIZED_SYNTHETIC_SCOPE:
             from .coding_recovery import CONTEXT_CONTRACT
             result['context_review_contract'] = CONTEXT_CONTRACT
+        from .models import CodingRun
+        from .coding_engine import SOURCE_CONTRACT
+        first = CodingRun.objects.filter(encounter=encounter).order_by('created_at', 'pk').first()
+        # Pin old encounters to the contract on their first immutable run.
+        # Context-only derivatives already copy that run's configuration.
+        contract = first.config.get('clinical_source_contract') if first is not None else SOURCE_CONTRACT
+        if contract is not None:
+            if contract != SOURCE_CONTRACT:
+                raise ValidationError('Unknown clinical coding source contract.')
+            result['clinical_source_contract'] = contract
     return result
 
 
