@@ -4,6 +4,7 @@
     <span class="badge" data-coding-state role="status" aria-live="polite">{{ coding.state_label }}</span>
   </div>
   {% if coding.replay %}<p class="notice warning" data-corti-replay><strong>Synthetic replay.</strong> These AI-assisted suggestions use the retained Corti response for a fictional encounter. No new provider request was made. The original response-quality failure is preserved. This synthetic workflow is not for real patient care or billing.</p>{% endif %}
+  {% if coding.retained_prediction %}<p class="notice" data-corti-retained><strong>Retained prediction revalidated.</strong> These suggestions use the existing Corti response after an independent check of the saved answers. No new Corti prediction was requested. The original response, usage and description defect remain in the earlier coding record.</p>{% endif %}
   <p class="notice warning" data-coding-error role="alert" tabindex="-1" hidden></p>
   <p class="small muted" data-coding-dirty role="status" hidden>Unsaved coding edits. Save or undo them before approval.</p>
   <p class="small muted" data-coding-connection role="status" hidden></p>

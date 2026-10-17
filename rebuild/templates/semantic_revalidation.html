@@ -1,0 +1,15 @@
+{% if semantic_revalidation.available %}
+<section class="notice" data-semantic-revalidation>
+  <h2>Recheck retained answers</h2>
+  <p>A validation repair is available for this synthetic document. One independent check will review the retained candidate against the complete saved source and approved field definitions. It does not regenerate answers or request another Corti prediction.</p>
+  <p>The original failed validation and provider responses stay in the document record. Answers change only if the repaired validation and independent check both pass. You must still review and approve the resulting document.</p>
+  <p class="small">Sponsored synthetic test · $0 account charge. Estimated provider cost: ${{ semantic_revalidation.quote_usd }}. One checker call, automatic retries disabled.</p>
+  <form method="post" action="{% url 'semantic_revalidation' encounter.pk %}" data-submit-once>
+    {% csrf_token %}
+    <input type="hidden" name="revision" value="{{ semantic_revalidation.revision }}">
+    <input type="hidden" name="display_token" value="{{ semantic_revalidation.display_token }}">
+    <label class="check-row"><input type="checkbox" name="confirm_revalidation" required> Request this single independent check of the saved synthetic document.</label>
+    <button type="submit" data-pending-label="Submitting independent check…">Recheck retained answers</button>
+  </form>
+</section>
+{% endif %}

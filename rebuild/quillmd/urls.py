@@ -53,6 +53,8 @@ urlpatterns += [
 
 from core.document_review import submit as document_review_submit
 urlpatterns += [path('encounters/<uuid:pk>/review/',document_review_submit,name='document_review')]
+from core.semantic_revalidation_views import submit as semantic_revalidation_submit
+urlpatterns += [path('encounters/<uuid:pk>/recheck-retained/',semantic_revalidation_submit,name='semantic_revalidation')]
 
 from core import coding_views
 from core.coding_export import export_with_codes

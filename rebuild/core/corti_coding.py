@@ -173,6 +173,15 @@ def generate(run):
         raise ValidationError('Corti requires its exact immutable engine contract.')
     request = corti_prediction.payload(run)
     response = corti_prediction.execute(run, request)
+    return retained_result(run, request, response, run.requests[0]['response_sha256'])
+
+
+def retained_result(run, request, response, response_sha256):
+    """Validate provider output without sending or manufacturing a receipt."""
+    if run.inputs.get('engine_contract') != CONTRACT:
+        raise ValidationError('Corti requires its exact immutable engine contract.')
+    if request != corti_prediction.payload(run):
+        raise ValidationError('The retained prediction belongs to a different source payload.')
     terms, cpt = terminology(run)
     replay = run.config['mode'] == 'replay'
     if replay:
@@ -182,7 +191,7 @@ def generate(run):
         original_verdict = 'NOT_EVALUATED'
     parsed = adapt_response(response, request, service_date=date.fromisoformat(run.inputs['service_date']),
         terminology=terms, original_verdict=original_verdict,
-        source_response_sha256=run.requests[0]['response_sha256'])
+        source_response_sha256=response_sha256)
     reference = engine.reference_for(run)
     result = dict(contract=CONTRACT, suggestions=[], candidates={}, source_checks={},
         questions=[], excluded=[], global_blockers=identity_blockers(run),
