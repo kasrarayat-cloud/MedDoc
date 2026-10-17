@@ -129,16 +129,23 @@ def _icd_source(run, reference, proposal, selected_codes):
                         kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
                         certainty='confirmed', temporality='current', subject='patient', relevant=True,
                         missing_detail='', integral_to='')
-                    if modern and engine.current_source_scope_errors(notes, concept):
+                    nec = None
+                    if contract == engine.CURRENT_SOURCE_CONTRACT:
+                        from .coding_nec import prove
+                        nec = prove(reference, entry, concept, notes, source_contract=contract)
+                        if nec:
+                            concept = nec[0]
+                    if modern and engine.current_source_scope_errors(notes, concept, source_contract=contract):
                         continue
                     subtypes = engine.index_subtypes(reference, concept, source_contract=contract)
                     qualifiers = [item['qualifier'] for item in subtypes]
                     assertion = engine.assertion_concept(concept, subtypes)
-                    disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers,
-                        source_contract=contract)
+                    disposition, reason = (('eligible', 'Current source-bound narrower clinical concept and complete NEC route verified.')
+                        if nec else engine.source_disposition(assertion, notes, qualifiers=qualifiers,
+                            source_contract=contract))
                     check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
-                    errors = (engine.index_route_errors(entry, concept, lookup, code_description=description,
-                                  source_contract=contract)
+                    errors = (([] if nec else engine.index_route_errors(entry, concept, lookup, code_description=description,
+                                  source_contract=contract))
                               + engine.specificity_errors(concept, proposal['code'], description))
                     if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
                             or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes)):
@@ -147,8 +154,10 @@ def _icd_source(run, reference, proposal, selected_codes):
                         description=description, path=entry.get('path', []),
                         release_id=str(reference.release_id), release_version=reference.release.version,
                         instructions=check.get('instructions', []))
+                    if nec:
+                        candidate['clinical_specificity'] = nec[1]
                     return concept, candidate, {'disposition': disposition, 'reason': reason,
-                        'index_scope_entry_ids': [row['entry']['id'] for row in subtypes]}
+                        'index_scope_entry_ids': nec[1]['index_family_ids'] if nec else [row['entry']['id'] for row in subtypes]}
     return None, None, None
 
 

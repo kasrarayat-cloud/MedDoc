@@ -86,8 +86,8 @@ def office_time_facts(notes, *, contract=None):
     conflicting total, missing exclusion or missing service date cannot supply
     a same-day practitioner time fact.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3'):
-        return _source_time_analysis(notes)[0]
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4'):
+        return _source_time_analysis(notes, modern=contract == 'source-bound-clinical-coding-v4')[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
     if re.search(r'(?im)^\s*(?:quoted )?example(?: note)?\s*:', notes):
@@ -197,8 +197,8 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     not infer an encounter from a numeric time quote or a scheduled appointment.
     Unrecognized competing practitioner totals require clarification.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3'):
-        support, errors = _source_time_analysis(notes)
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4'):
+        support, errors = _source_time_analysis(notes, modern=contract == 'source-bound-clinical-coding-v4')
         if service_date is not None:
             for raw_date in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes):
                 parsed = None
@@ -291,9 +291,87 @@ _WORK = (r'(?:review(?:ing)? (?:of )?(?:(?:the|available|prior|medical) )*(?:rec
     r'|examining(?: (?:the patient|him|her))?|counsel(?:ing|ling)(?: (?:the patient|patient|him|her))?'
     r'|entering orders|document(?:ing|ation)(?: (?:the )?visit)?)')
 _STAFF = r'(?:(?:clinical )?staff (?:time|work|rooming(?: work)?)|nursing (?:time|work|rooming(?: work)?))'
+_STAFF_CURRENT = r'(?:(?:clinical )?staff|nursing) (?:time|work|(?:intake|rooming|triage)(?: work)?)'
+_CALENDAR_DAY = r'(?:\d{4}-\d{2}-\d{2}|\d{1,2} [A-Za-z]+ \d{4}|[A-Za-z]+ \d{1,2}, \d{4})'
 
 
-def _work_list(text, minutes):
+def _calendar_day(value):
+    for pattern in ('%Y-%m-%d', '%d %B %Y', '%B %d, %Y'):
+        try:
+            return datetime.strptime(value.strip(), pattern).date()
+        except ValueError:
+            pass
+    return None
+
+
+def _new_patient_service_history(text, scope):
+    """Check the qualifying history without negating its heading's label.
+
+    This returns a veto, never a new-patient fact. An affirmative or unresolved
+    service history involving the treating clinician/same group must not be
+    hidden by an explicit new-patient label elsewhere. External prior care is
+    not automatically established-patient care in this practice.
+    """
+    from .clinical_source_context import clinician_matches
+    low = text.casefold()
+    history_label = bool(re.match(r'new[ -]patient history\s*:', low))
+    aliases = [alias for row in scope['clinicians'] for alias in row['aliases']]
+    actor = r'(?:(?:dr\.?|doctor)\s+(?:' + '|'.join(re.escape(a) for a in sorted(aliases, key=len, reverse=True)) + r')|the treating (?:clinician|physician|doctor))'
+    same_clinician = bool(aliases and re.search(r'\b' + actor + r'(?!\w)', low))
+    relevant = (history_label or same_clinician
+                or bool(re.search(r'\bsame (?:group|specialty|subspecialty|practice)\b', low)))
+    if not relevant:
+        return None
+    # Only a complete, explicitly remote encounter can be excluded from the
+    # three-year window. Unknown dates remain unresolved rather than silently
+    # counting as old care. A year means its full possible interval.
+    def outside_window(when):
+        current = scope.get('service_date')
+        if isinstance(current, str):
+            current = _calendar_day(current)
+        if not current:
+            return False
+        years = re.fullmatch(r'(' + _NUMBER + r') years? ago', when)
+        if years:
+            count = int(years[1]) if years[1].isdigit() else _NUMBERS[years[1]]
+            return count > 3
+        year = re.fullmatch(r'in ((?:19|20)\d\d)', when)
+        if year:
+            return int(year[1]) < current.year - 3
+        exact = re.fullmatch(r'on (.+)', when)
+        value = _calendar_day(exact[1]) if exact else None
+        return bool(value and (value.year, value.month, value.day) < (current.year - 3, current.month, current.day))
+    patient = r'(?:she|he|they|the patient|' + re.escape(scope.get('patient_name','').casefold()) + r')'
+    visit = re.fullmatch(patient + r' (?:saw|was seen by|was evaluated by|was treated by) '
+        + actor + r' (?P<when>.+?)\.?', low)
+    if visit and outside_window(visit['when'].rstrip('.')):
+        return None
+    # Different specialty/subspecialty care in the group does not establish
+    # this physician's new-patient relationship. Require the complete claim.
+    different = re.fullmatch(patient + r' received professional services from a [a-z]+ '
+        r'of a different specialty and subspecialty in (?:this|the) same group practice '
+        r'(?:last (?:month|year|week)|on ' + _CALENDAR_DAY + r')\.?', text, re.I)
+    if different and not same_clinician:
+        return None
+    if (re.search(r'\bestablished patient\b', low)
+            or same_clinician and re.search(r'\b(?:saw|seen|evaluated|treated|visited|consulted)\b', low)):
+        return 'A documented prior treating-clinician relationship conflicts with or leaves new-patient status unresolved.'
+    if not re.search(r'\bprofessional services\b', low):
+        return None
+    value = re.sub(r'^new[ -]patient history\s*:\s*', '', text, flags=re.I).strip().rstrip('.')
+    # The bounded negative assertion covers the entire professional-service
+    # predicate. Exceptions and additional predicates are not swallowed.
+    match = re.fullmatch(r'(?:During|In|Over) the (?:preceding|previous|past|last) (?:three|3) years,? '
+        r'(?:she|he|they|the patient) (?:has|have) received no professional services from '
+        r'(?P<clinician>Dr\. [A-Z][A-Za-z -]+?) or from any (?:physician|doctor) or '
+        r'qualified (?:health|health care|healthcare) professional of the same specialty and subspecialty '
+        r'in (?:this|the) same group practice', value, re.I)
+    if match and clinician_matches(scope, match['clinician']):
+        return None
+    return 'The qualifying professional-service history conflicts with or does not establish new-patient status.'
+
+
+def _work_list(text, minutes, *, modern=False):
     """Recognize complete work lists and reconcile explicit allocated minutes.
 
     Unrecognized words, service performance, another person and partial sums
@@ -313,29 +391,40 @@ def _work_list(text, minutes):
     # Other recipients or days are not removed by this grammar.
     text = re.sub(r'\bdirectly with the patient\s+', '', text, flags=re.I)
     evaluated = bool(re.search(r'\b(?:obtaining|taking) (?:the )?history|performing (?:the )?examination\b|\bexamining\b', text, re.I))
-    residue = re.sub(_WORK, '', text, flags=re.I)
+    work = _WORK
+    if modern:
+        # Qualify administrative physician activities, not procedure delivery.
+        # Every word remains covered by this finite grammar, including adjuncts.
+        work = work.replace('available|prior|medical', 'available|outside|prior|medical')
+        work = work.replace('entering orders', r'entering (?:the )?(?:(?:investigation|test|imaging|laboratory|medication) )?orders?')
+        work = work.replace('(?:the )?visit', '(?:the )?(?:visit|encounter)')
+    residue = re.sub(work, '', text, flags=re.I)
     residue = re.sub(r'\band\b|[\s,;]', '', residue, flags=re.I)
     return not residue, evaluated
 
 
-def _time_statement(text, scope):
+def _time_statement(text, scope, *, modern=False, service_date=None):
     from .clinical_source_context import clinician_matches
     low = text.casefold()
-    match = re.match(r'total ' + _ROLE + r' time(?: ' + _DAY + r')?\s*(?:was|is|:)\s*'
+    day = r'(?:' + _DAY + r'|on (?P<calendar>' + _CALENDAR_DAY + r'))' if modern else _DAY
+    match = re.match(r'total ' + _ROLE + r' time(?: ' + day + r')?\s*(?:was|is|:)\s*'
                      r'(?P<minutes>\d{1,4})\s+minutes\b', low)
     if match is None:
         match = re.match(r'(?P<performer>.+?)\s+(?:personally\s+)?spent\s+(?P<minutes>\d{1,4})'
-                         r'\s+minutes\s+' + _DAY + r'\b', text, re.I)
+                         r'\s+minutes\s+' + day + r'\b', text, re.I)
         if match and not (re.fullmatch(r'(?:the )?' + _ROLE, match['performer'], re.I)
                           or clinician_matches(scope, match['performer'])):
             return None
     if match is None:
         return None
+    calendar = match.groupdict().get('calendar')
+    if calendar and (service_date is None or _calendar_day(calendar) != service_date):
+        return None
     minutes = int(match['minutes'])
-    valid_work, evaluated = _work_list(text[match.end():], minutes)
+    valid_work, evaluated = _work_list(text[match.end():], minutes, modern=modern)
     if not valid_work:
         return None
-    return {'minutes': minutes, 'same_day': bool(re.search(_DAY, low)), 'evaluated': evaluated}
+    return {'minutes': minutes, 'same_day': bool(calendar or re.search(_DAY, low)), 'evaluated': evaluated}
 
 
 def _evaluation_denied(text, scope):
@@ -418,7 +507,7 @@ def _time_integrity_assertion(text):
         for clause in clauses)
 
 
-def _source_time_analysis(notes):
+def _source_time_analysis(notes, *, modern=False):
     """One source-bound interpretation shared by review and export checks.
 
     Only the prospective coding contract calls this reader. Source ownership,
@@ -426,14 +515,22 @@ def _source_time_analysis(notes):
     context inventory used by clinical extraction. Old reviews retain their
     exact eight facts, quotations and hashes under the original reader.
     """
-    from .clinical_source_context import source_context
+    from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE
     from .generation import source_units
     units, _ = source_units(notes, [])
-    scope = source_context(notes, units)
+    scope = source_context(notes, units, profile=SOURCE_GOVERNANCE_PROFILE if modern else None)
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers, service_errors, evaluated = list(scope['issues']), [], False
+    service_date = None
+    if modern:
+        dates = [_calendar_day(raw) for raw in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes)]
+        if dates and None not in dates and len(set(dates)) == 1:
+            service_date = dates[0]
+        elif dates:
+            blockers.append('The source service date is unresolved or contradictory.')
     totals = []
     exclusions = []
+    new_patient_history = []
     active_total, previous_end = None, None
 
     def add(key, value, unit):
@@ -452,6 +549,13 @@ def _source_time_analysis(notes):
             r'\bminutes?\b[^.;]*\b(?:date of service|encounter date)\b|\btime (?:above|below)\b', time_low)
         integrity = _time_integrity_assertion(text)
         local = scope['units'].get(unit['start'], {})
+        # Qualifying prior care is deliberately historical. Its bearing on
+        # current new-patient status cannot be discarded with old time facts.
+        if (modern and local.get('subject') == 'patient' and local.get('section_timing') == 'current'
+                and not local.get('issues')):
+            history_error = _new_patient_service_history(text, scope)
+            if history_error:
+                new_patient_history.append(history_error)
         if local.get('subject') != 'patient' or local.get('timing') != 'current' or local.get('issues'):
             # Ambiguous practitioner-time material cannot supply or silently
             # qualify an earlier total. Explicit foreign/past sections retain
@@ -471,17 +575,23 @@ def _source_time_analysis(notes):
         if _evaluation_denied(text, scope):
             service_errors.append('The complete source denies participation in the documented physician evaluation.')
         negative = bool(re.search(r'\b(?:no|not|never|denies?|without)\b', low))
-        if re.search(r'\b(?:office (?:visit|consultation|encounter)|outpatient (?:office )?(?:visit|consultation))\b', low) and not negative:
+        office = re.search(r'\b(?:office (?:visit|consultation|encounter)|outpatient (?:office )?(?:visit|consultation))\b', low)
+        if modern and not office:
+            office = re.fullmatch(r'(?:encounter|visit type)\s*:\s*(?:(?:new|established)[ -]patient,?\s*)?'
+                r'(?:in-person\s+)?(?:visit|consultation)\s+in\s+(?:a|an|the)\s+'
+                r'(?:(?:u\.s\.|us|united states)\s+)?(?:[a-z]+\s+){0,3}office\.?', low)
+        if office and not negative:
             add('setting', 'outpatient_office', unit)
+        status_text = re.sub(r'^(?:new|established)[ -]patient history\s*:', '', low) if modern else low
         for status in ('new', 'established'):
-            if re.search(r'\b' + status + r'[ -]patient\b', low):
+            if re.search(r'\b' + status + r'[ -]patient\b', status_text):
                 if negative:
                     blockers.append('The documented patient-status assertion is negated or qualified.')
                 else:
                     add('patient_status', status, unit)
         if re.search(r'\b(?:inpatient|emergency department)\b', low) and not negative:
             blockers.append('A non-office encounter setting is also documented.')
-        timing = _time_statement(text, scope)
+        timing = _time_statement(text, scope, modern=modern, service_date=service_date)
         if timing:
             totals.append(timing['minutes'])
             active_total = timing['minutes']
@@ -506,15 +616,16 @@ def _source_time_analysis(notes):
                 blockers.append('The time-exclusion assertion is negated or qualified.')
             else:
                 exclusions.append((int(exclusion['total']) if exclusion['total'] else None, unit))
-                if re.search(r'\b' + _STAFF + r'\b', tail):
+                if re.search(r'\b' + (_STAFF_CURRENT if modern else _STAFF) + r'\b', tail):
                     add('time_excludes_staff', True, unit)
                 if re.search(r'\bseparately reported services\b', tail):
                     add('time_excludes_separately_reported', True, unit)
-        ineligible = bool(re.search(r'\b(?:' + _STAFF + r'|separately reported services|preceding day|previous day|prior day)\b', low))
+        staff = _STAFF_CURRENT if modern else _STAFF
+        ineligible = bool(re.search(r'\b(?:' + staff + r'|separately reported services|preceding day|previous day|prior day)\b', low))
         if ineligible and not exclusion and (
                 re.search(r'\b(?:includes?|including|included|counted|spent by|performed by)\b', low)
                 or re.search(r'\b(?:not exclude|not excluded|does not exclude)\b', low)
-                or re.search(r'\b(?:minutes?|time)\s+(?:is|are|was|were)\s+(?:all\s+)?(?:' + _STAFF + r')\b', low)
+                or re.search(r'\b(?:minutes?|time)\s+(?:is|are|was|were)\s+(?:all\s+)?(?:' + staff + r')\b', low)
                 or re.search(r'\bof (?:these|the)\s+[^.;]*\bminutes\b', low)):
             blockers.append('The documented total includes ineligible staff, other-day or separately reported time.')
         if time_reference and not timing and not exclusion and not basis and not integrity:
@@ -528,10 +639,16 @@ def _source_time_analysis(notes):
             service_errors.append('The complete source denies a completed office evaluation or examination.')
         if re.search(r'\b(?:examined|history (?:was )?obtained|examination (?:was )?performed)\b[^.;]*\b(?:this (?:encounter|visit)|today)\b', low) and not negative:
             evaluated = True
-        if not timing and not exclusion and not basis:
+        work_qualification = modern and re.fullmatch(
+            r'(?:these|those) are all ' + _ROLE + r' activities ' + _DAY + r'\.?', low)
+        if work_qualification and active_total is None:
+            blockers.append('The physician-work qualification has no adjacent source-bound total.')
+        if not timing and not exclusion and not basis and not work_qualification:
             active_total = None
     if any(total is not None and set(totals) != {total} for total, _unit in exclusions):
         blockers.append('The exclusion statement belongs to a different or unresolved physician total.')
+    if modern and any(row['value'] == 'new' for row in found['patient_status']):
+        blockers.extend(new_patient_history)
     facts = []
     for key, candidates in found.items():
         values = {str(row['value']) for row in candidates}

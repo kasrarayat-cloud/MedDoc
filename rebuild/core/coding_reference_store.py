@@ -214,9 +214,11 @@ def selection_reference(metadata, run, selections):
         'dictionary_sha256', tabular->'dictionary_sha256',
         'index_xml_sha256', tabular->'index_xml_sha256',
         'tabular_xml_sha256', tabular->'tabular_xml_sha256',
-        'introduction', tabular->'introduction')''')
+        'introduction', tabular->'introduction',
+        'guidelines_sha256', provenance #>> '{manifest,files,guidelines,sha256}')''')
     if type(tabular) is not dict or tabular.get('format') != FORMAT or not re.fullmatch(r'20\d\d', str(tabular.get('version'))):
         raise ValidationError('Unsupported bound coding reference format.')
+    guidelines_sha256 = tabular.pop('guidelines_sha256', None)
     index = _ancestors(entries, {}, query.index, 'parent_id') if entries else {}
     descriptions = query.read('''(SELECT COALESCE(jsonb_object_agg(wanted, tabular->'codes'->wanted), '{}'::jsonb)
         FROM unnest(%s::text[]) AS names(wanted) WHERE tabular->'codes' ? wanted)''', [sorted(codes)])
@@ -235,7 +237,8 @@ def selection_reference(metadata, run, selections):
     tabular.update(codes=descriptions, nodes=nodes)
     return SimpleNamespace(pk=metadata.pk, id=metadata.pk, release_id=metadata.release_id,
         release=metadata.release, digest=metadata.digest, index=list(index.values()),
-        tabular=tabular, _index_lookup=index, projection_bytes=query.total_bytes)
+        tabular=tabular, _index_lookup=index, projection_bytes=query.total_bytes,
+        guidelines_sha256=guidelines_sha256)
 
 
 def _prediction_codes(codes):
@@ -314,9 +317,11 @@ def prediction_reference(metadata, codes, *, source_contract=None):
         'dictionary_sha256', tabular->'dictionary_sha256',
         'index_xml_sha256', tabular->'index_xml_sha256',
         'tabular_xml_sha256', tabular->'tabular_xml_sha256',
-        'introduction', tabular->'introduction')''')
+        'introduction', tabular->'introduction',
+        'guidelines_sha256', provenance #>> '{manifest,files,guidelines,sha256}')''')
     if type(tabular) is not dict or tabular.get('format') != FORMAT or not re.fullmatch(r'20\d\d', str(tabular.get('version'))):
         raise ValidationError('Unsupported bound coding reference format.')
+    guidelines_sha256 = tabular.pop('guidelines_sha256', None)
     routes = query.read('''(SELECT COALESCE(jsonb_agg(entry ORDER BY ordinal), '[]'::jsonb)
         FROM jsonb_array_elements("index") WITH ORDINALITY AS index_entries(entry, ordinal)
         WHERE entry->>'code' = ANY(%s::text[]))''', [sorted(wanted)]) if wanted else []
@@ -390,4 +395,5 @@ def prediction_reference(metadata, codes, *, source_contract=None):
     tabular.update(codes=descriptions, nodes=nodes)
     return SimpleNamespace(pk=metadata.pk, id=metadata.pk, release_id=metadata.release_id,
         release=metadata.release, digest=metadata.digest, index=list(index.values()),
-        tabular=tabular, _index_lookup=index, projection_bytes=query.total_bytes)
+        tabular=tabular, _index_lookup=index, projection_bytes=query.total_bytes,
+        guidelines_sha256=guidelines_sha256)

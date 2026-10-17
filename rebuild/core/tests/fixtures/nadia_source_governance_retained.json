@@ -1,0 +1,2054 @@
+{
+  "provenance": {
+    "kind": "Actual successful synthetic Nadia02 retained source/stage responses; no constructed replies",
+    "source_sha256": "3cc46ae54461cc50a2709a3c096f6f5979f9a0c9e3c970db97707ab13e10d227",
+    "snapshot_sha256": "79ff26ac0b37b8c19a7d0275e186f2e7dd7fcf05f96155b5bf55120e635547e3",
+    "scope_contract": "positioned-encounter-support-v14"
+  },
+  "notes": "FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY\r\n\r\nPatient: Synthetic Nadia Fenwick\r\nAge: 46 years\r\nClinic record number: SYN-NF-1017\r\nDate of service: 17 October 2026\r\nVisit: In-person gastroenterology office consultation. This is an established patient who was seen by this same gastroenterologist eight months ago.\r\n\r\nHistory\r\nSynthetic Nadia Fenwick reports right upper quadrant abdominal pain after fatty meals for six days. Episodes last about 15 minutes. The pain is rated 5 out of 10. There has also been intermittent nausea for three days. The patient denies vomiting, heartburn, constipation, diarrhea, difficulty swallowing, vomiting blood, black stools, rectal bleeding, fever and unintentional weight loss.\r\n\r\nCurrent medicine is lisinopril 10 mg orally once daily. Penicillin causes a rash.\r\n\r\nExamination\r\nBlood pressure is 126/78 mmHg, pulse 76 beats per minute and temperature 36.8 degrees Celsius. The patient is alert and in no acute distress. The abdomen is soft with mild right upper quadrant tenderness. There is no rebound tenderness or guarding.\r\n\r\nAssessment\r\nRight upper quadrant abdominal pain and nausea were both evaluated during this encounter. The cause remains uncertain. Gallstones, cholecystitis and pancreatitis have not been established.\r\n\r\nPlan\r\nDiscussed smaller low-fat meals and maintaining hydration. A right upper quadrant ultrasound was ordered for a later date. The ultrasound was not performed today. No other investigation or procedure was performed today. No medication changes were made. Review in two weeks. The patient was advised to seek urgent assessment for severe or worsening pain, fever, jaundice or persistent vomiting.\r\n\r\nTotal physician time on the date of service was 36 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation. This total excludes clinical staff time and time for separately reported services. Office E/M selection is based on total physician time.",
+  "fields": [
+    {
+      "key": "cell_0",
+      "kind": "text",
+      "label": "Patient full name",
+      "locator": {
+        "cell": 0
+      }
+    },
+    {
+      "key": "cell_1",
+      "kind": "text",
+      "label": "Age in years",
+      "locator": {
+        "cell": 1
+      }
+    },
+    {
+      "key": "cell_2",
+      "kind": "text",
+      "label": "Clinic record number",
+      "locator": {
+        "cell": 2
+      }
+    },
+    {
+      "key": "cell_3",
+      "kind": "text",
+      "label": "Date of service",
+      "locator": {
+        "cell": 3
+      }
+    },
+    {
+      "key": "cell_4",
+      "kind": "text",
+      "label": "Referring physician",
+      "locator": {
+        "cell": 4
+      }
+    },
+    {
+      "key": "cell_5",
+      "kind": "text",
+      "label": "Visit setting and patient status",
+      "locator": {
+        "cell": 5
+      }
+    },
+    {
+      "key": "cell_6",
+      "kind": "text",
+      "label": "Main symptoms and duration",
+      "locator": {
+        "cell": 6
+      }
+    },
+    {
+      "key": "cell_7",
+      "kind": "text",
+      "label": "Symptom severity",
+      "locator": {
+        "cell": 7
+      }
+    },
+    {
+      "key": "cell_8",
+      "kind": "text",
+      "label": "Pertinent negatives",
+      "locator": {
+        "cell": 8
+      }
+    },
+    {
+      "key": "cell_9",
+      "kind": "text",
+      "label": "Current medicines",
+      "locator": {
+        "cell": 9
+      }
+    },
+    {
+      "key": "cell_10",
+      "kind": "text",
+      "label": "Drug allergies",
+      "locator": {
+        "cell": 10
+      }
+    },
+    {
+      "key": "cell_11",
+      "kind": "text",
+      "label": "Family history",
+      "locator": {
+        "cell": 11
+      }
+    },
+    {
+      "key": "cell_12",
+      "kind": "text",
+      "label": "Objective findings",
+      "locator": {
+        "cell": 12
+      }
+    },
+    {
+      "key": "cell_13",
+      "kind": "text",
+      "label": "Assessment",
+      "locator": {
+        "cell": 13
+      }
+    },
+    {
+      "key": "cell_14",
+      "kind": "text",
+      "label": "Plan and follow up",
+      "locator": {
+        "cell": 14
+      }
+    },
+    {
+      "key": "cell_15",
+      "kind": "text",
+      "label": "Investigations ordered and performed",
+      "locator": {
+        "cell": 15
+      }
+    },
+    {
+      "key": "cell_16",
+      "kind": "text",
+      "label": "Total physician time on date of service in minutes",
+      "locator": {
+        "cell": 16
+      }
+    },
+    {
+      "key": "cell_17",
+      "kind": "text",
+      "label": "E M selection basis",
+      "locator": {
+        "cell": 17
+      }
+    }
+  ],
+  "definitions": {
+    "cell_0": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's full name only, in the patient record section; no other person's name.",
+      "permitted_destination": {
+        "field_key": "cell_0",
+        "locator_sha256": "3494be869665191b22eca25c562e43529ee1e2390da68d9644a4626235dc71cc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_1": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's age in whole years, as requested by the label 'Age in years'. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_1",
+        "locator_sha256": "db65ec1317a1ef286e061af7dd0ad6d1c1a0da0e18fe7a649e1cc98fff97fb2a"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": "years",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_2": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The single clinic record number or reference code identifying the patient's record.",
+      "permitted_destination": {
+        "field_key": "cell_2",
+        "locator_sha256": "7fd8d47a6b4a8bea4ada90d791a477c02ec4c704f05ab756e2ddc35ea80d43f2"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "identifier",
+      "version": 2
+    },
+    "cell_3": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The calendar date of service of the consultation encounter. Accepts only a complete, unambiguous calendar date with an explicit year, preserving the documented spelling; no date format is printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_3",
+        "locator_sha256": "48d01dcb7e0ce6b72adf7f2d102aab3d051880b631f76139383fc4a1b66bc53c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "date",
+      "version": 2
+    },
+    "cell_4": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "Referring physician: the clinician’s name, as requested by this form.",
+      "permitted_destination": {
+        "field_key": "cell_4",
+        "locator_sha256": "9206a0ab3abd5816cde43322a5bc27ec65322f511e0612a64cb91f1e6cd35fbc"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "clinician",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "person_name",
+      "version": 2
+    },
+    "cell_5": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "A description of the visit setting and the patient's status for the documented consultation encounter. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_5",
+        "locator_sha256": "e87979c685a2639187177e593d5acf8dfd049c319a97ebefcc09b4fc4a78733d"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_6": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "A description of the patient's main symptoms and how long they have lasted. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_6",
+        "locator_sha256": "4860d960e874f5c0355a4e72ee45bd6f1d592194bc67e3d44c75db5a3cb48d6c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_7": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "A concise statement of the severity of the patient's symptoms as documented. No numeric scale or choices are printed on the form.",
+      "permitted_destination": {
+        "field_key": "cell_7",
+        "locator_sha256": "1da18aa98481b51a832725f163933a45979ecd6e7170e30c7d00cf191aaf8539"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_8": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The pertinent negatives: relevant symptoms or findings documented as absent or denied, listed as documented. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_8",
+        "locator_sha256": "1d9de35a55d0dfcdae707f336289c8c0d4c2a0d60137e2b4647c657b69b3809c"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_9": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The medicines the patient is currently taking at the documented encounter, or documentation that there are none. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_9",
+        "locator_sha256": "662c6da7cce123b38fedca81e3649ef538c261fbf59d81dafeb24a3704131511"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "current"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_10": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The patient's documented drug allergies, or documentation that no drug allergies are known. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_10",
+        "locator_sha256": "686e45fa28bb90d6c1a3bc02d9385e10d23f7c58e51c3b003c50c089d1539fbf"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_11": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The documented family history relevant to the patient, including documented absence of relevant family conditions. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_11",
+        "locator_sha256": "cba008036b4e04732bd353870375f48e4ebea9c882dcc3be7c9a36585c112dce"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_12": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The objective findings documented from examination or observation, including documented normal or absent findings. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_12",
+        "locator_sha256": "496c096a33b4acbfd27f9e7328eae01e44deb9a2d85fe4b563f49549cad1826b"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_13": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The clinician's assessment or impression, which may include several findings, diagnostic uncertainty and explicit exclusions; preserve uncertainty and negation as documented.",
+      "permitted_destination": {
+        "field_key": "cell_13",
+        "locator_sha256": "01d36235e8e650430ca22afeb495cbb08e64c794be57badf40e3b91194f305f0"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_14": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The documented management plan and follow-up arrangements. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_14",
+        "locator_sha256": "39acde59594128ff59afd0bc87ccc84ac3363f7b0cd78e2c37172d9b4b812ea6"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_15": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The investigations that were ordered and those that were performed, as documented, including documented absence of investigations. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_15",
+        "locator_sha256": "d5b9d6fab52b29c02d8d4b423c7e0abcd5f769b420f1248482f718992aaa26b3"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "patient",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    },
+    "cell_16": {
+      "answer_mode": "atomic",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "The total physician time on the date of service, as a whole number of minutes, as requested by the label. Leave blank if not documented.",
+      "permitted_destination": {
+        "field_key": "cell_16",
+        "locator_sha256": "14d093df536e5d87ccf1c49eb75610cc0bf829611e9ba5b85c53f4728b82f9de"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": "minutes",
+      "value_type": "integer",
+      "version": 2
+    },
+    "cell_17": {
+      "answer_mode": "narrative",
+      "choices": [],
+      "constraints": {
+        "maximum": null,
+        "minimum": null,
+        "scale_maximum": null,
+        "scale_minimum": null
+      },
+      "meaning": "A concise statement of the documented basis for the E/M (evaluation and management) selection, such as the documented elements supporting the level chosen.",
+      "permitted_destination": {
+        "field_key": "cell_17",
+        "locator_sha256": "e16bb4d5760a8fd18f7e00791df3f828deeb177b3602ba4857d0edc57f889410"
+      },
+      "scope": {
+        "polarity": "any",
+        "subject": "encounter",
+        "temporality": "any"
+      },
+      "unit": null,
+      "value_type": "text",
+      "version": 2
+    }
+  },
+  "stages": [
+    {
+      "stage": "extractor",
+      "attempt": 1,
+      "request_digests": {
+        "payload": "0d4aaf964431b9e240520821703b6f6d9b70e0354785fb30d7f7e5e8b62f7d5b",
+        "schema": "76e5af06c7fc37357490f7b2fa707d2bd422087908b1ebbfd2788c03d5dc45ba",
+        "instructions": "65be806908ab02955c76776c7f60e4e0156ce9e3274366a5256429a72efebb20"
+      },
+      "output": {
+        "reference_contract": "exact-source-reference-inventory-v2",
+        "facts": [
+          {
+            "id": "f1",
+            "kind": "identity",
+            "concept": "patient full name",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Synthetic Nadia Fenwick",
+              "source_unit_id": 2,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f2",
+            "kind": "identity",
+            "concept": "patient age",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "46",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "years",
+            "unit_span": {
+              "quote": "years",
+              "source_unit_id": 3,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f3",
+            "kind": "identity",
+            "concept": "clinic record number",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "SYN-NF-1017",
+              "source_unit_id": 4,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f4",
+            "kind": "identity",
+            "concept": "date of service",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "17 October 2026",
+              "source_unit_id": 5,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f5",
+            "kind": "reason",
+            "concept": "visit type and setting",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "In-person gastroenterology office consultation",
+              "source_unit_id": 6,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f6",
+            "kind": "history",
+            "concept": "established patient status",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "This is an established patient",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f7",
+            "kind": "history",
+            "concept": "prior encounter with same gastroenterologist",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "seen by this same gastroenterologist eight months ago",
+              "source_unit_id": 7,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "past",
+              "span": {
+                "quote": "eight months ago",
+                "source_unit_id": 7,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f8",
+            "kind": "history",
+            "concept": "right upper quadrant abdominal pain after fatty meals",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "right upper quadrant abdominal pain after fatty meals for six days",
+              "source_unit_id": 9,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f9",
+            "kind": "history",
+            "concept": "right upper quadrant abdominal pain duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "six days",
+              "source_unit_id": 9,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f10",
+            "kind": "history",
+            "concept": "pain episode duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Episodes last about 15 minutes",
+              "source_unit_id": 10,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f11",
+            "kind": "measurement",
+            "concept": "abdominal pain severity score",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "5",
+              "source_unit_id": 11,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": {
+              "minimum": null,
+              "maximum": "10",
+              "span": {
+                "quote": "out of 10",
+                "source_unit_id": 11,
+                "occurrence": 1
+              }
+            },
+            "supersedes": []
+          },
+          {
+            "id": "f12",
+            "kind": "history",
+            "concept": "abdominal pain severity statement",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The pain is rated 5 out of 10",
+              "source_unit_id": 11,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f13",
+            "kind": "history",
+            "concept": "intermittent nausea",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "intermittent nausea for three days",
+              "source_unit_id": 12,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f14",
+            "kind": "history",
+            "concept": "nausea duration",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "three days",
+              "source_unit_id": 12,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f15",
+            "kind": "finding",
+            "concept": "denied symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "denies vomiting, heartburn, constipation, diarrhea, difficulty swallowing, vomiting blood, black stools, rectal bleeding, fever and unintentional weight loss",
+              "source_unit_id": 13,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f16",
+            "kind": "history",
+            "concept": "current medicines",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Current medicine is lisinopril 10 mg orally once daily",
+              "source_unit_id": 14,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f17",
+            "kind": "history",
+            "concept": "drug allergy",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Penicillin causes a rash",
+              "source_unit_id": 15,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "unspecified",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f18",
+            "kind": "finding",
+            "concept": "blood pressure",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Blood pressure is 126/78 mmHg",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f19",
+            "kind": "finding",
+            "concept": "pulse",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "pulse 76 beats per minute",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f20",
+            "kind": "finding",
+            "concept": "body temperature",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "temperature 36.8 degrees Celsius",
+              "source_unit_id": 17,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f21",
+            "kind": "finding",
+            "concept": "general appearance",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The patient is alert and in no acute distress",
+              "source_unit_id": 18,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f22",
+            "kind": "finding",
+            "concept": "abdominal examination",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The abdomen is soft with mild right upper quadrant tenderness",
+              "source_unit_id": 19,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f23",
+            "kind": "finding",
+            "concept": "rebound tenderness and guarding",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "There is no rebound tenderness or guarding",
+              "source_unit_id": 20,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f24",
+            "kind": "assessment",
+            "concept": "evaluated problems",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Right upper quadrant abdominal pain and nausea were both evaluated during this encounter",
+              "source_unit_id": 22,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f25",
+            "kind": "assessment",
+            "concept": "cause of symptoms",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The cause remains uncertain",
+              "source_unit_id": 23,
+              "occurrence": 1
+            },
+            "polarity": "uncertain",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f26",
+            "kind": "assessment",
+            "concept": "gallstones cholecystitis pancreatitis diagnosis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Gallstones, cholecystitis and pancreatitis have not been established",
+              "source_unit_id": 24,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f27",
+            "kind": "plan",
+            "concept": "dietary and hydration counseling",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Discussed smaller low-fat meals and maintaining hydration",
+              "source_unit_id": 26,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f28",
+            "kind": "plan",
+            "concept": "right upper quadrant ultrasound order",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "A right upper quadrant ultrasound was ordered for a later date",
+              "source_unit_id": 27,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f29",
+            "kind": "plan",
+            "concept": "ultrasound performance today",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The ultrasound was not performed today",
+              "source_unit_id": 28,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": {
+                "quote": "today",
+                "source_unit_id": 28,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f30",
+            "kind": "plan",
+            "concept": "other investigations or procedures performed",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No other investigation or procedure was performed today",
+              "source_unit_id": 29,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": {
+                "quote": "today",
+                "source_unit_id": 29,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f31",
+            "kind": "plan",
+            "concept": "medication changes",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "No medication changes were made",
+              "source_unit_id": 30,
+              "occurrence": 1
+            },
+            "polarity": "negated",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f32",
+            "kind": "follow_up",
+            "concept": "review follow-up",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Review in two weeks",
+              "source_unit_id": 31,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "future",
+              "span": {
+                "quote": "in two weeks",
+                "source_unit_id": 31,
+                "occurrence": 1
+              }
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f33",
+            "kind": "plan",
+            "concept": "safety-net advice",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "The patient was advised to seek urgent assessment for severe or worsening pain, fever, jaundice or persistent vomiting",
+              "source_unit_id": 32,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f34",
+            "kind": "measurement",
+            "concept": "total physician time on date of service",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "36",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": "minutes",
+            "unit_span": {
+              "quote": "minutes",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f35",
+            "kind": "other",
+            "concept": "physician time statement with activities",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Total physician time on the date of service was 36 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation",
+              "source_unit_id": 33,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f36",
+            "kind": "other",
+            "concept": "physician time exclusions",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "This total excludes clinical staff time and time for separately reported services",
+              "source_unit_id": 34,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          },
+          {
+            "id": "f37",
+            "kind": "other",
+            "concept": "E/M selection basis",
+            "subject": {
+              "kind": "patient",
+              "name_span": {
+                "quote": "Synthetic Nadia Fenwick",
+                "source_unit_id": 2,
+                "occurrence": 1
+              }
+            },
+            "value_span": {
+              "quote": "Office E/M selection is based on total physician time",
+              "source_unit_id": 35,
+              "occurrence": 1
+            },
+            "polarity": "affirmed",
+            "timing": {
+              "kind": "current",
+              "span": null
+            },
+            "unit": null,
+            "unit_span": null,
+            "scale": null,
+            "supersedes": []
+          }
+        ]
+      },
+      "receipt_sha256": {
+        "request": "26a35866be33d06eaf91cefbead730ac0cc9048b9bf62c65326f068af91e4907",
+        "result": "eea2db35bc489337d9ffb8029dc7a169850fe6fe10a70e0ef6c78b9ccec7067e"
+      }
+    },
+    {
+      "stage": "assigner",
+      "attempt": 1,
+      "request_digests": {
+        "payload": "19e3a2314f9496f050f04b4cba5a2064eabae34faf8d858e7276c33a5fe52840",
+        "schema": "82ec5b269d0d8f84a31435cf5c055ca3b3604ef0dc558de20611ad5e530f57a7",
+        "instructions": "44e11bcc0547fb2809f9897bb12762321e11ad844d0761df45424e61ac0d75fb"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "fact_ids": [
+              "f1"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_1",
+            "fact_ids": [
+              "f2"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_2",
+            "fact_ids": [
+              "f3"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_3",
+            "fact_ids": [
+              "f4"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_4",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_5",
+            "fact_ids": [
+              "f5",
+              "f6",
+              "f7"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_6",
+            "fact_ids": [
+              "f8",
+              "f10",
+              "f13"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_7",
+            "fact_ids": [
+              "f11"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_8",
+            "fact_ids": [
+              "f15"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_9",
+            "fact_ids": [
+              "f16"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_10",
+            "fact_ids": [
+              "f17"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_11",
+            "fact_ids": [],
+            "status": "missing",
+            "separator": ""
+          },
+          {
+            "key": "cell_12",
+            "fact_ids": [
+              "f18",
+              "f19",
+              "f20",
+              "f21",
+              "f22",
+              "f23"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_13",
+            "fact_ids": [
+              "f24",
+              "f25",
+              "f26"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_14",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29",
+              "f30",
+              "f31",
+              "f32",
+              "f33"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_15",
+            "fact_ids": [
+              "f28",
+              "f29",
+              "f30"
+            ],
+            "status": "supported",
+            "separator": "; "
+          },
+          {
+            "key": "cell_16",
+            "fact_ids": [
+              "f34"
+            ],
+            "status": "supported",
+            "separator": ""
+          },
+          {
+            "key": "cell_17",
+            "fact_ids": [
+              "f35",
+              "f36",
+              "f37"
+            ],
+            "status": "supported",
+            "separator": "; "
+          }
+        ]
+      },
+      "receipt_sha256": {
+        "request": "079d562cfb0a08827db4b8549016285b58871f2fbe629be979637214d655be24",
+        "result": "7a8df7090e2cdf9241a8ebcfd1492c505e17e318b6fec77cb893d2f970c3564e"
+      }
+    },
+    {
+      "stage": "checker",
+      "attempt": 1,
+      "request_digests": {
+        "payload": "a00f8cd19612193229ed54d6c2b5ebe077d13db5dbd3e87313c690e490ce33fd",
+        "schema": "624e0289f7058770e1d0a00b3c7fb66a6ad29c100125f0faa390f6c07395d3b9",
+        "instructions": "93d8c82f05e346bb8e42aad8a8bcb38e9e4a6bfaf558d72616fc2bae2e5f06c0"
+      },
+      "output": {
+        "fields": [
+          {
+            "key": "cell_0",
+            "verdict": "pass",
+            "fact_ids": [
+              "f1"
+            ],
+            "reason": "The complete patient name, including the 'Synthetic' prefix, matches the source."
+          },
+          {
+            "key": "cell_1",
+            "verdict": "pass",
+            "fact_ids": [
+              "f2"
+            ],
+            "reason": "The source documents age 46 years."
+          },
+          {
+            "key": "cell_2",
+            "verdict": "pass",
+            "fact_ids": [
+              "f3"
+            ],
+            "reason": "The record number SYN-NF-1017 matches the source."
+          },
+          {
+            "key": "cell_3",
+            "verdict": "pass",
+            "fact_ids": [
+              "f4"
+            ],
+            "reason": "The date of service is documented as 17 October 2026, with the year."
+          },
+          {
+            "key": "cell_4",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No referring physician is documented. The only clinician mentioned is the treating gastroenterologist."
+          },
+          {
+            "key": "cell_5",
+            "verdict": "pass",
+            "fact_ids": [
+              "f5",
+              "f6",
+              "f7"
+            ],
+            "reason": "The answer gives the in-person office consultation, the established status, and the prior visit with the same gastroenterologist eight months ago."
+          },
+          {
+            "key": "cell_6",
+            "verdict": "pass",
+            "fact_ids": [
+              "f8",
+              "f10",
+              "f13"
+            ],
+            "reason": "The answer gives the right upper quadrant pain after fatty meals for six days, the 15-minute episodes, and the intermittent nausea for three days."
+          },
+          {
+            "key": "cell_7",
+            "verdict": "pass",
+            "fact_ids": [
+              "f11"
+            ],
+            "reason": "The answer is the pain score with its scale, 5 out of 10."
+          },
+          {
+            "key": "cell_8",
+            "verdict": "pass",
+            "fact_ids": [
+              "f15"
+            ],
+            "reason": "The list of denied symptoms keeps the 'Denies' wording and matches the source."
+          },
+          {
+            "key": "cell_9",
+            "verdict": "pass",
+            "fact_ids": [
+              "f16"
+            ],
+            "reason": "Lisinopril 10 mg orally once daily is the documented current medicine."
+          },
+          {
+            "key": "cell_10",
+            "verdict": "pass",
+            "fact_ids": [
+              "f17"
+            ],
+            "reason": "The documented drug allergy is penicillin causing a rash."
+          },
+          {
+            "key": "cell_11",
+            "verdict": "missing",
+            "fact_ids": [],
+            "reason": "No family history is documented."
+          },
+          {
+            "key": "cell_12",
+            "verdict": "pass",
+            "fact_ids": [
+              "f18",
+              "f19",
+              "f20",
+              "f21",
+              "f22",
+              "f23"
+            ],
+            "reason": "The answer includes all documented vital signs and examination findings, including the absence of rebound tenderness and guarding."
+          },
+          {
+            "key": "cell_13",
+            "verdict": "pass",
+            "fact_ids": [
+              "f24",
+              "f25",
+              "f26"
+            ],
+            "reason": "The answer keeps the evaluated problems, the uncertain cause, and the negated gallstones, cholecystitis and pancreatitis."
+          },
+          {
+            "key": "cell_14",
+            "verdict": "pass",
+            "fact_ids": [
+              "f27",
+              "f28",
+              "f29",
+              "f30",
+              "f31",
+              "f32",
+              "f33"
+            ],
+            "reason": "The plan includes counseling, the later ultrasound order, the statements that nothing was performed today, no medication changes, the two-week review, and the safety-net advice."
+          },
+          {
+            "key": "cell_15",
+            "verdict": "pass",
+            "fact_ids": [
+              "f28",
+              "f29",
+              "f30"
+            ],
+            "reason": "The answer gives the ordered ultrasound, its non-performance today, and the absence of any other investigation or procedure today."
+          },
+          {
+            "key": "cell_16",
+            "verdict": "pass",
+            "fact_ids": [
+              "f34"
+            ],
+            "reason": "Total physician time is 36 minutes."
+          },
+          {
+            "key": "cell_17",
+            "verdict": "pass",
+            "fact_ids": [
+              "f35",
+              "f36",
+              "f37"
+            ],
+            "reason": "The answer keeps the time statement with its activities, the exclusions, and the selection basis of total physician time."
+          }
+        ],
+        "fact_findings": []
+      },
+      "receipt_sha256": {
+        "request": "f87290ae67f573f57cbd5a70ac4fdb9a1a0e6a5fc700ae65238c38c666fd8347",
+        "result": "8880733d08d2eb266835922834f0b6c2d154155ecdfec303159e790514461213"
+      }
+    }
+  ],
+  "saved_answers_sha256": "f163a8edff23ea46433c77543d0ab4a9d2e03f5a27b3183521f76efade515653",
+  "saved_text_status": {
+    "cell_0": {
+      "text": "Synthetic Nadia Fenwick",
+      "status": "supported"
+    },
+    "cell_1": {
+      "text": "46",
+      "status": "supported"
+    },
+    "cell_2": {
+      "text": "SYN-NF-1017",
+      "status": "supported"
+    },
+    "cell_3": {
+      "text": "17 October 2026",
+      "status": "supported"
+    },
+    "cell_4": {
+      "text": "",
+      "status": "missing"
+    },
+    "cell_5": {
+      "text": "In-person gastroenterology office consultation; This is an established patient; Seen by this same gastroenterologist eight months ago",
+      "status": "supported"
+    },
+    "cell_6": {
+      "text": "Right upper quadrant abdominal pain after fatty meals for six days; Episodes last about 15 minutes; Intermittent nausea for three days",
+      "status": "supported"
+    },
+    "cell_7": {
+      "text": "5 out of 10",
+      "status": "supported"
+    },
+    "cell_8": {
+      "text": "Denies vomiting, heartburn, constipation, diarrhea, difficulty swallowing, vomiting blood, black stools, rectal bleeding, fever and unintentional weight loss",
+      "status": "supported"
+    },
+    "cell_9": {
+      "text": "Current medicine is lisinopril 10 mg orally once daily",
+      "status": "supported"
+    },
+    "cell_10": {
+      "text": "Penicillin causes a rash",
+      "status": "supported"
+    },
+    "cell_11": {
+      "text": "",
+      "status": "missing"
+    },
+    "cell_12": {
+      "text": "Blood pressure is 126/78 mmHg; Pulse 76 beats per minute; Temperature 36.8 degrees Celsius; The patient is alert and in no acute distress; The abdomen is soft with mild right upper quadrant tenderness; There is no rebound tenderness or guarding",
+      "status": "supported"
+    },
+    "cell_13": {
+      "text": "Right upper quadrant abdominal pain and nausea were both evaluated during this encounter; The cause remains uncertain; Gallstones, cholecystitis and pancreatitis have not been established",
+      "status": "supported"
+    },
+    "cell_14": {
+      "text": "Discussed smaller low-fat meals and maintaining hydration; A right upper quadrant ultrasound was ordered for a later date; The ultrasound was not performed today; No other investigation or procedure was performed today; No medication changes were made; Review in two weeks; The patient was advised to seek urgent assessment for severe or worsening pain, fever, jaundice or persistent vomiting",
+      "status": "supported"
+    },
+    "cell_15": {
+      "text": "A right upper quadrant ultrasound was ordered for a later date; The ultrasound was not performed today; No other investigation or procedure was performed today",
+      "status": "supported"
+    },
+    "cell_16": {
+      "text": "36",
+      "status": "supported"
+    },
+    "cell_17": {
+      "text": "Total physician time on the date of service was 36 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation; This total excludes clinical staff time and time for separately reported services; Office E/M selection is based on total physician time",
+      "status": "supported"
+    }
+  }
+}

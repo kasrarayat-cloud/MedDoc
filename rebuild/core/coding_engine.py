@@ -185,6 +185,11 @@ def source_explanation(notes, concept, candidate):
     """
     path = candidate.get('path', [])
     result = 'Source: “' + concept['evidence'] + '” Verified Index route: ' + ' → '.join(path) + '.'
+    if candidate.get('clinical_specificity'):
+        proof = candidate['clinical_specificity']
+        result += (' Specificity uses the documented complete clinical term and an explicit narrower-concept '
+            'relationship in ' + proof['authority_version'] + ', with the complete dated Index family checked. '
+            + proof['attribution'] + '. The terminology relationship is not itself an ICD mapping.')
     for qualifier in re.findall(r'\bwithout\s+([^()]+)', ' '.join(path), flags=re.I):
         related = {**concept, 'term': qualifier.strip(), 'index_terms': [qualifier.strip()]}
         for clause, _before, _after in mention_clauses(notes, related):
@@ -456,7 +461,49 @@ def _current_condition_assertion(clause, before, after, context, row):
     return False
 
 
-def _condition_assertion_errors(notes, concept, mentions, context, units):
+def _coordinated_condition_assertion(clause, concept, context):
+    """Read a complete current-patient report with separately timed objects.
+
+    This establishes the reported finding, not an Index subtype. Every object
+    and adjunct must be accounted for; an unknown trailing predicate cannot be
+    clipped away to turn a question, attribution or retraction into presence.
+    """
+    patient = norm(context.get('patient_name') or '')
+    subject = r'(?:the patient|patient|he|she|they' + ('|' + re.escape(patient) if patient else '') + r')'
+    match = re.fullmatch(subject + r'\s+(?:(?:also|currently|still)\s+)?'
+        r'(?:reports?|experiences?|endorses?|describes?|complains? of|presents? with|has|have)\s+(?P<objects>.+)', norm(clause))
+    if not match:
+        return False
+    found = False
+    for item in re.split(r'\s+and\s+|\s*,\s*', match['objects']):
+        value = re.fullmatch(r'(?P<finding>[a-z]+(?:[ -][a-z]+){0,7}?)(?P<tail>\s+(?:for|lasting|persisting for|today|currently|now|at present|daily|nightly|intermittently|since|after|with|according to|as reported by)\b.*)?', item)
+        if not value or not _complete_presence_tail((value['tail'] or '').strip()):
+            return None
+        finding = value['finding']
+        # A coordinated object is a clinical nominal, not an action on the
+        # preceding assertion. Deictic/account nouns keep unknown verbs from
+        # turning a retraction or qualification into an unrelated finding.
+        if re.search(r'\b(?:this|that|these|those|it|them|statement|statements|assertion|assertions|'
+                r'claim|claims|account|documentation|report|reports|information)\b', finding):
+            return None
+        if re.search(r'\b(?:whether|if|risk|screening|question|without|no|not|never|unverified|fabricated|'
+                r'erroneous|incorrect|wrong|retracted|withdrawn|resolved|prior|previous|past|history|mother|father|patient|'
+                r'possibly|possible|probable|suspected|hypothetical|quoted|denied|absence|uncertain)\b', finding):
+            return None
+        for term in sorted(anchors(concept), key=len, reverse=True):
+            # Only known assertion attributes may precede this finding. An
+            # arbitrary modifier can change existence, ownership or timing;
+            # its mere position before a noun is not affirmative evidence.
+            modifiers = r'(?:(?:a|an|the|current|ongoing|persistent|recurrent|intermittent|acute|chronic|mild|moderate|severe|watery)\s+)*'
+            if re.fullmatch(modifiers + re.escape(term), finding):
+                found = True
+                break
+            elif re.search(r'(?<!\w)' + re.escape(term) + r'(?!\w)', finding):
+                return None
+    return found
+
+
+def _condition_assertion_errors(notes, concept, mentions, context, units, *, source_contract=None):
     """Require current presence and honor source-owned condition corrections."""
     from .clinical_source_context import owned_current
     affirmed = False
@@ -478,6 +525,8 @@ def _condition_assertion_errors(notes, concept, mentions, context, units):
             prior_frame = re.match(r'\s*(?:for|during|in|at|regarding)\s+(?:(?:the|his|her)\s+)?'
                 r'(?:prior|previous|earlier|past)\s+(?:visit|encounter|appointment)\b', before)
             predicate = re.sub(r'^(?:(?:actually|also|now|in fact)\s+)+', '', after.strip())
+            if source_contract == CURRENT_SOURCE_CONTRACT:
+                predicate = re.sub(r'^(?:statement|assertion|report|entry|claim|documentation)\s+', '', predicate)
             invalid = re.match(r'(?:(?:is|are|was|were)\s+)?'
                 r'(?:(?:documented|recorded|entered|reported|included)\s+(?:in error|erroneously)|'
                 r'erroneous|incorrect|wrong|invalid|retracted|withdrawn)\b', predicate)
@@ -494,6 +543,10 @@ def _condition_assertion_errors(notes, concept, mentions, context, units):
                     or re.match(r'\s*(?:is|was|remains?)\s+(?:a\s+)?risk\b.*\bnot\s+(?:a\s+)?current\s+(?:symptom|condition|diagnosis)', after)):
                 return ['The source questions or denies current presence of the selected condition.']
             assertion = _current_condition_assertion(clause, before, after, context, row)
+            if source_contract == CURRENT_SOURCE_CONTRACT:
+                coordinated = _coordinated_condition_assertion(clause, concept, context)
+                if coordinated is not False:
+                    assertion = coordinated
             if assertion is None:
                 return ['The source assertion has an unresolved qualification of the selected condition.']
             if assertion:
@@ -519,14 +572,15 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         return 'excluded', 'A planned or historical procedure is not a performed service at this encounter.'
     if kind in ('diagnosis', 'symptom') and concept['temporality'] != 'current':
         return 'excluded', 'A historical or planned finding is not established as a current condition.'
-    if source_contract == CURRENT_SOURCE_CONTRACT:
-        from .clinical_source_context import source_context
+    if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT):
+        from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE
         from .generation import source_units
         units, _ = source_units(notes, [])
-        context = source_context(notes, units)
+        context = source_context(notes, units, profile=(SOURCE_GOVERNANCE_PROFILE
+            if source_contract == CURRENT_SOURCE_CONTRACT else None))
     def mentions(text):
         rows = condition_mentions(text, concept, qualifiers)
-        if source_contract == CURRENT_SOURCE_CONTRACT:
+        if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT):
             rows = [row for row in rows if not (_exception_summary_mention(notes, row[0], concept, context, units)
                 or _condition_integrity_mention(row[0], concept, context, units))]
         return rows
@@ -541,8 +595,9 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
     ownership = source_owner_question(concept, surrounding)
     if ownership:
         return 'question', ownership
-    if source_contract == CURRENT_SOURCE_CONTRACT and kind in ('diagnosis', 'symptom'):
-        assertion_errors = _condition_assertion_errors(notes, concept, source_mentions, context, units)
+    if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT) and kind in ('diagnosis', 'symptom'):
+        assertion_errors = _condition_assertion_errors(notes, concept, source_mentions, context, units,
+            source_contract=source_contract)
         if assertion_errors:
             return 'question', assertion_errors[0]
     for clause in surrounding:
@@ -660,8 +715,9 @@ TAXONOMY_HEADS = {'disease','diseased','history','syndrome','condition','conditi
                   'absence','screening','encounter','examination','abnormal','abnormality'}
 ROUTE_WORDS = {'with','without','of','and','or','in','the','a','an','at','due','to','by','from'}
 SOURCE_CONTRACT = 'source-bound-clinical-coding-v2'
-CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v3'
-SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT))
+ASSERTION_SOURCE_CONTRACT = 'source-bound-clinical-coding-v3'
+CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v4'
+SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT))
 
 
 def index_head_terms(head, description=''):
@@ -736,12 +792,13 @@ def _condition_assertion_qualifiers(before, after):
     return uncertain, historical
 
 
-def current_source_scope_errors(notes, concept):
+def current_source_scope_errors(notes, concept, *, source_contract=None):
     """Bind new current-condition routes to source-owned, actual assertions."""
-    from .clinical_source_context import source_context, owned_current
+    from .clinical_source_context import source_context, owned_current, SOURCE_GOVERNANCE_PROFILE
     from .generation import source_units
     units, _ = source_units(notes, [])
-    context = source_context(notes, units)
+    context = source_context(notes, units, profile=(SOURCE_GOVERNANCE_PROFILE
+        if source_contract == CURRENT_SOURCE_CONTRACT else None))
     if context['issues']:
         return list(context['issues'])
     quote = concept['evidence']
@@ -975,6 +1032,9 @@ def contextual_validation(run, reference, code, concept, selected_codes):
             if concept['kind'] == 'reason' and screening and asymptomatic and not diagnostic and not contradictory:
                 resolved = {'outcome':'not_applicable', 'basis':'The source explicitly establishes asymptomatic screening, rather than a diagnostic examination for a symptom.',
                             'source_sha256':hashlib.sha256(notes.encode()).hexdigest(), 'guideline':'I.C.21.c.5'}
+        if not resolved and getattr(run, 'config', {}).get('clinical_source_contract') == CURRENT_SOURCE_CONTRACT:
+            from .coding_nec import conditional_following_resolution
+            resolved = conditional_following_resolution(instruction, notes, concept, reference, selected_codes)
         if resolved:
             for item in checked['instructions']:
                 if item['id'] == instruction['id']:
@@ -1336,6 +1396,7 @@ def validate_selection(run,selections):
     clean={}
     for key in ids:
         row=rows[key];override=overrides.get(key)
+        nec = None
         code=row['code']
         if override is not None:
             if type(override) is not dict or set(override)!={'code','reason'}:
@@ -1354,13 +1415,18 @@ def validate_selection(run,selections):
             checked=validate_cpt_selection(run,code,row['evidence'])
         else:
             if (source_contract in SOURCE_CONTRACTS
-                    and current_source_scope_errors(run.inputs['notes'], row['concept'])):
+                    and current_source_scope_errors(run.inputs['notes'], row['concept'], source_contract=source_contract)):
                 raise ValidationError('The selected condition is not established in this patient’s current source encounter.')
             lookup=index_lookup(reference)
             candidate=next((c for c in run.result.get('candidates',{}).get(key,[])
                             if c['code']==code and c['system']=='ICD-10-CM'),None)
             entry=lookup.get(candidate['entry_id']) if candidate else None
-            if not entry or index_route_errors(entry,row['concept'],lookup,candidate.get('source_aliases',()),
+            if entry and source_contract == CURRENT_SOURCE_CONTRACT and candidate.get('clinical_specificity'):
+                from .coding_nec import prove
+                nec = prove(reference, entry, row['concept'], run.inputs['notes'], source_contract=source_contract)
+                if not nec or nec[0] != row['concept'] or nec[1] != candidate['clinical_specificity']:
+                    raise ValidationError('The clinical subtype and complete NEC route need renewed verification.')
+            if not entry or not nec and index_route_errors(entry,row['concept'],lookup,candidate.get('source_aliases',()),
                     code_description=reference.tabular['codes'].get(code, ''),
                     source_contract=source_contract):
                 raise ValidationError('The selected Index route requires unsupported source qualifiers.')
@@ -1371,8 +1437,8 @@ def validate_selection(run,selections):
                 raise ValidationError('The authoritative code description no longer matches its bound release.')
         errors=specificity_errors(row['concept'],code,checked.get('description',row['description']))
         subtypes=index_subtypes(reference,row['concept'], source_contract=source_contract) if key!='office_em' else []
-        state,_=source_disposition(assertion_concept(row['concept'],subtypes),run.inputs['notes'], qualifiers=[
-            item['qualifier'] for item in subtypes], source_contract=source_contract) if key!='office_em' else ('eligible','')
+        state,_=(('eligible','') if nec else source_disposition(assertion_concept(row['concept'],subtypes),
+            run.inputs['notes'], qualifiers=[item['qualifier'] for item in subtypes], source_contract=source_contract)) if key!='office_em' else ('eligible','')
         if state!='eligible' or not checked['valid'] or checked.get('requires_review') or checked.get('errors') or errors:
             raise ValidationError('This selection needs source or coding-instruction clarification before approval.')
     if len(selected_codes)!=len(set(selected_codes)):
