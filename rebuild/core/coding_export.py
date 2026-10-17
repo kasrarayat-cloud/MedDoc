@@ -95,13 +95,13 @@ def eligible_codes(encounter):
     # The original approval and catalogue path above remain independent. A
     # bounded API-output decision does not alter that approval or turn an
     # unverified provider description into licensed terminology.
-    from .coding_output import accepted_output_rows
+    from .coding_output import accepted_output_rows, DESCRIPTION_STATUSES
     supplements = accepted_output_rows(encounter, run, decision)
     if supplements:
         for output in supplements:
             if (not isinstance(output, dict) or output.get('system') != 'CPT'
                     or not re.fullmatch(r'[0-9]{5}', str(output.get('code', '')))
-                    or output.get('description_status') != 'withheld_defective_provider_text'):
+                    or output.get('description_status') not in DESCRIPTION_STATUSES):
                 raise ValidationError('The accepted API output has an unsupported export shape.')
             matches = [row for row in suggestions
                        if row.get('system') == output['system'] and row.get('code') == output['code']]
@@ -224,7 +224,13 @@ def append_codes(original, rows):
     paragraphs = [('Diagnosis and procedure codes', True)]
     bounded = any(row.get('export_route') == 'bounded_api_output' for row in rows)
     automated = any(row.get('review_execution') == 'agent_executed_synthetic' for row in rows)
-    if bounded and automated:
+    unverified = any(row.get('description_status') == 'withheld_unverified_provider_text' for row in rows)
+    if bounded and automated and unverified:
+        paragraphs.append(('Synthetic live API-output review. The code decisions were executed by an authorized '
+            'automated test agent using a synthetic clinician account; this is not human clinical review. CPT is '
+            'exported as an accepted code number with independently checked original-note evidence. Its provider '
+            'description and upstream terminology version remain unverified. Not for billing or real-patient use.', False))
+    elif bounded and automated:
         paragraphs.append(('Synthetic live API-output review. The code decisions were executed by an authorized '
             'automated test agent using a synthetic clinician account; this is not human clinical review. CPT is '
             'exported as an accepted code number with independently checked original-note evidence. Its defective '

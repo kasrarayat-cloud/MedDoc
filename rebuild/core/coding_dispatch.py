@@ -1,11 +1,26 @@
 """Select the coding engine independently of clinical generation configuration."""
 from django.conf import settings
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.utils.dateparse import parse_datetime
 from django.utils.timezone import is_aware
 
 
 SOURCE_CONTEXT_CONTRACT = 'original-note-context-v1'
+AUTHORIZED_SYNTHETIC_SCOPE = 'authorized_synthetic_clinicians'
+
+
+def authorized_synthetic_actor(actor, department_id):
+    """Reuse actual testing enrollment and clinical membership, never a patient list."""
+    from . import testing_authority
+    from .security import membership
+    try:
+        if not testing_authority.enabled():
+            return False
+        testing_authority.admit_actor(actor, department_id)
+        membership(actor, department_id, roles=['owner', 'clinician'])
+    except (ValidationError, PermissionDenied):
+        return False
+    return True
 
 
 def prospectively_admitted(encounter):
@@ -13,9 +28,16 @@ def prospectively_admitted(encounter):
     if not isinstance(encounter, Encounter) or encounter._state.adding:
         return False
     cutoff = parse_datetime(getattr(settings, 'CORTI_NEW_ENCOUNTERS_SINCE', '') or '')
-    return bool(getattr(settings, 'SYNTHETIC_ONLY', False) and cutoff and is_aware(cutoff)
-        and encounter.created_at and encounter.created_at >= cutoff
-        and str(encounter.created_by_id) in getattr(settings, 'CORTI_NEW_ENCOUNTER_ACTORS', ()))
+    prospective = bool(getattr(settings, 'SYNTHETIC_ONLY', False) and cutoff and is_aware(cutoff)
+        and encounter.created_at and encounter.created_at >= cutoff)
+    if not prospective:
+        return False
+    scope = getattr(settings, 'CORTI_NEW_ENCOUNTER_SCOPE', '')
+    if scope:
+        if scope != AUTHORIZED_SYNTHETIC_SCOPE:
+            raise ValidationError('Unknown prospective synthetic coding scope.')
+        return authorized_synthetic_actor(encounter.created_by, encounter.department_id)
+    return str(encounter.created_by_id) in getattr(settings, 'CORTI_NEW_ENCOUNTER_ACTORS', ())
 
 
 def source_context_enabled(encounter):
@@ -64,6 +86,9 @@ def configuration(actor, encounter):
     result = configure(actor, encounter)
     if result.get('provider') == 'corti' and source_context_enabled(encounter):
         result['source_context_contract'] = SOURCE_CONTEXT_CONTRACT
+        if getattr(settings, 'CORTI_NEW_ENCOUNTER_SCOPE', '') == AUTHORIZED_SYNTHETIC_SCOPE:
+            from .coding_recovery import CONTEXT_CONTRACT
+            result['context_review_contract'] = CONTEXT_CONTRACT
     return result
 
 

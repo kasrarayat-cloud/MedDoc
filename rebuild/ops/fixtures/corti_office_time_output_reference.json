@@ -1,0 +1,512 @@
+{
+  "contract": "synthetic-api-output-reference-v3",
+  "scope": {
+    "actor_policy": "authorized_synthetic_clinicians",
+    "encounters_created_since": "2026-10-17T00:00:00+00:00",
+    "service_date_from": "2026-10-01",
+    "service_date_until": "2026-12-31"
+  },
+  "preserved_references": [
+    {
+      "contract": "synthetic-api-output-reference-v2",
+      "scope": {
+        "actor_ids": [
+          "5f4d1a3d-eeb6-4207-b1df-4597dc696e82"
+        ],
+        "notes_sha256": [
+          "462613fe7482464d9cfdd73e0cf7dea28b532f7416e1e428aaa4a49143ef0f08"
+        ],
+        "service_dates": [
+          "2026-10-16"
+        ]
+      },
+      "permission": {
+        "status": "bounded_api_output",
+        "scope": "internal_fictional_review",
+        "terms_version": "4",
+        "sections": [
+          "2.6.1.1",
+          "2.6.2",
+          "2.7"
+        ],
+        "source_url": "https://www.corti.ai/legal/master-terms-of-service",
+        "record_sha256": "53326ec1f8ac968efb54a5d1385f56b4bf95991d4fd055e5727718f89e1d82ac",
+        "contradictory_restriction": null,
+        "account_specific_terms": "No separate account agreement found in available protected records; no accepted-version receipt fabricated.",
+        "conditions": "AI-generated output identified; explicit recorded reviewer confirmation required; credentials/API access protected; internal fictional evaluation only; no endorsement, catalogue import, real-patient or external end-customer activation.",
+        "campaign_review_control": "The user authorized agent-executed synthetic review on 2026-10-16. Such decisions must be recorded as automation and do not represent human clinical review. Original Taylor user-decision requirements remain unchanged."
+      },
+      "permission_summary": "Corti Master Terms v4 \u00a7\u00a72.6.1.1, 2.6.2 and 2.7 permit API-output incorporation under their stated conditions. This bounded internal fictional review exports a code number and original-note evidence; it grants no independent CPT catalogue rights.",
+      "source_summary": "The retained CMS October 2026 release lists the code as active on this service date. CMS May 2026 E/M guidance and AMA code-specific guidance support the documented time pathway for this fictional case. The upstream descriptor and CPT release remain unresolved.",
+      "source_reassessment_sha256": "5af0b487c0d712bf31c5052c7fd3fa79cbdd1f381363124a99ef6e4ad56f1c51",
+      "prior_case_assessment_sha256": "1c8206e14b5f01ee83b964f73197807365c0f56d1d0960db36d80864975218d6",
+      "entries": [
+        {
+          "system": "CPT",
+          "code": "99213",
+          "service_dates": [
+            "2026-10-16"
+          ],
+          "description_status": "withheld_defective_provider_text",
+          "criteria": {
+            "basis": "documented_total_time",
+            "minimum_minutes": 20,
+            "maximum_minutes": 29,
+            "setting": "outpatient_office",
+            "patient_status": "established",
+            "em_basis": "time"
+          },
+          "coverage": {
+            "status": "dated_code_presence_and_case_criteria",
+            "cms_code_status": "A",
+            "cms_release": "CMS RVU26D October 2026",
+            "cms_release_date": "2026-08-26",
+            "criteria_source": "CMS MLN006764 May 2026 and AMA code-specific guidance reviewed 2026-10-16",
+            "date_limit": "CMS October release covers the encounter date; AMA page does not state an annual CPT edition/effective interval. Upstream Corti terminology version remains unknown. This case assessment is not a full CPT release."
+          },
+          "sources": [
+            {
+              "role": "dated_code_presence",
+              "title": "CMS October 2026 physician fee schedule",
+              "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+              "edition": "RVU26D; released 2026-08-26; October 2026",
+              "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+              "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+            },
+            {
+              "role": "em_rules",
+              "title": "CMS E/M guidance",
+              "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+              "edition": "MLN006764 May 2026, pages 23\u201325",
+              "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+              "date_limit": "General office/outpatient selection criteria."
+            },
+            {
+              "role": "code_specific_time",
+              "title": "AMA code-specific time guidance",
+              "url": "https://www.ama-assn.org/practice-management/cpt/cpt-code-99213-established-patient-office-visit-20-29-minutes",
+              "edition": "Official page inspected 2026-10-16",
+              "evidence_sha256": "3cf46efad0897d55fc33fe3a46efb0aa41b5fdc8da0a34880cdb81a02ff39e07",
+              "date_limit": "Source reassessment provenance hash; public page has no annual CPT edition or explicit effective interval."
+            }
+          ]
+        }
+      ],
+      "review_execution": "agent_executed_synthetic"
+    }
+  ],
+  "permission": {
+    "status": "bounded_api_output",
+    "scope": "internal_fictional_review",
+    "terms_version": "4",
+    "sections": [
+      "2.6.1.1",
+      "2.6.2",
+      "2.7"
+    ],
+    "source_url": "https://www.corti.ai/legal/master-terms-of-service",
+    "record_sha256": "cac6ddd90a82e990474e62c9410f8161bda16bbb675c33c42864b1ca22849153",
+    "contradictory_restriction": null,
+    "account_specific_terms": "No separate account agreement found in available protected records; no accepted-version receipt fabricated.",
+    "conditions": "AI-generated output identified; explicit recorded reviewer confirmation required; credentials/API access protected; internal fictional evaluation only; no endorsement, catalogue import, real-patient or external end-customer activation.",
+    "campaign_review_control": "The current task authorizes agent-executed synthetic review. Decisions are retained as automation, never human clinical review. Standing testing authority admits only already enrolled synthetic clinical actors."
+  },
+  "permission_summary": "The reviewed Corti API-output terms permit this authenticated internal fictional evaluation with protected service access, AI-output identification and explicit recorded synthetic review. This assessment grants no independent CPT catalogue or real-patient use rights.",
+  "source_summary": "A bounded office-time source assessment checks the complete note, saved time confirmations and the selected code against dated CMS code presence and AMA office E/M time guidance. The provider description and upstream CPT edition remain unverified.",
+  "entries": [
+    {
+      "system": "CPT",
+      "code": "99202",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 15,
+        "maximum_minutes": 29,
+        "setting": "outpatient_office",
+        "patient_status": "new",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99203",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 30,
+        "maximum_minutes": 44,
+        "setting": "outpatient_office",
+        "patient_status": "new",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99204",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 45,
+        "maximum_minutes": 59,
+        "setting": "outpatient_office",
+        "patient_status": "new",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99205",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 60,
+        "maximum_minutes": 74,
+        "setting": "outpatient_office",
+        "patient_status": "new",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99212",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 10,
+        "maximum_minutes": 19,
+        "setting": "outpatient_office",
+        "patient_status": "established",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99213",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 20,
+        "maximum_minutes": 29,
+        "setting": "outpatient_office",
+        "patient_status": "established",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99214",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 30,
+        "maximum_minutes": 39,
+        "setting": "outpatient_office",
+        "patient_status": "established",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA code-specific time guidance",
+          "url": "https://www.ama-assn.org/practice-management/cpt/cpt-code-99214-established-patient-office-visit-30-39-minutes",
+          "edition": "Official page updated 2026-01-26; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    },
+    {
+      "system": "CPT",
+      "code": "99215",
+      "effective_from": "2026-10-01",
+      "effective_until": "2026-12-31",
+      "description_status": "withheld_unverified_provider_text",
+      "criteria": {
+        "basis": "documented_total_time",
+        "minimum_minutes": 40,
+        "maximum_minutes": 54,
+        "setting": "outpatient_office",
+        "patient_status": "established",
+        "em_basis": "time"
+      },
+      "coverage": {
+        "status": "dated_code_presence_and_case_criteria",
+        "cms_code_status": "A",
+        "cms_release": "CMS RVU26D October 2026",
+        "cms_release_date": "2026-08-26",
+        "criteria_source": "AMA office E/M time guidance, CMS MLN006764 May 2026; source assessment 2026-10-17",
+        "date_limit": "CMS October 2026 code presence is verified in both QP and non-QP files. AMA public guidance is not a complete 2026 CPT edition; provider descriptor/version stay unverified. Prolonged services, MDM selection, other procedures and quality measures are outside this bounded assessment."
+      },
+      "sources": [
+        {
+          "role": "dated_code_presence",
+          "title": "CMS October 2026 physician fee schedule",
+          "url": "https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d",
+          "edition": "RVU26D; released 2026-08-26; October 2026",
+          "evidence_sha256": "521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6",
+          "date_limit": "Dated CMS code presence for this service date; not a complete CPT edition."
+        },
+        {
+          "role": "em_rules",
+          "title": "CMS E/M guidance",
+          "url": "https://www.cms.gov/files/document/mln006764-evaluation-management-services.pdf",
+          "edition": "MLN006764 May 2026, pages 23\u201325",
+          "evidence_sha256": "2b2f327d70a599cfedad8b30c7112e66073ca9c60b9a3823c4a4224392f45c82",
+          "date_limit": "General office/outpatient selection criteria."
+        },
+        {
+          "role": "code_specific_time",
+          "title": "AMA office E/M time guidance",
+          "url": "https://www.ama-assn.org/system/files/2019-06/cpt-office-prolonged-svs-code-changes.pdf",
+          "edition": "Office/prolonged service changes, 2021 guidance, pages 15\u201317; inspected 2026-10-17",
+          "evidence_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6",
+          "date_limit": "Hash binds the retained source-assessment record, not unavailable raw PDF bytes (direct fetch returned 403). Official PDF inspected through web tool. This is bounded numeric guidance, not an annual CPT edition."
+        }
+      ]
+    }
+  ],
+  "review_execution": "agent_executed_synthetic",
+  "source_reassessment_sha256": "ed49622f7d8f9d31e9a6e5f5511906ef1e023c26bd23eb51d129230076688ec6"
+}

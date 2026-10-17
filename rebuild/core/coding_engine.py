@@ -177,6 +177,22 @@ def question(key, text, *, system='ICD-10-CM', blocking=False):
     return {'id': key, 'system': system, 'question': text, 'blocking': blocking}
 
 
+def source_explanation(notes, concept, candidate):
+    """Explain proven source/Index facts instead of unchecked model prose.
+
+    Retain the provider explanation in diagnostics. A default Index modifier
+    cannot turn an explicit denial in the complete note into undocumented data.
+    """
+    path = candidate.get('path', [])
+    result = 'Source: “' + concept['evidence'] + '” Verified Index route: ' + ' → '.join(path) + '.'
+    for qualifier in re.findall(r'\bwithout\s+([^()]+)', ' '.join(path), flags=re.I):
+        related = {**concept, 'term': qualifier.strip(), 'index_terms': [qualifier.strip()]}
+        for clause, _before, _after in mention_clauses(notes, related):
+            if NEGATION.search(clause) and clause not in result:
+                result += ' Additional source context: “' + clause + '”'
+    return result
+
+
 def evidence_span(notes, quote, *, limit=4000):
     if not isinstance(quote, str) or not quote or len(quote) > limit:
         raise ValidationError('Coding evidence is missing or exceeds the bounded source clause.')
@@ -996,7 +1012,8 @@ def generate(run):
             continue
         result['suggestions'].append({'id':concept['id'],'system':candidate['system'],'code':candidate['code'],
             'description':candidate['description'],'evidence':concept['evidence'],'evidence_span':evidence_span(notes,concept['evidence']),
-            'explanation':choice['explanation'],'index_entry_id':candidate['entry_id'],'index_path':candidate.get('path',[]),
+            'explanation':source_explanation(notes,concept,candidate),'provider_explanation':choice['explanation'],
+            'index_entry_id':candidate['entry_id'],'index_path':candidate.get('path',[]),
             'instructions':check.get('instructions',[]),'eligible':True,'concept':concept,
             'release_id':candidate.get('release_id',str(reference.release_id)),
             'release_version':candidate.get('release_version',reference.release.version)})
