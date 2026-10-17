@@ -105,7 +105,7 @@ def _icd_source(run, reference, proposal, selected_codes):
     lookup = engine.index_lookup(reference)
     notes = run.inputs['notes']
     contract = run.config.get('clinical_source_contract') if hasattr(run, 'config') else None
-    modern = contract == engine.SOURCE_CONTRACT
+    modern = contract in engine.SOURCE_CONTRACTS
     matching = [entry for entry in reference.index if entry.get('code') == proposal['code']
                 and not entry.get('requires_review')]
     for entry in matching:
@@ -134,7 +134,8 @@ def _icd_source(run, reference, proposal, selected_codes):
                     subtypes = engine.index_subtypes(reference, concept, source_contract=contract)
                     qualifiers = [item['qualifier'] for item in subtypes]
                     assertion = engine.assertion_concept(concept, subtypes)
-                    disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers)
+                    disposition, reason = engine.source_disposition(assertion, notes, qualifiers=qualifiers,
+                        source_contract=contract)
                     check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
                     errors = (engine.index_route_errors(entry, concept, lookup, code_description=description,
                                   source_contract=contract)
