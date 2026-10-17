@@ -603,7 +603,25 @@ def _stable_state_frame(text):
     return match if match and _literal_nominal_list(match['objects']) else None
 
 
-def _stable_state_destination(definition,objects, *, complete_objects=None):
+def _stable_state_topics(text):
+    """Complete coordinated nominal topics, keeping their defining modifiers."""
+    values=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',text,flags=re.I)
+    topics=[]
+    for value in values:
+        phrase=' '.join(value.casefold().split())
+        topic=re.sub(r'\s+(?:change|status|function)$','',phrase,flags=re.I)
+        if not _literal_nominal_phrase(topic):return None
+        topics.append({'phrase':phrase,'topic':topic})
+    return topics
+
+
+def _stable_state_topic_contains(source,topic):
+    """Whole nominal containment, without dropping a source modifier."""
+    return (source==topic['phrase'] or source==topic['topic']
+        or source.endswith(' '+topic['phrase']) or source.endswith(' '+topic['topic']))
+
+
+def _stable_state_destination(definition,objects, *, complete=False):
     """A complete positive requested topic, not object mention in a qualifier."""
     d=definition
     if (d.get('answer_mode')!='narrative' or d['value_type']!='text'
@@ -617,7 +635,7 @@ def _stable_state_destination(definition,objects, *, complete_objects=None):
         r'(?:\s*,?\s*including\s+(?:the\s+)?reason\s+for\s+[A-Za-z]+(?:\s+[A-Za-z]+){0,2}\s+evaluation)?',meaning,re.I)
     if hpi:return True
     topic=r'(?:symptoms?|findings?|state|change|status)'
-    listed=re.fullmatch(prefix+r'(?:[A-Za-z]+\s+)?symptoms?(?:\s+and\s+pertinent\s+negatives)?\s*\((?P<items>[^()]+)\)',meaning,re.I)
+    listed=re.fullmatch(prefix+r'(?:(?P<primary>.+?)\s+)?symptoms?(?:\s+and\s+pertinent\s+negatives)?\s*\((?P<items>[^()]+)\)',meaning,re.I)
     direct=re.fullmatch(prefix+r'(?P<items>.+?)\s+'+topic+r'(?:\s+and\s+current\s+state)?',meaning,re.I)
     inverse=re.fullmatch(prefix+topic+r'\s+(?:of|for)\s+(?P<items>.+)',meaning,re.I)
     match=listed or direct or inverse
@@ -625,19 +643,40 @@ def _stable_state_destination(definition,objects, *, complete_objects=None):
     items=match['items']
     # An explicitly requested change/status of a named source object remains
     # a positive topic; the whole list still needs complete nominal syntax.
-    nominal=re.sub(r'\b([A-Za-z]+)\s+(?:change|status|function)\b',r'\1',items,flags=re.I)
-    if not _literal_nominal_list(nominal):return False
-    terms=set(re.findall(r'[a-z]+',items.casefold()))
-    if complete_objects is not None and not listed:
-        # Relevance for omission detection is broader than permission to render
-        # a compound. Every coordinated source object must be requested by a
-        # specifically named topic; one overlapping object is insufficient.
-        groups=re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+',complete_objects,flags=re.I)
-        for group in groups:
-            nouns={word for word in re.findall(r'[a-z]+',group.casefold())
-                if not re.fullmatch(_NOMINAL_ADJECTIVE,word,re.I)}
-            if not nouns & terms:return False
-    return bool(objects & terms)
+    topics=_stable_state_topics(items)
+    source_topics=_stable_state_topics(objects)
+    if not topics or not source_topics:return False
+    # A requested noun phrase can cover a more qualified source phrase while
+    # all source modifiers remain in the answer. Sharing a noun does not make
+    # chest pain an abdominal-pain finding, or one coordinated object another.
+    # These are topic-relevance relations for a preserved whole literal, not
+    # equivalent assertions. Dysphagia concerns difficulty swallowing (NIDCD);
+    # dyspnea concerns difficult breathing (NCI). An unchanged function does
+    # not establish symptom absence, normality, or either diagnosis. Relations
+    # apply only to exact unmodified phrases on both sides.
+    supporting_topics={'dysphagia':'swallowing','dyspnea':'breathing'}
+    covered=[any(_stable_state_topic_contains(source['phrase'],topic)
+            or supporting_topics.get(topic['phrase'])==source['phrase']
+            for topic in topics) for source in source_topics]
+    if listed and listed['primary']:
+        primary=' '.join(listed['primary'].casefold().split())
+        # Deliberately bounded positive membership (NIDDK/MedlinePlus; NCI).
+        # A domain only restricts the explicit item list; it never excuses an
+        # uncovered source object. Unknown domains/qualifiers remain held.
+        domains={'gi':('swallowing','dysphagia','appetite','abdominal pain'),
+            'gastrointestinal':('swallowing','dysphagia','appetite','abdominal pain'),
+            'digestive':('swallowing','dysphagia','appetite','abdominal pain'),
+            'respiratory':('breathing','dyspnea')}
+        primary_topics=([{'phrase':v,'topic':v} for v in domains[primary]]
+            if primary in domains else _stable_state_topics(primary))
+        if not primary_topics:return False
+        primary_covered=[any(_stable_state_topic_contains(source['phrase'],topic)
+            or supporting_topics.get(topic['phrase'])==source['phrase']
+            for topic in primary_topics) for source in source_topics]
+        covered=[item and head for item,head in zip(covered,primary_covered)]
+    # Relevance for omission detection is broader than rendering permission.
+    # Parentheses do not exempt a compound from complete topic containment.
+    return all(covered) if complete else any(covered)
 
 
 def _stable_state_inventory(notes, definitions):
@@ -650,15 +689,11 @@ def _stable_state_inventory(notes, definitions):
         # that qualifies stability must not disappear from a completeness hold.
         match=re.match(r'(?P<objects>.+?)\s+(?:is|are|remains?|remain)\s+(?:unchanged|stable)\b',unit['quote'],re.I)
         if not match or not _literal_nominal_list(match['objects']):continue
-        objects=set(re.findall(r'[a-z]+',match['objects'].casefold()))-{'and','or','the'}
         for key,d in definitions.items():
-            if not _stable_state_destination(d,objects):continue
-            meaning=d['meaning'];terms=set(re.findall(r'[a-z]+',meaning.casefold()))
-            hpi=(bool(re.search(r'\b(?:history\s+of\s+present\s+illness|HPI)\b',meaning,re.I))
-                and context['units'][unit['start']]['section']=='history of present illness'
-                and not re.search(r'\b(?:only|excluding|except)\b',meaning,re.I))
-            explicit=(bool(objects & terms) and bool(re.search(r'\b(?:symptoms?|findings?|state|change|status)\b',meaning,re.I)))
-            if hpi or explicit:rows.append({'field_key':key,'kind':'stable_state','source':unit,'polarities':['affirmed','negated']})
+            if not _stable_state_destination(d,match['objects']):continue
+            hpi=bool(re.search(r'\b(?:history\s+of\s+present\s+illness|HPI)\b',d['meaning'],re.I))
+            if hpi and context['units'][unit['start']]['section']!='history of present illness':continue
+            rows.append({'field_key':key,'kind':'stable_state','source':unit,'polarities':['affirmed','negated']})
     return rows
 
 
@@ -2900,8 +2935,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 own=next(e for e in f['evidence'] if _inside(f['value_evidence'],[e]))
                 stable=_stable_state_frame(own['quote'])
                 if stable:
-                    objects=set(re.findall(r'[a-z]+',stable['objects'].casefold()))-{'and','or','the'}
-                    if (not _stable_state_destination(d,objects,complete_objects=stable['objects'])
+                    if (not _stable_state_destination(d,stable['objects'],complete=True)
                             or f['value_evidence']['quote'].strip().removesuffix('.')!=own['quote'].strip().removesuffix('.')):
                         reasons.append('A stability predicate must remain complete in a requested polarity-any narrative state; it cannot assert symptom absence or normality.')
                 shared=_shared_negative_structure(own)

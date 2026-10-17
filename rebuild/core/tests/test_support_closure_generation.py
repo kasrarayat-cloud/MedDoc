@@ -194,6 +194,132 @@ class SupportClosureGenerationTests(SimpleTestCase):
         self.assertEqual(answers['cell_17']['status'],'supported',answers['cell_17']['review_reasons'])
         self.assertFalse(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']))
 
+    def test_parenthesized_topics_do_not_admit_an_unrequested_compound_object(self):
+        for meaning in ('Documented symptoms (appetite).',
+                'Documented appetite symptoms (appetite).',
+                'Documented appetite symptoms (swallowing and appetite).',
+                'Documented symptoms (appetite and sleep).',
+                'Documented symptoms (appetite or sleep).',
+                'Documented symptoms (appetite, sleep).'):
+            definitions=deepcopy(self.definitions);definitions['cell_17']['meaning']=meaning
+            for selected in (['f8'],['f5']):
+                raw,proposal=self.prospective()
+                next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=selected
+                answers,calls=self.run_case(raw=raw,proposal=proposal,definitions=definitions)
+                with self.subTest(meaning=meaning,selected=selected):
+                    self.held(answers['cell_17'])
+                    self.assertTrue(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']))
+
+    def test_complete_nominal_topics_preserve_site_and_other_modifiers(self):
+        old='Swallowing and appetite are unchanged'
+        for source,meaning,supported,relevant in (
+                ('Mild chest pain and severe abdominal pain are unchanged','Documented symptoms (chest pain and abdominal pain).',True,True),
+                ('Mild chest pain and severe abdominal pain are unchanged','Documented chest pain symptoms.',False,True),
+                ('Abdominal pain is unchanged','Documented chest pain symptoms.',False,False),
+                ('Chest pain and appetite are unchanged','Documented symptoms (abdominal pain and appetite).',False,True),
+                ('Severe abdominal pain is unchanged','Documented abdominal pain symptoms.',True,True)):
+            notes,raw=self.changed(old,source,{'f8':source});_,proposal=self.prospective()
+            definitions=deepcopy(self.definitions);definitions['cell_17']['meaning']=meaning
+            next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+            answers,calls=self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)
+            with self.subTest(source=source,meaning=meaning):
+                if supported:
+                    self.assertEqual(answers['cell_17']['status'],'supported',answers['cell_17']['review_reasons'])
+                    self.assertEqual(answers['cell_17']['text'],source)
+                else:self.held(answers['cell_17'])
+                self.assertEqual(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']),relevant)
+
+    def test_primary_and_parenthetical_topics_both_constrain_every_source_object(self):
+        old='Swallowing and appetite are unchanged'
+        for source,meaning,supported,relevant in (
+                (old,'Documented renal symptoms (swallowing and appetite).',False,False),
+                (old,'Documented gastrointestinal symptoms (dysphagia and appetite).',True,True),
+                ('Breathing is unchanged','Documented respiratory symptoms (dyspnea).',True,True),
+                ('Dyspnea is unchanged','Documented respiratory symptoms (dyspnea).',True,True),
+                ('Dysphagia is unchanged','Documented GI symptoms (dysphagia).',True,True),
+                ('Breathing is unchanged','Documented digestive symptoms (dyspnea).',False,False),
+                ('Breathing is unchanged','Documented acute respiratory symptoms (dyspnea).',False,False),
+                ('Swallowing is unchanged','Documented respiratory symptoms (dysphagia).',False,False),
+                ('Breathing and swallowing are unchanged','Documented respiratory symptoms (dyspnea and dysphagia).',False,True),
+                ('Severe abdominal pain is unchanged','Documented GI symptoms (abdominal pain).',True,True),
+                ('Severe chest pain is unchanged','Documented GI symptoms (chest pain).',False,False),
+                ('Severe abdominal pain is unchanged','Documented chest pain symptoms (abdominal pain).',False,False),
+                ('Severe chest pain is unchanged','Documented chest pain symptoms (chest pain).',True,True)):
+            if source==old:notes=self.notes;raw,_=self.prospective()
+            else:notes,raw=self.changed(old,source,{'f8':source})
+            _,proposal=self.prospective();definitions=deepcopy(self.definitions)
+            definitions['cell_17']['meaning']=meaning
+            next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+            answers,calls=self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)
+            with self.subTest(source=source,meaning=meaning):
+                if supported:
+                    self.assertEqual(answers['cell_17']['status'],'supported',answers['cell_17']['review_reasons'])
+                    self.assertEqual(answers['cell_17']['text'],source)
+                else:self.held(answers['cell_17'])
+                self.assertEqual(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']),relevant)
+
+    def test_bounded_function_state_relevance_preserves_whole_literal_and_omission(self):
+        old='Swallowing and appetite are unchanged'
+        for source,meaning in (
+                ('Swallowing is unchanged','Documented dysphagia symptoms.'),
+                ('Breathing remains unchanged','Documented dyspnea symptoms.'),
+                ('Breathing and swallowing are unchanged','Documented symptoms (dyspnea and dysphagia).'),
+                ('Mild dyspnea remains unchanged','Documented dyspnea symptoms.'),
+                ('Regular breathing is unchanged','Documented breathing symptoms and current state.')):
+            notes,raw=self.changed(old,source,{'f8':source});definitions=deepcopy(self.definitions)
+            definitions['cell_17']['meaning']=meaning
+            for polarity in ('affirmed','negated'):
+                next(f for f in raw['facts'] if f['id']=='f8')['polarity']=polarity
+                _,proposal=self.prospective()
+                next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+                answers,calls=self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)
+                with self.subTest(source=source,meaning=meaning,polarity=polarity):
+                    self.assertEqual(answers['cell_17']['status'],'supported',answers['cell_17']['review_reasons'])
+                    self.assertEqual(answers['cell_17']['text'],source)
+                    self.assertTrue(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']))
+            next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f5']
+            self.held(self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)[0]['cell_17'])
+
+    def test_function_topic_relations_do_not_collapse_modifiers_or_assert_absence(self):
+        old='Swallowing and appetite are unchanged'
+        for source,meaning,relevant in (
+                ('Breathing is unchanged','Documented dysphagia symptoms.',False),
+                ('Swallowing is unchanged','Documented dyspnea symptoms.',False),
+                ('Breathing is unchanged','Documented acute dyspnea symptoms.',False),
+                ('Regular breathing is unchanged','Documented dyspnea symptoms.',False),
+                ('Swallowing function is unchanged','Documented dysphagia symptoms.',False),
+                ('Breathing is unchanged','Documented dyspnea change symptoms.',False),
+                ('Breathing and appetite are unchanged','Documented symptoms (dyspnea).',True),
+                ('Breathing is unchanged','Documented absence of dyspnea symptoms.',False)):
+            notes,raw=self.changed(old,source,{'f8':source});_,proposal=self.prospective()
+            definitions=deepcopy(self.definitions);definitions['cell_17']['meaning']=meaning
+            next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+            answers,calls=self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)
+            with self.subTest(source=source,meaning=meaning):
+                self.held(answers['cell_17'])
+                self.assertEqual(any(r['field_key']=='cell_17' for r in calls[0][2]['stable_state_inventory']),relevant)
+        source='Breathing is unchanged';notes,raw=self.changed(old,source,{'f8':source});_,proposal=self.prospective()
+        next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+        for option,value in (('answer_mode','atomic'),('polarity','negative'),('polarity','positive')):
+            definitions=deepcopy(self.definitions);definitions['cell_17']['meaning']='Documented dyspnea symptoms.'
+            if option=='polarity':definitions['cell_17']['scope'][option]=value
+            else:definitions['cell_17'][option]=value
+            self.held(self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)[0]['cell_17'])
+
+    def test_function_topic_relation_never_repairs_a_qualified_or_clipped_source(self):
+        old='Swallowing and appetite are unchanged'
+        for source,value,polarity in (
+                ('Breathing is unchanged except during exertion','Breathing is unchanged','affirmed'),
+                ('Breathing is not unchanged','Breathing is not unchanged','negated'),
+                ('Breathing may be unchanged','Breathing may be unchanged','uncertain'),
+                ('Breathing and swallowing are unchanged','swallowing are unchanged','negated')):
+            notes,raw=self.changed(old,source,{'f8':value});_,proposal=self.prospective()
+            next(f for f in raw['facts'] if f['id']=='f8')['polarity']=polarity
+            definitions=deepcopy(self.definitions);definitions['cell_17']['meaning']='Documented symptoms (dyspnea and dysphagia).'
+            next(r for r in proposal['fields'] if r['key']=='cell_17')['fact_ids']=['f8']
+            with self.subTest(source=source,value=value):
+                self.held(self.run_case(notes=notes,raw=raw,proposal=proposal,definitions=definitions)[0]['cell_17'])
+
     def test_shared_frequency_is_retained_and_clipped_first_object_stays_held(self):
         old='She has never smoked and does not use alcohol or recreational drugs'
         for qualifier in ('every weekend','more than once a month','currently','often'):
