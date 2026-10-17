@@ -20,7 +20,7 @@ GENERATION_MAX_OUTPUT_TOKENS=16000
 GENERATION_TIMEOUT_SECONDS=120
 MAX_CALLS=5
 DEFINITION_MAX_OUTPUT_TOKENS=16000
-STAGES={'extractor':1,'assigner':2,'checker':2,'definition_proposer':1,'definition_checker':1}
+STAGES={'extractor':1,'assigner':2,'checker':2,'definition_proposer':1,'definition_checker':1,'revalidation_checker':1}
 
 class StageFailure(ValidationError):
     """A known result failed processing; its provider accounting remains retained."""
@@ -76,9 +76,26 @@ def definition_pipeline_config(config):
             'definition_maximum_cost':str(quote(config,output_tokens=DEFINITION_MAX_OUTPUT_TOKENS)*2)}
 
 
+def call_limit(config):
+    if 'semantic_revalidation_contract' not in config:
+        return MAX_CALLS
+    from .semantic_revalidation import CONTRACT
+    if config['semantic_revalidation_contract'] != CONTRACT:
+        raise StageNotSent('Unknown retained revalidation contract; nothing was sent.')
+    return 1
+
+
+def revalidation_config(config):
+    from .semantic_revalidation import CONTRACT
+    prospective=pipeline_config(config)
+    prospective.update(semantic_revalidation_contract=CONTRACT,semantic_max_calls=1)
+    prospective['semantic_maximum_cost']=str(maximum_cost(prospective))
+    return prospective
+
+
 def maximum_cost(config):
     output_limit,_=generation_limits(config)
-    return quote(config,output_tokens=output_limit)*MAX_CALLS
+    return quote(config,output_tokens=output_limit)*call_limit(config)
 
 
 def retain(value):
@@ -176,6 +193,15 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         or type(timeout_seconds) not in (int,float) or not 0<timeout_seconds<=120):
         raise StageNotSent('The stage exceeds its output or time limit.')
     parent,actor,department=parent_context(job,definition_preparation,config)
+    if job is not None:
+        limit=call_limit(config)
+        if limit==1:
+            if stage!='revalidation_checker' or attempt!=1:
+                raise StageNotSent('Retained revalidation permits only its one independent checker.')
+            from .semantic_revalidation import validate_stage_parent
+            validate_stage_parent(job,payload,schema,instructions)
+        elif stage=='revalidation_checker':
+            raise StageNotSent('This checker requires an explicit retained revalidation contract.')
     schema_json=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
@@ -197,8 +223,8 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         previous=AIStageReceipt.objects.filter(**relation)
         if previous.filter(stage=stage,attempt=attempt).exists():raise StageNotSent('This stage already has a retained attempt; it cannot be resent.')
         if previous.exclude(state='succeeded').exists():raise StageUnknown('An earlier stage remains unresolved; no new request was sent.')
-        if previous.count()>=(MAX_CALLS if job is not None else 2):raise StageNotSent('The bounded workflow has no further provider requests.')
-        if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=MAX_CALLS or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=output_limit):
+        if previous.count()>=(call_limit(config) if job is not None else 2):raise StageNotSent('The bounded workflow has no further provider requests.')
+        if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=call_limit(config) or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=output_limit):
             raise StageNotSent('The immutable generation quote does not cover this workflow.')
         if job is not None:
             if Decimal(config.get('semantic_maximum_cost','-1'))!=maximum_cost(config):raise StageNotSent('The pipeline quote differs from its authorized configuration.')
@@ -300,10 +326,10 @@ def aggregate(job):
 
 def stage_progress(job):
     labels={'extractor':'Extracting source facts','assigner':'Assigning facts to approved fields',
-            'checker':'Independently checking answers'}
+            'checker':'Independently checking answers','revalidation_checker':'Independently rechecking retained answers'}
     rows=list(job.ai_stage_receipts.order_by('created_at','pk'))
     return [{'stage':row.stage,'label':labels[row.stage], 'attempt':row.attempt,
-        'state':row.state,'maximum_calls':MAX_CALLS,'completed_calls':sum(r.state=='succeeded' for r in rows)}
+        'state':row.state,'maximum_calls':call_limit(job.config),'completed_calls':sum(r.state=='succeeded' for r in rows)}
         for row in rows if row.stage in labels and row.state in ('reserved','sending','received','succeeded','failed','unknown')]
 
 
@@ -313,6 +339,8 @@ def assert_installed_guards():
     from django.db import connection
     module=importlib.import_module('core.migrations.0026_semantic_stage_receipts')
     bodies=dict(re.findall(r'CREATE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',module.SEMANTIC_SQL,re.S))
+    recovery=importlib.import_module('core.migrations.0030_retained_semantic_revalidation')
+    bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',recovery.REVALIDATION_SQL,re.S)))
     triggers={name:(f'CREATE TRIGGER {name} BEFORE {events} ON public.{table} FOR EACH ROW EXECUTE FUNCTION {function}()')
         for name,table,events,function in (
             ('definition_preparation_guard','core_templatedefinitionpreparation','INSERT OR DELETE OR UPDATE','quillmd_definition_preparation_guard'),

@@ -233,6 +233,9 @@ def assert_current(run, encounter):
         raise ValidationError('The saved documentation or coding context changed. Review the current coding result.')
     if run.state not in ('succeeded', 'needs_detail'):
         raise ValidationError('Wait for a completed coding result before reviewing selections.')
+    if run.config.get('mode') == 'retained_live':
+        from .coding_recovery import source_for
+        source_for(run)
 
 
 @transaction.atomic
@@ -380,6 +383,7 @@ def snapshot(encounter, user):
             'releases': releases, 'error': latest.error if latest else '',
             'corti': bool(latest and latest.config.get('provider') == 'corti'),
             'replay': bool(latest and latest.config.get('mode') == 'replay'),
+            'retained_prediction': result.get('retained_prediction'),
             'diagnostics': result.get('diagnostics_summary', {})}
     view['context_derived'] = bool(view['corti'] and context['setting'] != 'unknown'
         and not CodingContext.objects.filter(encounter=e).exists())

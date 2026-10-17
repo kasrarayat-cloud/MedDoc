@@ -124,3 +124,6 @@ LOGGING['filters'] = {'account_csrf_redaction': {'()': 'core.preview_logging.Acc
 LOGGING['loggers']['django.security.csrf'] = {'handlers': ['console'], 'level': 'WARNING', 'propagate': False, 'filters': ['account_csrf_redaction']}
 
 SECURE_HSTS_SECONDS=31536000 if SESSION_COOKIE_SECURE else 0
+
+# Exact original jobs admitted to the synthetic retained-facts recovery.
+SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS=tuple(x.strip() for x in os.getenv('QUILLMD_SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS','').split(',') if x.strip())

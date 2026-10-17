@@ -79,17 +79,21 @@ def live_assessment(encounter, run):
          and hashlib.sha256(encounter.notes.encode()).hexdigest() in bounded.get('notes_sha256', [])
          and encounter.service_date.isoformat() in bounded.get('service_dates', []),
          'This actor, source note or service date is outside the authorized synthetic assessment.')
-    need(run.config.get('provider') == 'corti' and run.config.get('mode') == 'live'
+    need(run.config.get('provider') == 'corti' and run.config.get('mode') in ('live', 'retained_live')
          and run.result.get('replay') is False and not run.result.get('global_blockers')
          and run.state in ('succeeded', 'needs_detail') and encounter.status == 'finalized',
          'Only a finalized supported synthetic direct-prediction result is covered.')
-    need(len(run.requests) == 1, 'The synthetic result must have one retained prediction receipt.')
-    receipt = run.requests[0]
+    source_run = run
+    if run.config.get('mode') == 'retained_live':
+        from .coding_recovery import source_for
+        source_run = source_for(run)
+    need(len(source_run.requests) == 1, 'The synthetic result must have one retained prediction receipt.')
+    receipt = source_run.requests[0]
     request = corti_prediction.payload(run)
     envelope = receipt.get('envelope') or {}
     need(type(envelope) is dict and envelope.get('protocol') == corti_prediction.PROTOCOL
-         and envelope.get('identity') == corti_prediction.receipts._identity(run)
-         and envelope.get('config') == run.config and envelope.get('payload') == request
+         and envelope.get('identity') == corti_prediction.receipts._identity(source_run)
+         and envelope.get('config') == source_run.config and envelope.get('payload') == request
          and receipt.get('request_sha256') == hashlib.sha256(corti_prediction.receipts.encode(request)).hexdigest()
          and receipt.get('stage') == corti_prediction.STAGE and receipt.get('attempt') == 1
          and receipt.get('provider') == 'corti',
@@ -175,7 +179,7 @@ def reviewed(encounter, run, base_decision=None):
     """Validate every binding again on display, decision and download."""
     need(run is not None and run.encounter_id == encounter.pk, 'No retained result belongs to this encounter.')
     service.assert_current(run, encounter)
-    live = run.config.get('mode') == 'live'
+    live = run.config.get('mode') in ('live', 'retained_live')
     a = live_assessment(encounter, run) if live else assessment()
     scope = a.get('scope', {})
     need(scope == {'encounter_id': str(encounter.pk), 'patient_id': str(encounter.patient_id),
@@ -189,7 +193,11 @@ def reviewed(encounter, run, base_decision=None):
         need(run.config.get('provider') == 'corti' and run.config.get('mode') == 'replay'
              and run.result.get('replay') is True and not run.result.get('global_blockers')
              and encounter.status == 'finalized', 'Only the finalized, supported synthetic replay is covered.')
-    need(len(run.requests) == 1 and run.requests[0].get('response_sha256') == a.get('response_sha256'),
+    source_run = run
+    if run.config.get('mode') == 'retained_live':
+        from .coding_recovery import source_for
+        source_run = source_for(run)
+    need(len(source_run.requests) == 1 and source_run.requests[0].get('response_sha256') == a.get('response_sha256'),
          'The retained response does not match the assessed output.')
     rows = [r for r in run.result.get('suggestions', []) if r.get('id') == a.get('identifier')]
     need(len(rows) == 1, 'The assessed selected output is missing or ambiguous.')
@@ -269,8 +277,10 @@ def reviewed(encounter, run, base_decision=None):
     if live:
         review.update(reference_digest=a['reference_digest'], authorized_actor_ids=a['authorized_actor_ids'],
             evidence_origin=a['evidence_origin'], provider_evidence_spans=provider_spans,
-            provider_citation_adequacy=a['provider_citation_adequacy'], provider_mode='live',
+            provider_citation_adequacy=a['provider_citation_adequacy'], provider_mode=run.config['mode'],
             review_execution=a['review_execution'])
+        if run.config.get('mode') == 'retained_live':
+            review['retained_prediction'] = copy.deepcopy(run.config['retained_prediction'])
     return a, review, base
 
 
