@@ -5,6 +5,41 @@ Medical vocabulary is not an ownership test. Foreign people, quoted material,
 other encounters and unresolved source attribution retain their own scope.
 """
 import re
+from datetime import datetime
+
+SOURCE_GOVERNANCE_PROFILE = 'source-governance-v2'
+
+
+def _profile(profile):
+    if profile not in (None, SOURCE_GOVERNANCE_PROFILE):
+        raise ValueError('Unknown clinical source-governance profile.')
+    return profile == SOURCE_GOVERNANCE_PROFILE
+
+
+def source_date(value):
+    """Exact documented calendar dates; no inferred encounter date."""
+    for format in ('%d %B %Y', '%B %d, %Y', '%Y-%m-%d'):
+        try:
+            return datetime.strptime(value.strip(), format).date().isoformat()
+        except ValueError:
+            pass
+    return None
+
+
+def conditional_follow_up(text):
+    """A complete follow-up instruction with a retained safety-net condition.
+
+    This is an instruction, not a hypothetical assertion about current disease.
+    Unparsed tails, another subject or a qualified report do not fit the frame.
+    """
+    noun = r'(?:[A-Za-z-]+(?:al|ic|ous|ive|ed|en)\s+){0,2}[A-Za-z][A-Za-z-]*'
+    pattern = (r'(?:follow-up|followup|review)\s+is\s+planned\s+after\s+(?:the\s+)?'+noun
+        +r'\s+to\s+(?:discuss|review)\s+(?:its|the)\s+'+noun
+        +r',\s+with\s+earlier\s+contact\s+if\s+'+noun
+        +r'\s+(?:worsen|worsens|persist|persists|recur|recurs|continue|continues)\s*\.?')
+    return bool(re.fullmatch(pattern,text.strip(),re.I)
+        and not re.search(r'\b(?:'+PERSON+r'|not|never|unless|except|reported|unverified|uncertain|'
+            r'possibly|maybe|yesterday|tomorrow|previous|prior|hypothetical)\b',text,re.I))
 
 
 PERSON = (r'(?:(?:another|other)\s+patient|family(?:\s+(?:history|member))?|'
@@ -169,7 +204,40 @@ def _retracted_clause_domains(text, established=()):
     return domains if domains.intersection(established) else set()
 
 
-def source_context(notes, units=None):
+def _whole_account_governance(text):
+    """Positioned whole-account references, with complete integrity permission.
+
+    Detection is broader than the recognized predicates: an unverified or
+    unknown qualification of the clinical account cannot be silently ignored.
+    This reader is prospective only; ordinary medical statements do not match
+    its explicit account noun and scope modifier.
+    """
+    direction_word=r'(?:above|preceding|foregoing|following|below)'
+    modifier=r'(?:'+direction_word+r'|entire|whole|current|clinical|medical|documented)'
+    quantifier=r'(?:(?:all|none|some|any|each|every)(?:\s+of)?\s+)?'
+    article=r'(?:(?:the|this|these|those|that)\s+)?'
+    account=(quantifier+article+r'(?:'+modifier+r'\s+)+'
+        r'(?:statements?|assertions?|account|documentation|record|note|text|material|findings)'
+        r'(?:\s+'+direction_word+r')?')
+    universal=r'(?:everything|anything|nothing)\s+(?:(?:documented|recorded|written|stated)\s+)?'+direction_word
+    reference=re.search(r'\b(?:'+account+'|'+universal+r')\b',text,re.I)
+    if not reference:return None
+    scope=_account_preamble(text[:reference.start()])
+    if not scope['current_owned']:return None
+    before,after=text[:reference.start()],text[reference.end():]
+    # The whole clause must affirm integrity. Negating an invalidation or an
+    # imperative does not retract the record; unknown outer predicates do.
+    positive_subject=not re.match(r'(?:none|some|any|nothing|anything)\b',reference[0],re.I)
+    integrity=(positive_subject and not scope['qualified'] and (
+        re.fullmatch(r'\s*do\s+not\s+(?:disregard|ignore)\s+',before,re.I) and re.fullmatch(r'\s*\.?',after)
+        or not before.strip() and re.fullmatch(r'\s+(?:is|are|was|were)\s+(?:not\s+(?:false|unverified|wrong|incorrect|invalid|erroneous|retracted|withdrawn)|true|verified|correct|valid|accurate)\s*\.?',after,re.I)))
+    direction=('after' if re.search(r'\b(?:following|below)\b',reference[0],re.I)
+        else 'before' if re.search(r'\b(?:above|preceding|foregoing)\b',reference[0],re.I) else 'all')
+    return {'direction':direction,'integrity':bool(integrity)}
+
+
+def source_context(notes, units=None, *, profile=None):
+    modern = _profile(profile)
     if units is None:
         from .generation import source_units
         units, _ = source_units(notes, [])
@@ -211,9 +279,25 @@ def source_context(notes, units=None):
     initial = next(iter(unique), None) if len(unique) == 1 else None
     owner, encounter_time, section = 'ambiguous', 'current', None
     rows, retracted, established = {}, [], set()
+    integrity_units=[]
+    separate_governance_units=[]
+    first_identity=min((start for start,event in events.items() if event[0]=='patient'),default=0)
     for unit in units:
         text, start = unit['quote'].strip(), unit['start']
         event = events.get(start)
+        if modern and (owner=='foreign' or encounter_time!='current') and _whole_account_governance(text):
+            # A known other-person/encounter section owns its own directive.
+            # Subsequent current-source resets must not inherit its denial.
+            separate_governance_units.append(start)
+        if modern and encounter_time=='current' and (owner=='patient'
+                or owner=='ambiguous' and start<first_identity and initial is not None):
+            reference=_whole_account_governance(text)
+            if reference and reference['integrity']:
+                integrity_units.append(start)
+            elif reference:
+                direction=reference['direction']
+                retracted.append(({'all'},unit['end'] if direction=='after' else 0,
+                    start if direction=='before' else None))
         if owner=='patient' and encounter_time=='current':
             for clause in account_clauses(text):
                 domains=_retracted_clause_domains(clause,established)
@@ -235,7 +319,7 @@ def source_context(notes, units=None):
         if heading: section = heading[1].casefold()
         row_issues = list(issues)
         if (re.search(r'[“”"]|\b(?:suppose|imagine|hypothetical)\b', text, re.I)
-                or re.search(r'\bif\b',text,re.I) and literal_kind(text,section)!='conditional_plan'):
+                or re.search(r'\bif\b',text,re.I) and literal_kind(text,section,profile=profile) not in ('conditional_plan','conditional_follow_up')):
             row_issues.append('Quoted or hypothetical source is not a current patient assertion.')
         if re.match(r'\s*(?:his|her|their|the\s+patient[\x27’]s)\s+'+PERSON+r'\b', text, re.I):
             row_issues.append('This statement introduces a different person.')
@@ -248,7 +332,7 @@ def source_context(notes, units=None):
             'section': section, 'issues': row_issues}
         if owner=='patient' and encounter_time=='current' and not row_issues and not heading:
             if section in ('assessment','impression'):established.add('assessment')
-            if time_kind(text):established.add('time')
+            if time_kind(text,profile=profile):established.add('time')
     for unit in units:
         row=rows[unit['start']]
         if row['subject']!='patient' or row['section_timing']!='current':continue
@@ -263,8 +347,18 @@ def source_context(notes, units=None):
     clinicians = [clinician for clinician in clinicians
         if (row := rows[clinician['source']['start']])['subject'] == 'patient'
         and row['section_timing'] == 'current' and not row['issues']]
-    return {'patient_name': identities[0] if len(unique) == 1 else None,
+    result = {'patient_name': identities[0] if len(unique) == 1 else None,
         'clinicians': clinicians, 'units': rows, 'issues': issues}
+    if modern:
+        dates=[source_date(match[1]) for unit in units
+            if (match:=re.fullmatch(r'\s*Date\s+of\s+service\s*:\s*(.+?)\s*\.?',unit['quote'],re.I))
+            and owned_current(result,unit)]
+        result.update(profile=profile,service_date=dates[0] if len(dates)==1 else None,
+            integrity_units=integrity_units,separate_governance_units=separate_governance_units,
+            time_heading_units=[unit['start'] for unit in units
+                if events.get(unit['start'],(None,))[0]=='time'
+                and ':' not in unit['quote'].rstrip(':. ')])
+    return result
 
 
 def owned_current(context, unit, *, historical_support=False):
@@ -274,9 +368,11 @@ def owned_current(context, unit, *, historical_support=False):
         and (historical_support or row['timing'] == 'current'))
 
 
-def literal_kind(text, section=None):
+def literal_kind(text, section=None, *, profile=None):
     """Complete source predicates, with no disease/drug/test allowlist."""
     value = text.strip().removesuffix('.').strip()
+    if _profile(profile) and section=='plan' and conditional_follow_up(text):
+        return 'conditional_follow_up'
     if section in ('assessment', 'impression'):
         if re.fullmatch(r'(?:the\s+)?(?:cause|etiology)(?:\s+of\s+(?:these|the)\s+symptoms)?\s+(?:remains?|is)\s+(?:uncertain|unknown|unclear)', value, re.I):
             return 'uncertainty'
@@ -336,7 +432,8 @@ def requirement_kind(text, section=None):
     return None
 
 
-def time_kind(text):
+def time_kind(text, *, profile=None):
+    modern = _profile(profile)
     value = text.strip().removesuffix('.').strip()
     if re.fullmatch(r'(?:office\s+)?(?:E\s*/?\s*M|evaluation\s+and\s+management)\s+(?:selection|level)\s+(?:is|was)\s+based\s+on\s+(?:total\s+)?(?:physician|clinician)\s+time(?:\s+on\s+the\s+(?:date\s+of\s+service|encounter\s+date))?', value, re.I):
         return 'basis'
@@ -345,6 +442,12 @@ def time_kind(text):
         r'(?P<total>'+NUMBER+r')\s+minutes(?:\s+on\s+(?:the\s+(?:encounter\s+date|date\s+of\s+service)|today))?'
         r'(?P<activities>\s*[:,;]\s*(?:including\s+)?[^\r\n]+)', value, re.I)
     if total: return 'total'
+    if modern and re.fullmatch(r'(?:Dr\.?\s+|Doctor\s+)[A-Za-z][A-Za-z .\x27’\-]{0,80}?\s+(?:personally\s+)?spent\s+'
+            +NUMBER+r'\s+minutes\s+on\s+(?:\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{1,2},\s+\d{4}|\d{4}-\d{2}-\d{2})'
+            r'\s*[:,;]\s*[^\r\n]+',value,re.I):
+        return 'total'
+    if modern and re.fullmatch(r'(?:these|those)\s+are\s+all\s+(?:physician|clinician)\s+activities\s+on\s+the\s+(?:encounter\s+date|date\s+of\s+service)',value,re.I):
+        return 'qualification'
     if re.fullmatch(r'(?:this\s+total|the\s+total|the\s+'+NUMBER+r'\s+minutes|they|(?:these|those)\s+minutes)\s+(?:also\s+)?(?:excludes?|does\s+not\s+(?:include|count))\s+[^\r\n]+', value, re.I):
         return 'exclusion'
     if re.fullmatch(r'(?:time\s+[^\r\n]+\s+(?:is|was)\s+excluded\s+from\s+(?:this|the)\s+total|I\s+excluded\s+[^\r\n]+\s+from\s+(?:this|the)\s+total)',value,re.I):
@@ -367,8 +470,10 @@ def _number(text):
     return sum(words[p] for p in parts) if parts and all(p in words for p in parts) else None
 
 
-def time_blocks(notes, units, context):
+def time_blocks(notes, units, context, *, profile=None):
     """Only adjacent source-owned time statements share a deictic total."""
+    profile=profile or context.get('profile')
+    modern=_profile(profile)
     result, group = [], []
     def finish():
         kinds = [kind for _,kind in group]
@@ -378,6 +483,10 @@ def time_blocks(notes, units, context):
         total_match = re.search(r'('+NUMBER+r')\s+minutes\b', totals[0]['quote'], re.I)
         total_value = _number(total_match[1]) if total_match else None
         valid = len(totals)==1 and total_value is not None and source_clinician_bound(context,totals[0]['quote'])
+        if modern:
+            dated=re.search(r'\bminutes\s+on\s+(.+?)(?=\s*[:;]|,\s*(?!\d{4}\b))',totals[0]['quote'],re.I)
+            if dated and dated[1].casefold() not in ('today','the encounter date','the date of service'):
+                valid=valid and source_date(dated[1]) is not None and source_date(dated[1])==context.get('service_date')
         total_seen = False
         for unit, kind in group:
             if kind == 'total': total_seen = True
@@ -387,7 +496,7 @@ def time_blocks(notes, units, context):
     previous = None
     for unit in units:
         owned=owned_current(context,unit)
-        kind = time_kind(unit['quote']) if owned else None
+        kind = time_kind(unit['quote'],profile=profile) if owned else None
         gap = notes[previous['end']:unit['start']] if previous else ''
         if (owned and not kind and any(k=='total' for _,k in group)
                 and not re.search(r'\r?\n\s*\r?\n',gap)
