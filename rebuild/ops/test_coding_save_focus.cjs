@@ -53,13 +53,18 @@ async function choose(page) {
   await page.locator('#source-action').selectOption('accept');
   await page.locator('#source-candidate').check();
 }
-async function sourcePost(page, count = 1) {
+async function sourcePost(page, count = 1, retainNativeFocus = false) {
   await choose(page);
   await page.locator('#coding-source-approve').focus();
   await page.keyboard.press('Enter');
   await page.waitForFunction(n => window.requests.filter(r => r.method === 'POST').length === n, count);
   assert.equal(await page.locator('#coding-source-approve').isDisabled(), true);
-  assert.equal(await page.evaluate(() => document.activeElement.tagName), 'BODY');
+  // Chromium releases differ on whether disabling a focused button blurs it.
+  // Exercise the lost-focus condition explicitly instead of assuming a version.
+  if (!retainNativeFocus) {
+    await page.evaluate(() => document.activeElement.blur());
+    assert.equal(await page.evaluate(() => document.activeElement.tagName), 'BODY');
+  }
 }
 async function reply(page, status, version, options = {}, error = '') {
   await page.evaluate(({status, version, html, error}) => window.requests.find(r => !r.settled).finish(status, {encounter_id:'fixture', version, html, error}), {status, version, html:panel(version, options), error});
@@ -71,6 +76,13 @@ async function poll(page) {
 (async () => {
   browser = await chromium.launch({headless:true});
   try {
+    await fixture(async page => {
+      await sourcePost(page, 1, true);
+      await reply(page, 200, 'v2', {retained:true});
+      await focused(page, 'coding-source-approve');
+      assert.equal(await page.locator('#coding-source-approve').isDisabled(), false);
+      controls.push('native retained or lost disabled-button focus restores the usable submitter');
+    });
     await fixture(async page => {
       await sourcePost(page);
       await reply(page, 200, 'v2', {complete:true});
