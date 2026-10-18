@@ -9,6 +9,7 @@
   if (statusURL.origin !== location.origin) return;
   const baselines = new WeakMap();
   let timer, pollController, polling = false, posting = false, uncertain = false, staged = null, stopped = false;
+  let pendingFocusID = '', pendingFocusFallbackID = '';
   let epoch = 0, failures = 0;
   const value = form => JSON.stringify([...form.elements].filter(el => el.name && el.name !== 'csrfmiddlewaretoken' && !['submit', 'button'].includes(el.type) && (!['checkbox', 'radio'].includes(el.type) || el.checked)).map(el => [el.name, el.value]));
   const dirty = () => [...panel.querySelectorAll('[data-coding-form]')].filter(f => baselines.get(f) !== value(f));
@@ -17,11 +18,32 @@
     el.textContent = message; el.hidden = !message;
     if (message) el.focus();
   };
+  const sourceReviewError = form => {
+    let chosen = 0;
+    for (const row of form.querySelectorAll('[data-source-row]')) {
+      const action = row.querySelector('[data-source-action]');
+      if (!action) continue; // Previously approved outcomes are read-only.
+      const candidates = [...row.querySelectorAll('[data-source-candidate]')].filter(control => control.checked);
+      const reason = row.querySelector('[data-source-reason]')?.value.trim() || '';
+      if (!action.value) {
+        if (candidates.length || reason) return 'Choose a review outcome for each edited condition, or undo its changes.';
+        continue;
+      }
+      if (!['accept', 'no_code', 'needs_clarification'].includes(action.value)) return 'Choose a valid source review outcome.';
+      if (action.value === 'accept' && (candidates.length !== 1 || candidates[0].disabled)) return 'Select an eligible source-derived code for every condition you choose to approve.';
+      if (action.value !== 'accept' && candidates.length) return 'Clear the code selection before recording a no-code or clarification outcome.';
+      if (action.value !== 'accept' && !reason) return 'Enter a reason for every no-code or clarification outcome.';
+      chosen++;
+    }
+    return chosen ? '' : 'Choose at least one source review outcome before approving.';
+  };
   const updateControls = () => {
     const edited = dirty().length > 0;
     panel.querySelectorAll('[data-coding-form] button[type="submit"]').forEach(button => {
-      const approval = button.closest('[data-coding-form]').dataset.codingForm === 'approval';
-      button.disabled = button.dataset.serverDisabled === 'true' || posting || uncertain || Boolean(staged) || (approval && edited);
+      const form = button.closest('[data-coding-form]');
+      const approval = form.dataset.codingForm === 'approval';
+      const otherEdits = form.dataset.codingForm === 'source-review' && dirty().some(other => other !== form);
+      button.disabled = button.dataset.serverDisabled === 'true' || posting || uncertain || Boolean(staged) || (approval && edited) || otherEdits;
     });
     panel.querySelectorAll('[data-coding-form] input, [data-coding-form] select, [data-coding-form] textarea').forEach(control => { control.disabled = posting || control.dataset.serverDisabled === 'true'; });
     panel.querySelectorAll('[data-coding-undo]').forEach(button => { button.hidden = !dirty().includes(button.closest('form')); });
@@ -30,13 +52,19 @@
     panel.querySelectorAll('[data-export-with-codes]').forEach(link => {
       link.setAttribute('aria-disabled', String(edited || posting || uncertain || Boolean(staged)));
     });
+    if (pendingFocusID && !posting) {
+      const original = document.getElementById(pendingFocusID);
+      const target = original && panel.contains(original) ? original : document.getElementById(pendingFocusFallbackID);
+      if (target && panel.contains(target)) target.focus({preventScroll:true});
+      pendingFocusID = ''; pendingFocusFallbackID = '';
+    }
   };
   const bind = () => {
     panel.querySelectorAll('[data-coding-form]').forEach(form => {
       baselines.set(form, value(form));
       form.querySelectorAll('input, select, textarea').forEach(control => { control.dataset.serverDisabled = String(control.disabled); });
       form.querySelectorAll('button[type="submit"]').forEach(button => { button.dataset.serverDisabled = String(button.disabled); });
-      if (['context', 'selections', 'output-decision'].includes(form.dataset.codingForm)) {
+      if (['context', 'selections', 'output-decision', 'source-review'].includes(form.dataset.codingForm)) {
         const reset = document.createElement('button');
         reset.type = 'button'; reset.className = 'quiet'; reset.dataset.codingUndo = 'true'; reset.textContent = 'Undo unsaved changes';
         reset.addEventListener('click', () => { form.reset(); error(''); basis(); updateControls(); });
@@ -57,9 +85,13 @@
     const next = fragment.content.querySelector('[data-coding-panel]');
     if (!next || next.dataset.encounterId !== encounter || fragment.content.querySelector('script') || next.dataset.version !== data.version) throw new Error('Invalid coding panel');
     const focusID = panel.contains(document.activeElement) ? document.activeElement.id : '';
+    const sourceFocus = panel.querySelector('[data-coding-form="source-review"]')?.contains(document.activeElement);
     panel.replaceWith(next); panel = next; staged = null; uncertain = false;
+    // A save response arrives while controls are disabled. Restore focus only
+    // after the POST finishes and updateControls makes the new control usable.
+    pendingFocusID = focusID;
+    pendingFocusFallbackID = sourceFocus ? 'coding-source-review-heading' : '';
     bind();
-    if (focusID) document.getElementById(focusID)?.focus({preventScroll:true});
   };
   const fetchJSON = async (url, options = {}, controller = new AbortController()) => {
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -103,7 +135,12 @@
     if (panel.contains(event.target)) updateControls();
   });
   document.addEventListener('change', event => {
-    if (panel.contains(event.target)) { basis(); updateControls(); }
+    if (panel.contains(event.target)) {
+      if (event.target.matches('[data-source-action]') && event.target.value !== 'accept') {
+        event.target.closest('[data-source-row]').querySelectorAll('[data-source-candidate]').forEach(control => { control.checked = false; });
+      }
+      basis(); updateControls();
+    }
   });
   document.addEventListener('click', event => {
     const download = event.target.closest('[data-export-with-codes]');
@@ -125,6 +162,13 @@
     }
     if (form.dataset.codingForm === 'approval' && dirty().length) {
       error('Save your code selections before approving the complete coding record.'); return;
+    }
+    if (form.dataset.codingForm === 'source-review') {
+      if (!event.submitter || event.submitter.form !== form || event.submitter.disabled || !event.submitter.matches('[data-source-approve]')) {
+        error('Use Approve source review to record your explicit choices.'); return;
+      }
+      const problem = sourceReviewError(form);
+      if (problem) { error(problem); return; }
     }
     const url = new URL(form.action, location.href);
     if (url.origin !== location.origin) return;

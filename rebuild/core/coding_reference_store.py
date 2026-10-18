@@ -300,7 +300,7 @@ def _forest(roots, initial, fetch, fetch_children):
     return {key: nodes[key] for key in visited}
 
 
-def prediction_reference(metadata, codes, *, source_contract=None):
+def prediction_reference(metadata, codes, *, source_contract=None, source_inventory=None):
     """Recompute finite predictions without materializing a full release.
 
     Every selected-code route is loaded, including alternative main terms.
@@ -310,6 +310,20 @@ def prediction_reference(metadata, codes, *, source_contract=None):
     Oversized or malformed closure refuses without a full-reference fallback.
     """
     from . import coding_engine as engine
+    source_terms = set()
+    if source_inventory is not None:
+        # Source terms are a retrieval scope, never evidence for selecting a code.
+        # Their complete authoritative families are revalidated by the caller.
+        if (type(source_inventory) is not dict
+                or type(source_inventory.get('reference_terms')) is not list
+                or len(source_inventory['reference_terms']) > MAX_SELECTIONS
+                or any(type(t) is not str or not 1 <= len(t) <= 180
+                       for t in source_inventory['reference_terms'])
+                or any(type(source_inventory.get(k)) is not str
+                       or not re.fullmatch(r'[0-9a-f]{64}', source_inventory.get(k, ''))
+                       for k in ('source_sha256', 'inventory_sha256'))):
+            raise ValidationError('Invalid source condition reference scope.')
+        source_terms = {engine.norm(t) for t in source_inventory['reference_terms']}
     wanted = _prediction_codes(codes)
     query = _Projection(metadata)
     tabular = query.read('''jsonb_build_object(
@@ -343,7 +357,7 @@ def prediction_reference(metadata, codes, *, source_contract=None):
         'description', COALESCE(descriptions.value, '""'::jsonb)) ORDER BY ordinal), '[]'::jsonb)
         FROM jsonb_array_elements("index") WITH ORDINALITY AS root_entries(entry, ordinal)
         LEFT JOIN descriptions ON descriptions.key = entry->>'code'
-        WHERE entry->'parent_id' = 'null'::jsonb)''') if routes else []
+        WHERE entry->'parent_id' = 'null'::jsonb)''') if routes or source_inventory is not None else []
     if (type(inventory) is not list or len(inventory) > MAX_ROOTS
             or any(type(row) is not dict or type(row.get('id')) is not str
                    or not INDEX_ID.fullmatch(row['id']) or type(row.get('term')) is not str
@@ -367,7 +381,7 @@ def prediction_reference(metadata, codes, *, source_contract=None):
             lexical.update(engine.anchors({'term':term, 'index_terms':[term]}))
     for row in inventory:
         terms = engine.index_head_terms(row, row['description']) if modern else [row['term']]
-        if any(engine.norm(term) in lexical and engine.norm(term) not in engine.TAXONOMY_HEADS for term in terms):
+        if any(engine.norm(term) in lexical | source_terms and engine.norm(term) not in engine.TAXONOMY_HEADS for term in terms):
             roots.add(row['id'])
     forest = _forest(roots, ancestors, query.index, query.children) if roots else {}
     # One final source-order query preserves route choice and scope-ID order.
@@ -393,7 +407,14 @@ def prediction_reference(metadata, codes, *, source_contract=None):
         raise ValidationError('A prediction code lacks its governing Tabular node.')
     nodes = _ancestors(governing, initial, query.nodes, 'parent') if governing else {}
     tabular.update(codes=descriptions, nodes=nodes)
-    return SimpleNamespace(pk=metadata.pk, id=metadata.pk, release_id=metadata.release_id,
+    reference = SimpleNamespace(pk=metadata.pk, id=metadata.pk, release_id=metadata.release_id,
         release=metadata.release, digest=metadata.digest, index=list(index.values()),
         tabular=tabular, _index_lookup=index, projection_bytes=query.total_bytes,
         guidelines_sha256=guidelines_sha256)
+    if source_inventory is not None:
+        reference.completeness_scope = {
+            'contract': 'source-reference-closure-v1',
+            'source_sha256': source_inventory['source_sha256'],
+            'inventory_sha256': source_inventory['inventory_sha256'],
+            'terms': sorted(set(source_inventory['reference_terms'])), 'complete': True}
+    return reference

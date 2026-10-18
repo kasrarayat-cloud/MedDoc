@@ -1,0 +1,81 @@
+{% comment %}
+Reference lock: existing Tessa partial-coding/download/reloaded.png and
+preserved-browser-after-02/rowan-coding.png in the retained 20261017 evidence.
+Keep the product's typography, native controls, evidence blocks and quiet
+dividers. Source-condition completeness is separate from the approved code
+count and CPT decision. No provider output or accepted decision is rewritten.
+{% endcomment %}
+<section class="coding-approval" data-coding-source-review aria-labelledby="coding-source-review-heading">
+  <h3 id="coding-source-review-heading" tabindex="-1">Source condition review</h3>
+  <p class="small">Review each current evaluated condition in the saved source. Each needs a supported ICD code or an explicit review outcome. These suggestions are checked independently of the provider's output.</p>
+  {% if review.available == False %}
+  <div class="notice warning" data-source-review-unavailable><strong>Partial ICD coding — source verification unavailable</strong><p>{{ review.reason }}</p><p class="small">Source completeness is not confirmed. Existing code decisions remain separate.</p></div>
+  {% else %}
+  <div class="notice" data-source-review-summary role="status">
+    {% if review.complete and review.current_count %}
+      {% if review.counts.reviewed_no_code %}<strong>Review complete with no-code outcomes</strong><p class="small">Some conditions were reviewed without a code. This does not mean every condition was coded.</p>{% else %}<strong>All conditions in this source review have approved ICD codes</strong>{% endif %}
+    {% else %}<strong>Source review incomplete</strong>{% endif %}
+    <p class="small">{{ review.current_count }} condition{{ review.current_count|pluralize }} or unresolved source clause{{ review.current_count|pluralize }} · {{ review.counts.approved }} covered by approved codes · {{ review.counts.reviewed_no_code }} reviewed without a code · {{ review.counts.needs_review }} awaiting review · {{ review.counts.needs_clarification }} needing clarification</p>
+  </div>
+  {% if review.approved_at %}<p class="small" data-source-review-approval>Source review recorded by <strong>{{ review.reviewer }}</strong> on {{ review.approved_at|date:'j M Y, H:i' }}. Earlier review revisions remain retained.</p>{% endif %}
+  {% if review.reason %}<p class="notice warning">{{ review.reason }}</p>{% endif %}
+  {% if review.approval_pending_reason %}<p class="notice warning" data-source-approval-pending>{{ review.approval_pending_reason }}</p>{% endif %}
+  {% if review.blockers %}<div class="notice warning" data-source-review-blockers><strong>Source review needs attention</strong><ul>{% for blocker in review.blockers %}<li>{{ blocker.message|default:blocker }}</li>{% endfor %}</ul></div>{% endif %}
+  {% if review.can_review %}
+  <form method="post" action="{% url 'coding_source_review' encounter.pk %}" data-coding-form="source-review">
+    {% csrf_token %}
+    <input type="hidden" name="source_review_token" value="{{ review.display_token }}">
+    <input type="hidden" name="review_digest" value="{{ review.review_digest }}">
+    <input type="hidden" name="prior_revision" value="{{ review.prior_revision }}">
+  {% endif %}
+    {% for row in review.rows %}
+    <fieldset data-source-row data-condition-id="{{ row.id }}">
+      <legend>{{ row.label }}</legend>
+      <p class="small" data-source-row-status>{% if row.status == 'approved_code' %}<strong>Covered by approved ICD code</strong>{% elif row.status == 'reviewed_no_code' %}<strong>Reviewed without a code</strong>{% elif row.status == 'needs_clarification' %}<strong>Needs clarification — review incomplete</strong>{% else %}<strong>Awaiting review</strong>{% endif %}</p>
+      <div class="evidence"><span class="evidence-label">SAVED SOURCE</span>{% for span in row.evidence %}<blockquote data-source-evidence data-start="{{ span.start }}" data-end="{{ span.end }}">{{ span.text }}</blockquote>{% empty %}<p class="notice warning">Source evidence is unavailable. This condition remains unresolved.</p>{% endfor %}</div>
+      {% if row.approved_codes %}<p class="small">Approved ICD codes: {% for code in row.approved_codes %}<span class="mono">{{ code }}</span>{% if not forloop.last %}, {% endif %}{% endfor %}.</p>{% endif %}
+      {% if row.chosen.reason %}<p class="small"><strong>Saved review reason:</strong> {{ row.chosen.reason }}</p>{% endif %}
+      {% if row.status == 'approved_code' or row.status == 'reviewed_no_code' %}
+        <p class="helptext">This saved outcome is retained with the review.</p>
+        {% if row.chosen.action == 'accept' %}{% for suggestion in row.suggestions %}{% if suggestion.id == row.chosen.suggestion_id %}
+        <details data-source-approved-reference><summary>Approved source reference for {{ suggestion.code }}</summary>
+          <p class="small"><strong>Alphabetic Index route:</strong> {{ suggestion.route }}</p>
+          <p class="small coding-provenance">{{ suggestion.release.version }} · applicable {{ suggestion.release.effective_from }}–{{ suggestion.release.effective_until }}. Source: {{ suggestion.release.source }}</p>
+          {% for span in suggestion.evidence %}<blockquote data-source-candidate-evidence data-start="{{ span.start }}" data-end="{{ span.end }}">{{ span.text }}</blockquote>{% endfor %}
+          {% if suggestion.instructions %}<p class="small"><strong>Tabular instructions</strong></p><ul class="small">{% for instruction in suggestion.instructions %}<li>{{ instruction.text }}</li>{% endfor %}</ul>{% endif %}
+        </details>
+        {% endif %}{% endfor %}{% endif %}
+      {% else %}
+        {% if review.can_review %}
+        <label for="source-action-{{ row.id }}">Review outcome for {{ row.label }}</label>
+        <select id="source-action-{{ row.id }}" name="action:{{ row.id }}" data-source-action>
+          <option value="" selected>Leave awaiting review</option>
+          <option value="accept">Approve a supported code selected below</option>
+          <option value="no_code">Reviewed — no code added</option>
+          <option value="needs_clarification">Needs clarification</option>
+        </select>
+        {% endif %}
+        {% if row.suggestions %}<h4>Suggestions from the saved source</h4><p class="small muted">These are independently checked ICD-10-CM routes. A suggestion is not an approved code.</p>{% endif %}
+        {% for suggestion in row.suggestions %}
+        <div data-source-suggestion data-suggestion-id="{{ suggestion.id }}">
+          {% if review.can_review %}
+          <label class="check-label" for="source-suggestion-{{ row.id }}-{{ forloop.counter }}"><input id="source-suggestion-{{ row.id }}-{{ forloop.counter }}" type="radio" name="suggestion:{{ row.id }}" value="{{ suggestion.id }}" data-source-candidate {% if suggestion.eligible != True %}disabled{% endif %}><span><strong class="mono">{{ suggestion.code }}</strong> · {{ suggestion.description }}</span></label>
+          {% else %}<p><strong class="mono">{{ suggestion.code }}</strong> · {{ suggestion.description }}</p>{% endif %}
+          {% if suggestion.eligible != True %}<p class="notice warning"><strong>Held — cannot approve</strong>{% for reason in suggestion.hold_reasons %}<br>{{ reason }}{% endfor %}</p>{% endif %}
+          <p class="small"><strong>Alphabetic Index route:</strong> {{ suggestion.route }}</p>
+          <p class="small coding-provenance">Reference: {{ suggestion.release.version }} · applicable {{ suggestion.release.effective_from }}–{{ suggestion.release.effective_until }}.{% if suggestion.release.source %} Source: {{ suggestion.release.source }}{% endif %}</p>
+          <div class="evidence"><span class="evidence-label">SUPPORTING SOURCE TEXT</span>{% for span in suggestion.evidence %}<blockquote data-source-candidate-evidence data-start="{{ span.start }}" data-end="{{ span.end }}">{{ span.text }}</blockquote>{% empty %}<p>Supporting source evidence unavailable.</p>{% endfor %}</div>
+          {% if suggestion.instructions %}<details><summary>Tabular instructions</summary><ul class="small">{% for instruction in suggestion.instructions %}<li>{{ instruction.text }}</li>{% endfor %}</ul></details>{% endif %}
+        </div>
+        {% empty %}<p class="small">No supported source-derived code is available. Review without adding a code or record what needs clarification.</p>{% endfor %}
+        {% if review.can_review %}<label for="source-reason-{{ row.id }}">Reason for no code or clarification</label><textarea id="source-reason-{{ row.id }}" name="reason:{{ row.id }}" rows="2" maxlength="2000" data-source-reason aria-describedby="source-reason-help-{{ row.id }}"></textarea><p class="helptext" id="source-reason-help-{{ row.id }}">Required for either of those outcomes. Record your review; this does not change the saved clinical source.</p>{% endif %}
+      {% endif %}
+    </fieldset>
+    {% empty %}<p>No current conditions have been established for source review. Completeness is not confirmed.</p>{% endfor %}
+  {% if review.can_review %}
+    <button type="submit" id="coding-source-approve" data-source-approve>Approve source review</button>
+    <p class="helptext">Saves only your explicit choices in a new review revision. Untouched conditions and those needing clarification remain unresolved. Existing ICD and CPT approvals are retained.</p>
+  </form>
+  {% endif %}
+  {% endif %}
+</section>

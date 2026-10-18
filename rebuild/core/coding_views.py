@@ -76,6 +76,39 @@ def response(request, encounter, error='', status=200):
     return result
 
 
+@require_POST
+@transaction.atomic
+def source_review(request, pk):
+    e = encounter_for(request, pk)
+    try:
+        from . import coding_source_review
+        data = payload(request)
+        allowed = {'csrfmiddlewaretoken', 'source_review_token', 'review_digest', 'prior_revision'}
+        choices = {}
+        for key, value in data.items():
+            if key in allowed:
+                continue
+            prefix, separator, identifier = key.partition(':')
+            if prefix not in ('action', 'suggestion', 'reason') or not separator or not identifier:
+                raise ValidationError('Unexpected source review form field.')
+            choices.setdefault(identifier, {})[prefix] = value
+        changes = {}
+        for key, fields in choices.items():
+            action = fields.get('action', '')
+            candidate = fields.get('suggestion', '')
+            reason = fields.get('reason', '')
+            if not action:
+                if candidate or reason:
+                    raise ValidationError('Choose an explicit outcome for every edited source condition.')
+                continue
+            changes[key] = {'action': action, 'suggestion_id': candidate, 'reason': reason}
+        coding_source_review.decide(e, request.user, data.get('source_review_token', ''),
+            data.get('review_digest', ''), data.get('prior_revision', ''), changes)
+        return response(request, e)
+    except ValidationError as exc:
+        return response(request, e, '; '.join(exc.messages), 409)
+
+
 @require_GET
 @never_cache
 @transaction.atomic

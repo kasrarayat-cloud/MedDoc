@@ -63,6 +63,7 @@ urlpatterns += [
     path('encounters/<uuid:pk>/export-with-codes/', export_with_codes, name='export_with_codes'),
     path('encounters/<uuid:pk>/export-coding-draft/', export_synthetic_coding_draft, name='export_synthetic_coding_draft'),
     path('encounters/<uuid:pk>/coding/status/', coding_views.status, name='coding_status'),
+    path('encounters/<uuid:pk>/coding/source-review/', coding_views.source_review, name='coding_source_review'),
     path('encounters/<uuid:pk>/coding/request/', coding_views.request_run, name='coding_request'),
     path('encounters/<uuid:pk>/coding/context/', coding_views.context, name='coding_context'),
     path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/selections/', coding_views.selections, name='coding_selections'),
