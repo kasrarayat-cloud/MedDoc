@@ -341,7 +341,7 @@ def assert_installed_guards():
     from django.db import connection
     module=importlib.import_module('core.migrations.0026_semantic_stage_receipts')
     bodies=dict(re.findall(r'CREATE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',module.SEMANTIC_SQL,re.S))
-    recovery=importlib.import_module('core.migrations.0031_retained_semantic_revalidation_v2')
+    recovery=importlib.import_module('core.migrations.0033_retained_semantic_revalidation_v3')
     bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',recovery.REVALIDATION_SQL,re.S)))
     triggers={name:(f'CREATE TRIGGER {name} BEFORE {events} ON public.{table} FOR EACH ROW EXECUTE FUNCTION {function}()')
         for name,table,events,function in (

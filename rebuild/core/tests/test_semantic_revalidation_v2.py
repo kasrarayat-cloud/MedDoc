@@ -109,6 +109,7 @@ class CorrectedLifecycleTests(TestCase):
     # Reuse the original complete receipt/Corti fixture construction without
     # inheriting (and therefore repeating) the historical lifecycle campaign.
     setUp=historical_tests.RetainedLifecycleTests.setUp
+    coding_receipt=historical_tests.RetainedLifecycleTests.coding_receipt
     request=historical_tests.RetainedLifecycleTests.request
     execute=historical_tests.RetainedLifecycleTests.execute
 

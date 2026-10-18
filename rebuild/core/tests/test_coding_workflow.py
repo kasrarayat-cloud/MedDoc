@@ -9,6 +9,7 @@ from decimal import Decimal
 from unittest.mock import patch
 
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core import signing
 from django.db import DatabaseError, connection, transaction
 from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
@@ -231,6 +232,48 @@ class CodingWorkflow(TestCase):
         self.assertEqual(decision.selections,{'selected_ids':[],'overrides':{}})
         with self.assertRaises(ValidationError):service.update_selection(run,self.user,{'selected_ids':['finding'],'overrides':{}},run.selection_revision)
         self.assertEqual(CodingDecision.objects.count(),1)
+
+    def test_compact_saves_keep_validation_and_reload_persisted_selections(self):
+        from core.coding_views import MUTATION_RESPONSE
+        run = self.complete()
+        headers = {'HTTP_ACCEPT':'application/json',
+                   'HTTP_X_QUILLMD_CODING_RESPONSE':MUTATION_RESPONSE}
+
+        def save(action, path, data, model):
+            # A committed mutation must not need a second complete assessment
+            # just to deliver its acknowledgement.
+            with patch('core.coding_service.snapshot', side_effect=AssertionError('duplicate panel assessment')):
+                response = self.client.post(self.url+path, data, content_type='application/json', **headers)
+            self.assertEqual(response.status_code, 200, response.content)
+            body = response.json()
+            self.assertTrue(body['saved'])
+            self.assertNotIn('html', body)
+            bound = signing.loads(body['receipt'], salt=MUTATION_RESPONSE)
+            self.assertEqual((bound['actor'], bound['encounter'], bound['action'], bound['saved_model']),
+                (str(self.user.pk), str(self.e.pk), action, model))
+            return bound
+
+        view = service.snapshot(self.e, self.user)
+        save('context', 'context/', {'display_token':view['display_token'],
+             'context':{'setting':'outpatient_office'}}, 'core.codingrun')
+        view = service.snapshot(self.e, self.user)
+        save('selections', f'runs/{run.pk}/selections/', {'display_token':view['display_token'],
+             'selection_revision':run.selection_revision,
+             'selections':{'selected_ids':[], 'overrides':{}}}, 'core.codingrun')
+        run.refresh_from_db()
+        self.assertEqual(run.selection, {'selected_ids':[], 'overrides':{}})
+        view = service.snapshot(self.e, self.user)
+        receipt = save('approval', f'runs/{run.pk}/approve/', {'display_token':view['display_token'],
+             'input_digest':run.input_digest, 'selection_digest':view['selection_digest']}, 'core.codingdecision')
+        decision = CodingDecision.objects.get(pk=receipt['saved_id'])
+        self.assertEqual(decision.selections, run.selection)
+        reloaded = self.client.get(self.url+'status/', HTTP_ACCEPT='application/json')
+        self.assertEqual(reloaded.status_code, 200)
+        fresh = service.snapshot(Encounter.objects.get(pk=self.e.pk), self.user)
+        self.assertEqual(fresh['decision'].pk, decision.pk)
+        self.assertEqual(fresh['decision'].selections, {'selected_ids':[], 'overrides':{}})
+        self.assertFalse(fresh['can_approve'])
+        self.generate.assert_called_once()
 
     def test_selection_revision_and_signed_display_refuse_old_tabs(self):
         run=self.complete();view=service.snapshot(self.e,self.user)

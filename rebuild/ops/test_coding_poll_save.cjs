@@ -51,6 +51,21 @@ const panel = (version='v1', value='one') => `<section data-coding-panel data-en
   assert.equal(await page.evaluate(()=>window.requests.filter(r=>r.method==='POST').length),2);
   assert.equal(await page.locator('[name=choice]').inputValue(),'three');
   assert.equal(await page.locator('[data-coding-form=approval] button').isDisabled(),true);
+  await page.locator('[data-coding-load]').click();
+  await page.waitForFunction(()=>window.requests.filter(r=>r.method==='GET').length===2);
+  await page.evaluate(html=>window.requests.filter(r=>r.method==='GET')[1].finish(200,{encounter_id:'fixture',version:'v2',html}),panel('v2','other'));
+  await page.waitForTimeout(20);
+  // The POST may still be running: an unchanged read cannot resolve it.
+  await page.locator('[data-coding-load]').click();
+  await page.waitForFunction(()=>window.requests.filter(r=>r.method==='GET').length===3);
+  assert.equal(await page.locator('[name=choice]').inputValue(),'three');
+  assert.equal(await page.locator('[data-coding-form=approval] button').isDisabled(),true);
+  await page.evaluate(html=>window.requests.filter(r=>r.method==='GET')[2].finish(200,{encounter_id:'fixture',version:'v3',html}),panel('v3','three'));
+  await page.waitForTimeout(20);
+  await page.locator('[data-coding-load]').click();
+  assert.equal(await page.locator('[name=choice]').inputValue(),'three');
+  assert.equal(await page.locator('[data-coding-form=approval] button').isDisabled(),false);
+  assert.equal(await page.evaluate(()=>window.requests.filter(r=>r.method==='POST').length),2);
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({result:'PASS',scope:'Offline mocked-fetch browser only',provider_calls:0,
    controls:['inflight GET aborted on save','one POST per explicit action','stale response stages saved data without losing edits','approval/export blocked while unsaved or stale','interrupted POST never resent','local edits retained after interruption']}));

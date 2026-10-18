@@ -525,7 +525,7 @@ def _condition_assertion_errors(notes, concept, mentions, context, units, *, sou
             prior_frame = re.match(r'\s*(?:for|during|in|at|regarding)\s+(?:(?:the|his|her)\s+)?'
                 r'(?:prior|previous|earlier|past)\s+(?:visit|encounter|appointment)\b', before)
             predicate = re.sub(r'^(?:(?:actually|also|now|in fact)\s+)+', '', after.strip())
-            if source_contract == CURRENT_SOURCE_CONTRACT:
+            if source_contract in GOVERNANCE_SOURCE_CONTRACTS:
                 predicate = re.sub(r'^(?:statement|assertion|report|entry|claim|documentation)\s+', '', predicate)
             invalid = re.match(r'(?:(?:is|are|was|were)\s+)?'
                 r'(?:(?:documented|recorded|entered|reported|included)\s+(?:in error|erroneously)|'
@@ -543,7 +543,7 @@ def _condition_assertion_errors(notes, concept, mentions, context, units, *, sou
                     or re.match(r'\s*(?:is|was|remains?)\s+(?:a\s+)?risk\b.*\bnot\s+(?:a\s+)?current\s+(?:symptom|condition|diagnosis)', after)):
                 return ['The source questions or denies current presence of the selected condition.']
             assertion = _current_condition_assertion(clause, before, after, context, row)
-            if source_contract == CURRENT_SOURCE_CONTRACT:
+            if source_contract in GOVERNANCE_SOURCE_CONTRACTS:
                 coordinated = _coordinated_condition_assertion(clause, concept, context)
                 if coordinated is not False:
                     assertion = coordinated
@@ -572,15 +572,14 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         return 'excluded', 'A planned or historical procedure is not a performed service at this encounter.'
     if kind in ('diagnosis', 'symptom') and concept['temporality'] != 'current':
         return 'excluded', 'A historical or planned finding is not established as a current condition.'
-    if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT):
+    if source_contract in ASSERTION_SOURCE_CONTRACTS:
         from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE
         from .generation import source_units
         units, _ = source_units(notes, [])
-        context = source_context(notes, units, profile=(SOURCE_GOVERNANCE_PROFILE
-            if source_contract == CURRENT_SOURCE_CONTRACT else None))
+        context = source_context(notes, units, profile=source_profile(source_contract))
     def mentions(text):
         rows = condition_mentions(text, concept, qualifiers)
-        if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT):
+        if source_contract in ASSERTION_SOURCE_CONTRACTS:
             rows = [row for row in rows if not (_exception_summary_mention(notes, row[0], concept, context, units)
                 or _condition_integrity_mention(row[0], concept, context, units))]
         return rows
@@ -595,7 +594,7 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
     ownership = source_owner_question(concept, surrounding)
     if ownership:
         return 'question', ownership
-    if source_contract in (ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT) and kind in ('diagnosis', 'symptom'):
+    if source_contract in ASSERTION_SOURCE_CONTRACTS and kind in ('diagnosis', 'symptom'):
         assertion_errors = _condition_assertion_errors(notes, concept, source_mentions, context, units,
             source_contract=source_contract)
         if assertion_errors:
@@ -717,7 +716,17 @@ ROUTE_WORDS = {'with','without','of','and','or','in','the','a','an','at','due','
 SOURCE_CONTRACT = 'source-bound-clinical-coding-v2'
 ASSERTION_SOURCE_CONTRACT = 'source-bound-clinical-coding-v3'
 CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v4'
-SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, ASSERTION_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT))
+PROSPECTIVE_SOURCE_CONTRACT = 'source-bound-clinical-coding-v5'
+GOVERNANCE_SOURCE_CONTRACTS = frozenset((CURRENT_SOURCE_CONTRACT, PROSPECTIVE_SOURCE_CONTRACT))
+ASSERTION_SOURCE_CONTRACTS = frozenset((ASSERTION_SOURCE_CONTRACT, *GOVERNANCE_SOURCE_CONTRACTS))
+SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, *ASSERTION_SOURCE_CONTRACTS))
+
+
+def source_profile(contract):
+    from .clinical_source_context import SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE
+    if contract == PROSPECTIVE_SOURCE_CONTRACT:
+        return COMPLETE_ASSERTION_PROFILE
+    return SOURCE_GOVERNANCE_PROFILE if contract == CURRENT_SOURCE_CONTRACT else None
 
 
 def index_head_terms(head, description=''):
@@ -797,8 +806,7 @@ def current_source_scope_errors(notes, concept, *, source_contract=None):
     from .clinical_source_context import source_context, owned_current, SOURCE_GOVERNANCE_PROFILE
     from .generation import source_units
     units, _ = source_units(notes, [])
-    context = source_context(notes, units, profile=(SOURCE_GOVERNANCE_PROFILE
-        if source_contract == CURRENT_SOURCE_CONTRACT else None))
+    context = source_context(notes, units, profile=source_profile(source_contract))
     if context['issues']:
         return list(context['issues'])
     quote = concept['evidence']
@@ -1032,7 +1040,7 @@ def contextual_validation(run, reference, code, concept, selected_codes):
             if concept['kind'] == 'reason' and screening and asymptomatic and not diagnostic and not contradictory:
                 resolved = {'outcome':'not_applicable', 'basis':'The source explicitly establishes asymptomatic screening, rather than a diagnostic examination for a symptom.',
                             'source_sha256':hashlib.sha256(notes.encode()).hexdigest(), 'guideline':'I.C.21.c.5'}
-        if not resolved and getattr(run, 'config', {}).get('clinical_source_contract') == CURRENT_SOURCE_CONTRACT:
+        if not resolved and getattr(run, 'config', {}).get('clinical_source_contract') in GOVERNANCE_SOURCE_CONTRACTS:
             from .coding_nec import conditional_following_resolution
             resolved = conditional_following_resolution(instruction, notes, concept, reference, selected_codes)
         if resolved:
@@ -1421,7 +1429,7 @@ def validate_selection(run,selections):
             candidate=next((c for c in run.result.get('candidates',{}).get(key,[])
                             if c['code']==code and c['system']=='ICD-10-CM'),None)
             entry=lookup.get(candidate['entry_id']) if candidate else None
-            if entry and source_contract == CURRENT_SOURCE_CONTRACT and candidate.get('clinical_specificity'):
+            if entry and source_contract in GOVERNANCE_SOURCE_CONTRACTS and candidate.get('clinical_specificity'):
                 from .coding_nec import prove
                 nec = prove(reference, entry, row['concept'], run.inputs['notes'], source_contract=source_contract)
                 if not nec or nec[0] != row['concept'] or nec[1] != candidate['clinical_specificity']:

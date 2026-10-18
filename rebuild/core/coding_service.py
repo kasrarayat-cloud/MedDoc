@@ -70,6 +70,34 @@ def release_snapshot(encounter):
             for r in releases]
 
 
+def patient_name_inputs(encounter, answers):
+    """Derive identity input only from the same saved destinations and answers."""
+    version = encounter.template_version
+    approved, required_name_keys = None, set()
+    if any(isinstance(d, dict) and d.get('version') == 3 for d in version.semantic_definitions.values()):
+        from .semantic_generation import requires_patient_name
+        from .semantic_preparation import validated_semantic_definitions
+        approved = validated_semantic_definitions(version)
+        required_name_keys = {key for key, d in approved.items() if d['version'] == 3 and requires_patient_name(d)}
+    result = {'patient_name_answers': []}
+    for field in version.fields:
+        if field['key'] in required_name_keys:
+            continue  # The validated identity fact below replaces label-only narrative interpretation.
+        label = field.get('label', '')
+        normalized = ' '.join(re.sub(r'[^\w\s]', ' ', label.casefold().replace("'", '').replace('’', '')).split()) if isinstance(label, str) else ''
+        if normalized not in ('patient name', 'full name', 'name of patient', 'what is the patients full name'):
+            continue
+        answer = answers.get(field.get('key'), {})
+        text = answer.get('text') if isinstance(answer, dict) else None
+        if isinstance(text, str) and text.strip():
+            result['patient_name_answers'].append({'key': field['key'], 'label': label, 'text': text})
+    if required_name_keys:
+        from .coding_engine import semantic_patient_name_evidence
+        result['documented_patient_name_evidence'] = {'contract':'approved-semantic-patient-name-v1',
+            'fields':semantic_patient_name_evidence(encounter.notes, version.fields, approved, answers)}
+    return result
+
+
 def input_snapshot(encounter):
     patient = encounter.patient
     from .coding_dispatch import contract
@@ -84,29 +112,8 @@ def input_snapshot(encounter):
     birth = getattr(patient, 'date_of_birth', None)
     if birth is not None:
         inputs['patient_identity']['date_of_birth'] = birth.isoformat()
+    inputs.update(patient_name_inputs(encounter, encounter.answers))
     version = encounter.template_version
-    approved, required_name_keys = None, set()
-    if any(isinstance(d, dict) and d.get('version') == 3 for d in version.semantic_definitions.values()):
-        from .semantic_generation import requires_patient_name
-        from .semantic_preparation import validated_semantic_definitions
-        approved = validated_semantic_definitions(version)
-        required_name_keys = {key for key, d in approved.items() if d['version'] == 3 and requires_patient_name(d)}
-    inputs['patient_name_answers'] = []
-    for field in version.fields:
-        if field['key'] in required_name_keys:
-            continue  # The validated identity fact below replaces label-only narrative interpretation.
-        label = field.get('label', '')
-        normalized = ' '.join(re.sub(r'[^\w\s]', ' ', label.casefold().replace("'", '').replace('’', '')).split()) if isinstance(label, str) else ''
-        if normalized not in ('patient name', 'full name', 'name of patient', 'what is the patients full name'):
-            continue
-        answer = encounter.answers.get(field.get('key'), {})
-        text = answer.get('text') if isinstance(answer, dict) else None
-        if isinstance(text, str) and text.strip():
-            inputs['patient_name_answers'].append({'key': field['key'], 'label': label, 'text': text})
-    if required_name_keys:
-        from .coding_engine import semantic_patient_name_evidence
-        inputs['documented_patient_name_evidence'] = {'contract':'approved-semantic-patient-name-v1',
-            'fields':semantic_patient_name_evidence(encounter.notes, version.fields, approved, encounter.answers)}
     inputs['template'] = {'fields_sha256': digest(version.fields),
                           'definitions_sha256': digest(version.semantic_definitions),
                           'original_sha256': version.template.sha256,

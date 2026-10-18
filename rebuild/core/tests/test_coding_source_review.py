@@ -107,6 +107,55 @@ class SourceDecisionBoundaryTests(TestCase):
         self.assertEqual(CodingSourceDecision.objects.count(), 1)
         self.assert_originals()
 
+    def test_negotiated_receipt_saves_once_without_rendering_another_panel(self):
+        import json
+        from django.core import signing
+        view = source.view(self.encounter, self.run, self.user)
+        request = RequestFactory().post('/synthetic/coding/source-review/', {
+            'source_review_token': view['display_token'], 'review_digest': view['review_digest'],
+            'prior_revision': '', 'action:source-condition:omitted': 'accept',
+            'suggestion:source-condition:omitted': 'source:candidate'},
+            content_type='application/json', HTTP_ACCEPT='application/json',
+            HTTP_X_QUILLMD_CODING_RESPONSE=coding_views.MUTATION_RESPONSE)
+        request.user = self.user
+        self.assessment.reset_mock()
+        with patch.object(service, 'snapshot', side_effect=AssertionError('No panel projection in save receipt')):
+            response = coding_views.source_review(request, self.encounter.pk)
+        self.assertEqual(response.status_code, 200)
+        body = json.loads(response.content)
+        self.assertTrue(body['saved'])
+        self.assertEqual(body['action'], 'source-review')
+        self.assertEqual(body['status_url'], f'/encounters/{self.encounter.pk}/coding/status/')
+        self.assertNotIn('html', body)
+        saved = CodingSourceDecision.objects.get()
+        binding = signing.loads(body['receipt'], salt=coding_views.MUTATION_RESPONSE)
+        self.assertEqual(binding, {'contract': coding_views.MUTATION_RESPONSE,
+            'actor': str(self.user.pk), 'encounter': str(self.encounter.pk),
+            'action': 'source-review', 'saved_model': 'core.codingsourcedecision',
+            'saved_id': str(saved.pk)})
+        self.assertEqual(self.assessment.call_count, 1)
+        self.assertTrue(source.view(self.encounter, self.run, self.user)['all_coded'])
+        self.assertEqual(self.assessment.call_count, 2)
+        self.assert_originals()
+
+    def test_receipt_protocol_cannot_bypass_source_choice_or_display_binding(self):
+        import json
+        view = source.view(self.encounter, self.run, self.user)
+        for changes in ({'source_review_token': 'forged'},
+                        {'suggestion:source-condition:omitted': 'source:ineligible'}):
+            data = {'source_review_token': view['display_token'], 'review_digest': view['review_digest'],
+                'prior_revision': '', 'action:source-condition:omitted': 'accept',
+                'suggestion:source-condition:omitted': 'source:candidate', **changes}
+            request = RequestFactory().post('/synthetic/coding/source-review/', data,
+                content_type='application/json', HTTP_ACCEPT='application/json',
+                HTTP_X_QUILLMD_CODING_RESPONSE=coding_views.MUTATION_RESPONSE)
+            request.user = self.user
+            response = coding_views.source_review(request, self.encounter.pk)
+            self.assertEqual(response.status_code, 409)
+            self.assertFalse(json.loads(response.content).get('saved', False))
+            self.assertFalse(CodingSourceDecision.objects.exists())
+        self.assert_originals()
+
     def test_post_rejects_forged_stale_and_unexpected_response_proofs(self):
         view = source.view(self.encounter, self.run, self.user)
         for values in ({'source_review_token': 'forged'}, {'review_digest': '0' * 64},

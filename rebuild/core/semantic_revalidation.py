@@ -22,7 +22,8 @@ from .security import audit, membership, private_path
 
 CONTRACT = 'retained-facts-independent-check-v1'
 INDEPENDENT_CONTRACT = 'retained-facts-independent-check-v2'
-CONTRACTS = (CONTRACT, INDEPENDENT_CONTRACT)
+COMPLETE_SOURCE_CONTRACT = 'retained-facts-independent-check-v3'
+CONTRACTS = (CONTRACT, INDEPENDENT_CONTRACT, COMPLETE_SOURCE_CONTRACT)
 STAGE = 'revalidation_checker'
 SALT = 'quillmd-retained-generation-revalidation-v1'
 INSTRUCTIONS = (
@@ -40,6 +41,7 @@ INDEPENDENT_INSTRUCTIONS = (
     'fact does not by itself establish an omission when its complete relevant content is already retained in the '
     'displayed answer. Independently report any actual omission, contradiction, unsupported assertion or unresolved '
     'source issue. The current proposal is not a clinician decision and does not establish a passing verdict.')
+COMPLETE_SOURCE_INSTRUCTIONS = INDEPENDENT_INSTRUCTIONS.replace(INDEPENDENT_CONTRACT, COMPLETE_SOURCE_CONTRACT)
 SEQUENCE = (('extractor',1),('assigner',1),('checker',1),('assigner',2),('checker',2))
 
 
@@ -94,12 +96,60 @@ def _retained(parent):
     return result, requests, outputs, manifest
 
 
+def _target_scope(contract):
+    if contract not in CONTRACTS:
+        _fail('Unknown retained revalidation contract.')
+    return (semantic.COMPLETE_ASSERTION_SCOPE_CONTRACT if contract == COMPLETE_SOURCE_CONTRACT
+            else semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT)
+
+
+def _complete_source_check(notes, fields, definitions, units, facts, answers, requests, outputs):
+    """Current evidence only: old checker verdicts never enter the new request."""
+    from .semantic_source_context import observation_qualifier_inventory, consent_qualifier_inventory
+    scope = semantic.COMPLETE_ASSERTION_SCOPE_CONTRACT
+    payload = {'notes': notes, 'approved_definitions': deepcopy(definitions),
+        'fields': [{'key': f['key'], 'label': f['label'], 'protected_signing': semantic.protected(f)} for f in fields],
+        'fact_scope_contract': scope, 'timing_reference_contract': semantic.TEMPORAL_REFERENCE_CONTRACT,
+        'observation_qualifier_inventory': observation_qualifier_inventory(units),
+        'consent_qualifier_inventory': consent_qualifier_inventory(units),
+        'approved_patient_name_destinations': [key for key,d in definitions.items() if semantic.requires_patient_name(d)],
+        'encounter_support_inventory': semantic._encounter_support_inventory(notes, definitions),
+        'clinical_context_inventory': semantic._clinical_context_inventory(notes, definitions, scope_contract=scope),
+        'mixed_observation_inventory': semantic._mixed_observation_inventory(notes, definitions, scope_contract=scope),
+        'medication_antecedent_inventory': semantic._medication_antecedent_inventory(notes, definitions),
+        'atomic_status_inventory': semantic._atomic_status_inventory(notes, definitions),
+        'stable_state_inventory': semantic._stable_state_inventory(notes, definitions),
+        'source_governance_inventory': semantic._source_governance_inventory(notes, definitions, scope),
+        'scoped_denial_inventory': semantic._scoped_denial_inventory(notes, definitions, scope),
+        'clinical_qualification_inventory': semantic._clinical_qualification_inventory(notes),
+        'facts': list(facts.values()), 'proposed_answers': semantic._answer_preview(answers),
+        'retained_revalidation': {'contract': COMPLETE_SOURCE_CONTRACT,
+            'source_sha256': hashlib.sha256(notes.encode()).hexdigest(),
+            'definitions_sha256': semantic.digest(definitions),
+            'original_requests_sha256': [semantic.digest(row) for row in requests],
+            'original_outputs_sha256': [semantic.digest(row) for row in outputs]}}
+    instructions = semantic.TEMPORAL_REFERENCE_INSTRUCTIONS + semantic.CHECK_INSTRUCTIONS
+    for suffix in (semantic.SOURCE_CONTEXT_CHECK_INSTRUCTIONS, semantic.SOURCE_BINDING_CHECK_INSTRUCTIONS,
+            semantic.OBSERVATION_CONTEXT_CHECK_INSTRUCTIONS, semantic.CONSENT_CONTEXT_CHECK_INSTRUCTIONS,
+            semantic.DOCUMENT_IDENTITY_INSTRUCTIONS):
+        instructions += ' ' + suffix
+    for suffix in (semantic.LITERAL_SOURCE_INSTRUCTIONS, semantic.CLINICAL_LITERAL_INSTRUCTIONS,
+            semantic.ENCOUNTER_SUPPORT_INSTRUCTIONS, semantic.CLINICAL_CONTEXT_INSTRUCTIONS,
+            semantic.MIXED_OBSERVATION_INSTRUCTIONS, semantic.SUPPORT_CLOSURE_INSTRUCTIONS,
+            semantic.SOURCE_GOVERNANCE_INSTRUCTIONS, semantic.SCOPED_DENIAL_INSTRUCTIONS,
+            semantic.COMPLETE_ASSERTION_INSTRUCTIONS):
+        instructions += suffix
+    return {'answers': answers, 'facts': facts, 'payload': payload, 'schema': semantic.CHECK_SCHEMA,
+            'instructions': instructions + COMPLETE_SOURCE_INSTRUCTIONS}
+
+
 def prepare(notes, fields, definitions, requests, outputs, original_answers, original_config, *, contract=CONTRACT):
     """Pure deterministic proposal. No provider call and no old verdict promoted."""
     if contract not in CONTRACTS:
         _fail('Unknown retained revalidation contract.')
     if len(requests) != 5 or len(outputs) != 5:
         _fail('The complete original stage chain is required.')
+    target_scope = _target_scope(contract)
     counter = 0
     def replay(role, attempt, payload, schema, instructions):
         nonlocal counter
@@ -119,7 +169,7 @@ def prepare(notes, fields, definitions, requests, outputs, original_answers, ori
     units,_=generation.source_units(notes,fields)
     facts=semantic.validate_facts(notes,units,semantic.resolve_source_references(notes,units,outputs[0],
         reference_contract=original_config['semantic_fact_reference_contract']),
-        scope_contract=semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,
+        scope_contract=target_scope,
         timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)
     semantic._validate_current_subjects(notes,units,facts)
     final={r['key']:deepcopy(r) for r in outputs[1]['fields']}
@@ -128,13 +178,16 @@ def prepare(notes, fields, definitions, requests, outputs, original_answers, ori
     if set(r['key'] for r in outputs[3]['fields']) != set(repair or []):
         _fail('The retained assignment repair differs from its recorded destinations.')
     final.update({r['key']:deepcopy(r) for r in outputs[3]['fields']})
-    for row in final.values():
-        row['status']='supported' if row['fact_ids'] else 'missing'
+    if contract != COMPLETE_SOURCE_CONTRACT:
+        for row in final.values():
+            row['status']='supported' if row['fact_ids'] else 'missing'
     answers=semantic._assign(notes,fields,definitions,facts,{'fields':list(final.values())},
-        scope_contract=semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,
+        scope_contract=target_scope,
         timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)
     if any(a['status'] not in ('supported','missing') for a in answers.values()):
         _fail('A deterministic source or assignment issue remains; no new checker may be sent.')
+    if contract == COMPLETE_SOURCE_CONTRACT:
+        return _complete_source_check(notes, fields, definitions, units, facts, answers, requests, outputs)
     if contract == INDEPENDENT_CONTRACT:
         # Construct the current-check surface explicitly. Copying the previous
         # repair request leaked its top-level prior_findings into v1 even though
@@ -178,8 +231,9 @@ def _origin(encounter, user, parent_id=None, *, require_current=True, admitted=T
     if admitted:
         if not settings.SYNTHETIC_ONLY:
             _fail('Retained revalidation is available only in the authorized synthetic workflow.')
-        ids=getattr(settings,('SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS' if contract == INDEPENDENT_CONTRACT
-                              else 'SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS'),())
+        ids=getattr(settings,{CONTRACT:'SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS',
+            INDEPENDENT_CONTRACT:'SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS',
+            COMPLETE_SOURCE_CONTRACT:'SEMANTIC_REVALIDATION_V3_ORIGIN_JOB_IDS'}[contract],())
     else:
         ids=[parent_id]
     query=Job.objects.filter(pk__in=ids,encounter=encounter,user=user,kind='generation',state='succeeded')
@@ -212,10 +266,12 @@ def _binding(encounter,user,parent,result,manifest,parent_run_id,*,contract=CONT
         'template_version_id':str(encounter.template_version_id),'encounter_id':str(encounter.pk),
         'patient_id':str(encounter.patient_id),'revision':encounter.revision,
         'parent_result_sha256':parent.result_sha256,'parent_receipts_digest':semantic.digest(manifest),
-        'target_scope_contract':semantic.OBJECTIVE_NEGATION_SCOPE_CONTRACT,'actor_id':str(user.pk)}
+        'target_scope_contract':_target_scope(contract),'actor_id':str(user.pk)}
     if contract == INDEPENDENT_CONTRACT:
         value['contract']=contract
         value['prior_revalidation']=_predecessor(encounter,user,parent.pk,parent_run_id)
+    elif contract == COMPLETE_SOURCE_CONTRACT:
+        value['contract']=contract
     elif contract != CONTRACT:
         _fail('Unknown retained revalidation contract.')
     return value
@@ -247,21 +303,28 @@ def _prior(parent_id,contract=CONTRACT):
         config__semantic_revalidation__parent_job_id=str(parent_id)).order_by('created_at','pk').first()
 
 
-def _coding_source(encounter,user,parent_run_id,*,completed=False):
+def _coding_source(encounter,user,parent_run_id,*,completed=False,contract=CONTRACT):
     from . import coding_recovery,coding_service
     try:source=CodingRun.objects.get(pk=parent_run_id,encounter=encounter,user=user)
     except (CodingRun.DoesNotExist,ValueError):
         _fail('The original coding snapshot is unavailable.')
-    coding_recovery.live_receipt(source)
+    if contract == COMPLETE_SOURCE_CONTRACT:
+        coding_recovery.revalidation_receipt(source,complete=True)
+    else:
+        coding_recovery.live_receipt(source)
     inputs,context,releases,key=coding_service.input_snapshot(encounter)
-    stable=lambda row:{k:v for k,v in row.items() if k not in ('answers','documented_patient_name_evidence')}
-    if ((stable(source.inputs)!=stable(inputs) if completed else source.inputs!=inputs or source.input_digest!=key)
+    stable=(coding_recovery.stable_revalidation_inputs(encounter,source.inputs,inputs,
+            complete=contract==COMPLETE_SOURCE_CONTRACT) if completed else None)
+    if ((not stable if completed else source.inputs!=inputs or source.input_digest!=key)
             or source.context!=context or source.releases!=releases):
         _fail('The retained prediction belongs to different source, patient, date, context or references.')
     return source
 
 
 def _prospective_contract(encounter,user):
+    ids=getattr(settings,'SEMANTIC_REVALIDATION_V3_ORIGIN_JOB_IDS',())
+    if Job.objects.filter(pk__in=ids,encounter=encounter,user=user,kind='generation',state='succeeded').exists():
+        return COMPLETE_SOURCE_CONTRACT
     ids=getattr(settings,'SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS',())
     return (INDEPENDENT_CONTRACT if Job.objects.filter(pk__in=ids,encounter=encounter,user=user,
             kind='generation',state='succeeded').exists() else CONTRACT)
@@ -278,20 +341,31 @@ def _offer(encounter,user):
         _fail('Another request is still pending for this encounter.')
     runs=list(CodingRun.objects.filter(encounter=encounter,user=user,config__provider='corti',config__mode='live').exclude(
         state__in=['queued','running','unknown','failed']))
+    if contract == COMPLETE_SOURCE_CONTRACT:
+        from . import coding_recovery,coding_service
+        inputs,context,releases,key=coding_service.input_snapshot(encounter)
+        candidates=CodingRun.objects.filter(encounter=encounter,user=user,config__provider='corti',
+            config__mode__in=('live',coding_recovery.MODE),state__in=('succeeded','needs_detail'))
+        runs=[row for row in candidates if row.inputs==inputs and row.context==context
+            and row.releases==releases and row.input_digest==key
+            and (row.config.get('mode')=='live' or
+                row.config.get('retained_prediction',{}).get('contract')==coding_recovery.CONTEXT_CONTRACT)]
     if len(runs)!=1:
         _fail('The retained Corti prediction must have one unambiguous completed source run.')
-    run=_coding_source(encounter,user,runs[0].pk)
+    run=_coding_source(encounter,user,runs[0].pk,contract=contract)
     if run.inputs.get('answers')!=result['answers'] or run.inputs.get('notes')!=encounter.notes:
         _fail('The retained coding prediction belongs to different source answers.')
     binding=_binding(encounter,user,parent,result,manifest,run.pk,contract=contract)
     config=_new_config(encounter,user,binding,contract=contract)
     quoted=str(ai_stages.maximum_cost(config))
     token_data={'binding':binding,'config_digest':semantic.digest(config)}
-    if contract==INDEPENDENT_CONTRACT:token_data['contract']=contract
+    if contract in (INDEPENDENT_CONTRACT,COMPLETE_SOURCE_CONTRACT):token_data['contract']=contract
     token=signing.dumps(token_data,salt=SALT,compress=True)
     reason=('One distinct v2 independent check with corrected current-evidence input. The failed v1 attempt stays '
             'consumed and preserved; no extraction or coding call.' if contract==INDEPENDENT_CONTRACT else
             'One new independent check of unchanged retained facts; no extraction or coding call.')
+    if contract == COMPLETE_SOURCE_CONTRACT:
+        reason='One new independent check of unchanged retained facts under current complete-source rules; no extraction or coding call.'
     return {'available':True,'reason':reason,
         'display_token':token,'revision':encounter.revision,'parent_job_id':str(parent.pk),
         'parent_run_id':str(run.pk),'quote_usd':quoted,'provider_calls':1,'stage':STAGE}
@@ -352,7 +426,7 @@ def _bound_proposal(job,*,completed=False):
             or job.revision!=binding['revision'] or job.request_key!=_key(parent.pk,contract)
             or job.config.get('semantic_fact_scope_contract')!=binding['target_scope_contract']):
         _fail('The independent check no longer matches its immutable parent and source.')
-    _coding_source(job.encounter,job.user,binding.get('parent_run_id'),completed=completed)
+    _coding_source(job.encounter,job.user,binding.get('parent_run_id'),completed=completed,contract=contract)
     proposal['payload']['retained_revalidation']['binding']=deepcopy(binding)
     return proposal,definitions
 

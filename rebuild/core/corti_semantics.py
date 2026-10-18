@@ -86,8 +86,8 @@ def office_time_facts(notes, *, contract=None):
     conflicting total, missing exclusion or missing service date cannot supply
     a same-day practitioner time fact.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4'):
-        return _source_time_analysis(notes, modern=contract == 'source-bound-clinical-coding-v4')[0]
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5'):
+        return _source_time_analysis(notes, modern=contract in ('source-bound-clinical-coding-v4','source-bound-clinical-coding-v5'), complete=contract == 'source-bound-clinical-coding-v5')[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
     if re.search(r'(?im)^\s*(?:quoted )?example(?: note)?\s*:', notes):
@@ -197,8 +197,8 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     not infer an encounter from a numeric time quote or a scheduled appointment.
     Unrecognized competing practitioner totals require clarification.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4'):
-        support, errors = _source_time_analysis(notes, modern=contract == 'source-bound-clinical-coding-v4')
+    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5'):
+        support, errors = _source_time_analysis(notes, modern=contract in ('source-bound-clinical-coding-v4','source-bound-clinical-coding-v5'), complete=contract == 'source-bound-clinical-coding-v5')
         if service_date is not None:
             for raw_date in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes):
                 parsed = None
@@ -507,7 +507,7 @@ def _time_integrity_assertion(text):
         for clause in clauses)
 
 
-def _source_time_analysis(notes, *, modern=False):
+def _source_time_analysis(notes, *, modern=False, complete=False):
     """One source-bound interpretation shared by review and export checks.
 
     Only the prospective coding contract calls this reader. Source ownership,
@@ -515,10 +515,10 @@ def _source_time_analysis(notes, *, modern=False):
     context inventory used by clinical extraction. Old reviews retain their
     exact eight facts, quotations and hashes under the original reader.
     """
-    from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE
+    from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE, time_kind
     from .generation import source_units
     units, _ = source_units(notes, [])
-    scope = source_context(notes, units, profile=SOURCE_GOVERNANCE_PROFILE if modern else None)
+    scope = source_context(notes, units, profile=COMPLETE_ASSERTION_PROFILE if complete else SOURCE_GOVERNANCE_PROFILE if modern else None)
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers, service_errors, evaluated = list(scope['issues']), [], False
     service_date = None
@@ -577,7 +577,7 @@ def _source_time_analysis(notes, *, modern=False):
         negative = bool(re.search(r'\b(?:no|not|never|denies?|without)\b', low))
         office = re.search(r'\b(?:office (?:visit|consultation|encounter)|outpatient (?:office )?(?:visit|consultation))\b', low)
         if modern and not office:
-            office = re.fullmatch(r'(?:encounter|visit type)\s*:\s*(?:(?:new|established)[ -]patient,?\s*)?'
+            office = re.fullmatch(r'(?:encounter|visit type' + ('|visit' if complete else '') + r')\s*:\s*(?:(?:new|established)[ -]patient,?\s*)?'
                 r'(?:in-person\s+)?(?:visit|consultation)\s+in\s+(?:a|an|the)\s+'
                 r'(?:(?:u\.s\.|us|united states)\s+)?(?:[a-z]+\s+){0,3}office\.?', low)
         if office and not negative:
@@ -641,6 +641,8 @@ def _source_time_analysis(notes, *, modern=False):
             evaluated = True
         work_qualification = modern and re.fullmatch(
             r'(?:these|those) are all ' + _ROLE + r' activities ' + _DAY + r'\.?', low)
+        if complete and time_kind(text, profile=COMPLETE_ASSERTION_PROFILE) == 'qualification':
+            work_qualification = True
         if work_qualification and active_total is None:
             blockers.append('The physician-work qualification has no adjacent source-bound total.')
         if not timing and not exclusion and not basis and not work_qualification:

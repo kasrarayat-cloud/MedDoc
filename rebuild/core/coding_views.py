@@ -1,6 +1,7 @@
 """Tenant-scoped coding endpoints. Observation never queues work."""
 import json
 
+from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import JsonResponse
@@ -12,6 +13,8 @@ from django.views.decorators.http import require_GET, require_POST
 from . import coding_service as service
 from .models import CodingRun, Encounter
 from .security import scoped
+
+MUTATION_RESPONSE = 'coding-mutation-receipt-v1'
 
 
 def encounter_for(request, pk, *, lock=True):
@@ -76,6 +79,30 @@ def response(request, encounter, error='', status=200, *, source_decision_respon
     return result
 
 
+def wants_receipt(request):
+    """Only the current browser protocol requests a compact mutation response."""
+    return (request.headers.get('Accept') == 'application/json'
+            and request.headers.get('X-QuillMD-Coding-Response') == MUTATION_RESPONSE)
+
+
+def saved_response(request, encounter, action, saved):
+    """Acknowledge the locked save without rebuilding the complete review.
+
+    The outer view transaction commits before Django sends this response.
+    The browser then loads a separately validated current panel. Neither this
+    receipt nor a display refresh grants coding or export eligibility.
+    """
+    binding = {'contract': MUTATION_RESPONSE, 'actor': str(request.user.pk),
+        'encounter': str(encounter.pk), 'action': action,
+        'saved_model': saved._meta.label_lower, 'saved_id': str(saved.pk)}
+    result = JsonResponse({'encounter_id': str(encounter.pk), 'saved': True,
+        'contract': MUTATION_RESPONSE, 'action': action,
+        'receipt': signing.dumps(binding, salt=MUTATION_RESPONSE, compress=True),
+        'status_url': '/encounters/' + str(encounter.pk) + '/coding/status/'})
+    result['Cache-Control'] = 'no-store'
+    return result
+
+
 @require_POST
 @transaction.atomic
 def source_review(request, pk):
@@ -102,9 +129,11 @@ def source_review(request, pk):
                     raise ValidationError('Choose an explicit outcome for every edited source condition.')
                 continue
             changes[key] = {'action': action, 'suggestion_id': candidate, 'reason': reason}
-        return coding_source_review.decide(e, request.user, data.get('source_review_token', ''),
+        compact = wants_receipt(request)
+        saved = coding_source_review.decide(e, request.user, data.get('source_review_token', ''),
             data.get('review_digest', ''), data.get('prior_revision', ''), changes,
-            respond=lambda assessed: response(request, e, source_decision_response=assessed))
+            respond=None if compact else lambda assessed: response(request, e, source_decision_response=assessed))
+        return saved_response(request, e, 'source-review', saved) if compact else saved
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
 
@@ -124,8 +153,11 @@ def request_run(request, pk):
         data = payload(request)
         latest = service.displayed_run(e)
         service.verify_display(e, request.user, data.get('display_token', ''), latest)
-        if service.ensure_run(e, request.user) is None:
+        saved = service.ensure_run(e, request.user)
+        if saved is None:
             raise ValidationError('Save the completed document and wait for its current request before coding.')
+        if wants_receipt(request):
+            return saved_response(request, e, 'request', saved)
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
@@ -145,7 +177,9 @@ def context(request, pk):
             for key, default in service.CONTEXT_DEFAULTS.items():
                 if type(default) is bool:
                     values[key] = data.get(key) == 'true'
-        service.update_context(e, request.user, values)
+        saved = service.update_context(e, request.user, values)
+        if wants_receipt(request) and saved is not None:
+            return saved_response(request, e, 'context', saved)
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
@@ -178,7 +212,9 @@ def selections(request, pk, run_pk):
                 revision = int(revision)
             except (TypeError, ValueError):
                 raise ValidationError('The selection revision is invalid.')
-        service.update_selection(run, request.user, value, revision)
+        saved = service.update_selection(run, request.user, value, revision)
+        if wants_receipt(request):
+            return saved_response(request, e, 'selections', saved)
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
@@ -192,7 +228,9 @@ def approval(request, pk, run_pk):
     try:
         data = payload(request)
         service.verify_display(e, request.user, data.get('display_token', ''), run)
-        service.approve(run, request.user, data.get('input_digest', ''), data.get('selection_digest', ''))
+        saved = service.approve(run, request.user, data.get('input_digest', ''), data.get('selection_digest', ''))
+        if wants_receipt(request):
+            return saved_response(request, e, 'approval', saved)
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
@@ -207,8 +245,10 @@ def output_decision(request, pk, run_pk):
     try:
         data = payload(request)
         confirmation = data.get('confirm_note_facts')
-        coding_output.decide(e, run, request.user, data.get('output_display_token', ''),
+        saved = coding_output.decide(e, run, request.user, data.get('output_display_token', ''),
                              data.get('outcome'), confirmation is True or confirmation == 'true')
+        if wants_receipt(request):
+            return saved_response(request, e, 'output-decision', saved)
         return response(request, e)
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)

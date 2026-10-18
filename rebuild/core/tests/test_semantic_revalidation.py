@@ -161,12 +161,11 @@ class RetainedLifecycleTests(TestCase):
         CodingContext.objects.create(encounter=self.e,data={'setting':'outpatient_office','patient_status':'established','em_basis':'time'},updated_by=self.user)
         inputs,context,releases,key=coding_service.input_snapshot(self.e)
         self.run_source=CodingRun(encounter=self.e,user=self.user,input_digest=key,inputs=inputs,context=context,releases=releases,
-            config={'provider':'corti','mode':'live'},state='needs_detail',result={'offline':True},actual_cost=Decimal('0'))
-        from core.tests.test_coding_output_live import controlled_receipt,bind_request
-        receipt,_=controlled_receipt(self.e.notes)
-        body=(FIXTURE.parent/'rowan_corti_live_response.json').read_bytes().decode()
-        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(),'205c8e586139407bf959d4f69420a41e0ebe1b50e972242f72d18e4e9cd12d86')
-        receipt['raw_response']['body']=body;receipt['response_sha256']=hashlib.sha256(body.encode()).hexdigest()
+            config=deepcopy(getattr(self,'source_coding_config',{'provider':'corti','mode':'live'})),
+            state='needs_detail',result={'offline':True},actual_cost=Decimal('0'))
+        from core.tests.test_coding_output_live import bind_request
+        receipt=self.coding_receipt()
+        body=receipt['raw_response']['body']
         self.run_source.requests=[receipt];bind_request(self.run_source)
         self.run_source.result=corti_coding.retained_result(self.run_source,corti_prediction.payload(self.run_source),
             json.loads(body),receipt['response_sha256'])
@@ -175,6 +174,14 @@ class RetainedLifecycleTests(TestCase):
         # The reviewed-definition boundary is separately tested. Here the real
         # retained Rowan definitions isolate recovery/storage/receipt behavior.
         definitions=patch('core.word_contract.require_generation',return_value=self.data['definitions']);definitions.start();self.addCleanup(definitions.stop)
+
+    def coding_receipt(self):
+        from core.tests.test_coding_output_live import controlled_receipt
+        receipt,_=controlled_receipt(self.e.notes)
+        body=(FIXTURE.parent/'rowan_corti_live_response.json').read_bytes().decode()
+        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(),'205c8e586139407bf959d4f69420a41e0ebe1b50e972242f72d18e4e9cd12d86')
+        receipt['raw_response']['body']=body;receipt['response_sha256']=hashlib.sha256(body.encode()).hexdigest()
+        return receipt
 
     def request(self):
         offered=recovery.offer(self.e,self.user)
