@@ -1,7 +1,7 @@
 <section class="coding-panel" data-coding-panel data-encounter-id="{{ encounter.pk }}" data-version="{{ coding.version }}" data-status-url="{% url 'coding_status' encounter.pk %}" data-pending="{{ coding.pending|yesno:'true,false' }}">
   <div class="coding-heading">
     <div><h2>Coding record</h2><p class="small muted">Separate from your clinical document. Coding changes do not alter its original export.</p></div>
-    <span class="badge" data-coding-state role="status" aria-live="polite">{{ coding.state_label }}</span>
+    <span class="badge" data-coding-state role="status" aria-live="polite">{{ coding.completeness_state_label|default:coding.state_label }}</span>
   </div>
   {% if coding.replay %}<p class="notice warning" data-corti-replay><strong>Synthetic replay.</strong> These AI-assisted suggestions use the retained Corti response for a fictional encounter. No new provider request was made. The original response-quality failure is preserved. This synthetic workflow is not for real patient care or billing.</p>{% endif %}
   {% if coding.retained_prediction %}<p class="notice" data-corti-retained><strong>Retained prediction revalidated.</strong> {% if coding.retained_prediction.contract == 'retained-live-context-review-v1' %}These suggestions use the existing provider response with the saved coding context. The clinical source and answers are unchanged. No new prediction was requested; the original response and usage remain in the earlier coding record.{% else %}These suggestions use the existing Corti response after an independent check of the saved answers. No new Corti prediction was requested. The original response, usage and description defect remain in the earlier coding record.{% endif %}</p>{% endif %}

@@ -85,6 +85,20 @@ class SourceDecisionBoundaryTests(TestCase):
         self.assertEqual(texts(new)[:len(texts(self.original))], texts(self.original))
         self.assert_originals()
 
+    def test_provider_approval_state_and_source_completeness_remain_distinct(self):
+        view = service.snapshot(self.encounter, self.user)
+        self.assertEqual(view['state_label'], 'Selections approved')
+        self.assertEqual(view['completeness_state_label'], 'Partial ICD coding — source review remains')
+        self.assertEqual(view['decision'].pk, self.decision.pk)
+        self.assertFalse(CodingSourceDecision.objects.exists())
+        self.choose()
+        after = service.snapshot(self.encounter, self.user)
+        self.assertEqual(after['state_label'], 'Selections approved')
+        self.assertEqual(after['completeness_state_label'],
+                         'All conditions in this source review have approved ICD codes')
+        self.assertEqual(after['decision'].pk, self.decision.pk)
+        self.assert_originals()
+
     def test_unknown_held_wrong_condition_and_missing_candidate_refuse(self):
         for candidate in ('', 'selected:0', 'source:other'):
             with self.subTest(candidate=candidate), self.assertRaises(ValidationError):

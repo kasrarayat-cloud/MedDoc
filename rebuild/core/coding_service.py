@@ -433,7 +433,9 @@ def snapshot(encounter, user):
     source_review = coding_source_review.view(e, latest, user) if current else None
     view['source_review'] = source_review
     if source_review:
-        view['state_label'] = source_review['state_label']
+        # Provider approval state and source completeness are distinct. Keep
+        # the saved-decision contract; the page badge uses completeness first.
+        view['completeness_state_label'] = source_review['state_label']
         source_codes = {code for row in source_review.get('rows', [])
             if row.get('chosen', {}).get('action') == 'accept' for code in row['approved_codes']}
         summary['approved'] += len(source_codes)
