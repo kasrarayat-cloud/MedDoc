@@ -64,10 +64,10 @@ def payload(request):
     return data.dict()
 
 
-def response(request, encounter, error='', status=200):
-    coding = service.snapshot(encounter, request.user)
+def response(request, encounter, error='', status=200, *, source_decision_response=None):
     if request.content_type != 'application/json' and request.headers.get('Accept') != 'application/json' and not error:
         return redirect('/encounters/' + str(encounter.pk) + '/?tab=coding')
+    coding = service.snapshot(encounter, request.user, source_decision_response=source_decision_response)
     html = render_to_string('coding_panel.html', {'encounter': encounter, 'coding': coding}, request=request)
     result = JsonResponse({'encounter_id': str(encounter.pk), 'version': coding['version'],
         'state': coding['state'], 'state_label': coding['state_label'], 'pending': coding['pending'],
@@ -102,9 +102,9 @@ def source_review(request, pk):
                     raise ValidationError('Choose an explicit outcome for every edited source condition.')
                 continue
             changes[key] = {'action': action, 'suggestion_id': candidate, 'reason': reason}
-        coding_source_review.decide(e, request.user, data.get('source_review_token', ''),
-            data.get('review_digest', ''), data.get('prior_revision', ''), changes)
-        return response(request, e)
+        return coding_source_review.decide(e, request.user, data.get('source_review_token', ''),
+            data.get('review_digest', ''), data.get('prior_revision', ''), changes,
+            respond=lambda assessed: response(request, e, source_decision_response=assessed))
     except ValidationError as exc:
         return response(request, e, '; '.join(exc.messages), 409)
 

@@ -3,10 +3,10 @@ from copy import deepcopy
 from unittest.mock import patch
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import DatabaseError, transaction
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
-from core import coding_source_review as source, coding_service as service
+from core import coding_source_review as source, coding_service as service, coding_views
 from core.models import CodingContext, CodingDecision, CodingRun, CodingSourceDecision, Encounter, User
 from core.tests import test_coding_export as export_tests
 from core.tests.test_coding_export import texts
@@ -43,7 +43,7 @@ class SourceDecisionBoundaryTests(TestCase):
         # Test only the persistence/selection boundary here; it cannot make
         # clinical routing pass. The pure and PostgreSQL projection suites do so.
         p = patch.object(source, 'assess', side_effect=assess)
-        p.start(); self.addCleanup(p.stop)
+        self.assessment = p.start(); self.addCleanup(p.stop)
         p = patch('core.coding_service.ensure_run', side_effect=AssertionError('No predictions from source review'))
         p.start(); self.addCleanup(p.stop)
         p = patch('core.corti_prediction.execute', side_effect=AssertionError('No provider call'))
@@ -67,6 +67,125 @@ class SourceDecisionBoundaryTests(TestCase):
         self.assertEqual(self.saved['decision'], CodingDecision.objects.values().get(pk=self.decision.pk))
         self.assertEqual(self.saved['encounter'], Encounter.objects.values().get(pk=self.encounter.pk))
         self.assertEqual(self.original, self.path.read_bytes())
+
+    def post_source_review(self, view, *, ajax=True, **overrides):
+        data = {'source_review_token': view['display_token'], 'review_digest': view['review_digest'],
+            'prior_revision': view['prior_revision'], 'action:source-condition:omitted': 'accept',
+            'suggestion:source-condition:omitted': 'source:candidate', **overrides}
+        kwargs = {'content_type': 'application/json'} if ajax else {}
+        request = RequestFactory().post('/synthetic/coding/source-review/', data, **kwargs)
+        request.user = self.user
+        return coding_views.source_review(request, self.encounter.pk)
+
+    def test_successful_json_post_assesses_once_and_later_display_and_export_reassess(self):
+        import json
+        view = source.view(self.encounter, self.run, self.user)
+        self.assessment.reset_mock()
+        response = self.post_source_review(view)
+        self.assertEqual(response.status_code, 200)
+        body = json.loads(response.content)
+        self.assertEqual(body['error'], '')
+        self.assertIn('All conditions in this source review have approved ICD codes', body['html'])
+        self.assertEqual(self.assessment.call_count, 1)
+        decision = CodingSourceDecision.objects.get()
+        self.assertEqual(decision.user_id, self.user.pk)
+        self.assertEqual(decision.choices['source-condition:omitted']['action'], 'accept')
+        self.assertTrue(decision.approved_at)
+        self.assertTrue(service.snapshot(self.encounter, self.user)['source_review']['all_coded'])
+        self.assertEqual(self.assessment.call_count, 2)
+        self.assertIn('Z00.01 — Synthetic source suggestion', texts(self.bytes()))
+        self.assertEqual(self.assessment.call_count, 3)
+        self.assert_originals()
+
+    def test_plain_source_approval_redirect_does_not_repeat_assessment(self):
+        view = source.view(self.encounter, self.run, self.user)
+        self.assessment.reset_mock()
+        response = self.post_source_review(view, ajax=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/encounters/' + str(self.encounter.pk) + '/?tab=coding')
+        self.assertEqual(self.assessment.call_count, 1)
+        self.assertEqual(CodingSourceDecision.objects.count(), 1)
+        self.assert_originals()
+
+    def test_post_rejects_forged_stale_and_unexpected_response_proofs(self):
+        view = source.view(self.encounter, self.run, self.user)
+        for values in ({'source_review_token': 'forged'}, {'review_digest': '0' * 64},
+                       {'prior_revision': 'other'}, {'source_decision_response': '{}'}):
+            with self.subTest(values=values):
+                response = self.post_source_review(view, **values)
+                self.assertEqual(response.status_code, 409)
+                self.assertFalse(CodingSourceDecision.objects.exists())
+        self.evaluation['suggestions'][0]['eligible'] = False
+        self.assertEqual(self.post_source_review(view).status_code, 409)
+        self.assertFalse(CodingSourceDecision.objects.exists())
+        self.assert_originals()
+
+    def test_success_response_proof_is_single_use_and_expires_after_callback(self):
+        view = source.view(self.encounter, self.run, self.user)
+        captured = []
+        def respond(proof):
+            captured.append(proof)
+            first = source.view(self.encounter, self.run, self.user, decision_response=proof)
+            self.assertTrue(first['all_coded'])
+            self.assertFalse(source.view(self.encounter, self.run, self.user,
+                                        decision_response=proof)['available'])
+            return first
+        self.assessment.reset_mock()
+        result = source.decide(self.encounter, self.user, view['display_token'], view['review_digest'], '',
+            {'source-condition:omitted': {'action': 'accept', 'suggestion_id': 'source:candidate', 'reason': ''}},
+            respond=respond)
+        self.assertTrue(result['all_coded'])
+        self.assertFalse(source.view(self.encounter, self.run, self.user,
+                                    decision_response=captured[0])['available'])
+        self.assertEqual(self.assessment.call_count, 1)
+        self.assertTrue(source.view(self.encounter, self.run, self.user)['all_coded'])
+        self.assertEqual(self.assessment.call_count, 2)
+
+    def test_response_rejects_changed_actor_run_proof_source_and_reference(self):
+        view = source.view(self.encounter, self.run, self.user)
+        for change in ('actor', 'encounter', 'inputs', 'context', 'config', 'result', 'requests',
+                       'selection', 'releases', 'notes', 'reference'):
+            with self.subTest(change=change), transaction.atomic():
+                def respond(proof):
+                    e, run, user = deepcopy(self.encounter), deepcopy(self.run), deepcopy(self.user)
+                    if change == 'actor': user.pk = self.department.pk
+                    elif change == 'encounter': e.pk = self.department.pk
+                    elif change == 'inputs': run.inputs['notes'] = 'Changed input'
+                    elif change == 'context': run.context['setting'] = 'unknown'
+                    elif change == 'config': run.config['provider'] = 'changed'
+                    elif change == 'result': run.result['global_blockers'] = ['Changed proof']
+                    elif change == 'requests': run.requests = [{'changed': True}]
+                    elif change == 'selection': run.selection['selected_ids'] = []
+                    elif change == 'releases': run.releases = []
+                    elif change == 'notes': e.notes += ' Changed source.'
+                    elif change == 'reference':
+                        # Model-copy return exercises rebinding without disabling
+                        # append-only database guards on the actual reference.
+                        with patch.object(service, 'release_snapshot', return_value=[]):
+                            return source.view(e, run, user, decision_response=proof)
+                    return source.view(e, run, user, decision_response=proof)
+                result = source.decide(self.encounter, self.user, view['display_token'], view['review_digest'], '',
+                    {'source-condition:omitted': {'action': 'accept', 'suggestion_id': 'source:candidate', 'reason': ''}},
+                    respond=respond)
+                self.assertFalse(result['available'])
+                transaction.set_rollback(True)
+        self.assertFalse(CodingSourceDecision.objects.exists())
+        self.assert_originals()
+
+    def test_failed_response_rolls_back_decision_and_expires_unused_proof(self):
+        view = source.view(self.encounter, self.run, self.user)
+        captured = []
+        def respond(proof):
+            captured.append(proof)
+            raise RuntimeError('Synthetic render failure')
+        with self.assertRaisesMessage(RuntimeError, 'Synthetic render failure'):
+            source.decide(self.encounter, self.user, view['display_token'], view['review_digest'], '',
+                {'source-condition:omitted': {'action': 'accept', 'suggestion_id': 'source:candidate', 'reason': ''}},
+                respond=respond)
+        self.assertFalse(CodingSourceDecision.objects.exists())
+        self.assertFalse(source.view(self.encounter, self.run, self.user,
+                                    decision_response=captured[0])['available'])
+        self.assert_originals()
 
     def test_read_does_not_select_or_approve_and_explicit_selection_preserves_original_export(self):
         old = self.bytes()
