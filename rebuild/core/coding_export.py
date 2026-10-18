@@ -31,7 +31,7 @@ DRAFT_TAG = 'quillmd-synthetic-coding-draft-v1'
 CONTRACT = 'finalized-word-with-codes-v1'
 
 
-def eligible_codes(encounter):
+def eligible_codes(encounter, *, include_source=True):
     """Read the persisted approval; never infer acceptance from suggestions."""
     if encounter.status != 'finalized' or encounter.template_version.template.format.lower() != 'docx':
         raise ValidationError('Export with codes requires a finalized Word document. The original download remains available.')
@@ -41,16 +41,18 @@ def eligible_codes(encounter):
         raise ValidationError('Review and approve coding for the current saved encounter revision before exporting with codes.')
     service.assert_current(run, encounter)
     decisions = list(CodingDecision.objects.filter(run=run)[:2])
-    if len(decisions) != 1:
-        raise ValidationError('A single saved coding approval is required before exporting with codes.')
-    decision = decisions[0]
-    if (decision.input_digest != key or decision.selection_digest != service.selection_digest(run)
-            or decision.selections != run.selection):
-        raise ValidationError('The saved coding approval no longer matches this reviewed result.')
-    service.approval_ready(run)
-    clean = validate_selection(run, copy.deepcopy(decision.selections))
-    if clean != decision.selections or not clean.get('selected_ids'):
-        raise ValidationError('No accepted, eligible codes are available for this export.')
+    if len(decisions) > 1:
+        raise ValidationError('The saved coding approval is ambiguous.')
+    decision = decisions[0] if decisions else None
+    clean = {'selected_ids': [], 'overrides': {}}
+    if decision:
+        if (decision.input_digest != key or decision.selection_digest != service.selection_digest(run)
+                or decision.selections != run.selection):
+            raise ValidationError('The saved coding approval no longer matches this reviewed result.')
+        service.approval_ready(run)
+        clean = validate_selection(run, copy.deepcopy(decision.selections))
+        if clean != decision.selections:
+            raise ValidationError('The saved coding selections changed.')
     suggestions = run.result.get('suggestions', [])
     rows = {item['id']: item for item in suggestions}
     if len(rows) != len(suggestions):
@@ -96,7 +98,7 @@ def eligible_codes(encounter):
     # bounded API-output decision does not alter that approval or turn an
     # unverified provider description into licensed terminology.
     from .coding_output import accepted_output_rows, DESCRIPTION_STATUSES
-    supplements = accepted_output_rows(encounter, run, decision)
+    supplements = accepted_output_rows(encounter, run, decision) if decision else []
     if supplements:
         for output in supplements:
             if (not isinstance(output, dict) or output.get('system') != 'CPT'
@@ -126,6 +128,22 @@ def eligible_codes(encounter):
                        if row.get('system') == exported['system'] and row.get('code') == exported['code']]
             if len(matched) == 1 and matched[0].get('evidence_spans'):
                 exported['evidence_spans'] = _note_evidence(matched[0]['evidence_spans'], run.inputs['notes'])
+    if include_source:
+        from .coding_source_review import accepted_rows
+        source_decision, source_rows, coverage = accepted_rows(encounter, run)
+        for row in source_rows:
+            identity = (row['system'], row['code'])
+            if identity in seen:
+                raise ValidationError('The source review duplicates an existing approved code.')
+            seen.add(identity); exports.append(row)
+        if source_decision:
+            decision = decision or source_decision
+            # A new explicit source review creates its own immutable variant.
+            # Earlier provider-only variants keep their original bytes.
+            for row in exports:
+                row['source_completeness'] = coverage
+    if not decision or not exports:
+        raise ValidationError('No accepted, eligible codes are available for this export.')
     return run, decision, sorted(exports, key=lambda row: (row['system'] != 'ICD-10-CM', row['code']))
 
 
@@ -222,6 +240,13 @@ def _paragraph(parent, text, heading=False):
 def append_codes(original, rows):
     """Return a fresh variant, preserving all clinical body bytes and assets."""
     paragraphs = [('Diagnosis and procedure codes', True)]
+    coverage = next((row['source_completeness'] for row in rows if row.get('source_completeness')), None)
+    if coverage:
+        paragraphs.append((coverage['state_label'], False))
+        for outcome in coverage['reviewed_outcomes']:
+            paragraphs.append((outcome['condition'] + ' — ' +
+                ('reviewed without a code' if outcome['action'] == 'no_code' else 'needs clarification') +
+                ': ' + outcome['reason'], False))
     bounded = any(row.get('export_route') == 'bounded_api_output' for row in rows)
     automated = any(row.get('review_execution') == 'agent_executed_synthetic' for row in rows)
     unverified = any(row.get('description_status') == 'withheld_unverified_provider_text' for row in rows)
@@ -251,7 +276,10 @@ def append_codes(original, rows):
                                        ('Description withheld; upstream description and terminology version remain unresolved.', False)])
                 else:
                     paragraphs.append((row['code'] + ' — ' + row['description'], False))
-                if bounded:
+                if row.get('export_route') == 'source_derived_review':
+                    paragraphs.append(('Source-derived ICD suggestion explicitly selected in a separate source review. '
+                        'Alphabetic Index route: ' + row['route'], False))
+                if bounded or row.get('export_route') == 'source_derived_review':
                     for span in row.get('evidence_spans', []):
                         paragraphs.append(('Original-note evidence: ' + span['quote'], False))
     return append_review(original, paragraphs, tag=TAG)
@@ -328,7 +356,10 @@ def export_with_codes(request, pk):
                                  pk=pk, status='finalized')
     membership(request.user, encounter.department)
     try:
-        run, decision, rows = eligible_codes(encounter)
+        variant = request.GET.get('source_review', '')
+        if variant not in ('', 'provider') or len(request.GET.getlist('source_review')) > 1:
+            raise ValidationError('Unknown coding export review variant.')
+        run, decision, rows = eligible_codes(encounter, include_source=variant != 'provider')
         original = private_path(encounter.export_path).read_bytes()
         if hashlib.sha256(original).hexdigest() != encounter.export_sha256:
             raise ValidationError('The original finalized export failed its integrity check.')

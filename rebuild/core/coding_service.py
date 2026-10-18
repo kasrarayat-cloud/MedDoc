@@ -13,7 +13,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from .coding_licensing import cpt_status
-from .models import CodingContext, CodingDecision, CodingRelease, CodingRun, CodeSet, CodeSuggestion, Encounter, Job
+from .models import CodingContext, CodingDecision, CodingRelease, CodingRun, CodingSourceDecision, CodeSet, CodeSuggestion, Encounter, Job
 from .security import audit, membership
 
 CONTRACT = 'outpatient-coding-v1'
@@ -250,6 +250,8 @@ def update_selection(run, user, selections, expected_selection_revision):
     assert_current(run, e)
     if CodingDecision.objects.filter(run=run).exists():
         raise ValidationError('This coding record has already been approved. Its approval is retained unchanged.')
+    if CodingSourceDecision.objects.filter(run=run).exists():
+        raise ValidationError('The source review has already been approved. Its provider selection basis is retained unchanged.')
     if type(expected_selection_revision) is not int or expected_selection_revision != run.selection_revision:
         raise ValidationError('These selections changed in another window. Review the saved selections.')
     from .coding_dispatch import validate_selection
@@ -280,6 +282,8 @@ def approve(run, user, expected_input_digest, expected_selection_digest):
         if previous.selection_digest != expected_selection_digest:
             raise ValidationError('A different selection was already approved.')
         return previous
+    if CodingSourceDecision.objects.filter(run=run).exists():
+        raise ValidationError('The source-only review has already been approved. Its empty provider basis is retained unchanged.')
     decision = CodingDecision.objects.create(run=run, user=user, input_digest=run.input_digest,
         selection_digest=expected_selection_digest, selections=copy.deepcopy(selections), approved_at=timezone.now())
     audit(user, 'coding.approved', decision.pk, department=e.department,
@@ -425,11 +429,23 @@ def snapshot(encounter, user):
         view['state_label'] = ('Selections approved; CPT number accepted with description withheld' if outcome == 'accepted'
                                else 'ICD decision saved; CPT number awaiting confirmation' if outcome == 'pending'
                                else 'Coding decisions saved; CPT number rejected')
+    from . import coding_source_review
+    source_review = coding_source_review.view(e, latest, user) if current else None
+    view['source_review'] = source_review
+    if source_review:
+        # Provider approval state and source completeness are distinct. Keep
+        # the saved-decision contract; the page badge uses completeness first.
+        view['completeness_state_label'] = source_review['state_label']
+        source_codes = {code for row in source_review.get('rows', [])
+            if row.get('chosen', {}).get('action') == 'accept' for code in row['approved_codes']}
+        summary['approved'] += len(source_codes)
+        view['source_decision'] = source_review.get('prior_revision', '')
     view['version'] = digest({'context': key, 'run': view['run_id'], 'state': state,
                               'selection': view['selection_digest'], 'result': digest(result),
                               'decision': str(decision.pk) if decision else None,
                               'can_edit': can_edit, 'can_review': can_review, 'can_approve': can_approve,
-                              'output_review': {k: output_review.get(k) for k in ('available', 'reason', 'state', 'review_digest')} if output_review else None})
+                              'output_review': {k: output_review.get(k) for k in ('available', 'reason', 'state', 'review_digest')} if output_review else None,
+                              'source_review': {k: source_review.get(k) for k in ('available', 'reason', 'complete', 'review_digest', 'prior_revision')} if source_review else None})
     return view
 
 

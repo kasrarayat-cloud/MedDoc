@@ -475,6 +475,27 @@ class CodingOutputDecision(Entity):
         super().save(*args,**kwargs)
     def delete(self,*args,**kwargs):raise ValidationError('Output decisions are append-only.')
 
+class CodingSourceDecision(Entity):
+    """Append-only source completeness review, independent of provider choices."""
+    run=models.ForeignKey(CodingRun,on_delete=models.PROTECT,related_name='source_decisions')
+    base_decision=models.ForeignKey(CodingDecision,on_delete=models.PROTECT,null=True)
+    previous=models.OneToOneField('self',on_delete=models.PROTECT,null=True,related_name='successor')
+    user=models.ForeignKey(User,on_delete=models.PROTECT)
+    review_digest=models.CharField(max_length=64)
+    review=models.JSONField(default=dict)
+    choices=models.JSONField(default=dict)
+    approved_at=models.DateTimeField(default=timezone.now)
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['run'],condition=models.Q(previous__isnull=True),name='coding_source_first_once')]
+    @property
+    def selection_digest(self):
+        return self.review_digest
+    def save(self,*args,**kwargs):
+        if not self._state.adding:raise ValidationError('Source coding reviews are append-only.')
+        super().save(*args,**kwargs)
+    def delete(self,*args,**kwargs):raise ValidationError('Source coding reviews are append-only.')
+
+
 class AuditEvent(Entity):
     actor=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)
