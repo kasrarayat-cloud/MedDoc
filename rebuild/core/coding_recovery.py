@@ -19,15 +19,40 @@ from .models import CodingRun, Job
 from .security import audit, private_path
 
 CONTRACT = 'retained-live-prediction-revalidation-v1'
+COMPLETE_SOURCE_CONTRACT = 'retained-live-prediction-revalidation-v2'
+COMPLETE_CHECK_CONTRACT = 'retained-facts-independent-check-v3'
 MODE = 'retained_live'
 REVALIDATION_CONTRACT = 'retained-facts-independent-check-v1'
-REVALIDATION_CONTRACTS = (REVALIDATION_CONTRACT,'retained-facts-independent-check-v2')
+REVALIDATION_CONTRACTS = (REVALIDATION_CONTRACT,'retained-facts-independent-check-v2',COMPLETE_CHECK_CONTRACT)
 CONTEXT_CONTRACT = 'retained-live-context-review-v1'
 
 
 def need(value, message):
     if not value:
         raise ValidationError(message)
+
+
+def stable_revalidation_inputs(encounter, source, current, *, complete=False):
+    """Identity projections may change only as a consequence of checked answers.
+
+    V3 recomputes both projections from the same immutable original destinations.
+    A caller cannot discard, forge or substitute an identity bridge merely by
+    removing it from the stable-input comparison. Historical rules stay exact.
+    """
+    excluded = {'answers', 'documented_patient_name_evidence'}
+    if complete:
+        fields_digest = service.digest(encounter.template_version.fields)
+        need(source.get('template', {}).get('fields_sha256') == fields_digest
+             == current.get('template', {}).get('fields_sha256'),
+             'The retained patient-name destinations changed.')
+        for inputs in (source, current):
+            expected = service.patient_name_inputs(encounter, inputs['answers'])
+            actual = {key: inputs[key] for key in ('patient_name_answers', 'documented_patient_name_evidence')
+                      if key in inputs}
+            need(actual == expected, 'The patient-name input is not the exact projection of its checked source answer.')
+        excluded.add('patient_name_answers')
+    return ({k:v for k,v in source.items() if k not in excluded}
+            == {k:v for k,v in current.items() if k not in excluded})
 
 
 def live_receipt(source):
@@ -64,7 +89,7 @@ def source_for(run):
     need(isinstance(binding, dict) and set(binding) == {'contract', 'source_run_id',
          'source_input_digest', 'source_requests_digest', 'source_result_digest',
          'recovery_job_id', 'recovery_result_sha256', 'approved_answers_digest'}
-         and binding.get('contract') == CONTRACT,
+         and binding.get('contract') in (CONTRACT, COMPLETE_SOURCE_CONTRACT),
          'The retained prediction has no supported provenance contract.')
     try:
         source = CodingRun.objects.get(pk=binding['source_run_id'], encounter_id=run.encounter_id)
@@ -75,6 +100,9 @@ def source_for(run):
          and job.result_sha256 and job.result_sha256 == binding.get('recovery_result_sha256')
          and job.user_id == run.user_id == source.user_id and job.revision == run.inputs.get('revision'),
          'The independent answer revalidation does not cover this coding record.')
+    complete = job.config.get('semantic_revalidation_contract') == COMPLETE_CHECK_CONTRACT
+    need(binding['contract'] == (COMPLETE_SOURCE_CONTRACT if complete else CONTRACT),
+         'The coding interpretation must match its independent source-check contract.')
     parent = job.config.get('semantic_revalidation', {})
     need(parent.get('parent_run_id') == str(source.pk)
          and parent.get('parent_answers_sha256') == service.digest(source.inputs.get('answers'))
@@ -94,21 +122,38 @@ def source_for(run):
          and service.digest(source.result) == binding.get('source_result_digest')
          and service.digest(run.inputs.get('answers')) == binding.get('approved_answers_digest'),
          'Retained prediction or independently checked answer evidence changed.')
-    stable_inputs = lambda value: {k: v for k, v in value.items()
-        if k not in ('answers', 'documented_patient_name_evidence')}
-    need(stable_inputs(source.inputs) == stable_inputs(run.inputs)
+    need(stable_revalidation_inputs(run.encounter if complete else None, source.inputs, run.inputs, complete=complete)
          and source.context == run.context and source.releases == run.releases
          and corti_prediction.payload(source) == corti_prediction.payload(run),
          'Retained output cannot cross a patient, source, date, revision, template, context or reference change.')
     expected_config = {**deepcopy(source.config), 'mode': MODE, 'max_calls': 0,
                        'retained_prediction': binding}
+    if complete:
+        from .coding_engine import PROSPECTIVE_SOURCE_CONTRACT
+        expected_config['clinical_source_contract'] = PROSPECTIVE_SOURCE_CONTRACT
     need(run.config == expected_config, 'The retained prediction configuration changed.')
     from .semantic_revalidation import validate_completed
     validate_completed(job, run.inputs.get('answers'))
     need(run.result.get('retained_prediction') == binding,
          'The derived result does not retain its provenance.')
-    live_receipt(source)
-    return source
+    origin, _receipt = revalidation_receipt(source, complete=complete)
+    return origin
+
+
+def revalidation_receipt(source, *, complete=False):
+    """V3 can retain an already saved context review of the original request.
+
+    Only the existing independently verified context derivative is admitted.
+    Historical answer revalidations and arbitrary chains cannot become origins.
+    """
+    if complete and source.config.get('mode') == MODE:
+        binding = source.config.get('retained_prediction') or {}
+        need(binding.get('contract') == CONTEXT_CONTRACT,
+             'The source must be an original prediction or its intact context review.')
+        origin = source_for(source)
+    else:
+        origin = source
+    return origin, live_receipt(origin)
 
 
 def context_source_for(run, binding):
@@ -190,28 +235,30 @@ def derive(encounter, recovery_job, parent_run_id):
          and recovery_job.config.get('semantic_revalidation_contract') in REVALIDATION_CONTRACTS,
          'A completed independent synthetic revalidation is required.')
     source = CodingRun.objects.select_for_update().get(pk=parent_run_id, encounter=e)
-    receipt = live_receipt(source)
+    complete = recovery_job.config.get('semantic_revalidation_contract') == COMPLETE_CHECK_CONTRACT
+    _origin, receipt = revalidation_receipt(source, complete=complete)
     inputs, context, releases, key = service.input_snapshot(e)
     old = CodingRun.objects.filter(encounter=e, input_digest=key).first()
     if old is not None:
         need(old.config.get('mode') == MODE, 'This answer snapshot already has another coding result.')
         source_for(old)
         return old
-    binding = {'contract': CONTRACT, 'source_run_id': str(source.pk),
+    binding = {'contract': COMPLETE_SOURCE_CONTRACT if complete else CONTRACT, 'source_run_id': str(source.pk),
         'source_input_digest': source.input_digest, 'source_requests_digest': service.digest(source.requests),
         'source_result_digest': service.digest(source.result), 'recovery_job_id': str(recovery_job.pk),
         'recovery_result_sha256': recovery_job.result_sha256,
         'approved_answers_digest': service.digest(inputs['answers'])}
     config = {**deepcopy(source.config), 'mode': MODE, 'max_calls': 0,
               'retained_prediction': binding}
+    if complete:
+        from .coding_engine import PROSPECTIVE_SOURCE_CONTRACT
+        config['clinical_source_contract'] = PROSPECTIVE_SOURCE_CONTRACT
     run = CodingRun(encounter=e, user=recovery_job.user, inputs=inputs, context=context,
         releases=releases, input_digest=key, config=config, requests=[], actual_cost=Decimal('0'),
         state='needs_detail', started_at=timezone.now(), finished_at=timezone.now())
     # Validate the same identity and unchanged provider input before any result is
     # created. The new snapshot may change only independently checked answers.
-    stable_inputs = lambda value: {k: v for k, v in value.items()
-        if k not in ('answers', 'documented_patient_name_evidence')}
-    need(stable_inputs(source.inputs) == stable_inputs(inputs) and source.user_id == run.user_id
+    need(stable_revalidation_inputs(e, source.inputs, inputs, complete=complete) and source.user_id == run.user_id
          and source.context == context and source.releases == releases
          and corti_prediction.payload(source) == corti_prediction.payload(run),
          'The retained coding payload or encounter identity changed; no new prediction was requested.')

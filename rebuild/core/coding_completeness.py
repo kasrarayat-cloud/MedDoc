@@ -767,6 +767,39 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
     return None, None, None
 
 
+def selected_qualified_route(run, reference, proposal, selected):
+    """Apply the same qualified-phrase proof to a provider-selected code.
+
+    The provider's original valid source span must contain the complete
+    independently inventoried condition. No new code, alternative or clipped
+    modifier is promoted. All source-reference vetoes still apply.
+    """
+    notes = run.inputs['notes']
+    inv = inventory(notes)
+    if inv['blockers']:
+        return None, None, None
+    lookup = engine.index_lookup(reference)
+    roots = {_root(entry, lookup)['id'] for entry in reference.index
+             if entry.get('code') == proposal['code'] and not entry.get('requires_review')}
+    found = []
+    for item in inv['items']:
+        if not item['current_evaluation_evidence']:
+            continue
+        spans = _condition_spans(notes, item)
+        if not any(p.get('status') == 'valid' and p.get('context_index') == 0
+                and notes[p['start']:p['end']] == p['text']
+                and p['start'] <= span['start'] and p['end'] >= span['end']
+                for p in proposal['evidence'] for span in spans):
+            continue
+        row = {**item, 'id':proposal['id']}
+        concept, candidate, check = _qualified_route(run, reference, row, proposal, roots, lookup, selected)
+        if not candidate or _condition_reference_errors(notes, concept, item['condition_text'], reference, inv['unresolved']):
+            continue
+        found.append((concept, candidate, {**check, 'source_condition_id':item['id'],
+            'source_inventory_sha256':inv['inventory_sha256']}))
+    return found[0] if len(found) == 1 else (None, None, None)
+
+
 def _coalesce_reference_mentions(rows, checked):
     """One directly classified finding may have short and qualified mentions.
 

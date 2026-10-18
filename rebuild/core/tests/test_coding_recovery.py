@@ -130,6 +130,73 @@ class RetainedPredictionProvenanceTests(live.LiveOutputReferenceTests):
         self.job.config['semantic_revalidation_contract'] = 'unknown'
         with self.assertRaises(ValidationError): recovery.source_for(self.derived)
 
+    def complete_identity_fixture(self):
+        fields = [{'key':'field', 'label':'Finding'}]
+        self.encounter.template_version = SimpleNamespace(fields=fields, semantic_definitions={})
+        for row in (self.source, self.derived):
+            row.encounter = self.encounter
+            row.inputs['template'] = {'fields_sha256':service.digest(fields)}
+            row.inputs.update(service.patient_name_inputs(self.encounter, row.inputs['answers']))
+            row.input_digest = service.digest({'inputs':row.inputs, 'context':row.context, 'releases':row.releases})
+        live.bind_request(self.source)
+        binding = self.derived.config['retained_prediction']
+        binding.update(source_input_digest=self.source.input_digest,
+            source_requests_digest=service.digest(self.source.requests))
+
+    def test_v3_interpretation_is_bound_to_its_distinct_independent_check(self):
+        from core.coding_engine import PROSPECTIVE_SOURCE_CONTRACT
+        self.complete_identity_fixture()
+        self.derived.config['clinical_source_contract'] = PROSPECTIVE_SOURCE_CONTRACT
+        with self.assertRaises(ValidationError): recovery.source_for(self.derived)
+        self.job.config['semantic_revalidation_contract'] = recovery.COMPLETE_CHECK_CONTRACT
+        with self.assertRaises(ValidationError): recovery.source_for(self.derived)
+        self.derived.config['retained_prediction']['contract'] = recovery.COMPLETE_SOURCE_CONTRACT
+        self.assertIs(recovery.source_for(self.derived), self.source)
+        self.derived.inputs['patient_name_answers'] = [{'key':'field','label':'Patient name','text':'Different patient'}]
+        with self.assertRaises(ValidationError): recovery.source_for(self.derived)
+        self.derived.inputs['patient_name_answers'] = []
+        self.derived.config['max_calls'] = 1
+        with self.assertRaises(ValidationError): recovery.source_for(self.derived)
+
+    def test_v3_retains_current_context_and_original_request_without_replaying_old_approvals(self):
+        from core.coding_engine import PROSPECTIVE_SOURCE_CONTRACT
+        self.complete_identity_fixture()
+        origin = self.source
+        origin.config['context_review_contract'] = recovery.CONTEXT_CONTRACT
+        live.bind_request(origin)
+        parent = deepcopy(origin); parent.pk = uuid4()
+        parent.context = {**origin.context, 'em_basis':'time'}
+        parent.input_digest = service.digest({'inputs':parent.inputs, 'context':parent.context, 'releases':parent.releases})
+        context_binding = {'contract':recovery.CONTEXT_CONTRACT, 'source_run_id':str(origin.pk),
+            'source_input_digest':origin.input_digest, 'source_requests_digest':service.digest(origin.requests),
+            'source_result_digest':service.digest(origin.result), 'review_context_digest':service.digest(parent.context)}
+        parent.config = {**deepcopy(origin.config), 'mode':recovery.MODE, 'max_calls':0,
+                         'retained_prediction':context_binding}
+        parent.requests = []; parent.actual_cost = Decimal('0')
+        parent.result['retained_prediction'] = context_binding
+        self.job.config['semantic_revalidation_contract'] = recovery.COMPLETE_CHECK_CONTRACT
+        self.job.config['semantic_revalidation']['parent_run_id'] = str(parent.pk)
+        self.derived.context = deepcopy(parent.context)
+        binding = {**deepcopy(self.derived.config['retained_prediction']),
+            'contract':recovery.COMPLETE_SOURCE_CONTRACT, 'source_run_id':str(parent.pk),
+            'source_input_digest':parent.input_digest, 'source_requests_digest':service.digest(parent.requests),
+            'source_result_digest':service.digest(parent.result)}
+        self.derived.config = {**deepcopy(parent.config), 'retained_prediction':binding,
+                              'clinical_source_contract':PROSPECTIVE_SOURCE_CONTRACT}
+        self.derived.result['retained_prediction'] = binding
+        self.derived.input_digest = service.digest({'inputs':self.derived.inputs,
+            'context':self.derived.context, 'releases':self.derived.releases})
+        saved = deepcopy((origin, parent))
+        def get(*args, **kwargs):
+            return parent if str(kwargs['pk']) == str(parent.pk) else origin
+        with patch.object(recovery.CodingRun.objects, 'get', side_effect=get), \
+             patch('core.corti_prediction.execute', side_effect=AssertionError('No new prediction')) as send:
+            self.assertIs(recovery.source_for(self.derived), origin)
+            self.assertEqual((vars(origin), vars(parent)), (vars(saved[0]), vars(saved[1])))
+            origin.requests[0]['raw_response']['body'] += ' '
+            with self.assertRaises(ValidationError): recovery.source_for(self.derived)
+        send.assert_not_called()
+
 
 # The base class is a fixture supplier. Do not rerun its unrelated campaign here.
 for _name in tuple(vars(live.LiveOutputReferenceTests)):

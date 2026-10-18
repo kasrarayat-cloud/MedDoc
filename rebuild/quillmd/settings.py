@@ -129,3 +129,4 @@ SECURE_HSTS_SECONDS=31536000 if SESSION_COOKIE_SECURE else 0
 # Exact original jobs admitted to the synthetic retained-facts recovery.
 SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS=tuple(x.strip() for x in os.getenv('QUILLMD_SEMANTIC_REVALIDATION_ORIGIN_JOB_IDS','').split(',') if x.strip())
 SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS=tuple(x.strip() for x in os.getenv('QUILLMD_SEMANTIC_REVALIDATION_V2_ORIGIN_JOB_IDS','').split(',') if x.strip())
+SEMANTIC_REVALIDATION_V3_ORIGIN_JOB_IDS=tuple(x.strip() for x in os.getenv('QUILLMD_SEMANTIC_REVALIDATION_V3_ORIGIN_JOB_IDS','').split(',') if x.strip())

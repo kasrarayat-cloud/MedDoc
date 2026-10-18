@@ -6,14 +6,15 @@ other encounters and unresolved source attribution retain their own scope.
 """
 import re
 from datetime import datetime
+from .clinical_assertions import PROFILE as COMPLETE_ASSERTION_PROFILE, follow_up_frame
 
 SOURCE_GOVERNANCE_PROFILE = 'source-governance-v2'
 
 
 def _profile(profile):
-    if profile not in (None, SOURCE_GOVERNANCE_PROFILE):
+    if profile not in (None, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE):
         raise ValueError('Unknown clinical source-governance profile.')
-    return profile == SOURCE_GOVERNANCE_PROFILE
+    return profile in (SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE)
 
 
 def source_date(value):
@@ -26,12 +27,15 @@ def source_date(value):
     return None
 
 
-def conditional_follow_up(text):
+def conditional_follow_up(text, *, profile=None):
     """A complete follow-up instruction with a retained safety-net condition.
 
     This is an instruction, not a hypothetical assertion about current disease.
     Unparsed tails, another subject or a qualified report do not fit the frame.
     """
+    if (profile == COMPLETE_ASSERTION_PROFILE and follow_up_frame(text)
+            and not re.search(r'\b' + PERSON + r'\b', text, re.I)):
+        return True
     noun = r'(?:[A-Za-z-]+(?:al|ic|ous|ive|ed|en)\s+){0,2}[A-Za-z][A-Za-z-]*'
     pattern = (r'(?:follow-up|followup|review)\s+is\s+planned\s+after\s+(?:the\s+)?'+noun
         +r'\s+to\s+(?:discuss|review)\s+(?:its|the)\s+'+noun
@@ -371,7 +375,7 @@ def owned_current(context, unit, *, historical_support=False):
 def literal_kind(text, section=None, *, profile=None):
     """Complete source predicates, with no disease/drug/test allowlist."""
     value = text.strip().removesuffix('.').strip()
-    if _profile(profile) and section=='plan' and conditional_follow_up(text):
+    if _profile(profile) and section=='plan' and conditional_follow_up(text, profile=profile):
         return 'conditional_follow_up'
     if section in ('assessment', 'impression'):
         if re.fullmatch(r'(?:the\s+)?(?:cause|etiology)(?:\s+of\s+(?:these|the)\s+symptoms)?\s+(?:remains?|is)\s+(?:uncertain|unknown|unclear)', value, re.I):
@@ -448,6 +452,9 @@ def time_kind(text, *, profile=None):
         return 'total'
     if modern and re.fullmatch(r'(?:these|those)\s+are\s+all\s+(?:physician|clinician)\s+activities\s+on\s+the\s+(?:encounter\s+date|date\s+of\s+service)',value,re.I):
         return 'qualification'
+    if profile == COMPLETE_ASSERTION_PROFILE and re.fullmatch(r'(?:these|those)\s+activities\s+were\s+all\s+performed\s+by\s+the\s+'
+            r'(?:physician|clinician)\s+on\s+the\s+(?:encounter\s+date|date\s+of\s+service)',value,re.I):
+        return 'qualification'
     if re.fullmatch(r'(?:this\s+total|the\s+total|the\s+'+NUMBER+r'\s+minutes|they|(?:these|those)\s+minutes)\s+(?:also\s+)?(?:excludes?|does\s+not\s+(?:include|count))\s+[^\r\n]+', value, re.I):
         return 'exclusion'
     if re.fullmatch(r'(?:time\s+[^\r\n]+\s+(?:is|was)\s+excluded\s+from\s+(?:this|the)\s+total|I\s+excluded\s+[^\r\n]+\s+from\s+(?:this|the)\s+total)',value,re.I):
@@ -502,7 +509,11 @@ def time_blocks(notes, units, context, *, profile=None):
                 and not re.search(r'\r?\n\s*\r?\n',gap)
                 and not _integrity_assertion(unit['quote'])
                 and re.search(r'\b(?:time|minutes|total|exclud\w*|count\w*)\b',unit['quote'],re.I)):
-            kind='qualification'
+            # The prospective account requires each intervening assertion to
+            # have its own complete frame. An unknown time-related sentence
+            # cannot act as an invisible bridge to a subsequent exclusion.
+            if profile != COMPLETE_ASSERTION_PROFILE:
+                kind='qualification'
         if not kind or gap.strip() or re.search(r'\r?\n\s*\r?\n',gap) and kind not in ('exclusion','qualification'):
             finish(); group=[]
         if kind: group.append((unit,kind))

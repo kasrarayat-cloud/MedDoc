@@ -454,7 +454,7 @@ def prove(reference, entry, concept, notes, *, source_contract):
     that two source qualifiers are clinically disjoint.
     """
     from . import coding_engine as engine
-    if (source_contract != engine.CURRENT_SOURCE_CONTRACT
+    if (source_contract not in engine.GOVERNANCE_SOURCE_CONTRACTS
             or engine.norm(entry.get('term', '')) != 'specified nec' or not _guideline_bound(reference)):
         return None
     head, family = _family(reference, entry)

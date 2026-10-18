@@ -8,15 +8,15 @@
   const statusURL = new URL(panel.dataset.statusUrl, location.href);
   if (statusURL.origin !== location.origin) return;
   const baselines = new WeakMap();
-  let timer, pollController, polling = false, posting = false, uncertain = false, staged = null, stopped = false;
+  let timer, pollController, polling = false, posting = false, uncertain = false, savedAcknowledged = false, staged = null, stopped = false;
   let pendingFocusID = '', pendingFocusFallbackID = '';
   let epoch = 0, failures = 0;
   const value = form => JSON.stringify([...form.elements].filter(el => el.name && el.name !== 'csrfmiddlewaretoken' && !['submit', 'button'].includes(el.type) && (!['checkbox', 'radio'].includes(el.type) || el.checked)).map(el => [el.name, el.value]));
   const dirty = () => [...panel.querySelectorAll('[data-coding-form]')].filter(f => baselines.get(f) !== value(f));
-  const error = message => {
+  const error = (message, focus = true) => {
     const el = panel.querySelector('[data-coding-error]');
     el.textContent = message; el.hidden = !message;
-    if (message) el.focus();
+    if (message && focus) el.focus();
   };
   const sourceReviewError = form => {
     let chosen = 0;
@@ -91,7 +91,7 @@
     // Disabling a focused control moves focus to BODY. Use this POST's snapshot
     // only then; a newer deliberate focus choice takes precedence.
     const focus = savedFocus && document.activeElement === document.body ? savedFocus : captureFocus();
-    panel.replaceWith(next); panel = next; staged = null; uncertain = false;
+    panel.replaceWith(next); panel = next; staged = null; uncertain = false; savedAcknowledged = false;
     // A save response arrives while controls are disabled. Restore focus only
     // after the POST finishes and updateControls makes the new control usable.
     pendingFocusID = focus.id;
@@ -99,7 +99,9 @@
     bind();
   };
   const fetchJSON = async (url, options = {}, controller = new AbortController()) => {
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    // A mutation can perform source validation before committing. Its budget
+    // covers the server's 120-second request limit and response delivery.
+    const timeout = setTimeout(() => controller.abort(), options.method === 'POST' ? 135000 : 60000);
     try {
       const response = await fetch(url, {...options, headers:{Accept:'application/json', ...options.headers},
         credentials:'same-origin', cache:'no-store', redirect:'error', signal:controller.signal});
@@ -123,6 +125,9 @@
       if (ticket !== epoch || posting) return;
       failures = 0;
       panel.querySelector('[data-coding-connection]').hidden = true;
+      // A read of the old version can race a still-running POST. It cannot
+      // reconcile that write or make its controls safe to use again.
+      if (uncertain && !savedAcknowledged && data.version === panel.dataset.version) return;
       if (data.version !== panel.dataset.version || uncertain) {
         if (dirty().length || uncertain) { staged = data; updateControls(); }
         else apply(data);
@@ -154,7 +159,7 @@
     }
     if (event.target.closest('[data-coding-load]') && panel.contains(event.target)) {
       if (staged) { apply(staged); error(''); }
-      else { uncertain = false; updateControls(); poll(); }
+      else { updateControls(); poll(); }
     }
   });
   document.addEventListener('submit', async event => {
@@ -186,16 +191,31 @@
       error('Choose Accept or Reject to record your decision.'); return;
     }
     const postFocus = captureFocus();
+    let acknowledged = false;
+    savedAcknowledged = false;
     posting = true; epoch++; clearTimeout(timer); pollController?.abort(); error(''); updateControls();
     try {
-      const {response, data} = await fetchJSON(url, {method:'POST', body});
+      const {response, data} = await fetchJSON(url, {method:'POST', body,
+        headers:{'X-QuillMD-Coding-Response':'coding-mutation-receipt-v1'}});
       if (response.status === 409) {
         if (data.version !== panel.dataset.version) staged = data;
         error(data.error || 'This coding review changed. Review the saved result before continuing.');
+      } else if (data.contract === 'coding-mutation-receipt-v1') {
+        if (data.saved !== true || data.action !== form.dataset.codingForm
+            || typeof data.receipt !== 'string' || !data.receipt
+            || new URL(data.status_url, location.href).href !== statusURL.href) throw new Error('Invalid save receipt');
+        acknowledged = true; savedAcknowledged = true;
+        uncertain = true;
+        error('Saved. Loading the current review.', false);
+        const refreshed = await fetchJSON(statusURL);
+        if (refreshed.response.status !== 200) throw new Error('Saved review could not be loaded');
+        apply(refreshed.data, postFocus);
       } else { apply(data, postFocus); }
     } catch (_) {
       uncertain = true;
-      error('The save response was interrupted. No action will be resent. Check the saved result before continuing; your local edits are kept.');
+      error(acknowledged
+        ? 'Saved. The current review could not be loaded. Load the saved result before continuing; no action will be resent.'
+        : 'The save response was interrupted. No action will be resent. Check the saved result before continuing; your local edits are kept.');
     } finally { posting = false; updateControls(); schedule(); }
   });
   window.addEventListener('beforeunload', event => {
