@@ -17,9 +17,12 @@ Three bounded relations are available:
 
 - Exact nominal identity, retaining ordinary frequency/severity modifiers and
   explicitly parsed current/daily timing or bowel-movement relief predicates.
-  Leading modifiers inside the assessed target and extra report prefixes share
-  one conflict check: repeated severity or frequency kinds remain unresolved,
-  including duplicates within the target itself. Literal spans stay intact.
+  Recognized ordinary modifier words anywhere in the complete literal assessed
+  target and extra report prefixes share one conflict check: repeated severity
+  or frequency kinds remain unresolved, including duplicates within the target
+  itself. Whole-word matching includes hyphen boundaries and does not match
+  substrings, erase punctuation or change literal spans. This finite lexical
+  guard does not infer synonyms or assert universal clinical consistency.
 - Loose/watery stool descriptions with an explicit daily count whose entire
   integer range is at least three, linked only to independently evaluated
   diarrhea. [NIDDK's definition](https://www.niddk.nih.gov/health-information/digestive-diseases/diarrhea/definition-facts)
@@ -36,7 +39,7 @@ The full report, exact object/atom/attribute/connector spans, independently
 evaluated targets and typed relation authorities are retained in the inventory
 and candidate proof. Relief after a bowel movement remains a symptom modifier;
 it establishes no cause or syndrome. Unknown clauses, additional unmatched
-findings, conflicting modifiers and ambiguous ownership/timing do not become
+findings, conflicting recognized modifiers and ambiguous ownership/timing do not become
 descriptive links. Existing historical/foreign-source exclusions remain intact.
 
 The pass creates no diagnosis, code or clinical decision. All existing engine

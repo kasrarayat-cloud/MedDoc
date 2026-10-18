@@ -216,6 +216,62 @@ class SourceCompoundDescriptorTests(SimpleTestCase):
                 self.assertEqual(notes[span['start']:span['end']], span['quote'])
                 self.assertEqual(span['quote'].casefold(), value['value'])
 
+    def test_all_literal_target_positions_participate_in_modifier_conflicts(self):
+        for target, extra in (
+            ('Localized severe abdominal pain', 'mild '),
+            ('Epigastric severe abdominal pain', 'mild '),
+            ('Abdominal pain of severe degree', 'mild '),
+            ('Dorsal wrist ache intermittent', 'constant '),
+            ('Localized mild abdominal pain of severe degree', ''),
+            ('Dorsal recurrent wrist ache constant', ''),
+            ('Localized-severe abdominal pain', 'mild '),
+            ('Dorsal wrist ache-intermittent', 'constant '),
+            ('Localized-mild abdominal pain-severe', '')):
+            report = f'They report {extra}{target.lower()} that improves after a bowel movement.'
+            with self.subTest(target=target, extra=extra):
+                self.assert_gap(report, f'{target} was evaluated today.')
+
+    def test_interior_distinct_modifier_kinds_retain_literal_spans(self):
+        for target, extra in (
+            ('Localized  SeVeRe abdominal pain', 'Intermittent  '),
+            ('Dorsal wrist ache InTeRmItTeNt', 'Mild  '),
+            ('Localized-severe abdominal pain', 'Recurrent  '),
+            ('Dorsal recurrent wrist ache of moderate degree', '')):
+            report = f'They report {extra}{target} that improves after a bowel movement.'
+            notes = self.notes(report, f'{target} was evaluated today.')
+            with self.subTest(target=target, extra=extra):
+                result = completeness.inventory(notes)
+                self.assertFalse(result['unresolved'])
+                proof = result['items'][0]['descriptive_reports'][0]
+                atom = proof['atoms'][0]
+                attributes = [value for value in atom['attributes']
+                              if value['kind'] in ('severity', 'frequency')]
+                self.assertEqual({value['kind'] for value in attributes}, {'severity', 'frequency'})
+                self.assertEqual(len(attributes), 2)
+                literal = next(value for value in atom['attributes'] if value['kind'] == 'literal_finding')
+                self.assertEqual(literal['span']['quote'], target)
+                for value in [literal, *attributes]:
+                    span = value['span']
+                    self.assertEqual(notes[span['start']:span['end']], span['quote'])
+                for value in attributes:
+                    self.assertEqual(value['span']['quote'].casefold(), value['value'])
+
+    def test_recognized_modifier_words_do_not_match_substrings_or_erase_suffixes(self):
+        for target in ('Severed dorsal ligament', 'Mildred dorsal ache',
+                       'Recurrently reported ache', 'Currentness sensation'):
+            report = f'They report mild {target} that improves after a bowel movement.'
+            with self.subTest(target=target):
+                result = completeness.inventory(self.notes(report, f'{target} was evaluated today.'))
+                self.assertFalse(result['unresolved'])
+                proof = result['items'][0]['descriptive_reports'][0]
+                attributes = [value for value in proof['atoms'][0]['attributes']
+                              if value['kind'] in ('severity', 'frequency')]
+                self.assertEqual([(value['kind'], value['value']) for value in attributes], [('severity', 'mild')])
+        for suffix in ('with unexplained nausea', 'that improves for an unknown reason',
+                       'that improves after a bowel movement sometimes', ', severe'):
+            self.assert_gap(f'They report intermittent localized severe abdominal pain {suffix}.',
+                'Localized severe abdominal pain was evaluated today.')
+
     def test_separate_current_evaluation_is_mandatory(self):
         self.assert_gap(self.report(), 'Diarrhea was evaluated today.')
         self.assert_gap(self.report(), 'Left lower quadrant abdominal pain was evaluated today.')

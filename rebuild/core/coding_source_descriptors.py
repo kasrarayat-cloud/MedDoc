@@ -21,7 +21,9 @@ _QUANTITY = (r'(?:between\s+' + _NUMBER + r'\s+and\s+' + _NUMBER + r'|'
              + _NUMBER + r'(?:(?:\s+to\s+|\s*[-–—]\s*)' + _NUMBER + r')?)')
 _FREQUENCIES = {'intermittent', 'recurrent', 'persistent', 'constant', 'ongoing', 'current'}
 _SEVERITIES = {'mild', 'moderate', 'severe'}
-_PREFIX = r'(?P<prefix>(?:(?:' + '|'.join(sorted(_FREQUENCIES | _SEVERITIES)) + r')\s+)*)'
+_MODIFIER_WORDS = '|'.join(sorted(_FREQUENCIES | _SEVERITIES))
+_MODIFIER = re.compile(r'\b(?:' + _MODIFIER_WORDS + r')\b', re.I)
+_PREFIX = r'(?P<prefix>(?:(?:' + _MODIFIER_WORDS + r')\s+)*)'
 _DAILY = r'(?:daily|per\s+day|a\s+day|each\s+day|every\s+day)'
 _RELIEF = (r'(?P<relief>\s+(?:that|which)\s+(?P<effect>improves|is\s+relieved)'
            r'\s+after\s+(?:a|each)\s+bowel\s+movement)?')
@@ -104,16 +106,15 @@ def resolve_report(objects, *, objects_start, report, targets, max_atoms=64):
                 if not match or match.end() < len(objects) and not _SEPARATOR.match(objects, match.end()):
                     continue
                 attributes, seen = [], set()
-                prefixes = [(match['prefix'], match.start('prefix'))]
+                modifier_regions = [(match['prefix'], match.start('prefix'))]
                 if relation == 'exact_nominal':
-                    # The literal evaluated target can itself begin with an
-                    # ordinary modifier. It shares the same conflict budget as
-                    # an extra report prefix, including duplicate kinds inside
-                    # the target. Keep the actual report offsets and spelling.
-                    embedded = re.match(_PREFIX, match['finding'], re.I)['prefix']
-                    prefixes.append((embedded, match.start('finding')))
-                modifiers = [(modifier, offset) for prefix, offset in prefixes
-                             for modifier in re.finditer(r'\S+', prefix)]
+                    # Count the finite recognized vocabulary anywhere in the
+                    # complete literal target, including hyphen boundaries.
+                    # This lexical conflict guard neither interprets unknown
+                    # words nor erases punctuation or normalizes source spans.
+                    modifier_regions.append((match['finding'], match.start('finding')))
+                modifiers = [(modifier, offset) for region, offset in modifier_regions
+                             for modifier in _MODIFIER.finditer(region)]
                 for modifier, offset in modifiers:
                     value = modifier.group().casefold()
                     kind = 'frequency' if value in _FREQUENCIES else 'severity'
