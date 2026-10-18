@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 from django.core.exceptions import ValidationError
 
-from . import coding_engine as engine, coding_nec, corti_coding
+from . import coding_engine as engine, coding_nec, coding_source_descriptors, corti_coding
 from .clinical_source_context import (SOURCE_GOVERNANCE_PROFILE, source_context,
                                       source_date, owned_current)
 from .generation import source_units
@@ -292,7 +292,7 @@ def inventory(notes, *, retained_facts=()):
         raise ValidationError('Source completeness requires a bounded nonempty original note.')
     units, _ = source_units(notes, [])
     context = _review_context(notes, units)
-    items, unresolved, excluded = {}, [], []
+    items, unresolved, excluded, descriptive_reports = {}, [], [], []
     assessment_section = None
     assessment_context_section = None
     patient = re.escape(context.get('patient_name') or '\0')
@@ -324,6 +324,11 @@ def inventory(notes, *, retained_facts=()):
             value['evidence'].append(evidence)
         if evaluated and evidence not in value['current_evaluation_evidence']:
             value['current_evaluation_evidence'].append(evidence)
+
+    def retain_report(unit, text, reported, inline, gap_row=None, terms=()):
+        if reported and not inline and unit['quote'].strip() in (text, text + '.'):
+            descriptive_reports.append((unit, reported['objects'],
+                len(unit['quote']) - len(unit['quote'].lstrip()) + reported.start('objects'), gap_row, terms))
 
     for unit in units:
         text = unit['quote'].strip().rstrip('.')
@@ -445,6 +450,9 @@ def inventory(notes, *, retained_facts=()):
             parts = None
         if not parts:
             gap(unit, 'The complete current assessment/report cannot be separated into verified condition objects without interpreting or dropping text.')
+            # The second pass needs independent evaluation found anywhere in
+            # the source. Never reuse ambiguous framing or a trimmed suffix.
+            retain_report(unit, text, reported, inline, gap_row=unresolved[-1])
             continue
         for term in parts:
             if _UNCERTAIN_PREFIX.match(term):
@@ -452,7 +460,37 @@ def inventory(notes, *, retained_facts=()):
                     'reason': 'Explicit uncertain condition; no affirmative diagnosis inferred.'})
             else:
                 add(term, unit, evaluated=bool(evaluated or present_evaluation or in_assessment))
+        retain_report(unit, text, reported, inline, terms=parts)
     _coalesce_report_mentions(items)
+    for unit, objects, offset, gap_row, terms in descriptive_reports:
+        proof = coding_source_descriptors.resolve_report(objects, objects_start=unit['start'] + offset,
+            report=_span(unit), targets=list(items.values()), max_atoms=MAX_ITEMS)
+        if proof is None:
+            continue
+        if gap_row is None and all(atom['relation']['kind'] == 'exact_nominal' for atom in proof['atoms']):
+            # Ordinary already-resolved nominal reports retain their historical
+            # inventory/proof bytes. New metadata is only for descriptive repair.
+            continue
+        if gap_row is not None:
+            proof['source_gap_id'] = gap_row['id']
+        targets = {atom['target_id'] for atom in proof['atoms']}
+        for term in terms:
+            key = engine.norm(term)
+            incidental = items.get(key)
+            if incidental is None or incidental['id'] in targets or incidental['current_evaluation_evidence']:
+                continue
+            incidental['evidence'] = [evidence for evidence in incidental['evidence'] if evidence != proof['report']]
+            if not incidental['evidence']:
+                del items[key]
+        for item in items.values():
+            if item['id'] not in targets:
+                continue
+            item.setdefault('descriptive_reports', []).append(deepcopy(proof))
+            if proof['report'] not in item['evidence']:
+                item['evidence'].append(deepcopy(proof['report']))
+                item['evidence'].sort(key=lambda evidence: evidence['start'])
+        if gap_row is not None:
+            unresolved.remove(gap_row)
     for item in items.values():
         item['reference_terms'] = reference_terms(item['condition_text'])
         item['retained_fact_ids'] = sorted({f.get('id') for f in retained_facts
@@ -762,6 +800,11 @@ def _coalesce_reference_mentions(rows, checked):
                 key=lambda e:e['start'])
         target.setdefault('source_mentions', [target['condition_text']]).append(bare['condition_text'])
         candidate = target['candidates'][0]
+        if bare.get('descriptive_reports'):
+            reports = [*target.get('descriptive_reports', []), *bare['descriptive_reports']]
+            target['descriptive_reports'] = sorted({engine.digest(report): report for report in reports}.values(),
+                key=lambda report: report['report']['start'])
+            candidate['proof']['descriptive_reports'] = deepcopy(target['descriptive_reports'])
         candidate['evidence'] = [{'text':e['quote'],'start':e['start'],'end':e['end']} for e in target['evidence']]
         candidate['proof']['coalesced_source_mentions'] = {
             'condition_ids': [target['id'], bare['id']], 'evidence': deepcopy(target['evidence'])}
@@ -890,6 +933,8 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
                 'inventory_sha256': inv['inventory_sha256'], 'condition_id': row['id'],
                 'source_contract': engine.CURRENT_SOURCE_CONTRACT, 'reference': release,
                 'candidate': candidate, 'source_check': source_check, 'concept': concept}
+            if row.get('descriptive_reports'):
+                proof['descriptive_reports'] = deepcopy(row['descriptive_reports'])
             value = {'id': _identity('source', engine.digest(proof)), 'origin': 'saved_source',
                 'condition_id': row['id'], 'system': 'ICD-10-CM', 'code': code,
                 'description': candidate['description'], 'eligible': not reference_errors, 'hold_reasons': reference_errors,
