@@ -8,6 +8,7 @@ alternatives, generated clinical answer text, or a condition-to-code table.
 """
 from copy import deepcopy
 from datetime import date
+from decimal import Decimal
 import hashlib
 import re
 from types import SimpleNamespace
@@ -31,6 +32,9 @@ _ASSESSMENT = {'assessment', 'impression'}
 _NOMINAL = re.compile(r'[A-Za-z][A-Za-z -]{0,178}[A-Za-z]|[A-Za-z]')
 _NON_NOMINAL = re.compile(r'\b(?:he|she|they|patient|reports?|retracts?|withdraws?|'
     r'believes?|claims?|denies?|has|have|had|is|are|was|were|will|would|could|may|'
+    r'do|does|did|not|never|no|been|being|must|should|can|cannot|'
+    r'experiences?|endorses?|suffers?|develops?|worsens?|persists?|requires?|'
+    r'according|despite|except|unless|until|while|yet|'
     r'statement|account|documentation|information|whether|if|because|although|but|'
     r'which|whose|occurs?|feels?|improves?|resolves?)\b', re.I)
 _PRESENT = r'(?:today|now|currently|at this visit|at this encounter|during this encounter|during the current encounter)'
@@ -49,12 +53,17 @@ _META = re.compile(r'(?:the\s+)?(?:underlying\s+)?(?:etiology|cause)\s+'
     r'no\s+(?:definitive\s+)?(?:underlying\s+)?(?:disease|diagnosis)\s+'
     r'is\s+(?:diagnosed|established)(?:\s+at this (?:visit|encounter))?', re.I)
 _LIST = re.compile(r'\s*,\s*(?:and\s+)?|\s+and\s+', re.I)
+_NEGATIVE_LIST = re.compile(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+', re.I)
 _ASSESSMENT_LABEL = (r'(?:(?:clinical\s+)?assessment(?:\s*(?:and|&|/)\s*plan)?|a\s*[/&]\s*p|'
     r'impression|diagnosis|diagnoses|current problems?|current conditions?|'
     r'(?:(?:other|current|active)\s+)?(?:problems?|conditions?|symptoms?|complaints?)\s+'
     r'(?:addressed|evaluated|assessed|managed|reviewed)(?:\s+today)?)')
 _EVALUATION_CUE = re.compile(r'\b(?:evaluated|assessed|addressed|diagnosed|managed|'
     r'assessment|diagnoses)\b', re.I)
+_SAFETY_ADVICE = re.compile(r'(?:(?:the\s+)?patient|he|she|they)\s+'
+    r'(?:(?:was|is|were|are)\s+(?:advised|instructed|told)\s+to|should)\s+'
+    r'(?:seek\s+(?:(?:prompt|urgent|immediate)\s+)?(?:assessment|evaluation|care)|'
+    r'contact\s+(?:the\s+)?clinic(?:\s+earlier)?)\s+for\s+(.+)', re.I)
 
 
 def _span(unit, start=0, end=None):
@@ -86,6 +95,129 @@ def _parts(objects, *, report=False):
             return None
         result.append(value)
     return result if result and len(result) <= MAX_ITEMS else None
+
+
+def _negative_list(text):
+    """A complete shared negative complement, never a second predicate."""
+    from .semantic_generation import _denial_nominal_phrase
+    parts = _NEGATIVE_LIST.split(text)
+    def nominal(part):
+        if not _parts(part) or _UNCERTAIN_PREFIX.match(part) or re.match(r'(?:ongoing|current|present)\b', part, re.I):
+            return False
+        part = re.sub(r'^(?:a|an|the)\s+', '', part, flags=re.I)
+        if _UNCERTAIN_PREFIX.match(part):
+            return False
+        if _denial_nominal_phrase(part):
+            return True
+        if re.match(r'worsening\s+', part, re.I) and _denial_nominal_phrase(part.split(None, 1)[1]):
+            return True
+        medical_head = re.fullmatch(r'(.+)\s+(?:disease|syndrome|disorder)', part, re.I)
+        inability = re.fullmatch(r'inability\s+to\s+[a-z]+\s+(.+)', part, re.I)
+        return bool((medical_head and _denial_nominal_phrase(medical_head[1]))
+            or (inability and _denial_nominal_phrase(inability[1])))
+    return bool(parts and all(nominal(part) for part in parts))
+
+
+def _nonaffirmative_statement(text, reported=None):
+    """Complete absent/uncertain predicates do not assert a current condition.
+
+    This is intentionally a whole-clause grammar. Unknown tails and changes of
+    subject/predicate remain inventory gaps; a negative first item cannot hide
+    an affirmative second clause.
+    """
+    meta = re.fullmatch(r'(?:the\s+)?(?:underlying\s+)?(?:cause|etiology)'
+        r'(?:\s+of\s+(?:these|the|those)\s+(?:symptoms|findings|conditions))?\s+'
+        r'(?:(?:has|have)\s+not\s+been\s+(?:established|determined|identified)|'
+        r'(?:is|remains)\s+(?:unknown|uncertain|undetermined))', text, re.I)
+    if meta:
+        return True
+    absent = re.fullmatch(r'(?P<objects>.+?)\s+(?:has|have)\s+not\s+been\s+'
+        r'(?:diagnosed|established|confirmed)(?:\s+(?:today|at this (?:visit|encounter)))?', text, re.I)
+    if absent and _negative_list(absent['objects']):
+        return True
+    uncertain = re.fullmatch(r'(?P<objects>.+?)\s+(?:remain|remains|are|is)\s+'
+        r'(?:a\s+)?possibilit(?:y|ies)(?:;\s*(?:neither|none)\s+has\s+been\s+established)?', text, re.I)
+    if uncertain and all(_parts(part) for part in _NEGATIVE_LIST.split(uncertain['objects'])):
+        return True
+    objects = reported['objects'] if reported else ''
+    if re.match(r'no\s+', objects, re.I):
+        return _negative_list(re.sub(r'^no\s+', '', objects, flags=re.I))
+    # These explicit negative experience/history predicates are not disease
+    # assertions. Every coordinated predicate must itself carry negation.
+    if objects:
+        predicates = re.split(r'\s+and\s+(?=(?:does|do|has|have)\b)', objects, flags=re.I)
+        for predicate in predicates:
+            match = re.fullmatch(r'(?:never\s+(?:had|experienced|used|taken|developed)|'
+                r'not\s+had|(?:does|do)\s+not\s+(?:use|take|drink|have|experience))\s+(.+)', predicate, re.I)
+            if match and _negative_list(match[1]):
+                continue
+            if re.fullmatch(r'never\s+(?:smoked|drunk)|(?:does|do)\s+not\s+smoke', predicate, re.I):
+                continue
+            return False
+        return bool(predicates)
+    return False
+
+
+def _future_safety_advice(text):
+    """A complete instruction to obtain future care is not current evaluation."""
+    match = _SAFETY_ADVICE.fullmatch(text)
+    return bool(match and _negative_list(match[1]))
+
+
+def _supporting_reference(text, names):
+    """Recognize complete descriptors of an already identified finding.
+
+    These predicates establish neither a new condition nor its severity code.
+    They preserve an existing finding without turning a rating or a scoped
+    'no additional findings' summary into a retraction of that finding.
+    """
+    # Preserve decimal punctuation. General search normalization is unsuitable
+    # for comparing measured values and can change the numeric ordering.
+    value = re.sub(r'\s+', ' ', text.strip().removesuffix('.')).casefold()
+    for name in names:
+        nominal = re.escape(engine.norm(name))
+        rating = re.fullmatch(r'(?:the|this|that|his|her|their)\s+'
+            r'(?:(?:reported|documented|described|noted)\s+)?' + nominal +
+            r'\s+is\s+rated\s+(\d{1,6}(?:\.\d{1,6})?)\s+out\s+of\s+(\d{1,6}(?:\.\d{1,6})?)'
+            r'(?:\s+(?:today|now|currently))?', value)
+        if rating and 0 <= Decimal(rating[1]) <= Decimal(rating[2]) and Decimal(rating[2]) > 0:
+            return True
+        if re.fullmatch(r'there\s+are\s+no\s+additional\s+findings\s+beyond\s+(?:the\s+)?'
+                + nominal + r'\s+described\s+above', value):
+            return True
+    return False
+
+
+def _reported_allergy_history(text):
+    match = re.fullmatch(r'(?:he|she|they|the\s+patient)\s+reports?\s+(?:an?\s+)?'
+        r'allergy\s+to\s+(.+?),\s+which\s+causes\s+(.+)', text, re.I)
+    return bool(match and _negative_list(match[1]) and _negative_list(match[2]))
+
+
+def _coalesce_report_mentions(items):
+    """Join a complete descriptive report to its independently stated finding.
+
+    Only ordinary frequency/severity prefixes can share an exact nominal
+    suffix. The full qualified report remains evidence for all source/route
+    checks; neither a location nor a diagnostic modifier is erased here.
+    """
+    modifiers = re.compile(r'(?:(?:intermittent|recurrent|persistent|constant|'
+        r'ongoing|current|mild|moderate|severe)\s+)+', re.I)
+    for key, item in list(items.items()):
+        if item['current_evaluation_evidence']:
+            continue
+        matches = []
+        for target_key, target in items.items():
+            if target_key == key or not target['current_evaluation_evidence']:
+                continue
+            if key.endswith(' ' + target_key) and modifiers.fullmatch(key[:-len(target_key)]):
+                matches.append(target)
+        if len(matches) != 1:
+            continue
+        target = matches[0]
+        target.setdefault('source_mentions', [target['condition_text']]).append(item['condition_text'])
+        target['evidence'] = sorted([*target['evidence'], *item['evidence']], key=lambda e:e['start'])
+        del items[key]
 
 
 def reference_terms(condition_text):
@@ -134,6 +266,12 @@ def _review_context(notes, units):
         nominal = (nominal_match and not re.search(r'\b(?:he|she|they|patient|has|have|had|is|are|was|were|'
                 r'reports|describes|reviewed|reviewing|ordered|orders|documented|records|recorded)\b',
                 nominal_match['qualifier'],re.I))
+        # An ordinary completed plan action requests/retrieves records; it
+        # does not frame the following assertions as coming from those records.
+        record_action = re.fullmatch(r'(?:requested|obtained|retrieved|reviewed)\s+'
+            r'(?:[A-Za-z-]+\s+){0,8}(?:records|notes|reports)', body, re.I)
+        if record_action:
+            nominal = False
         if ((text.endswith(':') or framed or nominal) and re.search(r'\b'+account+r'\b',body,re.I)
                 and not neutral.fullmatch(body)
                 and row['section_timing'] == 'current' and row['subject'] != 'foreign'):
@@ -164,6 +302,8 @@ def inventory(notes, *, retained_facts=()):
     complaint = re.compile(r'(?:(?:the|his|her|their)\s+)?(?:current |present |chief )?'
         r'(?:complaint|concern|symptom)\s+is\s+(?P<objects>.+)', re.I)
     presence = re.compile(r'(?P<objects>.+?)\s+(?:is|are)\s+present(?P<tail>\s+.+)?', re.I)
+    evaluated_presence = re.compile(r'(?:(?:the\s+)?patient|he|she|they|' + patient + r')\s+'
+        r'(?:is being|is|was)\s+evaluated for\s+(?P<objects>.+?)\s+present(?P<tail>\s+.+)?', re.I)
     report_cue = re.compile(r'\b(?:(?:the\s+)?patient|he|she|they|' + patient + r')\s+'
         r'(?:(?:also|currently|still|previously)\s+)*(?:(?:is|are|was|were)\s+)?'
         r'(?:reports?|reported|experiences?|experiencing|endorses?|complains?|complaining)\b',re.I)
@@ -202,9 +342,14 @@ def inventory(notes, *, retained_facts=()):
         in_assessment = section in _ASSESSMENT or assessment_section is not None or inline is not None
         if inline:
             text = inline[2].strip()
+        if in_assessment and re.fullmatch(r'\d+[.)]', unit['quote'].strip()):
+            # Sentence segmentation can separate "1." from its following
+            # assessment. The marker has no clinical predicate of its own.
+            continue
         evaluated = _EVALUATION.fullmatch(text)
         reported = report.fullmatch(text) or complaint.fullmatch(text)
         present = presence.fullmatch(text)
+        present_evaluation = evaluated_presence.fullmatch(text)
         opaque_assertion = re.match(r'(?:(?:the\s+)?patient|he|she|they|' + patient + r')\s+'
             r'(?:(?:also|currently|still)\s+)?(?:suffers? from|notes?|developed|is experiencing|'
             r'is diagnosed with|was diagnosed with)\b', text, re.I)
@@ -212,14 +357,26 @@ def inventory(notes, *, retained_facts=()):
         # actor, adverb or ordering around a clinical evaluation/report cannot
         # disappear merely because the complete assertion parser rejects it.
         # It becomes a visible unresolved source clause, never an eligible code.
-        evaluation_cue = _EVALUATION_CUE.search(text) or report_cue.search(text)
+        evaluation_cue = _EVALUATION_CUE.search(text) or report_cue.search(text) or _SAFETY_ADVICE.match(text)
         if not (in_assessment or evaluated or reported or present or opaque_assertion or evaluation_cue):
             continue
         if row['subject'] == 'foreign' or row['section_timing'] != 'current' or row['timing'] == 'past':
             excluded.append({'evidence': _span(unit), 'reason': 'Explicit other-person or historical/future encounter scope.'})
             continue
+        # Independently owned complete future-care instructions do not assert
+        # present conditions. Unresolved account framing remains a gap.
+        if owned_current(context, unit) and _future_safety_advice(text):
+            excluded.append({'evidence': _span(unit), 'reason': 'Complete prospective safety advice, not a current condition assertion.'})
+            continue
         if not owned_current(context, unit):
             gap(unit, 'Current condition-bearing source has unresolved ownership, timing, quotation or governance.')
+            continue
+        known_names = {' '.join(key.split()[start:]) for key in items for start in range(len(key.split()))}
+        if _supporting_reference(text, known_names):
+            continue
+        if not in_assessment and _reported_allergy_history(text):
+            excluded.append({'evidence': _span(unit),
+                'reason': 'Complete reported allergy history and reaction, without a current reaction/evaluation assertion.'})
             continue
         if _META.fullmatch(text):
             excluded.append({'evidence': _span(unit), 'reason': 'Complete statement of diagnostic uncertainty or no established underlying diagnosis.'})
@@ -229,13 +386,27 @@ def inventory(notes, *, retained_facts=()):
             excluded.append({'evidence': _span(unit), 'reason': 'Complete explicitly uncertain condition statement, not a confirmed outpatient diagnosis.'})
             continue
         if reported:
-            negative_objects = _parts(reported['objects'])
-            if negative_objects and all(re.match(r'no\b', value, re.I) for value in negative_objects):
+            negative_objects = _LIST.split(reported['objects'])
+            if negative_objects and all(re.match(r'no\s+', value, re.I)
+                    and _parts(re.sub(r'^no\s+', '', value, flags=re.I)) for value in negative_objects):
                 excluded.append({'evidence': _span(unit), 'reason': 'Complete reported negative condition/history list.'})
                 continue
             negative_past = re.fullmatch(r'not had\s+(.+)', reported['objects'], re.I)
             if negative_past and _parts(negative_past[1]):
                 excluded.append({'evidence': _span(unit), 'reason': 'Complete reported absence of a prior event.'})
+                continue
+        if _nonaffirmative_statement(text, reported):
+            excluded.append({'evidence': _span(unit), 'reason': 'Complete explicit absent/uncertain condition or history predicate.'})
+            continue
+        reaffirmed = re.fullmatch(r'(?:the|this|that|his|her|their)\s+'
+            r'(?:(?:reported|documented|described|noted)\s+)?(?P<object>.+?)\s+'
+            r'(?:(?:is|are)\s+present|persists?|continues?)(?P<tail>\s+.+)?', text, re.I)
+        if reaffirmed and _parts(reaffirmed['object']) and engine._complete_presence_tail(
+                engine.norm(reaffirmed['tail'] or '')):
+            name = engine.norm(reaffirmed['object'])
+            targets = [item for key,item in items.items() if key == name or key.endswith(' ' + name)]
+            if len(targets) == 1:
+                targets[0]['evidence'].append(_span(unit))
                 continue
         # Negation applies only to a complete nominal list/predicate. A trailing
         # second assertion must not disappear with a negative first clause.
@@ -255,12 +426,18 @@ def inventory(notes, *, retained_facts=()):
             current = not tail or re.fullmatch(_PRESENT, tail, re.I)
             if tail.lower().startswith('on '):
                 current = source_date(tail[3:]) == context.get('service_date') and context.get('service_date') is not None
-            parts = _parts(evaluated['objects']) if current else None
+            objects = evaluated['objects']
+            if re.match(r'both\s+', objects, re.I) and len(_LIST.split(objects)) > 1:
+                objects = re.sub(r'^both\s+', '', objects, flags=re.I)
+            parts = _parts(objects) if current else None
         elif reported:
             parts = _parts(reported['objects'], report=True)
         elif present:
             parts = (_parts(present['objects']) if engine._complete_presence_tail(
                 engine.norm(present['tail'] or '')) else None)
+        elif present_evaluation:
+            parts = (_parts(present_evaluation['objects']) if engine._complete_presence_tail(
+                engine.norm(present_evaluation['tail'] or '')) else None)
         elif in_assessment:
             bare = re.sub(r'^\d+[.)]\s*', '', text)
             parts = _parts(bare)
@@ -274,7 +451,8 @@ def inventory(notes, *, retained_facts=()):
                 excluded.append({'condition_text': term, 'evidence': _span(unit),
                     'reason': 'Explicit uncertain condition; no affirmative diagnosis inferred.'})
             else:
-                add(term, unit, evaluated=bool(evaluated or in_assessment))
+                add(term, unit, evaluated=bool(evaluated or present_evaluation or in_assessment))
+    _coalesce_report_mentions(items)
     for item in items.values():
         item['reference_terms'] = reference_terms(item['condition_text'])
         item['retained_fact_ids'] = sorted({f.get('id') for f in retained_facts
@@ -430,6 +608,8 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
                 continue
             if engine._condition_integrity_mention(clause, guarded, context, units):
                 continue
+            if owned_current(context, unit) and _supporting_reference(unit['quote'], aliases):
+                continue
             if unit['start'] in unresolved_starts:
                 # Completeness and eligibility share the same full assertion.
                 # An unresolved current clause referring to this condition
@@ -499,9 +679,22 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
             chain.append(node); node = lookup.get(node.get('parent_id'))
         description = proposal['terminology']['description']
         authority_words = set(engine.norm(' '.join([description, *(n.get('term', '') for n in chain)])).split())
+        # An Index main term can name the symptom while its exact Tabular
+        # description supplies a leading site modifier (e.g. a named finding
+        # versus its anatomically qualified source phrase). Both halves must
+        # belong to the SAME direct official route. No synonym/code table or
+        # arbitrary source modifier is introduced.
+        direct_head = None
+        if entry['id'] == head['id']:
+            for term in engine.index_head_terms(head, description):
+                literal, name = engine.norm(text), engine.norm(term)
+                if literal.endswith(' ' + name):
+                    modifier = literal[:-len(name)].strip()
+                    if modifier and engine.norm(description).startswith(modifier + ' '):
+                        direct_head = term
         if (not words or not words <= authority_words or words & (engine.ROUTE_WORDS | engine.TAXONOMY_HEADS)
                 or not (engine.norm(text) == engine.norm(description)
-                    or engine.tabular_specific_route(chain, text, description))):
+                    or engine.tabular_specific_route(chain, text, description) or direct_head)):
             continue
         head_terms = engine.index_head_terms(head, description)
         for span in proposal['evidence']:
@@ -529,9 +722,97 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
                         'source_sha256':hashlib.sha256(run.inputs['notes'].encode()).hexdigest(),
                         'reference_digest':reference.digest,
                         'basis':'Complete literal phrase and all tokens bound to one connected official Index/Tabular route.'})
+                if direct_head:
+                    candidate['qualified_phrase_proof']['direct_head'] = direct_head
                 return concept, candidate, {'disposition':disposition,'reason':reason,
                     'index_scope_entry_ids':[s['entry']['id'] for s in subtypes]}
     return None, None, None
+
+
+def _coalesce_reference_mentions(rows, checked):
+    """One directly classified finding may have short and qualified mentions.
+
+    Collapse only a complete bare official head into its unique independently
+    eligible qualified row. Unknown clauses, modifiers, alternative routes and
+    different findings sharing a coarse code cannot disappear here. Every
+    original mention remains in the resulting evidence and proof.
+    """
+    removed = set()
+    for bare in rows:
+        if not bare.get('reference_terms') or not bare['current_evaluation_evidence']:
+            continue
+        matches = []
+        for target in rows:
+            candidates = target['candidates']
+            if target is bare or len(candidates) != 1 or not candidates[0]['eligible']:
+                continue
+            proof = candidates[0]['index_route'].get('qualified_phrase_proof', {})
+            if engine.norm(proof.get('direct_head', '')) == engine.norm(bare['condition_text']):
+                matches.append(target)
+        if len(matches) != 1:
+            continue
+        target = matches[0]
+        # A separately held/alternative candidate is an unresolved constraint,
+        # not a duplicate that can be removed to manufacture completion.
+        if any(not candidate['eligible'] or candidate['code'] != target['candidates'][0]['code']
+                for candidate in bare['candidates']):
+            continue
+        for key in ('evidence', 'current_evaluation_evidence'):
+            target[key] = sorted({(e['start'], e['end']):e for e in [*target[key], *bare[key]]}.values(),
+                key=lambda e:e['start'])
+        target.setdefault('source_mentions', [target['condition_text']]).append(bare['condition_text'])
+        candidate = target['candidates'][0]
+        candidate['evidence'] = [{'text':e['quote'],'start':e['start'],'end':e['end']} for e in target['evidence']]
+        candidate['proof']['coalesced_source_mentions'] = {
+            'condition_ids': [target['id'], bare['id']], 'evidence': deepcopy(target['evidence'])}
+        candidate['support_digest'] = engine.digest(candidate['proof'])
+        candidate['id'] = _identity('source', candidate['support_digest'])
+        removed.add(bare['id'])
+    return ([row for row in rows if row['id'] not in removed],
+            [value for value in checked if value['row']['id'] not in removed])
+
+
+def _remove_proven_general_routes(run, reference, row, roots, lookup, approved):
+    """A proven specific descendant cannot compete with its own default.
+
+    This compares independently validated candidates for one complete literal
+    condition, not codes sharing a prefix or findings sharing a coarse code.
+    The entire literal must also pass the qualified route proof; merely
+    mentioning a child elsewhere in the note cannot displace its parent.
+    """
+    removed = []
+    for general in row['candidates']:
+        if not general['eligible']:
+            continue
+        descendants = []
+        for specific in row['candidates']:
+            if specific is general or not specific['eligible'] or specific['code'] == general['code']:
+                continue
+            node = lookup[specific['index_route']['entry_id']]
+            ancestors = []
+            while node.get('parent_id') is not None:
+                node = lookup[node['parent_id']]
+                ancestors.append(node['id'])
+            if general['index_route']['entry_id'] not in ancestors:
+                continue
+            proposal = {'id': row['id'], 'code': specific['code'],
+                'terminology': {'description': specific['description']},
+                'evidence': _condition_spans(run.inputs['notes'], row)}
+            _, route, _ = _qualified_route(run, reference, row, proposal, roots, lookup,
+                sorted(approved | {specific['code']}))
+            if route and route['entry_id'] == specific['index_route']['entry_id']:
+                descendants.append((specific, route))
+        if len(descendants) != 1:
+            continue
+        specific, route = descendants[0]
+        specific['proof'].setdefault('excluded_general_routes', []).append({
+            'code': general['code'], 'entry_id': general['index_route']['entry_id'],
+            'path': general['index_route']['path'], 'specific_literal_proof': route['qualified_phrase_proof']})
+        specific['support_digest'] = engine.digest(specific['proof'])
+        specific['id'] = _identity('source', specific['support_digest'])
+        removed.append(general)
+    row['candidates'] = [candidate for candidate in row['candidates'] if candidate not in removed]
+    return removed
 
 
 def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
@@ -620,6 +901,9 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
             if reference_errors:
                 row['reason'] = reference_errors[0]
             checked.append({'concept': concept, 'eligible': not reference_errors, 'row': row, 'candidate': value})
+        removed = _remove_proven_general_routes(copied, reference, row, roots, lookup, approved)
+        if removed:
+            checked = [value for value in checked if value['candidate'] not in removed]
         if len(row['candidates']) != 1:
             row['reason'] = ('No unique authoritative source-supported code is established.' if not row['candidates']
                              else 'More than one authoritative code remains possible; clinician detail is required.')
@@ -639,6 +923,7 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
         else:
             row['state'] = 'covered' if candidate['code'] in approved else 'review_required'
             row['approved_codes'] = [candidate['code']] if row['state'] == 'covered' else []
+    rows, checked = _coalesce_reference_mentions(rows, checked)
     suggestions = [value['candidate'] for value in checked]
     covered = sum(row['state'] == 'covered' for row in rows)
     reviewable = sum(row['state'] == 'review_required' for row in rows)

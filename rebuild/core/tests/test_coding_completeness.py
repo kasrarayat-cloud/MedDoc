@@ -387,3 +387,212 @@ class SourceCompletenessTests(SimpleTestCase):
         run=self.case.run_value();inv=completeness.inventory(NOTES);reference=bind(deepcopy(self.case.reference),inv)
         inv['inventory_sha256']='0'*64
         with self.assertRaises(ValidationError):completeness.evaluate(run,reference,inventory_result=inv)
+
+    def test_complete_shared_negative_lists_and_negative_history_are_not_conditions(self):
+        for text in ('She reports no fever, vomiting or blood in the stool.',
+                     'She reports no difficulty initiating a swallow, painful swallowing and weight loss.',
+                     'She has never had abdominal surgery.',
+                     'She has never smoked and does not use alcohol or recreational drugs.',
+                     'She has not had a seizure.',
+                     'Migraine, epilepsy and an inflammatory disorder have not been diagnosed.',
+                     'Infectious and inflammatory causes remain possibilities; neither has been established.',
+                     'The cause of these symptoms has not been established.'):
+            with self.subTest(text=text):
+                notes=self.simple('She reports heartburn today.','Heartburn.\n'+text)
+                result=self.result(notes,approved=['R12'])
+                self.assertTrue(result['coverage']['complete'],result['inventory'])
+                self.assertEqual(len(result['inventory']),1)
+
+    def test_negative_first_clause_never_hides_a_positive_or_ambiguous_tail(self):
+        for text in ('No fever, but dysphagia is present today.',
+                     'No fever, but dysphagia was evaluated today.',
+                     'She reports no fever and ongoing heartburn.',
+                     'She has never smoked but reports nausea.',
+                     'Migraine and epilepsy have not been diagnosed, but nausea is present.',
+                     'She reports no nausea, experiences chest pain.',
+                     'She reports no fever despite ongoing vomiting.',
+                     'Possible migraine; heartburn is present today.'):
+            with self.subTest(text=text):
+                inv=completeness.inventory(self.simple('She reports heartburn today.','Heartburn.\n'+text))
+                self.assertTrue(inv['unresolved'],inv)
+
+    def test_number_markers_do_not_become_conditions_or_erase_the_following_finding(self):
+        inv=completeness.inventory(self.simple('She reports heartburn today.','1. Heartburn.\n2. Nausea.'))
+        self.assertEqual([r['condition_text'] for r in inv['items']],['heartburn','Nausea'])
+        self.assertFalse(inv['unresolved'])
+        for text in ('1. An unexplained disorder requires assessment.', '1.5', '1 unknown condition'):
+            with self.subTest(text=text):
+                self.assertTrue(completeness.inventory(self.simple('She reports heartburn today.',text))['unresolved'])
+
+    def test_prospective_advice_is_complete_and_cannot_swallow_current_assertions(self):
+        for text in ('The patient was advised to seek prompt assessment for severe or worsening pain, vomiting blood or fainting.',
+                     'She is instructed to seek urgent evaluation for difficulty swallowing or persistent vomiting.',
+                     'He should contact the clinic earlier for inability to maintain hydration.'):
+            with self.subTest(text=text):
+                result=self.result(self.simple('She reports heartburn today.')+'\nPlan\n'+text,approved=['R12'])
+                self.assertTrue(result['coverage']['complete'],result['inventory'])
+        for text in ('The patient was advised to seek assessment for vomiting, but nausea is present.',
+                     'She was advised to seek assessment for vomiting and reports nausea today.',
+                     'She was advised to seek assessment for fever; nausea is evaluated today.',
+                     'She should contact the clinic for fever according to an unverified report.'):
+            with self.subTest(text=text):
+                inv=completeness.inventory(self.simple('She reports heartburn today.')+'\nPlan\n'+text)
+                self.assertTrue(inv['unresolved'],inv)
+
+    def test_record_retrieval_action_is_distinct_from_a_governing_account(self):
+        for action in ('Requested the previous gastroenterology records.',
+                       'Obtained prior rheumatology records.', 'Reviewed available clinical notes.'):
+            with self.subTest(action=action):
+                notes=self.simple('She reports heartburn today.')+'\nPlan\n'+action+'\nNausea was evaluated today.'
+                inv=completeness.inventory(notes)
+                self.assertFalse(inv['unresolved'])
+                self.assertEqual([r['condition_text'] for r in inv['items']],['heartburn','Nausea'])
+        for header in ('According to requested unverified records:', 'Unverified clinical records.'):
+            with self.subTest(header=header):
+                result=self.result(header+'\n'+self.simple('She reports heartburn today.'),approved=['R12'])
+                self.assertFalse(result['coverage']['complete'])
+
+    def test_explicit_presence_with_evaluation_keeps_its_complete_qualification(self):
+        notes=self.simple('She is being evaluated for heartburn present for three weeks.')
+        inv=completeness.inventory(notes)
+        self.assertFalse(inv['unresolved']);self.assertEqual(len(inv['items']),1)
+        self.assertEqual(len(inv['items'][0]['evidence']),2)
+        self.assertTrue(self.result(notes,approved=['R12'])['coverage']['complete'])
+        for body in ('She is being evaluated for heartburn.',
+                     'She is being evaluated for heartburn present according to an unverified report.',
+                     'She is being evaluated for heartburn present last year.',
+                     'She is being evaluated for possible heartburn present today.'):
+            with self.subTest(body=body):
+                self.assertFalse(self.result(self.simple(body),approved=['R12'])['coverage']['complete'])
+
+    def test_descriptive_report_merges_only_with_its_exact_evaluated_finding(self):
+        notes=self.simple('She reports intermittent heartburn for three days.')
+        inv=completeness.inventory(notes)
+        self.assertEqual(len(inv['items']),1)
+        self.assertEqual(inv['items'][0]['source_mentions'],['Heartburn','intermittent heartburn'])
+        self.assertEqual(len(inv['items'][0]['evidence']),2)
+        self.assertTrue(self.result(notes,approved=['R12'])['coverage']['complete'])
+        for phrase in ('left heartburn','maternal heartburn','renal heartburn','possible heartburn'):
+            with self.subTest(phrase=phrase):
+                result=self.result(self.simple('She reports '+phrase+' today.'),approved=['R12'])
+                self.assertFalse(result['coverage']['complete'])
+        inv=completeness.inventory(self.simple('She reports intermittent chest pain today.', 'Abdominal pain.'))
+        self.assertEqual(len(inv['items']),2)
+
+    def test_complete_rating_and_scoped_summary_preserve_the_existing_finding(self):
+        for descriptor in ('The heartburn is rated 4 out of 10.',
+                           'Her reported heartburn is rated 2 out of 5 today.',
+                           'The heartburn is rated 2.5 out of 10.',
+                           'The heartburn is rated 0.25 out of 0.3.',
+                           'There are no additional findings beyond the heartburn described above.'):
+            with self.subTest(descriptor=descriptor):
+                notes=self.simple('She reports heartburn today.')+'\nReview of systems\n'+descriptor
+                self.assertTrue(self.result(notes,approved=['R12'])['coverage']['complete'])
+        for descriptor in ('The heartburn is rated 4 out of 10 according to her mother.',
+                           'The heartburn was rated 4 out of 10 last year.',
+                           'The heartburn is not rated 4 out of 10.',
+                           'The heartburn is possibly rated 4 out of 10.',
+                           'The heartburn is rated 14 out of 10.',
+                           'The heartburn is rated 1.1 out of 1.01.',
+                           'The heartburn is rated '+('9'*400)+' out of '+('1'*400)+'.',
+                           'There are no additional findings beyond the heartburn described above, which is unverified.',
+                           'There are no additional findings beyond the heartburn described above; the heartburn has resolved.'):
+            with self.subTest(descriptor=descriptor):
+                result=self.result(self.simple('She reports heartburn today.')+'\nReview of systems\n'+descriptor,approved=['R12'])
+                self.assertFalse(result['coverage']['complete'])
+                self.assertFalse(any(c['eligible'] for c in result['suggestions']))
+
+    def test_reported_allergy_history_cannot_erase_current_reaction_or_evaluation(self):
+        for history in ('He reports an allergy to amoxicillin, which causes hives.',
+                        'She reports an allergy to latex, which causes a rash.'):
+            with self.subTest(history=history):
+                result=self.result(self.simple('She reports heartburn today.\n'+history),approved=['R12'])
+                self.assertTrue(result['coverage']['complete'])
+                self.assertTrue(any('allergy history' in e['reason'] for e in result['excluded']))
+        for history in ('She reports an allergy to latex, which causes hives today.',
+                        'She reports an allergy to latex, which causes hives and she has nausea.',
+                        'She reports an allergy to latex, which causes hives; nausea is present today.'):
+            with self.subTest(history=history):
+                result=self.result(self.simple('She reports heartburn today.\n'+history),approved=['R12'])
+                self.assertFalse(result['coverage']['complete'])
+        inv=completeness.inventory(self.simple('She reports an allergy to latex, which causes a rash.',
+            'Allergic reaction was evaluated today.'))
+        self.assertTrue(any('Allergic reaction'==r['condition_text'] for r in inv['items']))
+
+    def test_complete_specific_descendant_does_not_compete_with_its_general_default(self):
+        result=self.other_family('The patient reports diarrhea today.',
+            'Diarrhea and periumbilical abdominal pain were both evaluated during this encounter.')
+        pain=next(r for r in result['inventory'] if r['condition_text']=='periumbilical abdominal pain')
+        self.assertEqual([(c['code'],c['eligible']) for c in pain['candidates']],[('R10.33',True)])
+        self.assertEqual(pain['candidates'][0]['proof']['excluded_general_routes'][0]['code'],'R10.9')
+        for text in ('The patient denies periumbilical pain today.',
+                     'The periumbilical pain belongs to her mother.',
+                     'The periumbilical pain is uncertain.'):
+            with self.subTest(text=text):
+                result=self.other_family('The patient reports diarrhea today.',
+                    'Diarrhea and periumbilical abdominal pain were both evaluated during this encounter.\n'+text)
+                self.assertFalse(any(c['code']=='R10.33' and c['eligible'] for c in result['suggestions']))
+
+
+class SourceInventoryReferenceBoundaryTests(SimpleTestCase):
+    def setUp(self):
+        from core.tests.test_corti_semantics import OfficialRouteVocabularyChecks, SOURCE
+        self.notes=SOURCE
+        fixture=OfficialRouteVocabularyChecks();fixture.setUp()
+        self.reference=fixture.reference
+        self.reference.release=N(id='unit',system='ICD-10-CM',version='FY2027-unit',
+            source_url='https://www.cms.gov/unit',sha256='a'*64,
+            effective_from='2026-10-01',effective_until='2027-09-30')
+        self.reference.digest=engine.digest({'index':self.reference.index,'tabular':self.reference.tabular})
+
+    def result(self, notes=None, approved=('R10.13','R14.0'), reference=None):
+        notes=self.notes if notes is None else notes
+        reference=deepcopy(reference or self.reference)
+        inv=completeness.inventory(notes);bind(reference,inv)
+        run=N(pk='offline',inputs={'notes':notes,'service_date':'2026-10-16'},
+            config={'clinical_source_contract':engine.CURRENT_SOURCE_CONTRACT},
+            releases=[vars(reference.release)],result={})
+        return completeness.evaluate(run,reference,approved_codes=approved,inventory_result=inv)
+
+    def test_retained_full_source_has_two_independently_covered_conditions(self):
+        result=self.result()
+        self.assertTrue(result['coverage']['complete'],result['inventory'])
+        self.assertEqual(len(result['inventory']),2)
+        self.assertEqual({r['approved_codes'][0] for r in result['inventory']},{'R10.13','R14.0'})
+        self.assertFalse(any(r['condition_text'].startswith('Both ') for r in result['inventory']))
+        pain=next(r for r in result['inventory'] if r['approved_codes']==['R10.13'])
+        self.assertTrue(any('intermittent' in e['quote'] for e in pain['evidence']))
+        bloating=next(r for r in result['inventory'] if r['approved_codes']==['R14.0'])
+        self.assertEqual(bloating['source_mentions'],['abdominal bloating','bloating'])
+        self.assertTrue(any('Both epigastric pain and bloating' in e['quote'] for e in bloating['evidence']))
+        for row in result['inventory']:
+            for span in row['evidence']:
+                self.assertEqual(self.notes[span['start']:span['end']],span['quote'])
+
+    def test_source_candidate_uses_direct_official_head_and_tabular_modifier_not_a_code_map(self):
+        result=self.result(approved=())
+        self.assertEqual(result['coverage']['review_required'],2)
+        candidate=next(c for c in result['suggestions'] if c['code']=='R14.0')
+        self.assertEqual(candidate['route'],'Bloating')
+        self.assertEqual(candidate['index_route']['qualified_phrase_proof']['direct_head'],'Bloating')
+        self.assertIn('coalesced_source_mentions',candidate['proof'])
+        changed=deepcopy(self.reference)
+        changed.tabular['codes']['R14.0']='Unrelated swelling'
+        result=self.result(reference=changed)
+        self.assertFalse(result['coverage']['complete'])
+        self.assertFalse(any(c['eligible'] and c['code']=='R14.0' for c in result['suggestions']))
+
+    def test_qualified_head_coverage_never_discards_unknown_modifiers_or_source_holds(self):
+        for suffix in ('The reported bloating has resolved.',
+                       'The abdominal bloating belongs to her mother.',
+                       'The patient denies bloating today.',
+                       'It is uncertain whether the bloating is present.',
+                       'All the above clinical statements are false.'):
+            with self.subTest(suffix=suffix):
+                result=self.result(self.notes+'\n'+suffix)
+                self.assertFalse(result['coverage']['complete'])
+                self.assertFalse(any(c['eligible'] and c['code']=='R14.0' for c in result['suggestions']))
+        for prefix in ('left','unverified','maternal','possible'):
+            with self.subTest(prefix=prefix):
+                result=self.result(self.notes.replace('abdominal bloating',prefix+' abdominal bloating').replace('Abdominal bloating',prefix+' abdominal bloating'))
+                self.assertFalse(result['coverage']['complete'])
