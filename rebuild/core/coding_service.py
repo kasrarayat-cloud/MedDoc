@@ -308,7 +308,7 @@ def verify_display(encounter, user, token, run=None):
 
 
 @transaction.atomic
-def snapshot(encounter, user):
+def snapshot(encounter, user, *, source_decision_response=None):
     # A read-only panel must not hold the encounter row while it validates
     # retained evidence. Mutations independently lock and rebind every token.
     e = Encounter.objects.select_related('patient', 'department', 'template_version__template').get(pk=encounter.pk)
@@ -430,7 +430,8 @@ def snapshot(encounter, user):
                                else 'ICD decision saved; CPT number awaiting confirmation' if outcome == 'pending'
                                else 'Coding decisions saved; CPT number rejected')
     from . import coding_source_review
-    source_review = coding_source_review.view(e, latest, user) if current else None
+    source_review = coding_source_review.view(e, latest, user,
+        decision_response=source_decision_response) if current else None
     view['source_review'] = source_review
     if source_review:
         # Provider approval state and source completeness are distinct. Keep

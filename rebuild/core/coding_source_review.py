@@ -2,7 +2,8 @@
 
 The provider run, its selections, and its approvals are immutable inputs here.
 Source-derived suggestions have their own namespace and require an affirmative
-clinician choice. Every display, decision and export recomputes eligibility.
+clinician choice. Every independent display, decision and export recomputes
+eligibility; a decision's immediate response uses that same locked assessment.
 """
 from copy import deepcopy
 from django.conf import settings
@@ -169,11 +170,56 @@ def presentation(review, decision=None):
         'coverage_limit': review['evaluation'].get('coverage', {}).get('limit', '')}
 
 
-def view(encounter, run, user):
+class _DecisionResponse:
+    """One-use proof for the successful decision's synchronous response only.
+
+    Created after all approval checks, kept inside decide's transaction, and
+    expired before returning to its caller. Nothing is stored on a request,
+    model, session or global cache. The completed run, reference and approvals
+    are immutable; current input/reference metadata is still rebound on use.
+    """
+    def __init__(self, encounter, run, user, review, base):
+        self._active = True
+        self._connection = transaction.get_connection()
+        self._transaction = self._connection.atomic_blocks[-1]
+        self._binding = self._bind(encounter, run, user)
+        self._assessment = deepcopy(review), base
+
+    @staticmethod
+    def _bind(encounter, run, user):
+        return (encounter.pk, user.pk, run.pk, run.encounter_id, run.input_digest,
+            run.state, service.digest(run.inputs), service.digest(run.context), service.digest(run.config),
+            service.digest(run.result), service.digest(run.requests),
+            service.selection_digest(run), service.digest(run.releases))
+
+    def consume(self, encounter, run, user):
+        need(self._active, 'This source approval response is no longer current. Reload Coding.')
+        self._active = False
+        need(transaction.get_connection() is self._connection
+             and any(block is self._transaction for block in self._connection.atomic_blocks),
+             'The source approval response is outside its locked decision.')
+        need(self._bind(encounter, run, user) == self._binding,
+             'The source approval response changed. Reload Coding.')
+        # Includes the current source, identity, context, dated reference and
+        # pending-document guards, without repeating the heavy ICD projection.
+        service.assert_current(run, encounter)
+        service.approval_ready(run)
+        return self._assessment
+
+    def close(self):
+        self._active = False
+        self._assessment = None
+
+
+def view(encounter, run, user, *, decision_response=None):
     if run is None or run.state not in ('succeeded', 'needs_detail'):
         return None
     try:
-        review, base = assess(encounter, run)
+        if decision_response is None:
+            review, base = assess(encounter, run)
+        else:
+            need(type(decision_response) is _DecisionResponse, 'Invalid source approval response.')
+            review, base = decision_response.consume(encounter, run, user)
         decision = current_decision(run, review)
         value = presentation(review, decision)
         previous = str(decision.pk) if decision else ''
@@ -193,7 +239,7 @@ def view(encounter, run, user):
 
 
 @transaction.atomic
-def decide(encounter, user, token, expected_digest, expected_previous, changes):
+def decide(encounter, user, token, expected_digest, expected_previous, changes, *, respond=None):
     e = service.locked_encounter(encounter, user, clinician=True)
     run = CodingRun.objects.select_for_update().filter(encounter=e,
         input_digest=service.input_snapshot(e)[3]).first()
@@ -222,7 +268,15 @@ def decide(encounter, user, token, expected_digest, expected_previous, changes):
         run_id=str(run.pk), previous=str(previous.pk) if previous else None,
         review_digest=decision.review_digest, choice_digest=service.digest(choices),
         review_execution='synthetic_clinician_account' if settings.SYNTHETIC_ONLY else 'clinician')
-    return decision
+    if respond is None:
+        return decision
+    # Keep the response inside the approval's locks. This private, single-use
+    # value cannot outlive this callback or authorize another request/export.
+    response = _DecisionResponse(e, run, user, review, base)
+    try:
+        return respond(response)
+    finally:
+        response.close()
 
 
 def accepted_rows(encounter, run):
