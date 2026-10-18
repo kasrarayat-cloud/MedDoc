@@ -79,18 +79,23 @@
     if (time) time.hidden = selected !== 'time';
     if (mdm) mdm.hidden = selected !== 'mdm';
   };
-  const apply = data => {
+  const captureFocus = () => ({
+    id: panel.contains(document.activeElement) ? document.activeElement.id : '',
+    fallbackID: panel.querySelector('[data-coding-form="source-review"]')?.contains(document.activeElement) ? 'coding-source-review-heading' : '',
+  });
+  const apply = (data, savedFocus) => {
     if (data.encounter_id !== encounter || typeof data.html !== 'string' || typeof data.version !== 'string') throw new Error('Invalid coding response');
     const fragment = document.createElement('template'); fragment.innerHTML = data.html;
     const next = fragment.content.querySelector('[data-coding-panel]');
     if (!next || next.dataset.encounterId !== encounter || fragment.content.querySelector('script') || next.dataset.version !== data.version) throw new Error('Invalid coding panel');
-    const focusID = panel.contains(document.activeElement) ? document.activeElement.id : '';
-    const sourceFocus = panel.querySelector('[data-coding-form="source-review"]')?.contains(document.activeElement);
+    // Disabling a focused control moves focus to BODY. Use this POST's snapshot
+    // only then; a newer deliberate focus choice takes precedence.
+    const focus = savedFocus && document.activeElement === document.body ? savedFocus : captureFocus();
     panel.replaceWith(next); panel = next; staged = null; uncertain = false;
     // A save response arrives while controls are disabled. Restore focus only
     // after the POST finishes and updateControls makes the new control usable.
-    pendingFocusID = focusID;
-    pendingFocusFallbackID = sourceFocus ? 'coding-source-review-heading' : '';
+    pendingFocusID = focus.id;
+    pendingFocusFallbackID = focus.fallbackID;
     bind();
   };
   const fetchJSON = async (url, options = {}, controller = new AbortController()) => {
@@ -180,13 +185,14 @@
     if (form.dataset.codingForm === 'output-decision' && !['accepted', 'rejected'].includes(body.get('outcome'))) {
       error('Choose Accept or Reject to record your decision.'); return;
     }
+    const postFocus = captureFocus();
     posting = true; epoch++; clearTimeout(timer); pollController?.abort(); error(''); updateControls();
     try {
       const {response, data} = await fetchJSON(url, {method:'POST', body});
       if (response.status === 409) {
         if (data.version !== panel.dataset.version) staged = data;
         error(data.error || 'This coding review changed. Review the saved result before continuing.');
-      } else { apply(data); }
+      } else { apply(data, postFocus); }
     } catch (_) {
       uncertain = true;
       error('The save response was interrupted. No action will be resent. Check the saved result before continuing; your local edits are kept.');
