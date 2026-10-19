@@ -87,6 +87,13 @@ def corrected_definitions(prep):
     return values
 
 
+def fully_reviewed_keys(prep):
+    """A component draft is never consent to the rest of the blank form."""
+    return {key for row in getattr(prep, 'correction_history', [])
+            if row.get('review_scope') != 'field_components'
+            for key in row.get('reviewed_fields', [])}
+
+
 def roles_agree(prep):
     return (all(row['state'] == 'proposed' for row in prep.proposal['fields'])
             and all(row['state'] == 'pass' for row in prep.checker['fields'])
@@ -170,7 +177,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
         config = testing_authority.bind_actor_config(config, actor, template.department_id)
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
-    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 3,
+    config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 4,
               MEANING_CONTRACT_KEY: COMPOUND_ANSWER_CONTRACT}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
@@ -194,7 +201,7 @@ def _inventory(prep):
 
 def definition_version(config):
     value = config.get('semantic_definition_version', 1)
-    if type(value) is not int or value not in (1, 2, 3):
+    if type(value) is not int or value not in (1, 2, 3, 4):
         raise ValidationError('Unsupported explicit answer-definition version.')
     return value
 
@@ -204,7 +211,7 @@ def instruction_contract(config):
         value = configured_meaning_contract(config)
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
-    if value is not None and definition_version(config) not in (2, 3):
+    if value is not None and definition_version(config) not in (2, 3, 4):
         raise ValidationError('Unsupported explicit answer-meaning instruction contract.')
     return value
 
@@ -281,6 +288,14 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
     try:
         validate_definitions(prep.source_version.fields, definitions)
         _require_definition_version({'fields':[{'definition':d} for d in definitions.values()]}, definition_version(prep.config))
+        before = corrected_definitions(prep)
+        for key, value in definitions.items():
+            if value.get('version') == 4 and value != before[key]:
+                semantic_keys = ('meaning', 'scope', 'value_type', 'answer_mode', 'unit', 'choices',
+                                 'constraints', 'patient_name_requirement')
+                if (any(value[name] != before[key][name] for name in semantic_keys)
+                        and value['component_contract'] == before[key]['component_contract']):
+                    raise ValidationError('Review the required parts with this corrected meaning using Edit required parts before saving.')
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.corrections = deepcopy(definitions)
@@ -293,6 +308,39 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
     prep.save(update_fields=['corrections', 'correction_history', 'revision', 'state'])
     audit(actor, 'template.definitions_corrected', prep.pk, department=prep.source_version.template.department,
           revision=prep.revision, definition_sha256=digest(definitions))
+    return prep
+
+
+@transaction.atomic
+def correct_components(prep_id, actor, field_key, token, definition, reason):
+    """Save a scoped draft; the complete form still needs its original review."""
+    prep = TemplateDefinitionPreparation.objects.select_for_update().select_related('source_version__template').get(pk=prep_id)
+    membership(actor, prep.source_version.template.department, roles=['owner', 'clinician'])
+    from .component_review import verify_token
+    verify_token(prep, actor, field_key, token)
+    if prep.state not in EDITABLE or definition_version(prep.config) != 4:
+        raise ValidationError('Review components in the current unapproved definition preparation.')
+    _validate_source(prep, current=True); _validate_roles(prep); _receipt_integrity(prep)
+    if not isinstance(reason, str) or not 12 <= len(reason.strip()) <= 1000:
+        raise ValidationError('Explain the component correction in 12 to 1000 characters.')
+    values = corrected_definitions(prep)
+    if field_key not in values:
+        raise ValidationError('This field is not part of the retained original mapping.')
+    values[field_key] = deepcopy(definition)
+    try:
+        validate_definitions(prep.source_version.fields, values)
+        _require_definition_version({'fields': [{'definition': d} for d in values.values()]}, 4)
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+    prep.corrections = values
+    prep.correction_history.append({'revision': prep.revision, 'actor': str(actor.pk),
+        'at': timezone.now().isoformat(), 'reason': reason.strip(), 'definitions': deepcopy(values),
+        'reviewed_fields': [], 'review_scope': 'field_components', 'component_reviewed_field': field_key})
+    prep.revision += 1
+    prep.state = 'guided'
+    prep.save(update_fields=['corrections', 'correction_history', 'revision', 'state'])
+    audit(actor, 'template.components_corrected', prep.pk, department=prep.source_version.template.department,
+          revision=prep.revision, field_key=field_key, definition_sha256=digest(definition))
     return prep
 
 

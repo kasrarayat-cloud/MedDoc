@@ -52,7 +52,11 @@ def review_items(prep, items):
             or re.fullmatch(r'what\s+is\s+(?:'+role_name+r')\s*\?'
                             r'|who\s+is\s+(?:the\s+)?(?:referring\s+)?'+role+r'\s*\?',
                             question_label, re.IGNORECASE))
-        if (prep.state != 'approved' and not corrected and not qualified
+        field_corrected = bool(corrected)
+        if definition.get('version') == 4:
+            from .semantic_preparation import fully_reviewed_keys
+            field_corrected = row['field']['key'] in fully_reviewed_keys(prep)
+        if (prep.state != 'approved' and not field_corrected and not qualified
                 and definition.get('value_type') == 'person_name'):
             row.update(state='unresolved', reason='The name label does not specify whose name belongs here.')
         result.append(row)
@@ -136,7 +140,7 @@ def rows(items, labels=None):
                    reason=row.get('reason', '').replace('Save doctor corrections', 'Save decisions'),
                    location=location, name_question=row.get('name_question_type', kind) == 'person_name' and row.get('state') == 'unresolved',
                    numeric=kind in {'integer', 'number'}, choice=kind == 'choice', constraints_summary=' · '.join(limits),
-                   type_options=[(k,v) for k,v in TYPE_LABELS.items() if definition.get('version') in (2, 3) or k not in {'person_name', 'identifier'}], subject_options=list(SUBJECT_LABELS.items()),
+                   type_options=[(k,v) for k,v in TYPE_LABELS.items() if definition.get('version') in (2, 3, 4) or k not in {'person_name', 'identifier'}], subject_options=list(SUBJECT_LABELS.items()),
                    timing_options=list(TIMING_LABELS.items()), polarity_options=list(POLARITY_LABELS.items()),
                    mode_options=list(MODE_LABELS.items()), patient_name_options=list(PATIENT_NAME_LABELS.items()),
                    patient_name_summary=PATIENT_NAME_LABELS.get(definition.get('patient_name_requirement'), ''))
@@ -176,13 +180,14 @@ def submitted(prep, items, user, post, operation):
         raise ValidationError('Answer definitions are not available for this review.')
     for key, definition in baseline.items():
         names = ['meaning', 'value_type', 'unit', 'choices', 'subject', 'temporality', 'polarity', *CONSTRAINT_KEYS]
-        if definition['version'] in (2, 3): names.append('answer_mode')
-        if definition['version'] == 3: names.append('patient_name_requirement')
+        if definition['version'] in (2, 3, 4): names.append('answer_mode')
+        if definition['version'] in (3, 4): names.append('patient_name_requirement')
         if any(len(post.getlist('field_'+key+'_'+name)) != 1 for name in names):
             raise ValidationError('A definition control is missing or repeated. Reload before reviewing this form.')
     from .semantic_preparation_views import posted_definitions
     proxy = SimpleNamespace(source_version=SimpleNamespace(fields=[r['field'] for r in items]),
-                            config={'semantic_definition_version': next(iter(baseline.values()))['version']})
+                            config={'semantic_definition_version': next(iter(baseline.values()))['version']},
+                            component_baseline=baseline)
     normalized = post.copy()
     newline = lambda value: value.replace('\r\n', '\n').replace('\r', '\n')
     for key in baseline:
@@ -223,6 +228,13 @@ def submitted(prep, items, user, post, operation):
                 # previewed on selection. The original model response stays intact.
                 if value['meaning'] == current['meaning']:
                     value['meaning'] = f'{label_text(row["field"]["label"])}: the {role}’s name, as requested by this form.'
+                if value.get('version') == 4:
+                    parts = value['component_contract']['components']
+                    if (len(parts) != 1 or parts[0]['value_type'] != 'person_name'
+                            or value['component_contract']['rendering'] != 'plain'):
+                        raise ValidationError('Use Edit required parts to review this name and its component roles.')
+                    parts[0]['scope'] = dict(value['scope'])
+                    parts[0]['meaning'] = value['meaning']
                 decisions.append(f'{label_text(row["field"]["label"])}: {role}')
             else:
                 decision = post.get('decision_'+key, '')
@@ -232,6 +244,9 @@ def submitted(prep, items, user, post, operation):
                 decisions.append(f'{label_text(row["field"]["label"])}: {"confirmed proposed meaning" if decision == "accept" else "edited definition"}')
         if value['scope']['subject'] != current['scope']['subject'] and value['meaning'] == current['meaning']:
             raise ValidationError('When changing whom a field describes, update its meaning to describe that person too.')
+        if (value.get('version') == 4 and value != current
+                and value['component_contract'] == current['component_contract']):
+            raise ValidationError('Use Edit required parts to check the components against this corrected definition before saving.')
     if operation == 'approve' and values != baseline:
         raise ValidationError('Save your edited definitions before approving this template. No version was created.')
     changed = [label_text(r['field']['label']) for r in items if values[r['field']['key']] != baseline[r['field']['key']]]

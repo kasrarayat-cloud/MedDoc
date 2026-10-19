@@ -310,7 +310,9 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
     Oversized or malformed closure refuses without a full-reference fallback.
     """
     from . import coding_engine as engine
+    from .source_assertion_coding import CONTRACT as GRAPH_SOURCE_CONTRACT, HISTORY_ROLES
     source_terms = set()
+    taxonomy_roles=[]
     if source_inventory is not None:
         # Source terms are a retrieval scope, never evidence for selecting a code.
         # Their complete authoritative families are revalidated by the caller.
@@ -324,10 +326,19 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
                        for k in ('source_sha256', 'inventory_sha256'))):
             raise ValidationError('Invalid source condition reference scope.')
         inventory_contract = source_inventory.get('source_contract')
-        if (engine.QUALIFIED_SOURCE_CONTRACT in (source_contract, inventory_contract)
+        if (any(c in (engine.QUALIFIED_SOURCE_CONTRACT, GRAPH_SOURCE_CONTRACT) for c in (source_contract, inventory_contract))
                 and source_contract != inventory_contract):
             raise ValidationError('The prospective source inventory and reference contract differ.')
         source_terms = {engine.norm(t) for t in source_inventory['reference_terms']}
+        if source_contract==GRAPH_SOURCE_CONTRACT:
+            taxonomy_roles=source_inventory.get('reference_taxonomy_roles')
+            if (type(taxonomy_roles)is not list or any(type(role)is not str or role not in HISTORY_ROLES for role in taxonomy_roles)
+                    or taxonomy_roles!=sorted(set(taxonomy_roles))
+                    or type(source_inventory.get('items'))is not list
+                    or any(type(row)is not dict for row in source_inventory['items'])
+                    or taxonomy_roles!=sorted({row.get('consumer_role') for row in source_inventory['items']
+                        if row.get('consumer_role') in HISTORY_ROLES})):
+                raise ValidationError('Invalid checked history reference scope.')
     wanted = _prediction_codes(codes)
     query = _Projection(metadata)
     tabular = query.read('''jsonb_build_object(
@@ -374,7 +385,7 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
             or any(type(value) is not str or not value for value in descriptions.values())):
         raise ValidationError('Invalid prediction code descriptions.')
     lexical = set()
-    modern = source_contract in engine.SOURCE_CONTRACTS
+    modern = source_contract in engine.SOURCE_CONTRACTS or source_contract == GRAPH_SOURCE_CONTRACT
     for route in routes:
         head = route
         while head['parent_id'] is not None:
@@ -386,6 +397,8 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
     for row in inventory:
         terms = engine.index_head_terms(row, row['description']) if modern else [row['term']]
         if any(engine.norm(term) in lexical | source_terms and engine.norm(term) not in engine.TAXONOMY_HEADS for term in terms):
+            roots.add(row['id'])
+        if taxonomy_roles and engine.norm(row['term'])=='history':
             roots.add(row['id'])
     forest = _forest(roots, ancestors, query.index, query.children) if roots else {}
     # One final source-order query preserves route choice and scope-ID order.
@@ -421,4 +434,6 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
             'source_sha256': source_inventory['source_sha256'],
             'inventory_sha256': source_inventory['inventory_sha256'],
             'terms': sorted(set(source_inventory['reference_terms'])), 'complete': True}
+        if source_contract==GRAPH_SOURCE_CONTRACT:
+            reference.completeness_scope['taxonomy_roles']=taxonomy_roles
     return reference

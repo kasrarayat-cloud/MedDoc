@@ -26,7 +26,7 @@ class IndependentStageTests(TestCase):
     def setUp(self):
         preparation_fixture.DefinitionPreparationDatabaseTests.setUp(self)
         welcome_credit(self.user)
-        prep=semantic_preparation.create_preparation(self.source,self.user)
+        prep=preparation_fixture.historical_preparation(self.source,self.user)
         self.assertTrue(semantic_preparation.run_one());prep.refresh_from_db()
         self.assertEqual(prep.state,'review',prep.error_code)
         definitions=semantic_preparation.corrected_definitions(prep)
@@ -211,7 +211,7 @@ class IndependentStageTests(TestCase):
             template=Template.objects.create(department=department,name='Standing synthetic blank',format='docx',original_name='blank.docx',
                 original_path=self.template.original_path,sha256=self.template.sha256,created_by=actor)
             source=TemplateVersion.objects.create(template=template,number=1,fields=self.source.fields,created_by=actor)
-            prep=semantic_preparation.create_preparation(source,actor);semantic_preparation.run_one();prep.refresh_from_db()
+            prep=preparation_fixture.historical_preparation(source,actor);semantic_preparation.run_one();prep.refresh_from_db()
             self.assertEqual(prep.state,'review',prep.error_code)
             version=semantic_preparation.approve(prep.pk,actor,prep.revision,prep.inventory['inventory_sha256'],[f['key'] for f in source.fields],True)
             patient=Patient.objects.create(department=department,display_name='Synthetic standing patient',reference='standing',created_by=actor)

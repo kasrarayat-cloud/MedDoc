@@ -21,6 +21,21 @@ from core.models import AIStageReceipt, Department, Membership, Organization, Te
 from core.semantic_preparation_views import posted_definitions
 
 
+def historical_preparation(source, actor, **options):
+    """Freeze the original v3 protocol before insertion for historical tests.
+
+    Current v4 preparation and correction behavior has its own component suite;
+    these fixtures must not be silently reinterpreted with the new graph schema.
+    """
+    from core.models import TemplateDefinitionPreparation
+    create = TemplateDefinitionPreparation.objects.create
+    def insert(**values):
+        values['config'] = {**values['config'], 'semantic_definition_version': 3}
+        return create(**values)
+    with patch('core.semantic_preparation.TemplateDefinitionPreparation.objects.create', side_effect=insert):
+        return workflow.create_preparation(source, actor, **options)
+
+
 class DefinitionPreparationPureTests(SimpleTestCase):
     def test_historical_definition_role_envelopes_remain_byte_equivalent(self):
         fields = [{'key':'cell_0', 'label':'Subjective', 'kind':'text', 'locator':{'cell':0}}]
@@ -197,7 +212,7 @@ class DefinitionPreparationDatabaseTests(TestCase):
             definition.update(value_type='person_name', answer_mode='atomic')
             definition['scope']['subject'] = 'unspecified'
             return response
-        prep = workflow.create_preparation(self.source, self.user)
+        prep = historical_preparation(self.source, self.user)
         with patch.object(workflow, '_call_role', side_effect=ambiguous):
             self.assertTrue(workflow.run_one())
         prep.refresh_from_db(); self.assertEqual(prep.state, 'guided')
@@ -255,7 +270,7 @@ class DefinitionPreparationDatabaseTests(TestCase):
         self.assertNotContains(response,'Prepare reusable answer definitions</button>')
 
     def prepared(self):
-        prep = workflow.create_preparation(self.source, self.user)
+        prep = historical_preparation(self.source, self.user)
         self.assertTrue(workflow.run_one()); prep.refresh_from_db()
         self.assertEqual(prep.state, 'review', prep.error_code)
         return prep
@@ -286,7 +301,7 @@ class DefinitionPreparationDatabaseTests(TestCase):
         first_version = self.approve(prep)
         old_definitions = deepcopy(first_version.semantic_definitions)
         original = (self.root/'blank.docx').read_bytes()
-        new_prep = workflow.create_preparation(first_version, self.user)
+        new_prep = historical_preparation(first_version, self.user)
         self.assertTrue(workflow.run_one()); new_prep.refresh_from_db()
         proposed = deepcopy((new_prep.proposal, new_prep.checker))
         values = workflow.corrected_definitions(new_prep)
@@ -309,8 +324,8 @@ class DefinitionPreparationDatabaseTests(TestCase):
 
     def test_repeated_start_reuses_request_and_cannot_create_provider_replay(self):
         prep = self.prepared()
-        self.assertEqual(workflow.create_preparation(self.source, self.user).pk, prep.pk)
-        self.assertEqual(workflow.create_preparation(self.source, self.user).pk, prep.pk)
+        self.assertEqual(historical_preparation(self.source, self.user).pk, prep.pk)
+        self.assertEqual(historical_preparation(self.source, self.user).pk, prep.pk)
         self.assertFalse(workflow.run_one()); self.assertEqual(prep.ai_stage_receipts.count(), 2)
 
     def test_uncertain_definition_requires_explicit_review_and_separate_correction_history(self):
@@ -363,7 +378,7 @@ class DefinitionPreparationDatabaseTests(TestCase):
     def test_new_definition_review_after_approval_gets_its_own_source_without_changing_prior_approval(self):
         first_prep = self.prepared(); version = self.approve(first_prep)
         first_prep.refresh_from_db(); seal = first_prep.approval_sha256
-        next_prep = workflow.create_preparation(version, self.user)
+        next_prep = historical_preparation(version, self.user)
         self.assertNotEqual(next_prep.pk, first_prep.pk); self.assertTrue(workflow.run_one())
         next_prep.refresh_from_db(); self.assertEqual(next_prep.state, 'review', next_prep.error_code)
         next_version = self.approve(next_prep)
@@ -372,26 +387,26 @@ class DefinitionPreparationDatabaseTests(TestCase):
         self.assertEqual(workflow.validated_semantic_definitions(next_version), next_prep.approved_definitions or next_version.semantic_definitions)
 
     def test_explicit_blocked_retry_retains_attempt_and_replayed_retry_reuses_new_request(self):
-        prep=workflow.create_preparation(self.source,self.user)
+        prep=historical_preparation(self.source,self.user)
         with patch.object(workflow,'_inventory',side_effect=ValidationError('Controlled source refusal')):
             self.assertTrue(workflow.run_one())
         prep.refresh_from_db();self.assertEqual(prep.state,'blocked')
         before={key:deepcopy(value) for key,value in prep.__dict__.items() if key!='_state'}
-        self.assertEqual(workflow.create_preparation(self.source,self.user).pk,prep.pk)
-        new=workflow.create_preparation(self.source,self.user,retry_of=prep.pk)
+        self.assertEqual(historical_preparation(self.source,self.user).pk,prep.pk)
+        new=historical_preparation(self.source,self.user,retry_of=prep.pk)
         self.assertNotEqual(new.pk,prep.pk);self.assertEqual(new.config['definition_retry_of'],str(prep.pk))
-        self.assertEqual(workflow.create_preparation(self.source,self.user,retry_of=prep.pk).pk,new.pk)
+        self.assertEqual(historical_preparation(self.source,self.user,retry_of=prep.pk).pk,new.pk)
         prep.refresh_from_db()
         self.assertEqual({key:value for key,value in prep.__dict__.items() if key!='_state'},before)
         self.assertTrue(workflow.run_one());new.refresh_from_db();self.assertEqual(new.state,'review')
         self.assertEqual(AIStageReceipt.objects.count(),2)
 
     def test_uncertain_blocked_preparation_cannot_buy_another_provider_request(self):
-        prep=workflow.create_preparation(self.source,self.user)
+        prep=historical_preparation(self.source,self.user)
         from core.ai_stages import StageUnknown
         with patch.object(workflow,'_call_role',side_effect=StageUnknown('Controlled uncertain provider response')):
             self.assertTrue(workflow.run_one())
         prep.refresh_from_db();self.assertEqual(prep.state,'blocked');self.assertEqual(prep.error_code,'provider_unknown')
-        with self.assertRaises(ValidationError):workflow.create_preparation(self.source,self.user,retry_of=prep.pk)
-        self.assertEqual(workflow.create_preparation(self.source,self.user).pk,prep.pk)
+        with self.assertRaises(ValidationError):historical_preparation(self.source,self.user,retry_of=prep.pk)
+        self.assertEqual(historical_preparation(self.source,self.user).pk,prep.pk)
         self.assertEqual(prep.__class__.objects.count(),1)

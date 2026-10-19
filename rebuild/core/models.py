@@ -273,6 +273,25 @@ class Job(ProviderIdentifiers,Entity):
     @property
     def pricing_snapshot(self):
         return self.config.get('pricing_version','Not captured for this historical job')
+
+class SourceInterpretation(Entity):
+    """One immutable checked source interpretation for an explicit generation."""
+    job=models.OneToOneField(Job,on_delete=models.PROTECT,related_name='source_interpretation')
+    encounter=models.ForeignKey(Encounter,on_delete=models.PROTECT,related_name='source_interpretations')
+    contract=models.CharField(max_length=100)
+    interpretation_sha256=models.CharField(max_length=64)
+    source_sha256=models.CharField(max_length=64)
+    bindings=models.JSONField(default=dict)
+    interpretation=models.JSONField(default=dict)
+    stage_receipts=models.JSONField(default=list)
+
+    def save(self,*args,**kwargs):
+        if not self._state.adding:
+            raise ValidationError('Source interpretations are immutable; create a new generation.')
+        super().save(*args,**kwargs)
+
+    def delete(self,*args,**kwargs):
+        raise ValidationError('Source interpretations cannot be deleted.')
 class Wallet(Entity):
     user=models.ForeignKey(User,on_delete=models.PROTECT,null=True)
     organization=models.ForeignKey(Organization,on_delete=models.PROTECT,null=True)

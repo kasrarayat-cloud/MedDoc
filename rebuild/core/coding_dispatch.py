@@ -79,12 +79,20 @@ def contract(encounter=None):
 
 
 def configuration(actor, encounter):
-    if provider(encounter) == 'corti':
+    from . import source_assertion_coding as shared
+    graph_generation = (any(type(d) is dict and d.get('version') == 4
+        for d in getattr(getattr(encounter, 'template_version', None), 'semantic_definitions', {}).values())
+        or any(type(a) is dict and a.get('fact_scope_contract') == shared.graph.CONTRACT
+               for a in getattr(encounter, 'answers', {}).values()))
+    selected_provider = provider(encounter)
+    if graph_generation and selected_provider != 'corti':
+        raise ValidationError('Coding for this newly reviewed form requires Corti. Ask your administrator to configure it; no prediction was sent.')
+    if selected_provider == 'corti':
         from .corti_prediction import configuration as configure
     else:
         from .coding_provider import configuration as configure
     result = configure(actor, encounter)
-    if result.get('provider') == 'corti' and source_context_enabled(encounter):
+    if result.get('provider') == 'corti' and (graph_generation or source_context_enabled(encounter)):
         result['source_context_contract'] = SOURCE_CONTEXT_CONTRACT
         if getattr(settings, 'CORTI_NEW_ENCOUNTER_SCOPE', '') == AUTHORIZED_SYNTHETIC_SCOPE:
             from .coding_recovery import CONTEXT_CONTRACT
@@ -95,10 +103,16 @@ def configuration(actor, encounter):
         # Pin old encounters to the contract on their first immutable run.
         # Context-only derivatives already copy that run's configuration.
         contract = first.config.get('clinical_source_contract') if first is not None else QUALIFIED_SOURCE_CONTRACT
+        if graph_generation:
+            shared.snapshot(encounter)  # Explicit persisted generation, never a caller-supplied flag.
+            contract = shared.CONTRACT
         if contract is not None:
-            if contract not in SOURCE_CONTRACTS:
+            if contract not in SOURCE_CONTRACTS and contract != shared.CONTRACT:
                 raise ValidationError('Unknown clinical coding source contract.')
             result['clinical_source_contract'] = contract
+            if contract == shared.CONTRACT:
+                from .corti_coding import DIAGNOSTIC_CONTRACT
+                result['coding_diagnostic_contract'] = DIAGNOSTIC_CONTRACT
     return result
 
 
