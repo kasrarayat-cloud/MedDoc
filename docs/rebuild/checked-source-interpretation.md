@@ -93,3 +93,22 @@ scope rule, provider instructions, request envelopes and restore behavior remain
 the historical branch. New encounter instructions apply only to approved v2
 definitions. Existing approvals are never silently upgraded; choosing v2 requires
 a new prospective preparation and approval. The factual graph schema is unchanged.
+
+## Bounded definition output capacity
+
+New version 4 preparations using `field-components-v2` on the existing supported
+Anthropic model pin `bounded-definition-output-32k-v1`: at most 32,000 output
+tokens and 240 seconds per role, two role calls and the unchanged 512,000-byte
+complete-request bound. The immutable two-call quote is recalculated before any
+send. This addresses the larger component schema exhausting the older output
+limit; it does not make truncated or invalid JSON acceptable.
+
+Preparations without the explicit capacity profile retain their original
+16,000-token, 120-second limits, quote and request envelope, including earlier
+version 4 preparations. Unknown profiles, mismatched limits and unsupported
+provider/model contracts are refused. Migration 0035 changes only the definition
+capacity admission condition in the existing immutable stage guard; predecessor,
+lineage, ownership, metering and two-call checks remain in force. There is no
+historical backfill, provider switch or automatic retry. A failed preparation and
+its raw response remain retained; a replacement requires the existing explicit
+new-attempt route. Fresh installed acceptance remains a separate requirement.

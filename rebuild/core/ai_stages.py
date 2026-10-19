@@ -25,6 +25,9 @@ GENERATION_TIMEOUT_SECONDS_V2=240
 GENERATION_CAPACITY_V2_MODELS=frozenset({('anthropic','claude-sonnet-5-5')})
 MAX_CALLS=5
 DEFINITION_MAX_OUTPUT_TOKENS=16000
+DEFINITION_CAPACITY_PROFILE='bounded-definition-output-32k-v1'
+DEFINITION_MAX_OUTPUT_TOKENS_V2=32000
+DEFINITION_TIMEOUT_SECONDS_V2=240
 STAGES={'extractor':1,'assigner':2,'checker':2,'definition_proposer':1,'definition_checker':1,'revalidation_checker':1}
 
 class StageFailure(ValidationError):
@@ -97,10 +100,53 @@ def _pipeline_config(config,profile):
 
 
 def definition_pipeline_config(config):
-    return {**config,'definition_stage_protocol':PROTOCOL,'definition_max_calls':2,
+    if 'definition_capacity_profile' in config or 'definition_timeout_seconds' in config:
+        definition_limits(config)
+    prospective={**config,'definition_stage_protocol':PROTOCOL,'definition_max_calls':2,
             'definition_request_byte_limit':MAX_REQUEST_BYTES,
-            'definition_output_token_limit':DEFINITION_MAX_OUTPUT_TOKENS,
-            'definition_maximum_cost':str(quote(config,output_tokens=DEFINITION_MAX_OUTPUT_TOKENS)*2)}
+            'definition_output_token_limit':DEFINITION_MAX_OUTPUT_TOKENS}
+    if _supports_definition_capacity(config):
+        prospective.update(definition_capacity_profile=DEFINITION_CAPACITY_PROFILE,
+            definition_output_token_limit=DEFINITION_MAX_OUTPUT_TOKENS_V2,
+            definition_timeout_seconds=DEFINITION_TIMEOUT_SECONDS_V2)
+    return {**prospective,'definition_maximum_cost':str(definition_maximum_cost(prospective))}
+
+
+def _supports_definition_capacity(config):
+    return (_supports_generation_capacity_v2(config)
+            and type(config.get('semantic_definition_version')) is int
+            and config['semantic_definition_version']==4
+            and config.get('semantic_component_contract')=='field-components-v2')
+
+
+def definition_limits(config):
+    """Frozen preparations without a profile retain their original 16k/120s."""
+    if 'definition_capacity_profile' not in config:
+        if 'definition_timeout_seconds' in config:
+            raise StageNotSent('The definition timeout has no capacity profile.')
+        return DEFINITION_MAX_OUTPUT_TOKENS,120
+    if (config['definition_capacity_profile']!=DEFINITION_CAPACITY_PROFILE
+        or not _supports_definition_capacity(config)
+        or type(config.get('definition_output_token_limit')) is not int
+        or config['definition_output_token_limit']!=DEFINITION_MAX_OUTPUT_TOKENS_V2
+        or type(config.get('definition_timeout_seconds')) is not int
+        or config['definition_timeout_seconds']!=DEFINITION_TIMEOUT_SECONDS_V2):
+        raise StageNotSent('The definition capacity profile or its frozen limits is invalid.')
+    return DEFINITION_MAX_OUTPUT_TOKENS_V2,DEFINITION_TIMEOUT_SECONDS_V2
+
+
+def definition_maximum_cost(config):
+    output_limit,_=definition_limits(config)
+    return quote(config,output_tokens=output_limit)*2
+
+
+def validate_definition_config(config):
+    output_limit,_=definition_limits(config)
+    expected={'definition_stage_protocol':PROTOCOL,'definition_max_calls':2,
+              'definition_request_byte_limit':MAX_REQUEST_BYTES,'definition_output_token_limit':output_limit,
+              'definition_maximum_cost':str(definition_maximum_cost(config))}
+    if any(type(config.get(k)) is not type(v) or config[k]!=v for k,v in expected.items()):
+        raise StageNotSent('The immutable definition quote does not cover this workflow.')
 
 
 def call_limit(config):
@@ -215,7 +261,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     if stage not in STAGES or type(attempt) is not int or not 1<=attempt<=STAGES[stage]:
         raise StageNotSent('This stage is outside the bounded workflow.')
     if (job is None)!=stage.startswith('definition_'):raise StageNotSent('The stage does not match its parent.')
-    output_limit,default_timeout=((DEFINITION_MAX_OUTPUT_TOKENS,120) if stage.startswith('definition_')
+    output_limit,default_timeout=(definition_limits(config) if stage.startswith('definition_')
                                   else generation_limits(config))
     if max_output_tokens is None:max_output_tokens=output_limit
     if timeout_seconds is None:timeout_seconds=default_timeout
@@ -235,7 +281,8 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     schema_json=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
-    if job is not None and 'semantic_capacity_profile' in config:
+    if ((job is not None and 'semantic_capacity_profile' in config)
+        or (definition_preparation is not None and 'definition_capacity_profile' in config)):
         envelope['timeout_seconds']=timeout_seconds
     raw=encode(envelope)
     if len(raw)>MAX_REQUEST_BYTES:raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
@@ -261,9 +308,9 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
             if sum((row.actual_cost or Decimal('0') for row in previous),Decimal('0'))+cap>maximum_cost(config):
                 raise StageNotSent('Recorded provider costs exhausted the whole-pipeline estimate; no further request was sent.')
         else:
-            expected=definition_pipeline_config(config)
-            if any(config.get(k)!=expected[k] for k in ('definition_stage_protocol','definition_max_calls','definition_request_byte_limit','definition_output_token_limit','definition_maximum_cost')):
-                raise StageNotSent('The immutable definition quote does not cover this workflow.')
+            validate_definition_config(config)
+            if sum((row.actual_cost or Decimal('0') for row in previous),Decimal('0'))+cap>definition_maximum_cost(config):
+                raise StageNotSent('Recorded costs exhausted the definition preparation estimate; nothing was sent.')
         predecessor=({'assigner':('extractor',1) if attempt==1 else ('checker',1),'checker':('assigner',attempt)}.get(stage)
             if job is not None else (('definition_proposer',1) if stage=='definition_checker' else None))
         if predecessor and not previous.filter(stage=predecessor[0],attempt=predecessor[1],state='succeeded').exists():
@@ -371,6 +418,8 @@ def assert_installed_guards():
     bodies=dict(re.findall(r'CREATE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',module.SEMANTIC_SQL,re.S))
     recovery=importlib.import_module('core.migrations.0033_retained_semantic_revalidation_v3')
     bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',recovery.REVALIDATION_SQL,re.S)))
+    capacity=importlib.import_module('core.migrations.0035_definition_capacity_profile')
+    bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',capacity.CAPACITY_SQL,re.S)))
     triggers={name:(f'CREATE TRIGGER {name} BEFORE {events} ON public.{table} FOR EACH ROW EXECUTE FUNCTION {function}()')
         for name,table,events,function in (
             ('definition_preparation_guard','core_templatedefinitionpreparation','INSERT OR DELETE OR UPDATE','quillmd_definition_preparation_guard'),
