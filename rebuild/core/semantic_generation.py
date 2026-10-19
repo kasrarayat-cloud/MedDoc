@@ -45,7 +45,9 @@ SCOPED_DENIAL_SCOPE_CONTRACT = 'positioned-scoped-denial-v19'
 COMPLETE_ASSERTION_SCOPE_CONTRACT = 'positioned-complete-assertions-v20'
 SOAP_ASSERTION_SCOPE_CONTRACT = 'positioned-soap-assertions-v21'
 COMPLETE_NARRATIVE_SCOPE_CONTRACT = 'positioned-complete-narratives-v22'
-SOAP_ASSERTION_SCOPE_CONTRACTS = (SOAP_ASSERTION_SCOPE_CONTRACT, COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+ORDER_EVENT_SCOPE_CONTRACT = 'positioned-order-event-roles-v23'
+COMPLETE_NARRATIVE_SCOPE_CONTRACTS = (COMPLETE_NARRATIVE_SCOPE_CONTRACT, ORDER_EVENT_SCOPE_CONTRACT)
+SOAP_ASSERTION_SCOPE_CONTRACTS = (SOAP_ASSERTION_SCOPE_CONTRACT, *COMPLETE_NARRATIVE_SCOPE_CONTRACTS)
 COMPLETE_ASSERTION_SCOPE_CONTRACTS = (COMPLETE_ASSERTION_SCOPE_CONTRACT, *SOAP_ASSERTION_SCOPE_CONTRACTS)
 COMPLETE_ASSERTION_INSTRUCTIONS = (' Complete source assertions retain each negative predicate, coordinated object, '
     'shared subject, uncertainty and conditional safety-net clause. Calendar dates are not modal verbs. '
@@ -58,6 +60,11 @@ COMPLETE_NARRATIVE_INSTRUCTIONS = (' Extract and retain complete source statemen
     'by assignment alone. Preserve every source predicate, topic, uncertainty and ownership. '
     'Complete narrative definitions include only their explicitly requested topics and attributes; '
     'documentation-only instructions never authorize invented facts.')
+ORDER_EVENT_INSTRUCTIONS = (' A complete current order can also describe later collection or performance. '
+    'Preserve both event roles, the complete purpose and timing, and any documented nonperformance or missing result. '
+    'A whole plan fact may retain current or future timing for that complete source statement; do not rewrite its '
+    'timing annotation or turn an ordered service into a performed service. Source ownership, exact complete wording, '
+    'approved destination timing and clinical uncertainty remain separate requirements.')
 SCOPED_DENIAL_SCOPE_CONTRACTS = (SCOPED_DENIAL_SCOPE_CONTRACT, *COMPLETE_ASSERTION_SCOPE_CONTRACTS)
 SOURCE_GOVERNANCE_SCOPE_CONTRACTS = (SOURCE_GOVERNANCE_SCOPE_CONTRACT, *SCOPED_DENIAL_SCOPE_CONTRACTS)
 SUPPORT_CLOSURE_SCOPE_CONTRACTS = (SUPPORT_CLOSURE_SCOPE_CONTRACT, *SOURCE_GOVERNANCE_SCOPE_CONTRACTS)
@@ -599,7 +606,7 @@ def _scoped_denial_objects(fact,own,scope_contract=None):
     frame=_scoped_denial_frame(own['quote'])
     value=fact['value_evidence']['quote'].strip().removesuffix('.')
     eligible=(fact['kind'] in ('history','finding') and fact['subject']['kind']=='patient'
-        and (fact['timing']['kind']=='current' or scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+        and (fact['timing']['kind']=='current' or scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS
             and fact['timing']['kind']=='unspecified') and fact['polarity']=='negated'
         and fact['unit'] is None and fact['scale'] is None
         and frame is not None)
@@ -880,7 +887,7 @@ def _scoped_denial_inventory(notes,definitions,scope_contract=SCOPED_DENIAL_SCOP
                     if _denial_destination(d,first,scope_contract=scope_contract):end=unit['start']+frame.start('objects')+len(first)
                 rows.append({'field_key':key,'kind':'reported_absence','source':{
                     'start':start,'end':end,'quote':notes[start:end]},'polarities':['negated']})
-    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+    if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
         for row in rows:row['allow_owned_unspecified_denial']=True
     return rows
 
@@ -1741,7 +1748,7 @@ def _context_literal_kind(text, section=None):
 
 
 def _destination_contracts(scope_contract):
-    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+    if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
         from . import complete_narrative_contracts
         return complete_narrative_contracts
     from . import soap_destination_contracts
@@ -1771,6 +1778,11 @@ def _governance_literal(text, scope_contract=None):
     """
     from .clinical_source_context import PERSON,conditional_follow_up
     value=text.strip().removesuffix('.').strip()
+    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+        from .order_event_roles import order_event_frame
+        order = order_event_frame(text)
+        if order:
+            return order
     if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .clinical_assertions_v4 import family_history_order_frame
         order = family_history_order_frame(text)
@@ -1802,7 +1814,7 @@ def _governance_literal(text, scope_contract=None):
         from .clinical_assertions import assertion_frame
         typed = assertion_frame(text, nominal)
         if typed:
-            if (scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+            if (scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS
                     and typed['kind']=='medication_absence' and typed.get('antecedent')=='named_medication_trial'):
                 start,end=typed['values'][0]
                 copula=re.match(r'(?:is|are)\s+',value[start:end],re.I)
@@ -1865,12 +1877,14 @@ def _governance_fact_literal(fact,own,scope_contract=None):
         'uncertainty':('assessment',),'linked_nonperformance':('finding','plan'),
         'observation_comparison':('finding',),'conditional_follow_up':('follow_up','plan'),
         'diagnostic_limit':('assessment',),'medication_absence':('history','finding','other'),
-        'medication_response':('history','finding'),'family_history_order':('plan',)}
+        'medication_response':('history','finding'),'family_history_order':('plan',),
+        'investigation_order':('plan',)}
     value=fact['value_evidence']
     exact=(value['start']-own['start'],value['end']-own['start'])
     if fact['kind'] not in allowed[frame['kind']] or exact not in frame['values']:return None
     if (frame.get('required_polarity',fact['polarity']) != fact['polarity']
-            or frame.get('required_timing',fact['timing']['kind']) != fact['timing']['kind']):return None
+            or fact['timing']['kind'] not in frame.get('allowed_timings',
+                (frame.get('required_timing',fact['timing']['kind']),))):return None
     return frame['kind']
 
 
@@ -1906,7 +1920,7 @@ def _governance_literal_owned(fact,own,context,units,scope_contract=None):
     frame=_fact_assertion_frame(fact,own,scope_contract)
     historical_response=bool(frame and frame['kind']=='medication_response')
     if not _context_fact_owned(fact,own,context,historical=historical_response):return False
-    if frame and frame['kind']=='family_history_order':
+    if frame and frame['kind'] in ('family_history_order','investigation_order'):
         return context['units'][own['start']]['section']=='plan'
     if frame and frame.get('antecedent') == 'named_medication_trial':
         if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
@@ -1959,6 +1973,11 @@ def _governance_literal_owned(fact,own,context,units,scope_contract=None):
 
 def _governance_candidate(text,scope_contract=None):
     """Broad obligation detection, never permission for an unparsed tail."""
+    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+        from .order_event_roles import order_event_frame
+        order = order_event_frame(text)
+        if order:
+            return order['kind']
     if re.search(r'\b(?:examination|observation)\b.*\b(?:stable|unchanged)\b',text,re.I):return 'observation_comparison'
     if re.match(r'\s*(?:follow-up|followup)\b',text,re.I) and re.search(r'\bif\b',text,re.I):return 'conditional_follow_up'
     if re.search(r'\b(?:has|have)\s+received\s+no\s+professional\s+services\b',text,re.I):return 'service_history_absence'
@@ -2042,7 +2061,7 @@ def _historical_cessation_support(fact,definition,context,picked,notes,units,sco
                 if not p['issues'] and p['subject']['kind']=='patient' and p['timing']['kind']=='past'
                 and p['polarity']=='affirmed' and _inside(p['value_evidence'],[trial]))
             cursor=trial['start']
-            if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+            if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
                 # The whole dated source trial was already parsed and bound.
                 # Its explicit past verb is metadata evidence, not a required
                 # prefix of the unchanged complete regimen value.
@@ -2105,7 +2124,7 @@ def _source_governance_inventory(notes,definitions,scope_contract=SOURCE_GOVERNA
                 # Current non-use does not cover the separately requested
                 # historical stopping date and reason preceding its predicate.
                 prefix=text[:frame['values'][0][0]]
-                stop=re.search(r'\s+and\s*(?:(?:is|are)\s+)?$' if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                stop=re.search(r'\s+and\s*(?:(?:is|are)\s+)?$' if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS
                     else r'\s+and\s*$',prefix,re.I)
                 if stop:
                     rows.append({'field_key':key,'kind':'historical_stopping_details',
@@ -2227,6 +2246,12 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
         source={'start':unit['start'],'end':unit['start']+end,'quote':unit['quote'][:end],'source_unit_id':unit['id']}
         rows.extend({'field_key':key,'kind':kind,'source':source,'polarities':list(polarities)} for key in keys
             if definitions[key]['scope']['polarity']=='any' or definitions[key]['scope']['polarity'] in polarities)
+        if scope_contract == ORDER_EVENT_SCOPE_CONTRACT and kind == 'investigation_order':
+            from .order_event_roles import order_event_frame
+            if order_event_frame(unit['quote']):
+                for row in rows:
+                    if row['kind'] == kind and row['source'] == source:
+                        row['order_event_contract'] = ORDER_EVENT_SCOPE_CONTRACT
     narrative = {key:d for key,d in definitions.items() if d['value_type']=='text'
         and d.get('answer_mode')=='narrative' and d['scope']['subject'] in ('patient','encounter')
         and d['scope']['temporality'] in ('any','current')}
@@ -2304,7 +2329,15 @@ def _clinical_context_covered(notes, obligation, picked, context):
         unspecified_denial=(obligation.get('allow_owned_unspecified_denial') is True
             and obligation['kind']=='reported_absence' and fact['timing']['kind']=='unspecified'
             and _owned_unspecified_denial(fact,own,context))
-        if fact['timing']['kind']!=expected and not unspecified_time and not lifetime and not unspecified_denial: continue
+        future_order=(obligation.get('order_event_contract') == ORDER_EVENT_SCOPE_CONTRACT
+            and obligation['kind'] == 'investigation_order' and fact['timing']['kind'] == 'future'
+            and fact['kind'] == 'plan' and fact['polarity'] == 'affirmed'
+            and fact['unit'] is None and fact['scale'] is None
+            and value == {key:source[key] for key in ('start','end','quote')}
+            and _governance_fact_literal(fact,own,ORDER_EVENT_SCOPE_CONTRACT) in
+                ('family_history_order','investigation_order')
+            and context['units'][own['start']]['section'] == 'plan')
+        if fact['timing']['kind']!=expected and not unspecified_time and not lifetime and not unspecified_denial and not future_order: continue
         if historical and fact['subject']['kind']!='patient': continue
         spans.append((max(source['start'],value['start']),min(source['end'],value['end'])))
     cursor=source['start']
@@ -3475,10 +3508,14 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                                 or time_statement in ('basis','exclusion','qualification') and fact['timing']['kind']=='unspecified')
                             or scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS
                             and context_kind=='social_absence' and fact['timing']['kind']=='unspecified'
-                            or scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                            or scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS
                             and context_kind=='reported_absence' and _owned_unspecified_denial(fact,own,context_source)
                             or scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS
-                            and context_kind=='medication_response' and fact['timing']['kind']=='past')
+                            and context_kind=='medication_response' and fact['timing']['kind']=='past'
+                            or scope_contract == ORDER_EVENT_SCOPE_CONTRACT
+                            and context_kind in ('family_history_order','investigation_order')
+                            and fact['timing']['kind'] == 'future'
+                            and _governance_fact_literal(fact,own,scope_contract) == context_kind)
                         and (context_kind not in ('uncertainty','diagnostic_limit') or section in ('assessment','impression'))
                         and (context_kind not in ('nonperformance','linked_nonperformance') or section in ('plan','objective','examination','physical examination'))
                         and (context_kind!='negative_observation' or section in ('objective','examination','physical examination'))
@@ -3891,7 +3928,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         from .soap_destination_contracts import compound_component_inventory
         compound_support = compound_component_inventory(notes, definitions, support_units, assignment_context)
     separations = (_separation_inventory(notes, definitions, support_units, assignment_context)
-        if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT else [])
+        if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS else [])
     for field in fields:
         key = field['key']
         if key not in selected: continue
@@ -3991,7 +4028,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 and f['timing']['kind']=='unspecified' and d['scope']['temporality']=='current'
                 and _complete_context_literal(f,next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),scope_contract)=='social_absence'
                 and not f['issues'])
-            present_denial=(scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+            present_denial=(scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS
                 and not f['issues'] and _owned_unspecified_denial(f,
                     next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),assignment_context))
             cessation_support=(scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
@@ -4881,7 +4918,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         base['source_governance_inventory'] = _source_governance_inventory(notes,definitions,scope_contract)
     if scope_contract in SCOPED_DENIAL_SCOPE_CONTRACTS:
         base['scoped_denial_inventory'] = _scoped_denial_inventory(notes,definitions,scope_contract)
-    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+    if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
         from .clinical_source_context import source_context
         base['source_separation_inventory'] = _separation_inventory(notes,definitions,units,
             source_context(notes,units,profile=_source_profile(scope_contract)))
@@ -4952,10 +4989,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += COMPLETE_ASSERTION_INSTRUCTIONS
         assign_instructions += COMPLETE_ASSERTION_INSTRUCTIONS
         check_instructions += COMPLETE_ASSERTION_INSTRUCTIONS
-    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+    if scope_contract in COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
         instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
         assign_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
         check_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
+    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+        instructions += ORDER_EVENT_INSTRUCTIONS
+        assign_instructions += ORDER_EVENT_INSTRUCTIONS
+        check_instructions += ORDER_EVENT_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),

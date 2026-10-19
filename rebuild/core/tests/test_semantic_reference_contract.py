@@ -65,7 +65,7 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         with patch('core.jobs.Job.objects.create', side_effect=insert):
             job = enqueue(self.encounter, self.user)
         self.assertEqual(observed[0]['semantic_fact_reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.ORDER_EVENT_SCOPE_CONTRACT)
         self.assertEqual(job.config, observed[0])
         self.assertEqual(job.config['semantic_template_version'], str(self.version.pk))
         original = deepcopy(job.config)
@@ -84,10 +84,10 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.ORDER_EVENT_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertEqual(first['payload']['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(first['payload']['fact_scope_contract'], semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.ORDER_EVENT_SCOPE_CONTRACT)
         self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA)
         expected_instructions = (semantic.EXTRACT_INVENTORY_INSTRUCTIONS
                          + ' ' + semantic.SOURCE_CONTEXT_EXTRACT_INSTRUCTIONS
@@ -101,7 +101,8 @@ class SemanticReferenceContractDatabaseTests(TestCase):
             'Other uses of mixed are held.','Other uses require the complete-observation rules below.')
             + semantic.MIXED_OBSERVATION_INSTRUCTIONS + semantic.SUPPORT_CLOSURE_INSTRUCTIONS
             + semantic.SOURCE_GOVERNANCE_INSTRUCTIONS + semantic.SCOPED_DENIAL_INSTRUCTIONS
-            + semantic.COMPLETE_ASSERTION_INSTRUCTIONS + semantic.COMPLETE_NARRATIVE_INSTRUCTIONS)
+            + semantic.COMPLETE_ASSERTION_INSTRUCTIONS + semantic.COMPLETE_NARRATIVE_INSTRUCTIONS
+            + semantic.ORDER_EVENT_INSTRUCTIONS)
         self.assertIn('atomic_status_inventory',first['payload'])
         self.assertIn('stable_state_inventory',first['payload'])
         self.assertIn('mixed_observation_inventory',first['payload'])
