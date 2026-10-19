@@ -268,8 +268,9 @@ def validate_inventory(fields, inventory):
     return inventory
 
 
-def role_schema(role, definition_version=1):
+def role_schema(role, definition_version=1, *, component_contract=None):
     require(role in {'proposer', 'checker'}, 'Unsupported semantic preparation role.')
+    require(component_contract is None or definition_version == 4, 'Component schemas require version 4.')
     nullable = lambda schema: {'anyOf': [schema, {'type': 'null'}]}
     definition = {'type': 'object', 'additionalProperties': False, 'required': sorted(DEFINITION_KEYS), 'properties': {
         'version': {'type': 'integer', 'enum': [definition_version]}, 'meaning': {'type': 'string', 'minLength': 1, 'maxLength': 2000},
@@ -293,9 +294,9 @@ def role_schema(role, definition_version=1):
         definition['required'].append('patient_name_requirement')
         definition['properties']['patient_name_requirement'] = {'type': 'string', 'enum': list(PATIENT_NAME_REQUIREMENTS)}
     if definition_version == 4:
-        from .component_contracts import schema as component_schema
+        from .component_contracts import CONTRACT, schema_for
         definition['required'].append('component_contract')
-        definition['properties']['component_contract'] = component_schema()
+        definition['properties']['component_contract'] = schema_for(CONTRACT if component_contract is None else component_contract)
     states = ['proposed', 'unresolved'] if role == 'proposer' else ['pass', 'unresolved']
     return {'type': 'object', 'additionalProperties': False, 'required': ['inventory_sha256', 'fields'], 'properties': {
         'inventory_sha256': {'type': 'string', 'minLength': 64, 'maxLength': 64},
@@ -329,16 +330,18 @@ def validate_role_result(fields, inventory, response, role):
     return response
 
 
-def fixture_role(fields, inventory, role, proposal=None, definition_version=1):
+def fixture_role(fields, inventory, role, proposal=None, definition_version=1, *, component_contract=None):
+    require(component_contract is None or definition_version == 4, 'Component fixtures require version 4.')
     definitions = default_definitions(fields)
     if definition_version in (2, 3, 4):
         for value in definitions.values(): value.update(version=definition_version, answer_mode='narrative' if value['value_type']=='text' else 'atomic')
     if definition_version in (3, 4):
         for value in definitions.values(): value['patient_name_requirement'] = 'none'
     if definition_version == 4:
-        from .component_contracts import fixture as component_fixture
+        from .component_contracts import CONTRACT, fixture_for
         for field in fields:
-            definitions[field['key']]['component_contract'] = component_fixture(field, definitions[field['key']])
+            definitions[field['key']]['component_contract'] = fixture_for(field, definitions[field['key']],
+                CONTRACT if component_contract is None else component_contract)
     response = {'inventory_sha256': inventory['inventory_sha256'], 'fields': [
         {'field_key': field['key'], 'definition': definitions[field['key']],
          'state': 'proposed' if role == 'proposer' else 'pass', 'reason': ''} for field in fields]}
@@ -519,8 +522,9 @@ def require_compound_answers(fields, definitions, *, meaning_contract=None):
     return definitions
 
 
-def role_instructions(role, definition_version=1, *, timing_reference=None, meaning_contract=None):
+def role_instructions(role, definition_version=1, *, timing_reference=None, meaning_contract=None, component_contract=None):
     require(role in {'proposer', 'checker'}, 'Unsupported semantic preparation role.')
+    require(component_contract is None or definition_version == 4, 'Component instructions require version 4.')
     require(timing_reference in (None, TEMPORAL_REFERENCE_CONTRACT), 'Unsupported temporal reference contract.')
     require(meaning_contract in (None, COMPOSITE_MEANING_CONTRACT, COMPOUND_ANSWER_CONTRACT)
             and (meaning_contract is None or definition_version in (2, 3, 4)),
@@ -561,8 +565,9 @@ def role_instructions(role, definition_version=1, *, timing_reference=None, mean
             'or a signature. A generic narrative heading alone does not require a patient name; use none unless '
             'the original form explicitly establishes that requirement, and leave ambiguity for clinician review. ')
     if definition_version == 4:
-        from .component_contracts import INSTRUCTIONS as COMPONENT_INSTRUCTIONS
-        additions = additions.replace('Use definition version 3 ', 'Use definition version 4 ', 1) + COMPONENT_INSTRUCTIONS
+        from .component_contracts import CONTRACT, instructions_for
+        additions = additions.replace('Use definition version 3 ', 'Use definition version 4 ', 1) + instructions_for(
+            CONTRACT if component_contract is None else component_contract)
     # Existing receipts did not name this prospective instruction contract.
     # Their v1/v2/v3 schema, wording and fixtures remain byte-identical.
     composite = COMPOSITE_MEANING_INSTRUCTIONS if meaning_contract is not None else ''

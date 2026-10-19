@@ -31,6 +31,7 @@ def historical_preparation(source, actor, **options):
     create = TemplateDefinitionPreparation.objects.create
     def insert(**values):
         values['config'] = {**values['config'], 'semantic_definition_version': 3}
+        values['config'].pop('semantic_component_contract', None)
         return create(**values)
     with patch('core.semantic_preparation.TemplateDefinitionPreparation.objects.create', side_effect=insert):
         return workflow.create_preparation(source, actor, **options)

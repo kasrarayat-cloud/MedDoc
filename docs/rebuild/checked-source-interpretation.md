@@ -64,3 +64,32 @@ controls, frozen independent cases, and fresh installed HTTPS acceptance. Their
 counts must not be combined into a claim of general natural-language reliability.
 Native Microsoft Word pagination and licensed CPT descriptor/edition acceptance
 remain separate requirements. Local tests alone do not establish live acceptance.
+
+## Encounter scope for prospective components
+
+New version 4 preparations pin `semantic_component_contract=field-components-v2`.
+Every component explicitly chooses `encounter_scope`: `current`, `past`, or
+`all_documented`. This is independent of its subject, event temporality and
+polarity. A future plan documented in the current encounter remains a future plan;
+neither the encounter permission nor a supported clinical answer makes it a
+performed service or a current disease.
+
+An open topic requesting all documented symptom negatives uses one complete topic
+component with `all_documented`. Its answer may contain current-encounter facts,
+explicit past-encounter/past-event facts, or both. It does not require an invented
+finding in every time category. Unknown and future encounter ownership remain
+held. Selected past roots must retain their exact established timing evidence;
+null or omitted timing evidence cannot be hidden by an all-documentation scope.
+All ownership, negation, qualifier, independent-check and required-sibling gates
+remain in force. Current ICD and E/M eligibility remain separate and unchanged.
+
+Both preparation roles receive the closed v2 schema. The ordinary component editor
+displays encounter scope separately from event time and saves it in the signed,
+revision-bound draft. The complete form still requires review and approval. Source
+questions, Word bytes, physical destinations and prior definitions are unchanged.
+
+A missing preparation config key retains `field-components-v1`. Its validator,
+scope rule, provider instructions, request envelopes and restore behavior remain
+the historical branch. New encounter instructions apply only to approved v2
+definitions. Existing approvals are never silently upgraded; choosing v2 requires
+a new prospective preparation and approval. The factual graph schema is unchanged.

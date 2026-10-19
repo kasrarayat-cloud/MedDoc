@@ -33,7 +33,7 @@ def editor_post(prep, field, definition, actor):
     result['component_reviewed'] = 'on'
     for part in editor.parts_for(field, definition):
         prefix = 'part_'+str(part['index'])+'_'
-        for name in editor.PART_CONTROLS:
+        for name in editor.part_controls(definition):
             result[prefix+name] = (part['scope'][name] if name in part['scope'] else part.get(name)) or ''
     return result
 
@@ -201,3 +201,30 @@ class ComponentReviewDatabaseTests(TestCase):
         self.assertEqual(self.prep.correction_history, [])
         self.prep.revision += 1; self.prep.save(update_fields=['revision'])
         self.assertContains(self.client.post(url, post), 'form changed', status_code=409)
+
+    def test_encounter_scope_is_a_bound_draft_until_whole_form_approval(self):
+        from documents.component_contracts import CONFIG_KEY, ENCOUNTER_CONTRACT
+        self.assertEqual(self.prep.config[CONFIG_KEY], ENCOUNTER_CONTRACT)
+        current = workflow.corrected_definitions(self.prep)[self.field['key']]
+        url = reverse('template_definitions_components', args=[self.prep.pk,self.field['key']])
+        self.assertContains(self.client.get(url), 'name="part_0_encounter_scope"')
+        post = editor_post(self.prep, self.field, current, self.user)
+        post['part_0_encounter_scope'] = 'all_documented'
+        self.assertEqual(self.client.post(url, post).status_code, 302)
+        self.prep.refresh_from_db(); self.source.refresh_from_db()
+        values = workflow.corrected_definitions(self.prep)
+        self.assertEqual(values[self.field['key']]['component_contract']['components'][0]['encounter_scope'], 'all_documented')
+        self.assertEqual(self.prep.state, 'guided')
+        self.assertEqual((self.source.fields,self.source.semantic_definitions,self.prep.proposal,self.prep.checker), self.original)
+        self.assertContains(self.client.post(url, post), 'form changed', status_code=409)
+        with self.assertRaises(ValidationError):
+            workflow.approve(self.prep.pk, self.user, self.prep.revision,
+                self.prep.inventory['inventory_sha256'], list(values), True)
+        workflow.correct(self.prep.pk, self.user, self.prep.revision, values, list(values),
+                         'Compared all encounter scopes and every original field.')
+        self.prep.refresh_from_db()
+        version = workflow.approve(self.prep.pk, self.user, self.prep.revision,
+            self.prep.inventory['inventory_sha256'], list(values), True)
+        self.assertEqual(version.semantic_definitions, values)
+        self.assertEqual(version.fields, self.source.fields)
+        self.assertEqual(workflow.validated_semantic_definitions(version), values)

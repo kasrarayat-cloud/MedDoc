@@ -4,6 +4,7 @@
   <ul>{% for component in component_contract.components %}
     <li>{% if component.label %}<strong>{{ component.label }}:</strong> {% endif %}{{ component.meaning }}
       <span class="small">Person: {{ component.scope.subject }}. Timing: {{ component.scope.temporality }}.{% if component.scope.polarity != 'any' %} Statements: {{ component.scope.polarity }}.{% endif %}
+      {% if component.encounter_scope %}Encounters: {% if component.encounter_scope == 'all_documented' %}this encounter and documented past encounters{% elif component.encounter_scope == 'past' %}past encounters{% else %}this encounter{% endif %}.{% endif %}
       {% if component.unit_requirement == 'documented' %}Keep this value’s documented unit and scale.{% elif component.unit_requirement == 'printed' %}Printed unit: {{ component.unit }}.{% endif %}</span>
     </li>
   {% endfor %}</ul>
