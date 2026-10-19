@@ -46,7 +46,9 @@ COMPLETE_ASSERTION_SCOPE_CONTRACT = 'positioned-complete-assertions-v20'
 SOAP_ASSERTION_SCOPE_CONTRACT = 'positioned-soap-assertions-v21'
 COMPLETE_NARRATIVE_SCOPE_CONTRACT = 'positioned-complete-narratives-v22'
 ORDER_EVENT_SCOPE_CONTRACT = 'positioned-order-event-roles-v23'
-COMPLETE_NARRATIVE_SCOPE_CONTRACTS = (COMPLETE_NARRATIVE_SCOPE_CONTRACT, ORDER_EVENT_SCOPE_CONTRACT)
+LABELLED_PRESENTATION_SCOPE_CONTRACT = 'positioned-labelled-components-v24'
+ORDER_EVENT_SCOPE_CONTRACTS = (ORDER_EVENT_SCOPE_CONTRACT, LABELLED_PRESENTATION_SCOPE_CONTRACT)
+COMPLETE_NARRATIVE_SCOPE_CONTRACTS = (COMPLETE_NARRATIVE_SCOPE_CONTRACT, *ORDER_EVENT_SCOPE_CONTRACTS)
 SOAP_ASSERTION_SCOPE_CONTRACTS = (SOAP_ASSERTION_SCOPE_CONTRACT, *COMPLETE_NARRATIVE_SCOPE_CONTRACTS)
 COMPLETE_ASSERTION_SCOPE_CONTRACTS = (COMPLETE_ASSERTION_SCOPE_CONTRACT, *SOAP_ASSERTION_SCOPE_CONTRACTS)
 COMPLETE_ASSERTION_INSTRUCTIONS = (' Complete source assertions retain each negative predicate, coordinated object, '
@@ -65,6 +67,13 @@ ORDER_EVENT_INSTRUCTIONS = (' A complete current order can also describe later c
     'A whole plan fact may retain current or future timing for that complete source statement; do not rewrite its '
     'timing annotation or turn an ordered service into a performed service. Source ownership, exact complete wording, '
     'approved destination timing and clinical uncertainty remain separate requirements.')
+LABELLED_PRESENTATION_INSTRUCTIONS = (' Approved labelled-component requirements are explicit presentation obligations. '
+    'Code binds each label literally to the approved meaning and independently binds selected facts to source roles. '
+    'Select complete source values without inventing labels or changing facts. A missing, ambiguous or unsupported '
+    'label association remains held even when the clinical values are present. Check the exact derived presentation '
+    'and every label/value association, not only its fact set. Existing complete source-labelled measurements retain '
+    'their original phrases, units and scales without duplicate headers. Labels are definition metadata, never '
+    'purported source quotations or permission to change subject, timing, polarity or destination.')
 SCOPED_DENIAL_SCOPE_CONTRACTS = (SCOPED_DENIAL_SCOPE_CONTRACT, *COMPLETE_ASSERTION_SCOPE_CONTRACTS)
 SOURCE_GOVERNANCE_SCOPE_CONTRACTS = (SOURCE_GOVERNANCE_SCOPE_CONTRACT, *SCOPED_DENIAL_SCOPE_CONTRACTS)
 SUPPORT_CLOSURE_SCOPE_CONTRACTS = (SUPPORT_CLOSURE_SCOPE_CONTRACT, *SOURCE_GOVERNANCE_SCOPE_CONTRACTS)
@@ -1778,7 +1787,7 @@ def _governance_literal(text, scope_contract=None):
     """
     from .clinical_source_context import PERSON,conditional_follow_up
     value=text.strip().removesuffix('.').strip()
-    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+    if scope_contract in ORDER_EVENT_SCOPE_CONTRACTS:
         from .order_event_roles import order_event_frame
         order = order_event_frame(text)
         if order:
@@ -1973,7 +1982,7 @@ def _governance_literal_owned(fact,own,context,units,scope_contract=None):
 
 def _governance_candidate(text,scope_contract=None):
     """Broad obligation detection, never permission for an unparsed tail."""
-    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+    if scope_contract in ORDER_EVENT_SCOPE_CONTRACTS:
         from .order_event_roles import order_event_frame
         order = order_event_frame(text)
         if order:
@@ -2246,7 +2255,7 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
         source={'start':unit['start'],'end':unit['start']+end,'quote':unit['quote'][:end],'source_unit_id':unit['id']}
         rows.extend({'field_key':key,'kind':kind,'source':source,'polarities':list(polarities)} for key in keys
             if definitions[key]['scope']['polarity']=='any' or definitions[key]['scope']['polarity'] in polarities)
-        if scope_contract == ORDER_EVENT_SCOPE_CONTRACT and kind == 'investigation_order':
+        if scope_contract in ORDER_EVENT_SCOPE_CONTRACTS and kind == 'investigation_order':
             from .order_event_roles import order_event_frame
             if order_event_frame(unit['quote']):
                 for row in rows:
@@ -3512,7 +3521,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                             and context_kind=='reported_absence' and _owned_unspecified_denial(fact,own,context_source)
                             or scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS
                             and context_kind=='medication_response' and fact['timing']['kind']=='past'
-                            or scope_contract == ORDER_EVENT_SCOPE_CONTRACT
+                            or scope_contract in ORDER_EVENT_SCOPE_CONTRACTS
                             and context_kind in ('family_history_order','investigation_order')
                             and fact['timing']['kind'] == 'future'
                             and _governance_fact_literal(fact,own,scope_contract) == context_kind)
@@ -4148,7 +4157,17 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 source_gap = True
                 reasons.append('The compound answer omits a complete documented component ('
                     +obligation['component']+'): '+obligation['source']['quote'])
-        text = row['separator'].join(_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked)
+        rendered_values = [_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked]
+        text = row['separator'].join(rendered_values)
+        presentation = None
+        if scope_contract == LABELLED_PRESENTATION_SCOPE_CONTRACT:
+            from .labelled_presentation import derive
+            presentation = derive(notes, field, d, facts, row['fact_ids'], rendered_values,
+                                  row['separator'], support_units, assignment_context)
+            if presentation is not None:
+                text = presentation['text']
+                reasons.extend(presentation['errors'])
+                source_gap = source_gap or bool(presentation['errors'])
         typed = None
         try: typed = validate_value(d, text, field)
         except ValidationError as exc: reasons.extend(exc.messages)
@@ -4209,6 +4228,8 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             answer['timing_reference_contract'] = timing_reference_contract
         if identity_check is not None:
             answer['patient_name_check'] = identity_check
+        if presentation is not None and presentation['proof'] is not None:
+            answer['derived_presentation'] = presentation['proof']
         answer['semantic_proof_sha256'] = _fact_proof(answer)
         answers[key] = answer
     return answers
@@ -4922,6 +4943,11 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         from .clinical_source_context import source_context
         base['source_separation_inventory'] = _separation_inventory(notes,definitions,units,
             source_context(notes,units,profile=_source_profile(scope_contract)))
+    if scope_contract == LABELLED_PRESENTATION_SCOPE_CONTRACT:
+        from .labelled_presentation import requirements
+        base['labelled_presentation_requirements'] = {
+            key: requirement for key, definition in definitions.items()
+            if (requirement := requirements(definition)) is not None}
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -4993,10 +5019,14 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
         assign_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
         check_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
-    if scope_contract == ORDER_EVENT_SCOPE_CONTRACT:
+    if scope_contract in ORDER_EVENT_SCOPE_CONTRACTS:
         instructions += ORDER_EVENT_INSTRUCTIONS
         assign_instructions += ORDER_EVENT_INSTRUCTIONS
         check_instructions += ORDER_EVENT_INSTRUCTIONS
+    if scope_contract == LABELLED_PRESENTATION_SCOPE_CONTRACT:
+        instructions += LABELLED_PRESENTATION_INSTRUCTIONS
+        assign_instructions += LABELLED_PRESENTATION_INSTRUCTIONS
+        check_instructions += LABELLED_PRESENTATION_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),
@@ -5068,7 +5098,11 @@ def _answer_preview(answers):
     # Global facts are sent once. Repeating their complete inventory per answer
     # needlessly grows provider cost and can exhaust the finite input envelope.
     keys = ('text', 'value', 'status', 'fact_ids', 'candidate_text', 'review_reasons', 'unit', 'scale')
-    return {key: {k: a[k] for k in keys} for key, a in answers.items()}
+    return {key: {**{k: a[k] for k in keys},
+                  **({'derived_presentation': a['derived_presentation']}
+                     if a.get('fact_scope_contract') == LABELLED_PRESENTATION_SCOPE_CONTRACT
+                     and 'derived_presentation' in a else {})}
+            for key, a in answers.items()}
 
 
 def resolve_source_references(notes, units, parsed, *, reference_contract=LEGACY_REFERENCE_CONTRACT):
@@ -5174,6 +5208,9 @@ def _fact_proof(answer):
         keys += ('timing_reference_contract',)
     if 'patient_name_check' in answer:
         keys += ('patient_name_check',)
+    if (answer.get('fact_scope_contract') == LABELLED_PRESENTATION_SCOPE_CONTRACT
+            and 'derived_presentation' in answer):
+        keys += ('derived_presentation',)
     return digest({k: answer.get(k) for k in keys})
 
 
@@ -5240,12 +5277,21 @@ def validate_stored_answer(notes, field, definition, answer):
             _fail('The stored patient-name finding differs from its approved requirement and source facts.')
         if identity_check and identity_check['verdict'] != 'pass' and answer.get('status') not in ('conflict', 'ambiguous'):
             _fail('The required documented patient identity remains unresolved.')
+    if scope_contract == LABELLED_PRESENTATION_SCOPE_CONTRACT:
+        presentation_answer = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
+            {'key': field['key'], 'fact_ids': ids, 'status': 'supported' if ids else 'missing',
+             'separator': answer.get('separator')}]}, scope_contract=scope_contract,
+             timing_reference_contract=answer.get('timing_reference_contract'))[field['key']]
+        if (('derived_presentation' in answer) != ('derived_presentation' in presentation_answer)
+                or digest(answer.get('derived_presentation')) != digest(presentation_answer.get('derived_presentation'))):
+            _fail('The stored labelled presentation differs from its approved metadata and exact source-role bindings.')
     if answer.get('status') == 'supported':
         fresh = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]},
             scope_contract=scope_contract, timing_reference_contract=answer.get('timing_reference_contract'))[field['key']]
         if fresh['status'] != 'supported': _fail('The stored answer no longer satisfies its source, scope or type constraints.')
-        expected = answer['separator'].join(_render_bound_fact(notes, facts, facts[i], definition, scope_contract) for i in ids)
+        expected = (fresh['text'] if scope_contract == LABELLED_PRESENTATION_SCOPE_CONTRACT else
+                    answer['separator'].join(_render_bound_fact(notes, facts, facts[i], definition, scope_contract) for i in ids))
         if answer.get('text') != expected: _fail('A generated answer differs from its grounded fact values.')
         typed=validate_value(definition, expected, field)
         if type(typed) is not type(answer.get('value')) or typed!=answer.get('value'): _fail('The stored typed value differs from its displayed answer.')
