@@ -135,10 +135,11 @@ def _icd_source(run, reference, proposal, selected_codes):
                         nec = prove(reference, entry, concept, notes, source_contract=contract)
                         if nec:
                             concept = nec[0]
-                    if modern and engine.current_source_scope_errors(notes, concept, source_contract=contract):
-                        continue
                     subtypes = engine.index_subtypes(reference, concept, source_contract=contract)
                     qualifiers = [item['qualifier'] for item in subtypes]
+                    if modern and engine.current_source_scope_errors(notes, concept, source_contract=contract,
+                            qualifiers=qualifiers):
+                        continue
                     assertion = engine.assertion_concept(concept, subtypes)
                     disposition, reason = (('eligible', 'Current source-bound narrower clinical concept and complete NEC route verified.')
                         if nec else engine.source_disposition(assertion, notes, qualifiers=qualifiers,
@@ -148,7 +149,8 @@ def _icd_source(run, reference, proposal, selected_codes):
                                   source_contract=contract))
                               + engine.specificity_errors(concept, proposal['code'], description))
                     if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
-                            or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes)):
+                            or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes,
+                                source_contract=contract)):
                         continue
                     candidate = dict(code=proposal['code'], system='ICD-10-CM', entry_id=entry['id'],
                         description=description, path=entry.get('path', []),
@@ -164,7 +166,7 @@ def _icd_source(run, reference, proposal, selected_codes):
     return None, None, None
 
 
-def integral_holds(rows, notes):
+def integral_holds(rows, notes, *, source_contract=None):
     concepts = [row['concept'] for row in rows if row.get('concept') and row.get('eligible')]
     dispositions = {concept['id']: 'eligible' for concept in concepts}
     held = {concept['id']: parent for concept in concepts
@@ -177,6 +179,11 @@ def integral_holds(rows, notes):
         if concept['kind'] != 'symptom' or concept['id'] in held:
             continue
         for clause, _, _ in engine.mention_clauses(notes, concept):
+            if (source_contract == engine.QUALIFIED_SOURCE_CONTRACT
+                    and engine.unknown_cause_attribute(clause, concept)
+                    and not engine.current_source_scope_errors(notes, {**concept, 'evidence': clause},
+                        source_contract=source_contract)):
+                continue
             text = engine.norm(clause)
             for symptom in engine.anchors(concept):
                 token = r'\b' + re.escape(symptom) + r'\b'
@@ -291,7 +298,8 @@ def retained_result(run, request, response, response_sha256):
     for row in quarantined:
         result['questions'].append({'id':row['id'], 'system':row['system'], 'blocking':False,
             'question':'Held '+row['code']+': '+row['explanation']})
-    for key, parent in integral_holds(result['suggestions'], run.inputs['notes']).items():
+    for key, parent in integral_holds(result['suggestions'], run.inputs['notes'],
+            source_contract=run.config.get('clinical_source_contract')).items():
         row = next(row for row in result['suggestions'] if row['id'] == key)
         row['eligible'] = False
         reason = ('Source causal wording requires review before this symptom can be accepted separately; no cause code was promoted.'
@@ -313,7 +321,8 @@ def validate_selection(run, selections):
     if any(type(x) is not str for x in ids) or len(ids) != len(set(ids)):
         raise ValidationError('Invalid or duplicate Corti selection.')
     rows = {r['id']: r for r in run.result.get('suggestions', [])}
-    if set(ids).intersection(integral_holds(list(rows.values()), run.inputs['notes'])):
+    if set(ids).intersection(integral_holds(list(rows.values()), run.inputs['notes'],
+            source_contract=run.config.get('clinical_source_contract'))):
         raise ValidationError('An integral symptom cannot be accepted separately from its documented cause.')
     terms, _ = terminology(run)
     raw = run.result.get('adapter', {}).get('diagnostics', {}).get('provider_response')

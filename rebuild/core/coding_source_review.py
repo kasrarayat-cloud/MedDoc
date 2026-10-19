@@ -65,10 +65,13 @@ def assess(encounter, run):
     need(metadata is not None and metadata.release.effective_from <= encounter.service_date
          <= metadata.release.effective_until and metadata.release.version == bound['version']
          and metadata.release.sha256 == bound['sha256'], 'The dated ICD reference changed or does not apply.')
-    inventory = completeness.inventory(encounter.notes)
+    from .coding_engine import QUALIFIED_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT
+    source_contract = (QUALIFIED_SOURCE_CONTRACT
+        if run.config.get('clinical_source_contract') == QUALIFIED_SOURCE_CONTRACT else CURRENT_SOURCE_CONTRACT)
+    inventory = completeness.inventory(encounter.notes, source_contract=source_contract)
     from .coding_reference_store import prediction_reference
     reference = prediction_reference(metadata, approved,
-        source_contract='source-bound-clinical-coding-v4', source_inventory=inventory)
+        source_contract=source_contract, source_inventory=inventory)
     evaluation = completeness.evaluate(run, reference, approved_codes=approved, inventory_result=inventory)
     review = {'contract': CONTRACT, 'encounter_id': str(encounter.pk), 'run_id': str(run.pk),
         'input_digest': run.input_digest, 'result_digest': service.digest(run.result),

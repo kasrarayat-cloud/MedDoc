@@ -11,8 +11,10 @@ CLASSIFICATION_SOURCE = 'https://www.cms.gov/medicare/coding-billing/healthcare-
 REQUIRED_TIME_FACTS = ('setting', 'patient_status', 'time_minutes', 'time_same_day',
     'time_qualified_clinician', 'time_excludes_staff', 'time_excludes_separately_reported', 'em_basis')
 SOAP_TIME_CONTRACT = 'source-bound-clinical-coding-v6'
+QUALIFIED_TIME_CONTRACT = 'source-bound-clinical-coding-v7'
+_SOAP_TIME_CONTRACTS = (SOAP_TIME_CONTRACT, QUALIFIED_TIME_CONTRACT)
 _SOURCE_TIME_CONTRACTS = ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3',
-    'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5', SOAP_TIME_CONTRACT)
+    'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5', *_SOAP_TIME_CONTRACTS)
 _MODERN_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[2:]
 _COMPLETE_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[3:]
 
@@ -94,7 +96,7 @@ def office_time_facts(notes, *, contract=None):
     """
     if contract in _SOURCE_TIME_CONTRACTS:
         return _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
-            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=contract == SOAP_TIME_CONTRACT)[0]
+            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=contract in _SOAP_TIME_CONTRACTS)[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
     if re.search(r'(?im)^\s*(?:quoted )?example(?: note)?\s*:', notes):
@@ -205,7 +207,7 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     Unrecognized competing practitioner totals require clarification.
     """
     if contract in _SOURCE_TIME_CONTRACTS:
-        soap = contract == SOAP_TIME_CONTRACT
+        soap = contract in _SOAP_TIME_CONTRACTS
         support, errors = _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
             complete=contract in _COMPLETE_TIME_CONTRACTS, soap=soap)
         if service_date is not None:

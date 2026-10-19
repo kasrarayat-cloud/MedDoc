@@ -277,8 +277,75 @@ def attribute_mention(before, after, qualifiers=()):
     return nominal or bool(qualified and bounded)
 
 
-def condition_mentions(text, concept, qualifiers=()):
-    return [item for item in mention_clauses(text, concept) if not attribute_mention(item[1], item[2], qualifiers)]
+def _denied_condition_atom(clause, before, after):
+    """Bind a mention to one object of a complete shared negative predicate.
+
+    The comma/conjunction boundaries survive normalization. Every object must
+    be a nominal and the entire predicate must be consumed; a modifier, owner,
+    different time or second predicate cannot disappear into this exception.
+    The result establishes absence of diagnosis, never presence or a code.
+    """
+    value = clause.strip().removesuffix('.').strip()
+    objects_pattern = r'(?P<objects>[A-Za-z][A-Za-z ,/-]{0,500}?)'
+    match = re.fullmatch(objects_pattern + r'\s+(?:is|are)\s+'
+        r'(?:not\s+(?:diagnosed|confirmed|established|present)|absent)'
+        r'(?:\s+(?:today|at this encounter))?', value, re.I)
+    if not match:
+        match = re.fullmatch(r'(?:the patient|patient|he|she|they)\s+'
+            r'(?:deny|denies|denied)\s+' + objects_pattern
+            + r'(?:\s+(?:today|at this encounter))?', value, re.I)
+    if not match:
+        return None
+    objects = re.split(r'\s*,\s*(?:and\s+)?|\s+and\s+', match['objects'], flags=re.I)
+    if not objects or any(not re.fullmatch(r'[A-Za-z]+(?:[ -][A-Za-z]+){0,9}', item) for item in objects):
+        return None
+    if any(re.search(r'\b(?:no|not|never|without|or|but|except|unless|whether|if|possible|possibly|'
+            r'probable|suspected|uncertain|unverified|previous|prior|past|history|future|mother|father|'
+            r'patient|her|his|their|they|she|he|this|that|it|statement|report|claim|retracted|withdrawn|'
+            r'has|have|had|is|are|was|were|caused|due|belongs|for|from|by|with)\b', item, re.I)
+           for item in objects):
+        return None
+    normalized = norm(clause)
+    start, end = len(before), len(normalized) - len(after)
+    cursor = 0
+    for item in objects:
+        atom = norm(item)
+        at = normalized.find(atom, cursor)
+        if at < 0:
+            return None
+        cursor = at + len(atom)
+        if at <= start < end <= cursor:
+            return atom
+    return None
+
+
+def condition_mentions(text, concept, qualifiers=(), *, source_contract=None):
+    result = []
+    for item in mention_clauses(text, concept):
+        clause, before, after = item
+        if attribute_mention(before, after, qualifiers):
+            continue
+        if source_contract == QUALIFIED_SOURCE_CONTRACT:
+            atom = _denied_condition_atom(clause, before, after)
+            # Only a literal date-bound Index subtype is distinct from the
+            # parent. An unqualified parent in the same list remains a denial.
+            if atom and any(atom == norm(qualifier + ' ' + term)
+                            for qualifier in qualifiers for term in anchors(concept)):
+                continue
+        result.append(item)
+    return result
+
+
+def unknown_cause_attribute(clause, concept):
+    """Complete unknown-cause noun assertions are not causal predicates."""
+    cause = r'(?:cause|etiology|aetiology)'
+    unknown = r'(?:not (?:established|known|determined|identified)|unknown|undetermined|unestablished)'
+    for term in anchors(concept):
+        finding = r'(?:the )?' + re.escape(term)
+        if re.fullmatch(r'(?:(?:the )?' + cause + r' (?:of|for) ' + finding + r'|'
+                + finding + r'(?: s)? ' + cause + r') (?:is|remains) ' + unknown, norm(clause)):
+            return True
+    return False
 
 
 def enclosing_clauses(notes, quote):
@@ -503,6 +570,12 @@ def _coordinated_condition_assertion(clause, concept, context):
     return found
 
 
+def _proven_noncurrent_scope(row):
+    """Only complete foreign/past/future scope can exclude a current veto."""
+    return not row['issues'] and (row['subject'] == 'foreign'
+        or row['section_timing'] in ('past', 'future') or row['timing'] == 'past')
+
+
 def _condition_assertion_errors(notes, concept, mentions, context, units, *, source_contract=None):
     """Require current presence and honor source-owned condition corrections."""
     from .clinical_source_context import owned_current
@@ -513,6 +586,15 @@ def _condition_assertion_errors(notes, concept, mentions, context, units, *, sou
             continue
         for unit in matching:
             row = context['units'][unit['start']]
+            if source_contract == QUALIFIED_SOURCE_CONTRACT and not _proven_noncurrent_scope(row) and (
+                    _denied_condition_atom(clause, before, after)
+                    or re.search(r'\b(?:deny|denies|denied|absence)\b', before)
+                    or re.search(r'\b(?:absent|absence|denied)\b', after)):
+                # This is a veto, not a denial exception: incomplete qualifiers
+                # cannot be ignored merely because another unit affirms the
+                # parent. Exact denied official subtypes were already removed
+                # by condition_mentions; all remaining parent mentions stay held.
+                return ['The complete current source denies or ambiguously negates the selected condition.']
             if FAMILY.search(clause) or explicit_other_subject(before):
                 continue
             owned = owned_current(context, unit)
@@ -578,7 +660,7 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         units, _ = source_units(notes, [])
         context = source_context(notes, units, profile=source_profile(source_contract))
     def mentions(text):
-        rows = condition_mentions(text, concept, qualifiers)
+        rows = condition_mentions(text, concept, qualifiers, source_contract=source_contract)
         if source_contract in ASSERTION_SOURCE_CONTRACTS:
             rows = [row for row in rows if not (_exception_summary_mention(notes, row[0], concept, context, units)
                 or _condition_integrity_mention(row[0], concept, context, units))]
@@ -604,6 +686,10 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
             return 'excluded', 'The source explicitly describes a resolved finding, not a current condition.'
     negative, affirmative = [], []
     for clause, before, after in source_mentions:
+        if source_contract == QUALIFIED_SOURCE_CONTRACT:
+            scoped = [context['units'][unit['start']] for unit in units if clause.strip() in unit['quote']]
+            if scoped and all(_proven_noncurrent_scope(row) for row in scoped):
+                continue
         family = bool(FAMILY.search(clause))
         if kind == 'family_history' and not family or kind != 'family_history' and family:
             continue
@@ -612,7 +698,8 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         # Explicitly resolved historical symptoms and a current denial agree.
         if PAST.search(clause) and concept['temporality'] == 'current' and 'resolved' in norm(clause):
             continue
-        if NEGATION.search(before) or re.match(r'\s*(?:(?:is|was|are|were|has|have|been|remains|being)\s+)*(?:ruled out|absent|denied|not\b)', after):
+        if (source_contract == QUALIFIED_SOURCE_CONTRACT and _denied_condition_atom(clause, before, after)
+                or NEGATION.search(before) or re.match(r'\s*(?:(?:is|was|are|were|has|have|been|remains|being)\s+)*(?:ruled out|absent|denied|not\b)', after)):
             negative.append(clause)
         else:
             affirmative.append(clause)
@@ -718,7 +805,8 @@ ASSERTION_SOURCE_CONTRACT = 'source-bound-clinical-coding-v3'
 CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v4'
 PROSPECTIVE_SOURCE_CONTRACT = 'source-bound-clinical-coding-v5'
 SOAP_SOURCE_CONTRACT = 'source-bound-clinical-coding-v6'
-COMPLETE_SOURCE_CONTRACTS = frozenset((PROSPECTIVE_SOURCE_CONTRACT, SOAP_SOURCE_CONTRACT))
+QUALIFIED_SOURCE_CONTRACT = 'source-bound-clinical-coding-v7'
+COMPLETE_SOURCE_CONTRACTS = frozenset((PROSPECTIVE_SOURCE_CONTRACT, SOAP_SOURCE_CONTRACT, QUALIFIED_SOURCE_CONTRACT))
 GOVERNANCE_SOURCE_CONTRACTS = frozenset((CURRENT_SOURCE_CONTRACT, *COMPLETE_SOURCE_CONTRACTS))
 ASSERTION_SOURCE_CONTRACTS = frozenset((ASSERTION_SOURCE_CONTRACT, *GOVERNANCE_SOURCE_CONTRACTS))
 SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, *ASSERTION_SOURCE_CONTRACTS))
@@ -726,7 +814,7 @@ SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, *ASSERTION_SOURCE_CONTRACTS))
 
 def source_profile(contract):
     from .clinical_source_context import SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE
-    if contract == SOAP_SOURCE_CONTRACT:
+    if contract in (SOAP_SOURCE_CONTRACT, QUALIFIED_SOURCE_CONTRACT):
         from .clinical_source_context import SOAP_ASSERTION_PROFILE
         return SOAP_ASSERTION_PROFILE
     if contract == PROSPECTIVE_SOURCE_CONTRACT:
@@ -806,7 +894,7 @@ def _condition_assertion_qualifiers(before, after):
     return uncertain, historical
 
 
-def current_source_scope_errors(notes, concept, *, source_contract=None):
+def current_source_scope_errors(notes, concept, *, source_contract=None, qualifiers=()):
     """Bind new current-condition routes to source-owned, actual assertions."""
     from .clinical_source_context import source_context, owned_current, SOURCE_GOVERNANCE_PROFILE
     from .generation import source_units
@@ -821,14 +909,17 @@ def current_source_scope_errors(notes, concept, *, source_contract=None):
         if not covered or any(not owned_current(context, unit) for unit in covered):
             return ['The current-condition evidence has foreign, historical or unresolved source scope.']
     if concept['kind'] in ('diagnosis', 'symptom'):
-        for _clause, before, after in condition_mentions(quote, concept):
+        scoped_qualifiers = qualifiers if source_contract == QUALIFIED_SOURCE_CONTRACT else ()
+        for _clause, before, after in condition_mentions(quote, concept, scoped_qualifiers,
+                source_contract=source_contract):
             uncertain, historical = _condition_assertion_qualifiers(before, after)
             if uncertain or historical:
                 return ['The selected condition is qualified as uncertain or historical in its source assertion.']
         for unit in units:
             if not owned_current(context, unit):
                 continue
-            for clause, before, after in condition_mentions(unit['quote'], concept):
+            for clause, before, after in condition_mentions(unit['quote'], concept, scoped_qualifiers,
+                    source_contract=source_contract):
                 if FAMILY.search(clause) or explicit_other_subject(before):
                     continue
                 uncertain, historical = _condition_assertion_qualifiers(before, after)
@@ -941,7 +1032,7 @@ def assertion_concept(concept, subtypes):
     return concept
 
 
-def more_specific_source_routes(entry, concept, notes, reference, subtypes):
+def more_specific_source_routes(entry, concept, notes, reference, subtypes, *, source_contract=None):
     """A default cannot erase a separately documented affirmative subtype.
 
     This veto never manufactures an alternative quote or selects a replacement.
@@ -966,6 +1057,15 @@ def more_specific_source_routes(entry, concept, notes, reference, subtypes):
             current_attribute = re.match(r'\s+(?:(?:type|subtype)\s+)?is\s+'+qualifier+r'\b', after)
             if not adjacent and not current_attribute:
                 continue
+            if source_contract == QUALIFIED_SOURCE_CONTRACT:
+                atom = _denied_condition_atom(clause, before, after)
+                if atom == norm(row['qualifier'] + ' ' + row['head_term']):
+                    continue
+                if re.search(r'\b(?:is|are)\s+not\s+(?:diagnosed|confirmed|established|present)\b', clause, re.I):
+                    # An incomplete shared denial is unresolved, not an
+                    # affirmative subtype or permission to choose the default.
+                    result.append(child['id'])
+                    break
             local = {**parent_concept, 'evidence':clause}
             affirmed = source_disposition(local, clause, qualifiers=qualifiers)[0] == 'eligible'
             if (current_attribute and not source_owner_question(concept, [clause])
@@ -1304,7 +1404,8 @@ def generate(run):
             for entry in entries:
                 if index_route_errors(entry,concept,lookup,aliases,
                         code_description=reference.tabular['codes'].get(entry.get('code'), '')):continue
-                specific = more_specific_source_routes(entry,concept,notes,reference,subtype_routes[concept['id']])
+                specific = more_specific_source_routes(entry,concept,notes,reference,subtype_routes[concept['id']],
+                    source_contract=getattr(run, 'config', {}).get('clinical_source_contract'))
                 if specific:
                     result['source_checks'][concept['id']].setdefault('specificity_holds', []).append(
                         {'entry_id':entry['id'], 'documented_entry_ids':specific,
