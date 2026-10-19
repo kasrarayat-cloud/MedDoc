@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
@@ -217,13 +218,30 @@ _SEMANTIC_STAGE_TOTAL_VALID = r"""
  AND u.actual_cost=(SELECT sum(actual_cost) FROM core_aistagereceipt WHERE job_id=j.id)
  AND u.simulated=(SELECT bool_and(simulated) FROM core_aistagereceipt WHERE job_id=j.id)
 """
+# A revalidation is a separate, historically authorized one-checker pipeline.
+# Keep the original five-call predicate byte-for-byte; share every meter check.
+_REVALIDATION_STAGE_TOTAL_VALID = _SEMANTIC_STAGE_TOTAL_VALID.replace(
+    "j.config->>'semantic_max_calls'='5'",
+    "j.config->'semantic_max_calls'='1'::jsonb").replace(
+    "j.config->>'semantic_template_version'=e.template_version_id::text",
+    "j.config->>'semantic_template_version'=j.config->'semantic_revalidation'->>'template_version_id'") + r"""
+ AND j.config->>'semantic_revalidation_contract' IN ('retained-facts-independent-check-v1',
+   'retained-facts-independent-check-v2','retained-facts-independent-check-v3')
+ AND j.config->>'semantic_capacity_profile'='bounded-output-16k-v1'
+ AND j.config->'semantic_request_byte_limit'='512000'::jsonb
+ AND jsonb_array_length(u.units->'stages')=1
+ AND EXISTS(SELECT 1 FROM core_aistagereceipt s WHERE s.job_id=j.id
+   AND s.stage='revalidation_checker' AND s.attempt=1)
+"""
+_ACCOUNTED_STAGE_TOTAL_VALID = '('+_SEMANTIC_STAGE_TOTAL_VALID+') OR ('+_REVALIDATION_STAGE_TOTAL_VALID+')'
+
 _SEMANTIC_STANDING_USAGE_VALID = _STANDING_USAGE_VALID.replace(
  "(j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')",
- "(("+_SEMANTIC_STAGE_TOTAL_VALID+") OR (j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')")
+ "(("+_ACCOUNTED_STAGE_TOTAL_VALID+") OR (j.kind='generation' AND u.provider=(j.config->>'provider')||':'||(j.config->>'model')")
 _SEMANTIC_STANDING_USAGE_VALID = _SEMANTIC_STANDING_USAGE_VALID.replace(
  "AND u.rates ?& ARRAY['input_per_million','output_per_million'])",
  "AND u.rates ?& ARRAY['input_per_million','output_per_million']))")
-_SEMANTIC_STANDING_USAGE_VALID += " AND (COALESCE(j.config->>'semantic_contract','')<>'semantic-facts-v1' OR ("+_SEMANTIC_STAGE_TOTAL_VALID+"))"
+_SEMANTIC_STANDING_USAGE_VALID += " AND (COALESCE(j.config->>'semantic_contract','')<>'semantic-facts-v1' OR ("+_ACCOUNTED_STAGE_TOTAL_VALID+"))"
 _SEMANTIC_STANDING_USAGE_INVARIANT = _STANDING_USAGE_INVARIANT.replace(_STANDING_USAGE_VALID,_SEMANTIC_STANDING_USAGE_VALID)
 
 
@@ -394,6 +412,124 @@ def fingerprint(query, copy_hash):
     return result
 
 
+# Only retained immutable rows are read here. Current encounter answers, review,
+# revision, notes and template are deliberately not historical authorities.
+_REVALIDATION_LINEAGE_ROWS = r"""
+SELECT jsonb_build_object('job',to_jsonb(j),'parent',to_jsonb(parent),'source',to_jsonb(source),
+ 'parent_stages',(SELECT jsonb_agg(to_jsonb(s)||jsonb_build_object('actual_cost',s.actual_cost::text)
+   ORDER BY s.created_at,s.id) FROM core_aistagereceipt s WHERE s.job_id=parent.id),
+ 'stages',(SELECT jsonb_agg(to_jsonb(s)||jsonb_build_object('actual_cost',s.actual_cost::text)
+   ORDER BY s.created_at,s.id) FROM core_aistagereceipt s WHERE s.job_id=j.id),
+ 'prior',to_jsonb(prior),'prior_config_md5',md5(prior.config::text),
+ 'prior_stages',(SELECT jsonb_agg(to_jsonb(s)||jsonb_build_object('actual_cost',s.actual_cost::text))
+   FROM core_aistagereceipt s WHERE s.job_id=prior.id),
+ 'prior_usage',(SELECT jsonb_agg(to_jsonb(u)||jsonb_build_object('actual_cost',u.actual_cost::text))
+   FROM core_usage u WHERE u.job_id=prior.id),
+ 'same_contract_count',(SELECT count(*) FROM core_job other
+   WHERE other.config->>'semantic_revalidation_contract'=j.config->>'semantic_revalidation_contract'
+   AND other.config->'semantic_revalidation'->>'parent_job_id'=j.config->'semantic_revalidation'->>'parent_job_id'))
+FROM core_job j
+LEFT JOIN core_job parent ON parent.id::text=j.config->'semantic_revalidation'->>'parent_job_id'
+LEFT JOIN core_codingrun source ON source.id::text=j.config->'semantic_revalidation'->>'parent_run_id'
+LEFT JOIN core_job prior ON prior.id::text=j.config->'semantic_revalidation'->'prior_revalidation'->>'job_id'
+WHERE j.config ? 'semantic_revalidation_contract'
+ AND EXISTS(SELECT 1 FROM core_usage u WHERE u.job_id=j.id)
+"""
+
+
+def _canonical_digest(value):
+    return digest(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':')).encode())
+
+
+def revalidation_lineage_valid(row):
+    """Validate settled historical authority, never eligibility for a new call."""
+    try:
+        j,p,source=row['job'],row['parent'],row['source']
+        c=j['config']; binding=c['semantic_revalidation']; contract=c['semantic_revalidation_contract']
+        versions={f'retained-facts-independent-check-v{i}':i for i in (1,2,3)}
+        v=versions[contract]
+        keys={'parent_job_id','parent_run_id','parent_answers_sha256','source_sha256',
+              'definitions_sha256','template_version_id','encounter_id','patient_id','revision',
+              'parent_result_sha256','parent_receipts_digest','target_scope_contract','actor_id'}
+        if v>1:keys.add('contract')
+        if v==2:keys.add('prior_revalidation')
+        require(type(binding) is dict and set(binding)==keys,'binding_shape')
+        require(type(c['semantic_max_calls']) is int and c['semantic_max_calls']==1,'one_call')
+        require(all(type(x) is int for x in (binding['revision'],j['revision'],p['revision'])) and binding['revision']==j['revision']==p['revision'],'revision')
+        require(type(row['same_contract_count']) is int and row['same_contract_count']==1,'unique_attempt')
+        require(v==1 or binding['contract']==contract,'contract')
+        scope='positioned-complete-assertions-v20' if v==3 else 'positioned-objective-negation-v12'
+        require(binding['target_scope_contract']==c['semantic_fact_scope_contract']==scope,'target_scope')
+        require(j['kind']==p['kind']=='generation' and j['state'] in ('succeeded','failed')
+                and j['finished_at'] and p['state']=='succeeded' and p['finished_at'],'terminal_jobs')
+        require(p['id']==binding['parent_job_id'] and source['id']==binding['parent_run_id'],'parents')
+        require(j['request_key']==f"semantic-revalidation:{p['id']}:{contract}",'request_key')
+        require(j['encounter_id']==p['encounter_id']==source['encounter_id']==binding['encounter_id']
+                and j['user_id']==p['user_id']==source['user_id']==binding['actor_id'],'identity')
+        require('semantic_revalidation_contract' not in p['config'],'original_parent')
+        inputs=source['inputs']
+        for key in ('encounter_id','patient_id','template_version_id','revision'):
+            require(type(inputs[key]) is type(binding[key]) and inputs[key]==binding[key],'source_identity')
+        require(source['state'] in ('succeeded','needs_detail') and source['config']['provider']=='corti','source_run')
+        require(source['config']['mode']=='live' or (v==3 and source['config']['mode']=='retained_live'
+                and source['config']['retained_prediction']['contract']=='retained-live-context-review-v1'),'source_mode')
+        for key,configkey in [('source_sha256','semantic_source_sha256'),('definitions_sha256','semantic_definitions_sha256'),
+                              ('template_version_id','semantic_template_version')]:
+            require(binding[key]==c[configkey]==p['config'][configkey],'source_binding')
+        require(binding['source_sha256']==digest(inputs['notes'].encode())
+                and binding['parent_answers_sha256']==_canonical_digest(inputs['answers']),'retained_source')
+        require(p['result_path'] and p['result_sha256']==binding['parent_result_sha256'],'parent_result')
+        for key in ('source_sha256','definitions_sha256','parent_answers_sha256','parent_result_sha256','parent_receipts_digest'):
+            require(type(binding[key]) is str and re.fullmatch('[a-f0-9]{64}',binding[key]),'digest')
+        stages=row['parent_stages']
+        require([(s['stage'],s['attempt']) for s in stages]==[
+            ('extractor',1),('assigner',1),('checker',1),('assigner',2),('checker',2)],'parent_chain')
+        manifest=[]
+        for s in stages:
+            require(type(s['attempt']) is int and s['job_id']==p['id'] and s['state']=='succeeded' and s['finished_at']
+                    and s['config']==p['config'] and s['actual_cost'] is not None,'parent_stage')
+            require(s['request_path'] and s['result_path'],'parent_raw')
+            manifest.append({k:s[k] for k in ('id','stage','attempt','request_sha256','result_sha256',
+                'provider_request_id','provider_resource_id')} | {'config_sha256':_canonical_digest(s['config']),
+                'actual_cost':format(Decimal(s['actual_cost']),'.12f')})
+        require(_canonical_digest(manifest)==binding['parent_receipts_digest'],'parent_receipts')
+        require(len(row['stages'])==1,'one_stage')
+        for item in stages+row['stages']:
+            cost=Decimal(str(item['actual_cost']))
+            require(cost.is_finite() and cost>=0,'known_cost')
+        stage=row['stages'][0]
+        require(stage['job_id']==j['id'] and stage['stage']=='revalidation_checker' and type(stage['attempt']) is int
+                and stage['attempt']==1 and stage['config']==c and stage['state'] in ('succeeded','failed')
+                and stage['finished_at'] and stage['actual_cost'] is not None
+                and (j['state']!='succeeded' or stage['state']=='succeeded'),'checker')
+        if v==2:
+            b=binding['prior_revalidation']; prior=row['prior']; ps=row['prior_stages']; pu=row['prior_usage']
+            require(type(b) is dict and set(b)=={'job_id','contract','state','config_sha256','result_sha256',
+                'config_database_md5','receipt_id','request_sha256','response_sha256','receipt_config_sha256',
+                'usage_id','actual_cost'},'prior_shape')
+            require(prior['id']==b['job_id'] and prior['kind']=='generation' and prior['state']==b['state']=='failed'
+                    and prior['finished_at'] and prior['encounter_id']==j['encounter_id']
+                    and prior['user_id']==j['user_id'] and prior['revision']==j['revision'],'prior_identity')
+            require(prior['request_key']==f"semantic-revalidation:{p['id']}:retained-facts-independent-check-v1",'prior_request_key')
+            require(prior['config']['semantic_revalidation_contract']==b['contract']=='retained-facts-independent-check-v1'
+                    and prior['config']['semantic_revalidation']=={k:val for k,val in binding.items()
+                        if k not in ('contract','prior_revalidation')},'prior_binding')
+            require(prior['result_path'] and prior['result_sha256']==b['result_sha256']
+                    and _canonical_digest(prior['config'])==b['config_sha256']==b['receipt_config_sha256']
+                    and row['prior_config_md5']==b['config_database_md5'],'prior_digest')
+            require(len(ps)==len(pu)==1,'prior_accounting')
+            x,y=ps[0],pu[0]
+            require(x['id']==b['receipt_id'] and x['job_id']==prior['id'] and x['stage']=='revalidation_checker'
+                    and x['attempt']==1 and x['state']=='succeeded' and x['finished_at']
+                    and x['config']==prior['config'] and x['request_sha256']==b['request_sha256']
+                    and x['result_sha256']==b['response_sha256'],'prior_receipt')
+            require(y['id']==b['usage_id'] and y['job_id']==prior['id'] and y['user_id']==j['user_id']
+                    and Decimal(str(y['actual_cost']))==Decimal(str(x['actual_cost']))==Decimal(str(b['actual_cost'])),'prior_cost')
+        return True
+    except (KeyError,TypeError,ValueError,RuntimeError,InvalidOperation,AttributeError):
+        return False
+
+
 def invariant_counts(query):
     statements = dict(INVARIANTS)
     if query("SELECT to_regclass('public.core_testingreservation')")[0][0] is not None:
@@ -403,6 +539,9 @@ def invariant_counts(query):
         if query("SELECT to_regclass('public.core_testingreservation')")[0][0] is not None:
             statements['usage_multiplier']=_SEMANTIC_STANDING_USAGE_INVARIANT
     result = {name: query(statement)[0][0] for name, statement in statements.items()}
+    if 'semantic_stage_parent' in statements:
+        result['usage_multiplier'] += sum(not revalidation_lineage_valid(row[0])
+            for row in query(_REVALIDATION_LINEAGE_ROWS))
     require(not any(result.values()), 'Database invariants failed; backup/restore qualification stopped.')
     return result
 
