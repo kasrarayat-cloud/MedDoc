@@ -44,11 +44,20 @@ SOURCE_GOVERNANCE_SCOPE_CONTRACT = 'positioned-source-governance-v18'
 SCOPED_DENIAL_SCOPE_CONTRACT = 'positioned-scoped-denial-v19'
 COMPLETE_ASSERTION_SCOPE_CONTRACT = 'positioned-complete-assertions-v20'
 SOAP_ASSERTION_SCOPE_CONTRACT = 'positioned-soap-assertions-v21'
-COMPLETE_ASSERTION_SCOPE_CONTRACTS = (COMPLETE_ASSERTION_SCOPE_CONTRACT, SOAP_ASSERTION_SCOPE_CONTRACT)
+COMPLETE_NARRATIVE_SCOPE_CONTRACT = 'positioned-complete-narratives-v22'
+SOAP_ASSERTION_SCOPE_CONTRACTS = (SOAP_ASSERTION_SCOPE_CONTRACT, COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+COMPLETE_ASSERTION_SCOPE_CONTRACTS = (COMPLETE_ASSERTION_SCOPE_CONTRACT, *SOAP_ASSERTION_SCOPE_CONTRACTS)
 COMPLETE_ASSERTION_INSTRUCTIONS = (' Complete source assertions retain each negative predicate, coordinated object, '
     'shared subject, uncertainty and conditional safety-net clause. Calendar dates are not modal verbs. '
     'A partial timing value cannot cover the complete follow-up instruction. Time exclusions require '
     'the same explicit clinician, encounter date and adjacent complete time account; this grants no billing authority.')
+COMPLETE_NARRATIVE_INSTRUCTIONS = (' Extract and retain complete source statements separating one concern from another; '
+    'the relationship is independent content even when the symptoms are already represented. '
+    'source_separation_inventory contains literal source obligations, not new facts or permission '
+    'to infer a relationship. A missing extracted fact must remain held and cannot be repaired '
+    'by assignment alone. Preserve every source predicate, topic, uncertainty and ownership. '
+    'Complete narrative definitions include only their explicitly requested topics and attributes; '
+    'documentation-only instructions never authorize invented facts.')
 SCOPED_DENIAL_SCOPE_CONTRACTS = (SCOPED_DENIAL_SCOPE_CONTRACT, *COMPLETE_ASSERTION_SCOPE_CONTRACTS)
 SOURCE_GOVERNANCE_SCOPE_CONTRACTS = (SOURCE_GOVERNANCE_SCOPE_CONTRACT, *SCOPED_DENIAL_SCOPE_CONTRACTS)
 SUPPORT_CLOSURE_SCOPE_CONTRACTS = (SUPPORT_CLOSURE_SCOPE_CONTRACT, *SOURCE_GOVERNANCE_SCOPE_CONTRACTS)
@@ -586,11 +595,12 @@ def _scoped_denial_frame(text):
     return frame if parts and all(_denial_nominal_phrase(part) for part in parts) else None
 
 
-def _scoped_denial_objects(fact,own):
+def _scoped_denial_objects(fact,own,scope_contract=None):
     frame=_scoped_denial_frame(own['quote'])
     value=fact['value_evidence']['quote'].strip().removesuffix('.')
     eligible=(fact['kind'] in ('history','finding') and fact['subject']['kind']=='patient'
-        and fact['timing']['kind']=='current' and fact['polarity']=='negated'
+        and (fact['timing']['kind']=='current' or scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+            and fact['timing']['kind']=='unspecified') and fact['polarity']=='negated'
         and fact['unit'] is None and fact['scale'] is None
         and frame is not None)
     if not eligible:return None
@@ -602,8 +612,8 @@ def _scoped_denial_objects(fact,own):
     return first if value==head+first else None
 
 
-def _scoped_denial_literal(fact,own):
-    return _scoped_denial_objects(fact,own) is not None
+def _scoped_denial_literal(fact,own,scope_contract=None):
+    return _scoped_denial_objects(fact,own,scope_contract) is not None
 
 
 # Directed topic relevance for whole, unchanged negative literals. These are
@@ -674,8 +684,8 @@ def _denial_destination(d, objects=None, *, complete=True, scope_contract=None):
     if (d.get('answer_mode') not in ('narrative','atomic') or d['value_type']!='text'
             or d['scope']['subject']!='patient' or d['scope']['temporality'] not in ('any','current')
             or d['scope']['polarity'] not in ('any','negative')):return False
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-        from .soap_destination_contracts import complete_denial_destination
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+        complete_denial_destination = _destination_contracts(scope_contract).complete_denial_destination
         if complete_denial_destination(d):return True
     value=d['meaning'].strip()
     value=re.sub(r'\s*Leave\s+blank\s+if\s+not\s+documented\.\s*$','',value,flags=re.I).strip().removesuffix('.')
@@ -870,6 +880,8 @@ def _scoped_denial_inventory(notes,definitions,scope_contract=SCOPED_DENIAL_SCOP
                     if _denial_destination(d,first,scope_contract=scope_contract):end=unit['start']+frame.start('objects')+len(first)
                 rows.append({'field_key':key,'kind':'reported_absence','source':{
                     'start':start,'end':end,'quote':notes[start:end]},'polarities':['negated']})
+    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+        for row in rows:row['allow_owned_unspecified_denial']=True
     return rows
 
 
@@ -1206,8 +1218,9 @@ def _medication_antecedent_selected(fact, picked, dependency, context):
 
 
 def _mixed_observation_destination(definition, *, include_restricted=False, scope_contract=None):
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-        from .soap_destination_contracts import complete_exam_destination, restricted_exam_destination
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+        complete_exam_destination = _destination_contracts(scope_contract).complete_exam_destination
+        restricted_exam_destination = _destination_contracts(scope_contract).restricted_exam_destination
         if not include_restricted and restricted_exam_destination(definition):return False
         if complete_exam_destination(definition):return True
     meaning=definition['meaning']
@@ -1240,8 +1253,8 @@ def _observation_destination_region(definition):
 
 
 def _observation_matches_destination(text, definition,scope_contract=None):
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-        from .soap_destination_contracts import complete_exam_destination
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+        complete_exam_destination = _destination_contracts(scope_contract).complete_exam_destination
         if complete_exam_destination(definition):return True
     region=_observation_destination_region(definition)
     if region=='*':return True
@@ -1266,7 +1279,7 @@ def _mixed_observation_inventory(notes, definitions, *, scope_contract=None):
     from .generation import source_units
     from .clinical_source_context import source_context, owned_current
     units,_=source_units(notes,[]);context=source_context(notes,units,
-        profile=_source_profile(scope_contract) if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT else None)
+        profile=_source_profile(scope_contract) if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS else None)
     destinations=[(key,definition) for key,definition in definitions.items() if _mixed_observation_destination(definition,include_restricted=True,scope_contract=scope_contract)]
     rows=[]
     for unit in units:
@@ -1446,7 +1459,7 @@ def _clinical_sections(units, scope_contract=None):
             unit['quote'], re.I)
         if heading:
             section = heading[1].casefold()
-        elif scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+        elif scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
             from .clinical_assertions_v4 import soap_heading
             section = soap_heading(unit['quote']) or section
         result[unit['start']] = section
@@ -1727,9 +1740,22 @@ def _context_literal_kind(text, section=None):
     return literal_kind(text, section) if section else next((kind for s in ('assessment','plan','examination','review of systems') if (kind:=literal_kind(text,s))),None)
 
 
+def _destination_contracts(scope_contract):
+    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+        from . import complete_narrative_contracts
+        return complete_narrative_contracts
+    from . import soap_destination_contracts
+    return soap_destination_contracts
+
+
+def _separation_inventory(notes,definitions,units,context):
+    from .complete_narrative_contracts import separation_inventory
+    return separation_inventory(notes,definitions,units,context,_literal_nominal_phrase)
+
+
 def _source_profile(scope_contract):
     from .clinical_source_context import SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE
-    if scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .clinical_source_context import SOAP_ASSERTION_PROFILE
         return SOAP_ASSERTION_PROFILE
     if scope_contract in COMPLETE_ASSERTION_SCOPE_CONTRACTS:
@@ -1745,7 +1771,7 @@ def _governance_literal(text, scope_contract=None):
     """
     from .clinical_source_context import PERSON,conditional_follow_up
     value=text.strip().removesuffix('.').strip()
-    if scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .clinical_assertions_v4 import family_history_order_frame
         order = family_history_order_frame(text)
         if order:
@@ -1763,7 +1789,7 @@ def _governance_literal(text, scope_contract=None):
         value=re.sub(r'^(?:food|emergency)\s+','',value,flags=re.I)
         value=re.sub(r'^[A-Za-z-]+(?:ory|able|ible|ac)\s+','',value,flags=re.I)
         return _literal_nominal_phrase(value,participles=True)
-    if scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .clinical_assertions_v4 import follow_up_frame, _nominal
         from .soap_clinical_literals import assertion_frame as soap_literal
         follow = follow_up_frame(text)
@@ -1776,6 +1802,11 @@ def _governance_literal(text, scope_contract=None):
         from .clinical_assertions import assertion_frame
         typed = assertion_frame(text, nominal)
         if typed:
+            if (scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                    and typed['kind']=='medication_absence' and typed.get('antecedent')=='named_medication_trial'):
+                start,end=typed['values'][0]
+                copula=re.match(r'(?:is|are)\s+',value[start:end],re.I)
+                if copula:typed={**typed,'values':[(start+copula.end(),end),*typed['values']]}
             return typed
     # Explicit service-history qualification retains the entire look-back,
     # professional role and practice restriction rather than retyping status.
@@ -1878,14 +1909,14 @@ def _governance_literal_owned(fact,own,context,units,scope_contract=None):
     if frame and frame['kind']=='family_history_order':
         return context['units'][own['start']]['section']=='plan'
     if frame and frame.get('antecedent') == 'named_medication_trial':
-        if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
+        if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
             return _soap_medication_antecedent(own,context,units,frame) is not None
         from .clinical_source_context import owned_current
         index = next((i for i,u in enumerate(units) if u['start'] == own['start']), 0)
         # One complete intervening response may follow the immediately prior
         # named trial. Unknown events cannot be skipped to find a remote name.
         response=(_governance_literal(units[index-1]['quote'],scope_contract) if index
-            and scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT else None)
+            and scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS else None)
         if (not historical_response and index and (re.fullmatch(r'It\s+provided\s+(?:little|no|some|partial|good)\s+benefit\.?',
                 units[index-1]['quote'], re.I) or response and response['kind']=='medication_response')
                 and owned_current(context,units[index-1],historical_support=True)):
@@ -1933,7 +1964,7 @@ def _governance_candidate(text,scope_contract=None):
     if re.search(r'\b(?:has|have)\s+received\s+no\s+professional\s+services\b',text,re.I):return 'service_history_absence'
     if re.match(r'\s*(?:he|she|they|the\s+patient)\s+(?:has|have)\s+(?:not\s+had|no)\b',text,re.I):return 'documented_absence'
     if re.match(r'\s*It\s+was\s+not\s+performed\b',text,re.I):return 'linked_nonperformance'
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .clinical_assertions_v4 import explicit_order
         if explicit_order(text) and re.search(r'\bfamily\s+history\b',text,re.I):return 'family_history_order'
         if re.match(r'\s*It\s+(?:gave|provided)\b',text,re.I):return 'medication_response'
@@ -1997,8 +2028,8 @@ def _historical_cessation_support(fact,definition,context,picked,notes,units,sco
             or fact['kind'] not in ('history','finding') or fact['subject']['kind']!='patient'
             or fact['timing']['kind']!='current' or fact['polarity']!='negated'):return False
     own=next(e for e in fact['evidence'] if _inside(fact['value_evidence'],[e]))
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-        from .soap_destination_contracts import historical_medicine_with_current_nonuse
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+        historical_medicine_with_current_nonuse = _destination_contracts(scope_contract).historical_medicine_with_current_nonuse
         frame=_fact_assertion_frame(fact,own,scope_contract)
         if (historical_medicine_with_current_nonuse(definition)
                 and frame and frame.get('antecedent')=='named_medication_trial'
@@ -2011,6 +2042,12 @@ def _historical_cessation_support(fact,definition,context,picked,notes,units,sco
                 if not p['issues'] and p['subject']['kind']=='patient' and p['timing']['kind']=='past'
                 and p['polarity']=='affirmed' and _inside(p['value_evidence'],[trial]))
             cursor=trial['start']
+            if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+                # The whole dated source trial was already parsed and bound.
+                # Its explicit past verb is metadata evidence, not a required
+                # prefix of the unchanged complete regimen value.
+                lead=re.match(r'(?:he|she|they|the\s+patient)\s+previously\s+(?:took|tried|used)\s+',trial['quote'],re.I)
+                if lead:cursor+=lead.end()
             for start,end in spans:
                 if re.search(r'\w',notes[cursor:start]):return False
                 cursor=max(cursor,end)
@@ -2042,7 +2079,7 @@ def _source_governance_inventory(notes,definitions,scope_contract=SOURCE_GOVERNA
             meaning=d['meaning'];requested=False
             if kind=='observation_comparison':
                 requested=section in _OBSERVATION_SECTIONS and _mixed_observation_destination(d,
-                    scope_contract=scope_contract if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT else SOURCE_GOVERNANCE_SCOPE_CONTRACT) and _observation_matches_destination(text,d,scope_contract)
+                    scope_contract=scope_contract if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS else SOURCE_GOVERNANCE_SCOPE_CONTRACT) and _observation_matches_destination(text,d,scope_contract)
             elif kind=='conditional_follow_up':
                 requested=section=='plan' and d['scope']['temporality'] in ('any','future') and bool(re.search(r'\bfollow[- ]?up\b',meaning,re.I))
             elif kind=='service_history_absence':
@@ -2053,22 +2090,23 @@ def _source_governance_inventory(notes,definitions,scope_contract=SOURCE_GOVERNA
                     or re.search(r'\b(?:symptom\s+negatives|impaction\s+history)\b',meaning,re.I) and re.search(r'\bnot\s+had\b',text,re.I)))
             elif kind=='historical_cessation_support':requested=(_historical_cessation_destination(d)
                 and _historical_cessation_antecedent(unit,notes,units,context) is not None)
-            elif kind=='medication_absence' and scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-                from .soap_destination_contracts import historical_medicine_with_current_nonuse
+            elif kind=='medication_absence' and scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+                historical_medicine_with_current_nonuse = _destination_contracts(scope_contract).historical_medicine_with_current_nonuse
                 requested=bool(frame and frame.get('antecedent')=='named_medication_trial'
                     and historical_medicine_with_current_nonuse(d))
-            elif kind=='medication_response' and scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-                from .soap_destination_contracts import historical_medicine_with_current_nonuse
+            elif kind=='medication_response' and scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+                historical_medicine_with_current_nonuse = _destination_contracts(scope_contract).historical_medicine_with_current_nonuse
                 requested=bool(frame and frame.get('antecedent')=='named_medication_trial'
                     and historical_medicine_with_current_nonuse(d)
                     and re.search(r'\b(?:response|benefit|outcome)\b',meaning,re.I))
             if not requested:continue
-            if (scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT and kind=='medication_absence'
+            if (scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS and kind=='medication_absence'
                     and re.search(r'\b(?:stopping\s+reason|reason\s+for\s+stopping)\b',meaning,re.I)):
                 # Current non-use does not cover the separately requested
                 # historical stopping date and reason preceding its predicate.
                 prefix=text[:frame['values'][0][0]]
-                stop=re.search(r'\s+and\s*$',prefix,re.I)
+                stop=re.search(r'\s+and\s*(?:(?:is|are)\s+)?$' if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                    else r'\s+and\s*$',prefix,re.I)
                 if stop:
                     rows.append({'field_key':key,'kind':'historical_stopping_details',
                         'source':{'start':unit['start'],'end':unit['start']+stop.start(),
@@ -2093,7 +2131,7 @@ def _source_governance_inventory(notes,definitions,scope_contract=SOURCE_GOVERNA
 def _complete_context_literal(fact, own, scope_contract=None):
     from .clinical_source_context import literal_segments
     if scope_contract in SCOPED_DENIAL_SCOPE_CONTRACTS:
-        if _scoped_denial_literal(fact,own):return 'reported_absence'
+        if _scoped_denial_literal(fact,own,scope_contract):return 'reported_absence'
         if _encounter_contrast_literal(fact,own):return 'encounter_contrast'
     if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
         kind=_governance_fact_literal(fact,own,scope_contract)
@@ -2138,6 +2176,17 @@ def _complete_context_literal(fact, own, scope_contract=None):
     return kind
 
 
+def _owned_unspecified_denial(fact,own,context):
+    # A missing extractor time annotation is not an inferred time. Only the
+    # complete present predicate in an explicit current clinical section can
+    # qualify, and the stored annotation stays unchanged.
+    return (fact['timing']['kind']=='unspecified'
+        and _scoped_denial_literal(fact,own,COMPLETE_NARRATIVE_SCOPE_CONTRACT)
+        and _context_fact_owned(fact,own,context)
+        and context['units'][own['start']]['section'] in
+            ('subjective','history of present illness','review of systems'))
+
+
 def _context_fact_owned(fact, own, context, *, historical=False):
     from .clinical_source_context import owned_current, clinician_matches, source_clinician_bound
     if not owned_current(context, own, historical_support=historical): return False
@@ -2165,12 +2214,12 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
     rows = [row for row in _encounter_support_inventory(notes, destinations,include_restricted=include_restricted)
         if row['kind'] == 'patient_identity_ambiguity' or owned_current(context,
             next(unit for unit in units if unit['id'] == row['source']['source_unit_id']), historical_support=True)]
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-        from .soap_destination_contracts import support_obligation_requested
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+        support_obligation_requested = _destination_contracts(scope_contract).support_obligation_requested
         rows=[row for row in rows if support_obligation_requested(definitions[row['field_key']],
             row['kind'],row['source']['quote']) is not False]
     def add(keys, kind, unit, polarities):
-        if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
+        if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
             keys=[key for key,d in definitions.items() if (
                 (requested:=support_obligation_requested(d,kind,unit['quote'])) is True
                 or requested is None and key in keys)]
@@ -2192,7 +2241,7 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
     summary_keys=[key for key,d in narrative.items() if re.search(r'\b(?:review\s+of\s+systems|ROS)\b',d['meaning'],re.I)]
     for unit in units:
         if not owned_current(context,unit,historical_support=True): continue
-        if scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+        if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
             from .clinical_assertions_v4 import soap_heading
             if soap_heading(unit['quote']): continue
         section=context['units'][unit['start']]['section']
@@ -2207,7 +2256,7 @@ def _clinical_context_inventory(notes, definitions, *, include_restricted=False,
             add(assessment_keys,kind,unit,('uncertain',) if kind=='uncertainty' else ('negated',) if kind=='diagnostic_limit' else ('affirmed','negated','uncertain','mixed'))
         elif section in ('plan','objective','examination','physical examination') and kind in ('nonperformance','linked_nonperformance'):
             add(investigation_keys,kind,unit,('negated',))
-        elif (scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT and section=='plan'
+        elif (scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS and section=='plan'
                 and explicit_order(unit['quote'])):
             # Detection creates a completeness obligation, never permission to
             # assert an order or rewrite a conditional/uncertain source unit.
@@ -2252,7 +2301,10 @@ def _clinical_context_covered(notes, obligation, picked, context):
             and fact['timing']['kind']=='unspecified')
         lifetime=(context.get('profile') and obligation['kind']=='documented_absence'
             and fact['timing']['kind'] in ('past','unspecified'))
-        if fact['timing']['kind']!=expected and not unspecified_time and not lifetime: continue
+        unspecified_denial=(obligation.get('allow_owned_unspecified_denial') is True
+            and obligation['kind']=='reported_absence' and fact['timing']['kind']=='unspecified'
+            and _owned_unspecified_denial(fact,own,context))
+        if fact['timing']['kind']!=expected and not unspecified_time and not lifetime and not unspecified_denial: continue
         if historical and fact['subject']['kind']!='patient': continue
         spans.append((max(source['start'],value['start']),min(source['end'],value['end'])))
     cursor=source['start']
@@ -2674,7 +2726,7 @@ def _retained_family_history(value, own, subject, kind, scope_contract=FAMILY_SC
     They do not supply an answer or remove local/positioned source governance.
     Invisible spellings and incomplete relationship phrases remain held.
     """
-    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT and kind=='plan' and subject['kind']=='patient':
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS and kind=='plan' and subject['kind']=='patient':
         from .clinical_assertions_v4 import family_history_order_frame
         order=family_history_order_frame(own['quote'])
         exact=(value['start']-own['start'],value['end']-own['start'])
@@ -2890,7 +2942,7 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
         from .clinical_source_context import source_context,owned_current,literal_kind
         context=source_context(notes,units,profile=_source_profile(scope_contract))
         for unit in units:
-            if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT and owned_current(context,unit) and context['units'][unit['start']]['section']=='plan':
+            if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS and owned_current(context,unit) and context['units'][unit['start']]['section']=='plan':
                 from .clinical_assertions_v4 import family_history_order_frame
                 order=family_history_order_frame(unit['quote'])
                 if order and all(family_history_order_frame(r) for r in readings(unit['quote'])):
@@ -3374,7 +3426,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
             if context_source is not None:
                 context_kind = _complete_context_literal(fact,own,scope_contract)
                 time_statement = time_kind(own['quote'],profile=_source_profile(scope_contract))
-                if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
+                if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
                     from .clinical_assertions_v4 import foreign_order_beneficiary
                     if fact['subject']['kind']=='patient' and foreign_order_beneficiary(own['quote']):
                         fact['issues'].append('The selected order explicitly belongs to another beneficiary, not the patient.')
@@ -3423,7 +3475,9 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                                 or time_statement in ('basis','exclusion','qualification') and fact['timing']['kind']=='unspecified')
                             or scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS
                             and context_kind=='social_absence' and fact['timing']['kind']=='unspecified'
-                            or scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT
+                            or scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                            and context_kind=='reported_absence' and _owned_unspecified_denial(fact,own,context_source)
+                            or scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS
                             and context_kind=='medication_response' and fact['timing']['kind']=='past')
                         and (context_kind not in ('uncertainty','diagnostic_limit') or section in ('assessment','impression'))
                         and (context_kind not in ('nonperformance','linked_nonperformance') or section in ('plan','objective','examination','physical examination'))
@@ -3833,9 +3887,11 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
     if scope_contract in SCOPED_DENIAL_SCOPE_CONTRACTS:
         governed_support += _scoped_denial_inventory(notes,definitions,scope_contract)
     compound_support = []
-    if scope_contract == SOAP_ASSERTION_SCOPE_CONTRACT:
+    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
         from .soap_destination_contracts import compound_component_inventory
         compound_support = compound_component_inventory(notes, definitions, support_units, assignment_context)
+    separations = (_separation_inventory(notes, definitions, support_units, assignment_context)
+        if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT else [])
     for field in fields:
         key = field['key']
         if key not in selected: continue
@@ -3872,14 +3928,14 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS:
                 own=next(e for e in f['evidence'] if _inside(f['value_evidence'],[e]))
                 if scope_contract in SCOPED_DENIAL_SCOPE_CONTRACTS:
-                    if _scoped_denial_literal(f,own) and not _denial_destination(d,_scoped_denial_objects(f,own),scope_contract=scope_contract):
+                    if _scoped_denial_literal(f,own,scope_contract) and not _denial_destination(d,_scoped_denial_objects(f,own,scope_contract),scope_contract=scope_contract):
                         reasons.append('The reported denial must fit the complete approved topic scope; its selected content includes an unrelated, excluded or unsupported component for this destination.')
                     if _encounter_contrast_literal(f,own) and not _encounter_contrast_destination(d):
                         reasons.append('An encounter identity contrast requires the requested complete narrative distinction, not a current-only or restricted field.')
                 if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS:
                     kind=_governance_fact_literal(f,own,scope_contract)
-                    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:
-                        from .soap_destination_contracts import restricted_support_destination
+                    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:
+                        restricted_support_destination = _destination_contracts(scope_contract).restricted_support_destination
                         from .clinical_source_context import time_kind, requirement_kind
                         if (restricted_support_destination(d) and (
                                 _complete_context_literal(f,own,scope_contract) in ('nonperformance','linked_nonperformance','time_exclusion')
@@ -3935,9 +3991,12 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 and f['timing']['kind']=='unspecified' and d['scope']['temporality']=='current'
                 and _complete_context_literal(f,next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),scope_contract)=='social_absence'
                 and not f['issues'])
+            present_denial=(scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT
+                and not f['issues'] and _owned_unspecified_denial(f,
+                    next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),assignment_context))
             cessation_support=(scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
                 and _historical_cessation_support(f,d,assignment_context,picked,notes,support_units,scope_contract))
-            if d['scope']['temporality'] != 'any' and f['timing']['kind'] != d['scope']['temporality'] and not medication_support and not present_social and not cessation_support:
+            if d['scope']['temporality'] != 'any' and f['timing']['kind'] != d['scope']['temporality'] and not medication_support and not present_social and not present_denial and not cessation_support:
                 reasons.append('The fact timing does not match the approved field scope.')
             if d['scope']['polarity'] == 'positive' and f['polarity'] != 'affirmed' or d['scope']['polarity'] == 'negative' and f['polarity'] != 'negated':
                 reasons.append('The fact polarity does not match the approved field scope.')
@@ -4010,7 +4069,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 covered = (_clinical_context_covered(notes,obligation,picked,assignment_context)
                     if assignment_context is not None else _encounter_support_covered(notes,obligation,picked))
                 if not covered:
-                    if scope_contract==SOAP_ASSERTION_SCOPE_CONTRACT:source_gap=True
+                    if scope_contract in SOAP_ASSERTION_SCOPE_CONTRACTS:source_gap=True
                     reasons.append('The answer omits documented encounter support ('
                         +obligation['kind']+'): '+source['quote'])
         if scope_contract in MIXED_OBSERVATION_SCOPE_CONTRACTS:
@@ -4039,6 +4098,12 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             if obligation['field_key']==key and not _clinical_context_covered(notes,obligation,picked,assignment_context):
                 source_gap=True
                 reasons.append('The answer omits complete source-qualified support ('+obligation['kind']+'): '+obligation['source']['quote'])
+        for obligation in separations:
+            if obligation['field_key']==key and (obligation['unresolved'] or not any(
+                    _inside(obligation['source'],[fact['value_evidence']])
+                    and _clinical_context_covered(notes,obligation,[fact],assignment_context) for fact in picked)):
+                source_gap=True
+                reasons.append('The narrative omits or leaves unresolved a complete source separation statement: '+obligation['source']['quote'])
         for obligation in compound_support:
             if obligation['field_key'] == key and not any(
                     not obligation['unresolved'] and _inside(obligation['source'], [fact['value_evidence']])
@@ -4816,6 +4881,10 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         base['source_governance_inventory'] = _source_governance_inventory(notes,definitions,scope_contract)
     if scope_contract in SCOPED_DENIAL_SCOPE_CONTRACTS:
         base['scoped_denial_inventory'] = _scoped_denial_inventory(notes,definitions,scope_contract)
+    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+        from .clinical_source_context import source_context
+        base['source_separation_inventory'] = _separation_inventory(notes,definitions,units,
+            source_context(notes,units,profile=_source_profile(scope_contract)))
     extractor = {**base, 'source_units': units}
     schema, instructions = API_FACT_SCHEMA, EXTRACT_INSTRUCTIONS
     if reference_contract == REFERENCE_INVENTORY_CONTRACT:
@@ -4883,6 +4952,10 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += COMPLETE_ASSERTION_INSTRUCTIONS
         assign_instructions += COMPLETE_ASSERTION_INSTRUCTIONS
         check_instructions += COMPLETE_ASSERTION_INSTRUCTIONS
+    if scope_contract==COMPLETE_NARRATIVE_SCOPE_CONTRACT:
+        instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
+        assign_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
+        check_instructions += COMPLETE_NARRATIVE_INSTRUCTIONS
     raw = send('extractor', 1, extractor, schema, instructions)
     try:
         facts = validate_facts(notes, units, resolve_source_references(notes, units, raw, reference_contract=reference_contract),

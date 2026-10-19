@@ -256,11 +256,12 @@ class SourceBoundTimeTests(SimpleTestCase):
 class ProspectiveCodingContractTests(SimpleTestCase):
     @override_settings(CORTI_NEW_ENCOUNTER_SCOPE=coding_dispatch.AUTHORIZED_SYNTHETIC_SCOPE)
     def test_new_run_adopts_and_old_encounter_pins_its_first_contract(self):
-        for first, expected in [(None, engine.SOAP_SOURCE_CONTRACT), (N(config={}), None),
+        for first, expected in [(None, engine.QUALIFIED_SOURCE_CONTRACT), (N(config={}), None),
                                 (N(config={'clinical_source_contract':CONTRACT}), CONTRACT),
                                 (N(config={'clinical_source_contract':engine.CURRENT_SOURCE_CONTRACT}), engine.CURRENT_SOURCE_CONTRACT),
                                 (N(config={'clinical_source_contract':engine.PROSPECTIVE_SOURCE_CONTRACT}), engine.PROSPECTIVE_SOURCE_CONTRACT),
-                                (N(config={'clinical_source_contract':engine.SOAP_SOURCE_CONTRACT}), engine.SOAP_SOURCE_CONTRACT)]:
+                                (N(config={'clinical_source_contract':engine.SOAP_SOURCE_CONTRACT}), engine.SOAP_SOURCE_CONTRACT),
+                                (N(config={'clinical_source_contract':engine.QUALIFIED_SOURCE_CONTRACT}), engine.QUALIFIED_SOURCE_CONTRACT)]:
             query = N(order_by=lambda *args: N(first=lambda:first))
             with patch.object(coding_dispatch,'provider',return_value='corti'), \
                  patch.object(coding_dispatch,'source_context_enabled',return_value=True), \

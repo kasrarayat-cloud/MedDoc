@@ -164,7 +164,7 @@ def _future_safety_advice(text):
     return bool(match and _negative_list(match[1]))
 
 
-def _supporting_reference(text, names):
+def _supporting_reference(text, names, *, source_contract=None):
     """Recognize complete descriptors of an already identified finding.
 
     These predicates establish neither a new condition nor its severity code.
@@ -176,6 +176,12 @@ def _supporting_reference(text, names):
     value = re.sub(r'\s+', ' ', text.strip().removesuffix('.')).casefold()
     for name in names:
         nominal = re.escape(engine.norm(name))
+        if source_contract == engine.QUALIFIED_SOURCE_CONTRACT:
+            attributes = r'(?:subtype|type|cause|etiology|aetiology|severity|grade|stage|laterality|site|location)'
+            if re.fullmatch(r'(?:the\s+)?' + nominal + r'\s+is\s+documented\s+without\s+'
+                    r'(?:an?\s+)?(?:established|known|specified)\s+' + attributes
+                    + r'(?:\s+(?:or|and)\s+' + attributes + r')*', value):
+                return True
         rating = re.fullmatch(r'(?:the|this|that|his|her|their)\s+'
             r'(?:(?:reported|documented|described|noted)\s+)?' + nominal +
             r'\s+is\s+rated\s+(\d{1,6}(?:\.\d{1,6})?)\s+out\s+of\s+(\d{1,6}(?:\.\d{1,6})?)'
@@ -188,10 +194,46 @@ def _supporting_reference(text, names):
     return False
 
 
-def _reported_allergy_history(text):
+def _reported_allergy_history(text, *, source_contract=None):
+    reaction = r'(?:causes|caused)' if source_contract == engine.QUALIFIED_SOURCE_CONTRACT else r'causes'
     match = re.fullmatch(r'(?:he|she|they|the\s+patient)\s+reports?\s+(?:an?\s+)?'
-        r'allergy\s+to\s+(.+?),\s+which\s+causes\s+(.+)', text, re.I)
+        r'allergy\s+to\s+(.+?),\s+which\s+' + reaction + r'\s+(.+)', text, re.I)
     return bool(match and _negative_list(match[1]) and _negative_list(match[2]))
+
+
+def _separate_condition_reference(text, names):
+    """Bind a complete distinction between two independently evaluated names."""
+    if re.search(r'[?!;]', text):
+        return None
+    value = engine.norm(text)
+    matches = []
+    for subject in names:
+        for other in names:
+            if engine.norm(subject) == engine.norm(other):
+                continue
+            if re.fullmatch(r'(?:the )?' + re.escape(engine.norm(subject))
+                    + r' is a separate (?:concern|symptom|finding|problem) from (?:the )?'
+                    + re.escape(engine.norm(other)), value):
+                matches.append((subject, other))
+    return matches[0] if len(matches) == 1 else None
+
+
+def _uncertain_cause_review(text, names):
+    """Whole unknown-cause/explicitly undiagnosed possibility, never a code.
+
+    Retain this as a reviewable no-code obligation, not an invisible exclusion.
+    The cause refers to an independently inventoried literal condition; the
+    possible disease has a complete negative diagnosis predicate of its own.
+    """
+    clauses = re.split(r'\s*;\s*', text)
+    if len(clauses) != 2:
+        return False
+    targets = [name for name in names if engine.unknown_cause_attribute(
+        clauses[0], {'term': name, 'index_terms': [name]})]
+    possible = re.fullmatch(r'(?P<object>.+?)\s+is\s+a\s+possibility\s+but\s+is\s+not\s+'
+        r'(?:diagnosed|established|confirmed)(?:\s+(?:today|at this encounter))?', clauses[1], re.I)
+    return bool(len(targets) == 1 and possible and _parts(possible['object'])
+                and not _UNCERTAIN_PREFIX.match(possible['object']))
 
 
 def _coalesce_report_mentions(items):
@@ -241,7 +283,7 @@ def reference_terms(condition_text):
     return sorted(set(values), key=lambda value: (engine.norm(value), value))
 
 
-def _review_context(notes, units):
+def _review_context(notes, units, *, source_contract=None):
     """Add review-local provenance scope without changing historical contracts.
 
     An unparsed account header governs the following prose; an ordinary SOAP
@@ -249,7 +291,9 @@ def _review_context(notes, units):
     historical account headers keep their existing scope. This identifies a
     review obligation, not a new source fact or a universal language parser.
     """
-    context = source_context(notes, units, profile=SOURCE_GOVERNANCE_PROFILE)
+    profile = (engine.source_profile(source_contract) if source_contract == engine.QUALIFIED_SOURCE_CONTRACT
+               else SOURCE_GOVERNANCE_PROFILE)
+    context = source_context(notes, units, profile=profile)
     qualified = False
     account = r'(?:accounts?|records?|reports?|notes?|statements?|documentation|clinical information|clinical history|source)'
     neutral = re.compile(r'(?:(?:current|present)\s+)?(?:(?:clinical|encounter|source)\s+)?'
@@ -281,7 +325,7 @@ def _review_context(notes, units):
     return context
 
 
-def inventory(notes, *, retained_facts=()):
+def inventory(notes, *, retained_facts=(), source_contract=None):
     """Inventory complete source assertions independently of model omissions.
 
     Retained facts are intentionally not authority for discovery.  Their IDs
@@ -291,7 +335,11 @@ def inventory(notes, *, retained_facts=()):
     if type(notes) is not str or not notes.strip() or len(notes.encode()) > MAX_SOURCE:
         raise ValidationError('Source completeness requires a bounded nonempty original note.')
     units, _ = source_units(notes, [])
-    context = _review_context(notes, units)
+    context = _review_context(notes, units, source_contract=source_contract)
+    modern = source_contract == engine.QUALIFIED_SOURCE_CONTRACT
+    evaluation = (re.compile(r'(?P<objects>.+?)\s+(?:is|are|was|were)\s+(?:both\s+)?'
+        r'(?:separately\s+)?(?:evaluated|assessed|addressed|managed)(?:\s+and\s+discussed)?'
+        r'(?P<tail>\s+.+)?', re.I) if modern else _EVALUATION)
     items, unresolved, excluded, descriptive_reports = {}, [], [], []
     assessment_section = None
     assessment_context_section = None
@@ -332,6 +380,11 @@ def inventory(notes, *, retained_facts=()):
 
     for unit in units:
         text = unit['quote'].strip().rstrip('.')
+        if modern:
+            from .clinical_assertions_v4 import soap_heading
+            if soap_heading(unit['quote']):
+                assessment_section = assessment_context_section = None
+                continue
         heading = re.fullmatch(r'(?:[AS]\s*[-–:]\s*)?('+_ASSESSMENT_LABEL+r')\s*:?', text, re.I)
         inline = re.fullmatch(r'(?:[AS]\s*[-–:]\s*)?('+_ASSESSMENT_LABEL+r')\s*:\s*(.+)', text, re.I)
         row = context['units'][unit['start']]
@@ -351,7 +404,7 @@ def inventory(notes, *, retained_facts=()):
             # Sentence segmentation can separate "1." from its following
             # assessment. The marker has no clinical predicate of its own.
             continue
-        evaluated = _EVALUATION.fullmatch(text)
+        evaluated = evaluation.fullmatch(text)
         reported = report.fullmatch(text) or complaint.fullmatch(text)
         present = presence.fullmatch(text)
         present_evaluation = evaluated_presence.fullmatch(text)
@@ -377,11 +430,33 @@ def inventory(notes, *, retained_facts=()):
             gap(unit, 'Current condition-bearing source has unresolved ownership, timing, quotation or governance.')
             continue
         known_names = {' '.join(key.split()[start:]) for key in items for start in range(len(key.split()))}
-        if _supporting_reference(text, known_names):
+        if _supporting_reference(text, known_names, source_contract=source_contract):
+            if modern:
+                for name, item in items.items():
+                    if _supporting_reference(text, {name}, source_contract=source_contract):
+                        item['evidence'].append(_span(unit))
             continue
-        if not in_assessment and _reported_allergy_history(text):
+        if not in_assessment and _reported_allergy_history(text, source_contract=source_contract):
+            # A current evaluation elsewhere remains visible; a report of
+            # historical reaction cannot erase that separate obligation.
+            history = re.search(r'allergy\s+to\s+(.+?),\s+which\s+cause[sd]\s+(.+)', text, re.I)
+            history_names = ({engine.norm(part) for group in history.groups()
+                              for part in _NEGATIVE_LIST.split(group)} if history else set())
+            if modern and any(owned_current(context, other)
+                    and (context['units'][other['start']]['section'] in _ASSESSMENT
+                         or _EVALUATION_CUE.search(other['quote']))
+                    and (re.search(r'\ballerg(?:y|ies|ic)\b', other['quote'], re.I)
+                         or any(re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', engine.norm(other['quote']))
+                                for name in history_names))
+                    for other in units):
+                gap(unit, 'Reported allergy history also has a current evaluation requiring explicit source review.')
+                continue
             excluded.append({'evidence': _span(unit),
                 'reason': 'Complete reported allergy history and reaction, without a current reaction/evaluation assertion.'})
+            continue
+        if modern and _uncertain_cause_review(text, known_names):
+            gap(unit, 'Complete explicit unknown-cause and undiagnosed possibility; review a no-code outcome, not a confirmed disease.')
+            unresolved[-1].update(state='review_required', source_assertion_kind='explicit_unestablished_cause')
             continue
         if _META.fullmatch(text):
             excluded.append({'evidence': _span(unit), 'reason': 'Complete statement of diagnostic uncertainty or no established underlying diagnosis.'})
@@ -462,6 +537,31 @@ def inventory(notes, *, retained_facts=()):
                 add(term, unit, evaluated=bool(evaluated or present_evaluation or in_assessment))
         retain_report(unit, text, reported, inline, terms=parts)
     _coalesce_report_mentions(items)
+    if modern:
+        evaluated_names = {item['condition_text'] for item in items.values() if item['current_evaluation_evidence']}
+        for unit in units:
+            relation = (_separate_condition_reference(unit['quote'], evaluated_names)
+                if owned_current(context, unit) else None)
+            if relation:
+                for item in items.values():
+                    if item['condition_text'] in relation and _span(unit) not in item['evidence']:
+                        item['evidence'].append(_span(unit))
+            # Discovery must be broader than the permission grammar. A literal
+            # relationship between evaluated conditions does not disappear because an
+            # unfamiliar adverb, predicate or missing article defeated parsing.
+            # Keep the whole otherwise-unaccounted unit, with no code authority.
+            mentions = {name for name in evaluated_names if re.search(
+                r'(?<!\w)' + re.escape(engine.norm(name)) + r'(?!\w)', engine.norm(unit['quote']))}
+            relation_candidate = len(mentions) > 1 or (mentions and re.search(
+                r'\b(?:separate|separately|separation)\b', unit['quote'], re.I))
+            accounted = any(_span(unit) in item['evidence'] for item in list(items.values()) + unresolved)
+            accounted = accounted or any(_span(unit) == item['evidence'] for item in excluded)
+            if relation_candidate and not accounted:
+                row = context['units'][unit['start']]
+                if engine._proven_noncurrent_scope(row):
+                    excluded.append({'evidence': _span(unit), 'reason': 'Explicit other-person or historical/future encounter scope.'})
+                else:
+                    gap(unit, 'A whole current source reference to an evaluated condition has unresolved wording or scope.')
     for unit, objects, offset, gap_row, terms in descriptive_reports:
         proof = coding_source_descriptors.resolve_report(objects, objects_start=unit['start'] + offset,
             report=_span(unit), targets=list(items.values()), max_atoms=MAX_ITEMS)
@@ -513,6 +613,8 @@ def inventory(notes, *, retained_facts=()):
         'blockers': blockers,
         'reference_terms': sorted({t for item in items.values() for t in item['reference_terms']}),
         'coverage_limit': 'Bounded current assessment and explicit evaluation/report grammar. Unparsed or unevaluated current assertions remain unresolved; this is not universal natural-language comprehension.'}
+    if modern:
+        result['source_contract'] = source_contract
     if len(result['reference_terms']) > 64:
         raise ValidationError('Source completeness exceeds the finite authoritative retrieval vocabulary bound.')
     # Fact annotations are supplementary and cannot change source identity or
@@ -597,7 +699,8 @@ def _condition_spans(notes, item):
     return result
 
 
-def _condition_reference_errors(notes, concept, condition, reference, unresolved=()):
+def _condition_reference_errors(notes, concept, condition, reference, unresolved=(), *, source_contract=None,
+                                evaluated_names=()):
     """Keep later references attached to the current condition being reviewed.
 
     A literal qualified route cannot erase a later qualification of its parent
@@ -606,7 +709,7 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
     predicates on a definite current condition reference stay unresolved.
     """
     units, _ = source_units(notes, [])
-    context = _review_context(notes, units)
+    context = _review_context(notes, units, source_contract=source_contract)
     aliases = set(engine.anchors(concept))
     # Retain the literal source's nominal suffixes around an existing official
     # head, e.g. "abdominal pain" inside "periumbilical abdominal pain". This
@@ -635,7 +738,8 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
         # "the reported pain is attributed to her mother" is a reassignment.
         if row['section_timing'] != 'current' or governing_owner == 'foreign':
             continue
-        for clause, before, after in engine.condition_mentions(unit['quote'], guarded, qualifiers):
+        for clause, before, after in engine.condition_mentions(unit['quote'], guarded, qualifiers,
+                source_contract=source_contract):
             before, after = before.strip(), after.strip()
             if engine.explicit_other_subject(before) or re.search(
                     r'\b(?:mother|father|sister|brother|grandmother|grandfather|relative|friend|spouse)'
@@ -646,7 +750,11 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
                 continue
             if engine._condition_integrity_mention(clause, guarded, context, units):
                 continue
-            if owned_current(context, unit) and _supporting_reference(unit['quote'], aliases):
+            if owned_current(context, unit) and _supporting_reference(unit['quote'], aliases,
+                    source_contract=source_contract):
+                continue
+            if (source_contract == engine.QUALIFIED_SOURCE_CONTRACT and owned_current(context, unit)
+                    and _separate_condition_reference(unit['quote'], evaluated_names)):
                 continue
             if unit['start'] in unresolved_starts:
                 # Completeness and eligibility share the same full assertion.
@@ -704,6 +812,9 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
     main-term aliases remain present, so a later denial/correction of the
     unqualified finding still vetoes this specific suggestion.
     """
+    source_contract = (engine.QUALIFIED_SOURCE_CONTRACT
+        if getattr(run, 'config', {}).get('clinical_source_contract') == engine.QUALIFIED_SOURCE_CONTRACT
+        else engine.CURRENT_SOURCE_CONTRACT)
     text = row['condition_text']
     words = set(engine.norm(text).split())
     for entry in reference.index:
@@ -741,17 +852,19 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
                     kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
                     certainty='confirmed', temporality='current', subject='patient', relevant=True,
                     missing_detail='', integral_to='')
-                if engine.current_source_scope_errors(run.inputs['notes'], concept, source_contract=engine.CURRENT_SOURCE_CONTRACT):
+                subtypes = engine.index_subtypes(reference, concept, source_contract=source_contract)
+                if engine.current_source_scope_errors(run.inputs['notes'], concept, source_contract=source_contract,
+                        qualifiers=[s['qualifier'] for s in subtypes]):
                     continue
-                subtypes = engine.index_subtypes(reference, concept, source_contract=engine.CURRENT_SOURCE_CONTRACT)
                 disposition, reason = engine.source_disposition(concept, run.inputs['notes'],
-                    qualifiers=[s['qualifier'] for s in subtypes], source_contract=engine.CURRENT_SOURCE_CONTRACT)
+                    qualifiers=[s['qualifier'] for s in subtypes], source_contract=source_contract)
                 validation = engine.contextual_validation(run, reference, proposal['code'], concept, selected)
                 if (disposition != 'eligible' or not validation['valid'] or validation.get('requires_review')
                         or engine.index_route_errors(entry, concept, lookup, code_description=description,
-                            source_contract=engine.CURRENT_SOURCE_CONTRACT)
+                            source_contract=source_contract)
                         or engine.specificity_errors(concept, proposal['code'], description)
-                        or engine.more_specific_source_routes(entry, concept, run.inputs['notes'], reference, subtypes)):
+                        or engine.more_specific_source_routes(entry, concept, run.inputs['notes'], reference, subtypes,
+                            source_contract=source_contract)):
                     continue
                 candidate = dict(code=proposal['code'], system='ICD-10-CM', entry_id=entry['id'],
                     description=description, path=entry.get('path', []), release_id=str(reference.release_id),
@@ -775,7 +888,8 @@ def selected_qualified_route(run, reference, proposal, selected):
     modifier is promoted. All source-reference vetoes still apply.
     """
     notes = run.inputs['notes']
-    inv = inventory(notes)
+    source_contract = getattr(run, 'config', {}).get('clinical_source_contract')
+    inv = inventory(notes, source_contract=source_contract)
     if inv['blockers']:
         return None, None, None
     lookup = engine.index_lookup(reference)
@@ -793,7 +907,9 @@ def selected_qualified_route(run, reference, proposal, selected):
             continue
         row = {**item, 'id':proposal['id']}
         concept, candidate, check = _qualified_route(run, reference, row, proposal, roots, lookup, selected)
-        if not candidate or _condition_reference_errors(notes, concept, item['condition_text'], reference, inv['unresolved']):
+        if not candidate or _condition_reference_errors(notes, concept, item['condition_text'], reference,
+                inv['unresolved'], source_contract=source_contract, evaluated_names=[x['condition_text']
+                    for x in inv['items'] if x['current_evaluation_evidence']]):
             continue
         found.append((concept, candidate, {**check, 'source_condition_id':item['id'],
             'source_inventory_sha256':inv['inventory_sha256']}))
@@ -899,7 +1015,8 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
     No stored eligible flag, provider candidate or generated answer is trusted.
     """
     notes = run.inputs['notes']
-    inv = inventory(notes)
+    requested_contract = getattr(run, 'config', {}).get('clinical_source_contract')
+    inv = inventory(notes, source_contract=requested_contract)
     if inventory_result is not None and (inventory_result.get('inventory_sha256') != inv['inventory_sha256']
             or inventory_result.get('source_sha256') != inv['source_sha256']):
         raise ValidationError('The source review inventory is stale or belongs to different notes.')
@@ -919,8 +1036,11 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
         if not valid:
             raise ValidationError('Approved ICD coverage must be present in the dated authoritative projection.')
         approved.add(code)
+    source_contract = (engine.QUALIFIED_SOURCE_CONTRACT
+        if getattr(run, 'config', {}).get('clinical_source_contract') == engine.QUALIFIED_SOURCE_CONTRACT
+        else engine.CURRENT_SOURCE_CONTRACT)
     copied = SimpleNamespace(inputs=deepcopy(run.inputs), releases=deepcopy(run.releases),
-        config={**deepcopy(getattr(run, 'config', {})), 'clinical_source_contract': engine.CURRENT_SOURCE_CONTRACT})
+        config={**deepcopy(getattr(run, 'config', {})), 'clinical_source_contract': source_contract})
     rows = deepcopy(inv['items']) + deepcopy(inv['unresolved'])
     checked = []
     for row in rows:
@@ -943,7 +1063,7 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
             lexical = {'evidence': row['condition_text'], 'kind': 'symptom'}
             if (engine.norm(entry.get('term', '')) != 'specified nec'
                     and engine.index_route_errors(entry, lexical, lookup,
-                        code_description=reference.tabular['codes'][code], source_contract=engine.CURRENT_SOURCE_CONTRACT)):
+                        code_description=reference.tabular['codes'][code], source_contract=source_contract)):
                 continue
             if code not in codes:
                 codes.append(code)
@@ -960,11 +1080,13 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
                 concept, candidate, source_check = _qualified_route(copied, reference, row, proposal, roots, lookup, sorted(approved | {code}))
             if not candidate or _root(lookup[candidate['entry_id']], lookup)['id'] not in roots:
                 continue
-            reference_errors = _condition_reference_errors(notes, concept, row['condition_text'], reference, inv['unresolved'])
+            reference_errors = _condition_reference_errors(notes, concept, row['condition_text'], reference,
+                inv['unresolved'], source_contract=source_contract, evaluated_names=[x['condition_text']
+                    for x in inv['items'] if x['current_evaluation_evidence']])
             source_check = {**source_check, 'condition_reference_errors': reference_errors}
             proof = {'contract': CONTRACT, 'source_sha256': inv['source_sha256'],
                 'inventory_sha256': inv['inventory_sha256'], 'condition_id': row['id'],
-                'source_contract': engine.CURRENT_SOURCE_CONTRACT, 'reference': release,
+                'source_contract': source_contract, 'reference': release,
                 'candidate': candidate, 'source_check': source_check, 'concept': concept}
             if row.get('descriptive_reports'):
                 proof['descriptive_reports'] = deepcopy(row['descriptive_reports'])
@@ -987,7 +1109,7 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
                              else 'More than one authoritative code remains possible; clinician detail is required.')
             for value in row['candidates']:
                 value['eligible'] = False; value['hold_reasons'].append(row['reason'])
-    integral = corti_coding.integral_holds(checked, notes)
+    integral = corti_coding.integral_holds(checked, notes, source_contract=source_contract)
     proposed_codes = {v['candidate']['code'] for v in checked if v['candidate']['eligible']}
     for value in checked:
         candidate, row = value['candidate'], value['row']
@@ -1009,7 +1131,7 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
         'inventory_sha256': inv['inventory_sha256'], 'run_id': str(getattr(run, 'pk', getattr(run, 'id', ''))),
         'run_input_digest': getattr(run, 'input_digest', ''),
         'provider_result_digest': engine.digest(getattr(run, 'result', {})),
-        'source_contract': engine.CURRENT_SOURCE_CONTRACT, 'reference': release},
+        'source_contract': source_contract, 'reference': release},
         'inventory': rows, 'suggestions': suggestions, 'excluded': inv['excluded'],
         'blockers': list(inv['blockers']), 'coverage': {'total': len(rows), 'covered': covered,
             'review_required': reviewable, 'unresolved': len(rows) - covered - reviewable,
