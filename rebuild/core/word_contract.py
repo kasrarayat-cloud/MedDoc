@@ -5,8 +5,8 @@ Neither a mapping number nor agent agreement grants this capability.
 """
 from copy import deepcopy
 from django.core.exceptions import ValidationError
-from documents.preparation import digest, model_inventory, validate_role
 from documents import semantic_preparation_roles as roles
+from documents.semantic_preparation_roles import digest
 
 LEGACY_PROFILE = 'reviewed-word-answer-contract-v1'
 PROFILE = 'reviewed-word-answer-contract-v2'
@@ -39,6 +39,7 @@ def eligible(inventory):
 
 
 def inventory_for(inventory):
+    from documents.preparation import model_inventory
     if not eligible(inventory):
         raise ValidationError('Review answer meanings after approving the new answer locations.')
     return roles.build_inventory(inventory['fields'],
@@ -51,6 +52,7 @@ def active(inventory, config):
 
 
 def validate_result(inventory, response, role, config):
+    from documents.preparation import validate_role
     if active(inventory, config):
         if not isinstance(response, dict) or set(response) != {'inventory_sha256', 'anchors', 'stories', 'answer_definitions'}:
             raise ValidationError('Preparation omitted its required answer definitions. No legacy fallback is permitted.')
@@ -113,6 +115,8 @@ def approval_issues(prep):
     if not values:
         return {}
     issues = roles.identity_scope_issues(prep.inventory['fields'], values)
+    issues.update(roles.compound_answer_issues(prep.inventory['fields'], values,
+        meaning_contract=roles.configured_meaning_contract(prep.config)))
     if not prep.corrections.get('answer_definitions'):
         labels = {f['key']: f['label'] for f in prep.inventory['fields']}
         for role, response in (('Proposer', prep.proposal), ('Checker', prep.checker)):

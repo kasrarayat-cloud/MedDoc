@@ -158,7 +158,7 @@ def _icd_source(run, reference, proposal, selected_codes):
                         candidate['clinical_specificity'] = nec[1]
                     return concept, candidate, {'disposition': disposition, 'reason': reason,
                         'index_scope_entry_ids': nec[1]['index_family_ids'] if nec else [row['entry']['id'] for row in subtypes]}
-    if contract == engine.PROSPECTIVE_SOURCE_CONTRACT:
+    if contract in engine.COMPLETE_SOURCE_CONTRACTS:
         from .coding_completeness import selected_qualified_route
         return selected_qualified_route(run, reference, proposal, selected_codes)
     return None, None, None
@@ -330,7 +330,7 @@ def validate_selection(run, selections):
     # Reuse the same source, Index, Tabular and CPT entitlement/rule checks as
     # the existing workflow at BOTH approval and export boundaries.
     icd_ids = [key for key in ids if rows[key]['system'] == 'ICD-10-CM']
-    if run.config.get('clinical_source_contract') == engine.PROSPECTIVE_SOURCE_CONTRACT and icd_ids:
+    if run.config.get('clinical_source_contract') in engine.COMPLETE_SOURCE_CONTRACTS and icd_ids:
         reference = engine.reference_for(run, prediction_codes=[rows[key]['code'] for key in icd_ids])
         codes = [rows[key]['code'] for key in icd_ids]
         for key in icd_ids:

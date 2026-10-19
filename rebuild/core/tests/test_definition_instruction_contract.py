@@ -89,7 +89,7 @@ class DefinitionInstructionPersistenceTests(TestCase):
         upload=preparation.create_preparation(self.template,self.user)
         reusable.refresh_from_db();upload.refresh_from_db();self.source.refresh_from_db()
         for prep in (reusable,upload):
-            self.assertEqual(prep.config[roles.MEANING_CONTRACT_KEY],roles.COMPOSITE_MEANING_CONTRACT)
+            self.assertEqual(prep.config[roles.MEANING_CONTRACT_KEY],roles.COMPOUND_ANSWER_CONTRACT)
         self.assertEqual(self.source.fields,before)
         self.assertEqual(self.source.semantic_definitions,{})
         self.assertEqual(reusable.ai_stage_receipts.count(),0)

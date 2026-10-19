@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
+from .generation_errors import NoProviderRequest, PlatformFailure
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
 from .media import (AMBIGUOUS,MISSING,RETRYABLE,SUBMISSION_BUDGET_SECONDS,TOO_LARGE,TOO_SLOW,UNAVAILABLE,UNREADABLE,NotNormalised,
@@ -25,16 +26,8 @@ class NotAdoptedByUser(ValidationError):
     """A successful, user-requested generation whose output the user's own state kept from adoption. It stays billable."""
 
 
-class PlatformFailure(ValidationError):
-    """A post-settlement failure QuillMD absorbs. Its message is a fixed, non-clinical string that is safe to display."""
-
-
 class CancellationRefused(ValidationError):
     """The job is past the point where cancellation is free; the message is the one-line reason."""
-
-
-class NoProviderRequest(ValidationError):
-    """Raised before any provider request is made: nothing billable happened, so the held funds are released."""
 
 
 class RecordingOverLimit(ValidationError):
@@ -257,7 +250,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     definitions = require_generation(e.template_version) if kind == 'generation' else {}
     if definitions:
         from .ai_stages import pipeline_config
-        from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT,COMPLETE_ASSERTION_SCOPE_CONTRACT
+        from .semantic_generation import digest,REFERENCE_INVENTORY_CONTRACT,SOAP_ASSERTION_SCOPE_CONTRACT
         prospective=pipeline_config(config)
         if require_current_generation_quote:
             quoted_keys=('semantic_contract','semantic_stage_protocol','semantic_max_calls',
@@ -268,7 +261,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         config=prospective
         config.update(semantic_template_version=str(e.template_version_id),
             semantic_fact_reference_contract=REFERENCE_INVENTORY_CONTRACT,
-            semantic_fact_scope_contract=COMPLETE_ASSERTION_SCOPE_CONTRACT,
+            semantic_fact_scope_contract=SOAP_ASSERTION_SCOPE_CONTRACT,
             semantic_source_sha256=hashlib.sha256(e.notes.encode()).hexdigest(),
             semantic_definitions_sha256=digest(definitions))
     from . import testing_authority

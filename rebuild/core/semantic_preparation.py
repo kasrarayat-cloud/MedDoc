@@ -14,7 +14,8 @@ from documents.semantic_preparation_roles import (
     PROTOCOL, DefinitionError, build_inventory, definitions_from_role, digest, fixture_role,
     role_instructions, role_schema, validate_definitions, validate_inventory, validate_role_result,
     identity_scope_issues, require_identity_scopes,
-    COMPOSITE_MEANING_CONTRACT, MEANING_CONTRACT_KEY, configured_meaning_contract,
+    COMPOUND_ANSWER_CONTRACT, MEANING_CONTRACT_KEY, configured_meaning_contract,
+    compound_answer_issues, require_compound_answers,
 )
 from . import ai_stages, testing_authority
 from .generation import configuration
@@ -92,6 +93,12 @@ def roles_agree(prep):
             and definitions_from_role(prep.proposal) == definitions_from_role(prep.checker))
 
 
+def review_issues(prep, values):
+    fields = prep.source_version.fields
+    return {**identity_scope_issues(fields, values), **compound_answer_issues(
+        fields, values, meaning_contract=instruction_contract(prep.config))}
+
+
 def validated_semantic_definitions(version):
     """Shared enqueue/review/export gate for a separately approved semantic version."""
     try:
@@ -164,7 +171,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
     config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 3,
-              MEANING_CONTRACT_KEY: COMPOSITE_MEANING_CONTRACT}
+              MEANING_CONTRACT_KEY: COMPOUND_ANSWER_CONTRACT}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -241,8 +248,8 @@ def run_one():
         prep.proposal = _call_role(prep, 'proposer')
         prep.state = 'checker'; prep.save(update_fields=['proposal', 'state'])
         prep.checker = _call_role(prep, 'checker')
-        prep.state = ('review' if roles_agree(prep) and not identity_scope_issues(
-            prep.source_version.fields, corrected_definitions(prep)) else 'guided')
+        prep.state = ('review' if roles_agree(prep) and not review_issues(
+            prep, corrected_definitions(prep)) else 'guided')
     except Exception as exc:
         prep.state = 'blocked'
         prep.error_code = ('membership_lost' if isinstance(exc, PermissionDenied) else
@@ -280,7 +287,9 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
     prep.correction_history.append({'revision': revision, 'actor': str(actor.pk),
         'at': timezone.now().isoformat(), 'reason': reason.strip(), 'definitions': deepcopy(definitions),
         'reviewed_fields': list(reviewed_fields)})
-    prep.revision += 1; prep.state = 'review'
+    prep.revision += 1
+    prep.state = ('guided' if compound_answer_issues(prep.source_version.fields, definitions,
+        meaning_contract=instruction_contract(prep.config)) else 'review')
     prep.save(update_fields=['corrections', 'correction_history', 'revision', 'state'])
     audit(actor, 'template.definitions_corrected', prep.pk, department=prep.source_version.template.department,
           revision=prep.revision, definition_sha256=digest(definitions))
@@ -315,6 +324,7 @@ def approve(prep_id, actor, revision, inventory_sha256, reviewed_fields, origina
     _receipt_integrity(prep)
     try:
         values = require_identity_scopes(source.fields, corrected_definitions(prep))
+        require_compound_answers(source.fields, values, meaning_contract=instruction_contract(prep.config))
         _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc

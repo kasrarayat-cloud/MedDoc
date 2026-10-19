@@ -636,9 +636,9 @@ def create_preparation(template, actor):
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
-        from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOSITE_MEANING_CONTRACT
+        from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOUND_ANSWER_CONTRACT
         config[word_contract.CONFIG_KEY] = word_contract.PROFILE
-        config[MEANING_CONTRACT_KEY] = COMPOSITE_MEANING_CONTRACT
+        config[MEANING_CONTRACT_KEY] = COMPOUND_ANSWER_CONTRACT
         config['word_signing_context'] = SIGNING_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
     from . import testing_authority
