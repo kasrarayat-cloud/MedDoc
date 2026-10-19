@@ -18,6 +18,11 @@ MAX_OUTPUT_TOKENS=4000
 GENERATION_CAPACITY_PROFILE='bounded-output-16k-v1'
 GENERATION_MAX_OUTPUT_TOKENS=16000
 GENERATION_TIMEOUT_SECONDS=120
+# These are prospective limits, not a reinterpretation of retained v1 jobs.
+GENERATION_CAPACITY_PROFILE_V2='bounded-output-32k-v2'
+GENERATION_MAX_OUTPUT_TOKENS_V2=32000
+GENERATION_TIMEOUT_SECONDS_V2=240
+GENERATION_CAPACITY_V2_MODELS=frozenset({('anthropic','claude-sonnet-5-5')})
 MAX_CALLS=5
 DEFINITION_MAX_OUTPUT_TOKENS=16000
 STAGES={'extractor':1,'assigner':2,'checker':2,'definition_proposer':1,'definition_checker':1,'revalidation_checker':1}
@@ -50,22 +55,44 @@ def generation_limits(config):
         if 'semantic_timeout_seconds' in config:
             raise StageNotSent('The generation timeout has no capacity profile.')
         return MAX_OUTPUT_TOKENS,60
-    if config['semantic_capacity_profile']!=GENERATION_CAPACITY_PROFILE:
+    profile=config['semantic_capacity_profile']
+    if profile==GENERATION_CAPACITY_PROFILE:
+        output_limit,timeout=GENERATION_MAX_OUTPUT_TOKENS,GENERATION_TIMEOUT_SECONDS
+    elif profile==GENERATION_CAPACITY_PROFILE_V2:
+        if not _supports_generation_capacity_v2(config):
+            raise StageNotSent('This provider and model do not support the generation capacity profile.')
+        output_limit,timeout=GENERATION_MAX_OUTPUT_TOKENS_V2,GENERATION_TIMEOUT_SECONDS_V2
+    else:
         raise StageNotSent('Unknown generation capacity profile; nothing was sent.')
     if (type(config.get('semantic_output_token_limit')) is not int
-        or config['semantic_output_token_limit']!=GENERATION_MAX_OUTPUT_TOKENS
+        or config['semantic_output_token_limit']!=output_limit
         or type(config.get('semantic_timeout_seconds')) is not int
-        or config['semantic_timeout_seconds']!=GENERATION_TIMEOUT_SECONDS):
+        or config['semantic_timeout_seconds']!=timeout):
         raise StageNotSent('The generation limits differ from their capacity profile.')
-    return GENERATION_MAX_OUTPUT_TOKENS,GENERATION_TIMEOUT_SECONDS
+    return output_limit,timeout
 
 
 def pipeline_config(config):
+    profile=(GENERATION_CAPACITY_PROFILE_V2
+             if _supports_generation_capacity_v2(config)
+             else GENERATION_CAPACITY_PROFILE)
+    return _pipeline_config(config,profile)
+
+
+def _supports_generation_capacity_v2(config):
+    return (type(config.get('provider')) is str and type(config.get('model')) is str
+            and (config['provider'],config['model']) in GENERATION_CAPACITY_V2_MODELS)
+
+
+def _pipeline_config(config,profile):
+    output_limit,timeout=((GENERATION_MAX_OUTPUT_TOKENS_V2,GENERATION_TIMEOUT_SECONDS_V2)
+                         if profile==GENERATION_CAPACITY_PROFILE_V2
+                         else (GENERATION_MAX_OUTPUT_TOKENS,GENERATION_TIMEOUT_SECONDS))
     prospective={**config,'semantic_contract':'semantic-facts-v1','semantic_stage_protocol':PROTOCOL,
             'semantic_max_calls':MAX_CALLS,'semantic_request_byte_limit':MAX_REQUEST_BYTES,
-            'semantic_capacity_profile':GENERATION_CAPACITY_PROFILE,
-            'semantic_timeout_seconds':GENERATION_TIMEOUT_SECONDS,
-            'semantic_output_token_limit':GENERATION_MAX_OUTPUT_TOKENS}
+            'semantic_capacity_profile':profile,
+            'semantic_timeout_seconds':timeout,
+            'semantic_output_token_limit':output_limit}
     return {**prospective,'semantic_maximum_cost':str(maximum_cost(prospective))}
 
 
@@ -89,7 +116,8 @@ def revalidation_config(config,*,contract='retained-facts-independent-check-v1')
     from .semantic_revalidation import CONTRACTS
     if contract not in CONTRACTS:
         raise StageNotSent('Unknown retained revalidation contract; nothing was sent.')
-    prospective=pipeline_config(config)
+    # Existing retained-check contracts bind their original 16k/120s envelope.
+    prospective=_pipeline_config(config,GENERATION_CAPACITY_PROFILE)
     prospective.update(semantic_revalidation_contract=contract,semantic_max_calls=1)
     prospective['semantic_maximum_cost']=str(maximum_cost(prospective))
     return prospective
@@ -192,7 +220,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     if max_output_tokens is None:max_output_tokens=output_limit
     if timeout_seconds is None:timeout_seconds=default_timeout
     if (type(max_output_tokens) is not int or not 1<=max_output_tokens<=output_limit
-        or type(timeout_seconds) not in (int,float) or not 0<timeout_seconds<=120):
+        or type(timeout_seconds) not in (int,float) or not 0<timeout_seconds<=max(120,default_timeout)):
         raise StageNotSent('The stage exceeds its output or time limit.')
     parent,actor,department=parent_context(job,definition_preparation,config)
     if job is not None:

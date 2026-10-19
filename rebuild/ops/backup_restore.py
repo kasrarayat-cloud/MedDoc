@@ -181,7 +181,14 @@ _SEMANTIC_STAGE_TOTAL_VALID = r"""
        AND jsonb_typeof(j.config->'semantic_output_token_limit')='number'
        AND j.config->>'semantic_output_token_limit'='16000'
        AND jsonb_typeof(j.config->'semantic_timeout_seconds')='number'
-       AND j.config->>'semantic_timeout_seconds'='120'))
+       AND j.config->>'semantic_timeout_seconds'='120')
+   OR (j.config->>'semantic_capacity_profile'='bounded-output-32k-v2'
+       AND j.config->>'provider'='anthropic'
+       AND j.config->>'model'='claude-sonnet-5-5'
+       AND jsonb_typeof(j.config->'semantic_output_token_limit')='number'
+       AND j.config->>'semantic_output_token_limit'='32000'
+       AND jsonb_typeof(j.config->'semantic_timeout_seconds')='number'
+       AND j.config->>'semantic_timeout_seconds'='240'))
  AND j.config->>'semantic_request_byte_limit'='512000'
  AND j.config->>'semantic_template_version'=e.template_version_id::text
  AND j.config->>'semantic_source_sha256' ~ '^[a-f0-9]{64}$'
