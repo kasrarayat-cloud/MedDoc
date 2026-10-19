@@ -845,7 +845,7 @@ def index_head_terms(head, description=''):
     return list(dict.fromkeys(result))
 
 
-def tabular_specific_route(chain, source, description):
+def tabular_specific_route(chain, source, description, *, asserted=None):
     """The exact specific Tabular phrase may imply lexical Index parents.
 
     Its terminal qualifier and main condition must both occur in the official
@@ -869,7 +869,8 @@ def tabular_specific_route(chain, source, description):
     between = (r'(?:\s+(?:' + '|'.join(re.escape(w) for w in sorted(intervening)) + r'))*\s+'
                if intervening else r'\s+')
     pattern = r'(?<!\w)' + between.join(re.escape(word) for word in words) + r'(?!\w)'
-    return any(affirmative_word(source, match.group()) for match in re.finditer(pattern, norm(source)))
+    return any((asserted(match.group()) if asserted is not None else affirmative_word(source, match.group()))
+               for match in re.finditer(pattern, norm(source)))
 
 
 def _condition_assertion_qualifiers(before, after):
@@ -928,22 +929,30 @@ def current_source_scope_errors(notes, concept, *, source_contract=None, qualifi
     return [] if occurrences else ['The selected assertion is absent from the complete source.']
 
 
-def index_route_errors(entry, concept, entries, aliases=(), *, code_description='', source_contract=None):
+def index_route_errors(entry, concept, entries, aliases=(), *, code_description='', source_contract=None,
+                       classification=None):
     """A qualified Index branch adds source obligations to its parent's default."""
     chain=[]; node=entry
     while node:
         chain.append(node)
         node=entries.get(node.get('parent_id'))
-    source=concept['evidence']; errors=[]; head=chain[-1]
+    source=concept['evidence'] if classification is None else classification.positive_text
+    affirmative=(lambda word: affirmative_word(source,word)) if classification is None else classification.affirmed
+    errors=[]; head=chain[-1]
     words=re.findall(r'[a-z]+',norm(head.get('term',head.get('title',''))))
     alias_allowed=any(n['id'] in aliases for n in chain)
     if not alias_allowed and words and not set(words)<=TAXONOMY_HEADS:
         modifiers=head.get('nonessential_modifiers',[])
-        if not any(affirmative_word(source,w) for w in words) and not any(
-                norm(m).strip() and norm(m) in norm(source) for m in modifiers):
+        if not any(affirmative(w) for w in words) and not any(
+                norm(m).strip() and (norm(m) in norm(source) if classification is None else affirmative(m))
+                for m in modifiers):
             errors.append('The Index main term is not established in the source assertion.')
-    specific_phrase = (source_contract in SOURCE_CONTRACTS
-                       and tabular_specific_route(chain, source, code_description))
+    if classification is None:
+        specific_phrase = (source_contract in SOURCE_CONTRACTS
+                           and tabular_specific_route(chain, source, code_description))
+    else:
+        specific_phrase=any(tabular_specific_route(chain,atom,code_description,asserted=classification.affirmed)
+                            for atom in classification.positive_quotes)
     for node in chain[:-1]:
         term=node.get('term',node.get('title',''))
         normalized=norm(term)
@@ -953,12 +962,14 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
         # Official parenthetical abbreviations can name the same branch (e.g.
         # gastroesophageal reflux (GERD)); ordinary nonessential modifiers do
         # not stand in for a diagnosis merely because "mild" is documented.
-        if any(re.fullmatch(r'\(?[A-Z]{2,12}\)?',m) and affirmative_word(source,m.strip('()'))
+        if any(re.fullmatch(r'\(?[A-Z]{2,12}\)?',m) and affirmative(m.strip('()'))
                for m in node.get('nonessential_modifiers',[])):continue
         required=[w for w in re.findall(r'[a-z]+',normalized) if w not in ROUTE_WORDS]
         def supported(words):
-            return all(affirmative_word(source,w) or w=='colonic' and affirmative_word(source,'colon')
-                       or w=='gastroesophageal' and affirmative_word(source,'gastro oesophageal') for w in words)
+            if classification is not None:
+                return classification.supported(words)
+            return all(affirmative(w) or w=='colonic' and affirmative('colon')
+                       or w=='gastroesophageal' and affirmative('gastro oesophageal') for w in words)
         # Some official branches list synonymous site names separated by a
         # comma. Do not interpret every comma as OR: an independently bound
         # Tabular description must itself be a complete affirmative phrase in
@@ -972,7 +983,7 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
         description_phrase = r'(?<!\w)' + r'\s+'.join(re.escape(w) for w in code_description.split()) + r'(?!\w)'
         description_affirmed = bool(code_description.strip()) and any(
             re.search(description_phrase, clause, re.I) and affirmative_word(clause, code_description)
-            for clause in re.split(r'[.!?;\r\n]', source))
+            for clause in re.split(r'[.!?;\r\n]', source)) if classification is None else classification.affirmed(code_description)
         head_words = set(norm(re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)).split()) - ROUTE_WORDS
         comma_alias = (len(chain) == 2 and ',' in term and description_words and description_affirmed
                        and any(part_words and set(description_words) == head_words | set(part_words)
@@ -982,11 +993,14 @@ def index_route_errors(entry, concept, entries, aliases=(), *, code_description=
         if comma_alias:
             continue
         if norm(term).startswith('without '):
-            if required and not all(re.search(r'\b(?:without|no)\s+(?:any\s+)?'+re.escape(w)+r'\b',norm(source)) for w in required):
+            absent=(all(re.search(r'\b(?:without|no)\s+(?:any\s+)?'+re.escape(w)+r'\b',norm(source)) for w in required)
+                    if classification is None else classification.supported(required,polarity='negated'))
+            if required and not absent:
                 errors.append('The Index without-condition qualifier needs documented absence.')
-        elif ' and ' in normalized:
+        elif ' and ' in normalized or classification is not None and ' or ' in normalized:
             # FY2027 I.A.14: "and" in classification titles means and/or.
-            alternatives=[[w for w in part.split() if w not in ROUTE_WORDS] for part in normalized.split(' and ')]
+            parts=normalized.split(' and ') if classification is None else re.split(r'\b(?:and|or)\b',normalized)
+            alternatives=[[w for w in part.split() if w not in ROUTE_WORDS] for part in parts]
             if not any(supported(words) for words in alternatives):
                 errors.append('The Index title requires a documented alternative: '+term+'.')
         elif required and not supported(required) and not specific_phrase:
@@ -1161,8 +1175,9 @@ def contextual_validation(run, reference, code, concept, selected_codes):
     return checked
 
 
-def specificity_errors(concept, code, description, *, default_description=''):
-    source = norm(concept['evidence'])
+def specificity_errors(concept, code, description, *, default_description='', classification=None):
+    source = norm(concept['evidence'] if classification is None else classification.positive_text)
+    affirmative=(lambda word: affirmative_word(concept['evidence'],word)) if classification is None else classification.affirmed
     desc = norm(description)
     errors = []
     for side in ('left', 'right', 'bilateral'):
@@ -1176,7 +1191,7 @@ def specificity_errors(concept, code, description, *, default_description=''):
                     words=source[:mention.start()].split()[-4:]
                     sides=[w for w in words if w in ('left','right','bilateral')]
                     if sides:local.append(sides[-1])
-                if side not in local:
+                if (side not in local if classification is None else not classification.laterality(side,site)):
                     errors.append('The documented laterality must belong to the coded '+site+', not another body site.')
     if any(re.search(r'\b'+side+r'\b', source) for side in ('left', 'right', 'bilateral')):
         if 'unspecified' in desc and any(word in desc for word in ('wrist','hand','arm','leg','knee','ankle','foot','shoulder','eye','ear')):
@@ -1194,11 +1209,11 @@ def specificity_errors(concept, code, description, *, default_description=''):
     # Clinical histology must be documented. Relative age and polyp location do
     # not distinguish the expanded family-history or personal-history codes.
     for word in ('adenomatous', 'serrated', 'hyperplastic'):
-        affirmed=affirmative_word(concept['evidence'],word) or word=='adenomatous' and affirmative_word(concept['evidence'],'adenoma')
+        affirmed=affirmative(word) or word=='adenomatous' and affirmative('adenoma')
         if word in desc and not affirmed:
             # The official combined adenomatous-and-serrated family code is
             # reached by either explicit Index route, not necessarily both.
-            if not ('adenomatous and serrated' in desc and any(affirmative_word(concept['evidence'],w) for w in ('adenomatous','adenoma','serrated'))):
+            if not ('adenomatous and serrated' in desc and any(affirmative(w) for w in ('adenomatous','adenoma','serrated'))):
                 errors.append('The selected code requires documented '+word+' histology.')
     if 'polyps unspecified' in desc and any(word in source for word in ('adenoma', 'serrated', 'hyperplastic')):
         errors.append('Documented polyp histology must be retained in the selected code.')

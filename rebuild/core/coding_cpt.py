@@ -159,10 +159,13 @@ def _reference(run):
     return CodingRelease.objects.select_related('release').get(release_id=status['release_id']), ''
 
 
-def _validate(run, code, evidence, reference):
+def _validate(run, code, evidence, reference, *, evidence_spans=None):
     row = reference.tabular['codes'].get(code)
     if row is None:
         return {'valid': False, 'errors': ['No licensed criteria are supplied for this code.'], 'instructions': []}
+    from . import source_assertion_coding as shared
+    if shared.enabled(run):
+        return shared.licensed_cpt_rule(run,code,evidence,row,evidence_spans=evidence_spans)
     errors = []
     instructions = list(row['instructions'])
     requirements = row['requirements']
@@ -222,7 +225,7 @@ def _validate(run, code, evidence, reference):
             'rule_reference': row['reference'], 'requires_review': bool(row['instructions']), 'description': row['description']}
 
 
-def validate_cpt_selection(run, code, evidence):
+def validate_cpt_selection(run, code, evidence, *, evidence_spans=None):
     if type(evidence) is not str:
         return {'valid': False, 'errors': ['CPT selection requires exact source evidence text.'], 'instructions': []}
     reference, reason = _reference(run)
@@ -233,7 +236,7 @@ def validate_cpt_selection(run, code, evidence):
     rule = reference.tabular['codes'].get(code)
     if official is None or rule is None or official.description != rule['description']:
         return {'valid': False, 'errors': ['The licensed description and dated code catalogue do not match.'], 'instructions': []}
-    return _validate(run, code, evidence, reference)
+    return _validate(run, code, evidence, reference,evidence_spans=evidence_spans)
 
 
 def procedure_candidates(run, concepts):

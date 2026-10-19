@@ -1,0 +1,37 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Review required parts · {{ template.name }}{% endblock %}
+{% block page_scripts %}<link rel="stylesheet" href="{% static 'template-review.css' %}">{% endblock %}
+{% block breadcrumb %}Form library <span>/</span> Required parts{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Review required parts</h1><p>{{ row.display_label }} · {{ template.name }}</p></div><a href="{% url 'template_definitions' preparation.pk %}">Back to all definitions</a></div>
+<p>Compare the complete question with the <a href="{% url 'template_original' template.pk %}">original Word form</a>. Keep every requested value, its person and time scope, and its own unit. Saving here creates a draft; review the whole form afterwards before approving a new version.</p>
+{% if error %}<div class="notice warning" role="alert">{{ error }}</div>{% endif %}
+{% if editable %}<form method="post" data-unsaved-form>{% csrf_token %}<input type="hidden" name="component_token" value="{{ component_token }}">{% endif %}
+<section class="panel">{% include 'template_review_field.html' %}</section>
+{% if editable %}
+<section class="panel">
+  <h2>Labels in the answer</h2>
+  <label for="component-rendering">Presentation</label><select id="component-rendering" name="rendering">{% for mode in renderings %}<option value="{{ mode }}" {% if row.definition.component_contract.rendering == mode %}selected{% endif %}>{{ mode|capfirst }}</option>{% endfor %}</select>
+  <p class="small">Use labelled presentation for combined identity or measurement values. Every label must appear in the original question or the reviewed meaning above. Plain answers have no added labels. Signing areas remain protected.</p>
+</section>
+{% for part in parts %}
+<fieldset class="panel"><legend>{% if part.new %}Add another required part{% else %}Required part {{ forloop.counter }}{% endif %}</legend>
+  {% if part.new %}<label><input type="checkbox" name="part_{{ part.index }}_add" {% if part.add %}checked{% endif %}> Add this part when saving</label>{% else %}<label><input type="checkbox" name="part_{{ part.index }}_remove" {% if part.remove %}checked{% endif %}> Remove this part from the draft</label>{% endif %}
+  <p class="small">Remove a part only when the complete original question does not request it. Undocumented patient information remains a missing required part.</p>
+  <label for="part-quote-{{ part.index }}">Exact words in the original question</label><textarea id="part-quote-{{ part.index }}" name="part_{{ part.index }}_question_quote" rows="2" maxlength="2000">{{ part.question_quote }}</textarea>
+  <label for="part-label-{{ part.index }}">Label in the answer · blank for plain presentation</label><textarea id="part-label-{{ part.index }}" name="part_{{ part.index }}_label" rows="1" maxlength="2000">{{ part.label|default_if_none:'' }}</textarea>
+  <label for="part-meaning-{{ part.index }}">What this part must contain</label><textarea id="part-meaning-{{ part.index }}" name="part_{{ part.index }}_meaning" rows="3" maxlength="2000">{{ part.meaning }}</textarea>
+  <label for="part-type-{{ part.index }}">Value type</label><select id="part-type-{{ part.index }}" name="part_{{ part.index }}_value_type">{% for choice,title in component_types %}<option value="{{ choice }}" {% if part.value_type == choice %}selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="part-person-{{ part.index }}">Whom this part describes</label><select id="part-person-{{ part.index }}" name="part_{{ part.index }}_subject">{% for choice,title in subjects %}<option value="{{ choice }}" {% if part.scope.subject == choice %}selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="part-time-{{ part.index }}">When it applies</label><select id="part-time-{{ part.index }}" name="part_{{ part.index }}_temporality">{% for choice,title in temporalities %}<option value="{{ choice }}" {% if part.scope.temporality == choice %}selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="part-polarity-{{ part.index }}">Statements to include</label><select id="part-polarity-{{ part.index }}" name="part_{{ part.index }}_polarity">{% for choice,title in polarities %}<option value="{{ choice }}" {% if part.scope.polarity == choice %}selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="part-unit-rule-{{ part.index }}">Unit requirement</label><select id="part-unit-rule-{{ part.index }}" name="part_{{ part.index }}_unit_requirement">{% for choice,title in unit_requirements %}<option value="{{ choice }}" {% if part.unit_requirement == choice %}selected{% endif %}>{{ title }}</option>{% endfor %}</select>
+  <label for="part-unit-{{ part.index }}">Exact unit printed on the original · blank otherwise</label><textarea id="part-unit-{{ part.index }}" name="part_{{ part.index }}_unit" rows="1" maxlength="80">{{ part.unit|default_if_none:'' }}</textarea>
+</fieldset>
+{% endfor %}
+<section class="panel"><label for="component-reason">Reason for this correction</label><textarea id="component-reason" name="reason" minlength="12" maxlength="1000" rows="3" required>{{ reason }}</textarea>
+<label class="check-row"><input type="checkbox" name="component_reviewed" required> I compared every required part, label, role and unit with this question in the complete original form.</label>
+<button type="submit">Save component draft</button></section>
+</form>
+{% endif %}
+{% endblock %}

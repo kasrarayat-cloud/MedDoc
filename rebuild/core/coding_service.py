@@ -36,7 +36,7 @@ def digest(value):
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-def context_data(encounter):
+def context_data(encounter, *, interpretation=None):
     row = CodingContext.objects.filter(encounter=encounter).first()
     if row is not None:
         return {**CONTEXT_DEFAULTS, **row.data}
@@ -45,13 +45,35 @@ def context_data(encounter):
     # prediction merely to populate setting/status. Confirmation remains explicit
     # in the separately bound output review; all time attestations stay false.
     from .coding_dispatch import provider, source_context_enabled
-    if provider(encounter) == 'corti' and source_context_enabled(encounter):
-        from .corti_semantics import office_time_facts
-        observed = office_time_facts(encounter.notes)
+    from .source_assertion_graph import CONTRACT as GRAPH_CONTRACT
+    graph_generation = (interpretation is not None or any(type(d) is dict and d.get('version')==4
+        for d in encounter.template_version.semantic_definitions.values())
+        or any(type(a) is dict and a.get('fact_scope_contract')==GRAPH_CONTRACT for a in encounter.answers.values()))
+    if provider(encounter) == 'corti' and (graph_generation or source_context_enabled(encounter)):
+        from . import source_assertion_coding as shared
+        if interpretation is None:
+            interpretation = shared.snapshot(encounter)
+        if interpretation is not None:
+            from types import SimpleNamespace
+            # The graph is already validated by the explicit immutable store.
+            probe = SimpleNamespace(config={'clinical_source_contract':shared.CONTRACT},
+                inputs=_graph_inputs(encounter, interpretation))
+            return {**CONTEXT_DEFAULTS, **shared.context_suggestions(probe)}
+        else:
+            from .corti_semantics import office_time_facts
+            observed = office_time_facts(encounter.notes)
         if observed['status'] == 'documented':
             facts = {f['key']: f['value'] for f in observed['facts']}
             return {**CONTEXT_DEFAULTS, **{k: facts[k] for k in ('setting', 'patient_status', 'em_basis')}}
     return dict(CONTEXT_DEFAULTS)
+
+
+def _graph_inputs(encounter, interpretation):
+    return {'source_interpretation':interpretation,'notes':encounter.notes,'answers':copy.deepcopy(encounter.answers),
+        'patient_id':str(encounter.patient_id),'encounter_id':str(encounter.pk),'department_id':str(encounter.department_id),
+        'template_version_id':str(encounter.template_version_id),'service_date':encounter.service_date.isoformat(),
+        'patient_identity':{'display_name':encounter.patient.display_name,'reference':encounter.patient.reference},
+        'template':{'fields_sha256':digest(interpretation['fields']),'definitions_sha256':digest(interpretation['definitions'])}}
 
 
 def release_snapshot(encounter):
@@ -112,13 +134,18 @@ def input_snapshot(encounter):
     birth = getattr(patient, 'date_of_birth', None)
     if birth is not None:
         inputs['patient_identity']['date_of_birth'] = birth.isoformat()
-    inputs.update(patient_name_inputs(encounter, encounter.answers))
+    from .source_assertion_coding import snapshot
+    interpretation = snapshot(encounter)
+    if interpretation is None:
+        inputs.update(patient_name_inputs(encounter, encounter.answers))
+    else:
+        inputs['source_interpretation'] = interpretation
     version = encounter.template_version
     inputs['template'] = {'fields_sha256': digest(version.fields),
-                          'definitions_sha256': digest(version.semantic_definitions),
+                          'definitions_sha256': digest(interpretation['definitions'] if interpretation is not None else version.semantic_definitions),
                           'original_sha256': version.template.sha256,
                           'prepared_sha256': version.prepared_sha256}
-    context = context_data(encounter)
+    context = context_data(encounter, interpretation=interpretation)
     releases = release_snapshot(encounter)
     return inputs, context, releases, digest({'inputs': inputs, 'context': context, 'releases': releases})
 
@@ -160,9 +187,10 @@ def ensure_run(encounter, user, automatic=False):
         from .coding_dispatch import configuration
         try:
             config = configuration(user, e)
-        except ValidationError:
+        except ValidationError as exc:
             state, error_code = 'failed', 'service_unavailable'
-            error = 'Coding is not configured for this workspace. Contact your administrator.'
+            error = (str(exc.messages[0]) if 'source_interpretation' in inputs else
+                     'Coding is not configured for this workspace. Contact your administrator.')
     run = CodingRun.objects.create(encounter=e, user=user, input_digest=key,
         inputs=inputs, context=context, releases=releases, config=config, state=state,
         error_code=error_code, error=error,

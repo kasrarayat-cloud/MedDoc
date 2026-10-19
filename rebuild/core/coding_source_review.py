@@ -66,9 +66,10 @@ def assess(encounter, run):
          <= metadata.release.effective_until and metadata.release.version == bound['version']
          and metadata.release.sha256 == bound['sha256'], 'The dated ICD reference changed or does not apply.')
     from .coding_engine import QUALIFIED_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT
-    source_contract = (QUALIFIED_SOURCE_CONTRACT
+    from . import source_assertion_coding as shared
+    source_contract = (shared.CONTRACT if shared.enabled(run) else QUALIFIED_SOURCE_CONTRACT
         if run.config.get('clinical_source_contract') == QUALIFIED_SOURCE_CONTRACT else CURRENT_SOURCE_CONTRACT)
-    inventory = completeness.inventory(encounter.notes, source_contract=source_contract)
+    inventory = shared.inventory(run) if shared.enabled(run) else completeness.inventory(encounter.notes, source_contract=source_contract)
     from .coding_reference_store import prediction_reference
     reference = prediction_reference(metadata, approved,
         source_contract=source_contract, source_inventory=inventory)

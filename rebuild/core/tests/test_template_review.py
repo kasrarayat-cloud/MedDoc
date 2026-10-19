@@ -185,7 +185,8 @@ class SeparateDefinitionRetryTests(TestCase):
         from core.tests.test_semantic_preparation import DefinitionPreparationDatabaseTests
         DefinitionPreparationDatabaseTests.setUp(self)
         from core import semantic_preparation
-        self.prep=semantic_preparation.create_preparation(self.source,self.user)
+        from core.tests.test_semantic_preparation import historical_preparation
+        self.prep=historical_preparation(self.source,self.user)
         self.assertTrue(semantic_preparation.run_one());self.prep.refresh_from_db()
         self.client.force_login(self.user)
 

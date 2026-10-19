@@ -637,6 +637,9 @@ def _reference(reference, inv, run):
     """Validate the bounded loader's watched set and complete family structure."""
     expected = {'contract': REFERENCE_CONTRACT, 'source_sha256': inv['source_sha256'],
         'inventory_sha256': inv['inventory_sha256'], 'terms': sorted(set(inv['reference_terms'])), 'complete': True}
+    from .source_assertion_coding import CONTRACT as GRAPH_SOURCE_CONTRACT
+    if inv.get('source_contract')==GRAPH_SOURCE_CONTRACT:
+        expected['taxonomy_roles']=inv['reference_taxonomy_roles']
     if getattr(reference, 'completeness_scope', None) != expected:
         raise ValidationError('Source review requires the complete source-bound authoritative retrieval projection.')
     release = reference.release
@@ -1014,6 +1017,9 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
     explicitly uses the current source safety contract on a small copied input.
     No stored eligible flag, provider candidate or generated answer is trusted.
     """
+    from . import source_assertion_coding as shared
+    if shared.enabled(run):
+        return shared.evaluate(run,reference,approved_codes=approved_codes,inventory_result=inventory_result)
     notes = run.inputs['notes']
     requested_contract = getattr(run, 'config', {}).get('clinical_source_contract')
     inv = inventory(notes, source_contract=requested_contract)

@@ -1,0 +1,12 @@
+{% if component_contract.components %}
+<div class="review-choices">
+  <p><strong>Required parts of this answer</strong></p>
+  <ul>{% for component in component_contract.components %}
+    <li>{% if component.label %}<strong>{{ component.label }}:</strong> {% endif %}{{ component.meaning }}
+      <span class="small">Person: {{ component.scope.subject }}. Timing: {{ component.scope.temporality }}.{% if component.scope.polarity != 'any' %} Statements: {{ component.scope.polarity }}.{% endif %}
+      {% if component.unit_requirement == 'documented' %}Keep this value’s documented unit and scale.{% elif component.unit_requirement == 'printed' %}Printed unit: {{ component.unit }}.{% endif %}</span>
+    </li>
+  {% endfor %}</ul>
+  <p class="small muted">Every part must be checked against the source. Undocumented parts remain missing; a partial answer does not become complete.</p>
+</div>
+{% endif %}

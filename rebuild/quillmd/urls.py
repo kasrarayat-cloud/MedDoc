@@ -43,12 +43,14 @@ urlpatterns += [
 ]
 
 from core import semantic_preparation_views as definitions
+from core.component_review import edit as edit_definition_components
 urlpatterns += [
     path('templates/<uuid:pk>/definitions/start/',definitions.start,name='template_definitions_start'),
     path('definition-preparations/<uuid:pk>/',definitions.detail,name='template_definitions'),
     path('definition-preparations/<uuid:pk>/status/',definitions.status,name='template_definitions_status'),
     path('definition-preparations/<uuid:pk>/corrections/',definitions.corrections,name='template_definitions_correct'),
     path('definition-preparations/<uuid:pk>/approve/',definitions.approval,name='template_definitions_approve'),
+    path('definition-preparations/<uuid:pk>/components/<str:field_key>/',edit_definition_components,name='template_definitions_components'),
 ]
 
 from core.document_review import submit as document_review_submit

@@ -6,6 +6,7 @@ Provider candidates/alternatives never become clinician replacement choices.
 """
 from copy import deepcopy
 from datetime import date
+import hashlib
 import re
 from urllib.parse import urlsplit
 
@@ -18,6 +19,7 @@ from .models import Code, CodeSet
 from . import corti_semantics
 
 CONTRACT = 'corti-selected-dated-review-v1'
+DIAGNOSTIC_CONTRACT = 'source-route-diagnostics-v1'
 SYSTEMS = {'icd10cm-outpatient': 'ICD-10-CM', 'cpt': 'CPT'}
 
 
@@ -28,6 +30,9 @@ def identity_blockers(run):
     accept only finite, complete source name frames; everything else requires
     the existing explicit synthetic identity review, never silent substitution.
     """
+    from . import source_assertion_coding as shared
+    if shared.enabled(run):
+        return shared.identity_blockers(run)
     from .semantic_generation import _complete_patient_identity, person_name_value, patient_name_check
     notes = run.inputs['notes']
     names = []
@@ -95,19 +100,83 @@ def terminology(run):
         'CPT descriptor and service-date release are unverified. ' + cpt.get('reason', '')}), cpt
 
 
-def _icd_source(run, reference, proposal, selected_codes):
+def _route_diagnostics(run, reference, proposal):
+    from . import source_assertion_coding as shared
+    return {'contract': DIAGNOSTIC_CONTRACT, 'proposal_id': proposal['id'],
+        'code': proposal['code'], 'source_sha256': hashlib.sha256(run.inputs['notes'].encode()).hexdigest(),
+        'source_contract': run.config.get('clinical_source_contract'),
+        'source_profile': shared.graph.CONTRACT if shared.enabled(run) else engine.source_profile(run.config.get('clinical_source_contract')),
+        'reference': {'release_id': str(reference.release_id),
+            'version': reference.release.version, 'coding_digest': reference.digest},
+        'attempts': [], 'outcome': None, 'initiating_failure': None}
+
+
+def _diagnostic_attempt(diagnostics, notes, *, entry=None, term=None, span=None, clause=None):
+    if diagnostics is None:
+        return None
+    witnesses = []
+    if clause is not None:
+        from .generation import source_units
+        from .clinical_source_context import source_context, owned_current
+        units, _ = source_units(notes, [])
+        context = source_context(notes, units, profile=diagnostics['source_profile'])
+        for match in re.finditer(re.escape(clause), notes):
+            witnesses.append({'start': match.start(), 'end': match.end(), 'quote': clause,
+                'units': [{'source': deepcopy(unit), 'context': deepcopy(context['units'][unit['start']]),
+                           'owned_current': owned_current(context, unit)}
+                    for unit in units if unit['start'] < match.end() and match.start() < unit['end']],
+                'context_issues': deepcopy(context['issues'])})
+    row = {'ordinal': len(diagnostics['attempts']) + 1,
+        'entry_id': entry.get('id') if entry else None, 'term': term,
+        'provider_span': deepcopy(span), 'expanded_source': witnesses,
+        'gates': [], 'failures': [], 'outcome': None}
+    diagnostics['attempts'].append(row)
+    return row
+
+
+def _diagnostic_gate(attempt, gate, status, detail):
+    if attempt is None:
+        return
+    event = {'gate': gate, 'status': status, 'detail': deepcopy(detail)}
+    attempt['gates'].append(event)
+    if status == 'failed':
+        attempt['failures'].append(deepcopy(event))
+
+
+def _diagnostic_finish(diagnostics, result):
+    if diagnostics is not None:
+        diagnostics['outcome'] = 'eligible' if result[1] else 'held'
+        if not result[1]:
+            diagnostics['initiating_failure'] = next((
+                {'attempt_ordinal': row['ordinal'], **deepcopy(row['failures'][0])}
+                for row in diagnostics['attempts'] if row['failures']), None)
+    return result
+
+
+def _icd_source(run, reference, proposal, selected_codes, *, diagnostics=None):
     """Bind the selected code to dated lexical routes and the complete source.
 
     New runs recognize reference-owned head vocabulary and specific Tabular
     phrases. Historical runs retain their original route contract. Neither
     branch promotes a provider alternative or treats membership as eligibility.
     """
+    from . import source_assertion_coding as shared
+    if shared.enabled(run):
+        return shared.icd_source(run, reference, proposal, selected_codes, diagnostics=diagnostics)
     lookup = engine.index_lookup(reference)
     notes = run.inputs['notes']
     contract = run.config.get('clinical_source_contract') if hasattr(run, 'config') else None
     modern = contract in engine.SOURCE_CONTRACTS
     matching = [entry for entry in reference.index if entry.get('code') == proposal['code']
                 and not entry.get('requires_review')]
+    if not matching:
+        attempt = _diagnostic_attempt(diagnostics, notes)
+        _diagnostic_gate(attempt, 'index_candidate', 'failed', {
+            'reason': 'No admissible Index entry for this selected code.',
+            'review_required_entry_ids': [entry['id'] for entry in reference.index
+                if entry.get('code') == proposal['code'] and entry.get('requires_review')]})
+        if attempt is not None:
+            attempt['outcome'] = 'held'
     for entry in matching:
         head = entry
         while head.get('parent_id') in lookup:
@@ -117,13 +186,28 @@ def _icd_source(run, reference, proposal, selected_codes):
                  [re.sub(r'\(s\)$', '', head.get('term', ''), flags=re.I)])
         for term in terms:
             if not term or engine.norm(term) in engine.TAXONOMY_HEADS:
+                attempt = _diagnostic_attempt(diagnostics, notes, entry=entry, term=term)
+                _diagnostic_gate(attempt, 'index_term', 'not_applicable', {'reason': 'Empty or taxonomy-only Index head.'})
+                if attempt is not None:
+                    attempt['outcome'] = 'not_applicable'
                 continue
             for span in proposal['evidence']:
                 if span['status'] != 'valid' or span['context_index'] != 0:
+                    attempt = _diagnostic_attempt(diagnostics, notes, entry=entry, term=term, span=span)
+                    _diagnostic_gate(attempt, 'provider_span', 'failed', {
+                        'reason': 'The provider span is not a valid span in the clinical source.'})
+                    if attempt is not None:
+                        attempt['outcome'] = 'held'
                     continue
                 if not engine.affirmative_word(span['text'], term):
+                    attempt = _diagnostic_attempt(diagnostics, notes, entry=entry, term=term, span=span)
+                    _diagnostic_gate(attempt, 'source_lexical_link', 'not_applicable', {
+                        'reason': 'This provider span does not contain the literal Index head.'})
+                    if attempt is not None:
+                        attempt['outcome'] = 'not_applicable'
                     continue
                 for clause in engine.enclosing_clauses(notes, span['text']):
+                    attempt = _diagnostic_attempt(diagnostics, notes, entry=entry, term=term, span=span, clause=clause)
                     anchor = description if engine.affirmative_word(span['text'], description) else term
                     concept = dict(id=proposal['id'], term=anchor, index_terms=[anchor], evidence=clause,
                         kind='symptom' if proposal['code'].startswith('R') else 'diagnosis',
@@ -137,20 +221,48 @@ def _icd_source(run, reference, proposal, selected_codes):
                             concept = nec[0]
                     subtypes = engine.index_subtypes(reference, concept, source_contract=contract)
                     qualifiers = [item['qualifier'] for item in subtypes]
-                    if modern and engine.current_source_scope_errors(notes, concept, source_contract=contract,
-                            qualifiers=qualifiers):
+                    scope_errors = (engine.current_source_scope_errors(notes, concept, source_contract=contract,
+                        qualifiers=qualifiers) if modern else [])
+                    _diagnostic_gate(attempt, 'source_scope', 'failed' if scope_errors else
+                        'passed' if modern else 'not_applicable', {'errors': scope_errors})
+                    if scope_errors:
+                        for gate in ('source_disposition', 'contextual_validation', 'index_route',
+                                     'specificity', 'more_specific_source_routes'):
+                            _diagnostic_gate(attempt, gate, 'not_evaluated', {'blocked_by': 'source_scope'})
+                        if attempt is not None:
+                            attempt['outcome'] = 'held'
                         continue
                     assertion = engine.assertion_concept(concept, subtypes)
                     disposition, reason = (('eligible', 'Current source-bound narrower clinical concept and complete NEC route verified.')
                         if nec else engine.source_disposition(assertion, notes, qualifiers=qualifiers,
                             source_contract=contract))
+                    _diagnostic_gate(attempt, 'source_disposition', 'passed' if disposition == 'eligible' else 'failed',
+                        {'disposition': disposition, 'reason': reason, 'nec_proof': deepcopy(nec[1]) if nec else None})
                     check = engine.contextual_validation(run, reference, proposal['code'], concept, selected_codes)
-                    errors = (([] if nec else engine.index_route_errors(entry, concept, lookup, code_description=description,
-                                  source_contract=contract))
-                              + engine.specificity_errors(concept, proposal['code'], description))
-                    if (disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
-                            or engine.more_specific_source_routes(entry, concept, notes, reference, subtypes,
-                                source_contract=contract)):
+                    _diagnostic_gate(attempt, 'contextual_validation',
+                        'passed' if check['valid'] and not check.get('requires_review') else 'failed', check)
+                    index_errors = ([] if nec else engine.index_route_errors(entry, concept, lookup,
+                        code_description=description, source_contract=contract))
+                    _diagnostic_gate(attempt, 'index_route', 'not_applicable' if nec else
+                        'failed' if index_errors else 'passed', {'errors': index_errors,
+                            'reason': 'Complete NEC proof substitutes this check.' if nec else ''})
+                    specificity_errors = engine.specificity_errors(concept, proposal['code'], description)
+                    _diagnostic_gate(attempt, 'specificity', 'failed' if specificity_errors else 'passed',
+                        {'errors': specificity_errors})
+                    errors = index_errors + specificity_errors
+                    blocked = disposition != 'eligible' or errors or not check['valid'] or check.get('requires_review')
+                    if blocked:
+                        _diagnostic_gate(attempt, 'more_specific_source_routes', 'not_evaluated',
+                            {'reason': 'Earlier failed requirement short-circuits this check.'})
+                    else:
+                        more_specific = engine.more_specific_source_routes(entry, concept, notes, reference, subtypes,
+                            source_contract=contract)
+                        _diagnostic_gate(attempt, 'more_specific_source_routes', 'failed' if more_specific else 'passed',
+                            {'routes': more_specific})
+                        blocked = more_specific
+                    if blocked:
+                        if attempt is not None:
+                            attempt['outcome'] = 'held'
                         continue
                     candidate = dict(code=proposal['code'], system='ICD-10-CM', entry_id=entry['id'],
                         description=description, path=entry.get('path', []),
@@ -158,12 +270,22 @@ def _icd_source(run, reference, proposal, selected_codes):
                         instructions=check.get('instructions', []))
                     if nec:
                         candidate['clinical_specificity'] = nec[1]
-                    return concept, candidate, {'disposition': disposition, 'reason': reason,
-                        'index_scope_entry_ids': nec[1]['index_family_ids'] if nec else [row['entry']['id'] for row in subtypes]}
+                    if attempt is not None:
+                        attempt['outcome'] = 'eligible'
+                    return _diagnostic_finish(diagnostics, (concept, candidate, {'disposition': disposition, 'reason': reason,
+                        'index_scope_entry_ids': nec[1]['index_family_ids'] if nec else [row['entry']['id'] for row in subtypes]}))
     if contract in engine.COMPLETE_SOURCE_CONTRACTS:
         from .coding_completeness import selected_qualified_route
-        return selected_qualified_route(run, reference, proposal, selected_codes)
-    return None, None, None
+        result = selected_qualified_route(run, reference, proposal, selected_codes)
+        attempt = _diagnostic_attempt(diagnostics, notes)
+        _diagnostic_gate(attempt, 'qualified_source_fallback', 'passed' if result[1] else 'failed',
+            {'reason': 'Qualified source fallback returned a route.' if result[1] else
+                'Qualified source fallback returned no verified route.', 'internal_checks': 'not_instrumented',
+                'source_check': result[2]})
+        if attempt is not None:
+            attempt['outcome'] = 'eligible' if result[1] else 'held'
+        return _diagnostic_finish(diagnostics, result)
+    return _diagnostic_finish(diagnostics, (None, None, None))
 
 
 def integral_holds(rows, notes, *, source_contract=None):
@@ -207,6 +329,11 @@ def retained_result(run, request, response, response_sha256):
         raise ValidationError('Corti requires its exact immutable engine contract.')
     if request != corti_prediction.payload(run):
         raise ValidationError('The retained prediction belongs to a different source payload.')
+    diagnostic_contract = run.config.get('coding_diagnostic_contract')
+    if diagnostic_contract not in (None, DIAGNOSTIC_CONTRACT):
+        raise ValidationError('Unknown coding diagnostic contract.')
+    from . import source_assertion_coding as shared
+    if shared.enabled(run): shared.source(run)
     terms, cpt = terminology(run)
     replay = run.config['mode'] == 'replay'
     if replay:
@@ -226,6 +353,8 @@ def retained_result(run, request, response, response_sha256):
         diagnostics_summary={'candidate_count': len(response.get('candidates', [])),
             'alternative_count': sum(len(r.get('alternatives', [])) for r in response['codes'] if isinstance(r, dict)),
             'rejected_selected_count': len(parsed['diagnostics']['rejected_selected'])})
+    if diagnostic_contract:
+        result['source_diagnostics'] = {'contract': diagnostic_contract, 'icd_routes': {}}
     if run.context.get('setting') != 'outpatient_office':
         result['global_blockers'].append('Confirm the US outpatient office setting before coding approval.')
     quarantined = []
@@ -260,31 +389,57 @@ def retained_result(run, request, response, response_sha256):
         if row['classification']['mismatch']:
             row['hold_reasons'].append('The selected procedure identifier does not have supported CPT syntax.')
         if system == 'CPT':
-            support = corti_semantics.office_time_facts(run.inputs['notes'],
-                contract=run.config.get('clinical_source_contract'))
+            support = (shared.office_time_facts(run) if shared.enabled(run) else
+                corti_semantics.office_time_facts(run.inputs['notes'], contract=run.config.get('clinical_source_contract')))
             row['semantic_support'] = {'status':'requires_dated_criteria', 'documented_time_facts':support,
                 'provider_citation_adequacy':corti_semantics.citation_adequacy(row['evidence_spans'], support['facts'])}
         if proposal['evidence_status'] != 'valid':
             row['hold_reasons'].append('Supporting evidence is ' + proposal['evidence_status'] + '.')
         if term['status'] != 'verified':
             row['hold_reasons'].append(term['reason'])
+        diagnostics = None
+        if diagnostic_contract and system == 'ICD-10-CM':
+            diagnostics = _route_diagnostics(run, reference, proposal)
+            result['source_diagnostics']['icd_routes'][row['id']] = diagnostics
+            if row['hold_reasons']:
+                attempt = _diagnostic_attempt(diagnostics, run.inputs['notes'])
+                _diagnostic_gate(attempt, 'provider_preconditions', 'failed', {
+                    'evidence_status': proposal['evidence_status'], 'terminology': term,
+                    'classification': row['classification'], 'reasons': row['hold_reasons']})
+                _diagnostic_gate(attempt, 'icd_source_route', 'not_evaluated',
+                    {'blocked_by': 'provider_preconditions'})
+                attempt['outcome'] = 'held'
+                _diagnostic_finish(diagnostics, (None, None, None))
         if not row['hold_reasons']:
             if system == 'ICD-10-CM':
-                concept, candidate, source_check = _icd_source(run, reference, proposal, icds)
+                concept, candidate, source_check = _icd_source(run, reference, proposal, icds,
+                    diagnostics=diagnostics)
                 if candidate:
                     row.update(concept=concept, release_id=candidate['release_id'],
                         instructions=candidate['instructions'], evidence=concept['evidence'],
                         index_entry_id=candidate['entry_id'], index_path=candidate['path'], eligible=True,
-                        explanation=engine.source_explanation(run.inputs['notes'], concept, candidate))
+                        explanation=('Checked source assertion: “'+concept['evidence']+'” Dated Index route: '
+                            +' → '.join(candidate['path'])+'.' if shared.enabled(run) else
+                            engine.source_explanation(run.inputs['notes'], concept, candidate)))
                     # This is an independently checked route for the SAME selected
                     # code, never a provider candidate or nested alternative.
                     result['candidates'][row['id']] = [candidate]
                     result['source_checks'][row['id']] = source_check
                 else:
-                    row['hold_reasons'].append('The selected code lacks a locally verified source-to-Index-to-Tabular route. Clarify the documentation; no alternative was promoted.')
+                    failure = diagnostics.get('initiating_failure') if diagnostics else None
+                    if failure:
+                        detail = failure['detail']
+                        reasons = ([detail['reason']] if detail.get('reason') else
+                                   detail.get('errors') or detail.get('reasons') or [])
+                        row['hold_reasons'].append('The first attempted route was held at '
+                            + failure['gate'] + ': ' + ' '.join(reasons)
+                            + ' Review the retained route diagnostics; no alternative was promoted.')
+                    else:
+                        row['hold_reasons'].append('The selected code lacks a locally verified source-to-Index-to-Tabular route. Clarify the documentation; no alternative was promoted.')
             else:
                 from .coding_cpt import validate_cpt_selection
-                check = validate_cpt_selection(run, row['code'], row['evidence'])
+                check = (validate_cpt_selection(run, row['code'], row['evidence'],evidence_spans=row['evidence_spans'])
+                    if shared.enabled(run) else validate_cpt_selection(run,row['code'],row['evidence']))
                 if check['valid'] and not check.get('requires_review'):
                     row.update(eligible=True, release_id=cpt['release_id'], instructions=check.get('instructions', []))
                 else:
@@ -298,8 +453,9 @@ def retained_result(run, request, response, response_sha256):
     for row in quarantined:
         result['questions'].append({'id':row['id'], 'system':row['system'], 'blocking':False,
             'question':'Held '+row['code']+': '+row['explanation']})
-    for key, parent in integral_holds(result['suggestions'], run.inputs['notes'],
-            source_contract=run.config.get('clinical_source_contract')).items():
+    held = (shared.integral_holds(run,result['suggestions']) if shared.enabled(run) else
+        integral_holds(result['suggestions'], run.inputs['notes'],source_contract=run.config.get('clinical_source_contract')))
+    for key, parent in held.items():
         row = next(row for row in result['suggestions'] if row['id'] == key)
         row['eligible'] = False
         reason = ('Source causal wording requires review before this symptom can be accepted separately; no cause code was promoted.'
@@ -307,10 +463,17 @@ def retained_result(run, request, response, response_sha256):
         row['hold_reasons'].append(reason)
         result['questions'].append({'id': key, 'system': 'ICD-10-CM', 'blocking': False, 'question': reason})
         result['source_checks'][key].update(disposition='integral', parent=parent)
+    if diagnostic_contract:
+        for row in result['suggestions']:
+            diagnostics = result['source_diagnostics']['icd_routes'].get(row['id'])
+            if diagnostics is not None:
+                diagnostics['selection_outcome'] = 'eligible' if row['eligible'] else 'held'
+                diagnostics['selection_hold_reasons'] = deepcopy(row['hold_reasons'])
     return result
 
 
 def validate_selection(run, selections):
+    from . import source_assertion_coding as shared
     if identity_blockers(run):
         raise ValidationError('The source patient identity requires review before code acceptance or export.')
     if (type(selections) is not dict or set(selections) != {'selected_ids', 'overrides'}
@@ -321,8 +484,9 @@ def validate_selection(run, selections):
     if any(type(x) is not str for x in ids) or len(ids) != len(set(ids)):
         raise ValidationError('Invalid or duplicate Corti selection.')
     rows = {r['id']: r for r in run.result.get('suggestions', [])}
-    if set(ids).intersection(integral_holds(list(rows.values()), run.inputs['notes'],
-            source_contract=run.config.get('clinical_source_contract'))):
+    held = (shared.integral_holds(run,list(rows.values())) if shared.enabled(run) else
+        integral_holds(list(rows.values()),run.inputs['notes'],source_contract=run.config.get('clinical_source_contract')))
+    if set(ids).intersection(held):
         raise ValidationError('An integral symptom cannot be accepted separately from its documented cause.')
     terms, _ = terminology(run)
     raw = run.result.get('adapter', {}).get('diagnostics', {}).get('provider_response')
@@ -339,7 +503,7 @@ def validate_selection(run, selections):
     # Reuse the same source, Index, Tabular and CPT entitlement/rule checks as
     # the existing workflow at BOTH approval and export boundaries.
     icd_ids = [key for key in ids if rows[key]['system'] == 'ICD-10-CM']
-    if run.config.get('clinical_source_contract') in engine.COMPLETE_SOURCE_CONTRACTS and icd_ids:
+    if (shared.enabled(run) or run.config.get('clinical_source_contract') in engine.COMPLETE_SOURCE_CONTRACTS) and icd_ids:
         reference = engine.reference_for(run, prediction_codes=[rows[key]['code'] for key in icd_ids])
         codes = [rows[key]['code'] for key in icd_ids]
         for key in icd_ids:
@@ -348,11 +512,13 @@ def validate_selection(run, selections):
                     or candidate not in run.result.get('candidates', {}).get(key, [])
                     or checked != run.result.get('source_checks', {}).get(key)):
                 raise ValidationError('The selected source and authoritative route proof changed.')
-    engine.validate_selection(run, {'selected_ids': icd_ids, 'overrides': {}})
+    if not shared.enabled(run):
+        engine.validate_selection(run, {'selected_ids': icd_ids, 'overrides': {}})
     for key in ids:
         if rows[key]['system'] == 'CPT':
             from .coding_cpt import validate_cpt_selection
-            checked = validate_cpt_selection(run, rows[key]['code'], rows[key]['evidence'])
+            checked = (validate_cpt_selection(run,rows[key]['code'],rows[key]['evidence'],evidence_spans=selected[key]['evidence'])
+                if shared.enabled(run) else validate_cpt_selection(run, rows[key]['code'], rows[key]['evidence']))
             if not checked['valid'] or checked.get('requires_review') or checked.get('errors'):
                 raise ValidationError('CPT eligibility, rights or dated selection criteria are unresolved.')
     codes = [(rows[key]['system'], rows[key]['code']) for key in ids]

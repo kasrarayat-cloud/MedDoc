@@ -259,9 +259,20 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
             if any(type(config.get(key)) is not type(prospective[key]) or config[key]!=prospective[key] for key in quoted_keys):
                 raise ValidationError('Generation capacity changed after this quote. Reload to review the current maximum charge. Nothing was queued.')
         config=prospective
+        graph_definition = all(d.get('version') == 4 for d in definitions.values())
+        if any(d.get('version') == 4 for d in definitions.values()) and not graph_definition:
+            raise ValidationError('The form mixes incompatible interpretation contracts. Review a complete new definition version; nothing was queued.')
+        if graph_definition:
+            from .source_assertion_graph import SCOPE_CONTRACT as graph_scope
+            config['semantic_encounter_binding'] = {
+                'patient_id': str(e.patient_id), 'encounter_id': str(e.pk),
+                'department_id': str(e.department_id), 'service_date': e.service_date.isoformat(),
+                'template_version_id': str(e.template_version_id),
+                'patient_display_name': e.patient.display_name, 'patient_reference': e.patient.reference,
+            }
         config.update(semantic_template_version=str(e.template_version_id),
             semantic_fact_reference_contract=REFERENCE_INVENTORY_CONTRACT,
-            semantic_fact_scope_contract=LABELLED_PRESENTATION_SCOPE_CONTRACT,
+            semantic_fact_scope_contract=graph_scope if graph_definition else LABELLED_PRESENTATION_SCOPE_CONTRACT,
             semantic_source_sha256=hashlib.sha256(e.notes.encode()).hexdigest(),
             semantic_definitions_sha256=digest(definitions))
     from . import testing_authority
@@ -586,15 +597,34 @@ def run_semantic_job(job):
             or job.config.get('semantic_source_sha256')!=hashlib.sha256(e.notes.encode()).hexdigest()
             or job.config.get('semantic_definitions_sha256')!=semantic_generation.digest(definitions)):
             raise ai_stages.StageNotSent('The approved generation source or definitions changed before processing.')
+        from .source_assertion_graph import SCOPE_CONTRACT as graph_scope
+        graph_run = job.config.get('semantic_fact_scope_contract') == graph_scope
+        interpretation = None
         def send(role,attempt,payload,schema,instructions):
+            options = {}
+            if graph_run and job.config.get('mode') == 'fixture':
+                from .source_assertion_generation import fixture_stage
+                options['fixture_output'] = fixture_stage(role, payload)
             return ai_stages.execute_stage(job=job,stage=role,attempt=attempt,payload=payload,
-                schema=schema,instructions=instructions,config=job.config)
-        answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send,
-            reference_contract=job.config.get('semantic_fact_reference_contract',semantic_generation.LEGACY_REFERENCE_CONTRACT),
-            scope_contract=job.config.get('semantic_fact_scope_contract',semantic_generation.POSITIONED_SCOPE_CONTRACT))
-        for field in e.template_version.fields:
-            semantic_generation.validate_stored_answer(e.notes,field,definitions[field['key']],answers[field['key']])
+                schema=schema,instructions=instructions,config=job.config,**options)
+        if graph_run:
+            from . import source_assertion_generation as graph_generation
+            from .source_interpretation_store import identity_for
+            identity = identity_for(e, definitions, generation_job_id=str(job.pk))
+            if {key: value for key, value in identity.items() if key != 'generation_job_id'} != job.config.get('semantic_encounter_binding'):
+                raise ai_stages.StageNotSent('The encounter identity or date changed after the interpretation was quoted; nothing was sent.')
+            output = graph_generation.run(e.notes, e.template_version.fields, definitions, send, identity=identity)
+            answers, interpretation = output['answers'], output['interpretation']
+            for field in e.template_version.fields:
+                graph_generation.validate_stored_answer(e.notes, field, definitions[field['key']], answers[field['key']], interpretation)
+        else:
+            answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send,
+                reference_contract=job.config.get('semantic_fact_reference_contract',semantic_generation.LEGACY_REFERENCE_CONTRACT),
+                scope_contract=job.config.get('semantic_fact_scope_contract',semantic_generation.POSITIONED_SCOPE_CONTRACT))
+            for field in e.template_version.fields:
+                semantic_generation.validate_stored_answer(e.notes,field,definitions[field['key']],answers[field['key']])
         result_path,result_sha=ai_stages.retain({'contract':semantic_generation.CONTRACT,'answers':answers,
+            **({'interpretation': interpretation} if graph_run else {}),
             'stages':[str(pk) for pk in job.ai_stage_receipts.order_by('created_at','pk').values_list('pk',flat=True)]})
         job.result_path=result_path;job.result_sha256=result_sha;job.save(update_fields=['result_path','result_sha256'])
         settle_semantic_stages(job)
@@ -604,6 +634,9 @@ def run_semantic_job(job):
             except PermissionDenied:raise NotAdoptedByUser('Access was revoked before the output could be adopted; its recorded usage stays billed.')
             if e.status=='finalized' or e.revision!=job.revision:
                 raise NotAdoptedByUser('Source changed while this job ran; output was not adopted. Its recorded usage stays billed.')
+            if graph_run:
+                from .source_interpretation_store import adopt
+                adopt(e, job, interpretation, answers)
             e.answers=answers;e.status='review';e.template_review={};e.save()
             job.state='succeeded';job.finished_at=timezone.now();job.save(update_fields=['state','finished_at'])
             audit(job.user,'job.succeeded',job.pk,department=e.department,kind=job.kind,

@@ -44,8 +44,15 @@ def posted_definitions(prep, post):
             'scope': {name: post.get(prefix+name, '') for name in ('subject', 'temporality', 'polarity')},
             'permitted_destination': destination(field),
             'constraints': {name: post.get(prefix+name, '').strip() or None for name in CONSTRAINT_KEYS}}
-        if version in (2, 3): values[field['key']]['answer_mode'] = post.get(prefix+'answer_mode', '')
-        if version == 3: values[field['key']]['patient_name_requirement'] = post.get(prefix+'patient_name_requirement', '')
+        if version in (2, 3, 4): values[field['key']]['answer_mode'] = post.get(prefix+'answer_mode', '')
+        if version in (3, 4): values[field['key']]['patient_name_requirement'] = post.get(prefix+'patient_name_requirement', '')
+        if version == 4:
+            # The component contract is shown and bound in the signed review,
+            # never accepted from hidden browser JSON.
+            retained = getattr(prep, 'component_baseline', None)
+            if retained is None:
+                retained = workflow.corrected_definitions(prep)
+            values[field['key']]['component_contract'] = deepcopy(retained.get(field['key'], {}).get('component_contract'))
     return values
 
 
@@ -66,12 +73,16 @@ def context(prep, member, *, definitions=None, error='', post=None):
              'name_question_type': retained.get(field['key'], {}).get('value_type'),
              'reviewed': bool(post and field['key'] in post.getlist('reviewed_field'))}
             for field in prep.source_version.fields]
-    if not prep.corrections:
-        for row in rows:
+    reviewed_keys = workflow.fully_reviewed_keys(prep)
+    for row in rows:
+        if not prep.corrections or (workflow.definition_version(prep.config) == 4 and row['field']['key'] not in reviewed_keys):
             proposal, checker = row['proposal'] or {}, row['checker'] or {}
             if proposal.get('state') == 'unresolved' or checker.get('state') == 'unresolved' or proposal.get('definition') != checker.get('definition'):
                 row['state'] = 'unresolved'
                 row['reason'] = row['reason'] or checker.get('reason') or proposal.get('reason') or 'The independent definitions differ. Confirm which meaning belongs here.'
+    if workflow.definition_version(prep.config) == 4 and member.role in ('owner', 'clinician') and prep.state in workflow.EDITABLE:
+        for row in rows:
+            row['components_edit_url'] = reverse('template_definitions_components', args=[prep.pk, row['field']['key']])
     baseline_rows = template_review.review_items(prep, rows)
     rows = [{**r, 'definition':values.get(r['field']['key'])} for r in baseline_rows]
     receipts = list(prep.ai_stage_receipts.order_by('created_at'))
@@ -89,7 +100,7 @@ def context(prep, member, *, definitions=None, error='', post=None):
             and prep.error_code!='provider_unknown'
             and all(row.state in ('succeeded','failed') and row.actual_cost is not None for row in receipts),
         'definition_version':workflow.definition_version(prep.config), 'answer_modes':ANSWER_MODES,
-        'value_types': ANSWER_TYPES if workflow.definition_version(prep.config) in (2, 3) else VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
+        'value_types': ANSWER_TYPES if workflow.definition_version(prep.config) in (2, 3, 4) else VALUE_TYPES, 'subjects': SUBJECTS, 'temporalities': TEMPORALITIES, 'polarities': POLARITIES,
         'error': error, 'correction_reason': post.get('correction_reason', '') if post else '',
         'approved_version': prep.versions.order_by('number').first() if prep.state == 'approved' else None}
 
