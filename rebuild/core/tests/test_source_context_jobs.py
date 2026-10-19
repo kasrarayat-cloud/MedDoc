@@ -1,4 +1,4 @@
-"""New jobs freeze v20; retained jobs continue their original scope contract."""
+"""New jobs freeze v21; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.COMPLETE_ASSERTION_SCOPE_CONTRACT:
+        if stored_scope == semantic.SOAP_ASSERTION_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -90,7 +90,7 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.SOURCE_GOVERNANCE_INSTRUCTIONS,) * 3
         if expected == semantic.SCOPED_DENIAL_SCOPE_CONTRACT:
             suffixes = (semantic.SCOPED_DENIAL_INSTRUCTIONS,) * 3
-        if expected == semantic.COMPLETE_ASSERTION_SCOPE_CONTRACT:
+        if expected in semantic.COMPLETE_ASSERTION_SCOPE_CONTRACTS:
             suffixes = (semantic.COMPLETE_ASSERTION_INSTRUCTIONS,) * 3
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
@@ -114,7 +114,10 @@ class SourceContextWorkerTests(TestCase):
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_new_enqueue_freezes_v20_and_worker_uses_it_without_extra_calls(self):
+    def test_current_soap_assertion_profile_is_frozen(self):
+        self.exercise(semantic.SOAP_ASSERTION_SCOPE_CONTRACT)
+
+    def test_retained_v20_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.COMPLETE_ASSERTION_SCOPE_CONTRACT)
 
     def test_retained_v19_job_keeps_old_requests_and_answer_contract(self):

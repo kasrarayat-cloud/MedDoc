@@ -7,14 +7,17 @@ other encounters and unresolved source attribution retain their own scope.
 import re
 from datetime import datetime
 from .clinical_assertions import PROFILE as COMPLETE_ASSERTION_PROFILE, follow_up_frame
+from . import clinical_assertions_v4 as soap_assertions
+SOAP_ASSERTION_PROFILE = soap_assertions.PROFILE
 
 SOURCE_GOVERNANCE_PROFILE = 'source-governance-v2'
+PATIENT_IDENTITY_HEADING = r"(?:(?P<current>current|today['’]s)\s+)?patient(?:\s+(?:full\s+)?name)?\s*:\s*(?P<name>.+?)\s*\.?"
 
 
 def _profile(profile):
-    if profile not in (None, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE):
+    if profile not in (None, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE):
         raise ValueError('Unknown clinical source-governance profile.')
-    return profile in (SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE)
+    return profile in (SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE)
 
 
 def source_date(value):
@@ -27,13 +30,43 @@ def source_date(value):
     return None
 
 
+def _dated_encounter_heading(text):
+    """A complete dated section header, or an explicit unresolved candidate.
+
+    Relative words establish past/future scope; an absolute date alone never
+    does. A malformed date or unconsumed tail must not leave subsequent SOAP
+    sections silently current. Keep those candidates unresolved rather than
+    interpreting a recognized prefix as the whole heading.
+    """
+    candidate = re.fullmatch(
+        r'(?:the\s+)?(?P<kind>previous|prior|historical|past|earlier|old|last|'
+        r'future|upcoming|next|planned)\s+(?:(?:office|clinical)\s+)?'
+        r'(?:encounter|visit|consultation)(?:\s+(?:notes?|records?))?'
+        r'\s+(?:on|dated)\b(?P<date>.*?)\s*', text, re.I)
+    if candidate is None:
+        return None
+    date = candidate['date'].strip().removesuffix('.').removesuffix(':').rstrip()
+    if source_date(date) is None:
+        months = r'(?:January|February|March|April|May|June|July|August|September|October|November|December)'
+        date_shape = (r'(?:\d{1,2}\s+'+months+r'\s+\d{4}|'+months+r'\s+\d{1,2},\s+\d{4}|'
+                      r'\d{4}-\d{2}-\d{2})')
+        # Only a complete calendar-shaped value can be timing ambiguity alone.
+        # Every unconsumed qualifier might govern ownership as well as timing.
+        return 'unresolved_time' if re.fullmatch(date_shape, date, re.I) else 'unresolved_scope'
+    return ('future' if candidate['kind'].casefold() in ('future', 'upcoming', 'next', 'planned')
+            else 'past')
+
+
 def conditional_follow_up(text, *, profile=None):
     """A complete follow-up instruction with a retained safety-net condition.
 
     This is an instruction, not a hypothetical assertion about current disease.
     Unparsed tails, another subject or a qualified report do not fit the frame.
     """
-    if (profile == COMPLETE_ASSERTION_PROFILE and follow_up_frame(text)
+    if (profile == SOAP_ASSERTION_PROFILE and soap_assertions.follow_up_frame(text)
+            and not re.search(r'\b' + PERSON + r'\b', text, re.I)):
+        return True
+    if (profile in (COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE) and follow_up_frame(text)
             and not re.search(r'\b' + PERSON + r'\b', text, re.I)):
         return True
     noun = r'(?:[A-Za-z-]+(?:al|ic|ous|ive|ed|en)\s+){0,2}[A-Za-z][A-Za-z-]*'
@@ -181,7 +214,7 @@ def _retracted_domains(text, established=()):
         for clause in account_clauses(text)))
 
 
-def _retracted_clause_domains(text, established=()):
+def _retracted_clause_domains(text, established=(), *, profile=None):
     """Resolve account references; unknown relevant qualifications stay held.
 
     A later source-owned reference to an established account cannot disappear
@@ -191,9 +224,25 @@ def _retracted_clause_domains(text, established=()):
     if not reference or _integrity_assertion(text):
         return set()
     tail, domains = reference['tail'], reference['domains']
-    # This permission recognizes the complete source predicate, not an
-    # embedded tail stripped of an unknown outer qualification.
-    if time_kind(text):
+    if profile == SOAP_ASSERTION_PROFILE:
+        # A coordinated second predicate can inherit the account subject.
+        # The broad legacy exclusion reader must not absorb that predicate
+        # as another excluded activity. Unknown qualifications remain held.
+        second_predicate = re.search(
+            r'\b(?:but|while|whereas|unless|except|although|however)\b'
+            r'|\band\s+(?:is|are|was|were|has|have|had|does|do|did|'
+            r'belongs?|refers?|relates?|concerns?|describes?|pertains?|'
+            r'may|might|could|should|must|will|would)\b', tail, re.I)
+        invalidation = re.search(
+            r'\b(?:erroneous|wrong|incorrect|invalid|retracted|withdrawn|copied|'
+            r'must\s+not\s+be\s+used)\b', tail, re.I)
+        relation = re.search(r'\b(?:belongs?|refers?|relates?|concerns?|describes?|pertains?)\b', tail, re.I)
+        directive = re.search(r'\b(?:disregard|ignore|do\s+not\s+use)\s*$', text[:reference['match'].start()], re.I)
+        if (second_predicate or invalidation or relation or directive
+                or reference['qualified'] and not soap_assertions.time_kind(text)):
+            return domains or {'all'}
+    # Historical contracts keep their original unprofiled exemption.
+    if time_kind(text, profile=profile if profile == SOAP_ASSERTION_PROFILE else None):
         return set()
     if reference['qualified']:
         return domains or ({'all'} if not re.search(r'\btotal\b', reference['prefix'], re.I) else set())
@@ -254,7 +303,7 @@ def source_context(notes, units=None, *, profile=None):
     encounter = r'(?:(?:encounters?|visits?|consultations?)(?:\s+(?:history|notes?|records?))?|notes?|records?)'
     for unit in units:
         text, start = unit['quote'].strip(), unit['start']
-        identity = re.fullmatch(r"(?:(?P<current>current|today['’]s)\s+)?patient(?:\s+(?:full\s+)?name)?\s*:\s*(?P<name>.+?)\s*\.?", text, re.I)
+        identity = re.fullmatch(PATIENT_IDENTITY_HEADING, text, re.I)
         clinician = re.fullmatch(r'(?:treating|attending|examining)\s+(?:clinician|physician|doctor)\s*:\s*(?:Dr\.?\s+|Doctor\s+)?(?P<name>[A-Za-z][A-Za-z\s\x27’.-]+?)\s*\.?', text, re.I)
         if identity:
             name = identity['name'].strip().removesuffix('.')
@@ -265,6 +314,9 @@ def source_context(notes, units=None, *, profile=None):
             clinicians.append({'name': name, 'aliases': [_normal(name), _normal(name.split()[-1])], 'source': unit})
         elif re.fullmatch(foreign+r'(?:\s*:\s*[^\r\n]*)?\s*\.?', text, re.I):
             events[start] = ('foreign',)
+        elif (profile == SOAP_ASSERTION_PROFILE
+                and (dated := _dated_encounter_heading(text)) is not None):
+            events[start] = (dated,) if dated in ('unresolved_time', 'unresolved_scope') else ('time', dated)
         elif re.fullmatch(r'(?:the\s+)?(?:previous|prior|historical|past|earlier|old|last|future|upcoming|next|planned)\s+(?:(?:office|clinical)\s+)?'+encounter+r'(?:\s*:\s*[^\r\n]*)?\s*\.?', text, re.I):
             events[start] = ('time', 'future' if re.match(r'(?:the\s+)?(?:future|upcoming|next|planned)\b', text, re.I) else 'past')
         elif re.fullmatch(encounter+r'\s+(?:from\s+)?'+NUMBER+r'\s+(?:days?|weeks?|months?|years?)\s+ago\s*:?\s*\.?', text, re.I):
@@ -282,6 +334,8 @@ def source_context(notes, units=None, *, profile=None):
         ['The source does not establish one explicit patient identity.'])
     initial = next(iter(unique), None) if len(unique) == 1 else None
     owner, encounter_time, section = 'ambiguous', 'current', None
+    unresolved_time = False
+    unresolved_scope = False
     rows, retracted, established = {}, [], set()
     integrity_units=[]
     separate_governance_units=[]
@@ -304,7 +358,7 @@ def source_context(notes, units=None, *, profile=None):
                     start if direction=='before' else None))
         if owner=='patient' and encounter_time=='current':
             for clause in account_clauses(text):
-                domains=_retracted_clause_domains(clause,established)
+                domains=_retracted_clause_domains(clause,established,profile=profile)
                 if domains:
                     begin,end=0,start if re.search(r'\b(?:above|preceding)\b',clause,re.I) else None
                     if 'paragraph' in domains:
@@ -314,14 +368,29 @@ def source_context(notes, units=None, *, profile=None):
         if event:
             if event[0] == 'patient':
                 owner = 'patient' if event[1] == initial else 'ambiguous'
-                if event[2]: encounter_time = 'current'
+                if event[2]:
+                    encounter_time = 'current'
+                    unresolved_time = False
+                    if owner == 'patient':
+                        unresolved_scope = False
             elif event[0] in ('foreign', 'ambiguous'):
                 owner = event[0]
             elif event[0] == 'time':
                 encounter_time = event[1]
+                unresolved_time = False
+            elif event[0] == 'unresolved_time':
+                unresolved_time = True
+            elif event[0] == 'unresolved_scope':
+                unresolved_scope = True
         heading = clinical.fullmatch(text)
         if heading: section = heading[1].casefold()
+        elif profile == SOAP_ASSERTION_PROFILE and soap_assertions.soap_heading(text):
+            section = soap_assertions.soap_heading(text)
         row_issues = list(issues)
+        if unresolved_time:
+            row_issues.append('The dated encounter heading has an invalid date or unresolved qualification; its source timing requires review.')
+        if unresolved_scope:
+            row_issues.append('The dated encounter heading has an unconsumed qualification; its source scope requires review or an explicit current-patient identity reset.')
         if (re.search(r'[“”"]|\b(?:suppose|imagine|hypothetical)\b', text, re.I)
                 or re.search(r'\bif\b',text,re.I) and literal_kind(text,section,profile=profile) not in ('conditional_plan','conditional_follow_up')):
             row_issues.append('Quoted or hypothetical source is not a current patient assertion.')
@@ -334,6 +403,8 @@ def source_context(notes, units=None, *, profile=None):
             row_time = 'past'
         rows[start] = {'subject': owner, 'timing': row_time, 'section_timing': encounter_time,
             'section': section, 'issues': row_issues}
+        if profile==SOAP_ASSERTION_PROFILE and soap_assertions.foreign_order_beneficiary(text):
+            rows[start]['issues'].append('This order explicitly names a different beneficiary; it cannot establish a patient-owned order.')
         if owner=='patient' and encounter_time=='current' and not row_issues and not heading:
             if section in ('assessment','impression'):established.add('assessment')
             if time_kind(text,profile=profile):established.add('time')
@@ -354,8 +425,9 @@ def source_context(notes, units=None, *, profile=None):
     result = {'patient_name': identities[0] if len(unique) == 1 else None,
         'clinicians': clinicians, 'units': rows, 'issues': issues}
     if modern:
+        date_label = r'(?:Date\s+of\s+service|Service\s+date)' if profile == SOAP_ASSERTION_PROFILE else r'Date\s+of\s+service'
         dates=[source_date(match[1]) for unit in units
-            if (match:=re.fullmatch(r'\s*Date\s+of\s+service\s*:\s*(.+?)\s*\.?',unit['quote'],re.I))
+            if (match:=re.fullmatch(r'\s*'+date_label+r'\s*:\s*(.+?)\s*\.?',unit['quote'],re.I))
             and owned_current(result,unit)]
         result.update(profile=profile,service_date=dates[0] if len(dates)==1 else None,
             integrity_units=integrity_units,separate_governance_units=separate_governance_units,
@@ -439,6 +511,11 @@ def requirement_kind(text, section=None):
 def time_kind(text, *, profile=None):
     modern = _profile(profile)
     value = text.strip().removesuffix('.').strip()
+    if profile == SOAP_ASSERTION_PROFILE:
+        extended = soap_assertions.time_kind(text)
+        if extended:
+            return extended
+        if soap_assertions.strict_exclusion(text):return 'exclusion'
     if re.fullmatch(r'(?:office\s+)?(?:E\s*/?\s*M|evaluation\s+and\s+management)\s+(?:selection|level)\s+(?:is|was)\s+based\s+on\s+(?:total\s+)?(?:physician|clinician)\s+time(?:\s+on\s+the\s+(?:date\s+of\s+service|encounter\s+date))?', value, re.I):
         return 'basis'
     total = re.fullmatch(r'(?:total\s+(?:physician|clinician)\s+time\s+(?:on\s+the\s+date\s+of\s+service\s+)?(?:was|is|:)\s*'
@@ -452,9 +529,10 @@ def time_kind(text, *, profile=None):
         return 'total'
     if modern and re.fullmatch(r'(?:these|those)\s+are\s+all\s+(?:physician|clinician)\s+activities\s+on\s+the\s+(?:encounter\s+date|date\s+of\s+service)',value,re.I):
         return 'qualification'
-    if profile == COMPLETE_ASSERTION_PROFILE and re.fullmatch(r'(?:these|those)\s+activities\s+were\s+all\s+performed\s+by\s+the\s+'
+    if profile in (COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE) and re.fullmatch(r'(?:these|those)\s+activities\s+were\s+all\s+performed\s+by\s+the\s+'
             r'(?:physician|clinician)\s+on\s+the\s+(?:encounter\s+date|date\s+of\s+service)',value,re.I):
         return 'qualification'
+    if profile == SOAP_ASSERTION_PROFILE:return None
     if re.fullmatch(r'(?:this\s+total|the\s+total|the\s+'+NUMBER+r'\s+minutes|they|(?:these|those)\s+minutes)\s+(?:also\s+)?(?:excludes?|does\s+not\s+(?:include|count))\s+[^\r\n]+', value, re.I):
         return 'exclusion'
     if re.fullmatch(r'(?:time\s+[^\r\n]+\s+(?:is|was)\s+excluded\s+from\s+(?:this|the)\s+total|I\s+excluded\s+[^\r\n]+\s+from\s+(?:this|the)\s+total)',value,re.I):
@@ -512,7 +590,7 @@ def time_blocks(notes, units, context, *, profile=None):
             # The prospective account requires each intervening assertion to
             # have its own complete frame. An unknown time-related sentence
             # cannot act as an invisible bridge to a subsequent exclusion.
-            if profile != COMPLETE_ASSERTION_PROFILE:
+            if profile not in (COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE):
                 kind='qualification'
         if not kind or gap.strip() or re.search(r'\r?\n\s*\r?\n',gap) and kind not in ('exclusion','qualification'):
             finish(); group=[]

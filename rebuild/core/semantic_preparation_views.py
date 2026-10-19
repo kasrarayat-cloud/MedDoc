@@ -52,7 +52,7 @@ def posted_definitions(prep, post):
 def context(prep, member, *, definitions=None, error='', post=None):
     retained = workflow.corrected_definitions(prep)
     values = retained if definitions is None else definitions
-    identity_issues = workflow.identity_scope_issues(prep.source_version.fields, retained) if retained else {}
+    identity_issues = workflow.review_issues(prep, retained) if retained else {}
     proposed = {row['field_key']: row for row in prep.proposal.get('fields', [])}
     checked = {row['field_key']: row for row in prep.checker.get('fields', [])}
     rows = [{'field': field, 'definition': retained.get(field['key']), 'location': describe(field),

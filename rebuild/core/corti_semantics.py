@@ -5,10 +5,16 @@ record clinician approval. Dated selection rules are applied by the caller.
 """
 import re
 from datetime import datetime
+from decimal import Decimal
 
 CLASSIFICATION_SOURCE = 'https://www.cms.gov/medicare/coding-billing/healthcare-common-procedure-system'
 REQUIRED_TIME_FACTS = ('setting', 'patient_status', 'time_minutes', 'time_same_day',
     'time_qualified_clinician', 'time_excludes_staff', 'time_excludes_separately_reported', 'em_basis')
+SOAP_TIME_CONTRACT = 'source-bound-clinical-coding-v6'
+_SOURCE_TIME_CONTRACTS = ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3',
+    'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5', SOAP_TIME_CONTRACT)
+_MODERN_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[2:]
+_COMPLETE_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[3:]
 
 
 def classify_selected(row):
@@ -86,8 +92,9 @@ def office_time_facts(notes, *, contract=None):
     conflicting total, missing exclusion or missing service date cannot supply
     a same-day practitioner time fact.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5'):
-        return _source_time_analysis(notes, modern=contract in ('source-bound-clinical-coding-v4','source-bound-clinical-coding-v5'), complete=contract == 'source-bound-clinical-coding-v5')[0]
+    if contract in _SOURCE_TIME_CONTRACTS:
+        return _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
+            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=contract == SOAP_TIME_CONTRACT)[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
     if re.search(r'(?im)^\s*(?:quoted )?example(?: note)?\s*:', notes):
@@ -197,10 +204,12 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     not infer an encounter from a numeric time quote or a scheduled appointment.
     Unrecognized competing practitioner totals require clarification.
     """
-    if contract in ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3', 'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5'):
-        support, errors = _source_time_analysis(notes, modern=contract in ('source-bound-clinical-coding-v4','source-bound-clinical-coding-v5'), complete=contract == 'source-bound-clinical-coding-v5')
+    if contract in _SOURCE_TIME_CONTRACTS:
+        soap = contract == SOAP_TIME_CONTRACT
+        support, errors = _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
+            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=soap)
         if service_date is not None:
-            for raw_date in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes):
+            for raw_date in _service_dates(notes, soap=soap):
                 parsed = None
                 for format in ('%Y-%m-%d', '%d %B %Y', '%B %d, %Y'):
                     try:
@@ -371,7 +380,7 @@ def _new_patient_service_history(text, scope):
     return 'The qualifying professional-service history conflicts with or does not establish new-patient status.'
 
 
-def _work_list(text, minutes, *, modern=False):
+def _work_list(text, minutes, *, modern=False, soap=False):
     """Recognize complete work lists and reconcile explicit allocated minutes.
 
     Unrecognized words, service performance, another person and partial sums
@@ -398,12 +407,16 @@ def _work_list(text, minutes, *, modern=False):
         work = work.replace('available|prior|medical', 'available|outside|prior|medical')
         work = work.replace('entering orders', r'entering (?:the )?(?:(?:investigation|test|imaging|laboratory|medication) )?orders?')
         work = work.replace('(?:the )?visit', '(?:the )?(?:visit|encounter)')
+    if soap:
+        # Order entry is administrative work. This complete phrase does not
+        # authorize collecting a sample or performing the ordered service.
+        work = '(?:' + work + r'|placing (?:the )?(?:(?:laboratory|investigation|test|imaging|medication) )?orders?)'
     residue = re.sub(work, '', text, flags=re.I)
     residue = re.sub(r'\band\b|[\s,;]', '', residue, flags=re.I)
     return not residue, evaluated
 
 
-def _time_statement(text, scope, *, modern=False, service_date=None):
+def _time_statement(text, scope, *, modern=False, service_date=None, soap=False):
     from .clinical_source_context import clinician_matches
     low = text.casefold()
     day = r'(?:' + _DAY + r'|on (?P<calendar>' + _CALENDAR_DAY + r'))' if modern else _DAY
@@ -421,7 +434,7 @@ def _time_statement(text, scope, *, modern=False, service_date=None):
     if calendar and (service_date is None or _calendar_day(calendar) != service_date):
         return None
     minutes = int(match['minutes'])
-    valid_work, evaluated = _work_list(text[match.end():], minutes, modern=modern)
+    valid_work, evaluated = _work_list(text[match.end():], minutes, modern=modern, soap=soap)
     if not valid_work:
         return None
     return {'minutes': minutes, 'same_day': bool(calendar or re.search(_DAY, low)), 'evaluated': evaluated}
@@ -507,7 +520,43 @@ def _time_integrity_assertion(text):
         for clause in clauses)
 
 
-def _source_time_analysis(notes, *, modern=False, complete=False):
+def _service_dates(notes, *, soap=False):
+    label = r'(?:date of service|service date)' if soap else r'date of service'
+    return re.findall(r'(?im)^\s*' + label + r'\s*:\s*([^\r\n]+)', notes)
+
+
+def _soap_exclusion_total(text):
+    """An explicit referenced total must equal its adjacent physician total."""
+    from .clinical_assertions_v4 import _TIME_COUNT
+    from .clinical_source_context import _number
+    match = re.match(r'\s*the\s+(?P<total>'+_TIME_COUNT+r')\s+minutes\b', text, re.I)
+    if match is None:
+        return None
+    raw = match['total']
+    return Decimal(raw) if re.fullmatch(r'\d+(?:\.\d+)?', raw) else Decimal(_number(raw))
+
+
+def _soap_office_visit(text, scope):
+    """Complete patient attendance wording, without inferred setting or owner."""
+    name = scope.get('patient_name') or ''
+    ordinary = re.sub(r'^synthetic\s+', '', name, flags=re.I)
+    aliases = {name, ordinary, ordinary.split()[0] if ordinary else ''} - {''}
+    patient = r'(?:he|she|they|the\s+patient' + ''.join('|'+re.escape(n) for n in sorted(aliases)) + r')'
+    attendance = (r'(?:is\s+an?\s+\d{1,3}-year-old\s+(?:woman|man|person)\s+attending|'
+                  r'(?:is\s+)?attending|attends)')
+    if re.search(r'\b(?:possible|possibly|uncertain|unverified|unconfirmed|maybe|apparently|'
+                 r'presumed|tentative|cancelled|canceled|not|never|only)\b', text, re.I):
+        return False
+    return bool(re.fullmatch(patient+r'\s+'+attendance+r'\s+(?:a|an|the)\s+'
+        r'(?:(?:new|established)[ -]patient,?\s+)?in-person\s+(?:visit|consultation)\s+'
+        r'in\s+(?:a|an|the)\s+(?:(?:u\.s\.|us|united\s+states)\s+)?'
+        r'(?:(?:medical|clinical|outpatient|primary\s+care|family\s+medicine|internal\s+medicine|'
+        r'gastroenterology|cardiology|dermatology|neurology|orthopedic|orthopaedic|psychiatry|'
+        r'pediatric|paediatric|oncology|endocrinology|rheumatology|pulmonology|urology|'
+        r'gynecology|gynaecology|obstetric|surgical)\s+)?office\s*\.?', text, re.I))
+
+
+def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
     """One source-bound interpretation shared by review and export checks.
 
     Only the prospective coding contract calls this reader. Source ownership,
@@ -515,15 +564,16 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
     context inventory used by clinical extraction. Old reviews retain their
     exact eight facts, quotations and hashes under the original reader.
     """
-    from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE, time_kind
+    from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE, SOAP_ASSERTION_PROFILE, time_kind
     from .generation import source_units
     units, _ = source_units(notes, [])
-    scope = source_context(notes, units, profile=COMPLETE_ASSERTION_PROFILE if complete else SOURCE_GOVERNANCE_PROFILE if modern else None)
+    profile = SOAP_ASSERTION_PROFILE if soap else COMPLETE_ASSERTION_PROFILE if complete else SOURCE_GOVERNANCE_PROFILE if modern else None
+    scope = source_context(notes, units, profile=profile)
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers, service_errors, evaluated = list(scope['issues']), [], False
     service_date = None
     if modern:
-        dates = [_calendar_day(raw) for raw in re.findall(r'(?im)^\s*date of service\s*:\s*([^\r\n]+)', notes)]
+        dates = [_calendar_day(raw) for raw in _service_dates(notes, soap=soap)]
         if dates and None not in dates and len(set(dates)) == 1:
             service_date = dates[0]
         elif dates:
@@ -565,7 +615,11 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
                 service_errors.append('A practitioner-time assertion has unresolved source ownership.')
             active_total = None
             continue
-        if _affirmed_time_retraction(text):
+        complete_exclusion = False
+        if soap:
+            from .clinical_assertions_v4 import strict_exclusion
+            complete_exclusion = strict_exclusion(text)
+        if _affirmed_time_retraction(text) and not complete_exclusion:
             service_errors.append('The complete source retracts or questions the documented service or time.')
         if _unsafe(notes, unit['start'], text):
             if time_reference and not integrity:
@@ -580,6 +634,8 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
             office = re.fullmatch(r'(?:encounter|visit type' + ('|visit' if complete else '') + r')\s*:\s*(?:(?:new|established)[ -]patient,?\s*)?'
                 r'(?:in-person\s+)?(?:visit|consultation)\s+in\s+(?:a|an|the)\s+'
                 r'(?:(?:u\.s\.|us|united states)\s+)?(?:[a-z]+\s+){0,3}office\.?', low)
+        if soap and not office:
+            office = _soap_office_visit(text, scope)
         if office and not negative:
             add('setting', 'outpatient_office', unit)
         status_text = re.sub(r'^(?:new|established)[ -]patient history\s*:', '', low) if modern else low
@@ -591,7 +647,7 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
                     add('patient_status', status, unit)
         if re.search(r'\b(?:inpatient|emergency department)\b', low) and not negative:
             blockers.append('A non-office encounter setting is also documented.')
-        timing = _time_statement(text, scope, modern=modern, service_date=service_date)
+        timing = _time_statement(text, scope, modern=modern, service_date=service_date, soap=soap)
         if timing:
             totals.append(timing['minutes'])
             active_total = timing['minutes']
@@ -601,6 +657,8 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
                 add('time_same_day', True, unit)
             evaluated |= timing['evaluated']
         basis = bool(re.search(r'\b(?:office\s+)?e/m\s+selection\b.*\bbased on total (?:physician )?time\b', low))
+        if soap and time_kind(text, profile=profile) == 'basis':
+            basis = True
         if basis and not negative:
             add('em_basis', 'time', unit)
         if re.search(r'\be/m\s+selection\b.*\b(?:not based on|medical decision making|mdm)\b', low):
@@ -618,8 +676,20 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
                 exclusions.append((int(exclusion['total']) if exclusion['total'] else None, unit))
                 if re.search(r'\b' + (_STAFF_CURRENT if modern else _STAFF) + r'\b', tail):
                     add('time_excludes_staff', True, unit)
-                if re.search(r'\bseparately reported services\b', tail):
+                if re.search(r'\bseparately reported services' + ('?' if soap else '') + r'\b', tail):
                     add('time_excludes_separately_reported', True, unit)
+        if soap and not exclusion:
+            if complete_exclusion:
+                exclusion = True
+                named_total = _soap_exclusion_total(text)
+                if active_total is None or named_total is not None and named_total != active_total:
+                    blockers.append('The time exclusion has no adjacent source-bound physician total.')
+                else:
+                    exclusions.append((named_total, unit))
+                    if re.search(r'\b' + _STAFF_CURRENT + r'\b', low):
+                        add('time_excludes_staff', True, unit)
+                    if re.search(r'\bseparately reported services?\b', low):
+                        add('time_excludes_separately_reported', True, unit)
         staff = _STAFF_CURRENT if modern else _STAFF
         ineligible = bool(re.search(r'\b(?:' + staff + r'|separately reported services|preceding day|previous day|prior day)\b', low))
         if ineligible and not exclusion and (
@@ -641,7 +711,7 @@ def _source_time_analysis(notes, *, modern=False, complete=False):
             evaluated = True
         work_qualification = modern and re.fullmatch(
             r'(?:these|those) are all ' + _ROLE + r' activities ' + _DAY + r'\.?', low)
-        if complete and time_kind(text, profile=COMPLETE_ASSERTION_PROFILE) == 'qualification':
+        if complete and time_kind(text, profile=profile) == 'qualification':
             work_qualification = True
         if work_qualification and active_total is None:
             blockers.append('The physician-work qualification has no adjacent source-bound total.')
