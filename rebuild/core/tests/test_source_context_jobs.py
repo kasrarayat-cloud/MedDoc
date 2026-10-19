@@ -1,4 +1,4 @@
-"""New jobs freeze v23; retained jobs continue their original scope contract."""
+"""New jobs freeze v24; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.ORDER_EVENT_SCOPE_CONTRACT:
+        if stored_scope == semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -94,8 +94,10 @@ class SourceContextWorkerTests(TestCase):
             suffixes = (semantic.COMPLETE_ASSERTION_INSTRUCTIONS,) * 3
         if expected in semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACTS:
             suffixes = (semantic.COMPLETE_NARRATIVE_INSTRUCTIONS,) * 3
-        if expected == semantic.ORDER_EVENT_SCOPE_CONTRACT:
+        if expected in semantic.ORDER_EVENT_SCOPE_CONTRACTS:
             suffixes = (semantic.ORDER_EVENT_INSTRUCTIONS,) * 3
+        if expected == semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT:
+            suffixes = (semantic.LABELLED_PRESENTATION_INSTRUCTIONS,) * 3
         for row, suffix in zip(rows, suffixes):
             request = json.loads(private_path(row.request_path).read_text())
             self.assertEqual(request['max_output_tokens'], 16000)
@@ -117,10 +119,15 @@ class SourceContextWorkerTests(TestCase):
                              expected in semantic.SCOPED_DENIAL_SCOPE_CONTRACTS)
             self.assertEqual('source_separation_inventory' in request['payload'],
                              expected in semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACTS)
+            self.assertEqual('labelled_presentation_requirements' in request['payload'],
+                             expected == semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT)
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_current_order_event_profile_is_frozen(self):
+    def test_current_labelled_presentation_profile_is_frozen(self):
+        self.exercise(semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT)
+
+    def test_retained_v23_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.ORDER_EVENT_SCOPE_CONTRACT)
 
     def test_retained_v22_job_keeps_old_requests_and_answer_contract(self):
