@@ -246,6 +246,26 @@ def _scope_matches(assertion, scope):
     return subject_ok and temporal_ok and polarity_ok and encounter_ok
 
 
+def _component_scope_matches(assertion, definition, component):
+    from documents.component_contracts import CONTRACT, ENCOUNTER_CONTRACT
+    contract = definition['component_contract']['contract']
+    if contract == CONTRACT:
+        return _scope_matches(assertion, component['scope'])
+    g.require(contract == ENCOUNTER_CONTRACT, 'component_encounter_contract')
+    scope = component['scope']
+    subject = scope['subject']
+    subject_ok = subject=='unspecified' or assertion['subject']==subject or subject=='encounter' and assertion['subject']=='patient'
+    temporal_ok = scope['temporality']=='any' or assertion['temporality']==scope['temporality']
+    polarity_ok = scope['polarity']=='any' or (scope['polarity']=='positive' and assertion['polarity']=='affirmed') or (
+        scope['polarity']=='negative' and assertion['polarity']=='negated')
+    current = assertion['encounter'] == 'current'
+    past = assertion['encounter'] == 'past' and assertion['temporality'] == 'past'
+    requested = component['encounter_scope']
+    encounter_ok = current if requested == 'current' else past if requested == 'past' else (
+        current or past) if requested == 'all_documented' else False
+    return subject_ok and temporal_ok and polarity_ok and encounter_ok
+
+
 def _measurement_display(notes, fact):
     """Exact attached unit/scale bytes; the numeric typed value stays separate.
 
@@ -301,7 +321,7 @@ def _component_render(notes, graph, field, definition, component, selected, adju
     if selected['disposition']=='missing':
         return '',None,errors
     for root in roots:
-        if not _scope_matches(graph['assertions'][root],component['scope']):
+        if not _component_scope_matches(graph['assertions'][root],definition,component):
             error('predicate_scope_mismatch',graph['assertions'][root]['predicate_refs'])
     # Chosen attachment edges may run qualifier -> predicate or account -> item.
     # Only relation kinds that preserve the attachment's own semantics connect
@@ -326,6 +346,16 @@ def _component_render(notes, graph, field, definition, component, selected, adju
     def retained(evidence):
         return evidence is not None and any(f['value_evidence']['start'] <= evidence['start'] < evidence['end']
                    <= f['value_evidence']['end'] for f in picked)
+    from documents.component_contracts import ENCOUNTER_CONTRACT
+    if definition['component_contract']['contract'] == ENCOUNTER_CONTRACT:
+        for fact in picked:
+            owner = graph['fact_assertions'][fact['id']]
+            if owner in roots and graph['assertions'][owner]['encounter'] == 'past':
+                evidence = fact['timing']['evidence']
+                if evidence is None:
+                    error('past_encounter_time_unestablished', graph['assertions'][owner]['predicate_refs'])
+                elif not retained(evidence):
+                    error('past_encounter_time_omitted', [evidence])
     # A checked relationship permits an attributed attachment, never relabelling
     # a different person's bare disease or prior/future event as the predicate.
     for owner in owners-set(roots):
@@ -612,30 +642,51 @@ def _evaluate(notes, fields, definitions, identity, graph, attempts):
     return prior
 
 
+ENCOUNTER_SCOPE_INSTRUCTIONS = '''
+For approved field-components-v2 only, component.encounter_scope is a separate
+required permission from subject, event temporality and polarity. current admits
+only target-encounter roots; past admits only explicit past-encounter/past-event
+roots; all_documented admits either without rewriting their recorded scope.
+Unknown and future encounters remain unresolved. A current-encounter future plan
+can match its independently requested event temporality without becoming performed.
+An all_documented open-topic component asks for all documented qualifying facts,
+not an invented required fact in each time category. Preserve every selected
+source ownership, date, negation and uncertainty qualifier and independently check
+the complete topic. Missing siblings and omitted facts remain held. This clinical
+permission never grants current-encounter ICD or E/M eligibility.'''
+
+
+def instructions_for(definitions, instructions):
+    from documents.component_contracts import ENCOUNTER_CONTRACT
+    if any(d['component_contract']['contract'] == ENCOUNTER_CONTRACT for d in definitions.values()):
+        return instructions + ENCOUNTER_SCOPE_INSTRUCTIONS
+    return instructions
+
+
 def run(notes, fields, definitions, send, *, identity):
     _definitions(fields,definitions)
     _identity(identity)
     units = g.units_for(notes)
     base = {'contract':SCOPE_CONTRACT,'notes':notes,'source_units':units,'identity':deepcopy(identity),
             'fields':deepcopy(fields),'approved_definitions':deepcopy(definitions)}
-    extraction = send('extractor',1,base,g.extraction_schema(),EXTRACT_INSTRUCTIONS)
+    extraction = send('extractor',1,base,g.extraction_schema(),instructions_for(definitions,EXTRACT_INSTRUCTIONS))
     graph = g.compile_graph(notes,extraction)
-    assignment = send('assigner',1,{**base,'graph':graph},assignment_schema(),ASSIGN_INSTRUCTIONS)
+    assignment = send('assigner',1,{**base,'graph':graph},assignment_schema(),instructions_for(definitions,ASSIGN_INSTRUCTIONS))
     selected = validate_assignments(graph,fields,definitions,assignment)
     # Preview is literal only; never masquerades as independently supported.
     preview = literal_preview(notes,fields,definitions,graph,selected)
-    checker = send('checker',1,{**base,'graph':graph,'proposed_answers':preview},g.checker_schema(),CHECK_INSTRUCTIONS)
+    checker = send('checker',1,{**base,'graph':graph,'proposed_answers':preview},g.checker_schema(),instructions_for(definitions,CHECK_INSTRUCTIONS))
     attempts = [{'assignment':deepcopy(assignment),'checker':deepcopy(checker)}]
     evaluated = _evaluate(notes,fields,definitions,identity,graph,attempts)
     repair = _repair_keys(evaluated['adjudication'],evaluated['answers'])
     if repair:
         assignment = send('assigner',2,{**base,'graph':graph,'previous_assignment':assignment,
-            'prior_checker':checker,'repair_keys':repair},assignment_schema(),ASSIGN_INSTRUCTIONS)
+            'prior_checker':checker,'repair_keys':repair},assignment_schema(),instructions_for(definitions,ASSIGN_INSTRUCTIONS))
         selected = validate_assignments(graph,fields,definitions,assignment)
         for key in selected:
             g.require(key in repair or g.same(selected[key],evaluated['assignments'][key]),'unrequested_assignment_change')
         checker = send('checker',2,{**base,'graph':graph,'proposed_answers':literal_preview(notes,fields,definitions,graph,selected),
-            'prior_checker':checker,'repair_keys':repair},g.checker_schema(),CHECK_INSTRUCTIONS)
+            'prior_checker':checker,'repair_keys':repair},g.checker_schema(),instructions_for(definitions,CHECK_INSTRUCTIONS))
         attempts.append({'assignment':deepcopy(assignment),'checker':deepcopy(checker)})
         evaluated = _evaluate(notes,fields,definitions,identity,graph,attempts)
     interpretation = {'contract':SCOPE_CONTRACT,'identity':deepcopy(identity),'notes':notes,

@@ -10,6 +10,7 @@ from django.utils import timezone
 from documents import DocumentError, inspect_template
 from documents.preparation import TYPED_PROTOCOL, model_inventory
 from documents.preparation_service import inspect_preparation
+from documents import component_contracts
 from documents.semantic_preparation_roles import (
     PROTOCOL, DefinitionError, build_inventory, definitions_from_role, digest, fixture_role,
     role_instructions, role_schema, validate_definitions, validate_inventory, validate_role_result,
@@ -78,7 +79,7 @@ def _validate_roles(prep):
     instruction_contract(prep.config)
     for role, response in (('proposer', prep.proposal), ('checker', prep.checker)):
         validate_role_result(fields, prep.inventory, response, role)
-        _require_definition_version(response, definition_version(prep.config))
+        _require_definition_version(response, definition_version(prep.config), component_contract(prep.config))
 
 
 def corrected_definitions(prep):
@@ -135,7 +136,7 @@ def _validated_semantic_definitions(version):
         _validate_source(prep)
         _validate_roles(prep)
         values = validate_definitions(source.fields, corrected_definitions(prep))
-        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config), component_contract(prep.config))
         if values != version.semantic_definitions:
             raise ValidationError('The semantic version differs from the reviewed field definitions.')
     except DefinitionError as exc:
@@ -178,7 +179,8 @@ def create_preparation(source_version, actor, *, retry_of=None):
     elif config.get('mode') == 'live':
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
     config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 4,
-              MEANING_CONTRACT_KEY: COMPOUND_ANSWER_CONTRACT}
+              MEANING_CONTRACT_KEY: COMPOUND_ANSWER_CONTRACT,
+              component_contracts.CONFIG_KEY: component_contracts.ENCOUNTER_CONTRACT}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)
@@ -216,26 +218,39 @@ def instruction_contract(config):
     return value
 
 
-def _require_definition_version(response, expected):
+def component_contract(config):
+    try:
+        value = component_contracts.configured(config)
+    except DefinitionError as exc:
+        raise ValidationError(str(exc)) from exc
+    return value if definition_version(config) == 4 else None
+
+
+def _require_definition_version(response, expected, expected_component=None):
     if any(row['definition']['version'] != expected for row in response['fields']):
         raise DefinitionError('The returned answer definitions do not match the requested schema version. Review a new preparation; no older contract was adopted.')
+    if expected == 4 and expected_component is not None and any(
+            row['definition']['component_contract']['contract'] != expected_component for row in response['fields']):
+        raise DefinitionError('The returned components do not match the retained preparation contract. Review a new preparation; no component version was changed.')
     return response
 
 
 def _call_role(prep, role):
     version = definition_version(prep.config)
+    components = component_contract(prep.config)
     payload = {'protocol': PROTOCOL, 'original': prep.inventory, 'role': role}
     if role == 'checker':
         payload['proposal'] = prep.proposal
     options = {}
     if prep.config.get('mode') != 'live':
-        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal, version)
+        options['fixture_output'] = fixture_role(prep.source_version.fields, prep.inventory, role, prep.proposal, version,
+            component_contract=components)
     response = ai_stages.execute_stage(definition_preparation=prep, stage='definition_'+role,
-        payload=payload, schema=role_schema(role, version), instructions=role_instructions(role, version,
-            meaning_contract=instruction_contract(prep.config)),
+        payload=payload, schema=role_schema(role, version, component_contract=components), instructions=role_instructions(role, version,
+            meaning_contract=instruction_contract(prep.config), component_contract=components),
         config=prep.config, **options)
     return _require_definition_version(
-        validate_role_result(prep.source_version.fields, prep.inventory, response, role), version)
+        validate_role_result(prep.source_version.fields, prep.inventory, response, role), version, components)
 
 
 def run_one():
@@ -287,7 +302,7 @@ def correct(prep_id, actor, revision, definitions, reviewed_fields, reason):
         raise ValidationError('Give a specific review reason between 12 and 1000 characters.')
     try:
         validate_definitions(prep.source_version.fields, definitions)
-        _require_definition_version({'fields':[{'definition':d} for d in definitions.values()]}, definition_version(prep.config))
+        _require_definition_version({'fields':[{'definition':d} for d in definitions.values()]}, definition_version(prep.config), component_contract(prep.config))
         before = corrected_definitions(prep)
         for key, value in definitions.items():
             if value.get('version') == 4 and value != before[key]:
@@ -329,7 +344,7 @@ def correct_components(prep_id, actor, field_key, token, definition, reason):
     values[field_key] = deepcopy(definition)
     try:
         validate_definitions(prep.source_version.fields, values)
-        _require_definition_version({'fields': [{'definition': d} for d in values.values()]}, 4)
+        _require_definition_version({'fields': [{'definition': d} for d in values.values()]}, 4, component_contract(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.corrections = values
@@ -373,7 +388,7 @@ def approve(prep_id, actor, revision, inventory_sha256, reviewed_fields, origina
     try:
         values = require_identity_scopes(source.fields, corrected_definitions(prep))
         require_compound_answers(source.fields, values, meaning_contract=instruction_contract(prep.config))
-        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config))
+        _require_definition_version({'fields':[{'definition':d} for d in values.values()]}, definition_version(prep.config), component_contract(prep.config))
     except DefinitionError as exc:
         raise ValidationError(str(exc)) from exc
     prep.approved_definitions = deepcopy(values)

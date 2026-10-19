@@ -4,8 +4,12 @@ This validates a literal contract. It does not infer components from clinical
 language or treat a valid structure as evidence that a proposal is complete.
 """
 import re
+from copy import deepcopy
 
 CONTRACT = 'field-components-v1'
+ENCOUNTER_CONTRACT = 'field-components-v2'
+CONFIG_KEY = 'semantic_component_contract'
+ENCOUNTER_SCOPES = ('current', 'past', 'all_documented')
 RENDERINGS = ('plain', 'labelled', 'protected')
 UNIT_REQUIREMENTS = ('none', 'documented', 'printed')
 COMPONENT_KEYS = {'id', 'question_quote', 'label', 'meaning', 'value_type',
@@ -21,7 +25,7 @@ def literal_part(text, value):
                for match in re.finditer(re.escape(value), text))
 
 
-def validate(field, definition):
+def validate_v1(field, definition):
     from .semantic_preparation_roles import (
         require, _string, protected_field, ANSWER_TYPES, SUBJECTS, TEMPORALITIES, POLARITIES,
     )
@@ -89,6 +93,37 @@ def validate(field, definition):
     return contract
 
 
+def validate(field, definition):
+    """Dispatch only the retained tag; approved definitions are never upgraded."""
+    from .semantic_preparation_roles import require
+    contract = definition.get('component_contract')
+    if isinstance(contract, dict) and contract.get('contract') == ENCOUNTER_CONTRACT:
+        require(set(contract) == {'contract', 'rendering', 'components'}
+                and isinstance(contract['components'], list), 'Invalid encounter component contract.')
+        for component in contract['components']:
+            require(isinstance(component, dict) and set(component) == COMPONENT_KEYS | {'encounter_scope'}
+                    and component['encounter_scope'] in ENCOUNTER_SCOPES,
+                    'Every component requires an explicit encounter scope.')
+        # Apply every unchanged v1 structural requirement to the common fields.
+        # This local validation projection never replaces the retained definition.
+        common = deepcopy(definition)
+        common['component_contract']['contract'] = CONTRACT
+        for component in common['component_contract']['components']:
+            del component['encounter_scope']
+        validate_v1(field, common)
+        return contract
+    return validate_v1(field, definition)
+
+
+def configured(config):
+    from .semantic_preparation_roles import require
+    value = config.get(CONFIG_KEY, CONTRACT)
+    require(value in (CONTRACT, ENCOUNTER_CONTRACT)
+            and (CONFIG_KEY not in config or config.get('semantic_definition_version') == 4),
+            'Unsupported explicit component contract.')
+    return value
+
+
 def identity_issue(definition):
     names = [component['label'] or component['question_quote']
              for component in definition['component_contract']['components']
@@ -147,3 +182,49 @@ def fixture(field, definition):
             'meaning': definition['meaning'], 'value_type': definition['value_type'], 'scope': dict(definition['scope']),
             'unit': definition['unit'], 'unit_requirement': 'printed' if definition['unit'] is not None else 'none',
             'required': True}]}
+
+
+ENCOUNTER_INSTRUCTIONS = INSTRUCTIONS.replace(CONTRACT, ENCOUNTER_CONTRACT, 1) + (
+    'Every component additionally requires encounter_scope: current, past, or all_documented. '
+    'This names the encounter the source assertion belongs to, independently of scope.temporality '
+    '(the clinical event time), subject and polarity. current permits only the target encounter; '
+    'past permits only explicitly past encounters with past events; all_documented permits the '
+    'target encounter and explicitly past encounters with past events, preserving each qualifier. '
+    'Unknown or future encounter ownership never counts as current or past. A future plan belonging '
+    'to the current encounter can still have future event temporality; it is not a performed service. '
+    'For an open topic requesting all documented information across encounters, use one complete '
+    'topic component with all_documented. Do not invent required current/past sibling components '
+    'or lists of possible findings: an absent time category is not an absent requested value. '
+    'Choose encounter_scope from the complete original question and meaning, not from patient notes. '
+    'The independent checker must verify this encounter permission separately from event time. '
+)
+
+
+def schema_for(contract=CONTRACT):
+    from .semantic_preparation_roles import require
+    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component schema.')
+    result = schema()
+    if contract == ENCOUNTER_CONTRACT:
+        result['properties']['contract']['enum'] = [contract]
+        component = result['properties']['components']['items']
+        component['required'].append('encounter_scope')
+        component['properties']['encounter_scope'] = {'type': 'string', 'enum': list(ENCOUNTER_SCOPES)}
+    return result
+
+
+def instructions_for(contract=CONTRACT):
+    from .semantic_preparation_roles import require
+    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component instructions.')
+    return ENCOUNTER_INSTRUCTIONS if contract == ENCOUNTER_CONTRACT else INSTRUCTIONS
+
+
+def fixture_for(field, definition, contract=CONTRACT):
+    """Explicit fixture default only; live scopes come from reviewed proposals."""
+    from .semantic_preparation_roles import require
+    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component fixture.')
+    result = fixture(field, definition)
+    if contract == ENCOUNTER_CONTRACT:
+        result['contract'] = contract
+        for component in result['components']:
+            component['encounter_scope'] = 'current'
+    return result
