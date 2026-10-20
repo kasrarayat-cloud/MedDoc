@@ -19,6 +19,9 @@ def approval_binding(preparation):
     from documents.question_context import CONFIG_KEY
     if CONFIG_KEY in getattr(preparation, 'config', {}):
         binding[CONFIG_KEY] = preparation.config[CONFIG_KEY]
+    from documents.signing_source_context import CONFIG_KEY as signing_key, CONTEXT as signing_context
+    if getattr(preparation, 'config', {}).get(signing_key) == signing_context:
+        binding[signing_key] = signing_context
     return digest(binding)
 
 def source_for_version(version):
@@ -41,6 +44,8 @@ def physical_source_for_version(version):
     validate_inventory(prep.inventory)
     from documents.question_context import validate_binding
     validate_binding(prep.inventory, getattr(prep, 'config', {}))
+    from documents.signing_source_context import validate_binding as validate_signing_binding
+    validate_signing_binding(prep.inventory, getattr(prep, 'config', {}))
     if (prep.template_id != version.template_id or prep.state != 'approved' or not prep.approved_by_id
             or not prep.approved_at or prep.approval_sha256 != approval_binding(prep)
             or version.prepared_path != prep.candidate_path or version.prepared_sha256 != prep.candidate_sha256

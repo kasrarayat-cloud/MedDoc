@@ -14,6 +14,7 @@ from documents.semantic_preparation_roles import (
     DefinitionError, digest, protected_field,
 )
 from . import semantic_preparation as workflow, template_review
+from .save_recovery import recoverable_save, binding as save_binding
 
 SALT = 'field-components-review-v1'
 OUTER_CONTROLS = ('meaning', 'value_type', 'answer_mode', 'patient_name_requirement', 'unit',
@@ -127,6 +128,7 @@ def posted_definition(prep, field, current, post):
     return value
 
 
+@recoverable_save('definitions')
 @require_http_methods(['GET', 'POST'])
 def edit(request, pk, field_key):
     from .semantic_preparation_views import selected
@@ -186,6 +188,7 @@ def edit(request, pk, field_key):
         'parts': display_parts, 'definition_version': 4,
         'component_editing': True,
         'component_token': token_for(prep, request.user, field_key),
+        'save_binding': save_binding(prep, 'definitions'),
         'renderings': RENDERINGS,
         'component_encounter_scopes': ENCOUNTER_SCOPE_LABELS if current['component_contract']['contract'] == ENCOUNTER_CONTRACT else [],
         'unit_requirements': [('none', 'No unit required'), ('documented', 'Keep the documented unit and scale'),

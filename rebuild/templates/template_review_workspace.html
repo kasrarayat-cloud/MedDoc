@@ -12,7 +12,7 @@
   </aside>
   <section class="review-fields panel" data-answer-definitions aria-labelledby="detected-fields-title">
     <div class="section-heading"><div><h2 id="detected-fields-title">{% if preparation.state == 'approved' or answer_contract_ready %}Approved fields{% else %}Review detected fields{% endif %}</h2><p class="small muted">{{ review_rows|length }} fields · {% if preparation.state == 'approved' or answer_contract_ready %}Reusable definitions and fixed destinations.{% else %}AI prepared the definitions for clinician review.{% endif %}</p></div></div>
-    {% if editable %}<form method="post" action="{{ review_save_url }}" data-template-review data-submit-once data-unsaved-form>{% csrf_token %}
+    {% if editable %}<form method="post" action="{{ review_save_url }}" data-template-review data-submit-once data-unsaved-form data-recoverable-save="decisions" data-save-revision="{{ preparation.revision }}" data-save-binding="{{ save_binding }}">{% csrf_token %}
       <input type="hidden" name="compact_review" value="on"><input type="hidden" name="revision" value="{{ preparation.revision }}"><input type="hidden" name="candidate_sha256" value="{{ preparation.candidate_sha256 }}"><input type="hidden" name="inventory_sha256" value="{{ preparation.inventory.inventory_sha256 }}"><input type="hidden" name="review_token_save" value="{{ review_token_save }}"><input type="hidden" name="review_token_approve" value="{{ review_token_approve }}">
     {% endif %}
     {% for row in review_rows %}{% include 'template_review_field.html' %}{% endfor %}

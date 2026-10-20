@@ -61,14 +61,28 @@ def inventory_for(inventory):
     from documents.preparation import model_inventory
     if not eligible(inventory):
         raise ValidationError('Review answer meanings after approving the new answer locations.')
-    return roles.build_inventory(inventory['fields'],
+    value = roles.build_inventory(inventory['fields'],
         source_version_id='blank-preparation:'+inventory['inventory_sha256'],
         source_sha256=inventory['source_sha256'], original=model_inventory(inventory))
+    from documents.signing_source_context import CONTEXT
+    if inventory.get('signing_context') == CONTEXT:
+        # A protected physical question is not permission for ordinary graph
+        # components. New preparation must establish the same manual policy in
+        # both contracts before a request or reservation can be created.
+        from documents.engine import DocumentFailure
+        source = {anchor['field_key']: anchor['protected_signing'] for anchor in inventory['anchors']}
+        if (any(issue.get('code') == 'guided_signing' for issue in inventory['issues'])
+                or any(source[field['key']] and not field['protected_signing'] for field in value['fields'])):
+            raise DocumentFailure('This signing or attestation area has no established manual answer protection. '
+                'Preparation is held for review.', 'guided_signing')
+    return value
 
 
 def active(inventory, config):
     from documents.question_context import validate_binding
     validate_binding(inventory, config)
+    from documents.signing_source_context import validate_binding as validate_signing_binding
+    validate_signing_binding(inventory, config)
     return requested(config) and eligible(inventory)
 
 

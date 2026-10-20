@@ -15,10 +15,12 @@ if __package__:
     from .engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from .sdk_service import WM_IOV_SHA256
     from .question_context import CONTEXT as QUESTION_CONTEXT, project_fields, validate_context
+    from .signing_source_context import CONTEXT as SOURCE_SIGNING_CONTEXT, documented_event_time_request, require_source_protection
 else:
     from engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from sdk_service import WM_IOV_SHA256
     from question_context import CONTEXT as QUESTION_CONTEXT, project_fields, validate_context
+    from signing_source_context import CONTEXT as SOURCE_SIGNING_CONTEXT, documented_event_time_request, require_source_protection
 
 NS = {'w': W_NS}
 W = '{'+W_NS+'}'
@@ -56,13 +58,15 @@ CONSENT_FACT = re.compile(
 
 
 def signing_protected(label, context=None):
-    if context not in (None, SIGNING_CONTEXT):
+    if context not in (None, SIGNING_CONTEXT, SOURCE_SIGNING_CONTEXT):
         raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
     if context is None:
         return bool(SIGNING.search(label))
     normalized = ''.join(c for c in unicodedata.normalize('NFKC', label)
                          if unicodedata.category(c) != 'Cf')
     normalized = ' '.join(normalized.split())
+    if context == SOURCE_SIGNING_CONTEXT and documented_event_time_request(normalized):
+        return False
     if CONSENT_FACT.fullmatch(normalized):
         return False
     return bool(SIGNING.search(normalized))
@@ -125,6 +129,7 @@ def typed_source_fields(path, fields, *, signing_context=None, question_context=
         from .table_constraints import with_table_constraints
     else:
         from table_constraints import with_table_constraints
+    require_source_protection(path, fields, signing_context)
     result = with_table_constraints(path, fields)
     _, paragraphs, _, inspected, _ = docx_inspect(path)
     source = {field['key']: field for field in inspected}
@@ -173,7 +178,7 @@ def unmapped_multi_column_rows(path):
 def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None, question_context=None):
     if protocol not in {PROTOCOL, TYPED_PROTOCOL}:
         raise DocumentFailure('Unsupported preparation protocol.', 'invalid_proposal')
-    if (signing_context is not None and (signing_context != SIGNING_CONTEXT
+    if (signing_context is not None and (signing_context not in (SIGNING_CONTEXT, SOURCE_SIGNING_CONTEXT)
             or protocol != TYPED_PROTOCOL or known)):
         raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
     if question_context is not None:
@@ -275,9 +280,16 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None, ques
                 blank_count = len(BLANK.findall(complete))
                 if not blank_count:
                     continue
-                if ambiguous_signing(complete, signing_context):
+                classification = complete
+                if signing_context == SOURCE_SIGNING_CONTEXT and blank_count == 1:
+                    blank = BLANK.search(complete)
+                    # A terminal, located answer blank is not part of the
+                    # nominal event-time question. No other source is removed.
+                    if not complete[blank.end():].strip() and documented_event_time_request(complete[:blank.start()]):
+                        classification = complete[:blank.start()]
+                if ambiguous_signing(classification, signing_context):
                     issues.append({'code':'guided_signing','message':'Clarify whether Sign is a clinical answer or a signing area before preparation.'});continue
-                protected = signing_protected(complete, signing_context)
+                protected = signing_protected(classification, signing_context)
                 if protected:
                     qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
                     questions.append({'id':qid,'text':complete,'story':part.filename,'protected_signing':True})
@@ -477,7 +489,7 @@ def validate_inventory(value):
     if (not isinstance(value,dict) or value.get('protocol') not in {PROTOCOL, TYPED_PROTOCOL}
             or value.get('inventory_sha256')!=digest({k:v for k,v in value.items() if k!='inventory_sha256'})):
         raise DocumentFailure('The original inventory changed.', 'stale_inventory')
-    if 'signing_context' in value and (value['signing_context'] != SIGNING_CONTEXT
+    if 'signing_context' in value and (value['signing_context'] not in (SIGNING_CONTEXT, SOURCE_SIGNING_CONTEXT)
             or value['protocol'] != TYPED_PROTOCOL or value.get('document_backend')):
         raise DocumentFailure('Unsupported signing classification policy.', 'stale_inventory')
     if 'question_context' in value and (value['question_context'] != QUESTION_CONTEXT

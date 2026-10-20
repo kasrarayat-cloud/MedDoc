@@ -93,6 +93,8 @@ document.addEventListener("submit", (event) => { if (!event.defaultPrevented) pa
 // repeated clicks. The server remains responsible for idempotency.
 const initializedSubmissions = new WeakSet();
 const submissionTimers = new WeakMap();
+const recoverableSave = (form, button) => form.dataset.recoverableSave === 'all'
+  || (form.dataset.recoverableSave === 'decisions' && button?.hasAttribute('data-review-save'));
 const resetSubmission = (form) => {
   clearTimeout(submissionTimers.get(form));
   submissionTimers.delete(form);
@@ -109,6 +111,12 @@ const initializeSubmitOnceForms = (root = document) => root.querySelectorAll("fo
   initializedSubmissions.add(form);
   form.addEventListener("submit", (event) => {
     if (event.defaultPrevented) return;
+    if (recoverableSave(form, event.submitter)) return;
+    if (saveStates.has(form)) {
+      event.preventDefault();
+      saveMessage(form, saveStates.get(form), 'Check the saved result before using another action from this draft. Your entries are kept.');
+      return;
+    }
     if (form.dataset.submitting) {
       event.preventDefault();
       return;
@@ -157,6 +165,180 @@ const initializeSubmitOnceForms = (root = document) => root.querySelectorAll("fo
   });
 });
 initializeSubmitOnceForms();
+
+// Editable template saves use this same-origin transport from the first attempt.
+// Keeping the editing document loaded is essential: a failed native main-frame
+// POST replaces it with the browser's error page before any recovery timer runs.
+const saveStates = new WeakMap();
+const saveContract = 'revision-bound-form-save-v1';
+const saveDigest = async (data) => {
+  const values = new Map();
+  for (const [key, value] of data) {
+    if (typeof value !== 'string') throw new Error('Unsupported save control');
+    if (key === 'csrfmiddlewaretoken') continue;
+    if (!values.has(key)) values.set(key, []);
+    values.get(key).push(value.replace(/\r\n?/g, '\n'));
+  }
+  const canonical = JSON.stringify([...values].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+  if (new TextEncoder().encode(canonical).length > 512 * 1024) throw new Error('Save bound');
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonical));
+  return [...new Uint8Array(bytes)].map(value => value.toString(16).padStart(2, '0')).join('');
+};
+const saveMessage = (form, state, text, check = true) => {
+  let notice = form.querySelector('[data-submission-recovery]');
+  if (!notice) {
+    notice = document.createElement('div'); notice.dataset.submissionRecovery = 'true';
+    notice.className = 'notice warning'; notice.setAttribute('role', 'status'); form.append(notice);
+  }
+  notice.replaceChildren();
+  const explanation = document.createElement('p'); explanation.textContent = text; notice.append(explanation);
+  if (check) {
+    const inspect = document.createElement('button'); inspect.type = 'button';
+    inspect.dataset.saveCheck = 'true'; inspect.textContent = 'Check this save';
+    inspect.addEventListener('click', () => reconcileSave(form, state)); notice.append(inspect);
+  }
+  const link = document.createElement('a'); link.href = location.href;
+  link.target = '_blank'; link.rel = 'noopener'; link.textContent = 'Open saved page in a new tab'; notice.append(link);
+};
+const saveReply = async (response, state) => {
+  const raw = await response.text();
+  if (raw.length > 1024 * 1024) throw new Error('Save response bound');
+  const value = JSON.parse(raw);
+  if (value.contract !== saveContract || value.attempt !== state.attempt || value.digest !== state.digest
+      || value.base_revision !== state.revision || value.base_binding !== state.binding
+      || !Number.isInteger(value.current_revision) || !/^[a-f0-9]{64}$/.test(value.current_binding)) {
+    throw new Error('Unbound save response');
+  }
+  return value;
+};
+const savedUrl = (value) => {
+  const url = new URL(value, location.href);
+  if (url.origin !== location.origin || !['http:', 'https:'].includes(url.protocol)) throw new Error('Save destination');
+  return url.href;
+};
+const checkSavedResult = (form, state, value, navigate = false) => {
+  if (value.state === 'committed' || value.state === 'committed_then_changed') {
+    const url = savedUrl(value.redirect_url);
+    if (value.saved_revision !== state.revision + 1) throw new Error('Save revision');
+    const laterEdits = formValue(form) !== state.formSnapshot;
+    state.phase = 'committed'; state.button.textContent = laterEdits ? 'Earlier save confirmed' : 'Save confirmed';
+    saveMessage(form, state, laterEdits ? 'The submitted entries were saved. Your later edits are still unsaved and kept here. Open the saved result in a separate tab before making another save.'
+      : value.state === 'committed' ? 'This save is confirmed. Your saved revision is available.'
+      : 'This save was committed, and the form has changed again since then. Open the current saved page; do not resubmit this draft.', false);
+    const link = document.createElement('a'); link.href = url; link.textContent = 'Open saved result';
+    link.target = '_blank'; link.rel = 'noopener';
+    form.querySelector('[data-submission-recovery]').append(link);
+    if (navigate && value.state === 'committed' && formValue(form) === state.formSnapshot) {
+      pageSubmission = true; location.assign(url);
+    }
+  } else if (value.state === 'not_recorded_at_read') {
+    state.phase = 'retry_ready'; state.button.textContent = 'Retry this save';
+    state.button.removeAttribute('aria-disabled');
+    saveMessage(form, state, 'No committed save was found at this check, and the original revision is unchanged. You may explicitly retry these same entries. The same save identity and revision prevent a late request from saving twice.');
+  } else if (value.state === 'rejected') {
+    state.rejected = true;
+    state.phase = value.http_status === 403 ? 'denied' : 'rejected';
+    state.button.textContent = state.phase === 'denied' ? 'Save denied' : state.label;
+    if (state.phase === 'rejected') state.button.removeAttribute('aria-disabled');
+    saveMessage(form, state, state.phase === 'denied' ? 'The server denied this save. Your edits are kept. Access restrictions remain in effect.'
+      : 'The server refused this attempt without saving it. Correct the validation errors or open the saved page before submitting again.');
+  } else if (value.state === 'changed') {
+    state.phase = 'changed'; state.button.textContent = 'Revision conflict';
+    saveMessage(form, state, 'The saved form changed after this draft opened. Your edits are kept here. Open the current saved page and compare them before making another save.', false);
+  } else throw new Error('Unknown save state');
+};
+const reconcileSave = async (form, state) => {
+  if (state.checking || state.phase === 'sending') return;
+  state.checking = true;
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(state.url, {method:'GET', credentials:'same-origin', redirect:'error',
+      cache:'no-store', headers:state.headers, signal:controller.signal});
+    if (response.status === 401 || response.status === 403) {
+      state.phase = 'denied'; state.button.textContent = 'Save denied';
+      saveMessage(form, state, 'The server denied access to this save. Your edits are kept. No other submission route was tried.', false);
+      return;
+    }
+    if (!response.ok) throw new Error('Reconciliation refused');
+    checkSavedResult(form, state, await saveReply(response, state));
+  } catch (_) {
+    saveMessage(form, state, 'The save result is still unconfirmed. Your entries are kept here. Checking did not submit or retry the save.');
+  } finally { clearTimeout(timer); state.checking = false; }
+};
+document.addEventListener('submit', async (event) => {
+  const form = event.target, button = event.submitter;
+  if (!(form instanceof HTMLFormElement) || event.defaultPrevented || !recoverableSave(form, button)) return;
+  event.preventDefault(); pageSubmission = false;
+  let state = saveStates.get(form);
+  if (state && !['retry_ready', 'rejected'].includes(state.phase)) return;
+  if (state?.checking) return;
+  const prior = state;
+  const priorPhase = state?.phase;
+  state = state || {button, label:button?.textContent || 'Save', phase:'preparing'};
+  if (!state.button) return;
+  state.phase = 'preparing'; saveStates.set(form, state);
+  try {
+    // Capture the navigation guard with the submitted controls, before the
+    // asynchronous digest yields to a user typing another clinical qualifier.
+    const formSnapshot = formValue(form);
+    const data = new FormData(form, button);
+    const digest = await saveDigest(data);
+    if (prior && prior.digest !== digest && priorPhase !== 'rejected') {
+      state.phase = 'uncertain';
+      saveMessage(form, state, 'These entries changed after the unconfirmed attempt. Check the saved page before submitting a different draft.');
+      return;
+    }
+    if (prior?.digest === digest && prior.rejected === true) {
+      state.phase = 'rejected';
+      saveMessage(form, state, 'The server already refused these unchanged entries. Correct the reported validation problem before trying again.');
+      return;
+    }
+    if (!prior || prior.digest !== digest) {
+      state = {...state, rejected:false, attempt:crypto.randomUUID(), digest,
+        revision:Number(form.dataset.saveRevision), binding:form.dataset.saveBinding};
+    }
+    const url = new URL(button?.getAttribute('formaction') || form.getAttribute('action') || location.href, location.href);
+    if (url.origin !== location.origin || form.method.toLowerCase() !== 'post'
+        || !Number.isInteger(state.revision) || state.revision < 0 || !/^[a-f0-9]{64}$/.test(state.binding)) throw new Error('Save binding');
+    state.url = url.href; state.headers = {'X-QuillMD-Save':saveContract, 'X-QuillMD-Save-Attempt':state.attempt,
+      'X-QuillMD-Save-Digest':state.digest, 'X-QuillMD-Save-Revision':String(state.revision),
+      'X-QuillMD-Save-Binding':state.binding, 'Accept':'application/json'};
+    state.formSnapshot = formSnapshot;
+    saveStates.set(form, state); state.phase = 'sending';
+    state.button.setAttribute('aria-disabled', 'true'); state.button.textContent = 'Saving…';
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const response = await fetch(state.url, {method:'POST', credentials:'same-origin', redirect:'error',
+        headers:state.headers, body:new URLSearchParams(data), signal:controller.signal});
+      if (response.status === 401 || response.status === 403) {
+        state.phase = 'denied'; state.button.textContent = 'Save denied';
+        saveMessage(form, state, 'The server denied this save. Your edits are kept. No alternate submission or retry was made.', false);
+      } else if (!response.ok) {
+        if (response.status === 409 && response.headers.get('X-QuillMD-Save-State') === 'rejected') {
+          state.phase = 'rejected'; state.rejected = true; state.button.textContent = state.label;
+          state.button.removeAttribute('aria-disabled');
+          const text = (await response.text()).slice(0, 65536);
+          const parsed = new DOMParser().parseFromString(text, 'text/html');
+          const error = parsed.querySelector('[role="alert"], .notice.warning');
+          saveMessage(form, state, 'The server refused this save; your edits are kept. '
+            + (error?.textContent || (response.headers.get('content-type')?.includes('text/plain') ? text : 'Correct the validation errors before submitting again.')).slice(0, 1200));
+        } else if (response.status === 409) {
+          state.phase = 'changed'; state.button.textContent = 'Revision conflict';
+          saveMessage(form, state, 'The save conflicts with the current form or its controls. Your edits are kept. Open the saved page before another save.', false);
+        } else throw new Error('Unconfirmed save response');
+      } else checkSavedResult(form, state, await saveReply(response, state), true);
+    } finally { clearTimeout(timer); }
+  } catch (_) {
+    if (!prior && state.phase === 'preparing') {
+      saveStates.delete(form); state.button.textContent = state.label;
+      state.button.removeAttribute('aria-disabled');
+      saveMessage(form, state, 'The save did not start. Your entries are kept. Open the current saved page if this browser cannot prepare the request.', false);
+      return;
+    }
+    state.phase = 'uncertain'; state.button.textContent = 'Save result unconfirmed';
+    saveMessage(form, state, 'The save result has not been confirmed. Your entries are kept here. Check this save before retrying; the original request may still complete.');
+  }
+});
 // A newly returned review form receives the same unsaved-edit and submit guards
 // as the original page. Expose only a read of dirty state, never draft contents.
 window.quillmdFormState = Object.freeze({
@@ -175,6 +357,7 @@ window.addEventListener("pageshow", (event) => {
   if (!event.persisted) return;
   pageSubmission = false;
   document.querySelectorAll("form[data-submit-once]").forEach((form) => {
+    if (saveStates.has(form)) return;
     resetSubmission(form);
   });
 });

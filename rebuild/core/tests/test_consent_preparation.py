@@ -108,8 +108,9 @@ class ConsentPreparationTests(SimpleTestCase):
                 validate_inventory(inv)
 
     def test_only_new_ordinary_preparations_freeze_the_policy(self):
+        from documents.signing_source_context import CONTEXT as current_context
         config = {'mode':'fixture'}
-        for source, expected in [('a'*64, SIGNING_CONTEXT), (preparation.WM_IOV_SHA256, None)]:
+        for source, expected in [('a'*64, current_context), (preparation.WM_IOV_SHA256, None)]:
             with patch.object(preparation,'feature_enabled',return_value=True), \
                     patch.object(preparation,'configuration',return_value=config), \
                     patch('core.preparation_campaign.active_campaign_config',side_effect=lambda value,_:value), \

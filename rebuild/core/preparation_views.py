@@ -13,6 +13,7 @@ from .security import scoped, membership, private_path, audit
 from .preparation import approve, correct, corrected_fields, can_continue_wm_review, continue_wm_review, failure_explanation
 from documents.preparation_service import read_original
 from documents import DocumentError
+from .save_recovery import recoverable_save, binding as save_binding
 
 def selected(request, pk):
     template=get_object_or_404(scoped(Template,request.user),pk=pk)
@@ -54,6 +55,7 @@ def detail(request,pk):
     definition_issues = {r['field']['key']: r['reason'] for r in definition_rows if r['state'] == 'unresolved'} if prep.state in {'review','guided'} else {}
     from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
     compact = {'review_rows': template_review.rows(definition_rows, template_review.label_displays(template)),
+        'save_binding': save_binding(prep, 'inline'),
         'review_save_url': reverse('template_preparation_correct', args=[template.pk]),
         'review_approve_url': reverse('template_preparation_approve', args=[template.pk]),
         **template_review.tokens(prep, definition_rows, request.user.pk)} if definition_rows else {}
@@ -81,6 +83,7 @@ def status(request,pk):
         'proposer':prep.receipts.filter(role='proposer').values_list('state',flat=True).first(),
         'checker':prep.receipts.filter(role='checker').values_list('state',flat=True).first()})
 
+@recoverable_save('inline')
 @require_POST
 def corrections(request,pk):
     _,prep=selected(request,pk)

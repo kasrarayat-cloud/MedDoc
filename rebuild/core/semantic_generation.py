@@ -48,6 +48,8 @@ COMPLETE_NARRATIVE_SCOPE_CONTRACT = 'positioned-complete-narratives-v22'
 ORDER_EVENT_SCOPE_CONTRACT = 'positioned-order-event-roles-v23'
 LABELLED_PRESENTATION_SCOPE_CONTRACT = 'positioned-labelled-components-v24'
 CLINICAL_SEMANTICS_SCOPE_CONTRACT = 'positioned-clinical-semantics-v25'
+CLINICAL_REQUIREMENTS_SCOPE_CONTRACT = 'positioned-clinical-requirements-v26'
+CLINICAL_SEMANTICS_SCOPE_CONTRACTS = (CLINICAL_SEMANTICS_SCOPE_CONTRACT, CLINICAL_REQUIREMENTS_SCOPE_CONTRACT)
 ORDER_EVENT_SCOPE_CONTRACTS = (ORDER_EVENT_SCOPE_CONTRACT, LABELLED_PRESENTATION_SCOPE_CONTRACT)
 COMPLETE_NARRATIVE_SCOPE_CONTRACTS = (COMPLETE_NARRATIVE_SCOPE_CONTRACT, *ORDER_EVENT_SCOPE_CONTRACTS)
 SOAP_ASSERTION_SCOPE_CONTRACTS = (SOAP_ASSERTION_SCOPE_CONTRACT, *COMPLETE_NARRATIVE_SCOPE_CONTRACTS)
@@ -222,8 +224,16 @@ SCOPE_CONTRACTS = (LEGACY_SCOPE_CONTRACT, POSITIONED_SCOPE_CONTRACT, DURATION_SC
                    FAMILY_SCOPE_CONTRACT, *SOURCE_CONTEXT_SCOPE_CONTRACTS)
 # The prospective semantic model replaces the overlapping v5-v24 readers;
 # adding it to their inherited tuples would silently run both interpretations.
-SCOPE_CONTRACTS += (CLINICAL_SEMANTICS_SCOPE_CONTRACT,)
-DOCUMENT_IDENTITY_SCOPE_CONTRACTS += (CLINICAL_SEMANTICS_SCOPE_CONTRACT,)
+SCOPE_CONTRACTS += CLINICAL_SEMANTICS_SCOPE_CONTRACTS
+DOCUMENT_IDENTITY_SCOPE_CONTRACTS += CLINICAL_SEMANTICS_SCOPE_CONTRACTS
+def _clinical_requirements_contract(scope_contract):
+    if scope_contract == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT:
+        from .clinical_field_scope import CONTRACT
+        return CONTRACT
+    from .clinical_semantics import REQUIREMENTS_CONTRACT
+    return REQUIREMENTS_CONTRACT
+
+
 MAX_CALLS = 5
 MAX_OUTPUT_TOKENS = 4000
 TYPES = ('text', 'integer', 'number', 'date', 'choice', 'person_name', 'identifier')
@@ -2560,7 +2570,7 @@ def _objective_negative_owners(notes, units, facts, *, clinical=False, encounter
 
 def _scope_issues(fact, contexts, scope_contract=POSITIONED_SCOPE_CONTRACT):
     """Conservative local guards, never sentence-wide negation of another fact."""
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import local_fact_issues
         return local_fact_issues(fact, contexts)
     value = fact['value_evidence']
@@ -2872,7 +2882,7 @@ def _fact_governance(notes, units, facts, scope_contract=POSITIONED_SCOPE_CONTRA
     """Positioned source scope, separate from legacy one-click offer eligibility."""
     from .generation import (heading_governance, governed_context, recognized_labels, readings, erratum_points,
                              REFRAMED_SCOPE, QUOTED_SOURCE, SCOPE_POINTER, INLINE_BREAK, _plain_pointer_only)
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         # Retain positioned structural governors, but never turn an offer-only
         # blanket keyword veto into a clinical finding on every source fact.
         governance = heading_governance(notes, recognized_labels([]), lexical=True, per_sentence=True)
@@ -3316,7 +3326,7 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
         _object(raw, keys, 'atomic fact')
         _string(raw['id'], 'fact ID', 80); _string(raw['concept'], 'fact concept', 120)
         polarities = (SOURCE_CONTEXT_POLARITIES if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS
-                      or scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT else POLARITIES)
+                      or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS else POLARITIES)
         if raw['id'] in facts or raw['kind'] not in KINDS or raw['polarity'] not in polarities: _fail('Unknown or duplicate atomic fact.')
         ids = raw['source_unit_ids']
         if type(ids) is not list or not ids or any(type(i) is not int or i not in by_unit for i in ids) or len(ids) != len(set(ids)):
@@ -3382,9 +3392,10 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                     whole = {'start': 0, 'end': len(notes), 'quote': notes}
                     if whole not in fact['evidence']: fact['evidence'].append(whole)
         facts[fact['id']] = fact
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    clinical_scope_source = None
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import validate_source_facts
-        validate_source_facts(notes, units, facts)
+        clinical_scope_source = validate_source_facts(notes, units, facts)
     ownership = (_source_context_ownership(notes, units, facts, scope_contract=scope_contract)
                  if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS else None)
     if scope_contract in OBSERVATION_CONTEXT_SCOPE_CONTRACTS:
@@ -3601,10 +3612,11 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                     exact = {key: unit[key] for key in ('start', 'end', 'quote')}
                     if exact not in fact['evidence']:
                         fact['evidence'].append(exact)
+    scoped_corrections = []
     for fact in facts.values():
         for old_id in fact['supersedes']:
             old = facts.get(old_id)
-            if ((scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS or scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT) and old is not None
+            if ((scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS) and old is not None
                     and 'mixed' in (fact['polarity'], old['polarity'])):
                 # Component-level corrections need clinician interpretation;
                 # one correction cannot silently retire a compound assessment.
@@ -3654,6 +3666,8 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
                         or old['timing']['kind'] != fact['timing']['kind']
                         or any((old['scale'] or {}).get(k) != (fact['scale'] or {}).get(k) for k in ('minimum', 'maximum'))))):
                 fact['issues'].append('The proposed correction is not explicitly bound to the same earlier fact.')
+            elif scope_contract == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT:
+                scoped_corrections.append({'correction_fact_id': fact['id'], 'target_fact_id': old_id})
         for other in facts.values():
             name = other['subject']['name_evidence']
             if other['subject']['kind'] == 'other' and name and fact['subject']['kind'] == 'patient':
@@ -3666,14 +3680,23 @@ def validate_facts(notes, units, result, *, scope_contract=POSITIONED_SCOPE_CONT
     if legacy:
         return facts
     governance = _fact_governance(notes, units, facts, scope_contract)
+    scoped_relations = []
+    if scope_contract == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT:
+        from .clinical_field_scope import governance_relations
+        scoped_relations = governance_relations(notes, units, facts, clinical_scope_source, scoped_corrections)
     for fact in facts.values():
         # An earlier identity citation supplies attribution, not the position
         # of this clinical value relative to an erratum or a heading.
         context = governed_context(governance, notes, [fact['value_evidence']]) or []
         positioned = [e for e in context if 'start' in e]
-        if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+        if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
             from .clinical_semantics import positioned_governors
             positioned = positioned_governors(positioned, fact['value_evidence'], units)
+        if scope_contract == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT:
+            from .clinical_field_scope import scoped_governors
+            positioned, relations = scoped_governors(positioned, fact, units, scoped_relations)
+            if relations:
+                fact['source_governance_relations'] = relations
         if scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS and context_source is not None:
             own=next(unit for unit in units if _inside(fact['value_evidence'],[unit]))
             if owned_current(context_source,own):
@@ -3755,7 +3778,7 @@ def _concise_score_phrase(notes, fact, definition):
 
 def _render_bound_fact(notes, facts, fact, definition, scope_contract):
     """One prospective choice equivalence, grounded in an owned visit frame."""
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import temporal_projection
         projection = temporal_projection(notes, definition, fact)
         if projection is not None:
@@ -3763,7 +3786,7 @@ def _render_bound_fact(notes, facts, fact, definition, scope_contract):
     if scope_contract in SUPPORT_CLOSURE_SCOPE_CONTRACTS:
         projection=_shared_predicate_projection(notes,fact,definition)
         if projection is not None:return projection['rendered_value']
-    if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS or scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         score = _concise_score_phrase(notes, fact, definition)
         if score is not None:
             return score
@@ -3929,7 +3952,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
     if set(selected) != expected: _fail('The assigner omitted approved field keys.')
     answers = {}
     semantic_context = semantic_units = None
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import source_context
         from .generation import source_units
         semantic_units, _ = source_units(notes, fields)
@@ -3977,9 +4000,10 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         source_gap = False
         competing = []
         reasons = [reason for f in picked for reason in f['issues']]
-        if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+        if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
             from .clinical_semantics import assignment_issues
-            requirement_issues = assignment_issues(notes, d, picked, semantic_units, semantic_context)
+            requirement_issues = assignment_issues(notes, d, picked, semantic_units, semantic_context,
+                requirements_contract=_clinical_requirements_contract(scope_contract))
             reasons.extend(requirement_issues)
             source_gap = bool(requirement_issues)
         if d.get('answer_mode') == 'atomic' and len(picked) > 1:
@@ -4052,7 +4076,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                     if target is not None and not _inside(target,[f['value_evidence']]):
                         reasons.append('The selected shared-negative value omits the object requested by this destination.')
             concise_score = (_concise_score_phrase(notes, f, d)
-                if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS or scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT else None)
+                if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS else None)
             if d['value_type']=='text' and _source_number(f['value_evidence']['quote']) is not None and concise_score is None:
                 reasons.append('A narrative answer needs the complete documented measurement phrase, preserving its clinical label, units and scale; a bare numeric fact is insufficient.')
             if concise_score is not None:
@@ -4066,7 +4090,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                 if len(scores) > 1 or len(source_scores) > 1:
                     reasons.append('The source contains competing severity measurements; no single concise score is established.')
             prospective_subject = False
-            if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+            if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
                 from .clinical_semantics import subject_compatible
                 prospective_subject = subject_compatible(d, f)
             if d['scope']['subject'] in ('patient', 'clinician', 'other') and f['subject']['kind'] != d['scope']['subject'] and not prospective_subject:
@@ -4082,11 +4106,11 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
                     next(e for e in f['evidence'] if _inside(f['value_evidence'],[e])),assignment_context))
             cessation_support=(scope_contract in SOURCE_GOVERNANCE_SCOPE_CONTRACTS
                 and _historical_cessation_support(f,d,assignment_context,picked,notes,support_units,scope_contract))
-            if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+            if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
                 cessation_support = _historical_cessation_support(f, d, semantic_context, picked,
                     notes, semantic_units, COMPLETE_NARRATIVE_SCOPE_CONTRACT)
             prospective_timing = False
-            if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+            if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
                 from .clinical_semantics import timing_compatible
                 prospective_timing = timing_compatible(d, f)
             if d['scope']['temporality'] != 'any' and f['timing']['kind'] != d['scope']['temporality'] and not medication_support and not present_social and not present_denial and not cessation_support and not prospective_timing:
@@ -4207,7 +4231,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
         rendered_values = [_render_bound_fact(notes, facts, f, d, scope_contract) for f in picked]
         text = row['separator'].join(rendered_values)
         presentation = None
-        if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT):
+        if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS):
             from .labelled_presentation import derive
             presentation = derive(notes, field, d, facts, row['fact_ids'], rendered_values,
                                   row['separator'], semantic_units if semantic_context is not None else support_units,
@@ -4278,7 +4302,7 @@ def _assign(notes, fields, definitions, facts, result, *, only=None, scope_contr
             answer['patient_name_check'] = identity_check
         if presentation is not None and presentation['proof'] is not None:
             answer['derived_presentation'] = presentation['proof']
-        if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+        if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
             from .clinical_semantics import temporal_projection
             answer['source_projections'] = {f['id']: projection for f in picked
                 if (projection := temporal_projection(notes, d, f)) is not None}
@@ -4391,6 +4415,10 @@ def current_identity_proof(notes, field, definition, answer):
         'source_sha256': hashlib.sha256(notes.encode()).hexdigest(),
         'definition_sha256': definition_digest(definition),
         'patient_names': [], 'fact_ids': [], 'issues': []}
+    current_scope = answer.get('fact_scope_contract') == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT
+    if current_scope:
+        result.update(contract='current-saved-source-identity-v2',
+            fact_scope_contract=CLINICAL_REQUIREMENTS_SCOPE_CONTRACT)
     if not requires_patient_name(definition):
         result['issues'].append('This approved destination does not establish a source patient-name requirement.')
         return result
@@ -4406,7 +4434,7 @@ def current_identity_proof(notes, field, definition, answer):
         if type(retained) is not list or len(retained) > 200 or any(type(item) is not dict for item in retained):
             raise ValueError('Invalid retained identity inventory.')
         for original in retained:
-            if original.get('kind') != 'identity':
+            if not current_scope and original.get('kind') != 'identity':
                 continue
             item = {key: deepcopy(original[key]) for key in FACT_SCHEMA['properties']['facts']['items']['required']}
             item['subject'] = {key: item['subject'][key] for key in ('kind','name_span')}
@@ -4414,10 +4442,17 @@ def current_identity_proof(notes, field, definition, answer):
             if item['scale'] is not None:
                 item['scale'] = {key: item['scale'][key] for key in ('minimum','maximum','span')}
             raw.append(item)
+        if current_scope:
+            # A current scoped correction is proved by the full retained raw
+            # inventory, not by a copied resolved status or proposed link. The
+            # small coding bridge still contributes source identities only.
+            result['retained_fact_inventory_sha256'] = definition_digest(raw)
         facts = validate_facts(notes, units, {'facts': raw},
-            scope_contract=CLINICAL_SEMANTICS_SCOPE_CONTRACT,
+            scope_contract=CLINICAL_REQUIREMENTS_SCOPE_CONTRACT if current_scope else CLINICAL_SEMANTICS_SCOPE_CONTRACT,
             timing_reference_contract=TEMPORAL_REFERENCE_CONTRACT)
-        checked = patient_name_check(notes, definition, facts, list(facts))
+        identity_facts = ({key:fact for key,fact in facts.items() if fact['kind'] == 'identity'}
+            if current_scope else facts)
+        checked = patient_name_check(notes, definition, identity_facts, list(identity_facts))
         if checked is None or checked['verdict'] != 'pass':
             result['issues'].append(checked['reason'] if checked else 'Current source identity is unresolved.')
             return result
@@ -5018,11 +5053,11 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
     base = {'notes': notes, 'approved_definitions': definitions,
             'timing_reference_contract': TEMPORAL_REFERENCE_CONTRACT,
             'fields': [{'key': f['key'], 'label': f['label'], 'protected_signing': protected(f)} for f in fields]}
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import field_requirements, assertion_frames
         base.update(fact_scope_contract=scope_contract,
-            approved_field_requirements={key: field_requirements(d) for key, d in definitions.items()},
-            source_assertions=assertion_frames(notes, units))
+            approved_field_requirements={key: field_requirements(d, contract=_clinical_requirements_contract(scope_contract)) for key, d in definitions.items()},
+            source_assertions=assertion_frames(notes, units, requirements_contract=_clinical_requirements_contract(scope_contract)))
     if scope_contract in (DURATION_SCOPE_CONTRACT, FAMILY_SCOPE_CONTRACT, *SOURCE_CONTEXT_SCOPE_CONTRACTS):
         base['fact_scope_contract'] = scope_contract
         base['qualifier_review'] = ('Judge completeness against the approved field meaning. A duration is a complete time quantity; '
@@ -5064,7 +5099,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         from .clinical_source_context import source_context
         base['source_separation_inventory'] = _separation_inventory(notes,definitions,units,
             source_context(notes,units,profile=_source_profile(scope_contract)))
-    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT):
+    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS):
         from .labelled_presentation import requirements
         base['labelled_presentation_requirements'] = {
             key: requirement for key, definition in definitions.items()
@@ -5077,13 +5112,18 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         schema, instructions = API_FACT_INVENTORY_SCHEMA, EXTRACT_INVENTORY_INSTRUCTIONS
     assign_instructions = TEMPORAL_REFERENCE_INSTRUCTIONS + ASSIGN_INSTRUCTIONS
     check_instructions = TEMPORAL_REFERENCE_INSTRUCTIONS + CHECK_INSTRUCTIONS
-    if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         from .clinical_semantics import INSTRUCTIONS
         schema = (SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA if reference_contract == REFERENCE_INVENTORY_CONTRACT
                   else SOURCE_CONTEXT_API_FACT_SCHEMA)
         instructions += INSTRUCTIONS
         assign_instructions += INSTRUCTIONS
         check_instructions += INSTRUCTIONS
+        if scope_contract == CLINICAL_REQUIREMENTS_SCOPE_CONTRACT:
+            from .clinical_field_scope import INSTRUCTIONS as requirement_instructions
+            instructions += requirement_instructions
+            assign_instructions += requirement_instructions
+            check_instructions += requirement_instructions
     if scope_contract in SOURCE_CONTEXT_SCOPE_CONTRACTS:
         schema = (SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA if reference_contract == REFERENCE_INVENTORY_CONTRACT
                   else SOURCE_CONTEXT_API_FACT_SCHEMA)
@@ -5151,7 +5191,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         instructions += ORDER_EVENT_INSTRUCTIONS
         assign_instructions += ORDER_EVENT_INSTRUCTIONS
         check_instructions += ORDER_EVENT_INSTRUCTIONS
-    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT):
+    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS):
         instructions += LABELLED_PRESENTATION_INSTRUCTIONS
         assign_instructions += LABELLED_PRESENTATION_INSTRUCTIONS
         check_instructions += LABELLED_PRESENTATION_INSTRUCTIONS
@@ -5197,7 +5237,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
                and not any(i in bad for i in answers[key]['fact_ids'])]
     assignment_findings = ({key: answer['review_reasons'] for key, answer in answers.items()
         if answer['review_reasons']} if scope_contract in CLINICAL_LITERAL_SCOPE_CONTRACTS
-        or scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT else {})
+        or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS else {})
     repair += [key for key in assignment_findings if key not in repair
         and not any(i in bad for i in answers[key]['fact_ids'])]
     if repair:
@@ -5229,10 +5269,10 @@ def _answer_preview(answers):
     keys = ('text', 'value', 'status', 'fact_ids', 'candidate_text', 'review_reasons', 'unit', 'scale')
     return {key: {**{k: a[k] for k in keys},
                   **({'derived_presentation': a['derived_presentation']}
-                     if a.get('fact_scope_contract') in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+                     if a.get('fact_scope_contract') in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS)
                      and 'derived_presentation' in a else {}),
                   **({'source_projections': a['source_projections']}
-                     if a.get('fact_scope_contract') == CLINICAL_SEMANTICS_SCOPE_CONTRACT else {})}
+                     if a.get('fact_scope_contract') in CLINICAL_SEMANTICS_SCOPE_CONTRACTS else {})}
             for key, a in answers.items()}
 
 
@@ -5339,9 +5379,9 @@ def _fact_proof(answer):
         keys += ('timing_reference_contract',)
     if 'patient_name_check' in answer:
         keys += ('patient_name_check',)
-    if answer.get('fact_scope_contract') == CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+    if answer.get('fact_scope_contract') in CLINICAL_SEMANTICS_SCOPE_CONTRACTS:
         keys += ('source_projections',)
-    if (answer.get('fact_scope_contract') in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+    if (answer.get('fact_scope_contract') in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS)
             and 'derived_presentation' in answer):
         keys += ('derived_presentation',)
     return digest({k: answer.get(k) for k in keys})
@@ -5410,7 +5450,7 @@ def validate_stored_answer(notes, field, definition, answer):
             _fail('The stored patient-name finding differs from its approved requirement and source facts.')
         if identity_check and identity_check['verdict'] != 'pass' and answer.get('status') not in ('conflict', 'ambiguous'):
             _fail('The required documented patient identity remains unresolved.')
-    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT):
+    if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS):
         presentation_answer = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported' if ids else 'missing',
              'separator': answer.get('separator')}]}, scope_contract=scope_contract,
@@ -5418,14 +5458,14 @@ def validate_stored_answer(notes, field, definition, answer):
         if (('derived_presentation' in answer) != ('derived_presentation' in presentation_answer)
                 or digest(answer.get('derived_presentation')) != digest(presentation_answer.get('derived_presentation'))):
             _fail('The stored labelled presentation differs from its approved metadata and exact source-role bindings.')
-        if scope_contract == CLINICAL_SEMANTICS_SCOPE_CONTRACT and answer.get('source_projections') != presentation_answer['source_projections']:
+        if scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS and answer.get('source_projections') != presentation_answer['source_projections']:
             _fail('The stored temporal projection differs from its original source and selected fact evidence.')
     if answer.get('status') == 'supported':
         fresh = _assign(notes, [field], {field['key']: definition}, facts, {'fields': [
             {'key': field['key'], 'fact_ids': ids, 'status': 'supported', 'separator': answer.get('separator')}]},
             scope_contract=scope_contract, timing_reference_contract=answer.get('timing_reference_contract'))[field['key']]
         if fresh['status'] != 'supported': _fail('The stored answer no longer satisfies its source, scope or type constraints.')
-        expected = (fresh['text'] if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, CLINICAL_SEMANTICS_SCOPE_CONTRACT) else
+        expected = (fresh['text'] if scope_contract in (LABELLED_PRESENTATION_SCOPE_CONTRACT, *CLINICAL_SEMANTICS_SCOPE_CONTRACTS) else
                     answer['separator'].join(_render_bound_fact(notes, facts, facts[i], definition, scope_contract) for i in ids))
         if answer.get('text') != expected: _fail('A generated answer differs from its grounded fact values.')
         typed=validate_value(definition, expected, field)
