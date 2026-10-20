@@ -98,11 +98,16 @@ def configuration(actor, encounter):
             from .coding_recovery import CONTEXT_CONTRACT
             result['context_review_contract'] = CONTEXT_CONTRACT
         from .models import CodingRun
-        from .coding_engine import QUALIFIED_SOURCE_CONTRACT, SOURCE_CONTRACTS
+        from .coding_engine import QUALIFIED_SOURCE_CONTRACT, SHARED_SOURCE_CONTRACT, SOURCE_CONTRACTS
         first = CodingRun.objects.filter(encounter=encounter).order_by('created_at', 'pk').first()
         # Pin old encounters to the contract on their first immutable run.
         # Context-only derivatives already copy that run's configuration.
         contract = first.config.get('clinical_source_contract') if first is not None else QUALIFIED_SOURCE_CONTRACT
+        if first is None:
+            from .semantic_generation import CLINICAL_SEMANTICS_SCOPE_CONTRACT
+            if any(isinstance(answer, dict) and answer.get('fact_scope_contract') == CLINICAL_SEMANTICS_SCOPE_CONTRACT
+                   for answer in getattr(encounter, 'answers', {}).values()):
+                contract = SHARED_SOURCE_CONTRACT
         if graph_generation:
             shared.snapshot(encounter)  # Explicit persisted generation, never a caller-supplied flag.
             contract = shared.CONTRACT
@@ -117,6 +122,9 @@ def configuration(actor, encounter):
             if contract not in SOURCE_CONTRACTS and contract != shared.CONTRACT:
                 raise ValidationError('Unknown clinical coding source contract.')
             result['clinical_source_contract'] = contract
+            if contract == SHARED_SOURCE_CONTRACT:
+                from .corti_semantics import SHARED_TIME_CONTRACT
+                result['cpt_time_source_contract'] = SHARED_TIME_CONTRACT
             if contract == QUALIFIED_SOURCE_CONTRACT:
                 if first is None:
                     result['cpt_time_source_contract'] = DOCUMENTED_TIME_CONTRACT

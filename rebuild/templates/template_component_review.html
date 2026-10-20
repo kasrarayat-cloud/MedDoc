@@ -3,7 +3,7 @@
 {% block page_scripts %}<link rel="stylesheet" href="{% static 'template-review.css' %}">{% endblock %}
 {% block breadcrumb %}Form library <span>/</span> Required parts{% endblock %}
 {% block content %}
-<div class="page-heading"><div><h1>Review required parts</h1><p>{{ row.display_label }} · {{ template.name }}</p></div><a href="{% url 'template_definitions' preparation.pk %}">Back to all definitions</a></div>
+<div class="page-heading"><div><h1>Review required parts</h1><p>{{ row.display_label }} · {{ template.name }}</p></div><a href="{% if component_back_url %}{{ component_back_url }}{% else %}{% url 'template_definitions' preparation.pk %}{% endif %}">Back to all definitions</a></div>
 <p>Compare the complete question with the <a href="{% url 'template_original' template.pk %}">original Word form</a>. Keep every requested value, its person and time scope, and its own unit. Saving here creates a draft; review the whole form afterwards before approving a new version.</p>
 {% if error %}<div class="notice warning" role="alert">{{ error }}</div>{% endif %}
 {% if editable %}<form method="post" data-unsaved-form>{% csrf_token %}<input type="hidden" name="component_token" value="{{ component_token }}">{% endif %}

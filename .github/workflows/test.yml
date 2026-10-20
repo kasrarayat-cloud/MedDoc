@@ -170,6 +170,7 @@ jobs:
         run: node rebuild/ops/test_docx_preview_browser.cjs "$PWD/rebuild/.runtime/word-preview-browser"
       - name: Coding save transport, recovery and keyboard focus (no provider access)
         run: |
+          node rebuild/ops/test_submission_recovery.cjs
           node rebuild/ops/test_coding_poll_save.cjs
           node rebuild/ops/test_coding_save_focus.cjs
           node rebuild/ops/test_coding_mutation_receipt.cjs

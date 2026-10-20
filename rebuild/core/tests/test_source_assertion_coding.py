@@ -740,6 +740,28 @@ def encounter_for(run):
 
 
 class GraphCodingIntegrationTests(SimpleTestCase):
+    def test_inline_graph_marker_resolves_only_authoritative_approved_components(self):
+        from core import semantic_review, word_contract
+        from core import source_interpretation_store as store
+        run = coding_run(symptom_case())
+        encounter = encounter_for(run)
+        approved = deepcopy(encounter.template_version.semantic_definitions)
+        encounter.template_version.semantic_definitions = {}
+        encounter.template_version.preparation_id = 'inline-preparation'
+        encounter.template_version.preparation = N(config={word_contract.CONFIG_KEY:word_contract.GRAPH_PROFILE},
+            candidate_info={word_contract.INFO_KEY:{'definitions':approved}})
+        with patch.object(semantic_review, 'definitions_for', return_value=approved), \
+             patch.object(semantic_review, 'validate_answer'), \
+             patch.object(store, 'load_for_answer', return_value=run.inputs[coding.INPUT_KEY]):
+            self.assertEqual(coding.snapshot(encounter),run.inputs[coding.INPUT_KEY])
+        # Neither answer markers nor an inline marker can manufacture approval.
+        with patch.object(semantic_review, 'definitions_for', return_value={}):
+            with self.assertRaisesMessage(ValidationError,'graph_requires_approved_components'):
+                coding.snapshot(encounter)
+        encounter.answers = {}
+        with patch.object(semantic_review, 'definitions_for', side_effect=AssertionError('No generation exists')):
+            self.assertIsNone(coding.snapshot(encounter))
+
     def test_snapshot_validates_every_saved_answer_and_cannot_fall_back_when_scope_removed(self):
         from core import semantic_review, source_interpretation_store
         run=coding_run(symptom_case());encounter=encounter_for(run);i=run.inputs['source_interpretation']

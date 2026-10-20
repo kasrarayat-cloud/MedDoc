@@ -58,11 +58,11 @@ def draft_review(encounter):
     if (not settings.SYNTHETIC_ONLY or encounter.status != 'finalized'
             or encounter.template_version.template.format.lower() != 'docx'):
         raise ValidationError('This draft is available only for finalized synthetic Word encounters.')
-    key = service.input_snapshot(encounter)[3]
-    run = CodingRun.objects.filter(encounter=encounter, input_digest=key).first()
+    run = service.displayed_run(encounter)
     if run is None:
         raise ValidationError('A completed replay for the current saved revision is required.')
     service.assert_current(run, encounter)
+    key = run.input_digest
     if (run.config.get('provider') != 'corti' or run.config.get('mode') != 'replay'
             or run.result.get('replay') is not True or run.result.get('contract') != CORTI_CONTRACT):
         raise ValidationError('This draft is restricted to retained Corti synthetic replay results.')

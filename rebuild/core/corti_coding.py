@@ -119,7 +119,9 @@ def _diagnostic_attempt(diagnostics, notes, *, entry=None, term=None, span=None,
         from .generation import source_units
         from .clinical_source_context import source_context, owned_current
         units, _ = source_units(notes, [])
-        context = source_context(notes, units, profile=diagnostics['source_profile'])
+        context = (engine.source_context_for(notes, units, diagnostics['source_contract'])
+                   if diagnostics['source_contract'] == engine.SHARED_SOURCE_CONTRACT
+                   else source_context(notes, units, profile=diagnostics['source_profile']))
         for match in re.finditer(re.escape(clause), notes):
             witnesses.append({'start': match.start(), 'end': match.end(), 'quote': clause,
                 'units': [{'source': deepcopy(unit), 'context': deepcopy(context['units'][unit['start']]),
@@ -301,8 +303,8 @@ def integral_holds(rows, notes, *, source_contract=None):
         if concept['kind'] != 'symptom' or concept['id'] in held:
             continue
         for clause, _, _ in engine.mention_clauses(notes, concept):
-            if (source_contract == engine.QUALIFIED_SOURCE_CONTRACT
-                    and engine.unknown_cause_attribute(clause, concept)
+            if (source_contract in engine.QUALIFIED_SOURCE_CONTRACTS
+                    and engine.unknown_cause_attribute(clause, concept, source_contract=source_contract)
                     and not engine.current_source_scope_errors(notes, {**concept, 'evidence': clause},
                         source_contract=source_contract)):
                 continue

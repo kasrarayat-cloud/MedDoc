@@ -153,7 +153,8 @@ def request_run(request, pk):
         data = payload(request)
         latest = service.displayed_run(e)
         service.verify_display(e, request.user, data.get('display_token', ''), latest)
-        saved = service.ensure_run(e, request.user)
+        from .coding_engine import CURRENT_IDENTITY_CONTRACT
+        saved = service.ensure_run(e, request.user, identity_policy=CURRENT_IDENTITY_CONTRACT)
         if saved is None:
             raise ValidationError('Save the completed document and wait for its current request before coding.')
         if wants_receipt(request):

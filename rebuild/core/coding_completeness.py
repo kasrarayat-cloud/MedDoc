@@ -176,7 +176,7 @@ def _supporting_reference(text, names, *, source_contract=None):
     value = re.sub(r'\s+', ' ', text.strip().removesuffix('.')).casefold()
     for name in names:
         nominal = re.escape(engine.norm(name))
-        if source_contract == engine.QUALIFIED_SOURCE_CONTRACT:
+        if source_contract in engine.QUALIFIED_SOURCE_CONTRACTS:
             attributes = r'(?:subtype|type|cause|etiology|aetiology|severity|grade|stage|laterality|site|location)'
             if re.fullmatch(r'(?:the\s+)?' + nominal + r'\s+is\s+documented\s+without\s+'
                     r'(?:an?\s+)?(?:established|known|specified)\s+' + attributes
@@ -195,7 +195,7 @@ def _supporting_reference(text, names, *, source_contract=None):
 
 
 def _reported_allergy_history(text, *, source_contract=None):
-    reaction = r'(?:causes|caused)' if source_contract == engine.QUALIFIED_SOURCE_CONTRACT else r'causes'
+    reaction = r'(?:causes|caused)' if source_contract in engine.QUALIFIED_SOURCE_CONTRACTS else r'causes'
     match = re.fullmatch(r'(?:he|she|they|the\s+patient)\s+reports?\s+(?:an?\s+)?'
         r'allergy\s+to\s+(.+?),\s+which\s+' + reaction + r'\s+(.+)', text, re.I)
     return bool(match and _negative_list(match[1]) and _negative_list(match[2]))
@@ -218,7 +218,7 @@ def _separate_condition_reference(text, names):
     return matches[0] if len(matches) == 1 else None
 
 
-def _uncertain_cause_review(text, names):
+def _uncertain_cause_review(text, names, *, source_contract=None):
     """Whole unknown-cause/explicitly undiagnosed possibility, never a code.
 
     Retain this as a reviewable no-code obligation, not an invisible exclusion.
@@ -229,7 +229,7 @@ def _uncertain_cause_review(text, names):
     if len(clauses) != 2:
         return False
     targets = [name for name in names if engine.unknown_cause_attribute(
-        clauses[0], {'term': name, 'index_terms': [name]})]
+        clauses[0], {'term': name, 'index_terms': [name]}, source_contract=source_contract)]
     possible = re.fullmatch(r'(?P<object>.+?)\s+is\s+a\s+possibility\s+but\s+is\s+not\s+'
         r'(?:diagnosed|established|confirmed)(?:\s+(?:today|at this encounter))?', clauses[1], re.I)
     return bool(len(targets) == 1 and possible and _parts(possible['object'])
@@ -291,9 +291,10 @@ def _review_context(notes, units, *, source_contract=None):
     historical account headers keep their existing scope. This identifies a
     review obligation, not a new source fact or a universal language parser.
     """
-    profile = (engine.source_profile(source_contract) if source_contract == engine.QUALIFIED_SOURCE_CONTRACT
+    profile = (engine.source_profile(source_contract) if source_contract in engine.QUALIFIED_SOURCE_CONTRACTS
                else SOURCE_GOVERNANCE_PROFILE)
-    context = source_context(notes, units, profile=profile)
+    context = (engine.source_context_for(notes, units, source_contract)
+               if source_contract == engine.SHARED_SOURCE_CONTRACT else source_context(notes, units, profile=profile))
     qualified = False
     account = r'(?:accounts?|records?|reports?|notes?|statements?|documentation|clinical information|clinical history|source)'
     neutral = re.compile(r'(?:(?:current|present)\s+)?(?:(?:clinical|encounter|source)\s+)?'
@@ -336,7 +337,7 @@ def inventory(notes, *, retained_facts=(), source_contract=None):
         raise ValidationError('Source completeness requires a bounded nonempty original note.')
     units, _ = source_units(notes, [])
     context = _review_context(notes, units, source_contract=source_contract)
-    modern = source_contract == engine.QUALIFIED_SOURCE_CONTRACT
+    modern = source_contract in engine.QUALIFIED_SOURCE_CONTRACTS
     evaluation = (re.compile(r'(?P<objects>.+?)\s+(?:is|are|was|were)\s+(?:both\s+)?'
         r'(?:separately\s+)?(?:evaluated|assessed|addressed|managed)(?:\s+and\s+discussed)?'
         r'(?P<tail>\s+.+)?', re.I) if modern else _EVALUATION)
@@ -429,6 +430,17 @@ def inventory(notes, *, retained_facts=(), source_contract=None):
         if not owned_current(context, unit):
             gap(unit, 'Current condition-bearing source has unresolved ownership, timing, quotation or governance.')
             continue
+        if source_contract == engine.SHARED_SOURCE_CONTRACT:
+            from .coding_source_assertions import nonassertion_frame
+            frame = nonassertion_frame(text)
+            if frame is not None:
+                # Preserve the complete clause as an explicit review obligation.
+                # Its attributes/negative diagnosis/relation cannot establish a
+                # condition, and are not uncertainty about an independently
+                # affirmed parent finding's presence.
+                gap(unit, 'Complete source-scoped nonaffirmative or attribute predicate; review an explicit no-code outcome.')
+                unresolved[-1].update(state='review_required', source_assertion_kind=frame['kind'], assertion_frame=frame)
+                continue
         known_names = {' '.join(key.split()[start:]) for key in items for start in range(len(key.split()))}
         if _supporting_reference(text, known_names, source_contract=source_contract):
             if modern:
@@ -454,7 +466,7 @@ def inventory(notes, *, retained_facts=(), source_contract=None):
             excluded.append({'evidence': _span(unit),
                 'reason': 'Complete reported allergy history and reaction, without a current reaction/evaluation assertion.'})
             continue
-        if modern and _uncertain_cause_review(text, known_names):
+        if modern and _uncertain_cause_review(text, known_names, source_contract=source_contract):
             gap(unit, 'Complete explicit unknown-cause and undiagnosed possibility; review a no-code outcome, not a confirmed disease.')
             unresolved[-1].update(state='review_required', source_assertion_kind='explicit_unestablished_cause')
             continue
@@ -562,6 +574,12 @@ def inventory(notes, *, retained_facts=(), source_contract=None):
                     excluded.append({'evidence': _span(unit), 'reason': 'Explicit other-person or historical/future encounter scope.'})
                 else:
                     gap(unit, 'A whole current source reference to an evaluated condition has unresolved wording or scope.')
+                    if source_contract == engine.SHARED_SOURCE_CONTRACT and owned_current(context, unit):
+                        from .coding_source_assertions import nonassertion_frame
+                        frame = nonassertion_frame(unit['quote'])
+                        if frame and frame['kind'] == 'distinct_concerns':
+                            unresolved[-1].update(state='review_required', source_assertion_kind=frame['kind'],
+                                assertion_frame=frame, reason='Complete source distinction; review an explicit no-code outcome.')
     for unit, objects, offset, gap_row, terms in descriptive_reports:
         proof = coding_source_descriptors.resolve_report(objects, objects_start=unit['start'] + offset,
             report=_span(unit), targets=list(items.values()), max_atoms=MAX_ITEMS)
@@ -756,9 +774,17 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
             if owned_current(context, unit) and _supporting_reference(unit['quote'], aliases,
                     source_contract=source_contract):
                 continue
-            if (source_contract == engine.QUALIFIED_SOURCE_CONTRACT and owned_current(context, unit)
+            if (source_contract in engine.QUALIFIED_SOURCE_CONTRACTS and owned_current(context, unit)
                     and _separate_condition_reference(unit['quote'], evaluated_names)):
                 continue
+            if source_contract == engine.SHARED_SOURCE_CONTRACT and owned_current(context, unit):
+                from .coding_source_assertions import nonassertion_frame
+                frame = nonassertion_frame(unit['quote'])
+                # A missing attribute or an explicit distinction does not
+                # contradict presence. Actual negative/uncertain diagnoses
+                # still pass through the condition assertion safety gates.
+                if frame and frame['kind'] in ('unspecified_attributes','distinct_concerns'):
+                    continue
             if unit['start'] in unresolved_starts:
                 # Completeness and eligibility share the same full assertion.
                 # An unresolved current clause referring to this condition
@@ -785,7 +811,7 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
                 # Its parsed whole predicate is different from an embedded
                 # positive proposition under an unknown/negative preamble.
                 if (owned_current(context, unit) and engine._current_condition_assertion(
-                        clause, before, after, context, row) is True):
+                        clause, before, after, context, row, source_contract=source_contract) is True):
                     continue
                 return ['A current condition reference has an unresolved qualifier before the reported finding.']
             # Bare assessment terms and coordinated clinical lists are handled
@@ -793,7 +819,7 @@ def _condition_reference_errors(notes, concept, condition, reference, unresolved
             # explicit account reference invokes this additional review guard.
             if not explicit_reference and not re.match(r'(?:is|are|was|were|has|have|had|belongs?|refers?|concerns?|remains?)\b', stripped):
                 continue
-            assertion = engine._current_condition_assertion(clause, '', stripped, context, row)
+            assertion = engine._current_condition_assertion(clause, '', stripped, context, row, source_contract=source_contract)
             if assertion is True and owned_current(context, unit):
                 continue
             # A complete current evaluation may accompany an independently
@@ -815,8 +841,8 @@ def _qualified_route(run, reference, row, proposal, roots, lookup, selected):
     main-term aliases remain present, so a later denial/correction of the
     unqualified finding still vetoes this specific suggestion.
     """
-    source_contract = (engine.QUALIFIED_SOURCE_CONTRACT
-        if getattr(run, 'config', {}).get('clinical_source_contract') == engine.QUALIFIED_SOURCE_CONTRACT
+    source_contract = (run.config['clinical_source_contract']
+        if getattr(run, 'config', {}).get('clinical_source_contract') in engine.QUALIFIED_SOURCE_CONTRACTS
         else engine.CURRENT_SOURCE_CONTRACT)
     text = row['condition_text']
     words = set(engine.norm(text).split())
@@ -1042,8 +1068,8 @@ def evaluate(run, reference, *, approved_codes=(), inventory_result=None):
         if not valid:
             raise ValidationError('Approved ICD coverage must be present in the dated authoritative projection.')
         approved.add(code)
-    source_contract = (engine.QUALIFIED_SOURCE_CONTRACT
-        if getattr(run, 'config', {}).get('clinical_source_contract') == engine.QUALIFIED_SOURCE_CONTRACT
+    source_contract = (run.config['clinical_source_contract']
+        if getattr(run, 'config', {}).get('clinical_source_contract') in engine.QUALIFIED_SOURCE_CONTRACTS
         else engine.CURRENT_SOURCE_CONTRACT)
     copied = SimpleNamespace(inputs=deepcopy(run.inputs), releases=deepcopy(run.releases),
         config={**deepcopy(getattr(run, 'config', {})), 'clinical_source_contract': source_contract})

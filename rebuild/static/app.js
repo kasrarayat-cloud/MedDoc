@@ -92,22 +92,68 @@ document.addEventListener("submit", (event) => { if (!event.defaultPrevented) pa
 // Preserve native validation and form field submission while limiting accidental
 // repeated clicks. The server remains responsible for idempotency.
 const initializedSubmissions = new WeakSet();
+const submissionTimers = new WeakMap();
+const resetSubmission = (form) => {
+  clearTimeout(submissionTimers.get(form));
+  submissionTimers.delete(form);
+  delete form.dataset.submitting;
+  form.querySelectorAll("[data-original-label]").forEach((button) => {
+    button.textContent = button.dataset.originalLabel;
+    button.removeAttribute("aria-disabled");
+    delete button.dataset.originalLabel;
+  });
+  form.querySelector("[data-submission-recovery]")?.remove();
+};
 const initializeSubmitOnceForms = (root = document) => root.querySelectorAll("form[data-submit-once]").forEach((form) => {
   if (initializedSubmissions.has(form)) return;
   initializedSubmissions.add(form);
   form.addEventListener("submit", (event) => {
     if (event.defaultPrevented) return;
-    if (form.dataset.submitting === "true") {
+    if (form.dataset.submitting) {
       event.preventDefault();
       return;
     }
     form.dataset.submitting = "true";
     const button = event.submitter;
-    if (button) {
-      button.dataset.originalLabel = button.textContent;
-      button.setAttribute("aria-disabled", "true");
-      button.textContent = button.dataset.pendingLabel || "Working…";
-    }
+    // Other form guards run later in the same event. Their cancellation is not
+    // a submitted request and must not leave this native-navigation guard set.
+    // A task (not a microtask) runs after every submit listener: browsers may
+    // run a microtask checkpoint between separate listener callbacks.
+    setTimeout(() => {
+      if (event.defaultPrevented) {
+        delete form.dataset.submitting;
+        pageSubmission = false;
+        return;
+      }
+      if (button) {
+        button.dataset.originalLabel = button.textContent;
+        button.setAttribute("aria-disabled", "true");
+        button.textContent = button.dataset.pendingLabel || "Working…";
+      }
+      // Native navigation has no reliable failed-request event: a browser
+      // inspector can block it, or the response can be lost after a commit.
+      // Never infer failure or repeat its POST. Keep this draft and offer a
+      // separate GET of the current page to inspect the saved result instead.
+      submissionTimers.set(form, setTimeout(() => {
+        if (!form.isConnected || form.dataset.submitting !== "true") return;
+        form.dataset.submitting = "uncertain";
+        pageSubmission = false;
+        if (button) button.textContent = "Save result unconfirmed";
+        const recovery = document.createElement("div");
+        recovery.className = "notice warning";
+        recovery.dataset.submissionRecovery = "true";
+        recovery.setAttribute("role", "status");
+        const explanation = document.createElement("p");
+        explanation.textContent = "The save result has not been confirmed. Your entries are kept here. Check the saved page before trying this action again; the original request may still complete.";
+        const link = document.createElement("a");
+        link.href = location.href;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = "Check saved page in a new tab";
+        recovery.append(explanation, link);
+        form.append(recovery);
+      }, 15000));
+    }, 0);
   });
 });
 initializeSubmitOnceForms();
@@ -129,11 +175,7 @@ window.addEventListener("pageshow", (event) => {
   if (!event.persisted) return;
   pageSubmission = false;
   document.querySelectorAll("form[data-submit-once]").forEach((form) => {
-    delete form.dataset.submitting;
-    form.querySelectorAll("[data-original-label]").forEach((button) => {
-      button.textContent = button.dataset.originalLabel;
-      button.removeAttribute("aria-disabled");
-    });
+    resetSubmission(form);
   });
 });
 

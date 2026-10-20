@@ -4,6 +4,7 @@ from core import views as v
 from core import recovery
 from core import preview_access
 from core import preparation_views as preparation
+from core.inline_component_review import edit as edit_inline_components
 from core.doctor_guide import doctor_guide
 urlpatterns=[path('doctor-guide/',doctor_guide,name='doctor_guide')]
 urlpatterns+=[path('preview/sign-in/',preview_access.sign_in,name='preview_sign_in'),path('preview/sign-out/',preview_access.sign_out,name='preview_sign_out')]
@@ -11,6 +12,7 @@ urlpatterns+=[path('recovery/',recovery.recovery_request,name='recovery_request'
 urlpatterns += [
     path('templates/preview-frame/',preparation.preview_frame,name='docx_preview_frame'),
     path('templates/<uuid:pk>/preparation/',preparation.detail,name='template_preparation'),
+    path('templates/<uuid:pk>/preparation/components/<str:field_key>/',edit_inline_components,name='template_preparation_components'),
     path('templates/<uuid:pk>/preparation/status/',preparation.status,name='template_preparation_status'),
     path('templates/<uuid:pk>/preparation/corrections/',preparation.corrections,name='template_preparation_correct'),
     path('templates/<uuid:pk>/preparation/continue-review/',preparation.continue_review,name='template_preparation_continue'),

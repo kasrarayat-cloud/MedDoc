@@ -29,7 +29,19 @@ class CompactReviewTests(TestCase):
             if second_unresolved and args[1] == 'checker':
                 result['answer_definitions']['fields'][1].update(state='unresolved', reason='Clarify the intended answer.')
             return result, receipt
-        with patch.object(preparation, 'provider_role', side_effect=role):
+        # Retain the original v2 compact-review contract for these historical
+        # assertions. Current inline-v4 component correction has its own suite.
+        from core.models import TemplatePreparation
+        create = TemplatePreparation.objects.create
+        def insert(**values):
+            config = dict(values['config'])
+            config[word_contract.CONFIG_KEY] = word_contract.PROFILE
+            config.pop('semantic_definition_version', None)
+            config.pop('semantic_component_contract', None)
+            values['config'] = config
+            return create(**values)
+        with patch.object(preparation, 'provider_role', side_effect=role), \
+                patch.object(TemplatePreparation.objects, 'create', side_effect=insert):
             return OrdinaryClinicianWordTests.fresh_upload(self, 'guided' if ambiguous or second_unresolved else 'review')
 
     def page(self, template):

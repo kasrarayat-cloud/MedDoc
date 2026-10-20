@@ -172,11 +172,17 @@ def role_limits(inventory, config=None):
             sizes.append(len(json.dumps(response, ensure_ascii=True, sort_keys=True,
                                         separators=(',', ':')).encode()))
         if config and word_contract.active(inventory, config):
-            from documents.semantic_preparation_roles import default_definitions
-            definitions = default_definitions(inventory['fields'])
-            for value in definitions.values():
-                value.update(version=2, answer_mode='atomic')
-            semantic_size = len(json.dumps({'fields': definitions}, ensure_ascii=True).encode())
+            if word_contract.definition_version(config) == 4:
+                from documents.semantic_preparation_roles import fixture_role
+                semantic = fixture_role(inventory['fields'], word_contract.inventory_for(inventory), 'proposer',
+                    definition_version=4, component_contract=word_contract.component_contract(config))
+                semantic_size = len(json.dumps(semantic, ensure_ascii=True).encode())
+            else:
+                from documents.semantic_preparation_roles import default_definitions
+                definitions = default_definitions(inventory['fields'])
+                for value in definitions.values():
+                    value.update(version=2, answer_mode='atomic')
+                semantic_size = len(json.dumps({'fields': definitions}, ensure_ascii=True).encode())
             sizes = [size + semantic_size + 1000 for size in sizes]
         output = MAX_OUTPUT + ((max(sizes) + 499) // 500) * 500
         maximum = MAX_COMPLETE_OUTPUT if profile == COMPLETE_OUTPUT_PROFILE else MAX_TYPED_OUTPUT
@@ -213,7 +219,8 @@ def role_schema(role, protocol=None, inventory=None, config=None):
         if inventory and config and word_contract.active(inventory, config):
             from documents.semantic_preparation_roles import role_schema as definition_schema
             schema['required'].append('answer_definitions')
-            schema['properties']['answer_definitions'] = definition_schema(role, 2)
+            schema['properties']['answer_definitions'] = definition_schema(role, word_contract.definition_version(config),
+                component_contract=word_contract.component_contract(config))
         return bind_identity_enums(schema, inventory, config)
     decision = 'decision' if role == 'proposer' else 'verdict'
     choices = ['map', 'needs_review'] if role == 'proposer' else ['pass', 'unresolved']
@@ -237,6 +244,9 @@ def role_payload(inventory, role, proposal=None, *, source_review_context=None, 
         result['physical_answer_areas'] = source_role_areas(inventory)
     if config and word_contract.active(inventory, config):
         result['answer_definition_inventory'] = word_contract.inventory_for(inventory)
+        if word_contract.definition_version(config) == 4:
+            result['answer_definition_contract'] = {'version':4,
+                'component_contract':word_contract.component_contract(config)}
         if word_contract.timing_reference(config):
             result['timing_reference_contract'] = word_contract.timing_reference(config)
     if role == 'checker': result['proposal'] = proposal
@@ -322,8 +332,9 @@ def provider_request(inventory, role, config, proposal=None):
         instructions += (' Separately return answer_definitions from answer_definition_inventory. Physical metadata '
                          'describes existing document controls; semantic definitions describe the values requested. '
                          'Physical generic text MUST NOT erase semantic types or constraints. ' +
-                         role_instructions(role, 2, timing_reference=word_contract.timing_reference(config),
-                                           meaning_contract=meaning_contract))
+                         role_instructions(role, word_contract.definition_version(config),
+                            timing_reference=word_contract.timing_reference(config),
+                            meaning_contract=meaning_contract, component_contract=word_contract.component_contract(config)))
     if finite_identities(inventory, config):
         instructions += (' Source identity values are application-owned, not semantic decisions. '
             'Copy each corresponding field key, locator digest, story ID and content digest from '
@@ -356,9 +367,13 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
             response['anchors'] = role_rows(inventory, role)
         if word_contract.active(inventory, config):
             from documents.semantic_preparation_roles import fixture_role
-            semantic = fixture_role(inventory['fields'], word_contract.inventory_for(inventory), role)
-            for row in semantic['fields']:
-                row['definition'].update(version=2, answer_mode='narrative' if row['definition']['value_type']=='text' else 'atomic')
+            if word_contract.definition_version(config) == 4:
+                semantic = fixture_role(inventory['fields'], word_contract.inventory_for(inventory), role,
+                    definition_version=4, component_contract=word_contract.component_contract(config))
+            else:
+                semantic = fixture_role(inventory['fields'], word_contract.inventory_for(inventory), role)
+                for row in semantic['fields']:
+                    row['definition'].update(version=2, answer_mode='narrative' if row['definition']['value_type']=='text' else 'atomic')
             response['answer_definitions'] = semantic
         evidence={'model': 'synthetic-blank-preparation-'+role, 'request_id': '', 'resource_id': '',
                   'usage': {}, 'rates': {}, 'cost': '0', 'simulated': True, 'response': response}
@@ -637,7 +652,10 @@ def create_preparation(template, actor):
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
         from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOUND_ANSWER_CONTRACT
-        config[word_contract.CONFIG_KEY] = word_contract.PROFILE
+        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACT
+        config[word_contract.CONFIG_KEY] = word_contract.GRAPH_PROFILE
+        config[component_key] = ENCOUNTER_CONTRACT
+        config['semantic_definition_version'] = 4
         config[MEANING_CONTRACT_KEY] = COMPOUND_ANSWER_CONTRACT
         config['word_signing_context'] = SIGNING_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
@@ -971,15 +989,31 @@ def correct(prep_id, actor, revision, labels, reviewed_anchors, reason,placement
         from documents.semantic_preparation_roles import validate_definitions
         validate_definitions(prep.inventory['fields'], definitions)
         keys = {f['key'] for f in prep.inventory['fields']}
-        if len(reviewed_definitions) != len(keys) or set(reviewed_definitions) != keys or any(d['version'] != 2 for d in definitions.values()):
+        if (len(reviewed_definitions) != len(keys) or set(reviewed_definitions) != keys
+                or any(d['version'] != word_contract.definition_version(prep.config) for d in definitions.values())):
             raise ValidationError('Review every complete answer definition before saving its correction.')
+        if word_contract.definition_version(prep.config) == 4 and any(
+                d['component_contract']['contract'] != word_contract.component_contract(prep.config)
+                for d in definitions.values()):
+            raise ValidationError('Review corrections using this preparation’s original component scope contract.')
+        if prep.config.get(word_contract.CONFIG_KEY) == word_contract.GRAPH_PROFILE:
+            before = word_contract.proposed(prep)
+            semantic_keys = ('meaning', 'scope', 'value_type', 'answer_mode', 'unit', 'choices',
+                             'constraints', 'patient_name_requirement')
+            for key, value in definitions.items():
+                if (any(value[name] != before[key][name] for name in semantic_keys)
+                        and value['component_contract'] == before[key]['component_contract']):
+                    raise ValidationError('Review the required parts with this corrected meaning using Edit required parts before saving.')
     # Manual adjudication is separate from the untouched automatic proposal/checker records.
     if change_placement:build_candidate(prep,placements)
     prep.corrections={'labels':labels,'placements':placements,'reviewed_anchors':sorted(reviewed_anchors),'reason':reason.strip(),
                       'actor_id':str(actor.pk),'at':timezone.now().isoformat()}
     if definitions is not None:
         prep.corrections['answer_definitions'] = definitions
-    prep.correction_history.append({'revision':prep.revision+1,**prep.corrections})
+    history={'revision':prep.revision+1,**prep.corrections}
+    if prep.config.get(word_contract.CONFIG_KEY) == word_contract.GRAPH_PROFILE:
+        history.update(review_scope='answer_definitions', reviewed_fields=sorted(reviewed_definitions))
+    prep.correction_history.append(history)
     prep.revision+=1; prep.state='guided' if word_contract.approval_issues(prep) else 'review'
     prep.save(update_fields=['corrections','correction_history','revision','state','candidate_info'])
     audit(actor,'template.preparation_corrected',prep.pk,department=prep.template.department,revision=prep.revision)

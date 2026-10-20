@@ -215,7 +215,7 @@ class PreparationOutputTests(SimpleTestCase):
                          'private-body':'must-not-appear'}
         receipts=Mock();receipts.order_by.return_value=[receipt]
         receipts.filter.return_value.values_list.return_value.first.return_value='failed'
-        packet=SimpleNamespace(inventory=self.inventory,proposal={},checker={},candidate_info={},corrections={},
+        packet=SimpleNamespace(inventory=self.inventory,proposal={},checker={},candidate_info={},corrections={},config={},
             receipts=receipts,error_code='provider_unknown',state='blocked',revision=0,started_at=None,finished_at=None)
         request=RequestFactory().get('/templates/00000000-0000-0000-0000-000000000001/preparation/')
         template=SimpleNamespace(pk='00000000-0000-0000-0000-000000000001')

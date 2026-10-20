@@ -25,6 +25,7 @@ MODE = 'retained_live'
 REVALIDATION_CONTRACT = 'retained-facts-independent-check-v1'
 REVALIDATION_CONTRACTS = (REVALIDATION_CONTRACT,'retained-facts-independent-check-v2',COMPLETE_CHECK_CONTRACT)
 CONTEXT_CONTRACT = 'retained-live-context-review-v1'
+IDENTITY_REVIEW_CONTRACT = 'retained-live-current-identity-review-v1'
 
 
 def need(value, message):
@@ -84,6 +85,8 @@ def source_for(run):
          and run.config.get('mode') == MODE and run.requests == [] and run.actual_cost == 0
          and run.state in ('succeeded', 'needs_detail'), 'This retained prediction is not a completed synthetic derivative.')
     binding = run.config.get('retained_prediction')
+    if isinstance(binding, dict) and binding.get('contract') == IDENTITY_REVIEW_CONTRACT:
+        return identity_source_for(run, binding)
     if isinstance(binding, dict) and binding.get('contract') == CONTEXT_CONTRACT:
         return context_source_for(run, binding)
     need(isinstance(binding, dict) and set(binding) == {'contract', 'source_run_id',
@@ -220,6 +223,123 @@ def reuse_for_context(encounter, user, inputs, context, releases, key):
     run.save(force_insert=True)
     source_for(run)
     audit(user, 'coding.retained_context_revalidated', run.pk, department=encounter.department,
+          source_run_id=str(source.pk), input_digest=key, new_provider_calls=0,
+          original_usage_retained_on_source=True)
+    return run
+
+
+def stable_identity_inputs(source, current):
+    """Only the local identity/review proof may differ from a live request.
+
+    Provider text equality alone is insufficient: patient, saved answers,
+    revision, template and date remain independent immutable requirements.
+    """
+    from .coding_engine import CURRENT_IDENTITY_CONTRACT, SEMANTIC_IDENTITY_CONTRACT, checked_patient_name_evidence
+    old = source.get('documented_patient_name_evidence', {})
+    new = current.get('documented_patient_name_evidence', {})
+    if (old.get('contract') not in (SEMANTIC_IDENTITY_CONTRACT, CURRENT_IDENTITY_CONTRACT)
+            or new.get('contract') != CURRENT_IDENTITY_CONTRACT):
+        return False
+    checked_patient_name_evidence(source)
+    checked_patient_name_evidence(current)
+    return (service.canonical({k:v for k,v in source.items() if k != 'documented_patient_name_evidence'})
+            == service.canonical({k:v for k,v in current.items() if k != 'documented_patient_name_evidence'}))
+
+
+def assert_no_pending_prediction(encounter, inputs, *, sources=None):
+    """A changed review/graph/context cannot repeat an unsettled exact request."""
+    if not settings.SYNTHETIC_ONLY or inputs.get('engine_contract') != corti_coding.CONTRACT:
+        return
+    if sources is None:
+        sources = CodingRun.objects.filter(encounter=encounter,
+            config__provider='corti', config__mode='live').order_by('-created_at', '-pk')
+    from types import SimpleNamespace
+    requested = corti_prediction.payload(SimpleNamespace(inputs=inputs, config={'mode':'live'}))
+    for source in sources:
+        pending = (source.state in ('queued', 'running', 'uncertain', 'reconciliation')
+            or any(receipt.get('state') in ('sending', 'unknown') for receipt in source.requests))
+        need(not (pending and corti_prediction.payload(source) == requested),
+             'An identical provider request is unfinished or uncertain. No duplicate prediction was submitted.')
+
+
+def identity_source_for(run, binding):
+    """Replay every join before displaying, approving or exporting a derivative."""
+    need(set(binding) == {'contract', 'source_run_id', 'source_input_digest',
+         'source_requests_digest', 'source_result_digest', 'current_identity_binding_sha256',
+         'clinical_source_contract', 'cpt_time_source_contract'},
+         'The current identity review provenance is malformed.')
+    from .coding_engine import SHARED_SOURCE_CONTRACT
+    from .corti_semantics import SHARED_TIME_CONTRACT
+    need(binding['clinical_source_contract'] == SHARED_SOURCE_CONTRACT
+         and binding['cpt_time_source_contract'] == SHARED_TIME_CONTRACT,
+         'The current source review has an unknown prospective clinical policy.')
+    need(service.digest({'inputs':run.inputs, 'context':run.context, 'releases':run.releases}) == run.input_digest,
+         'The current identity-review input digest changed.')
+    try:
+        source = CodingRun.objects.get(pk=binding['source_run_id'], encounter_id=run.encounter_id)
+    except (ValueError, CodingRun.DoesNotExist) as exc:
+        raise ValidationError('The original identity-review prediction is unavailable.') from exc
+    need(source.user_id == run.user_id and service.canonical(source.context) == service.canonical(run.context)
+         and service.canonical(source.releases) == service.canonical(run.releases)
+         and source.input_digest == binding['source_input_digest']
+         and service.digest(source.requests) == binding['source_requests_digest']
+         and service.digest(source.result) == binding['source_result_digest']
+         and service.digest(run.inputs.get('documented_patient_name_evidence')) == binding['current_identity_binding_sha256']
+         and stable_identity_inputs(source.inputs, run.inputs),
+         'The original prediction or current saved identity evidence changed.')
+    expected = {**deepcopy(source.config), 'mode':MODE, 'max_calls':0, 'retained_prediction':binding,
+        'clinical_source_contract':SHARED_SOURCE_CONTRACT, 'cpt_time_source_contract':SHARED_TIME_CONTRACT}
+    need(run.config == expected and run.result.get('retained_prediction') == binding
+         and corti_prediction.payload(source) == corti_prediction.payload(run),
+         'The current identity review configuration or exact provider input changed.')
+    live_receipt(source)
+    return source
+
+
+def reuse_for_identity_review(encounter, user, inputs, context, releases, key):
+    """Re-evaluate a completed exact prediction without repeating its submission.
+
+    The parent keeps its original raw response, result, usage and unknown cost.
+    Zero cost on the new local derivative means zero additional operations only.
+    """
+    from .coding_engine import CURRENT_IDENTITY_CONTRACT, SHARED_SOURCE_CONTRACT
+    if (not settings.SYNTHETIC_ONLY or inputs.get('documented_patient_name_evidence', {}).get('contract')
+            != CURRENT_IDENTITY_CONTRACT):
+        return None
+    from .corti_semantics import SHARED_TIME_CONTRACT
+    sources = list(CodingRun.objects.filter(encounter=encounter,
+        config__provider='corti', config__mode='live').order_by('-created_at', '-pk'))
+    assert_no_pending_prediction(encounter, inputs, sources=sources)
+    source = next((row for row in sources if str(row.user_id) == str(user.pk)
+                   and row.inputs != inputs and row.context == context
+                   and row.releases == releases and stable_identity_inputs(row.inputs, inputs)), None)
+    if source is None:
+        return None
+    need(source.state in ('succeeded', 'needs_detail'),
+         'The existing prediction is unfinished or uncertain. No new prediction was submitted; resolve its outcome first.')
+    receipt = live_receipt(source)
+    binding = {'contract':IDENTITY_REVIEW_CONTRACT, 'source_run_id':str(source.pk),
+        'source_input_digest':source.input_digest, 'source_requests_digest':service.digest(source.requests),
+        'source_result_digest':service.digest(source.result),
+        'current_identity_binding_sha256':service.digest(inputs['documented_patient_name_evidence']),
+        'clinical_source_contract':SHARED_SOURCE_CONTRACT, 'cpt_time_source_contract':SHARED_TIME_CONTRACT}
+    config = {**deepcopy(source.config), 'mode':MODE, 'max_calls':0, 'retained_prediction':binding,
+        'clinical_source_contract':SHARED_SOURCE_CONTRACT, 'cpt_time_source_contract':SHARED_TIME_CONTRACT}
+    run = CodingRun(encounter=encounter, user=user, inputs=inputs, context=context, releases=releases,
+        input_digest=key, config=config, requests=[], actual_cost=Decimal('0'), state='needs_detail',
+        started_at=timezone.now(), finished_at=timezone.now())
+    need(corti_prediction.payload(source) == corti_prediction.payload(run),
+         'The exact provider input changed; no retained identity review was created.')
+    result = corti_coding.retained_result(run, corti_prediction.payload(run),
+        json.loads(receipt['raw_response']['body']), receipt['response_sha256'])
+    result['retained_prediction'] = binding
+    run.result = result
+    run.selection = {'selected_ids':sorted(row['id'] for row in result['suggestions'] if row.get('eligible') is True),
+                     'overrides':{}}
+    run.selection_revision = 1
+    run.save(force_insert=True)
+    source_for(run)
+    audit(user, 'coding.retained_identity_revalidated', run.pk, department=encounter.department,
           source_run_id=str(source.pk), input_digest=key, new_provider_calls=0,
           original_usage_retained_on_source=True)
     return run

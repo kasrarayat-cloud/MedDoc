@@ -109,7 +109,9 @@ class DocumentedCodingTimeTests(SimpleTestCase):
             result = coding_dispatch.configuration(None, N())
             self.assertEqual(result['clinical_source_contract'], coding_engine.QUALIFIED_SOURCE_CONTRACT)
             self.assertEqual(result['cpt_time_source_contract'], CONTRACT)
-            for contract in sorted(coding_engine.SOURCE_CONTRACTS):
+            # Historical configurations retain their absent time-policy key.
+            # The prospective shared reader requires its explicit paired policy.
+            for contract in sorted(coding_engine.SOURCE_CONTRACTS - {coding_engine.SHARED_SOURCE_CONTRACT}):
                 with self.subTest(contract=contract):
                     first[0] = N(config={'clinical_source_contract': contract})
                     before = deepcopy(first[0].config)
@@ -117,6 +119,12 @@ class DocumentedCodingTimeTests(SimpleTestCase):
                     self.assertEqual(result['clinical_source_contract'], contract)
                     self.assertNotIn('cpt_time_source_contract', result)
                     self.assertEqual(first[0].config, before)
+            first[0] = N(config={'clinical_source_contract': coding_engine.SHARED_SOURCE_CONTRACT})
+            before = deepcopy(first[0].config)
+            result = coding_dispatch.configuration(None, N())
+            self.assertEqual(result['clinical_source_contract'], coding_engine.SHARED_SOURCE_CONTRACT)
+            self.assertEqual(result['cpt_time_source_contract'], time.SHARED_TIME_CONTRACT)
+            self.assertEqual(first[0].config, before)
             first[0] = N(config={'clinical_source_contract': coding_engine.QUALIFIED_SOURCE_CONTRACT,
                                 'cpt_time_source_contract': CONTRACT})
             self.assertEqual(coding_dispatch.configuration(None, N())['cpt_time_source_contract'], CONTRACT)

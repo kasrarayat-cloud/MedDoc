@@ -10,6 +10,7 @@ from documents.semantic_preparation_roles import digest
 
 LEGACY_PROFILE = 'reviewed-word-answer-contract-v1'
 PROFILE = 'reviewed-word-answer-contract-v2'
+GRAPH_PROFILE = 'reviewed-word-answer-contract-v3'
 CONFIG_KEY = 'word_answer_contract'
 INFO_KEY = 'answer_contract'
 MISSING = ('This Word form needs approved answer definitions before generation. '
@@ -20,14 +21,32 @@ MISSING = ('This Word form needs approved answer definitions before generation. 
 def requested(config):
     if CONFIG_KEY not in config:
         return False
-    if config[CONFIG_KEY] not in (LEGACY_PROFILE, PROFILE):
+    if config[CONFIG_KEY] not in (LEGACY_PROFILE, PROFILE, GRAPH_PROFILE):
         raise ValidationError('Unsupported explicit Word answer contract. Nothing was downgraded.')
     return True
 
 
 def timing_reference(config):
     requested(config)
-    return roles.TEMPORAL_REFERENCE_CONTRACT if config.get(CONFIG_KEY) == PROFILE else None
+    return roles.TEMPORAL_REFERENCE_CONTRACT if config.get(CONFIG_KEY) in (PROFILE, GRAPH_PROFILE) else None
+
+
+def definition_version(config):
+    """An immutable new-preparation marker selects the existing graph schema."""
+    requested(config)
+    if config.get(CONFIG_KEY) == GRAPH_PROFILE:
+        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACT
+        if config.get(component_key) != ENCOUNTER_CONTRACT or config.get('semantic_definition_version') != 4:
+            raise ValidationError('Fresh component Word preparation requires its explicit encounter-scope contract.')
+        return 4
+    return 2
+
+
+def component_contract(config):
+    if definition_version(config) == 4:
+        from documents.component_contracts import ENCOUNTER_CONTRACT
+        return ENCOUNTER_CONTRACT
+    return None
 
 
 def eligible(inventory):
@@ -58,8 +77,12 @@ def validate_result(inventory, response, role, config):
             raise ValidationError('Preparation omitted its required answer definitions. No legacy fallback is permitted.')
         validate_role(inventory, {k: v for k, v in response.items() if k != 'answer_definitions'}, role)
         roles.validate_role_result(inventory['fields'], inventory_for(inventory), response['answer_definitions'], role)
-        if any(row['definition']['version'] != 2 for row in response['answer_definitions']['fields']):
+        expected_version = definition_version(config)
+        if any(row['definition']['version'] != expected_version for row in response['answer_definitions']['fields']):
             raise ValidationError('Fresh Word preparation requires the complete answer contract.')
+        if expected_version == 4 and any(row['definition']['component_contract']['contract'] != component_contract(config)
+                for row in response['answer_definitions']['fields']):
+            raise ValidationError('Fresh Word preparation has a different component scope contract.')
     else:
         validate_role(inventory, response, role)
     return response
@@ -74,8 +97,11 @@ def proposed(prep):
     corrections = prep.corrections.get('answer_definitions', {})
     if corrections:
         roles.validate_definitions(prep.inventory['fields'], corrections)
-        if any(d['version'] != 2 for d in corrections.values()):
+        if any(d['version'] != definition_version(prep.config) for d in corrections.values()):
             raise ValidationError('A reviewed correction cannot discard the complete answer contract.')
+        if definition_version(prep.config) == 4 and any(d['component_contract']['contract'] != component_contract(prep.config)
+                for d in corrections.values()):
+            raise ValidationError('A reviewed correction cannot change the component scope contract.')
         values = deepcopy(corrections)
     return values
 
@@ -103,6 +129,23 @@ def identity_scope_issues(prep):
     return roles.identity_scope_issues(prep.inventory['fields'], values) if values else {}
 
 
+def fully_reviewed_keys(prep):
+    """Inline v4 component drafts invalidate the previous whole-form review."""
+    if not getattr(prep, 'correction_history', []):
+        return set()
+    last = prep.correction_history[-1]
+    if (last.get('review_scope') == 'field_components'
+            or last.get('answer_definitions') != proposed(prep)):
+        return set()
+    return set(last.get('reviewed_fields', []))
+
+
+def component_draft_pending(prep):
+    return (prep.config.get(CONFIG_KEY) == GRAPH_PROFILE
+            and bool(getattr(prep, 'correction_history', []))
+            and prep.correction_history[-1].get('review_scope') == 'field_components')
+
+
 def approval_issues(prep):
     """Pending semantic decisions, separate from immutable source/layout issues.
 
@@ -117,11 +160,12 @@ def approval_issues(prep):
     issues = roles.identity_scope_issues(prep.inventory['fields'], values)
     issues.update(roles.compound_answer_issues(prep.inventory['fields'], values,
         meaning_contract=roles.configured_meaning_contract(prep.config)))
-    if not prep.corrections.get('answer_definitions'):
+    reviewed = fully_reviewed_keys(prep) if prep.config.get(CONFIG_KEY) == GRAPH_PROFILE else None
+    if reviewed is not None or not prep.corrections.get('answer_definitions'):
         labels = {f['key']: f['label'] for f in prep.inventory['fields']}
         for role, response in (('Proposer', prep.proposal), ('Checker', prep.checker)):
             for row in response['answer_definitions']['fields']:
-                if row['state'] == 'unresolved':
+                if row['state'] == 'unresolved' and (reviewed is None or row['field_key'] not in reviewed):
                     key = row['field_key']
                     detail = (f"Resolve the answer definition for {labels[key]} using Save doctor corrections "
                               f"before approval. {role}: {row['reason']}").strip()
@@ -130,6 +174,8 @@ def approval_issues(prep):
 
 
 def require_resolved(prep, *, generation=False):
+    if component_draft_pending(prep):
+        raise ValidationError('Review the whole form and Save decisions after saving a component draft before approval or generation.')
     issues = approval_issues(prep)
     if issues:
         if generation:

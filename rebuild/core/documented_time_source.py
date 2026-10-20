@@ -89,6 +89,76 @@ def qualification(text):
                              text.strip(), re.I))
 
 
+def positioned_exclusion(text, *, total, service_date):
+    """An explicit excluded component of the adjacent current account.
+
+    This prospective representation is separate from the frozen v8 reader.
+    Excluded staff/prior-date components never contribute to the total; a
+    quantity, date and polarity stay attached to their own complete predicate.
+    """
+    value = text.strip().removesuffix('.').strip()
+    staff = re.fullmatch(r'(?P<count>'+_COUNT+r') minutes of (?P<actor>(?:clinical )?staff|nursing) '
+        r'(?P<activity>intake|rooming|triage)(?: work)? are (?:outside|excluded from) '
+        r'(?:that|this|the) total', value, re.I)
+    prior = re.fullmatch(r'(?P<count>'+_COUNT+r') minutes of (?P<actor>physician|practitioner) '
+        r'(?P<activity>(?:record|chart) review) (?:done|performed|completed) on '
+        r'(?P<date>'+_DATE+r') are (?:also )?excluded(?: from (?:that|this|the) total)?', value, re.I)
+    separate = re.fullmatch(r'(?:There (?:were|are) no separately (?:billed|reported) services, and )?'
+        r'no time for separately (?P<kind>billed|reported) (?:work|services?) is included in '
+        r'the (?P<total>\d{1,4})(?:-minute total| minutes)', value, re.I)
+    if separate:
+        return {'named_total': int(separate['total']), 'prior_day': None, 'staff': False,
+                'separately_reported': True, 'component': {'kind': 'separately_reported',
+                'polarity': 'excluded', 'minutes': None, 'date': None}}
+    match = staff or prior
+    if match is None:
+        return None
+    from .clinical_source_context import _number, source_date
+    raw_count = match['count']
+    count = int(raw_count) if raw_count.isdigit() else _number(raw_count)
+    day_value = source_date(prior['date']) if prior else None
+    day = datetime.strptime(day_value, '%Y-%m-%d').date() if day_value else None
+    return {'named_total': total, 'prior_day': day, 'staff': bool(staff),
+            'separately_reported': False, 'component': {
+                'kind': 'staff' if staff else 'prior_date_clinician', 'polarity': 'excluded',
+                'minutes': count, 'actor': match['actor'].casefold(),
+                'activity': match['activity'].casefold(), 'date': day.isoformat() if day else None,
+                'date_valid': bool(not prior or day is not None and service_date is not None and day < service_date)}}
+
+
+def positioned_qualification(text, scope):
+    """Complete actor/date qualification of already recorded activities."""
+    from .clinical_source_context import clinician_matches
+    match = re.fullmatch(r'(?P<actor>.+?) (?:performed|completed) all (?:of )?(?:that|this|the) work '
+        r'on (?:the )?(?:service date|date of service)\.?', text.strip(), re.I)
+    return bool(match and (re.fullmatch(r'(?:the )?(?:treating )?(?:physician|practitioner)',
+                                      match['actor'], re.I)
+                           or clinician_matches(scope, match['actor'])))
+
+
+def positioned_linked_claim(text, *, established=False, service_established=False, status_established=False):
+    """Unknown predicates cannot silently reassign a bound time account.
+
+    A bare quantity can name the current minutes without an article. Likewise
+    the actor may be the grammatical subject while current work is the object.
+    Their predicate must be consumed by a complete account event or held.
+    """
+    ordinary = linked_claim(text, established=established, service_established=service_established,
+                            status_established=status_established)
+    if ordinary or not established:
+        return ordinary
+    quantified = r'\b'+_ACCOUNT_NUMBER+r'\s+minutes?\s+'+_PREDICATE
+    work_object = (r'\b(?:(?:the\s+)?(?:treating\s+)?(?:physician|clinician|practitioner)|'
+        r'(?:Dr\.?|Doctor)\s+[A-Za-z][A-Za-z .\x27’\-]{0,80})\s+'
+        r'[^.;]*?\b(?:performed|completed|provided)\b[^.;]*?'
+        r'\b(?:all\s+(?:of\s+)?)?(?:that|this|the|these|those|above)\s+work\b')
+    for pattern in (quantified, work_object):
+        for match in re.finditer(pattern, text, re.I):
+            if not _separate_subject(text[:match.start()], match[0]):
+                return 'time'
+    return None
+
+
 def separate_exclusion(text):
     """A complete foreign/prior frame owns only a complete exclusion body.
 
