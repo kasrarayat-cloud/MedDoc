@@ -124,8 +124,11 @@ class DefinitionCapacityDatabaseTests(TestCase):
 
     def test_actual_migration_reverse_restores_exact_then_forward_reapplies(self):
         migration=import_module('core.migrations.0035_definition_capacity_profile')
+        current=import_module('core.migrations.0036_component_choice_capacity')
         with transaction.atomic():
             with connection.cursor()as cursor:cursor.execute(migration.PREVIOUS_SQL)
             with self.assertRaises(ai_stages.StageNotSent):ai_stages.assert_installed_guards()
             with connection.cursor()as cursor:cursor.execute(migration.CAPACITY_SQL)
+            with self.assertRaises(ai_stages.StageNotSent):ai_stages.assert_installed_guards()
+            with connection.cursor()as cursor:cursor.execute(current.CAPACITY_SQL)
             ai_stages.assert_installed_guards()

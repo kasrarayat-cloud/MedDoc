@@ -35,8 +35,8 @@ def definition_version(config):
     """An immutable new-preparation marker selects the existing graph schema."""
     requested(config)
     if config.get(CONFIG_KEY) == GRAPH_PROFILE:
-        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACT
-        if config.get(component_key) != ENCOUNTER_CONTRACT or config.get('semantic_definition_version') != 4:
+        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACTS
+        if config.get(component_key) not in ENCOUNTER_CONTRACTS or config.get('semantic_definition_version') != 4:
             raise ValidationError('Fresh component Word preparation requires its explicit encounter-scope contract.')
         return 4
     return 2
@@ -44,8 +44,8 @@ def definition_version(config):
 
 def component_contract(config):
     if definition_version(config) == 4:
-        from documents.component_contracts import ENCOUNTER_CONTRACT
-        return ENCOUNTER_CONTRACT
+        from documents.component_contracts import CONFIG_KEY as component_key
+        return config[component_key]
     return None
 
 

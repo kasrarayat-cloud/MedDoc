@@ -180,7 +180,7 @@ def create_preparation(source_version, actor, *, retry_of=None):
         raise ValidationError('Live definition preparation needs an active authorized preparation procedure.')
     config = {**config, 'semantic_definition_protocol': PROTOCOL, 'semantic_definition_version': 4,
               MEANING_CONTRACT_KEY: COMPOUND_ANSWER_CONTRACT,
-              component_contracts.CONFIG_KEY: component_contracts.ENCOUNTER_CONTRACT}
+              component_contracts.CONFIG_KEY: component_contracts.CHOICE_CONTRACT}
     if retry_of is not None:config['definition_retry_of']=retry_of
     config = ai_stages.definition_pipeline_config(config)
     prep = TemplateDefinitionPreparation.objects.create(source_version=source, requested_by=actor, config=config)

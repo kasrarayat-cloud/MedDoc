@@ -126,14 +126,15 @@ def edit(request,pk,field_key):
                     for name in editor.part_controls(current):
                         if len(request.POST.getlist(base+name))==1:
                             if name in ('subject','temporality','polarity'):part['scope'][name]=request.POST[base+name]
-                            else:part[name]=request.POST[base+name]
+                            else:part['choices_text' if name=='choices' else name]=request.POST[base+name]
                     part['remove']=request.POST.getlist(base+'remove')==['on'];part['add']=request.POST.getlist(base+'add')==['on']
     row=template_review.rows([{'field':field,'definition':display_definition,'state':''}])[0]
     return render(request,'template_component_review.html',{'preparation':prep,'template':template,'row':row,
         'parts':display_parts,'definition_version':4,'component_editing':True,
         'component_token':token_for(prep,request.user,field_key),'renderings':editor.RENDERINGS,
         'save_binding':save_binding(prep,'inline'),
-        'component_encounter_scopes':editor.ENCOUNTER_SCOPE_LABELS,
+        'component_encounter_scopes':editor.ENCOUNTER_SCOPE_LABELS if current['component_contract']['contract'] in editor.ENCOUNTER_CONTRACTS else [],
+        'component_choices':current['component_contract']['contract']==editor.CHOICE_CONTRACT,
         'unit_requirements':[('none','No unit required'),('documented','Keep the documented unit and scale'),('printed','Use the exact unit printed on the form')],
         'component_types':list(template_review.TYPE_LABELS.items()),'subjects':list(template_review.SUBJECT_LABELS.items()),
         'temporalities':list(template_review.TIMING_LABELS.items()),'polarities':list(template_review.POLARITY_LABELS.items()),
