@@ -729,9 +729,9 @@ def create_preparation(template, actor):
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
         from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOUND_ANSWER_CONTRACT
-        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACT
+        from documents.component_contracts import CONFIG_KEY as component_key, CHOICE_CONTRACT
         config[word_contract.CONFIG_KEY] = word_contract.GRAPH_PROFILE
-        config[component_key] = ENCOUNTER_CONTRACT
+        config[component_key] = CHOICE_CONTRACT
         config['semantic_definition_version'] = 4
         config[MEANING_CONTRACT_KEY] = COMPOUND_ANSWER_CONTRACT
         config[SIGNING_CONTEXT_KEY] = SOURCE_SIGNING_CONTEXT

@@ -4,10 +4,13 @@ This validates a literal contract. It does not infer components from clinical
 language or treat a valid structure as evidence that a proposal is complete.
 """
 import re
+import unicodedata
 from copy import deepcopy
 
 CONTRACT = 'field-components-v1'
 ENCOUNTER_CONTRACT = 'field-components-v2'
+CHOICE_CONTRACT = 'field-components-v3'
+ENCOUNTER_CONTRACTS = (ENCOUNTER_CONTRACT, CHOICE_CONTRACT)
 CONFIG_KEY = 'semantic_component_contract'
 ENCOUNTER_SCOPES = ('current', 'past', 'all_documented')
 RENDERINGS = ('plain', 'labelled', 'protected')
@@ -97,6 +100,20 @@ def validate(field, definition):
     """Dispatch only the retained tag; approved definitions are never upgraded."""
     from .semantic_preparation_roles import require
     contract = definition.get('component_contract')
+    if isinstance(contract, dict) and contract.get('contract') == CHOICE_CONTRACT:
+        require(set(contract) == {'contract', 'rendering', 'components'}
+                and isinstance(contract['components'], list), 'Invalid component choice contract.')
+        for component in contract['components']:
+            require(isinstance(component, dict) and set(component) == COMPONENT_KEYS | {'encounter_scope','choices','option_quote'},
+                    'Every prospective component requires its own complete choices.')
+            validate_choices(field, definition, component)
+        common = deepcopy(definition)
+        common['component_contract']['contract'] = ENCOUNTER_CONTRACT
+        for component in common['component_contract']['components']:
+            del component['choices']
+            del component['option_quote']
+        validate(field, common)
+        return contract
     if isinstance(contract, dict) and contract.get('contract') == ENCOUNTER_CONTRACT:
         require(set(contract) == {'contract', 'rendering', 'components'}
                 and isinstance(contract['components'], list), 'Invalid encounter component contract.')
@@ -115,10 +132,83 @@ def validate(field, definition):
     return validate_v1(field, definition)
 
 
+def validate_choices(field, definition, component):
+    """Bind a component enum to its own complete original ordered options.
+
+    Physical choices already have a source-owned finite inventory. Otherwise
+    the complete literal question quote must itself be an explicit OR-list.
+    A model's labels/meaning or another component's options supply no choices.
+    Unsupported/ambiguous list shapes remain held rather than being inferred.
+    """
+    from .semantic_preparation_roles import require, _string
+    choices = component['choices']
+    require(isinstance(choices,list) and len(choices)<=200,'Invalid component choices.')
+    for option in choices:
+        _string(option,'component choice',2000)
+    normalized = [' '.join(unicodedata.normalize('NFKC', option).casefold().split()) for option in choices]
+    require(len(choices)==len(set(normalized)), 'Component choices must be unambiguous, distinct and ordered.')
+    if component['value_type'] != 'choice':
+        require(not choices and component['option_quote'] is None,'Only a choice component can declare choices or option evidence.')
+        return
+    require(bool(choices),'A choice component requires its complete original choices.')
+    if len(definition['component_contract']['components']) == 1 and definition['answer_mode'] == 'atomic':
+        require(choices == definition['choices'],'An atomic choice component must preserve its field choices.')
+    printed = field.get('answer_constraints') or {}
+    if printed.get('data_type') == 'choice':
+        require(choices == printed.get('options') and component['option_quote'] is None,
+                'A physical choice component must preserve the original ordered metadata choices.')
+        return
+    require(len(choices)>=2 and all(not re.search(r'[,;/|\r\n]|\bor\b',option,re.I) for option in choices),
+            'A component choice list needs an unambiguous complete original OR-expression.')
+    quote = component['option_quote']
+    owner = component['question_quote']
+    head = r'\s*,\s*'.join(re.escape(option) for option in choices[:-1])
+    expression = head + r'(?:\s+or\s+|\s*,\s*or\s+)' + re.escape(choices[-1])
+    require(isinstance(quote,str) and re.fullmatch(expression,quote),
+            'The complete original option expression must match every component choice in order.')
+    require(isinstance(owner,str),'The complete component question must own its option expression.')
+    matches = [match for match in re.finditer(re.escape(quote),owner)
+        if (match.start()==0 or not owner[match.start()-1].isalnum())
+        and (match.end()==len(owner) or not owner[match.end()].isalnum())]
+    require(len(matches)==1,'The component option expression must have one exact complete-question binding.')
+    before, after = owner[:matches[0].start()],owner[matches[0].end():]
+    require(not re.search(r'(?:[,;/|]|\b(?:and|or))\s*(?:either\s+)?$',before,re.I)
+            and not re.match(r'\s*(?:[,;/|]|\b(?:and|or)\b)',after,re.I),
+            'A component option expression cannot prune an adjacent original alternative.')
+    owners = [m for m in re.finditer(re.escape(owner),field['label'])
+              if (m.start()==0 or not field['label'][m.start()-1].isalnum())
+              and (m.end()==len(field['label']) or not field['label'][m.end()].isalnum())]
+    require(len(owners)==1,'The complete choice question must have one original source binding.')
+    before,after=field['label'][:owners[0].start()],field['label'][owners[0].end():]
+    require(not re.search(r'\bor\s*(?:either\s+)?$',before,re.I) and not re.match(r'\s*or\b',after,re.I),
+            'A choice question cannot cut off an adjacent original OR alternative.')
+    require(not re.search(r'[/|]\s*$',before) and not re.match(r'\s*[/|]',after),
+            'Unsupported surrounding option separators cannot establish a complete choice question.')
+    # A source list separator outside the owned question is not automatically
+    # another option OR another requested part. Only an independently retained
+    # sibling's exact, non-overlapping source quote establishes that boundary.
+    # Adding a nominal suffix to a clipped owner supplies no such evidence.
+    prefix=re.search(r'(?:[,;]\s*(?:and\s+)?|\band\s+)\s*(?:either\s+)?$',before,re.I)
+    suffix=re.match(r'\s*(?:[,;]\s*(?:and\s+)?|and\s+)',after,re.I)
+    siblings=[part.get('question_quote') for part in definition['component_contract']['components']
+              if isinstance(part,dict) and part is not component and isinstance(part.get('question_quote'),str)
+              and part.get('id')!=component['id']]
+    if prefix:
+        end=len(before[:prefix.start()].rstrip())
+        require(any(literal_part(field['label'][:end],sibling) and field['label'][:end].endswith(sibling)
+                    for sibling in siblings),
+                'A preceding list item must have its own source-bound required component; no option may be pruned.')
+    if suffix:
+        start=owners[0].end()+suffix.end()
+        require(any(literal_part(field['label'][start:],sibling) and field['label'][start:].startswith(sibling)
+                    for sibling in siblings),
+                'A following list item must have its own source-bound required component; no option may be pruned.')
+
+
 def configured(config):
     from .semantic_preparation_roles import require
     value = config.get(CONFIG_KEY, CONTRACT)
-    require(value in (CONTRACT, ENCOUNTER_CONTRACT)
+    require(value in (CONTRACT, *ENCOUNTER_CONTRACTS)
             and (CONFIG_KEY not in config or config.get('semantic_definition_version') == 4),
             'Unsupported explicit component contract.')
     return value
@@ -199,32 +289,60 @@ ENCOUNTER_INSTRUCTIONS = INSTRUCTIONS.replace(CONTRACT, ENCOUNTER_CONTRACT, 1) +
     'The independent checker must verify this encounter permission separately from event time. '
 )
 
+CHOICE_INSTRUCTIONS = ENCOUNTER_INSTRUCTIONS.replace(ENCOUNTER_CONTRACT, CHOICE_CONTRACT, 1) + (
+    'Every component additionally has choices, an ordered array, and option_quote. Non-choice components '
+    'have choices:[] and option_quote:null. '
+    'A choice component has its OWN complete exact original options, never the compound field\'s empty choices. '
+    'For physical dropdowns preserve the complete original ordered options and use option_quote:null. Otherwise '
+    'question_quote binds the complete requested part including its context; option_quote is its entire literal '
+    'explicit OR-list (two alternatives or comma-separated alternatives ending in or), with choices exactly '
+    'matching that expression in original order. Do not truncate the owning question or omit an adjacent alternative, '
+    'invent options, sort them, borrow another part\'s choices or treat a multi-value request joined by and as a choice. '
+    'Unsupported or ambiguous option syntax remains unresolved. The outer narrative keeps choices:[]. '
+    'Represent distinct requested values, not both a topic/group introduction and a second copy of the same '
+    'values as children. When the original question names a topic then enumerates its attributes, those '
+    'attributes are its required parts; the topic introduction is their context. Preserve any additional '
+    'independently requested narrative or explanation as its own complete part with exact source wording. '
+    'Do not drop residual requested narrative, create redundant whole-topic requirements, or silently repair '
+    'another role\'s result. The independent checker verifies the complete source hierarchy and all options; '
+    'any real remaining omission, disagreement or ambiguity stays unresolved for explicit review. '
+)
+
 
 def schema_for(contract=CONTRACT):
     from .semantic_preparation_roles import require
-    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component schema.')
+    require(contract in (CONTRACT, *ENCOUNTER_CONTRACTS), 'Unsupported component schema.')
     result = schema()
-    if contract == ENCOUNTER_CONTRACT:
+    if contract in ENCOUNTER_CONTRACTS:
         result['properties']['contract']['enum'] = [contract]
         component = result['properties']['components']['items']
         component['required'].append('encounter_scope')
         component['properties']['encounter_scope'] = {'type': 'string', 'enum': list(ENCOUNTER_SCOPES)}
+        if contract == CHOICE_CONTRACT:
+            component['required'].append('choices')
+            component['properties']['choices'] = {'type':'array','maxItems':200,
+                'items':{'type':'string','minLength':1,'maxLength':2000}}
+            component['required'].append('option_quote')
+            component['properties']['option_quote'] = {'anyOf':[{'type':'string','minLength':1,'maxLength':2000},{'type':'null'}]}
     return result
 
 
 def instructions_for(contract=CONTRACT):
     from .semantic_preparation_roles import require
-    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component instructions.')
-    return ENCOUNTER_INSTRUCTIONS if contract == ENCOUNTER_CONTRACT else INSTRUCTIONS
+    require(contract in (CONTRACT, *ENCOUNTER_CONTRACTS), 'Unsupported component instructions.')
+    return CHOICE_INSTRUCTIONS if contract == CHOICE_CONTRACT else ENCOUNTER_INSTRUCTIONS if contract == ENCOUNTER_CONTRACT else INSTRUCTIONS
 
 
 def fixture_for(field, definition, contract=CONTRACT):
     """Explicit fixture default only; live scopes come from reviewed proposals."""
     from .semantic_preparation_roles import require
-    require(contract in (CONTRACT, ENCOUNTER_CONTRACT), 'Unsupported component fixture.')
+    require(contract in (CONTRACT, *ENCOUNTER_CONTRACTS), 'Unsupported component fixture.')
     result = fixture(field, definition)
-    if contract == ENCOUNTER_CONTRACT:
+    if contract in ENCOUNTER_CONTRACTS:
         result['contract'] = contract
         for component in result['components']:
             component['encounter_scope'] = 'current'
+            if contract == CHOICE_CONTRACT:
+                component['choices'] = deepcopy(definition['choices']) if component['value_type']=='choice' else []
+                component['option_quote'] = None
     return result

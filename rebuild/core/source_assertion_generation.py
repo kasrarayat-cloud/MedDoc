@@ -247,11 +247,11 @@ def _scope_matches(assertion, scope):
 
 
 def _component_scope_matches(assertion, definition, component):
-    from documents.component_contracts import CONTRACT, ENCOUNTER_CONTRACT
+    from documents.component_contracts import CONTRACT, ENCOUNTER_CONTRACTS
     contract = definition['component_contract']['contract']
     if contract == CONTRACT:
         return _scope_matches(assertion, component['scope'])
-    g.require(contract == ENCOUNTER_CONTRACT, 'component_encounter_contract')
+    g.require(contract in ENCOUNTER_CONTRACTS, 'component_encounter_contract')
     scope = component['scope']
     subject = scope['subject']
     subject_ok = subject=='unspecified' or assertion['subject']==subject or subject=='encounter' and assertion['subject']=='patient'
@@ -346,8 +346,8 @@ def _component_render(notes, graph, field, definition, component, selected, adju
     def retained(evidence):
         return evidence is not None and any(f['value_evidence']['start'] <= evidence['start'] < evidence['end']
                    <= f['value_evidence']['end'] for f in picked)
-    from documents.component_contracts import ENCOUNTER_CONTRACT
-    if definition['component_contract']['contract'] == ENCOUNTER_CONTRACT:
+    from documents.component_contracts import ENCOUNTER_CONTRACTS
+    if definition['component_contract']['contract'] in ENCOUNTER_CONTRACTS:
         for fact in picked:
             owner = graph['fact_assertions'][fact['id']]
             if owner in roots and graph['assertions'][owner]['encounter'] == 'past':
@@ -407,6 +407,24 @@ def _component_render(notes, graph, field, definition, component, selected, adju
     typed = None
     if picked:
         component_definition = {**definition,'value_type':component['value_type'],'scope':component['scope']}
+        from documents.component_contracts import CHOICE_CONTRACT
+        if definition['component_contract']['contract'] == CHOICE_CONTRACT:
+            component_definition['choices'] = component['choices']
+            if component['value_type'] == 'choice':
+                # The new component profile accepts only unambiguous case and
+                # whitespace equivalence to one original option. Literal text
+                # and evidence remain unchanged; historical typing stays exact.
+                normalized = ' '.join(typed_text.split()).casefold()
+                matches = [option for option in component['choices']
+                           if ' '.join(option.split()).casefold() == normalized]
+                if len(matches) == 1:
+                    typed_text = matches[0]
+                    if (definition['value_type'] == 'choice' and definition['answer_mode'] == 'atomic'
+                            and len(definition['component_contract']['components']) == 1):
+                        # An atomic choice presents its exact approved original
+                        # option to the unchanged physical/export validator.
+                        # The selected source quotation remains in the proof.
+                        text = matches[0]
         try:
             typed = _typed_value(component_definition,typed_text)
         except ValidationError as exc:
@@ -656,10 +674,21 @@ the complete topic. Missing siblings and omitted facts remain held. This clinica
 permission never grants current-encounter ICD or E/M eligibility.'''
 
 
+CHOICE_SCOPE_INSTRUCTIONS = ENCOUNTER_SCOPE_INSTRUCTIONS.replace('field-components-v2', 'field-components-v3', 1) + """
+Each choice component has its own approved complete ordered choices. Select only
+one of those exact options supported by that component's own source evidence,
+subject, encounter, event time, polarity and uncertainty. The outer narrative's
+empty choices are not the component's options. Missing or ambiguous source
+options remain held; an available option is never evidence the patient has it."""
+
+
 def instructions_for(definitions, instructions):
-    from documents.component_contracts import ENCOUNTER_CONTRACT
-    if any(d['component_contract']['contract'] == ENCOUNTER_CONTRACT for d in definitions.values()):
-        return instructions + ENCOUNTER_SCOPE_INSTRUCTIONS
+    from documents.component_contracts import ENCOUNTER_CONTRACT, CHOICE_CONTRACT
+    contracts = {d['component_contract']['contract'] for d in definitions.values()}
+    if CHOICE_CONTRACT in contracts:
+        instructions += CHOICE_SCOPE_INSTRUCTIONS
+    if ENCOUNTER_CONTRACT in contracts:
+        instructions += ENCOUNTER_SCOPE_INSTRUCTIONS
     return instructions
 
 

@@ -117,7 +117,7 @@ def _supports_definition_capacity(config):
     return (_supports_generation_capacity_v2(config)
             and type(config.get('semantic_definition_version')) is int
             and config['semantic_definition_version']==4
-            and config.get('semantic_component_contract')=='field-components-v2')
+            and config.get('semantic_component_contract') in ('field-components-v2','field-components-v3'))
 
 
 def definition_limits(config):
@@ -443,7 +443,7 @@ def assert_installed_guards():
     bodies=dict(re.findall(r'CREATE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',module.SEMANTIC_SQL,re.S))
     recovery=importlib.import_module('core.migrations.0033_retained_semantic_revalidation_v3')
     bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',recovery.REVALIDATION_SQL,re.S)))
-    capacity=importlib.import_module('core.migrations.0035_definition_capacity_profile')
+    capacity=importlib.import_module('core.migrations.0036_component_choice_capacity')
     bodies.update(dict(re.findall(r'CREATE OR REPLACE FUNCTION (quillmd_[a-z_]+)\([^)]*\) RETURNS [^$]*?AS \$\$(.*?)\$\$;',capacity.CAPACITY_SQL,re.S)))
     triggers={name:(f'CREATE TRIGGER {name} BEFORE {events} ON public.{table} FOR EACH ROW EXECUTE FUNCTION {function}()')
         for name,table,events,function in (

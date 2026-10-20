@@ -8,7 +8,7 @@ from django.http import Http404
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_http_methods
 
-from documents.component_contracts import ENCOUNTER_CONTRACT, RENDERINGS, UNIT_REQUIREMENTS
+from documents.component_contracts import CHOICE_CONTRACT, ENCOUNTER_CONTRACTS, RENDERINGS, UNIT_REQUIREMENTS
 from documents.semantic_preparation_roles import (
     ANSWER_MODES, ANSWER_TYPES, CONSTRAINT_KEYS, POLARITIES, SUBJECTS, TEMPORALITIES,
     DefinitionError, digest, protected_field,
@@ -26,7 +26,8 @@ ENCOUNTER_SCOPE_LABELS = [('current', 'This encounter'), ('past', 'Past encounte
 
 
 def part_controls(definition):
-    return PART_CONTROLS + (('encounter_scope',) if definition['component_contract']['contract'] == ENCOUNTER_CONTRACT else ())
+    contract = definition['component_contract']['contract']
+    return PART_CONTROLS + (('encounter_scope',) if contract in ENCOUNTER_CONTRACTS else ()) + (('choices','option_quote') if contract == CHOICE_CONTRACT else ())
 
 
 def binding(prep, actor, field_key):
@@ -73,9 +74,13 @@ def parts_for(field, definition):
         parts.append({'id': 'part_'+str(index), 'question_quote': field['label'], 'label': None,
             'meaning': '', 'value_type': 'text', 'scope': {'subject': 'patient', 'temporality': 'any', 'polarity': 'any'},
             'unit': None, 'unit_requirement': 'none', 'required': True, 'new': True})
-        if definition['component_contract']['contract'] == ENCOUNTER_CONTRACT:
+        if definition['component_contract']['contract'] in ENCOUNTER_CONTRACTS:
             parts[-1]['encounter_scope'] = ''  # An added part requires an explicit choice.
-    return [{**p, 'index': i} for i, p in enumerate(parts)]
+        if definition['component_contract']['contract'] == CHOICE_CONTRACT:
+            parts[-1]['choices'] = []
+            parts[-1]['option_quote'] = None
+    return [{**p, 'index': i, **({'choices_text': '\n'.join(p['choices'])} if 'choices' in p else {})}
+            for i, p in enumerate(parts)]
 
 
 def posted_definition(prep, field, current, post):
@@ -110,7 +115,8 @@ def posted_definition(prep, field, current, post):
         if remove or part.get('new') and not add:
             continue
         raw = {name: one(post, base+name) for name in controls}
-        for name in ('question_quote', 'label', 'meaning', 'unit'):
+        for name in ('question_quote', 'label', 'meaning', 'unit', 'option_quote'):
+            if name not in raw:continue
             old = part.get(name)
             if old is not None and raw[name] == old.replace('\r\n', '\n').replace('\r', '\n'):
                 raw[name] = old
@@ -120,6 +126,15 @@ def posted_definition(prep, field, current, post):
             'unit': raw['unit'] or None, 'unit_requirement': raw['unit_requirement'], 'required': True})
         if 'encounter_scope' in controls:
             components[-1]['encounter_scope'] = raw['encounter_scope']
+        if 'choices' in controls:
+            components[-1]['option_quote'] = raw['option_quote'] or None
+            old = part['choices']
+            if raw['choices'] == '\n'.join(old).replace('\r\n','\n').replace('\r','\n'):
+                components[-1]['choices'] = deepcopy(old)
+            elif any('\n' in option or '\r' in option for option in old):
+                raise ValidationError('Keep the original multiline component choice boundaries unchanged.')
+            else:
+                components[-1]['choices'] = raw['choices'].splitlines()
     if set(post) - allowed:
         raise ValidationError('This component form has unsupported controls. Reopen it; nothing was saved.')
     if not checked(post, 'component_reviewed'):
@@ -179,7 +194,7 @@ def edit(request, pk, field_key):
                             if name in ('subject', 'temporality', 'polarity'):
                                 part['scope'][name] = request.POST[base+name]
                             else:
-                                part[name] = request.POST[base+name]
+                                part['choices_text' if name == 'choices' else name] = request.POST[base+name]
                     part['remove'] = request.POST.getlist(base+'remove') == ['on']
                     part['add'] = request.POST.getlist(base+'add') == ['on']
     row = template_review.rows([{'field': field, 'definition': display_definition, 'state': ''}])[0]
@@ -190,7 +205,8 @@ def edit(request, pk, field_key):
         'component_token': token_for(prep, request.user, field_key),
         'save_binding': save_binding(prep, 'definitions'),
         'renderings': RENDERINGS,
-        'component_encounter_scopes': ENCOUNTER_SCOPE_LABELS if current['component_contract']['contract'] == ENCOUNTER_CONTRACT else [],
+        'component_encounter_scopes': ENCOUNTER_SCOPE_LABELS if current['component_contract']['contract'] in ENCOUNTER_CONTRACTS else [],
+        'component_choices': current['component_contract']['contract'] == CHOICE_CONTRACT,
         'unit_requirements': [('none', 'No unit required'), ('documented', 'Keep the documented unit and scale'),
                               ('printed', 'Use the exact unit printed on the form')],
         'component_types': list(template_review.TYPE_LABELS.items()),

@@ -203,8 +203,8 @@ class ComponentReviewDatabaseTests(TestCase):
         self.assertContains(self.client.post(url, post), 'form changed', status_code=409)
 
     def test_encounter_scope_is_a_bound_draft_until_whole_form_approval(self):
-        from documents.component_contracts import CONFIG_KEY, ENCOUNTER_CONTRACT
-        self.assertEqual(self.prep.config[CONFIG_KEY], ENCOUNTER_CONTRACT)
+        from documents.component_contracts import CONFIG_KEY, CHOICE_CONTRACT
+        self.assertEqual(self.prep.config[CONFIG_KEY], CHOICE_CONTRACT)
         current = workflow.corrected_definitions(self.prep)[self.field['key']]
         url = reverse('template_definitions_components', args=[self.prep.pk,self.field['key']])
         self.assertContains(self.client.get(url), 'name="part_0_encounter_scope"')
