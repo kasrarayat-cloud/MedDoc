@@ -11,6 +11,7 @@ from django.utils import timezone
 from . import generation
 from .models import AIStageReceipt, Job, TemplateDefinitionPreparation
 from .security import audit, membership, private_path
+from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 
 PROTOCOL='quillmd-ai-stages-v1'
 MAX_REQUEST_BYTES=512000
@@ -232,7 +233,7 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
         response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(
             model=config['model'],max_tokens=max_output_tokens,system=instructions,
             messages=[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
-            output_config={'format':{'type':'json_schema','schema':transform_schema(schema)}})
+            output_config={'format':{'type':'json_schema','schema':share_anthropic_schema(transform_schema(schema))}})
         on_response(response)
         usage=response.usage
         cached=getattr(usage,'cache_read_input_tokens',0) or 0
@@ -302,6 +303,8 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     schema_json=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
+    if config.get('mode')=='live' and config.get('provider')=='anthropic':
+        envelope['schema_transport']=ANTHROPIC_SCHEMA_TRANSPORT
     if ((job is not None and 'semantic_capacity_profile' in config)
         or (definition_preparation is not None and 'definition_capacity_profile' in config)):
         envelope['timeout_seconds']=timeout_seconds
