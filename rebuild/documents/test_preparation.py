@@ -69,6 +69,29 @@ class PreparationDocumentTests(unittest.TestCase):
                 with self.subTest(table=table,label=label):
                     self.assertIn('guided_signing',{i['code'] for i in inventory(p)['issues']})
 
+    def test_clinical_noun_signs_are_writable_without_granting_signing_authority(self):
+        clinical = ['Vital sign', 'Physical sign', 'Neurological sign', 'Cardinal sign',
+                    'Patient vital sign', 'Vital sign measured by nurse', 'Please document vital sign']
+        for table in (False, True):
+            p = self.make([label+': ____' for label in clinical] if not table else (),
+                          [[label, ''] for label in clinical] if table else None)
+            inv = inventory(p)
+            with self.subTest(table=table):
+                self.assertFalse(inv['issues'])
+                self.assertEqual([q['text'] for q in inv['questions']], clinical)
+                self.assertTrue(all(not a['protected_signing'] for a in inv['anchors']))
+
+    def test_signing_directives_in_clinical_labels_cannot_become_clinical_answers(self):
+        for label in ('Vital sign; please sign here', 'Physical sign and attestation',
+                      'Vital sign — physician to sign', 'Clinical sign and Sign',
+                      'Consultant should sign', 'Doctor will sign', 'Electronic sign', 'Digital sign'):
+            inv = inventory(self.make(['Assessment: ____', label+': ____']))
+            with self.subTest(label=label):
+                self.assertTrue(inv['issues'] or any(a['protected_signing'] for a in inv['anchors']))
+                question_ids = {q['id'] for q in inv['questions'] if q['text'] == label}
+                self.assertFalse(any(a['question_id'] in question_ids and not a['protected_signing']
+                                     for a in inv['anchors']))
+
     def test_ambiguous_cells_require_explicit_finite_doctor_placement(self):
         p=self.make(['Clinician signature: ______'],[['Temperature','','°C'],['Assessment','','']])
         inv=inventory(p);self.assertFalse(inv['issues'])

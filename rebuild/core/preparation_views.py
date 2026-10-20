@@ -43,7 +43,7 @@ def detail(request,pk):
            'proposal_metadata':metadata(proposed.get(a['id'],{})),
            'checker_metadata':metadata(checked.get(a['id'],{}))} for a in prep.inventory.get('anchors',[])]
     receipts=list(prep.receipts.order_by('created_at'))
-    from .word_contract import review_rows, approval_issues
+    from .word_contract import review_rows, approval_issues, definition_version
     definition_rows = template_review.review_items(prep, review_rows(prep))
     definition_issues = {r['field']['key']: r['reason'] for r in definition_rows if r['state'] == 'unresolved'} if prep.state in {'review','guided'} else {}
     from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
@@ -54,7 +54,8 @@ def detail(request,pk):
     return render(request,'template_preparation.html',{**compact, 'template':template,'preparation':prep,'layout_preparation':prep,
         'definition_rows':definition_rows, 'definition_issues':definition_issues,
         'can_approve':prep.state == 'review' and not definition_issues,
-        'definition_version':2, 'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
+        'definition_version':definition_version(prep.config),
+        'value_types':ANSWER_TYPES, 'answer_modes':ANSWER_MODES, 'subjects':SUBJECTS, 'temporalities':TEMPORALITIES, 'polarities':POLARITIES, 'anchor_rows':rows,'field_rows':corrected_fields(prep),'issues':prep.inventory.get('issues',[]),
         'placement_rows':[r for r in rows if r['kind']=='choose_cell'],
         'protected_rows':[r for r in rows if r['protected_signing']],
         'stories':prep.inventory.get('stories',[]),
@@ -80,13 +81,14 @@ def corrections(request,pk):
     labels={} if request.POST.get('placement_only')=='on' else {f['key']:request.POST.get('label_'+f['key'],'') for f in prep.candidate_info.get('fields',[])}
     placements={a['id']:request.POST.get('placement_'+a['id'],'') for a in prep.inventory.get('anchors',[]) if a['kind']=='choose_cell'}
     try:
-        from .word_contract import active
+        from .word_contract import active, definition_version, proposed
         definitions = None
-        if active(prep.inventory, prep.config):
+        if active(prep.inventory, prep.config) and request.POST.get('compact_review') != 'on':
             from types import SimpleNamespace
             from .semantic_preparation_views import posted_definitions
             definitions = posted_definitions(SimpleNamespace(source_version=SimpleNamespace(fields=prep.inventory['fields']),
-                config={'semantic_definition_version':2}), request.POST)
+                config={'semantic_definition_version':definition_version(prep.config)},
+                component_baseline=proposed(prep)), request.POST)
         reviewed_anchors = request.POST.getlist('reviewed_anchor')
         reviewed_fields = request.POST.getlist('reviewed_field')
         reason = request.POST.get('correction_reason','')

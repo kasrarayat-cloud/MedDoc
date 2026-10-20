@@ -65,10 +65,10 @@ def assess(encounter, run):
     need(metadata is not None and metadata.release.effective_from <= encounter.service_date
          <= metadata.release.effective_until and metadata.release.version == bound['version']
          and metadata.release.sha256 == bound['sha256'], 'The dated ICD reference changed or does not apply.')
-    from .coding_engine import QUALIFIED_SOURCE_CONTRACT, CURRENT_SOURCE_CONTRACT
+    from .coding_engine import QUALIFIED_SOURCE_CONTRACTS, CURRENT_SOURCE_CONTRACT
     from . import source_assertion_coding as shared
-    source_contract = (shared.CONTRACT if shared.enabled(run) else QUALIFIED_SOURCE_CONTRACT
-        if run.config.get('clinical_source_contract') == QUALIFIED_SOURCE_CONTRACT else CURRENT_SOURCE_CONTRACT)
+    source_contract = (shared.CONTRACT if shared.enabled(run) else run.config['clinical_source_contract']
+        if run.config.get('clinical_source_contract') in QUALIFIED_SOURCE_CONTRACTS else CURRENT_SOURCE_CONTRACT)
     inventory = shared.inventory(run) if shared.enabled(run) else completeness.inventory(encounter.notes, source_contract=source_contract)
     from .coding_reference_store import prediction_reference
     reference = prediction_reference(metadata, approved,
@@ -245,8 +245,9 @@ def view(encounter, run, user, *, decision_response=None):
 @transaction.atomic
 def decide(encounter, user, token, expected_digest, expected_previous, changes, *, respond=None):
     e = service.locked_encounter(encounter, user, clinician=True)
-    run = CodingRun.objects.select_for_update().filter(encounter=e,
-        input_digest=service.input_snapshot(e)[3]).first()
+    displayed = service.displayed_run(e)
+    run = (CodingRun.objects.select_for_update().filter(encounter=e, pk=displayed.pk).first()
+           if displayed is not None else None)
     review, base = assess(e, run)
     need(not provider_review_pending(run, base), PROVIDER_REVIEW_FIRST)
     previous = current_decision(run, review)

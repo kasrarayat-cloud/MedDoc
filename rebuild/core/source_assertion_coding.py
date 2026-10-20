@@ -31,14 +31,28 @@ def snapshot(encounter):
     """One explicit generation supplies all graph destinations; never latest()."""
     from .source_interpretation_store import load_for_answer
     from .semantic_review import definitions_for, validate_answer
+    from . import word_contract
     fields = encounter.template_version.fields
     answers = encounter.answers
-    if not any(type(d) is dict and d.get('version') == 4
-               for d in encounter.template_version.semantic_definitions.values()):
-        need(not any(type(a) is dict and a.get('fact_scope_contract') == graph.CONTRACT for a in answers.values()),
-             'graph_requires_approved_components')
+    # A newly created encounter has no generated document to interpret yet.
+    # The coding service independently marks it documentation_pending and
+    # refuses requests/approvals until answers exist. Reading that empty panel
+    # must not require a generation lineage that has not been created.
+    if not answers:
         return None
-    definitions = definitions_for(encounter.template_version)
+    version = encounter.template_version
+    graph_answers = any(type(a) is dict and a.get('fact_scope_contract') == graph.CONTRACT for a in answers.values())
+    inline_graph = (word_contract.has_inline(version)
+        and version.preparation.config.get(word_contract.CONFIG_KEY) == word_contract.GRAPH_PROFILE)
+    if not (graph_answers or inline_graph or any(type(d) is dict and d.get('version') == 4
+               for d in version.semantic_definitions.values())):
+        return None
+    # Inline Word definitions are sealed in preparation metadata, not copied
+    # into semantic_definitions. Markers trigger validation; only this approved
+    # reader can establish the actual component definitions and destinations.
+    definitions = definitions_for(version)
+    need(bool(definitions) and all(type(d) is dict and d.get('version') == 4 for d in definitions.values()),
+         'graph_requires_approved_components')
     need(set(answers) == {f['key'] for f in fields} and bool(fields), 'complete_graph_answers')
     lineage = None
     for field in fields:

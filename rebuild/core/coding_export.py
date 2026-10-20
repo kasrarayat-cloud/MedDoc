@@ -35,11 +35,11 @@ def eligible_codes(encounter, *, include_source=True):
     """Read the persisted approval; never infer acceptance from suggestions."""
     if encounter.status != 'finalized' or encounter.template_version.template.format.lower() != 'docx':
         raise ValidationError('Export with codes requires a finalized Word document. The original download remains available.')
-    key = service.input_snapshot(encounter)[3]
-    run = CodingRun.objects.filter(encounter=encounter, input_digest=key).first()
+    run = service.displayed_run(encounter)
     if run is None:
         raise ValidationError('Review and approve coding for the current saved encounter revision before exporting with codes.')
     service.assert_current(run, encounter)
+    key = run.input_digest
     decisions = list(CodingDecision.objects.filter(run=run)[:2])
     if len(decisions) > 1:
         raise ValidationError('The saved coding approval is ambiguous.')

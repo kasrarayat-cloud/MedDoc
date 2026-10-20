@@ -277,7 +277,7 @@ def attribute_mention(before, after, qualifiers=()):
     return nominal or bool(qualified and bounded)
 
 
-def _denied_condition_atom(clause, before, after):
+def _denied_condition_atom(clause, before, after, *, source_contract=None):
     """Bind a mention to one object of a complete shared negative predicate.
 
     The comma/conjunction boundaries survive normalization. Every object must
@@ -294,9 +294,16 @@ def _denied_condition_atom(clause, before, after):
         match = re.fullmatch(r'(?:the patient|patient|he|she|they)\s+'
             r'(?:deny|denies|denied)\s+' + objects_pattern
             + r'(?:\s+(?:today|at this encounter))?', value, re.I)
+    diagnosis_list = False
+    if not match and source_contract == SHARED_SOURCE_CONTRACT:
+        match = re.fullmatch(r'no\s+diagnosis\s+of\s+' + objects_pattern +
+            r'\s+(?:was\s+made|has\s+been\s+made|is\s+established)'
+            r'(?:\s+(?:today|at this encounter))?', value, re.I)
+        diagnosis_list = bool(match)
     if not match:
         return None
-    objects = re.split(r'\s*,\s*(?:and\s+)?|\s+and\s+', match['objects'], flags=re.I)
+    objects = re.split(r'\s*,\s*(?:(?:and|or)\s+)?|\s+(?:and|or)\s+' if diagnosis_list
+                       else r'\s*,\s*(?:and\s+)?|\s+and\s+', match['objects'], flags=re.I)
     if not objects or any(not re.fullmatch(r'[A-Za-z]+(?:[ -][A-Za-z]+){0,9}', item) for item in objects):
         return None
     if any(re.search(r'\b(?:no|not|never|without|or|but|except|unless|whether|if|possible|possibly|'
@@ -325,8 +332,8 @@ def condition_mentions(text, concept, qualifiers=(), *, source_contract=None):
         clause, before, after = item
         if attribute_mention(before, after, qualifiers):
             continue
-        if source_contract == QUALIFIED_SOURCE_CONTRACT:
-            atom = _denied_condition_atom(clause, before, after)
+        if source_contract in QUALIFIED_SOURCE_CONTRACTS:
+            atom = _denied_condition_atom(clause, before, after, source_contract=source_contract)
             # Only a literal date-bound Index subtype is distinct from the
             # parent. An unqualified parent in the same list remains a denial.
             if atom and any(atom == norm(qualifier + ' ' + term)
@@ -336,10 +343,12 @@ def condition_mentions(text, concept, qualifiers=(), *, source_contract=None):
     return result
 
 
-def unknown_cause_attribute(clause, concept):
+def unknown_cause_attribute(clause, concept, *, source_contract=None):
     """Complete unknown-cause noun assertions are not causal predicates."""
     cause = r'(?:cause|etiology|aetiology)'
-    unknown = r'(?:not (?:established|known|determined|identified)|unknown|undetermined|unestablished)'
+    unknown = (r'(?:not (?:established|known|determined|identified)|unknown|undetermined|unestablished|uncertain)'
+               if source_contract == SHARED_SOURCE_CONTRACT else
+               r'(?:not (?:established|known|determined|identified)|unknown|undetermined|unestablished)')
     for term in anchors(concept):
         finding = r'(?:the )?' + re.escape(term)
         if re.fullmatch(r'(?:(?:the )?' + cause + r' (?:of|for) ' + finding + r'|'
@@ -486,7 +495,7 @@ def _complete_presence_tail(tail):
     return not tail or bool(re.fullmatch(part + r'(?:(?:\s*,?\s+|\s+and\s+)' + part + r'){0,3}', tail))
 
 
-def _current_condition_assertion(clause, before, after, context, row):
+def _current_condition_assertion(clause, before, after, context, row, *, source_contract=None):
     """Finite affirmative source predicates, independent of provider labels.
 
     A condition appearing as the object of a question, screening or future risk
@@ -500,6 +509,19 @@ def _current_condition_assertion(clause, before, after, context, row):
     subject = r'(?:the patient|patient|he|she|they' + ('|' + re.escape(patient) if patient else '') + r')'
     modifiers = r'(?:(?:a|an|the|current|ongoing|persistent|recurrent|intermittent|acute|chronic|mild|moderate|severe|watery)\s+)*'
     before, after = before.lstrip(), after.strip()
+    if source_contract == SHARED_SOURCE_CONTRACT:
+        from .coding_source_assertions import current_presence, reporting_reference_prefix
+        current = current_presence(clause, before, after, subject, modifiers, row)
+        if current is not False:
+            return current
+        embedded, attributed = reporting_reference_prefix(before, context)
+        if (attributed and re.fullmatch(r'(?:(?:the|this|that|his|her|their)\s+)?'
+                r'(?:(?:reported|documented|recorded|described|noted|mentioned|stated)\s+)?', embedded)
+                and re.match(r'(?:is|are|was|were|present|persists?|continues?)\b', after)):
+            # A reported nominal and an embedded clinical predicate are
+            # different shapes. Keep "reports X today" intact above/below;
+            # only a complete "states X is present" unwraps its subject.
+            before = embedded
     if re.fullmatch(subject + r'\s+(?:(?:also|currently|still)\s+)?(?:has|have|reports?|reported|experiences?|experienced|endorses?|'
             r'describes?|complains? of|presents? with|is experiencing|are experiencing)\s*' + modifiers, before):
         return True if _complete_presence_tail(after) else None
@@ -586,8 +608,31 @@ def _condition_assertion_errors(notes, concept, mentions, context, units, *, sou
             continue
         for unit in matching:
             row = context['units'][unit['start']]
-            if source_contract == QUALIFIED_SOURCE_CONTRACT and not _proven_noncurrent_scope(row) and (
-                    _denied_condition_atom(clause, before, after)
+            if source_contract == SHARED_SOURCE_CONTRACT:
+                from .coding_source_assertions import (condition_reference_finding,
+                    condition_reference_subject, benign_reference_predicate)
+                finding = condition_reference_finding(before, after, context)
+                previous = next((prior for prior in reversed(units) if prior['start'] < unit['start']), None)
+                correction_scope = (row['section_timing'] == 'current' and previous is not None
+                    and owned_current(context, previous)
+                    and context['units'][previous['start']]['section'] == row['section'])
+                if finding and (owned_current(context, unit) or correction_scope):
+                    if finding['kind'] == 'source_assertion_governance':
+                        return ['The complete source retracts or reassigns this condition assertion.']
+                    if finding['kind'] == 'negated_presence':
+                        return ['The complete current source denies presence of the selected condition.']
+                    if finding['kind'] == 'uncertain_presence':
+                        return ['The complete current source questions whether the selected condition is established.']
+                if (after.strip() and condition_reference_subject(before, context)
+                        and (owned_current(context, unit) or correction_scope)):
+                    assertion = _current_condition_assertion(clause, before, after, context, row,
+                        source_contract=source_contract)
+                    if (assertion is not True and not benign_reference_predicate(
+                            clause, after, context, anchors(concept))):
+                        return ['A current source predicate about this condition remains unresolved; '
+                                'a separate positive mention cannot supply its interpretation.']
+            if source_contract in QUALIFIED_SOURCE_CONTRACTS and not _proven_noncurrent_scope(row) and (
+                    _denied_condition_atom(clause, before, after, source_contract=source_contract)
                     or re.search(r'\b(?:deny|denies|denied|absence)\b', before)
                     or re.search(r'\b(?:absent|absence|denied)\b', after)):
                 # This is a veto, not a denial exception: incomplete qualifiers
@@ -619,13 +664,18 @@ def _condition_assertion_errors(notes, concept, mentions, context, units, *, sou
                 return ['The complete source retracts, reassigns or retimes the selected condition.']
             if not owned:
                 continue
+            if source_contract == SHARED_SOURCE_CONTRACT:
+                uncertain, historical = _condition_assertion_qualifiers(before, after, source_contract=source_contract)
+                if uncertain and not historical:
+                    return ['The complete current source questions whether the selected condition is established.']
             # These qualifiers govern the existence of this condition, rather
             # than an independently documented cause/type/location attribute.
             if ('?' in clause or re.search(r'\b(?:whether|if)\b.*\b(?:has|have|is|are)\s*$', before)
                     or re.match(r'\s*(?:is|was|remains?)\s+(?:a\s+)?risk\b.*\bnot\s+(?:a\s+)?current\s+(?:symptom|condition|diagnosis)', after)):
                 return ['The source questions or denies current presence of the selected condition.']
-            assertion = _current_condition_assertion(clause, before, after, context, row)
-            if source_contract in GOVERNANCE_SOURCE_CONTRACTS:
+            assertion = _current_condition_assertion(clause, before, after, context, row, source_contract=source_contract)
+            if (source_contract in GOVERNANCE_SOURCE_CONTRACTS
+                    and not (source_contract == SHARED_SOURCE_CONTRACT and assertion is True)):
                 coordinated = _coordinated_condition_assertion(clause, concept, context)
                 if coordinated is not False:
                     assertion = coordinated
@@ -658,7 +708,7 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         from .clinical_source_context import source_context, SOURCE_GOVERNANCE_PROFILE
         from .generation import source_units
         units, _ = source_units(notes, [])
-        context = source_context(notes, units, profile=source_profile(source_contract))
+        context = source_context_for(notes, units, source_contract)
     def mentions(text):
         rows = condition_mentions(text, concept, qualifiers, source_contract=source_contract)
         if source_contract in ASSERTION_SOURCE_CONTRACTS:
@@ -686,7 +736,7 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
             return 'excluded', 'The source explicitly describes a resolved finding, not a current condition.'
     negative, affirmative = [], []
     for clause, before, after in source_mentions:
-        if source_contract == QUALIFIED_SOURCE_CONTRACT:
+        if source_contract in QUALIFIED_SOURCE_CONTRACTS:
             scoped = [context['units'][unit['start']] for unit in units if clause.strip() in unit['quote']]
             if scoped and all(_proven_noncurrent_scope(row) for row in scoped):
                 continue
@@ -698,7 +748,7 @@ def source_disposition(concept, notes, *, qualifiers=(), source_contract=None):
         # Explicitly resolved historical symptoms and a current denial agree.
         if PAST.search(clause) and concept['temporality'] == 'current' and 'resolved' in norm(clause):
             continue
-        if (source_contract == QUALIFIED_SOURCE_CONTRACT and _denied_condition_atom(clause, before, after)
+        if (source_contract in QUALIFIED_SOURCE_CONTRACTS and _denied_condition_atom(clause, before, after, source_contract=source_contract)
                 or NEGATION.search(before) or re.match(r'\s*(?:(?:is|was|are|were|has|have|been|remains|being)\s+)*(?:ruled out|absent|denied|not\b)', after)):
             negative.append(clause)
         else:
@@ -806,7 +856,9 @@ CURRENT_SOURCE_CONTRACT = 'source-bound-clinical-coding-v4'
 PROSPECTIVE_SOURCE_CONTRACT = 'source-bound-clinical-coding-v5'
 SOAP_SOURCE_CONTRACT = 'source-bound-clinical-coding-v6'
 QUALIFIED_SOURCE_CONTRACT = 'source-bound-clinical-coding-v7'
-COMPLETE_SOURCE_CONTRACTS = frozenset((PROSPECTIVE_SOURCE_CONTRACT, SOAP_SOURCE_CONTRACT, QUALIFIED_SOURCE_CONTRACT))
+SHARED_SOURCE_CONTRACT = 'source-bound-clinical-coding-v9'
+QUALIFIED_SOURCE_CONTRACTS = frozenset((QUALIFIED_SOURCE_CONTRACT, SHARED_SOURCE_CONTRACT))
+COMPLETE_SOURCE_CONTRACTS = frozenset((PROSPECTIVE_SOURCE_CONTRACT, SOAP_SOURCE_CONTRACT, *QUALIFIED_SOURCE_CONTRACTS))
 GOVERNANCE_SOURCE_CONTRACTS = frozenset((CURRENT_SOURCE_CONTRACT, *COMPLETE_SOURCE_CONTRACTS))
 ASSERTION_SOURCE_CONTRACTS = frozenset((ASSERTION_SOURCE_CONTRACT, *GOVERNANCE_SOURCE_CONTRACTS))
 SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, *ASSERTION_SOURCE_CONTRACTS))
@@ -814,12 +866,24 @@ SOURCE_CONTRACTS = frozenset((SOURCE_CONTRACT, *ASSERTION_SOURCE_CONTRACTS))
 
 def source_profile(contract):
     from .clinical_source_context import SOURCE_GOVERNANCE_PROFILE, COMPLETE_ASSERTION_PROFILE
+    if contract == SHARED_SOURCE_CONTRACT:
+        from .clinical_semantics import CONTEXT_PROFILE
+        return CONTEXT_PROFILE
     if contract in (SOAP_SOURCE_CONTRACT, QUALIFIED_SOURCE_CONTRACT):
         from .clinical_source_context import SOAP_ASSERTION_PROFILE
         return SOAP_ASSERTION_PROFILE
     if contract == PROSPECTIVE_SOURCE_CONTRACT:
         return COMPLETE_ASSERTION_PROFILE
     return SOURCE_GOVERNANCE_PROFILE if contract == CURRENT_SOURCE_CONTRACT else None
+
+
+def source_context_for(notes, units, source_contract):
+    """Generation and new coding share positioned source meaning explicitly."""
+    if source_contract == SHARED_SOURCE_CONTRACT:
+        from .clinical_semantics import source_context
+        return source_context(notes, units)
+    from .clinical_source_context import source_context
+    return source_context(notes, units, profile=source_profile(source_contract))
 
 
 def index_head_terms(head, description=''):
@@ -873,7 +937,7 @@ def tabular_specific_route(chain, source, description, *, asserted=None):
                for match in re.finditer(pattern, norm(source)))
 
 
-def _condition_assertion_qualifiers(before, after):
+def _condition_assertion_qualifiers(before, after, *, source_contract=None):
     """Read modifiers of the condition assertion, not an unrelated noun/date.
 
     The prospective source contract cannot replace assertion modality with a
@@ -886,6 +950,17 @@ def _condition_assertion_qualifiers(before, after):
             r'(?:possibility|possibilities|potential (?:diagnosis|symptom|condition)|under consideration)\b', after)
         or re.match(r'\s*' + state + r'not\s+(?:(?:an?|the|currently|yet|established|confirmed)\s+)*'
             r'(?:established|confirmed|diagnosed|symptom|diagnosis|condition)\b', after))
+    if source_contract == SHARED_SOURCE_CONTRACT:
+        from .coding_source_assertions import condition_reference_finding
+        finding = condition_reference_finding(before, after)
+        uncertain = uncertain or bool(finding and finding['kind'] == 'uncertain_presence')
+        uncertain = uncertain or bool(re.match(r'\s*(?:(?:is|was|are|were|remains?)\s+)'
+            r'(?:(?:a|an|the)\s+)?(?:possible|probable|suspected|unconfirmed|uncertain|'
+            r'not\s+(?:confirmed|established))\b', after)
+            or re.search(r'\b(?:possible|potential|probable|suspected|unconfirmed|uncertain|maybe)\s*$', before)
+            or re.match(r'\s*(?:may|might|could)\s+(?:not\s+)?(?:be|have\s+been)\s+'
+                r'(?:(?:a|an|the|current|actual|established|confirmed|possible|probable|suspected)\s+)*'
+                r'(?:present|diagnosis|condition|finding|symptom|disease|problem|complaint|possibility)\b', after))
     past_time = r'(?:yesterday|last\s+(?:week|month|year)|(?:\d+|[a-z]+)\s+(?:days?|weeks?|months?|years?)\s+ago|in\s+(?:19|20)\d\d|at\s+(?:the\s+)?(?:previous|prior|earlier)\s+(?:visit|encounter))'
     predicate = r'(?:(?:is|was|are|were|had|been|previously|last|evaluated|assessed|reported|documented|diagnosed|treated|present|noted|seen|for|at|on)\s+)*'
     historical = bool(re.search(r'\b(?:history of|previously (?:had|reported|experienced)|past (?:episode|diagnosis) of)\s*$', before)
@@ -900,7 +975,7 @@ def current_source_scope_errors(notes, concept, *, source_contract=None, qualifi
     from .clinical_source_context import source_context, owned_current, SOURCE_GOVERNANCE_PROFILE
     from .generation import source_units
     units, _ = source_units(notes, [])
-    context = source_context(notes, units, profile=source_profile(source_contract))
+    context = source_context_for(notes, units, source_contract)
     if context['issues']:
         return list(context['issues'])
     quote = concept['evidence']
@@ -910,10 +985,10 @@ def current_source_scope_errors(notes, concept, *, source_contract=None, qualifi
         if not covered or any(not owned_current(context, unit) for unit in covered):
             return ['The current-condition evidence has foreign, historical or unresolved source scope.']
     if concept['kind'] in ('diagnosis', 'symptom'):
-        scoped_qualifiers = qualifiers if source_contract == QUALIFIED_SOURCE_CONTRACT else ()
+        scoped_qualifiers = qualifiers if source_contract in QUALIFIED_SOURCE_CONTRACTS else ()
         for _clause, before, after in condition_mentions(quote, concept, scoped_qualifiers,
                 source_contract=source_contract):
-            uncertain, historical = _condition_assertion_qualifiers(before, after)
+            uncertain, historical = _condition_assertion_qualifiers(before, after, source_contract=source_contract)
             if uncertain or historical:
                 return ['The selected condition is qualified as uncertain or historical in its source assertion.']
         for unit in units:
@@ -923,7 +998,7 @@ def current_source_scope_errors(notes, concept, *, source_contract=None, qualifi
                     source_contract=source_contract):
                 if FAMILY.search(clause) or explicit_other_subject(before):
                     continue
-                uncertain, historical = _condition_assertion_qualifiers(before, after)
+                uncertain, historical = _condition_assertion_qualifiers(before, after, source_contract=source_contract)
                 if uncertain and not historical:
                     return ['The complete current source questions whether the selected condition is established.']
     return [] if occurrences else ['The selected assertion is absent from the complete source.']
@@ -1071,8 +1146,8 @@ def more_specific_source_routes(entry, concept, notes, reference, subtypes, *, s
             current_attribute = re.match(r'\s+(?:(?:type|subtype)\s+)?is\s+'+qualifier+r'\b', after)
             if not adjacent and not current_attribute:
                 continue
-            if source_contract == QUALIFIED_SOURCE_CONTRACT:
-                atom = _denied_condition_atom(clause, before, after)
+            if source_contract in QUALIFIED_SOURCE_CONTRACTS:
+                atom = _denied_condition_atom(clause, before, after, source_contract=source_contract)
                 if atom == norm(row['qualifier'] + ' ' + row['head_term']):
                     continue
                 if re.search(r'\b(?:is|are)\s+not\s+(?:diagnosed|confirmed|established|present)\b', clause, re.I):
@@ -1220,7 +1295,11 @@ def specificity_errors(concept, code, description, *, default_description='', cl
     return errors
 
 
-def semantic_patient_name_evidence(notes, fields, definitions, answers):
+SEMANTIC_IDENTITY_CONTRACT = 'approved-semantic-patient-name-v1'
+CURRENT_IDENTITY_CONTRACT = 'approved-semantic-patient-name-v2'
+
+
+def semantic_patient_name_evidence(notes, fields, definitions, answers, *, contract=SEMANTIC_IDENTITY_CONTRACT):
     """Project required v3 identities only after replaying the saved clinical proof.
 
     The full narrative is not a person name. Held or manually changed answers
@@ -1228,6 +1307,8 @@ def semantic_patient_name_evidence(notes, fields, definitions, answers):
     """
     from . import semantic_generation as semantic
     from documents.semantic_preparation_roles import validate_definitions, DefinitionError
+    if contract not in (SEMANTIC_IDENTITY_CONTRACT, CURRENT_IDENTITY_CONTRACT):
+        raise ValidationError('The saved patient-name evidence contract is unsupported.')
     if type(answers) is not dict:
         raise ValidationError('The saved patient-name answers must be a field mapping.')
     try:
@@ -1249,7 +1330,17 @@ def semantic_patient_name_evidence(notes, fields, definitions, answers):
             raise ValidationError('A required patient-name answer is missing from the saved coding source.')
         semantic.validate_stored_answer(notes, field, definition, answer)
         names = []
-        if answer.get('semantic_review_mode') == 'manual':
+        if contract == CURRENT_IDENTITY_CONTRACT:
+            # This is a fresh source/answer check, not a promotion of either the
+            # original generated verdict or the recorded manual decision.
+            proof = semantic.current_identity_proof(notes, field, definition, answer)
+            finding = {'verdict': 'held' if proof['issues'] else 'pass',
+                'reason': ('The current source identity requires review.' if proof['issues']
+                           else 'The complete source identity is retained in the current saved answer.'),
+                'current_source_proof': deepcopy(proof)}
+            if not proof['issues']:
+                names = deepcopy(proof['patient_names'])
+        elif answer.get('semantic_review_mode') == 'manual':
             finding = {'verdict':'manual', 'reason':'The required patient name has no validated generated identity proof after a manual answer decision.'}
         else:
             facts = {fact['id']:fact for fact in answer['facts']}
@@ -1271,10 +1362,27 @@ def checked_patient_name_evidence(inputs):
     if 'documented_patient_name_evidence' not in inputs:
         return []
     bridge = inputs['documented_patient_name_evidence']
-    if (type(bridge) is not dict or set(bridge) != {'contract', 'fields'}
-            or bridge['contract'] != 'approved-semantic-patient-name-v1'
+    contract = bridge.get('contract') if type(bridge) is dict else None
+    current = contract == CURRENT_IDENTITY_CONTRACT
+    if (type(bridge) is not dict or set(bridge) != ({'contract', 'fields', 'binding', 'review_state'} if current else {'contract', 'fields'})
+            or contract not in (SEMANTIC_IDENTITY_CONTRACT, CURRENT_IDENTITY_CONTRACT)
             or type(bridge['fields']) is not list or not bridge['fields']):
         raise ValidationError('The saved patient-name evidence contract is invalid.')
+    if current:
+        review = bridge['review_state']
+        if (type(review) is not dict or set(review) != {'status', 'revision', 'document_approval'}
+                or review['status'] not in ('review', 'finalized')
+                or type(review['revision']) is not int or review['revision'] != inputs.get('revision')
+                or type(review['document_approval']) is not dict):
+            raise ValidationError('The current patient-name review binding is invalid.')
+        expected_binding = {
+            'source_sha256': hashlib.sha256(inputs['notes'].encode()).hexdigest(),
+            'answers_sha256': digest(inputs['answers']), 'revision': inputs['revision'],
+            'review_state_sha256': digest(review),
+            'fields_sha256': inputs.get('template', {}).get('fields_sha256'),
+            'definitions_sha256': inputs.get('template', {}).get('definitions_sha256')}
+        if bridge['binding'] != expected_binding:
+            raise ValidationError('The current patient-name proof differs from its saved source, answers or review.')
     fields, definitions = [], {}
     for row in bridge['fields']:
         if type(row) is not dict or set(row) != {'field', 'definition', 'finding', 'names'}:
@@ -1283,7 +1391,7 @@ def checked_patient_name_evidence(inputs):
         if type(field) is not dict or not isinstance(field.get('key'), str) or field['key'] in definitions:
             raise ValidationError('The saved patient-name destinations are invalid or repeated.')
         fields.append(field); definitions[field['key']] = row['definition']
-    expected = semantic_patient_name_evidence(inputs['notes'], fields, definitions, inputs['answers'])
+    expected = semantic_patient_name_evidence(inputs['notes'], fields, definitions, inputs['answers'], contract=contract)
     if expected != bridge['fields']:
         raise ValidationError('The saved patient-name evidence differs from the validated clinical answers.')
     return expected

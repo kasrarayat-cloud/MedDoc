@@ -1,4 +1,4 @@
-"""New jobs freeze v24; retained jobs continue their original scope contract."""
+"""New jobs freeze v25; retained jobs continue their original scope contract."""
 from copy import deepcopy
 import json
 import os
@@ -32,7 +32,7 @@ class SourceContextWorkerTests(TestCase):
             else:
                 values['config']['semantic_fact_scope_contract'] = stored_scope
             return create(**values)
-        if stored_scope == semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT:
+        if stored_scope == semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT:
             job = enqueue(self.encounter, self.user, config=config)
         else:
             # Construct the historical snapshot at insertion, without updating
@@ -103,7 +103,13 @@ class SourceContextWorkerTests(TestCase):
             self.assertEqual(request['max_output_tokens'], 16000)
             self.assertEqual(request['timeout_seconds'], 120)
             current = expected in semantic.SOURCE_CONTEXT_SCOPE_CONTRACTS
-            self.assertEqual(request['instructions'].endswith(suffix), current)
+            if expected != semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT:
+                self.assertEqual(request['instructions'].endswith(suffix), current)
+            else:
+                from core.clinical_semantics import INSTRUCTIONS
+                self.assertIn(INSTRUCTIONS, request['instructions'])
+                self.assertIn('approved_field_requirements', request['payload'])
+                self.assertIn('source_assertions', request['payload'])
             self.assertEqual('source_context_review' in request['payload'], current)
             self.assertEqual('observation_qualifier_inventory' in request['payload'],
                              expected in semantic.OBSERVATION_CONTEXT_SCOPE_CONTRACTS)
@@ -120,11 +126,14 @@ class SourceContextWorkerTests(TestCase):
             self.assertEqual('source_separation_inventory' in request['payload'],
                              expected in semantic.COMPLETE_NARRATIVE_SCOPE_CONTRACTS)
             self.assertEqual('labelled_presentation_requirements' in request['payload'],
-                             expected == semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT)
+                             expected in (semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT, semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT))
             if stored_scope is not None:
                 self.assertEqual(request['payload']['fact_scope_contract'], expected)
 
-    def test_current_labelled_presentation_profile_is_frozen(self):
+    def test_current_clinical_semantics_profile_is_frozen(self):
+        self.exercise(semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+
+    def test_retained_v24_job_keeps_old_requests_and_answer_contract(self):
         self.exercise(semantic.LABELLED_PRESENTATION_SCOPE_CONTRACT)
 
     def test_retained_v23_job_keeps_old_requests_and_answer_contract(self):

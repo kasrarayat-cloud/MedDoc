@@ -326,7 +326,7 @@ def prediction_reference(metadata, codes, *, source_contract=None, source_invent
                        for k in ('source_sha256', 'inventory_sha256'))):
             raise ValidationError('Invalid source condition reference scope.')
         inventory_contract = source_inventory.get('source_contract')
-        if (any(c in (engine.QUALIFIED_SOURCE_CONTRACT, GRAPH_SOURCE_CONTRACT) for c in (source_contract, inventory_contract))
+        if (any(c in (*engine.QUALIFIED_SOURCE_CONTRACTS, GRAPH_SOURCE_CONTRACT) for c in (source_contract, inventory_contract))
                 and source_contract != inventory_contract):
             raise ValidationError('The prospective source inventory and reference contract differ.')
         source_terms = {engine.norm(t) for t in source_inventory['reference_terms']}

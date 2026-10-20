@@ -30,6 +30,64 @@ LABELS = ('Encounter category: Initial or Review', 'Clinic record reference', 'P
 
 
 class FreshWordContractTests(SimpleTestCase):
+    def graph_config(self):
+        from documents.component_contracts import CONFIG_KEY, ENCOUNTER_CONTRACT
+        return {**self.config, word_contract.CONFIG_KEY:word_contract.GRAPH_PROFILE,
+            'semantic_definition_version':4, CONFIG_KEY:ENCOUNTER_CONTRACT,
+            'word_preparation_output_profile':preparation.COMPLETE_OUTPUT_PROFILE}
+
+    def test_new_word_graph_profile_is_explicit_and_reuses_both_existing_component_roles(self):
+        from documents.component_contracts import CONFIG_KEY, ENCOUNTER_CONTRACT
+        config = self.graph_config()
+        before = deepcopy(self.config)
+        old = preparation.provider_request(self.inv,'proposer',self.config)
+        proposal = None
+        for role in ('proposer','checker'):
+            response,evidence = preparation.provider_role(self.inv,role,config,1,proposal)
+            word_contract.validate_result(self.inv,response,role,config)
+            definitions = response['answer_definitions']['fields']
+            self.assertTrue(all(row['definition']['version']==4 for row in definitions))
+            self.assertTrue(all(row['definition']['component_contract']['contract']==ENCOUNTER_CONTRACT for row in definitions))
+            self.assertEqual([row['field_key'] for row in definitions],[field['key'] for field in self.fields])
+            request = preparation.provider_request(self.inv,role,config,proposal)
+            self.assertIn('Use definition version 4',request['system'])
+            self.assertIn(ENCOUNTER_CONTRACT,request['system'])
+            self.assertLessEqual(request['max_tokens'],preparation.MAX_COMPLETE_OUTPUT)
+            self.assertLessEqual(len(json.dumps(request,ensure_ascii=False).encode()),preparation.MAX_PREPARATION_REQUEST_BYTES)
+            self.assertTrue(evidence['simulated'])
+            proposal = response
+        self.assertEqual(self.config,before)
+        self.assertEqual(old,preparation.provider_request(self.inv,'proposer',self.config))
+        self.assertEqual(word_contract.definition_version(self.config),2)
+        missing = deepcopy(config);del missing[CONFIG_KEY]
+        with self.assertRaises(ValidationError):
+            preparation.provider_request(self.inv,'proposer',missing)
+        old_response,_ = preparation.provider_role(self.inv,'proposer',self.config,1)
+        with self.assertRaisesMessage(ValidationError,'complete answer contract'):
+            word_contract.validate_result(self.inv,old_response,'proposer',config)
+
+    def test_new_inline_component_approval_preserves_the_original_destination_and_profile(self):
+        version = self.version()
+        prep = version.preparation
+        config = self.graph_config()
+        proposal,_ = preparation.provider_role(self.inv,'proposer',config,1)
+        checker,_ = preparation.provider_role(self.inv,'checker',config,1,proposal)
+        original = deepcopy((proposal,checker,self.fields))
+        prep.config,prep.proposal,prep.checker = config,proposal,checker
+        prep.candidate_info.pop(word_contract.INFO_KEY)
+        values = word_contract.proposed(prep)
+        word_contract.seal(prep,list(values),SimpleNamespace(pk='doctor'))
+        prep.approval_sha256 = approval_binding(prep)
+        self.assertEqual(word_contract.require_generation(version),values)
+        self.assertTrue(all(value['version']==4 for value in values.values()))
+        self.assertEqual(prep.candidate_info[word_contract.INFO_KEY]['profile'],word_contract.GRAPH_PROFILE)
+        self.assertEqual((proposal,checker,self.fields),original)
+        invalid = deepcopy(values)
+        invalid[next(iter(invalid))]['version'] = 2
+        prep.corrections['answer_definitions'] = invalid
+        with self.assertRaises((ValidationError,ValueError)):
+            word_contract.proposed(prep)
+
     def test_unresolved_semantic_result_cannot_be_sealed_by_review_checkboxes_or_layout_corrections(self):
         for role in ('proposal', 'checker'):
             for correction in ({}, {'labels': {'cell_2': 'Person full name'}}):
@@ -449,8 +507,11 @@ class OrdinaryClinicianWordTests(TestCase):
         def ambiguous(*args, **kwargs):
             response, evidence = original_role(*args, **kwargs)
             row = response['answer_definitions']['fields'][0]
-            row['definition'].update(version=2, value_type='person_name', answer_mode='atomic')
+            row['definition'].update(value_type='person_name', answer_mode='atomic')
             row['definition']['scope']['subject'] = 'unspecified'
+            if row['definition'].get('component_contract'):
+                component = row['definition']['component_contract']['components'][0]
+                component.update(value_type='person_name',scope=deepcopy(row['definition']['scope']))
             return response, evidence
         with patch.object(preparation, 'provider_role', side_effect=ambiguous):
             template, prep = self.fresh_upload('guided')
@@ -565,7 +626,11 @@ class OrdinaryClinicianWordTests(TestCase):
         from core.billing import welcome_credit
         template,prep=self.fresh_upload()
         review=self.client.get(f'/templates/{template.pk}/preparation/')
+        self.assertEqual(review.context['definition_version'],4)
         self.assertContains(review,'data-answer-definitions')
+        self.assertContains(review,'Required parts of this answer')
+        for field in prep.inventory['fields']:
+            self.assertContains(review,'name="field_'+field['key']+'_patient_name_requirement"')
         self.assertContains(review,'data-review-field=',count=len(prep.inventory['fields']))
         self.assertContains(review,'name="review_summary" required>',count=1)
         self.assertNotContains(review,'name="reviewed_definition"')
@@ -577,8 +642,17 @@ class OrdinaryClinicianWordTests(TestCase):
             'template_version':str(version.pk),'notes':'Patient name: Synthetic Alex Morgan\nAssessment: Left ankle pain',
             'service_date':timezone.localdate().isoformat(),'synthetic_only':'on'})
         self.assertEqual(response.status_code,302,response.content[:300])
-        from core.models import Encounter
+        from core.models import Encounter, CodingRun
         encounter=Encounter.objects.get(template_version=version)
+        before_jobs = Job.objects.filter(encounter=encounter).count()
+        self.assertEqual(encounter.answers,{})
+        self.assertFalse(CodingRun.objects.filter(encounter=encounter).exists())
+        empty_coding = self.client.get(f'/encounters/{encounter.pk}/?tab=coding')
+        self.assertEqual(empty_coding.status_code,200)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.answers,{})
+        self.assertEqual(Job.objects.filter(encounter=encounter).count(),before_jobs)
+        self.assertFalse(CodingRun.objects.filter(encounter=encounter).exists())
         first=enqueue(encounter,self.user)
         self.assertEqual(first.config['semantic_contract'],semantic.CONTRACT)
         self.assertTrue(run_one())
@@ -588,6 +662,51 @@ class OrdinaryClinicianWordTests(TestCase):
         self.assertEqual(Job.objects.filter(encounter=encounter).count(),1)
         self.assertEqual(list(AIStageReceipt.objects.filter(job=first).order_by('created_at').values_list('stage',flat=True)),
             ['extractor','assigner','checker'])
+        # Inline approved definitions live in the sealed preparation; an empty
+        # separate-definition column must not disconnect coding from the same
+        # retained graph that generated the current document.
+        from core import source_assertion_coding as shared, source_assertion_graph as graph
+        from core import coding_service
+        encounter.refresh_from_db()
+        self.assertEqual(version.semantic_definitions,{})
+        self.assertTrue(all(d['version']==4 for d in word_contract.require_generation(version).values()))
+        self.assertEqual(first.config['semantic_fact_scope_contract'],graph.CONTRACT)
+        checked = shared.snapshot(encounter)
+        self.assertIsNotNone(checked)
+        inputs,context,releases,key = coding_service.input_snapshot(encounter)
+        self.assertEqual(inputs['source_interpretation'],checked)
+        self.assertEqual(checked['identity']['generation_job_id'],str(first.pk))
+        self.assertEqual(inputs['revision'],encounter.revision)
+        projected = shared.source(SimpleNamespace(inputs=inputs,config={'clinical_source_contract':shared.CONTRACT}))
+        self.assertEqual(projected['identity']['encounter_id'],str(encounter.pk))
+        self.assertEqual(projected['identity']['generation_job_id'],str(first.pk))
+
+    def test_inline_graph_flat_review_keeps_its_profile_and_source_component_baseline(self):
+        template,prep = self.fresh_upload()
+        original = deepcopy((prep.proposal,prep.checker))
+        values = word_contract.proposed(prep)
+        post = {'revision':str(prep.revision),
+            'reviewed_anchor':[a['id'] for a in prep.inventory['anchors']],
+            'reviewed_field':list(values),
+            'correction_reason':'Checked each complete answer definition and its original source location.'}
+        for field in prep.inventory['fields']:
+            key = field['key']; definition = values[key]; prefix = 'field_'+key+'_'
+            post['label_'+key] = field['label']
+            for name in ('meaning','value_type','answer_mode','patient_name_requirement'):
+                post[prefix+name] = definition[name]
+            post[prefix+'unit'] = definition['unit'] or ''
+            post[prefix+'choices'] = '\n'.join(definition['choices'])
+            for name,value in {**definition['scope'],**definition['constraints']}.items():
+                post[prefix+name] = value if value is not None else ''
+            # Component JSON from a browser is never the authoritative baseline.
+            post[prefix+'component_contract'] = '{"components":[]}'
+        from django.urls import reverse
+        response = self.client.post(reverse('template_preparation_correct',args=[template.pk]),post)
+        self.assertEqual(response.status_code,302,response.content[:300])
+        prep.refresh_from_db()
+        self.assertEqual(prep.corrections['answer_definitions'],values)
+        self.assertEqual((prep.proposal,prep.checker),original)
+        self.assertTrue(all(d['version']==4 for d in prep.corrections['answer_definitions'].values()))
 
     def test_physical_only_form_is_actionable_and_cannot_start_generation(self):
         from core.models import Encounter,Job,AIStageReceipt

@@ -10,6 +10,7 @@ from documents.semantic_preparation_roles import digest
 
 LEGACY_PROFILE = 'reviewed-word-answer-contract-v1'
 PROFILE = 'reviewed-word-answer-contract-v2'
+GRAPH_PROFILE = 'reviewed-word-answer-contract-v3'
 CONFIG_KEY = 'word_answer_contract'
 INFO_KEY = 'answer_contract'
 MISSING = ('This Word form needs approved answer definitions before generation. '
@@ -20,14 +21,32 @@ MISSING = ('This Word form needs approved answer definitions before generation. 
 def requested(config):
     if CONFIG_KEY not in config:
         return False
-    if config[CONFIG_KEY] not in (LEGACY_PROFILE, PROFILE):
+    if config[CONFIG_KEY] not in (LEGACY_PROFILE, PROFILE, GRAPH_PROFILE):
         raise ValidationError('Unsupported explicit Word answer contract. Nothing was downgraded.')
     return True
 
 
 def timing_reference(config):
     requested(config)
-    return roles.TEMPORAL_REFERENCE_CONTRACT if config.get(CONFIG_KEY) == PROFILE else None
+    return roles.TEMPORAL_REFERENCE_CONTRACT if config.get(CONFIG_KEY) in (PROFILE, GRAPH_PROFILE) else None
+
+
+def definition_version(config):
+    """An immutable new-preparation marker selects the existing graph schema."""
+    requested(config)
+    if config.get(CONFIG_KEY) == GRAPH_PROFILE:
+        from documents.component_contracts import CONFIG_KEY as component_key, ENCOUNTER_CONTRACT
+        if config.get(component_key) != ENCOUNTER_CONTRACT or config.get('semantic_definition_version') != 4:
+            raise ValidationError('Fresh component Word preparation requires its explicit encounter-scope contract.')
+        return 4
+    return 2
+
+
+def component_contract(config):
+    if definition_version(config) == 4:
+        from documents.component_contracts import ENCOUNTER_CONTRACT
+        return ENCOUNTER_CONTRACT
+    return None
 
 
 def eligible(inventory):
@@ -58,8 +77,12 @@ def validate_result(inventory, response, role, config):
             raise ValidationError('Preparation omitted its required answer definitions. No legacy fallback is permitted.')
         validate_role(inventory, {k: v for k, v in response.items() if k != 'answer_definitions'}, role)
         roles.validate_role_result(inventory['fields'], inventory_for(inventory), response['answer_definitions'], role)
-        if any(row['definition']['version'] != 2 for row in response['answer_definitions']['fields']):
+        expected_version = definition_version(config)
+        if any(row['definition']['version'] != expected_version for row in response['answer_definitions']['fields']):
             raise ValidationError('Fresh Word preparation requires the complete answer contract.')
+        if expected_version == 4 and any(row['definition']['component_contract']['contract'] != component_contract(config)
+                for row in response['answer_definitions']['fields']):
+            raise ValidationError('Fresh Word preparation has a different component scope contract.')
     else:
         validate_role(inventory, response, role)
     return response
@@ -74,8 +97,11 @@ def proposed(prep):
     corrections = prep.corrections.get('answer_definitions', {})
     if corrections:
         roles.validate_definitions(prep.inventory['fields'], corrections)
-        if any(d['version'] != 2 for d in corrections.values()):
+        if any(d['version'] != definition_version(prep.config) for d in corrections.values()):
             raise ValidationError('A reviewed correction cannot discard the complete answer contract.')
+        if definition_version(prep.config) == 4 and any(d['component_contract']['contract'] != component_contract(prep.config)
+                for d in corrections.values()):
+            raise ValidationError('A reviewed correction cannot change the component scope contract.')
         values = deepcopy(corrections)
     return values
 

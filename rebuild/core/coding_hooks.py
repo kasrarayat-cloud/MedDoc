@@ -11,6 +11,17 @@ def after_saved_document(encounter_id, user_id):
         try:
             encounter = Encounter.objects.get(pk=encounter_id)
             user = User.objects.get(pk=user_id)
+            from .semantic_generation import CLINICAL_SEMANTICS_SCOPE_CONTRACT
+            from .source_assertion_graph import CONTRACT as GRAPH_SCOPE_CONTRACT
+            from .coding_dispatch import provider
+            if (provider(encounter) == 'corti' and any(
+                    isinstance(answer, dict) and answer.get('fact_scope_contract') in (
+                        CLINICAL_SEMANTICS_SCOPE_CONTRACT, GRAPH_SCOPE_CONTRACT)
+                    for answer in encounter.answers.values())):
+                # Current reviewed-source coding is explicit. Generation cannot
+                # send a prediction before the reviewed document is saved, then
+                # spend again merely because that review changes its proof.
+                return
             ensure_run(encounter, user, automatic=True)
         except Exception as exc:
             # Independent coding must never roll back a successfully saved

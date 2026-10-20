@@ -295,7 +295,16 @@ def _whole_account_governance(text):
     return {'direction':direction,'integrity':bool(integrity)}
 
 
-def source_context(notes, units=None, *, profile=None, time_exclusion_contract=None):
+def source_context(notes, units=None, *, profile=None, time_exclusion_contract=None, identity_contract=None,
+                   record_identity=None):
+    if identity_contract is not None:
+        from .clinical_semantics import CONTEXT_PROFILE, bare_patient_identity
+        if identity_contract != CONTEXT_PROFILE:
+            raise ValueError('Unknown source identity contract.')
+    if record_identity is not None:
+        from .semantic_generation import person_name_value
+        if identity_contract is None or not isinstance(record_identity, str) or not person_name_value(record_identity):
+            raise ValueError('A saved-document record requires a validated source patient identity.')
     if time_exclusion_contract is not None:
         from .documented_time_source import CONTRACT
         if time_exclusion_contract != CONTRACT or profile != SOAP_ASSERTION_PROFILE:
@@ -314,6 +323,17 @@ def source_context(notes, units=None, *, profile=None, time_exclusion_contract=N
     for unit in units:
         text, start = unit['quote'].strip(), unit['start']
         identity = re.fullmatch(PATIENT_IDENTITY_HEADING, text, re.I)
+        if identity is None and identity_contract is not None:
+            identity = bare_patient_identity(text)
+        if identity is None and record_identity is not None:
+            # A reviewed document inherits its record identity from independently
+            # checked clinical source evidence. An explicit replacement in the
+            # current document still competes with that identity; it cannot reset
+            # the source-derived owner by merely using a different label.
+            labelled = re.fullmatch(r'(?:the\s+)?patient(?:[\x27’]s)?(?:\s+(?:full\s+)?name)?'
+                r'(?:\s+is\s+|\s*:\s*)(?P<name>.+?)\.?', text, re.I)
+            if labelled and person_name_value(labelled['name']):
+                identity = {'name': labelled['name'], 'current': False}
         clinician = re.fullmatch(r'(?:treating|attending|examining)\s+(?:clinician|physician|doctor)\s*:\s*(?:Dr\.?\s+|Doctor\s+)?(?P<name>[A-Za-z][A-Za-z\s\x27’.-]+?)\s*\.?', text, re.I)
         if identity:
             name = identity['name'].strip().removesuffix('.')
@@ -340,10 +360,13 @@ def source_context(notes, units=None, *, profile=None, time_exclusion_contract=N
         elif re.search(r'\b(?:belongs?\s+to|(?:describes?|concerns?)\s+(?:another|a\s+different)|not\s+(?:this|the)\s+patient|(?:mother|father|sibling|spouse)[\x27’]s\s+(?:record|visit|note))\b', text, re.I) and not _integrity_assertion(text):
             events[start] = ('ambiguous',)
     unique = {_normal(name) for name in identities}
+    if record_identity is not None:
+        unique.add(_normal(record_identity))
     issues = ([] if len(unique) == 1 else
         ['The source does not establish one explicit patient identity.'])
     initial = next(iter(unique), None) if len(unique) == 1 else None
-    owner, encounter_time, section = 'ambiguous', 'current', None
+    owner, encounter_time, section = ('patient' if record_identity is not None and initial is not None
+        else 'ambiguous'), 'current', None
     unresolved_time = False
     unresolved_scope = False
     rows, retracted, established = {}, [], set()
@@ -433,7 +456,8 @@ def source_context(notes, units=None, *, profile=None, time_exclusion_contract=N
     clinicians = [clinician for clinician in clinicians
         if (row := rows[clinician['source']['start']])['subject'] == 'patient'
         and row['section_timing'] == 'current' and not row['issues']]
-    result = {'patient_name': identities[0] if len(unique) == 1 else None,
+    result = {'patient_name': (record_identity if record_identity is not None else identities[0])
+        if len(unique) == 1 else None,
         'clinicians': clinicians, 'units': rows, 'issues': issues}
     if modern:
         date_label = r'(?:Date\s+of\s+service|Service\s+date)' if profile == SOAP_ASSERTION_PROFILE else r'Date\s+of\s+service'

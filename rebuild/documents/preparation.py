@@ -32,10 +32,16 @@ WM_REQUIREMENT_SOURCE_KEYS = ('key', 'label', 'kind', 'body_paragraph', 'text',
                               'original_text_sha256')
 SIGNING = re.compile(r'\b(?:signatures?|signed|signing|attest(?:ation|ed|ing)?|certif(?:ication|ied|y)|consent(?:ed|ing)?)\b'
                      r'|\bsign\s+(?:here|below|above|by|and\s+date)\b'
-                     r'|\b(?:please|patient|clinician|physician|doctor|provider)\s+sign\b', re.I)
+                     r'|\b(?:please|patient|clinician|physician|doctor|provider|digital|electronic)\s+sign\b', re.I)
 # Unknown singular signing language is guided, never made writable. Plural
 # clinical signs and embedded words do not match this word-boundary predicate.
 AMBIGUOUS_SIGNING = re.compile(r'\bsign\b', re.I)
+# A clinical noun phrase is different from an instruction to sign. Recognize
+# adjectival and possessive noun modifiers, rather than exempting one printed
+# question. Classification is per occurrence: an actor or instruction elsewhere
+# in a clinical question does not turn its noun into a signing verb.
+CLINICAL_SIGN_NOUN = re.compile(
+    r"(?<!\w)(?:[\w-]+(?:al|ic|ary|ory|ous|ive)|[\w-]+['’]s)\s+sign\b", re.I)
 SIGNING_CONTEXT = 'documented-consent-facts-v1'
 # A retrospective question asks for evidence of an event; it does not grant
 # consent. Unknown wording and every explicit signature/attestation stay guided.
@@ -58,6 +64,24 @@ def signing_protected(label, context=None):
     if CONSENT_FACT.fullmatch(normalized):
         return False
     return bool(SIGNING.search(normalized))
+
+
+def ambiguous_signing(label, context=None):
+    """Keep uncertain signing language closed without holding clinical nouns.
+
+    Explicit signatures and attestations always take precedence, including a
+    clinical question followed by a signing directive. Each singular occurrence
+    must have a noun modifier; a second unexplained ``sign`` remains guided.
+    """
+    if signing_protected(label, context):
+        return False
+    normalized = ' '.join(unicodedata.normalize('NFKC', label).split())
+    occurrences = list(AMBIGUOUS_SIGNING.finditer(normalized))
+    if not occurrences:
+        return False
+    nouns = list(CLINICAL_SIGN_NOUN.finditer(normalized))
+    return any(not any(noun.start() <= item.start() and item.end() <= noun.end()
+                       for noun in nouns) for item in occurrences)
 
 BLANK = re.compile(r'_{3,}')
 UNSUPPORTED = {'sdt', 'txbxContent', 'fldChar', 'fldSimple', 'instrText', 'del', 'ins'}
@@ -172,7 +196,7 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
     if protocol == TYPED_PROTOCOL and not known and fields:
         fields = typed_source_fields(path, fields, signing_context=signing_context)
     for field in fields:
-        if AMBIGUOUS_SIGNING.search(field['label']) and not signing_protected(field['label'], signing_context):
+        if ambiguous_signing(field['label'], signing_context):
             issues.append({'code':'guided_signing','message':field['label']+': clarify whether this is a clinical answer or a signing area before preparation.'})
         qid, aid = 'q'+str(len(questions)+1), 'a'+str(len(anchors)+1)
         questions.append({'id': qid, 'text': field['label'], 'story': 'mapped',
@@ -220,7 +244,7 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
                         issues.append({'code':'guided_layout','message':label+': an unmapped answer region contains unsupported content.'});continue
                     if label and blanks and row.xpath('.//w:vMerge | .//w:gridSpan | .//w:tbl | ./w:trPr/w:trHeight[@w:hRule="exact"]',namespaces=NS):
                         issues.append({'code':'guided_layout','message':label+': merged, nested or fixed-height answer row needs assisted setup.'});continue
-                    if AMBIGUOUS_SIGNING.search(label) and not signing_protected(label, signing_context) and blanks:
+                    if ambiguous_signing(label, signing_context) and blanks:
                         issues.append({'code':'guided_signing','message':label+': clarify whether this is a clinical answer or a signing area before preparation.'});continue
                     if not label or len(label)>120 or not blanks or signing_protected(label, signing_context) or not TOKEN.fullmatch('{{'+label+'}}'):continue
                     other_text=[''.join(c.xpath('.//w:t/text()',namespaces=NS)).strip() for c in cells[1:] if occupied(c)]
@@ -243,7 +267,7 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
                 blank_count = len(BLANK.findall(complete))
                 if not blank_count:
                     continue
-                if AMBIGUOUS_SIGNING.search(complete) and not signing_protected(complete, signing_context):
+                if ambiguous_signing(complete, signing_context):
                     issues.append({'code':'guided_signing','message':'Clarify whether Sign is a clinical answer or a signing area before preparation.'});continue
                 protected = signing_protected(complete, signing_context)
                 if protected:

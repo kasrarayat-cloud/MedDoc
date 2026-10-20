@@ -92,7 +92,14 @@ def release_snapshot(encounter):
             for r in releases]
 
 
-def patient_name_inputs(encounter, answers):
+def identity_policy_for(run=None):
+    """A run owns its immutable proof policy; a later run cannot change it."""
+    from .coding_engine import CURRENT_IDENTITY_CONTRACT, SEMANTIC_IDENTITY_CONTRACT
+    bridge = getattr(run, 'inputs', {}).get('documented_patient_name_evidence', {})
+    return CURRENT_IDENTITY_CONTRACT if bridge.get('contract') == CURRENT_IDENTITY_CONTRACT else SEMANTIC_IDENTITY_CONTRACT
+
+
+def patient_name_inputs(encounter, answers, *, identity_policy=None):
     """Derive identity input only from the same saved destinations and answers."""
     version = encounter.template_version
     approved, required_name_keys = None, set()
@@ -114,13 +121,23 @@ def patient_name_inputs(encounter, answers):
         if isinstance(text, str) and text.strip():
             result['patient_name_answers'].append({'key': field['key'], 'label': label, 'text': text})
     if required_name_keys:
-        from .coding_engine import semantic_patient_name_evidence
-        result['documented_patient_name_evidence'] = {'contract':'approved-semantic-patient-name-v1',
-            'fields':semantic_patient_name_evidence(encounter.notes, version.fields, approved, answers)}
+        from .coding_engine import semantic_patient_name_evidence, CURRENT_IDENTITY_CONTRACT, SEMANTIC_IDENTITY_CONTRACT
+        policy = identity_policy or SEMANTIC_IDENTITY_CONTRACT
+        bridge = {'contract': policy, 'fields':semantic_patient_name_evidence(
+            encounter.notes, version.fields, approved, answers, contract=policy)}
+        if policy == CURRENT_IDENTITY_CONTRACT:
+            review = {'status':encounter.status, 'revision':encounter.revision,
+                'document_approval':copy.deepcopy(getattr(encounter, 'template_review', {}).get('document_approval', {}))}
+            bridge.update(review_state=review, binding={
+                'source_sha256':hashlib.sha256(encounter.notes.encode()).hexdigest(),
+                'answers_sha256':digest(answers), 'revision':encounter.revision,
+                'review_state_sha256':digest(review), 'fields_sha256':digest(version.fields),
+                'definitions_sha256':digest(approved)})
+        result['documented_patient_name_evidence'] = bridge
     return result
 
 
-def input_snapshot(encounter):
+def input_snapshot(encounter, *, identity_policy=None):
     patient = encounter.patient
     from .coding_dispatch import contract
     ENGINE_CONTRACT = contract(encounter)
@@ -137,7 +154,7 @@ def input_snapshot(encounter):
     from .source_assertion_coding import snapshot
     interpretation = snapshot(encounter)
     if interpretation is None:
-        inputs.update(patient_name_inputs(encounter, encounter.answers))
+        inputs.update(patient_name_inputs(encounter, encounter.answers, identity_policy=identity_policy))
     else:
         inputs['source_interpretation'] = interpretation
     version = encounter.template_version
@@ -164,16 +181,20 @@ def locked_encounter(encounter, user, clinician=False):
 
 
 @transaction.atomic
-def ensure_run(encounter, user, automatic=False):
+def ensure_run(encounter, user, automatic=False, *, identity_policy=None):
     """Durable enqueue inside the save transaction; a GET never calls this."""
     e = locked_encounter(encounter, user, clinician=True)
     if (automatic and e.status == 'finalized') or not eligible(e):
         return None
-    inputs, context, releases, key = input_snapshot(e)
+    inputs, context, releases, key = input_snapshot(e, identity_policy=identity_policy)
     old = CodingRun.objects.filter(input_digest=key, encounter=e).first()
     if old:
         return old
-    from .coding_recovery import reuse_for_context
+    from .coding_recovery import reuse_for_context, reuse_for_identity_review, assert_no_pending_prediction
+    assert_no_pending_prediction(e, inputs)
+    reused = reuse_for_identity_review(e, user, inputs, context, releases, key)
+    if reused is not None:
+        return reused
     reused = reuse_for_context(e, user, inputs, context, releases, key)
     if reused is not None:
         return reused
@@ -262,13 +283,14 @@ def approval_ready(run):
 
 
 def displayed_run(encounter):
-    key = input_snapshot(encounter)[3]
-    return (CodingRun.objects.filter(encounter=encounter, input_digest=key).first()
+    from .coding_engine import CURRENT_IDENTITY_CONTRACT
+    keys = {input_snapshot(encounter)[3], input_snapshot(encounter, identity_policy=CURRENT_IDENTITY_CONTRACT)[3]}
+    return (CodingRun.objects.filter(encounter=encounter, input_digest__in=keys).order_by('-created_at', '-pk').first()
             or CodingRun.objects.filter(encounter=encounter).order_by('-created_at', '-pk').first())
 
 
 def assert_current(run, encounter):
-    if not eligible(encounter) or input_snapshot(encounter)[3] != run.input_digest:
+    if not eligible(encounter) or input_snapshot(encounter, identity_policy=identity_policy_for(run))[3] != run.input_digest:
         raise ValidationError('The saved documentation or coding context changed. Review the current coding result.')
     if run.state not in ('succeeded', 'needs_detail'):
         raise ValidationError('Wait for a completed coding result before reviewing selections.')
@@ -328,7 +350,7 @@ def approve(run, user, expected_input_digest, expected_selection_digest):
 
 def display_binding(encounter, user, run=None):
     return {'actor': str(user.pk), 'encounter': str(encounter.pk),
-            'context_digest': input_snapshot(encounter)[3],
+            'context_digest': input_snapshot(encounter, identity_policy=identity_policy_for(run))[3],
             'run': str(run.pk) if run else None, 'result_digest': digest(run.result) if run else None,
             'selection_digest': selection_digest(run) if run else None}
 
@@ -348,9 +370,9 @@ def snapshot(encounter, user, *, source_decision_response=None):
     # retained evidence. Mutations independently lock and rebind every token.
     e = Encounter.objects.select_related('patient', 'department', 'template_version__template').get(pk=encounter.pk)
     membership(user, e.department)
-    inputs, context, releases, key = input_snapshot(e)
-    run = CodingRun.objects.filter(encounter=e, input_digest=key).first()
-    latest = run or CodingRun.objects.filter(encounter=e).order_by('-created_at', '-pk').first()
+    latest = displayed_run(e)
+    inputs, context, releases, key = input_snapshot(e, identity_policy=identity_policy_for(latest))
+    run = latest if latest is not None and latest.input_digest == key else None
     stale = latest is not None and run is None
     saved_decision = CodingDecision.objects.filter(run=latest).select_related('user').first() if latest else None
     current = bool(run and eligible(e))
@@ -434,6 +456,12 @@ def snapshot(encounter, user, *, source_decision_response=None):
             'diagnostics': result.get('diagnostics_summary', {})}
     view['context_derived'] = bool(view['corti'] and context['setting'] != 'unknown'
         and not CodingContext.objects.filter(encounter=e).exists())
+    # A historical v1 result remains readable under v1. An explicit new request
+    # may ask for current-source proof without treating the old hold as final.
+    from .coding_engine import CURRENT_IDENTITY_CONTRACT
+    prospective_key = input_snapshot(e, identity_policy=CURRENT_IDENTITY_CONTRACT)[3]
+    view['can_request'] = bool(can_edit and eligible(e) and not CodingRun.objects.filter(
+        encounter=e, input_digest=prospective_key).exists())
     view['mdm_rows'] = [{'key': k, 'label': label, 'value': context[k], 'evidence': context[k + '_evidence']}
                         for k, label in [('mdm_problems', 'Problems addressed'), ('mdm_data', 'Data reviewed'), ('mdm_risk', 'Risk of management')]]
     view['levels'] = ['unknown', 'straightforward', 'low', 'moderate', 'high']
@@ -501,7 +529,7 @@ def run_one():
             return False
         try:
             membership(run.user, e.department)
-            if not eligible(e) or input_snapshot(e)[3] != run.input_digest:
+            if not eligible(e) or input_snapshot(e, identity_policy=identity_policy_for(run))[3] != run.input_digest:
                 raise ValidationError('Documentation changed before coding started. Request the current saved version.')
         except (ValidationError, PermissionDenied):
             run.state = 'failed'; run.error_code = 'stale_before_start'
@@ -531,7 +559,7 @@ def run_one():
             run.save(update_fields=fields)
             audit(run.user, 'coding.completed', run.pk, department=e.department,
                   input_digest=run.input_digest, result_digest=digest(result),
-                  current=input_snapshot(e)[3] == run.input_digest)
+                  current=input_snapshot(e, identity_policy=identity_policy_for(run))[3] == run.input_digest)
     except Exception as exc:
         # The provider owns receipt/cost/unknown-outcome evidence; never overwrite it.
         with transaction.atomic():
