@@ -35,11 +35,22 @@ def validate_binding(inventory, config):
 
 def _question_text(cell):
     # Read actual source nodes. Adjacent runs and hyperlinks remain adjacent;
-    # only Word's explicit text boundaries supply whitespace.
+    # only Word's explicit text boundaries supply whitespace. Block wrappers
+    # may contain paragraphs, so direct-child traversal would omit source text.
+    text_tags = {W + 't', W + 'tab', W + 'br', W + 'cr'}
+    source_nodes = [node for node in cell.iter() if node.tag in text_tags]
+    covered_nodes = []
     paragraphs = []
-    for paragraph in cell.findall(W + 'p'):
+    for paragraph in cell.iter(W + 'p'):
+        for ancestor in paragraph.iterancestors():
+            if ancestor is cell:
+                break
+            if ancestor.tag in (W + 'p', W + 'tc', W + 'tbl'):
+                raise DocumentFailure('Question text has ambiguous nested paragraph ownership.', 'unsupported_structure')
         text = []
         for node in paragraph.iter():
+            if node.tag in text_tags:
+                covered_nodes.append(node)
             if node.tag == W + 't':
                 text.append(node.text or '')
             elif node.tag == W + 'tab':
@@ -47,6 +58,11 @@ def _question_text(cell):
             elif node.tag in (W + 'br', W + 'cr'):
                 text.append('\n')
         paragraphs.append(''.join(text))
+    # Identity and order matter: equal strings cannot conceal an omitted node,
+    # duplicate coverage or text outside any independently owned paragraph.
+    if len(source_nodes) != len(covered_nodes) or any(
+            source is not covered for source, covered in zip(source_nodes, covered_nodes)):
+        raise DocumentFailure('Question text is not completely bound to ordered source paragraphs.', 'unsupported_structure')
     return '\n'.join(paragraphs).strip()
 
 

@@ -9,6 +9,7 @@ from unittest.mock import patch
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from docx import Document
+from docx.oxml import OxmlElement
 
 from core import preparation, word_contract
 from core.template_source import approval_binding, physical_source_for_version
@@ -89,6 +90,73 @@ class QuestionContextTests(SimpleTestCase):
         self.assertEqual(fields[1]['label'], 'brain')
         self.assertFalse(literal_part(fields[0]['label'], 'History'))
         self.assertFalse(literal_part(fields[1]['label'], 'rain'))
+
+    def test_wrapped_block_paragraphs_retain_every_instruction_in_source_order_and_candidate(self):
+        document = self.save_questions(['History'])
+        cell = document.tables[0].rows[0].cells[0]
+        for outer_tag, inner_tag, text in [('customXml', None, 'Include allergies and reactions.'),
+                ('customXml', 'customXml', 'Retain medication uncertainty.')]:
+            wrapper = OxmlElement('w:' + outer_tag)
+            content = OxmlElement('w:' + inner_tag) if inner_tag else wrapper
+            if inner_tag: wrapper.append(content)
+            paragraph = OxmlElement('w:p'); run = OxmlElement('w:r'); node = OxmlElement('w:t')
+            node.text = text; run.append(node); paragraph.append(run); content.append(paragraph)
+            cell._tc.append(wrapper)
+        cell.add_paragraph('Keep genuine blanks.')
+        document.save(self.path)
+        raw = self.path.read_bytes()
+        value = self.current()
+        expected = 'History\nInclude allergies and reactions.\nRetain medication uncertainty.\nKeep genuine blanks.'
+        self.assertEqual(value['fields'][0]['label'], expected)
+        self.assertEqual(value['questions'][0]['text'], expected)
+        self.assertEqual(value['issues'], [])
+        output = self.root / 'wrapped-candidate.docx'
+        result = prepare_candidate(self.path, value, [a['id'] for a in value['anchors']], output)
+        self.assertEqual(result['prepared_fields'], value['fields'])
+        self.assertEqual(output.read_bytes(), raw)
+        self.assertEqual(inspect_preparation(self.path, protocol=TYPED_PROTOCOL,
+            signing_context=SIGNING_CONTEXT, question_context=CONTEXT), value)
+
+    def test_inline_wrappers_keep_adjacent_run_words_and_real_breaks(self):
+        document = self.save_questions(['History'])
+        paragraph = document.tables[0].rows[0].cells[0].paragraphs[0]
+        paragraph.clear(); paragraph.add_run('b')
+        for tag, text in [('hyperlink', 'ra'), ('customXml', 'in')]:
+            wrapper = OxmlElement('w:' + tag); run = OxmlElement('w:r'); node = OxmlElement('w:t')
+            node.text = text; run.append(node); wrapper.append(run); paragraph._p.append(wrapper)
+        paragraph.add_run('\tDocument\nuncertainty.')
+        document.save(self.path)
+        value = self.current()
+        self.assertEqual(value['fields'][0]['label'], 'brain\tDocument\nuncertainty.')
+        self.assertTrue(literal_part(value['fields'][0]['label'], 'brain'))
+        for fragment in ('rain', 'bra', 'in'):
+            self.assertFalse(literal_part(value['fields'][0]['label'], fragment))
+
+    def test_orphan_text_and_boundary_nodes_refuse_instead_of_losing_equal_source_text(self):
+        for tag, text in [('t', 'History'), ('tab', None), ('br', None)]:
+            with self.subTest(tag=tag):
+                document = self.save_questions(['History'])
+                node = OxmlElement('w:' + tag); node.text = text
+                document.tables[0].rows[0].cells[0]._tc.append(node)
+                document.save(self.path)
+                # The original physical reader remains unchanged. Only the
+                # new projection refuses text without paragraph ownership.
+                self.assertTrue(inventory(self.path, protocol=TYPED_PROTOCOL)['fields'])
+                with patch('anthropic.Anthropic') as client, self.assertRaisesMessage(
+                        DocumentFailure, 'completely bound to ordered source paragraphs'):
+                    self.current()
+                client.assert_not_called()
+
+    def test_nested_paragraphs_cannot_duplicate_even_identical_text(self):
+        document = self.save_questions(['History'])
+        paragraph = document.tables[0].rows[0].cells[0].paragraphs[0]
+        wrapper = OxmlElement('w:customXml'); nested = OxmlElement('w:p')
+        run = OxmlElement('w:r'); text = OxmlElement('w:t'); text.text = 'History'
+        run.append(text); nested.append(run); wrapper.append(nested); paragraph._p.append(wrapper)
+        document.save(self.path)
+        self.assertEqual(inventory(self.path, protocol=TYPED_PROTOCOL)['fields'][0]['label'], 'HistoryHistory')
+        with self.assertRaisesMessage(DocumentFailure, 'ambiguous nested paragraph ownership'):
+            self.current()
 
     def test_alternating_pairs_and_duplicate_titles_use_exact_preceding_cells(self):
         self.save_questions([['History', 'First instructions.'], ['History', 'Different instructions.'],
