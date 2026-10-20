@@ -19,10 +19,12 @@ from documents.component_contracts import CONFIG_KEY, CHOICE_CONTRACT
 from documents.preparation import TYPED_PROTOCOL, digest
 
 
-def encoded(value):
+def encoded(value, transport=codec.TRANSPORT):
     result = deepcopy(value)
     for component in codec.components(result):
         component['choices'] = json.dumps(component['choices'], ensure_ascii=False, separators=(',', ':'))
+        if transport == codec.TRANSPORT:
+            component['option_quote'] = json.dumps(component['option_quote'], ensure_ascii=False, separators=(',', ':'))
     return result
 
 
@@ -75,10 +77,62 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                 ['properties']['definition']['properties'])
             self.assertEqual(path['choices']['type'], 'array')
             self.assertEqual(path['component_contract']['properties']['components']['items']
-                             ['properties']['option_quote'],
-                             transform_schema(canonical_schema)['properties']['answer_definitions']
-                             ['properties']['fields']['items']['properties']['definition']['properties']
-                             ['component_contract']['properties']['components']['items']['properties']['option_quote'])
+                             ['properties']['option_quote']['type'], 'string')
+            canonical_quote = (canonical_schema['properties']['answer_definitions']['properties']['fields']
+                ['items']['properties']['definition']['properties']['component_contract']['properties']
+                ['components']['items']['properties']['option_quote'])
+            self.assertEqual([row['type'] for row in canonical_quote['anyOf']], ['string', 'null'])
+
+    def test_nullable_quote_codec_keeps_null_literal_null_empty_and_escaped_strings_distinct(self):
+        for quote in (None, 'null', '', '"null"', 'Exact "quoted" \\ source',
+                      ' é中文😀\n\t ', 'x' * 2000):
+            value = self.canonical()
+            next(codec.components(value))['option_quote'] = quote
+            wire = encoded(value)
+            self.assertEqual(next(codec.components(wire))['option_quote'], json.dumps(quote, ensure_ascii=False))
+            actual = self.decode(wire)
+            self.assertEqual(actual, value)
+            if quote is not None:
+                with self.assertRaises(ValueError):
+                    word_contract.validate_result(self.inventory, actual, 'proposer', self.live())
+        for quote in (None, False, 0, [], {}, '', 'NULL', 'undefined', '[]', '{}', 'false', '0',
+                      'NaN', 'Infinity', '"quote" trailing', ' ' * (codec.MAX_ENCODED_BYTES + 1)):
+            wire = encoded(self.canonical())
+            next(codec.components(wire))['option_quote'] = quote
+            with self.subTest(quote=repr(quote)[:40]), self.assertRaises(DocumentError):
+                self.decode(wire)
+
+    def test_previous_array_only_version_remains_explicit_and_never_decodes_quote_strings(self):
+        proposal = self.canonical()
+        for role in ('proposer', 'checker'):
+            value = self.canonical(role, proposal)
+            config = {**self.live(), preparation.SCHEMA_TRANSPORT_KEY: codec.ARRAY_TRANSPORT}
+            envelope = preparation.provider_request(self.inventory, role, config, proposal)
+            wire = encoded(value, codec.ARRAY_TRANSPORT)
+            evidence = {'response_transport': codec.ARRAY_TRANSPORT, 'request_envelope': envelope,
+                'request_envelope_sha256': digest(envelope),
+                'response': {'stop_reason': 'end_turn', 'content': [{'type': 'text', 'text': json.dumps(wire)}]}}
+            payload = preparation.role_payload(self.inventory, role, proposal, config=config)
+            result = preparation.decode_role_response(self.inventory, role, config, wire, proposal,
+                                                       evidence, digest(payload))
+            self.assertEqual(result, value)
+            word_contract.validate_result(self.inventory, result, role, config)
+            quote = expand(envelope['output_config']['format']['schema'])['properties']
+            quote = quote['answer_definitions']['properties']['fields']['items']['properties']['definition']
+            quote = quote['properties']['component_contract']['properties']['components']['items']['properties']['option_quote']
+            self.assertIn('anyOf', quote)
+            self.assertIn(codec.INSTRUCTIONS, envelope['system'])
+            self.assertNotIn(codec.QUOTE_INSTRUCTIONS, envelope['system'])
+            # A string containing JSON text remains an ordinary string on v2;
+            # canonical validation, not a versionless decoder, judges its meaning.
+            first = next(codec.components(wire))
+            first['option_quote'] = 'null'
+            evidence['response']['content'][0]['text'] = json.dumps(wire)
+            result = preparation.decode_role_response(self.inventory, role, config, wire, proposal,
+                                                       evidence, digest(payload))
+            self.assertEqual(next(codec.components(result))['option_quote'], 'null')
+            with self.assertRaises(ValueError):
+                word_contract.validate_result(self.inventory, result, role, config)
 
     def test_new_payload_and_request_are_explicit_and_deterministic_without_mutating_config(self):
         config = self.live()
