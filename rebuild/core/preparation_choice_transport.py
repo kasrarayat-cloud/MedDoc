@@ -1,7 +1,7 @@
 """Reversible preparation-only wire encoding; canonical validation stays mandatory.
 
-Only v3 component choices and their nullable option quote use JSON text on wire.
-Canonical arrays, nulls and strings remain distinct and fully validated.
+Versioned JSON text preserves canonical components without changing validation.
+Earlier choices-only and choices/quote transports remain explicit for replay.
 """
 from copy import deepcopy
 import json
@@ -9,8 +9,9 @@ import json
 from documents import DocumentError
 
 ARRAY_TRANSPORT = 'anthropic-shared-component-choices-json-v2'
-TRANSPORT = 'anthropic-shared-component-choices-quote-json-v3'
-TRANSPORTS = (ARRAY_TRANSPORT, TRANSPORT)
+QUOTE_TRANSPORT = 'anthropic-shared-component-choices-quote-json-v3'
+TRANSPORT = 'anthropic-shared-components-json-v4'
+TRANSPORTS = (ARRAY_TRANSPORT, QUOTE_TRANSPORT, TRANSPORT)
 MAX_ENCODED_BYTES = 2 * 1024 * 1024  # The existing retained-response byte bound.
 INSTRUCTIONS = (
     ' Response transport anthropic-shared-component-choices-json-v2: ONLY '
@@ -37,6 +38,24 @@ QUOTE_INSTRUCTIONS = (
     'source/type/bound check remain mandatory after decoding. This encoding grants '
     'no semantic approval and changes no canonical constraint. '
 )
+COMPONENTS_INSTRUCTIONS = (
+    ' Response transport anthropic-shared-components-json-v4: ONLY '
+    'answer_definitions.fields[].definition.component_contract.components is a string '
+    'containing one JSON array of the complete original ordered component objects. '
+    'Preserve every component property, ID, question_quote, label, meaning, value_type, '
+    'scope, unit, unit_requirement, required, encounter_scope, choices and option_quote '
+    'with its canonical JSON type and exact source text. Inside this encoded array, '
+    'choices remains an ordered array of strings and option_quote remains a string or '
+    'null; do not encode either property again. Null, the literal string null, empty '
+    'strings and empty arrays are distinct. Encode an empty component array as the '
+    'string "[]" only where the canonical signing/protection contract permits it. '
+    'component_contract.contract and rendering, all other outer properties and all '
+    'other choices remain unchanged explicit JSON values. Escape quotes, backslashes '
+    'and control characters as JSON requires. Do not shorten, normalize, omit, reorder '
+    'or infer any component or source evidence. All canonical source, type, ownership, '
+    'required, protection and bound checks remain mandatory after decoding. This '
+    'encoding grants no semantic approval and changes no canonical constraint. '
+)
 
 
 def invalid():
@@ -47,6 +66,8 @@ def invalid():
 def instructions(transport):
     if transport not in TRANSPORTS:
         raise invalid()
+    if transport == TRANSPORT:
+        return COMPONENTS_INSTRUCTIONS
     return INSTRUCTIONS if transport == ARRAY_TRANSPORT else QUOTE_INSTRUCTIONS
 
 
@@ -55,9 +76,19 @@ def wire_schema(canonical, transport=TRANSPORT):
     instructions(transport)
     value = deepcopy(canonical)
     try:
-        properties = (value['properties']['answer_definitions']['properties']['fields']['items']
-                      ['properties']['definition']['properties']['component_contract']['properties']
-                      ['components']['items']['properties'])
+        contract = (value['properties']['answer_definitions']['properties']['fields']['items']
+                    ['properties']['definition']['properties']['component_contract']['properties'])
+        if transport == TRANSPORT:
+            original = contract['components']
+            if original['type'] != 'array' or original['items']['type'] != 'object':
+                raise invalid()
+            contract['components'] = {'type': 'string', 'description': (
+                'JSON text encoding the complete ordered array of canonical component objects. '
+                'Inner choices are arrays and option_quote is null or a string; no nested transport. '
+                'All canonical constraints are checked after strict decoding: '
+                + json.dumps(original, ensure_ascii=False, sort_keys=True))}
+            return value
+        properties = contract['components']['items']['properties']
         choices = properties['choices']
         if choices['type'] != 'array' or choices['items']['type'] != 'string':
             raise invalid()
@@ -65,7 +96,7 @@ def wire_schema(canonical, transport=TRANSPORT):
             'A JSON-encoded ordered array of this component\'s complete original string choices; '
             'the string [] for a non-choice component. Canonical constraints, checked after decoding: '
             + json.dumps(choices, ensure_ascii=False, sort_keys=True))}
-        if transport == TRANSPORT:
+        if transport == QUOTE_TRANSPORT:
             quote = properties['option_quote']
             if (type(quote.get('anyOf')) is not list or len(quote['anyOf']) != 2
                     or [branch.get('type') for branch in quote['anyOf']] != ['string', 'null']):
@@ -80,8 +111,8 @@ def wire_schema(canonical, transport=TRANSPORT):
     return value
 
 
-def components(value):
-    """Admit no missing path or fallback; preserve every other property for validation."""
+def contracts(value):
+    """Admit no missing path or fallback; preserve every property for validation."""
     if type(value) is not dict:
         raise invalid()
     try:
@@ -92,20 +123,58 @@ def components(value):
             if type(row) is not dict or type(row['definition']) is not dict:
                 raise invalid()
             contract = row['definition']['component_contract']
-            if (type(contract) is not dict or contract['contract'] != 'field-components-v3'
-                    or type(contract['components']) is not list):
+            if type(contract) is not dict or contract['contract'] != 'field-components-v3':
                 raise invalid()
-            for component in contract['components']:
-                if type(component) is not dict:
-                    raise invalid()
-                yield component
+            yield contract
     except (KeyError, TypeError):
         raise invalid() from None
+
+
+def components(value):
+    """Walk canonical arrays without accepting encoded or incomplete objects."""
+    for contract in contracts(value):
+        if type(contract.get('components')) is not list:
+            raise invalid()
+        for component in contract['components']:
+            if type(component) is not dict:
+                raise invalid()
+            yield component
+
+
+def decode_components(response):
+    """Decode exactly one array string, keeping every inner canonical value."""
+    value = deepcopy(response)
+
+    def constant(_):
+        raise ValueError('Non-JSON constant')
+
+    def unique_object(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON property')
+            result[key] = item
+        return result
+
+    for contract in contracts(value):
+        try:
+            encoded = contract['components']
+            if type(encoded) is not str or len(encoded.encode('utf-8')) > MAX_ENCODED_BYTES:
+                raise invalid()
+            decoded = json.loads(encoded, parse_constant=constant, object_pairs_hook=unique_object)
+            if type(decoded) is not list or any(type(component) is not dict for component in decoded):
+                raise invalid()
+        except (KeyError, ValueError, TypeError, UnicodeError, RecursionError):
+            raise invalid() from None
+        contract['components'] = decoded
+    return value
 
 
 def decode(response, transport=TRANSPORT):
     """Decode losslessly, then let the unchanged full canonical validator judge it."""
     instructions(transport)
+    if transport == TRANSPORT:
+        return decode_components(response)
     value = deepcopy(response)
     def constant(_):
         raise ValueError('Non-JSON constant')
@@ -117,7 +186,7 @@ def decode(response, transport=TRANSPORT):
             choices = json.loads(encoded, parse_constant=constant)
             if type(choices) is not list or any(type(choice) is not str for choice in choices):
                 raise invalid()
-            if transport == TRANSPORT:
+            if transport == QUOTE_TRANSPORT:
                 encoded_quote = component['option_quote']
                 if (type(encoded_quote) is not str
                         or len(encoded_quote.encode('utf-8')) > MAX_ENCODED_BYTES):

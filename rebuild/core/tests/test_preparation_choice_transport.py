@@ -19,11 +19,15 @@ from documents.component_contracts import CONFIG_KEY, CHOICE_CONTRACT
 from documents.preparation import TYPED_PROTOCOL, digest
 
 
-def encoded(value, transport=codec.TRANSPORT):
+def encoded(value, transport=codec.QUOTE_TRANSPORT):
     result = deepcopy(value)
+    if transport == codec.TRANSPORT:
+        for contract in codec.contracts(result):
+            contract['components'] = json.dumps(contract['components'], ensure_ascii=False, separators=(',', ':'))
+        return result
     for component in codec.components(result):
         component['choices'] = json.dumps(component['choices'], ensure_ascii=False, separators=(',', ':'))
-        if transport == codec.TRANSPORT:
+        if transport == codec.QUOTE_TRANSPORT:
             component['option_quote'] = json.dumps(component['option_quote'], ensure_ascii=False, separators=(',', ':'))
     return result
 
@@ -34,7 +38,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
 
     def live(self):
         return {**self.config, 'mode': 'live', 'word_preparation_protocol': TYPED_PROTOCOL,
-                CONFIG_KEY: CHOICE_CONTRACT, preparation.SCHEMA_TRANSPORT_KEY: codec.TRANSPORT}
+                CONFIG_KEY: CHOICE_CONTRACT, preparation.SCHEMA_TRANSPORT_KEY: codec.QUOTE_TRANSPORT}
 
     def canonical(self, role='proposer', proposal=None):
         config = {**self.live(), 'mode': 'fixture'}
@@ -44,7 +48,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
     def evidence(self, role='proposer', proposal=None):
         config = self.live()
         envelope = preparation.provider_request(self.inventory, role, config, proposal)
-        return {'response_transport': codec.TRANSPORT, 'request_envelope': envelope,
+        return {'response_transport': codec.QUOTE_TRANSPORT, 'request_envelope': envelope,
                 'request_envelope_sha256': digest(envelope),
                 'response': {'stop_reason': 'end_turn', 'content': [{'type': 'text',
                     'text': json.dumps(encoded(self.canonical(role, proposal)), ensure_ascii=False)}]}}
@@ -70,7 +74,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
             self.assertEqual(value, before)
             word_contract.validate_result(self.inventory, actual, role, self.live())
             canonical_schema = preparation.role_schema(role, TYPED_PROTOCOL, self.inventory, self.live())
-            expected = transform_schema(codec.wire_schema(canonical_schema))
+            expected = transform_schema(codec.wire_schema(canonical_schema, codec.QUOTE_TRANSPORT))
             actual_schema = self.evidence(role, proposal)['request_envelope']['output_config']['format']['schema']
             self.assertEqual(json.dumps(expand(actual_schema)), json.dumps(expected))
             path = (expected['properties']['answer_definitions']['properties']['fields']['items']
@@ -140,7 +144,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
         old = {**config, preparation.SCHEMA_TRANSPORT_KEY: ANTHROPIC_SCHEMA_TRANSPORT}
         new_payload = preparation.role_payload(self.inventory, 'proposer', config=config)
         old_payload = preparation.role_payload(self.inventory, 'proposer', config=old)
-        self.assertEqual(new_payload['response_transport'], codec.TRANSPORT)
+        self.assertEqual(new_payload['response_transport'], codec.QUOTE_TRANSPORT)
         self.assertNotIn('response_transport', old_payload)
         self.assertNotEqual(digest(new_payload), digest(old_payload))
         reordered = json.loads(json.dumps(self.inventory, sort_keys=True))
@@ -246,7 +250,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                 'rendering': 'plain', 'components': [component]}}
         cc.validate(field, definition)
         wrapper = {'answer_definitions': {'fields': [{'definition': definition}]}}
-        roundtrip = codec.decode(encoded(wrapper))
+        roundtrip = codec.decode(encoded(wrapper), codec.QUOTE_TRANSPORT)
         self.assertEqual(roundtrip, wrapper)
         cc.validate(field, roundtrip['answer_definitions']['fields'][0]['definition'])
         for change in (lambda d: d['component_contract']['components'][0]['choices'].append('extra'),
@@ -254,7 +258,8 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                        lambda d: d['component_contract']['components'][0].update(option_quote='invented')):
             changed = deepcopy(definition)
             change(changed)
-            decoded = codec.decode(encoded({'answer_definitions': {'fields': [{'definition': changed}]}}))
+            decoded = codec.decode(encoded({'answer_definitions': {'fields': [{'definition': changed}]}}),
+                                   codec.QUOTE_TRANSPORT)
             with self.assertRaises(ValueError):
                 cc.validate(field, decoded['answer_definitions']['fields'][0]['definition'])
 
@@ -262,12 +267,16 @@ class PreparationChoiceTransportTests(SimpleTestCase):
         import httpx
         from anthropic import Anthropic
         for bad in ('not-json', '[]'):
-            wire = encoded(self.canonical())
-            first = next(codec.components(wire))
-            first['choices'] = bad
-            if bad == '[]':
-                first['required'] = False  # Decodes, then unchanged canonical validation refuses.
             config = self.live()
+            value = self.canonical()
+            if bad == '[]':
+                next(codec.components(value))['required'] = False
+            wire = encoded(value, config[preparation.SCHEMA_TRANSPORT_KEY])
+            if bad == 'not-json':
+                if config[preparation.SCHEMA_TRANSPORT_KEY] == codec.TRANSPORT:
+                    next(codec.contracts(wire))['components'] = bad
+                else:
+                    next(codec.components(wire))['choices'] = bad
             packet = SimpleNamespace(inventory=self.inventory, config=config, proposal={})
             receipt = test_preparation_output.PreparationOutputTests.receipt(self)
             receipt.role = 'proposer'
@@ -306,8 +315,8 @@ class PreparationChoiceTransportTests(SimpleTestCase):
         proposal = self.canonical()
         for role in ('proposer', 'checker'):
             value = self.canonical(role, proposal)
-            wire = encoded(value)
             config = self.live()
+            wire = encoded(value, config[preparation.SCHEMA_TRANSPORT_KEY])
             packet = SimpleNamespace(inventory=self.inventory, config=config, proposal=proposal)
             receipt = test_preparation_output.PreparationOutputTests.receipt(self)
             receipt.role = role
@@ -342,7 +351,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
             self.assertIsNone(retained['response']['content'][0]['citations'])
             self.assertEqual(retained['request_envelope'], sent[0])
             self.assertEqual(retained['request_envelope_sha256'], digest(sent[0]))
-            self.assertEqual(retained['response_transport'], codec.TRANSPORT)
+            self.assertEqual(retained['response_transport'], config[preparation.SCHEMA_TRANSPORT_KEY])
             self.assertEqual(preparation.read_retained_role(receipt, 'live'), value)
             # A valid file hash cannot authorize another config or receipt payload.
             receipt.request_sha256 = '0' * 64
@@ -358,9 +367,9 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                           None, {}, None), value)
             with self.assertRaises(DocumentError):
                 preparation.decode_role_response(self.inventory, 'proposer', config, value,
-                    None, {'response_transport': codec.TRANSPORT}, None)
+                    None, {'response_transport': codec.QUOTE_TRANSPORT}, None)
 
-    def test_queue_keeps_wm_legacy_and_marks_only_new_ordinary_live_v3(self):
+    def test_queue_keeps_wm_legacy_and_marks_only_new_ordinary_live_v4(self):
         from documents.sdk_service import WM_IOV_SHA256
         for sha, expected in (('a' * 64, codec.TRANSPORT), (WM_IOV_SHA256, ANTHROPIC_SCHEMA_TRANSPORT)):
             config = {**self.config, 'mode': 'live'}
@@ -372,3 +381,163 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                 queued = create.call_args.args[2]
                 self.assertEqual(queued[preparation.SCHEMA_TRANSPORT_KEY], expected)
                 self.assertEqual(preparation.schema_transport(queued), expected)
+
+
+class PreparationComponentsTransportTests(SimpleTestCase):
+    """One strict array string on wire; the full canonical guard remains decisive."""
+    setUp = PreparationChoiceTransportTests.setUp
+    canonical = PreparationChoiceTransportTests.canonical
+    decode = PreparationChoiceTransportTests.decode
+    test_live_sdk_retains_original_wire_and_replays_canonical_both_roles_once = (
+        PreparationChoiceTransportTests.test_live_sdk_retains_original_wire_and_replays_canonical_both_roles_once)
+    test_bad_live_wire_keeps_raw_response_known_usage_and_one_submission = (
+        PreparationChoiceTransportTests.test_bad_live_wire_keeps_raw_response_known_usage_and_one_submission)
+
+    def live(self):
+        return {**self.config, 'mode': 'live', 'word_preparation_protocol': TYPED_PROTOCOL,
+                CONFIG_KEY: CHOICE_CONTRACT, preparation.SCHEMA_TRANSPORT_KEY: codec.TRANSPORT}
+
+    def evidence(self, role='proposer', proposal=None):
+        envelope = preparation.provider_request(self.inventory, role, self.live(), proposal)
+        return {'response_transport': codec.TRANSPORT, 'request_envelope': envelope,
+                'request_envelope_sha256': digest(envelope),
+                'response': {'stop_reason': 'end_turn', 'content': [{'type': 'text',
+                    'text': json.dumps(encoded(self.canonical(role, proposal), codec.TRANSPORT), ensure_ascii=False)}]}}
+
+    def test_both_roles_preserve_all_components_and_change_only_the_array_schema(self):
+        proposal = self.canonical()
+        for role in ('proposer', 'checker'):
+            value = self.canonical(role, proposal)
+            before = deepcopy(value)
+            wire = encoded(value, codec.TRANSPORT)
+            result = self.decode(wire, role=role, proposal=proposal)
+            self.assertEqual(result, value)
+            self.assertEqual(value, before)
+            word_contract.validate_result(self.inventory, result, role, self.live())
+            canonical = preparation.role_schema(role, TYPED_PROTOCOL, self.inventory, self.live())
+            schema = codec.wire_schema(canonical)
+            original = deepcopy(canonical)
+            def properties(tree):
+                return (tree['properties']['answer_definitions']['properties']['fields']['items']
+                    ['properties']['definition']['properties']['component_contract']['properties'])
+            replacement = properties(schema)['components']
+            self.assertEqual(replacement['type'], 'string')
+            self.assertNotIn('items', replacement)
+            properties(original)['components'] = replacement
+            self.assertEqual(schema, original)
+            self.assertEqual(properties(canonical)['components']['type'], 'array')
+            request = self.evidence(role, proposal)['request_envelope']
+            self.assertEqual(expand(request['output_config']['format']['schema']), transform_schema(schema))
+            self.assertIn(codec.COMPONENTS_INSTRUCTIONS, request['system'])
+            self.assertEqual(next(codec.components(result))['choices'], [])
+            self.assertIsNone(next(codec.components(result))['option_quote'])
+
+    def test_every_nullable_value_literal_null_unicode_and_order_survives_without_coercion(self):
+        for item in (None, 'null', '', '"null"', ' é中文😀\n\t"\\ ', 'x' * 2000):
+            value = self.canonical()
+            component = next(codec.components(value))
+            for key in ('label', 'unit', 'option_quote'):
+                component[key] = item
+            component['choices'] = ['null', '', ' é中文😀\n\t"\\ ', 'last']
+            component['extra'] = {'ordered': [None, 'null', {'unknown': True}]}
+            before = deepcopy(value)
+            result = self.decode(encoded(value, codec.TRANSPORT))
+            self.assertEqual(result, before)
+            self.assertEqual(value, before)
+            with self.assertRaises(ValueError):
+                word_contract.validate_result(self.inventory, result, 'proposer', self.live())
+
+    def test_malformed_array_strings_duplicate_keys_constants_and_byte_depth_bounds_refuse(self):
+        invalid = (None, True, 4, [], {}, '', 'null', 'false', '{}', '[1]', '[null]',
+            '[[{}]]', '"[]"', '[{"id":NaN}]', '[{"id":Infinity}]', '[{"id":-Infinity}]',
+            '[{"id":"first","id":"second"}]',
+            '[{"id":"first","\\u0069d":"second"}]',
+            '[{"scope":{"subject":"patient","subject":"other"}}]',
+            '[{"extra":{"hidden":1,"hidden":2}}]', '[{}] trailing',
+            '[' * 1200 + ']' * 1200, 'é' * (codec.MAX_ENCODED_BYTES // 2 + 1), '\ud800')
+        for item in invalid:
+            wire = encoded(self.canonical(), codec.TRANSPORT)
+            next(codec.contracts(wire))['components'] = item
+            with self.subTest(item=repr(item)[:70]), self.assertRaises(DocumentError):
+                codec.decode(wire)
+
+    def test_inner_types_extras_false_required_duplicates_and_source_quotes_reach_full_validator(self):
+        changes = (
+            lambda c: c.update(choices='[]'), lambda c: c.update(option_quote='null'),
+            lambda c: c.update(required=False), lambda c: c.update(extra='preserved'),
+            lambda c: c.update(question_quote='foreign source'),
+            lambda c: c.update(value_type='invented'), lambda c: c.update(choices=['x'] * 201),
+            lambda c: c['scope'].update(extra='preserved'))
+        for change in changes:
+            value = self.canonical()
+            change(next(codec.components(value)))
+            result = self.decode(encoded(value, codec.TRANSPORT))
+            self.assertEqual(result, value)
+            with self.assertRaises(ValueError):
+                word_contract.validate_result(self.inventory, result, 'proposer', self.live())
+        value = self.canonical()
+        contract = next(codec.contracts(value))
+        contract['components'].append(deepcopy(contract['components'][0]))
+        result = self.decode(encoded(value, codec.TRANSPORT))
+        self.assertEqual(result, value)
+        with self.assertRaises(ValueError):
+            word_contract.validate_result(self.inventory, result, 'proposer', self.live())
+
+    def test_thirty_components_and_empty_signing_contract_keep_original_local_policy(self):
+        from documents import component_contracts as cc
+        field = {'key': 'findings', 'label': 'Requested findings', 'locator': {'paragraph': 1}}
+        scope = {'subject': 'patient', 'temporality': 'any', 'polarity': 'any'}
+        component = {'id': 'part0', 'question_quote': field['label'], 'label': None,
+            'meaning': 'The documented finding', 'value_type': 'text', 'scope': scope,
+            'unit': None, 'unit_requirement': 'none', 'required': True,
+            'encounter_scope': 'current', 'choices': [], 'option_quote': None}
+        definition = {'value_type': 'text', 'scope': scope, 'unit': None, 'choices': [],
+            'answer_mode': 'narrative', 'component_contract': {'contract': CHOICE_CONTRACT,
+                'rendering': 'plain', 'components': [dict(component, id='part'+str(i)) for i in range(30)]}}
+        def roundtrip():
+            value = {'answer_definitions': {'fields': [{'definition': definition}]}}
+            result = codec.decode(encoded(value, codec.TRANSPORT))
+            self.assertEqual(result, value)
+            return result['answer_definitions']['fields'][0]['definition']
+        cc.validate(field, roundtrip())
+        definition['component_contract']['components'].append(dict(component, id='part30'))
+        with self.assertRaises(ValueError):
+            cc.validate(field, roundtrip())
+        definition['component_contract'].update(components=[], rendering='protected')
+        cc.validate(dict(field, label='Clinician signature'), roundtrip())
+        with self.assertRaises(ValueError):
+            cc.validate(field, roundtrip())
+
+    def test_source_owned_unicode_quoted_and_backslash_or_choices_remain_exact(self):
+        from core.tests.test_component_choices import choice_definition
+        from documents import component_contracts as cc
+        options = ['null', 'é"\\one', '中😀two']
+        quote = options[0] + ', ' + options[1] + ' or ' + options[2]
+        field, definition = choice_definition(label='Visit mode: '+quote+'. Encounter details.',
+                                               options=options, quote=quote)
+        cc.validate(field, definition)
+        value = {'answer_definitions': {'fields': [{'definition': definition}]}}
+        result = codec.decode(encoded(value, codec.TRANSPORT))
+        self.assertEqual(result, value)
+        cc.validate(field, result['answer_definitions']['fields'][0]['definition'])
+
+    def test_v4_marker_cannot_replay_old_wire_or_cross_bind_role_proposal_and_config(self):
+        value = self.canonical()
+        for transport in (codec.ARRAY_TRANSPORT, codec.QUOTE_TRANSPORT):
+            with self.assertRaises(DocumentError):
+                self.decode(encoded(value, transport))
+        wire = encoded(value, codec.TRANSPORT)
+        evidence = self.evidence()
+        evidence['response_transport'] = codec.QUOTE_TRANSPORT
+        with self.assertRaises(DocumentError):
+            self.decode(wire, evidence=evidence)
+        for mutate in (lambda e: e.update(request_envelope_sha256='0' * 64),
+                       lambda e: e['response']['content'][0].update(text='{}')):
+            evidence = self.evidence()
+            mutate(evidence)
+            with self.assertRaises(DocumentError):
+                self.decode(wire, evidence=evidence)
+        with self.assertRaises(DocumentError):
+            self.decode(wire, role='checker', proposal=self.canonical(), evidence=self.evidence())
+        with self.assertRaises(DocumentError):
+            self.decode(wire, request_sha='0' * 64)
