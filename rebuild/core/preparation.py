@@ -21,6 +21,7 @@ from .generation import configuration, rates
 from .template_source import approval_binding
 from . import word_contract
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
+from . import preparation_choice_transport as choice_transport
 from documents.question_context import CONFIG_KEY as QUESTION_CONTEXT_KEY, CONTEXT as QUESTION_CONTEXT, validate_context as validate_question_context, validate_binding as validate_question_binding
 from documents.signing_source_context import CONFIG_KEY as SIGNING_CONTEXT_KEY, CONTEXT as SOURCE_SIGNING_CONTEXT, validate_context as validate_signing_context
 
@@ -73,9 +74,19 @@ def schema_transport(config):
     if config is None or SCHEMA_TRANSPORT_KEY not in config:
         return None
     value = config[SCHEMA_TRANSPORT_KEY]
-    if (type(value) is not str or value != ANTHROPIC_SCHEMA_TRANSPORT
+    if (type(value) is not str or value not in (ANTHROPIC_SCHEMA_TRANSPORT, choice_transport.TRANSPORT)
             or config.get('mode') != 'live' or config.get('provider') != 'anthropic'):
         raise DocumentError('Unsupported explicit preparation schema transport.', 'invalid_proposal')
+    if value == choice_transport.TRANSPORT:
+        from documents.component_contracts import CONFIG_KEY, CHOICE_CONTRACT
+        if (config.get('word_preparation_protocol') != TYPED_PROTOCOL
+                or config.get('word_preparation_output_profile') != COMPLETE_OUTPUT_PROFILE
+                or config.get(word_contract.CONFIG_KEY) != word_contract.GRAPH_PROFILE
+                or config.get(CONFIG_KEY) != CHOICE_CONTRACT
+                or type(config.get('semantic_definition_version')) is not int
+                or config['semantic_definition_version'] != 4):
+            raise DocumentError('The choice transport requires its complete v3 Word preparation contract.',
+                                'invalid_proposal')
     return value
 
 
@@ -252,9 +263,11 @@ def role_schema(role, protocol=None, inventory=None, config=None):
                                  decision: {'type': 'string', 'enum': choices}}}}}}
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
-    schema_transport(config)
+    transport = schema_transport(config)
     validate_question_binding(inventory, config)
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
+    if transport == choice_transport.TRANSPORT:
+        result['response_transport'] = transport
     if finite_identities(inventory, config):
         result['source_identity_contract'] = IDENTITY_PROFILE
     if finite_destinations(inventory, config):
@@ -359,11 +372,16 @@ def provider_request(inventory, role, config, proposal=None):
             'Copy each corresponding field key, locator digest, story ID and content digest from '
             'its original inventory row. The schema offers only original identity values; '
             'their exact associations and complete coverage are independently validated in code. ')
-    schema = transform_schema(role_schema(role, inventory['protocol'], inventory, config))
-    if transport == ANTHROPIC_SCHEMA_TRANSPORT:
+    schema = role_schema(role, inventory['protocol'], inventory, config)
+    if transport == choice_transport.TRANSPORT:
+        schema = choice_transport.wire_schema(schema)
+        instructions += choice_transport.INSTRUCTIONS
+    schema = transform_schema(schema)
+    if transport in (ANTHROPIC_SCHEMA_TRANSPORT, choice_transport.TRANSPORT):
         schema = share_anthropic_schema(schema)
     envelope = {'model':config['model'], 'max_tokens':role_limits(inventory, config)[0], 'system':instructions,
-        'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False)}],
+        'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False,
+            **({'sort_keys':True} if transport == choice_transport.TRANSPORT else {}))}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
     if config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE:
         # Include schema, system instructions, complete original and (for the
@@ -372,6 +390,37 @@ def provider_request(inventory, role, config, proposal=None):
         if size > MAX_PREPARATION_REQUEST_BYTES:
             raise processing_limit_error('request_bytes', size, MAX_PREPARATION_REQUEST_BYTES, role+'_request')
     return envelope
+
+
+def decode_role_response(inventory, role, config, response, proposal, evidence, request_sha256):
+    """Bind prospective decoding to the immutable request and untouched wire evidence."""
+    transport = schema_transport(config)
+    if transport != choice_transport.TRANSPORT:
+        if 'response_transport' in evidence:
+            raise choice_transport.invalid()
+        return response
+    envelope = evidence.get('request_envelope')
+    expected_payload = role_payload(inventory, role, proposal,
+        source_review_context=source_review_mode(config), config=config)
+    try:
+        raw = evidence['response']
+        if (type(raw) is not dict or raw.get('stop_reason') != 'end_turn'
+                or type(raw.get('content')) is not list
+                or any(type(block) is not dict for block in raw['content'])):
+            raise choice_transport.invalid()
+        wire = json.loads(''.join(block['text'] for block in raw['content'] if block.get('type') == 'text'))
+        if digest(wire) != digest(response):
+            raise choice_transport.invalid()
+    except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
+        raise choice_transport.invalid() from None
+    if (evidence.get('response_transport') != transport
+            or type(envelope) is not dict
+            or evidence.get('request_envelope_sha256') != digest(envelope)
+            or request_sha256 != digest(expected_payload)
+            or digest(envelope) != digest(provider_request(inventory, role, config, proposal))):
+        raise choice_transport.invalid()
+    return choice_transport.decode(response)
+
 
 def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None,prepared_client=None):
     payload = role_payload(inventory, role, proposal,
@@ -411,6 +460,9 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
                        'resource_id':getattr(response,'id',''),'usage':raw.get('usage'),
                        'rates':{k:config.get(k) for k in ('input_rate','output_rate','cached_rate')},
                        'cost':None,'simulated':False,'response':raw, 'request_envelope':envelope}
+    if schema_transport(config) == choice_transport.TRANSPORT:
+        original_evidence.update(response_transport=choice_transport.TRANSPORT,
+                                 request_envelope_sha256=digest(envelope))
     # The untouched response is durable before any usage or content property is judged.
     if on_response:on_response(original_evidence)
     r = rates(config)
@@ -428,6 +480,9 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
     evidence = {'model': getattr(response,'model',None), 'request_id': getattr(response, '_request_id', '') or '',
                 'resource_id': getattr(response,'id',''), 'usage': units, 'rates': {k: str(v) for k, v in r.items()},
                 'cost': str(cost) if cost is not None else None, 'simulated': False, 'response': raw, 'request_envelope':envelope}
+    if schema_transport(config) == choice_transport.TRANSPORT:
+        evidence.update(response_transport=choice_transport.TRANSPORT,
+                        request_envelope_sha256=digest(envelope))
     # Raw usage/response is retained by the caller BEFORE JSON/placement adjudication.
     return text, evidence
 
@@ -641,6 +696,8 @@ def call_role(prep, role, deadline, proposal=None):
                 raise DocumentError('The retained preparation response is not valid structured JSON. '
                                     'Its computed provider usage remains recorded.', 'invalid_response') from None
         stage='proposal_validation'
+        response = decode_role_response(prep.inventory, role, prep.config, response, proposal, evidence,
+                                        getattr(receipt, 'request_sha256', None))
         word_contract.validate_result(prep.inventory, response, role, prep.config)
         receipt.state='succeeded'; receipt.save(update_fields=['state'])
         return response
@@ -722,10 +779,12 @@ def create_preparation(template, actor):
             'word_preparation_output_profile': COMPLETE_OUTPUT_PROFILE,
             'queued_release_sha': settings.RELEASE_SHA,
             DESTINATION_KEY: DESTINATION_PROFILE}
-    schema_transport(config)
+    prior_transport = schema_transport(config)
     if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
         config[SCHEMA_TRANSPORT_KEY] = ANTHROPIC_SCHEMA_TRANSPORT
     if template.sha256 == WM_IOV_SHA256:
+        if prior_transport == choice_transport.TRANSPORT:
+            raise DocumentError('The component choice transport does not apply to the WM source.', 'invalid_proposal')
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
         from documents.semantic_preparation_roles import MEANING_CONTRACT_KEY, COMPOUND_ANSWER_CONTRACT
@@ -737,6 +796,8 @@ def create_preparation(template, actor):
         config[SIGNING_CONTEXT_KEY] = SOURCE_SIGNING_CONTEXT
         config[QUESTION_CONTEXT_KEY] = QUESTION_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
+        if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
+            config[SCHEMA_TRANSPORT_KEY] = choice_transport.TRANSPORT
     from . import testing_authority
     if testing_authority.identity(config):
         return testing_authority.create_preparation(template,actor,config)
@@ -985,9 +1046,19 @@ def _read_retained_role(receipt):
         raise ValidationError('The retained provider response is incomplete.')
     try:
         text=''.join(block['text'] for block in response['content'] if block.get('type')=='text')
-        return json.loads(text)
+        result = json.loads(text)
     except (KeyError,TypeError,ValueError):
         raise ValidationError('The retained provider result is invalid.') from None
+    prep = getattr(receipt, 'preparation', None)
+    config = getattr(prep, 'config', None)
+    if (config and schema_transport(config) == choice_transport.TRANSPORT
+            or 'response_transport' in evidence):
+        if prep is None or schema_transport(config) != choice_transport.TRANSPORT:
+            raise choice_transport.invalid()
+        result = decode_role_response(prep.inventory, receipt.role, config, result,
+            prep.proposal if receipt.role == 'checker' else None, evidence, receipt.request_sha256)
+        word_contract.validate_result(prep.inventory, result, receipt.role, config)
+    return result
 
 
 @transaction.atomic
