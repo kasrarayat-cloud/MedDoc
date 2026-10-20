@@ -1,0 +1,36 @@
+Patient: Synthetic Nessa Rowan
+Clinic record: SYN-NR-1020-G26
+Date of service: 19 October 2026
+Treating physician: Dr. Alina Park
+
+Subjective
+Nessa is a 52-year-old woman attending an in-person visit in a United States outpatient gastroenterology office. She is an established patient of Dr. Alina Park. The same physician saw her in the same office on 21 May 2026 for transient bloating; the bloating had resolved by that prior visit.
+
+For five weeks she has had heartburn on four days each week. The sensation is burning behind the sternum, without radiation, rated 3 out of 10. Episodes begin about 30 minutes after lunch and last 10 to 20 minutes. Bending forward after eating worsens the burning; walking upright after the meal eases it.
+
+Constipation started three weeks ago and is a separate symptom from the heartburn. Previously she passed one soft, formed stool every day. She now has three bowel movements per week, with firm stools and straining. She continues to pass gas.
+
+Today she denies difficulty swallowing, pain with swallowing, nausea, vomiting, vomiting blood, black stools, visible rectal bleeding, unintentional weight loss and severe abdominal pain.
+
+A telephone message about nausea concerned her sister, not Nessa. Her sister was neither examined nor treated at this encounter.
+
+She currently takes psyllium husk, 3.4 g mixed into 240 mL of water by mouth once daily for constipation. She began it on 14 October 2026. Her stools have become a little softer, but she still strains and still has three bowel movements weekly.
+
+She previously took calcium carbonate 1000 mg by mouth after dinner once daily for heartburn, from 29 September through 9 October 2026. It did not improve the burning. She stopped calcium carbonate on 9 October 2026 because it was ineffective. She is not taking calcium carbonate now.
+
+Her medication allergy is doxycycline, which caused a rash.
+
+Objective
+Blood pressure is 122/76 mmHg. Pulse is 72 beats per minute. Temperature is 36.6 degrees Celsius. Weight is 73.4 kg.
+
+She is alert, comfortable and well hydrated. The abdomen is soft and not distended, with normal bowel sounds. There is no abdominal tenderness, guarding or rebound.
+
+Assessment
+Heartburn and constipation were each evaluated as separate problems today. The cause of the heartburn remains uncertain. Gastroesophageal reflux disease is possible but has not been established. The constipation is unspecified; neither its cause nor a subtype has been established. There is no diagnosis of slow-transit constipation, outlet dysfunction, medication-induced constipation or irritable bowel syndrome today.
+
+Plan
+I ordered a basic metabolic panel today to assess calcium and electrolyte levels as part of the constipation evaluation. Collection at the laboratory is planned for 22 October 2026. No sample was collected today, the panel has not been performed and no result is available. No procedure was performed at this visit.
+
+Continue psyllium at the current dose and schedule. No new medication is prescribed today. We discussed maintaining fluid intake, increasing dietary fiber gradually and avoiding bending forward immediately after meals. Return in three weeks to review the bowel pattern, heartburn and laboratory result. Contact the office sooner if symptoms become worse or visible rectal bleeding develops. Seek urgent care if severe abdominal pain or repeated vomiting develops.
+
+Office E/M selection is based on total physician time on the date of service. Dr. Park personally spent 33 minutes on 19 October 2026: six minutes reviewing records, 21 minutes obtaining the history, examining and counselling the patient, and six minutes placing the laboratory order and documenting the encounter. All three activities were completed by the treating physician on the service date. The 33 minutes exclude six minutes of staff intake and three minutes of physician chart review on 18 October 2026. No time for separately reported services is included in the 33-minute total.

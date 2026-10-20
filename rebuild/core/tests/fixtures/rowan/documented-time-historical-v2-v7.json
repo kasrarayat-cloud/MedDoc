@@ -1,0 +1,430 @@
+{
+  "base_candidate": "6e6d580666580b5e67a58c8fbc438c4da72ff9c2",
+  "description": "Unchanged exact fictional Rowan source through frozen6e v2-v7 consumers; historical behavior remains immutable.",
+  "results": {
+    "crlf": {
+      "source-bound-clinical-coding-v2": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            },
+            {
+              "end": 3525,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3448,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v3": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            },
+            {
+              "end": 3525,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3448,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v4": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            },
+            {
+              "end": 3525,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3448,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v5": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            },
+            {
+              "end": 3525,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3448,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v6": {
+        "eligibility": [
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported.",
+            "Missing documented em basis."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v7": {
+        "eligibility": [
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported.",
+            "Missing documented em basis."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 309,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 261,
+              "value": "established"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      }
+    },
+    "lf": {
+      "source-bound-clinical-coding-v2": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            },
+            {
+              "end": 3490,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3413,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v3": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            },
+            {
+              "end": 3490,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3413,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v4": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            },
+            {
+              "end": 3490,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3413,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v5": {
+        "eligibility": [
+          "A competing or qualified practitioner-time statement requires clarification.",
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "The time exclusion has no adjacent source-bound physician total.",
+            "The documented total includes ineligible staff, other-day or separately reported time.",
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            },
+            {
+              "end": 3490,
+              "key": "em_basis",
+              "quote": "Office E/M selection is based on total physician time on the date of service.",
+              "source": "saved note",
+              "start": 3413,
+              "value": "time"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v6": {
+        "eligibility": [
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported.",
+            "Missing documented em basis."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      },
+      "source-bound-clinical-coding-v7": {
+        "eligibility": [
+          "The complete source must document evaluation with history or examination during this encounter."
+        ],
+        "facts": {
+          "blockers": [
+            "Missing documented setting.",
+            "Missing documented time minutes.",
+            "Missing documented time same day.",
+            "Missing documented time qualified clinician.",
+            "Missing documented time excludes staff.",
+            "Missing documented time excludes separately reported.",
+            "Missing documented em basis."
+          ],
+          "clinician_confirmed": false,
+          "facts": [
+            {
+              "end": 303,
+              "key": "patient_status",
+              "quote": "She is an established patient of Dr. Alina Park.",
+              "source": "saved note",
+              "start": 255,
+              "value": "established"
+            }
+          ],
+          "status": "requires_clarification"
+        }
+      }
+    }
+  },
+  "source_sha256": {
+    "crlf": "6a018d0e7ae38a935aa39f7755d541b8a2ce2f3fc5e5054f91477e4398c04bde",
+    "lf": "5b3b1f1dc34ba9f55b75db5827f880e475a39cfc56b0c4ac285b5d0a53ab39f0"
+  }
+}

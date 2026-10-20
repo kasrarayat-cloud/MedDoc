@@ -17,10 +17,11 @@ _PREDICATE = (r'(?:(?:actually|also|now|still|indeed|apparently|possibly|reporte
     r'(?:is|are|was|were|should|must|may|might|remains?|includes?|excludes?|does|do|did|has|have|had|'
     r'will|would|belongs?|refers?|relates?|concerns?|pertains?|contains?|comprises?|overlapped|'
     r'overlaps?|occurred|happened|qualifies?|qualified|took)\b')
-_ACCOUNT_SUBJECT = (r'(?P<quantifier>(?:all|some|none|any|each|every|both|only|part|portion)'
+_ACCOUNT_SUBJECT = (r'(?P<quantifier>(?:all|some|no|none|any|each|every|both|only|part|portion)'
     r'(?:\s+of)?\s+)?(?P<article>(?:the|this|that|these|those)\s+)?'
     r'(?P<modifiers>(?:'+_REFERENCE_MODIFIER+r'\s+)*)'
-    r'(?P<account>time|total|activities|work|'+_ACCOUNT_NUMBER+r'[ -]+minutes?(?:[ -]+total)?)')
+    r'(?P<account>time(?:\s+for\s+separately\s+reported\s+services?)?|total|'
+    r'(?:'+_ACCOUNT_NUMBER+r'\s+)?activities|work|'+_ACCOUNT_NUMBER+r'[ -]+minutes?(?:[ -]+total)?)')
 
 
 def _separate_subject(prefix, subject=''):
@@ -71,7 +72,10 @@ def exclusion(text):
             return {'named_total': int(active['total']), 'prior_day': day,
                     'staff': True, 'separately_reported': False}
         return None
-    passive = re.fullmatch(r'Time for separately reported services? is excluded from the '
+    # These complete predicates have the same exclusion polarity. Unknown
+    # negations, exceptions or additional predicates cannot enter this arm.
+    passive = re.fullmatch(r'(?:Time for separately reported services? is excluded from|'
+        r'No time for separately reported services? is included in) the '
         r'(?P<total>\d{1,4})-minute total', value, re.I)
     if passive:
         return {'named_total': int(passive['total']), 'prior_day': None,
@@ -80,8 +84,28 @@ def exclusion(text):
 
 
 def qualification(text):
-    return bool(re.fullmatch(r'These activities were all completed by the physician on the service date\.?',
+    return bool(re.fullmatch(r'(?:These activities were all|All (?:three|3) activities were) '
+                             r'completed by the (?:treating )?physician on the service date\.?',
                              text.strip(), re.I))
+
+
+def separate_exclusion(text):
+    """A complete foreign/prior frame owns only a complete exclusion body.
+
+    Reuse the source scope grammar, then consume the entire predicate. Merely
+    starting with a family member cannot exempt a later current-account claim,
+    an unknown qualifier or a second predicate in the same source unit.
+    """
+    from .clinical_source_context import _account_preamble
+    value = discourse_body(text)
+    if value is None:
+        return False
+    frame = re.fullmatch(r'(?P<owner>[^,،:;\r\n]+)[,،:]\s*(?P<body>[^\r\n]+)', value)
+    if frame is None:
+        return False
+    scope = _account_preamble(frame['owner'])
+    return (not scope['current_owned'] and not scope['qualified']
+            and exclusion(frame['body']) is not None)
 
 
 def unrelated_account(text):
@@ -89,6 +113,8 @@ def unrelated_account(text):
     value = discourse_body(text)
     if value is None:
         return False
+    if separate_exclusion(text):
+        return True
     # A separate account cannot exempt an additional current claim in the
     # same original unit. Its complete predicate must finish the unit.
     if linked_claim(text, established=True):
@@ -136,6 +162,8 @@ def linked_claim(text, *, established=False, service_established=None, status_es
     # Search complete subject/predicate frames, not an allowlist of possible
     # preparatory phrases. Prefixes never hide an explicit current account.
     value = text.strip()
+    if separate_exclusion(value):
+        return None
     for subject in account_subjects(value):
         if subject['qualified_practitioner'] or established and subject['referential']:
             return 'time'
