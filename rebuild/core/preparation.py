@@ -20,6 +20,7 @@ from .security import private_path, membership, audit
 from .generation import configuration, rates
 from .template_source import approval_binding
 from . import word_contract
+from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 
 MAX_OUTPUT = 2500
 OUTPUT_PROFILE = 'inventory-sized-typed-v1'
@@ -28,6 +29,7 @@ DESTINATION_PROFILE = 'finite-physical-destinations-v1'
 DESTINATION_KEY = 'word_preparation_destinations'
 IDENTITY_PROFILE = 'source-identity-enums-v1'
 IDENTITY_KEY = 'word_preparation_identities'
+SCHEMA_TRANSPORT_KEY = 'word_preparation_schema_transport'
 MAX_TYPED_OUTPUT = 16000
 MAX_COMPLETE_OUTPUT = 48000
 MAX_PREPARATION_REQUEST_BYTES = 512000
@@ -61,6 +63,18 @@ SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'pr
                'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
                'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure',
                'output_limit', 'invalid_response', 'provider_not_configured', 'invalid_destination'}
+
+
+def schema_transport(config):
+    # Absence reconstructs the historical wire exactly. An explicit policy may
+    # only select the qualified transport on an actual Anthropic preparation.
+    if config is None or SCHEMA_TRANSPORT_KEY not in config:
+        return None
+    value = config[SCHEMA_TRANSPORT_KEY]
+    if (type(value) is not str or value != ANTHROPIC_SCHEMA_TRANSPORT
+            or config.get('mode') != 'live' or config.get('provider') != 'anthropic'):
+        raise DocumentError('Unsupported explicit preparation schema transport.', 'invalid_proposal')
+    return value
 
 
 def finite_destinations(inventory, config):
@@ -236,6 +250,7 @@ def role_schema(role, protocol=None, inventory=None, config=None):
                                  decision: {'type': 'string', 'enum': choices}}}}}}
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
+    schema_transport(config)
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
     if finite_identities(inventory, config):
         result['source_identity_contract'] = IDENTITY_PROFILE
@@ -271,6 +286,7 @@ def maximum_cost(payload, config,max_output=MAX_OUTPUT):
     return (Decimal(input_bound)*r['input_per_million'] + Decimal(max_output)*r['output_per_million'])/1000000
 
 def provider_request(inventory, role, config, proposal=None):
+    transport = schema_transport(config)
     from documents.semantic_preparation_roles import configured_meaning_contract
     meaning_contract = configured_meaning_contract(config)
     payload = role_payload(inventory, role, proposal,
@@ -341,6 +357,8 @@ def provider_request(inventory, role, config, proposal=None):
             'its original inventory row. The schema offers only original identity values; '
             'their exact associations and complete coverage are independently validated in code. ')
     schema = transform_schema(role_schema(role, inventory['protocol'], inventory, config))
+    if transport == ANTHROPIC_SCHEMA_TRANSPORT:
+        schema = share_anthropic_schema(schema)
     envelope = {'model':config['model'], 'max_tokens':role_limits(inventory, config)[0], 'system':instructions,
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False)}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
@@ -648,6 +666,9 @@ def create_preparation(template, actor):
             'word_preparation_output_profile': COMPLETE_OUTPUT_PROFILE,
             'queued_release_sha': settings.RELEASE_SHA,
             DESTINATION_KEY: DESTINATION_PROFILE}
+    schema_transport(config)
+    if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
+        config[SCHEMA_TRANSPORT_KEY] = ANTHROPIC_SCHEMA_TRANSPORT
     if template.sha256 == WM_IOV_SHA256:
         config['word_source_review_context'] = WM_SOURCE_REVIEW_CONTEXT
     else:
