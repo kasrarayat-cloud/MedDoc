@@ -559,7 +559,16 @@ def _soap_office_visit(text, scope, *, documented=False):
     patient = r'(?:he|she|they|the\s+patient' + ''.join('|'+re.escape(n) for n in sorted(aliases)) + r')'
     attendance = (r'(?:is\s+an?\s+\d{1,3}-year-old\s+(?:woman|man|person)\s+attending|'
                   r'(?:is\s+)?attending|attends)')
+    specialty = (r'primary\s+care|family\s+medicine|internal\s+medicine|'
+        r'gastroenterology|cardiology|dermatology|neurology|orthopedic|orthopaedic|psychiatry|'
+        r'pediatric|paediatric|oncology|endocrinology|rheumatology|pulmonology|urology|'
+        r'gynecology|gynaecology|obstetric|surgical')
+    office_description = r'(?:(?:medical|clinical|outpatient|'+specialty+r')\s+)?'
     if documented:
+        # A facility descriptor and one specialty compose in v8; arbitrary
+        # modifiers or two competing specialties still fail the whole frame.
+        # Earlier contracts retain their exact single-descriptor grammar.
+        office_description = r'(?:(?:medical|clinical|outpatient)\s+)?(?:(?:'+specialty+r')\s+)?'
         # Convert this whole, literal attendance clause to the already bounded
         # medical-office frame; no partial match or unknown tail is discarded.
         text = re.sub(r'^(?P<patient>'+patient+r')\s+is\s+an?\s+(?P<age>\d{1,3})-year-old\s+'
@@ -572,10 +581,7 @@ def _soap_office_visit(text, scope, *, documented=False):
     return bool(re.fullmatch(patient+r'\s+'+attendance+r'\s+(?:a|an|the)\s+'
         r'(?:(?:new|established)[ -]patient,?\s+)?in-person\s+(?:visit|consultation)\s+'
         r'in\s+(?:a|an|the)\s+(?:(?:u\.s\.|us|united\s+states)\s+)?'
-        r'(?:(?:medical|clinical|outpatient|primary\s+care|family\s+medicine|internal\s+medicine|'
-        r'gastroenterology|cardiology|dermatology|neurology|orthopedic|orthopaedic|psychiatry|'
-        r'pediatric|paediatric|oncology|endocrinology|rheumatology|pulmonology|urology|'
-        r'gynecology|gynaecology|obstetric|surgical)\s+)?office\s*\.?', text, re.I))
+        +office_description+r'office\s*\.?', text, re.I))
 
 
 def _source_time_analysis(notes, *, modern=False, complete=False, soap=False, documented=False):
@@ -645,7 +651,12 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False, do
             from .clinical_assertions_v4 import strict_exclusion
             complete_exclusion = strict_exclusion(text)
         if documented:
-            from .documented_time_source import exclusion as documented_exclusion_for, qualification, linked_claim, unrelated_account
+            from .documented_time_source import exclusion as documented_exclusion_for, qualification, linked_claim, unrelated_account, separate_exclusion
+            if separate_exclusion(text):
+                # This complete separate account supplies no current facts and
+                # cannot connect a patient's total to a later exclusion.
+                active_total = None
+                continue
             documented_exclusion = documented_exclusion_for(text)
             documented_claim = linked_claim(text, established=bool(totals),
                 service_established=bool(found['setting'] or found['patient_status']),
