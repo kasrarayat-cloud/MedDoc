@@ -67,6 +67,8 @@ def inventory_for(inventory):
 
 
 def active(inventory, config):
+    from documents.question_context import validate_binding
+    validate_binding(inventory, config)
     return requested(config) and eligible(inventory)
 
 

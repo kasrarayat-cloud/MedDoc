@@ -14,9 +14,11 @@ from lxml import etree
 if __package__:
     from .engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from .sdk_service import WM_IOV_SHA256
+    from .question_context import CONTEXT as QUESTION_CONTEXT, project_fields, validate_context
 else:
     from engine import validate_docx, docx_inspect, DocumentFailure, TOKEN, W_NS, constraint_from_context
     from sdk_service import WM_IOV_SHA256
+    from question_context import CONTEXT as QUESTION_CONTEXT, project_fields, validate_context
 
 NS = {'w': W_NS}
 W = '{'+W_NS+'}'
@@ -117,7 +119,7 @@ def source_bound_candidate_fields(path, value):
     return fields
 
 
-def typed_source_fields(path, fields, *, signing_context=None):
+def typed_source_fields(path, fields, *, signing_context=None, question_context=None):
     """Opt-in semantics for a new preparation; existing approvals are untouched."""
     if __package__:
         from .table_constraints import with_table_constraints
@@ -137,6 +139,8 @@ def typed_source_fields(path, fields, *, signing_context=None):
                 if field.get('answer_constraints', constraint) != constraint:
                     raise DocumentFailure('The paragraph constraint differs from its source.', 'content_changed')
                 field['answer_constraints'] = deepcopy(constraint)
+    if question_context is not None:
+        result = project_fields(path, result, question_context, signing_context=signing_context)
     return result
 
 def occupied(cell):
@@ -166,12 +170,16 @@ def unmapped_multi_column_rows(path):
     return result
 
 
-def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
+def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None, question_context=None):
     if protocol not in {PROTOCOL, TYPED_PROTOCOL}:
         raise DocumentFailure('Unsupported preparation protocol.', 'invalid_proposal')
     if (signing_context is not None and (signing_context != SIGNING_CONTEXT
             or protocol != TYPED_PROTOCOL or known)):
         raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
+    if question_context is not None:
+        validate_context(question_context)
+        if protocol != TYPED_PROTOCOL or known:
+            raise DocumentFailure('Source-question context requires an ordinary typed Word form.', 'invalid_proposal')
     validate_docx(path, inventory_only=True)
     source_sha = hashlib.sha256(path.read_bytes()).hexdigest()
     if known and known.get('sha256') != source_sha:
@@ -194,7 +202,7 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
             if exc.code != 'no_fields':
                 issues.append({'code': exc.code, 'message': str(exc)})
     if protocol == TYPED_PROTOCOL and not known and fields:
-        fields = typed_source_fields(path, fields, signing_context=signing_context)
+        fields = typed_source_fields(path, fields, signing_context=signing_context, question_context=question_context)
     for field in fields:
         if ambiguous_signing(field['label'], signing_context):
             issues.append({'code':'guided_signing','message':field['label']+': clarify whether this is a clinical answer or a signing area before preparation.'})
@@ -331,6 +339,8 @@ def inventory(path, known=None, *, protocol=PROTOCOL, signing_context=None):
                                   if qualified else {}}
     if signing_context is not None:
         result['signing_context'] = signing_context
+    if question_context is not None:
+        result['question_context'] = question_context
     result['inventory_sha256'] = digest(result)
     return result
 
@@ -470,6 +480,10 @@ def validate_inventory(value):
     if 'signing_context' in value and (value['signing_context'] != SIGNING_CONTEXT
             or value['protocol'] != TYPED_PROTOCOL or value.get('document_backend')):
         raise DocumentFailure('Unsupported signing classification policy.', 'stale_inventory')
+    if 'question_context' in value and (value['question_context'] != QUESTION_CONTEXT
+            or type(value['question_context']) is not str
+            or value['protocol'] != TYPED_PROTOCOL or value.get('document_backend')):
+        raise DocumentFailure('Unsupported explicit source-question context.', 'stale_inventory')
     return value
 
 def validate_candidate_fields(value,fields,*,constraints=False):
@@ -495,7 +509,8 @@ def candidate(path, output, expected, selected,placements=None):
     if expected.get('document_backend'):
         known = {**expected['document_backend'], 'sha256': expected['source_sha256'],
                  'fields': expected['fields'], 'review_requirements': expected['review_requirements']}
-    actual = inventory(path, known, protocol=expected['protocol'], signing_context=expected.get('signing_context'))
+    actual = inventory(path, known, protocol=expected['protocol'], signing_context=expected.get('signing_context'),
+                       question_context=expected.get('question_context'))
     if actual != expected or not isinstance(selected, list) or len(set(selected)) != len(selected):
         raise DocumentFailure('The candidate request uses a stale inventory.', 'stale_inventory')
     if actual['issues']:
@@ -566,7 +581,8 @@ def candidate(path, output, expected, selected,placements=None):
         raise DocumentFailure('An unreviewed answer-shaped row remains in the candidate.', 'incomplete_proposal')
     fields = deepcopy(actual['fields']) if known else source_bound_candidate_fields(output, actual)
     if actual['protocol'] == TYPED_PROTOCOL and not known:
-        fields = typed_source_fields(output, fields, signing_context=actual.get('signing_context'))
+        fields = typed_source_fields(output, fields, signing_context=actual.get('signing_context'),
+                                     question_context=actual.get('question_context'))
     # The qualified WM writer already enforces its pinned choices and units.
     # Its original mapping stays byte-for-byte compatible with older approvals.
     validate_candidate_fields(actual, fields, constraints=not (known and actual['protocol'] == TYPED_PROTOCOL))

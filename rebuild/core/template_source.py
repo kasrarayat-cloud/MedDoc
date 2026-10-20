@@ -16,6 +16,9 @@ def approval_binding(preparation):
                    'candidate_info': preparation.candidate_info, 'changes': preparation.changes}
     if 'word_answer_contract' in getattr(preparation, 'config', {}):
         binding['word_answer_contract'] = preparation.config['word_answer_contract']
+    from documents.question_context import CONFIG_KEY
+    if CONFIG_KEY in getattr(preparation, 'config', {}):
+        binding[CONFIG_KEY] = preparation.config[CONFIG_KEY]
     return digest(binding)
 
 def source_for_version(version):
@@ -36,6 +39,8 @@ def physical_source_for_version(version):
     prep = version.preparation
     from documents.preparation import validate_inventory
     validate_inventory(prep.inventory)
+    from documents.question_context import validate_binding
+    validate_binding(prep.inventory, getattr(prep, 'config', {}))
     if (prep.template_id != version.template_id or prep.state != 'approved' or not prep.approved_by_id
             or not prep.approved_at or prep.approval_sha256 != approval_binding(prep)
             or version.prepared_path != prep.candidate_path or version.prepared_sha256 != prep.candidate_sha256
@@ -45,6 +50,11 @@ def physical_source_for_version(version):
     from documents.engine import structure
     if digest(structure(version.fields)) != digest(structure(prep.candidate_info['fields'])):
         raise ValidationError('This mapping differs from the approved answer placement.')
+    if 'question_context' in prep.inventory:
+        source_questions = {field['key']: field['label'] for field in prep.inventory['fields']}
+        if (any(field['label'] != source_questions.get(field['key']) for field in version.fields)
+                or any(field['label'] != source_questions.get(field['key']) for field in prep.candidate_info['fields'])):
+            raise ValidationError('The approved source-question boundaries changed.')
     from .tab_review import signature_label
     from documents.preparation import SIGNING
     originals = {f['key']: f for f in prep.candidate_info['fields']}

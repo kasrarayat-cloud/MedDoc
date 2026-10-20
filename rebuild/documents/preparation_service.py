@@ -55,12 +55,16 @@ def run(path, request, output=None):
             response['prepared_sha256'] = hashlib.sha256(prepared).hexdigest()
         return response
 
-def inspect_preparation(path, known=None, *, protocol=None, signing_context=None):
+def inspect_preparation(path, known=None, *, protocol=None, signing_context=None, question_context=None):
     request = {'operation': 'inventory', 'known': known}
     if protocol is not None:
         request['protocol'] = protocol
     if signing_context is not None:
         request['signing_context'] = signing_context
+    if question_context is not None:
+        from .question_context import validate_context
+        validate_context(question_context)
+        request['question_context'] = question_context
     return run(path, request)
 
 def prepare_candidate(path, inventory, selected, output,placements=None):

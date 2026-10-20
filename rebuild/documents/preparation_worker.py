@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from sandbox import isolate
 from engine import DocumentFailure
 from preparation import inventory, candidate, PROTOCOL, SIGNING_CONTEXT
+from question_context import validate_context
 # Load trusted source modules before Landlock restricts file access to this
 # disposable document workspace. The sandbox remains networkless and intact.
 import table_constraints
@@ -23,8 +24,10 @@ def main():
         if request['operation'] == 'inventory':
             if 'signing_context' in request and request['signing_context'] != SIGNING_CONTEXT:
                 raise DocumentFailure('Unsupported signing classification policy.', 'invalid_proposal')
+            if 'question_context' in request:
+                validate_context(request['question_context'])
             result = inventory(workspace/'input.docx', request.get('known'), protocol=request.get('protocol', PROTOCOL),
-                               signing_context=request.get('signing_context'))
+                               signing_context=request.get('signing_context'), question_context=request.get('question_context'))
         elif request['operation'] == 'candidate':
             result = candidate(workspace/'input.docx', workspace/'output.docx',
                                request['inventory'], request['selected'],request.get('placements'))

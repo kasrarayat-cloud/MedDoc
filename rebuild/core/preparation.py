@@ -21,6 +21,7 @@ from .generation import configuration, rates
 from .template_source import approval_binding
 from . import word_contract
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
+from documents.question_context import CONFIG_KEY as QUESTION_CONTEXT_KEY, CONTEXT as QUESTION_CONTEXT, validate_context as validate_question_context, validate_binding as validate_question_binding
 
 MAX_OUTPUT = 2500
 OUTPUT_PROFILE = 'inventory-sized-typed-v1'
@@ -251,6 +252,7 @@ def role_schema(role, protocol=None, inventory=None, config=None):
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
     schema_transport(config)
+    validate_question_binding(inventory, config)
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
     if finite_identities(inventory, config):
         result['source_identity_contract'] = IDENTITY_PROFILE
@@ -662,6 +664,10 @@ def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
+    if QUESTION_CONTEXT_KEY in config:
+        validate_question_context(config[QUESTION_CONTEXT_KEY])
+        if template.sha256 == WM_IOV_SHA256:
+            raise DocumentError('Source-question context requires an ordinary typed Word form.', 'invalid_proposal')
     config={**config, 'word_preparation_protocol': TYPED_PROTOCOL,
             'word_preparation_output_profile': COMPLETE_OUTPUT_PROFILE,
             'queued_release_sha': settings.RELEASE_SHA,
@@ -679,6 +685,7 @@ def create_preparation(template, actor):
         config['semantic_definition_version'] = 4
         config[MEANING_CONTRACT_KEY] = COMPOUND_ANSWER_CONTRACT
         config['word_signing_context'] = SIGNING_CONTEXT
+        config[QUESTION_CONTEXT_KEY] = QUESTION_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
     from . import testing_authority
     if testing_authority.identity(config):
@@ -721,6 +728,11 @@ def run_one(*, preparation_pk=None):
             if prep.config['word_signing_context'] != SIGNING_CONTEXT or protocol != TYPED_PROTOCOL:
                 raise DocumentError('Unsupported signing classification policy.', 'invalid_proposal')
             signing_args['signing_context'] = SIGNING_CONTEXT
+        if QUESTION_CONTEXT_KEY in prep.config:
+            validate_question_context(prep.config[QUESTION_CONTEXT_KEY])
+            if protocol != TYPED_PROTOCOL or known:
+                raise DocumentError('Source-question context requires an ordinary typed Word form.', 'invalid_proposal')
+            signing_args['question_context'] = prep.config[QUESTION_CONTEXT_KEY]
         prep.inventory=(inspect_preparation(original, known, protocol=protocol, **signing_args)
                         if protocol is not None else inspect_preparation(original, known))
         if prep.inventory['source_sha256'] != prep.template.sha256: raise DocumentError('Original changed.', 'source_changed')
