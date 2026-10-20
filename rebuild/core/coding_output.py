@@ -68,7 +68,7 @@ def _live_assessment(encounter, run, source_run):
     from . import corti_prediction
     from .corti_response import adapt_response
     from . import coding_output_reference as references
-    from .corti_semantics import (classify_selected, office_time_facts, citation_adequacy,
+    from .corti_semantics import (classify_selected, office_time_facts, citation_adequacy, time_contract,
                                  confirmed_time_context, office_service_eligibility)
     bundle, authorized_actor_ids = references.load(encounter, run)
     prospective = bundle['contract'] == references.CONTRACT
@@ -103,7 +103,7 @@ def _live_assessment(encounter, run, source_run):
         raise ValidationError('The retained selected-code collection is unavailable.') from exc
     need(type(selected) is list, 'The retained selected-code collection is malformed.')
     from . import source_assertion_coding as shared
-    support = shared.office_time_facts(run) if shared.enabled(run) else office_time_facts(encounter.notes, contract=run.config.get('clinical_source_contract'))
+    support = shared.office_time_facts(run) if shared.enabled(run) else office_time_facts(encounter.notes, contract=time_contract(run.config))
     need(support['status'] == 'documented', '; '.join(support['blockers']) or 'Office time support is unresolved.')
     facts = [{**fact, 'label': FACT_LABELS[fact['key']]} for fact in support['facts']]
     values = {fact['key']:fact['value'] for fact in facts}
@@ -111,7 +111,7 @@ def _live_assessment(encounter, run, source_run):
         errors = (confirmed_time_context(run.context, encounter.notes, facts)
                   + (shared.office_service_eligibility(run) if shared.enabled(run) else
                      office_service_eligibility(encounter.notes, encounter.service_date,
-                        contract=run.config.get('clinical_source_contract'))))
+                        contract=time_contract(run.config))))
         need(not errors, '; '.join(errors))
     entries = bundle.get('entries', [])
     need(type(entries) is list and all(type(e) is dict for e in entries)

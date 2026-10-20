@@ -106,10 +106,22 @@ def configuration(actor, encounter):
         if graph_generation:
             shared.snapshot(encounter)  # Explicit persisted generation, never a caller-supplied flag.
             contract = shared.CONTRACT
+        from .corti_semantics import DOCUMENTED_TIME_CONTRACT, time_contract
+        prior_time_contract = None
+        if first is not None and not graph_generation and 'cpt_time_source_contract' in first.config:
+            try:
+                prior_time_contract = time_contract(first.config)
+            except ValueError as exc:
+                raise ValidationError('Unknown CPT time-source contract.') from exc
         if contract is not None:
             if contract not in SOURCE_CONTRACTS and contract != shared.CONTRACT:
                 raise ValidationError('Unknown clinical coding source contract.')
             result['clinical_source_contract'] = contract
+            if contract == QUALIFIED_SOURCE_CONTRACT:
+                if first is None:
+                    result['cpt_time_source_contract'] = DOCUMENTED_TIME_CONTRACT
+                elif prior_time_contract is not None:
+                    result['cpt_time_source_contract'] = prior_time_contract
             if contract == shared.CONTRACT:
                 from .corti_coding import DIAGNOSTIC_CONTRACT
                 result['coding_diagnostic_contract'] = DIAGNOSTIC_CONTRACT

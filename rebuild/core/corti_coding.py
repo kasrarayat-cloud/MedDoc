@@ -390,7 +390,7 @@ def retained_result(run, request, response, response_sha256):
             row['hold_reasons'].append('The selected procedure identifier does not have supported CPT syntax.')
         if system == 'CPT':
             support = (shared.office_time_facts(run) if shared.enabled(run) else
-                corti_semantics.office_time_facts(run.inputs['notes'], contract=run.config.get('clinical_source_contract')))
+                corti_semantics.office_time_facts(run.inputs['notes'], contract=corti_semantics.time_contract(run.config)))
             row['semantic_support'] = {'status':'requires_dated_criteria', 'documented_time_facts':support,
                 'provider_citation_adequacy':corti_semantics.citation_adequacy(row['evidence_spans'], support['facts'])}
         if proposal['evidence_status'] != 'valid':
