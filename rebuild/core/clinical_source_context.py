@@ -214,12 +214,18 @@ def _retracted_domains(text, established=()):
         for clause in account_clauses(text)))
 
 
-def _retracted_clause_domains(text, established=(), *, profile=None):
+def _retracted_clause_domains(text, established=(), *, profile=None, time_exclusion_contract=None):
     """Resolve account references; unknown relevant qualifications stay held.
 
     A later source-owned reference to an established account cannot disappear
     merely because its predicate is outside the literal rendering grammar.
     """
+    if time_exclusion_contract is not None:
+        from .documented_time_source import CONTRACT, exclusion, unrelated_account
+        if time_exclusion_contract != CONTRACT or profile != SOAP_ASSERTION_PROFILE:
+            raise ValueError('Unknown documented time-exclusion contract.')
+        if exclusion(text) is not None or unrelated_account(text):
+            return set()
     reference = _account_reference(text)
     if not reference or _integrity_assertion(text):
         return set()
@@ -289,7 +295,11 @@ def _whole_account_governance(text):
     return {'direction':direction,'integrity':bool(integrity)}
 
 
-def source_context(notes, units=None, *, profile=None):
+def source_context(notes, units=None, *, profile=None, time_exclusion_contract=None):
+    if time_exclusion_contract is not None:
+        from .documented_time_source import CONTRACT
+        if time_exclusion_contract != CONTRACT or profile != SOAP_ASSERTION_PROFILE:
+            raise ValueError('Unknown documented time-exclusion contract.')
     modern = _profile(profile)
     if units is None:
         from .generation import source_units
@@ -358,7 +368,8 @@ def source_context(notes, units=None, *, profile=None):
                     start if direction=='before' else None))
         if owner=='patient' and encounter_time=='current':
             for clause in account_clauses(text):
-                domains=_retracted_clause_domains(clause,established,profile=profile)
+                domains=_retracted_clause_domains(clause,established,profile=profile,
+                    time_exclusion_contract=time_exclusion_contract)
                 if domains:
                     begin,end=0,start if re.search(r'\b(?:above|preceding)\b',clause,re.I) else None
                     if 'paragraph' in domains:

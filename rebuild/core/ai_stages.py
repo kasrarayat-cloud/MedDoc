@@ -183,6 +183,27 @@ def retain(value):
     return relative,hashlib.sha256(raw).hexdigest()
 
 
+def retain_unknown_error(receipt,exc,actor,department):
+    """Best-effort private diagnostics never change the original unknown outcome."""
+    try:
+        from .ai_stage_error_evidence import build,CONTRACT
+        evidence=build(exc,provider=receipt.provider,stage_id=receipt.pk,
+            stage=receipt.stage,attempt=receipt.attempt,
+            credentials=tuple(os.getenv(k,'') for k in ('ANTHROPIC_API_KEY','OPENAI_API_KEY')))
+        path,digest=retain(evidence)
+        # A failed audit insert must not poison an outer transaction or replace
+        # the provider exception. Existing result_path/raw responses stay exact.
+        with transaction.atomic():
+            audit(actor,'ai.stage_error_retained',receipt.pk,department=department,
+                contract=CONTRACT,evidence_path=path,evidence_sha256=digest,
+                exception_class=evidence['exception_class'],http_status=evidence['http_status'])
+    except Exception:
+        # Never stringify/log the original exception or claim cost/delivery from
+        # the failure to record diagnostics. The original hold remains in force.
+        return False
+    return True
+
+
 def parent_context(job,definition_preparation,config):
     if (job is None)==(definition_preparation is None):raise StageNotSent('AI stage requires exactly one authorized parent.')
     if job is not None:
@@ -384,6 +405,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
                 raise StageFailure('The retained stage could not be processed; its provider cost remains recorded.') from exc
             if receipt.state=='sending':
                 receipt.state='unknown';receipt.error_code='provider_unknown';receipt.finished_at=timezone.now();receipt.save(update_fields=['state','error_code','finished_at'])
+                retain_unknown_error(receipt,exc,actor,department)
             raise StageUnknown('The provider outcome is uncertain; reconciliation is required before any new request.') from exc
 
 

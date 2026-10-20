@@ -12,11 +12,22 @@ REQUIRED_TIME_FACTS = ('setting', 'patient_status', 'time_minutes', 'time_same_d
     'time_qualified_clinician', 'time_excludes_staff', 'time_excludes_separately_reported', 'em_basis')
 SOAP_TIME_CONTRACT = 'source-bound-clinical-coding-v6'
 QUALIFIED_TIME_CONTRACT = 'source-bound-clinical-coding-v7'
-_SOAP_TIME_CONTRACTS = (SOAP_TIME_CONTRACT, QUALIFIED_TIME_CONTRACT)
+DOCUMENTED_TIME_CONTRACT = 'source-bound-clinical-coding-v8'
+_SOAP_TIME_CONTRACTS = (SOAP_TIME_CONTRACT, QUALIFIED_TIME_CONTRACT, DOCUMENTED_TIME_CONTRACT)
 _SOURCE_TIME_CONTRACTS = ('source-bound-clinical-coding-v2', 'source-bound-clinical-coding-v3',
     'source-bound-clinical-coding-v4', 'source-bound-clinical-coding-v5', *_SOAP_TIME_CONTRACTS)
 _MODERN_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[2:]
 _COMPLETE_TIME_CONTRACTS = _SOURCE_TIME_CONTRACTS[3:]
+
+
+def time_contract(config):
+    """A separate immutable CPT time policy never upgrades old clinical runs."""
+    contract = config.get('clinical_source_contract')
+    if 'cpt_time_source_contract' not in config:
+        return contract
+    if config['cpt_time_source_contract'] != DOCUMENTED_TIME_CONTRACT or contract != QUALIFIED_TIME_CONTRACT:
+        raise ValueError('Unknown CPT time-source contract.')
+    return DOCUMENTED_TIME_CONTRACT
 
 
 def classify_selected(row):
@@ -96,7 +107,8 @@ def office_time_facts(notes, *, contract=None):
     """
     if contract in _SOURCE_TIME_CONTRACTS:
         return _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
-            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=contract in _SOAP_TIME_CONTRACTS)[0]
+            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=contract in _SOAP_TIME_CONTRACTS,
+            documented=contract == DOCUMENTED_TIME_CONTRACT)[0]
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers = []
     if re.search(r'(?im)^\s*(?:quoted )?example(?: note)?\s*:', notes):
@@ -209,7 +221,8 @@ def office_service_eligibility(notes, service_date=None, *, contract=None):
     if contract in _SOURCE_TIME_CONTRACTS:
         soap = contract in _SOAP_TIME_CONTRACTS
         support, errors = _source_time_analysis(notes, modern=contract in _MODERN_TIME_CONTRACTS,
-            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=soap)
+            complete=contract in _COMPLETE_TIME_CONTRACTS, soap=soap,
+            documented=contract == DOCUMENTED_TIME_CONTRACT)
         if service_date is not None:
             for raw_date in _service_dates(notes, soap=soap):
                 parsed = None
@@ -538,7 +551,7 @@ def _soap_exclusion_total(text):
     return Decimal(raw) if re.fullmatch(r'\d+(?:\.\d+)?', raw) else Decimal(_number(raw))
 
 
-def _soap_office_visit(text, scope):
+def _soap_office_visit(text, scope, *, documented=False):
     """Complete patient attendance wording, without inferred setting or owner."""
     name = scope.get('patient_name') or ''
     ordinary = re.sub(r'^synthetic\s+', '', name, flags=re.I)
@@ -546,6 +559,13 @@ def _soap_office_visit(text, scope):
     patient = r'(?:he|she|they|the\s+patient' + ''.join('|'+re.escape(n) for n in sorted(aliases)) + r')'
     attendance = (r'(?:is\s+an?\s+\d{1,3}-year-old\s+(?:woman|man|person)\s+attending|'
                   r'(?:is\s+)?attending|attends)')
+    if documented:
+        # Convert this whole, literal attendance clause to the already bounded
+        # medical-office frame; no partial match or unknown tail is discarded.
+        text = re.sub(r'^(?P<patient>'+patient+r')\s+is\s+an?\s+(?P<age>\d{1,3})-year-old\s+'
+            r'(?P<sex>woman|man|person)\s+seen\s+in\s+person\s+in\s+',
+            lambda m: m['patient']+' is a '+m['age']+'-year-old '+m['sex']+' attending an in-person visit in ',
+            text, flags=re.I)
     if re.search(r'\b(?:possible|possibly|uncertain|unverified|unconfirmed|maybe|apparently|'
                  r'presumed|tentative|cancelled|canceled|not|never|only)\b', text, re.I):
         return False
@@ -558,7 +578,7 @@ def _soap_office_visit(text, scope):
         r'gynecology|gynaecology|obstetric|surgical)\s+)?office\s*\.?', text, re.I))
 
 
-def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
+def _source_time_analysis(notes, *, modern=False, complete=False, soap=False, documented=False):
     """One source-bound interpretation shared by review and export checks.
 
     Only the prospective coding contract calls this reader. Source ownership,
@@ -570,7 +590,8 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
     from .generation import source_units
     units, _ = source_units(notes, [])
     profile = SOAP_ASSERTION_PROFILE if soap else COMPLETE_ASSERTION_PROFILE if complete else SOURCE_GOVERNANCE_PROFILE if modern else None
-    scope = source_context(notes, units, profile=profile)
+    scope = source_context(notes, units, profile=profile,
+        time_exclusion_contract=DOCUMENTED_TIME_CONTRACT if documented else None)
     found = {key: [] for key in REQUIRED_TIME_FACTS}
     blockers, service_errors, evaluated = list(scope['issues']), [], False
     service_date = None
@@ -618,12 +639,26 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
             active_total = None
             continue
         complete_exclusion = False
+        documented_exclusion = None
+        documented_claim = None
         if soap:
             from .clinical_assertions_v4 import strict_exclusion
             complete_exclusion = strict_exclusion(text)
+        if documented:
+            from .documented_time_source import exclusion as documented_exclusion_for, qualification, linked_claim, unrelated_account
+            documented_exclusion = documented_exclusion_for(text)
+            documented_claim = linked_claim(text, established=bool(totals),
+                service_established=bool(found['setting'] or found['patient_status']),
+                status_established=bool(found['patient_status']))
+            if unrelated_account(text):
+                time_reference = None
+            complete_exclusion = complete_exclusion or documented_exclusion is not None
         if _affirmed_time_retraction(text) and not complete_exclusion:
             service_errors.append('The complete source retracts or questions the documented service or time.')
         if _unsafe(notes, unit['start'], text):
+            if documented_claim and not integrity and not complete_exclusion:
+                blockers.append('A current time-account or service qualification requires complete source review.')
+                service_errors.append('A current time-account or service qualification requires complete source review.')
             if time_reference and not integrity:
                 service_errors.append('A competing or qualified practitioner-time statement requires clarification.')
             active_total = None
@@ -637,7 +672,7 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
                 r'(?:in-person\s+)?(?:visit|consultation)\s+in\s+(?:a|an|the)\s+'
                 r'(?:(?:u\.s\.|us|united states)\s+)?(?:[a-z]+\s+){0,3}office\.?', low)
         if soap and not office:
-            office = _soap_office_visit(text, scope)
+            office = _soap_office_visit(text, scope, documented=documented)
         if office and not negative:
             add('setting', 'outpatient_office', unit)
         status_text = re.sub(r'^(?:new|established)[ -]patient history\s*:', '', low) if modern else low
@@ -667,7 +702,20 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
             blockers.append('A conflicting E/M selection basis is documented.')
         exclusion = re.match(r'(?:(?:this|the) (?:(?P<total>\d+) minutes|total(?: time)?)|they)\s+(?:also\s+)?'
                              r'(?P<action>excludes?|does not include)\b(?P<tail>.*)', low)
-        if exclusion:
+        if documented_exclusion is not None:
+            if (documented_exclusion['prior_day'] is not None
+                    and (service_date is None or documented_exclusion['prior_day'] >= service_date)):
+                blockers.append('Excluded prior-day work must name a valid date before the service date.')
+            if active_total is None or documented_exclusion['named_total'] != active_total:
+                blockers.append('The time exclusion has no adjacent source-bound physician total.')
+            else:
+                exclusions.append((documented_exclusion['named_total'], unit))
+                if documented_exclusion['staff']:
+                    add('time_excludes_staff', True, unit)
+                if documented_exclusion['separately_reported']:
+                    add('time_excludes_separately_reported', True, unit)
+            exclusion = True
+        elif exclusion:
             tail = exclusion['tail']
             if active_total is None or exclusion['total'] and int(exclusion['total']) != active_total:
                 blockers.append('The time exclusion has no adjacent source-bound physician total.')
@@ -715,6 +763,11 @@ def _source_time_analysis(notes, *, modern=False, complete=False, soap=False):
             r'(?:these|those) are all ' + _ROLE + r' activities ' + _DAY + r'\.?', low)
         if complete and time_kind(text, profile=profile) == 'qualification':
             work_qualification = True
+        if documented and qualification(text):
+            work_qualification = True
+        if documented_claim and not (timing or exclusion or basis or work_qualification or integrity):
+            blockers.append('A current time-account or service qualification requires complete source review.')
+            service_errors.append('A current time-account or service qualification requires complete source review.')
         if work_qualification and active_total is None:
             blockers.append('The physician-work qualification has no adjacent source-bound total.')
         if not timing and not exclusion and not basis and not work_qualification:
