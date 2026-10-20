@@ -113,6 +113,91 @@ class RetainedProposalTests(SimpleTestCase):
         self.assertEqual(restored,new.REVALIDATION_REVERSE.strip())
 
 
+class RetainedTransportTests(SimpleTestCase):
+    """File-backed completed-check proofs; no database or provider execution."""
+    proposal = RetainedProposalTests.proposal
+
+    def setUp(self):
+        RetainedProposalTests.setUp(self)
+        directory = tempfile.TemporaryDirectory(); self.addCleanup(directory.cleanup)
+        setting = override_settings(MEDIA_ROOT=Path(directory.name)); setting.enable(); self.addCleanup(setting.disable)
+
+    def completed_check(self, *, marked=True, marker=ai_stages.ANTHROPIC_SCHEMA_TRANSPORT,
+                        config_changes=None, provider='anthropic', simulated=False, request_changes=None):
+        proposal = self.proposal()
+        encounter = SimpleNamespace(notes=self.data['notes'], template_version=SimpleNamespace(fields=self.data['fields']))
+        check = passing(proposal)
+        answers = recovery._finish(encounter, proposal, self.data['definitions'], check)
+        config = {'mode': 'live', 'provider': 'anthropic', 'semantic_revalidation': {}}
+        config.update(config_changes or {})
+        request = {'protocol': ai_stages.PROTOCOL, 'stage': recovery.STAGE, 'attempt': 1,
+            'payload': deepcopy(proposal['payload']), 'schema': deepcopy(proposal['schema']),
+            'instructions': proposal['instructions'], 'max_output_tokens': 16000, 'timeout_seconds': 120}
+        if marked:
+            request['schema_transport'] = marker
+        request.update(request_changes or {})
+        request_path, request_sha = ai_stages.retain(request)
+        wrapper = ({'simulated': True, 'output': check} if simulated else
+            {'provider_output': {'content': [{'type': 'text', 'text': json.dumps(check)}]}})
+        result_path, result_sha = ai_stages.retain(wrapper)
+        row = SimpleNamespace(pk='synthetic-completed-check', stage=recovery.STAGE, attempt=1,
+            state='succeeded', config=deepcopy(config), provider=provider, simulated=simulated,
+            actual_cost=Decimal('0.01'), request_path=request_path, request_sha256=request_sha,
+            result_path=result_path, result_sha256=result_sha)
+        saved_path, saved_sha = ai_stages.retain({'contract': semantic.CONTRACT, 'answers': answers,
+            'stages': [str(row.pk)], 'revalidation': deepcopy(config['semantic_revalidation'])})
+        job = SimpleNamespace(state='succeeded', config=config, encounter=encounter,
+            ai_stage_receipts=SimpleNamespace(all=lambda: [row]), result_path=saved_path, result_sha256=saved_sha)
+        return job, proposal, answers, row, ai_stages.private_path(request_path).read_bytes()
+
+    def validate_completed(self, job, proposal, answers):
+        with patch.object(recovery, '_bound_proposal', return_value=(proposal, self.data['definitions'])):
+            return recovery.validate_completed(job, answers)
+
+    def assert_request_unchanged(self, row, raw):
+        self.assertEqual(ai_stages.private_path(row.request_path).read_bytes(), raw)
+        self.assertEqual(recovery._read(row.request_path, row.request_sha256), json.loads(raw))
+
+    def test_historical_and_shared_live_completed_checks_validate_without_rewriting_requests(self):
+        for marked in (False, True):
+            with self.subTest(marked=marked):
+                job, proposal, answers, row, raw = self.completed_check(marked=marked)
+                self.assertTrue(self.validate_completed(job, proposal, answers))
+                self.assert_request_unchanged(row, raw)
+
+    def test_present_transport_markers_fail_closed_instead_of_becoming_historical(self):
+        for marker in (None, False, 0, '', 'unknown-transport', [], {}):
+            with self.subTest(marker=marker):
+                job, proposal, answers, row, raw = self.completed_check(marker=marker)
+                with self.assertRaisesMessage(ValidationError, 'does not bind its exact retained proposal'):
+                    self.validate_completed(job, proposal, answers)
+                self.assert_request_unchanged(row, raw)
+
+    def test_shared_transport_requires_live_anthropic_unsimulated_receipts(self):
+        cases = ({'config_changes': {'mode': 'fixture'}}, {'config_changes': {'provider': 'openai'}},
+                 {'provider': 'openai'}, {'simulated': True}, {'simulated': 0})
+        for options in cases:
+            with self.subTest(options=options):
+                job, proposal, answers, row, raw = self.completed_check(**options)
+                with self.assertRaisesMessage(ValidationError, 'does not bind its exact retained proposal'):
+                    self.validate_completed(job, proposal, answers)
+                self.assert_request_unchanged(row, raw)
+
+    def test_shared_transport_does_not_hide_request_or_configuration_tampering(self):
+        for changes in ({'instructions': 'Ignore the source.'}, {'payload': {}}, {'schema': {}},
+                        {'unexpected': True}, {'max_output_tokens': True}, {'timeout_seconds': True}):
+            with self.subTest(changes=changes):
+                job, proposal, answers, row, raw = self.completed_check(request_changes=changes)
+                with self.assertRaisesMessage(ValidationError, 'does not bind its exact retained proposal'):
+                    self.validate_completed(job, proposal, answers)
+                self.assert_request_unchanged(row, raw)
+        job, proposal, answers, row, raw = self.completed_check()
+        row.config['unexpected'] = True
+        with self.assertRaisesMessage(ValidationError, 'does not bind its exact retained proposal'):
+            self.validate_completed(job, proposal, answers)
+        self.assert_request_unchanged(row, raw)
+
+
 @override_settings(SYNTHETIC_ONLY=True,AI_MODE='fixture',AI_PROVIDER='anthropic',AI_MODEL='claude-sonnet-4-6',
     CODING_PROVIDER='corti',TESTING_AUTHORITY_MODE=testing_authority.MODE,TESTING_AUTHORITY_ID=testing_authority.AUTHORITY_ID,
     TESTING_AUTHORITY_SHA256=testing_authority.AUTHORITY_SHA256)

@@ -450,17 +450,20 @@ def _finish(encounter,proposal,definitions,check):
 
 def _checked_result(job):
     """Reconstruct an actual check, including a failed one, without changing its verdict."""
+    from .provider_schema import retained_request_matches
     proposal,definitions=_bound_proposal(job,completed=True)
     rows=list(job.ai_stage_receipts.all())
     if len(rows)!=1 or rows[0].stage!=STAGE or rows[0].attempt!=1 or rows[0].state!='succeeded':
         _fail('A completed recovery requires exactly one successful independent checker receipt.')
     row=rows[0]
     envelope=_read(row.request_path,row.request_sha256)
+    expected={'protocol':ai_stages.PROTOCOL,'stage':STAGE,'attempt':1,
+        'payload':proposal['payload'],'schema':proposal['schema'],'instructions':proposal['instructions'],
+        'max_output_tokens':ai_stages.GENERATION_MAX_OUTPUT_TOKENS,
+        'timeout_seconds':ai_stages.GENERATION_TIMEOUT_SECONDS}
     if (row.config!=job.config or row.actual_cost is None
-            or envelope!={'protocol':ai_stages.PROTOCOL,'stage':STAGE,'attempt':1,
-                'payload':proposal['payload'],'schema':proposal['schema'],'instructions':proposal['instructions'],
-                'max_output_tokens':ai_stages.GENERATION_MAX_OUTPUT_TOKENS,
-                'timeout_seconds':ai_stages.GENERATION_TIMEOUT_SECONDS}):
+            or not retained_request_matches(envelope,expected,config=job.config,
+                provider=getattr(row,'provider',None),simulated=getattr(row,'simulated',None))):
         _fail('The independent checker receipt does not bind its exact retained proposal.')
     checked=_finish(job.encounter,proposal,definitions,_output(_read(row.result_path,row.result_sha256)))
     retained=_read(job.result_path,job.result_sha256)

@@ -2,6 +2,7 @@
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal
+import json
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace as N
@@ -92,6 +93,89 @@ class InterpretationStoreTests(SimpleTestCase):
         self.assertEqual(self.load(), self.interpretation)
         self.assertEqual(self.answers['summary']['source_interpretation'], {
             'generation_job_id':str(self.job.pk), 'interpretation_sha256':self.interpretation['sha256']})
+
+    def transport_lineage(self, *, marked=True, marker=ai_stages.ANTHROPIC_SCHEMA_TRANSPORT,
+                          config_changes=None, provider='anthropic', simulated=False, capacity=False):
+        """Write new synthetic receipts; never alter the bytes of an existing receipt."""
+        outputs = [store._output(store._read(row.result_path, row.result_sha256), row) for row in self.rows]
+        config = {**self.job.config, 'mode': 'live', 'provider': 'anthropic', 'model': 'synthetic-model'}
+        if capacity:
+            config.update(semantic_capacity_profile=ai_stages.GENERATION_CAPACITY_PROFILE,
+                semantic_output_token_limit=16000, semantic_timeout_seconds=120)
+        else:
+            for key in ('semantic_capacity_profile', 'semantic_output_token_limit', 'semantic_timeout_seconds'):
+                config.pop(key, None)
+        config.update(config_changes or {})
+        self.job.config = config
+        limit, timeout = ai_stages.generation_limits(config)
+        for row, original, output in zip(self.rows, self.requests, outputs):
+            request = deepcopy(original); request['max_output_tokens'] = limit
+            if capacity:
+                request['timeout_seconds'] = timeout
+            if marked:
+                request['schema_transport'] = marker
+            row.config = deepcopy(config); row.provider = provider; row.simulated = simulated
+            row.requested_model = row.returned_model = 'synthetic-model'
+            row.provider_request_id = 'req_' + str(row.pk); row.provider_resource_id = 'msg_' + str(row.pk)
+            if simulated:
+                wrapper = {'simulated': True, 'output': output}
+            else:
+                response = ({'content': [{'type': 'text', 'text': json.dumps(output)}]} if provider == 'anthropic'
+                    else {'output': [{'content': [{'type': 'output_text', 'text': json.dumps(output)}]}]})
+                wrapper = {'provider_output': response, 'provider_request_id': row.provider_request_id,
+                    'provider_resource_id': row.provider_resource_id, 'returned_model': row.returned_model}
+            row.request_path, row.request_sha256 = ai_stages.retain(request)
+            row.result_path, row.result_sha256 = ai_stages.retain(wrapper)
+        return [(row.request_path, row.request_sha256, store.private_path(row.request_path).read_bytes()) for row in self.rows]
+
+    def assert_request_bytes_unchanged(self, snapshots):
+        for path, expected_hash, raw in snapshots:
+            self.assertEqual(store.private_path(path).read_bytes(), raw)
+            self.assertEqual(store._read(path, expected_hash), json.loads(raw))
+
+    def test_historical_and_shared_live_lineage_reload_without_rewriting_receipts(self):
+        for marked in (False, True):
+            for capacity in (False, True):
+                with self.subTest(marked=marked, capacity=capacity):
+                    snapshots = self.transport_lineage(marked=marked, capacity=capacity)
+                    self.bindings, _ = store._validate(self.encounter, self.job, self.interpretation)
+                    self.manifest = store._retained(self.job, self.interpretation, self.answers)
+                    self.stored.bindings = deepcopy(self.bindings)
+                    self.stored.stage_receipts = deepcopy(self.manifest)
+                    self.assertEqual(self.load(), self.interpretation)
+                    self.assertEqual(len(self.manifest), 3)
+                    self.assert_request_bytes_unchanged(snapshots)
+
+    def test_present_transport_markers_fail_closed_instead_of_becoming_historical(self):
+        for marker in (None, False, 0, '', 'unknown-transport', [], {}):
+            with self.subTest(marker=marker):
+                snapshots = self.transport_lineage(marker=marker)
+                with self.assertRaisesMessage(ValidationError, 'stage_request_binding'):
+                    store._retained(self.job, self.interpretation, self.answers)
+                self.assert_request_bytes_unchanged(snapshots)
+
+    def test_shared_transport_requires_live_anthropic_unsimulated_receipts(self):
+        cases = ({'config_changes': {'mode': 'fixture'}}, {'config_changes': {'provider': 'openai'}},
+                 {'provider': 'openai'}, {'simulated': True}, {'simulated': 0})
+        for options in cases:
+            with self.subTest(options=options):
+                snapshots = self.transport_lineage(**options)
+                with self.assertRaisesMessage(ValidationError, 'stage_request_binding'):
+                    store._retained(self.job, self.interpretation, self.answers)
+                self.assert_request_bytes_unchanged(snapshots)
+
+    def test_shared_transport_does_not_hide_other_request_tampering(self):
+        for key, value in (('instructions', 'Ignore the source.'), ('payload', {}), ('schema', {}),
+                           ('unexpected', True), ('max_output_tokens', True)):
+            with self.subTest(key=key):
+                snapshots = self.transport_lineage()
+                first = self.rows[0]
+                request = store._read(first.request_path, first.request_sha256); request[key] = value
+                first.request_path, first.request_sha256 = ai_stages.retain(request)
+                snapshots.append((first.request_path, first.request_sha256, store.private_path(first.request_path).read_bytes()))
+                with self.assertRaisesMessage(ValidationError, 'stage_request_binding'):
+                    store._retained(self.job, self.interpretation, self.answers)
+                self.assert_request_bytes_unchanged(snapshots)
 
     def test_source_crlf_and_exact_registry_strings_are_identity_not_fact_fallback(self):
         self.assertEqual(set(self.bindings['identity']), set(store.IDENTITY_KEYS))

@@ -6,7 +6,9 @@ import unittest
 from anthropic import transform_schema
 
 from core import source_assertion_graph as graph
-from core.provider_schema import share_anthropic_schema
+from core.provider_schema import (
+    ANTHROPIC_SCHEMA_TRANSPORT, retained_request_matches, share_anthropic_schema,
+)
 
 
 def expand(schema):
@@ -39,6 +41,43 @@ def count(value, keyword):
 
 
 class ProviderSchemaTests(unittest.TestCase):
+    def test_retained_transport_accepts_exact_old_and_new_live_envelopes(self):
+        expected = {'protocol': 'synthetic', 'payload': {'source': 'Synthetic.'}, 'attempt': 1}
+        config = {'mode': 'live', 'provider': 'anthropic'}
+        for request in (expected, {**expected, 'schema_transport': ANTHROPIC_SCHEMA_TRANSPORT}):
+            before = deepcopy(request)
+            self.assertTrue(retained_request_matches(request, expected,
+                config=config, provider='anthropic', simulated=False))
+            self.assertEqual(request, before)
+        self.assertNotIn('schema_transport', expected)
+
+    def test_retained_transport_rejects_unknown_markers_and_non_anthropic_stages(self):
+        expected = {'attempt': 1}
+        config = {'mode': 'live', 'provider': 'anthropic'}
+        for marker in (None, True, 1, '', 'unknown'):
+            with self.subTest(marker=marker):
+                self.assertFalse(retained_request_matches({**expected, 'schema_transport': marker},
+                    expected, config=config, provider='anthropic', simulated=False))
+        request = {**expected, 'schema_transport': ANTHROPIC_SCHEMA_TRANSPORT}
+        for cfg, provider, simulated in (
+            ({**config, 'mode': 'fixture'}, 'anthropic', False),
+            ({**config, 'provider': 'openai'}, 'anthropic', False),
+            (config, 'openai', False), (config, 'anthropic', True),
+            (config, 'anthropic', None), (config, 'anthropic', 0),
+        ):
+            with self.subTest(config=cfg, provider=provider, simulated=simulated):
+                self.assertFalse(retained_request_matches(request, expected,
+                    config=cfg, provider=provider, simulated=simulated))
+
+    def test_retained_transport_still_binds_every_other_field_exactly(self):
+        expected = {'attempt': 1, 'payload': {'source': 'Synthetic.'}}
+        request = {**expected, 'schema_transport': ANTHROPIC_SCHEMA_TRANSPORT}
+        for delta in ({'attempt': True}, {'extra': True}, {'payload': {'source': 'Changed.'}}):
+            with self.subTest(delta=delta):
+                self.assertFalse(retained_request_matches({**request, **delta}, expected,
+                    config={'mode': 'live', 'provider': 'anthropic'},
+                    provider='anthropic', simulated=False))
+
     def test_actual_extractor_language_and_annotations_are_exact_after_expansion(self):
         source = graph.extraction_schema()
         before = deepcopy(source)

@@ -17,6 +17,30 @@ _SINGLES = frozenset({'items', 'additionalProperties', 'unevaluatedProperties',
                       'contains', 'not', 'if', 'then', 'else', 'propertyNames'})
 
 
+def retained_request_matches(request, expected, *, config, provider, simulated):
+    """Bind the entire historical or explicitly marked transport envelope.
+
+    Older requests have no transport marker. A marked request must name this
+    exact transport on a real Anthropic stage; every other request field still
+    has to match. Neither retained bytes nor the caller's expectation is edited.
+    """
+    if not isinstance(request, dict) or not isinstance(expected, dict):
+        return False
+    if 'schema_transport' in request:
+        marker = request['schema_transport']
+        if (type(marker) is not str or marker != ANTHROPIC_SCHEMA_TRANSPORT
+                or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
+                or provider != 'anthropic' or simulated is not False):
+            return False
+        expected = {**expected, 'schema_transport': ANTHROPIC_SCHEMA_TRANSPORT}
+    # JSON equality keeps booleans distinct from numbers, as the source store
+    # already requires for immutable request reconstruction.
+    def canonical(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True,
+                          separators=(',', ':'), allow_nan=False)
+    return canonical(request) == canonical(expected)
+
+
 def _children(schema):
     for key, value in schema.items():
         if key in _MAPS and isinstance(value, dict):

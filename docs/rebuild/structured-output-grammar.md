@@ -24,6 +24,12 @@ Prompts, clinical schemas, response parsing, source evidence, clinical checks,
 cost accounting, output limits, timeouts, and zero SDK retries retain their
 existing behavior. No retained attempt is replayed or released by this change.
 
+Generation adoption and retained recovery validate both historical envelopes
+without a transport marker and newly marked envelopes. The marker must be this
+exact transport on a live, non-simulated Anthropic receipt. Unknown or invalid
+markers, different providers, extra fields, and altered payloads remain refused;
+the complete retained request is compared without removing or rewriting fields.
+
 Primary documentation:
 [Anthropic structured outputs](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
 (schema support, complexity limits, SDK conversion, and token counting).
