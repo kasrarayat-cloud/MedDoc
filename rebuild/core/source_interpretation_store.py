@@ -17,6 +17,7 @@ from django.db import connection
 
 from . import ai_stages, source_assertion_graph as graph
 from .models import Encounter, Job, SourceInterpretation
+from .provider_schema import retained_request_matches
 from .security import private_path
 
 IDENTITY_KEYS = ('patient_id', 'encounter_id', 'department_id', 'service_date',
@@ -163,7 +164,9 @@ def _retained(job, interpretation, answers):
             'payload': payload, 'schema': schema, 'instructions': instructions, 'max_output_tokens': limit}
         if 'semantic_capacity_profile' in job.config:
             envelope['timeout_seconds'] = timeout
-        require(same(envelope, requests[cursor]), 'stage_request_binding')
+        row = rows[cursor]
+        require(retained_request_matches(requests[cursor], envelope, config=job.config,
+            provider=row.provider, simulated=row.simulated), 'stage_request_binding')
         value = deepcopy(outputs[cursor]); cursor += 1
         return value
     restored = generation.run(interpretation['notes'], interpretation['fields'],

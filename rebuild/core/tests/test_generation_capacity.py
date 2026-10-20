@@ -66,9 +66,15 @@ class GenerationCapacityPureTests(SimpleTestCase):
 
     def test_real_sdk_sends_finite_limit_timeout_and_never_retries(self):
         import httpx
-        from anthropic import Anthropic
+        from anthropic import Anthropic, transform_schema
+        from core.tests.test_provider_schema import expand
         sent = []
         retained = []
+        repeated = {'type': 'object', 'properties': {'detail': {'type': 'string'}},
+                    'required': ['detail'], 'additionalProperties': False}
+        schema = {'type': 'object', 'properties': {'answer': {'type': 'string'},
+                  'first': repeated, 'second': repeated},
+                  'required': ['answer'], 'additionalProperties': False}
         def handle(request):
             self.assertEqual(request.url.host, 'synthetic-provider.invalid')
             sent.append(json.loads(request.content))
@@ -84,12 +90,15 @@ class GenerationCapacityPureTests(SimpleTestCase):
                 return Anthropic(api_key='synthetic-offline-only', base_url='https://synthetic-provider.invalid',
                                  http_client=http, **kwargs)
             with patch('anthropic.Anthropic', side_effect=client):
-                result = ai_stages._response({}, {'type': 'object', 'properties': {'answer': {'type': 'string'}},
-                    'required': ['answer'], 'additionalProperties': False}, 'Return an answer.',
+                result = ai_stages._response({}, schema, 'Return an answer.',
                     LIVE, 16000, 120, retained.append)
         self.assertEqual(len(sent), 1)
         self.assertEqual(sent[0]['max_tokens'], 16000)
         self.assertEqual(len(retained), 1)
+        transmitted = sent[0]['output_config']['format']['schema']
+        self.assertIn('$defs', transmitted)
+        self.assertEqual(expand(transmitted), transform_schema(schema))
+        self.assertEqual(result[-2], '{"answer":"ok"}')
         self.assertTrue(result[-1])
         self.assertEqual(result[1], Decimal('0.162'))
 
@@ -157,6 +166,7 @@ class GenerationCapacityDatabaseTests(TestCase):
             for call, receipt in zip(send.call_args_list, job.ai_stage_receipts.order_by('created_at')):
                 self.assertEqual(call.args[4:6], (expected_limit, expected_timeout))
                 request = json.loads(private_path(receipt.request_path).read_bytes())
+                self.assertEqual(request['schema_transport'], ai_stages.ANTHROPIC_SCHEMA_TRANSPORT)
                 self.assertEqual(request['max_output_tokens'], expected_limit)
                 if historical:
                     self.assertNotIn('timeout_seconds', request)
