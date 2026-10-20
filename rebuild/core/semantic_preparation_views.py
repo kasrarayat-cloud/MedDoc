@@ -16,6 +16,7 @@ from . import semantic_preparation as workflow
 from .field_location import describe
 from .models import Template, TemplateVersion, TemplateDefinitionPreparation
 from .security import departments, membership, scoped
+from .save_recovery import recoverable_save, binding as save_binding
 
 
 def selected(request, pk):
@@ -87,6 +88,7 @@ def context(prep, member, *, definitions=None, error='', post=None):
     rows = [{**r, 'definition':values.get(r['field']['key'])} for r in baseline_rows]
     receipts = list(prep.ai_stage_receipts.order_by('created_at'))
     return {**template_review.tokens(prep, baseline_rows, getattr(member, 'user_id', None)),
+        'save_binding': save_binding(prep, 'definitions'),
         'review_rows': template_review.rows(rows, template_review.label_displays(prep.source_version.template)) if values else [], 'preview_token': secrets.token_hex(24),
         'review_save_url': reverse('template_definitions_correct', args=[prep.pk]),
         'review_approve_url': reverse('template_definitions_approve', args=[prep.pk]),
@@ -135,6 +137,7 @@ def status(request, pk):
     return result
 
 
+@recoverable_save('definitions')
 @require_POST
 def corrections(request, pk):
     prep, member = selected(request, pk)

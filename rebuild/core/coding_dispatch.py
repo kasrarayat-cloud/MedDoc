@@ -104,8 +104,8 @@ def configuration(actor, encounter):
         # Context-only derivatives already copy that run's configuration.
         contract = first.config.get('clinical_source_contract') if first is not None else QUALIFIED_SOURCE_CONTRACT
         if first is None:
-            from .semantic_generation import CLINICAL_SEMANTICS_SCOPE_CONTRACT
-            if any(isinstance(answer, dict) and answer.get('fact_scope_contract') == CLINICAL_SEMANTICS_SCOPE_CONTRACT
+            from .semantic_generation import CLINICAL_SEMANTICS_SCOPE_CONTRACTS
+            if any(isinstance(answer, dict) and answer.get('fact_scope_contract') in CLINICAL_SEMANTICS_SCOPE_CONTRACTS
                    for answer in getattr(encounter, 'answers', {}).values()):
                 contract = SHARED_SOURCE_CONTRACT
         if graph_generation:

@@ -410,8 +410,11 @@ class TypedWMDeadlineTests(SimpleTestCase):
         with self.assertRaises(ValueError):preparation.timing_limits(bad)
 
     def receipt(self):
-        return SimpleNamespace(response_path='',computed_cost=None,quote_maximum=Decimal('0.220432'),
-            state='running',save=Mock())
+        # Match the persistent receipt's empty metadata/file defaults. Provider
+        # failures can now retain private detail as well as the closed mirror.
+        return SimpleNamespace(pk='offline-receipt',response_path='',response_sha256='',
+            provider_request_id='',provider_resource_id='',failure={},failure_path='',failure_sha256='',
+            computed_cost=None,quote_maximum=Decimal('0.220432'),state='running',save=Mock())
 
     def test_actual_sdk_timeout_is_scoped_clamped_and_never_retries(self):
         import httpx
@@ -499,7 +502,8 @@ class TypedWMDeadlineTests(SimpleTestCase):
                 'usage':{'input_tokens':20566,'output_tokens':16000,
                          'output_tokens_details':{'thinking_tokens':1937}}})
         def retain(*args):
-            retained.append(deepcopy(args[-1]));return 'offline-retained.json','c'*64
+            value=deepcopy(args[-1]);retained.append(value)
+            return f'offline-retained-{len(retained)}.json',preparation.digest(value)
         with httpx.Client(transport=httpx.MockTransport(handle)) as http:
             client=Anthropic(api_key='synthetic-offline-only',base_url='https://synthetic-provider.invalid',
                 http_client=http,timeout=120,max_retries=0)
@@ -527,7 +531,12 @@ class TypedWMDeadlineTests(SimpleTestCase):
         self.assertTrue(receipt.failure['usage_established']);self.assertFalse(receipt.failure['automatic_retry'])
         self.assertEqual(retained[0]['response']['stop_reason'],'max_tokens')
         self.assertEqual(retained[0]['response']['content'][0]['text'],truncated)
+        self.assertEqual(len(retained),3)
+        self.assertEqual(receipt.response_path,'offline-retained-1.json')
+        self.assertEqual(receipt.failure['private_error_evidence']['path'],'offline-retained-2.json')
+        self.assertEqual(receipt.failure_path,'offline-retained-3.json')
         self.assertEqual(retained[-1],receipt.failure)
+        self.assertEqual(receipt.failure_sha256,preparation.digest(retained[-1]))
         self.assertEqual((receipt.state,receipt.quote_maximum,receipt.computed_cost,receipt.failure),frozen)
 
     def test_reservation_and_slot_delay_recheck_the_actual_send_window(self):
@@ -556,7 +565,8 @@ class TypedWMDeadlineTests(SimpleTestCase):
                             'content':[{'type':'text','text':json.dumps(fixture)}],'stop_reason':'end_turn',
                             'stop_sequence':None,'usage':{'input_tokens':100,'output_tokens':20}})
                     def retain(*args):
-                        retained.append(deepcopy(args[-1]));return 'offline-evidence.json','a'*64
+                        value=deepcopy(args[-1]);retained.append(value)
+                        return f'offline-evidence-{len(retained)}.json',preparation.digest(value)
                     packet=SimpleNamespace(inventory=value,config={**self.config,'mode':'live'})
                     with httpx.Client(transport=httpx.MockTransport(handle)) as http:
                         def client(**kwargs):
@@ -584,7 +594,13 @@ class TypedWMDeadlineTests(SimpleTestCase):
                                 self.assertFalse(receipt.failure['usage_established'])
                                 self.assertFalse(receipt.failure['automatic_retry'])
                                 self.assertEqual(receipt.response_path,'');self.assertIsNone(receipt.computed_cost)
-                                self.assertEqual(retained,[receipt.failure])
+                                self.assertEqual(len(retained),2)
+                                self.assertEqual(retained[0]['contract'],'preparation-provider-error-evidence-v1')
+                                self.assertEqual(retained[-1],receipt.failure)
+                                self.assertEqual(receipt.failure['private_error_evidence']['path'],'offline-evidence-1.json')
+                                self.assertEqual(receipt.failure['private_error_evidence']['sha256'],preparation.digest(retained[0]))
+                                self.assertEqual(receipt.failure_path,'offline-evidence-2.json')
+                                self.assertEqual(receipt.failure_sha256,preparation.digest(retained[-1]))
                                 frozen=(receipt.state,receipt.quote_maximum,deepcopy(receipt.failure))
                                 reserved.side_effect=ValidationError('Role already reserved')
                                 with self.assertRaises(ValidationError):

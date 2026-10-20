@@ -65,7 +65,7 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         with patch('core.jobs.Job.objects.create', side_effect=insert):
             job = enqueue(self.encounter, self.user)
         self.assertEqual(observed[0]['semantic_fact_reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+        self.assertEqual(observed[0]['semantic_fact_scope_contract'], semantic.CLINICAL_REQUIREMENTS_SCOPE_CONTRACT)
         self.assertEqual(job.config, observed[0])
         self.assertEqual(job.config['semantic_template_version'], str(self.version.pk))
         original = deepcopy(job.config)
@@ -84,17 +84,18 @@ class SemanticReferenceContractDatabaseTests(TestCase):
         job.refresh_from_db(); self.encounter.refresh_from_db()
         self.assertEqual(job.state, 'succeeded', job.error)
         self.assertEqual(dispatch.call_args.kwargs['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+        self.assertEqual(dispatch.call_args.kwargs['scope_contract'], semantic.CLINICAL_REQUIREMENTS_SCOPE_CONTRACT)
         first = stages.call_args_list[0].kwargs
         self.assertEqual(first['payload']['reference_contract'], semantic.REFERENCE_INVENTORY_CONTRACT)
-        self.assertEqual(first['payload']['fact_scope_contract'], semantic.CLINICAL_SEMANTICS_SCOPE_CONTRACT)
+        self.assertEqual(first['payload']['fact_scope_contract'], semantic.CLINICAL_REQUIREMENTS_SCOPE_CONTRACT)
         self.assertEqual(first['schema'], semantic.SOURCE_CONTEXT_API_FACT_INVENTORY_SCHEMA)
         from core.clinical_semantics import INSTRUCTIONS, field_requirements
+        from core.clinical_field_scope import INSTRUCTIONS as REQUIREMENT_INSTRUCTIONS, CONTRACT as REQUIREMENT_CONTRACT
         self.assertEqual(first['instructions'], semantic.EXTRACT_INVENTORY_INSTRUCTIONS
-            + INSTRUCTIONS + ' ' + semantic.DOCUMENT_IDENTITY_INSTRUCTIONS
+            + INSTRUCTIONS + REQUIREMENT_INSTRUCTIONS + ' ' + semantic.DOCUMENT_IDENTITY_INSTRUCTIONS
             + semantic.LABELLED_PRESENTATION_INSTRUCTIONS)
         self.assertEqual(first['payload']['approved_field_requirements'],
-            {key: field_requirements(d) for key, d in self.version.semantic_definitions.items()})
+            {key: field_requirements(d, contract=REQUIREMENT_CONTRACT) for key, d in self.version.semantic_definitions.items()})
         self.assertIn('source_assertions', first['payload'])
         self.assertIn('labelled_presentation_requirements',first['payload'])
         self.assertNotIn('clinical_context_inventory',first['payload'])

@@ -13,6 +13,7 @@ from . import component_review as editor,word_contract,template_review
 from .models import TemplatePreparation
 from .security import membership,audit,private_path
 from .template_source import approval_binding
+from .save_recovery import recoverable_save, binding as save_binding
 
 SALT='inline-field-components-review-v1'
 EDITABLE=('review','guided')
@@ -92,6 +93,7 @@ def correct_components(prep_id,actor,field_key,token,definition,reason):
         revision=prep.revision,field_key=field_key,definition_sha256=digest(definition))
     return prep
 
+@recoverable_save('inline')
 @require_http_methods(['GET','POST'])
 def edit(request,pk,field_key):
     from .preparation_views import selected
@@ -130,6 +132,7 @@ def edit(request,pk,field_key):
     return render(request,'template_component_review.html',{'preparation':prep,'template':template,'row':row,
         'parts':display_parts,'definition_version':4,'component_editing':True,
         'component_token':token_for(prep,request.user,field_key),'renderings':editor.RENDERINGS,
+        'save_binding':save_binding(prep,'inline'),
         'component_encounter_scopes':editor.ENCOUNTER_SCOPE_LABELS,
         'unit_requirements':[('none','No unit required'),('documented','Keep the documented unit and scale'),('printed','Use the exact unit printed on the form')],
         'component_types':list(template_review.TYPE_LABELS.items()),'subjects':list(template_review.SUBJECT_LABELS.items()),

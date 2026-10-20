@@ -22,6 +22,7 @@ from .template_source import approval_binding
 from . import word_contract
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 from documents.question_context import CONFIG_KEY as QUESTION_CONTEXT_KEY, CONTEXT as QUESTION_CONTEXT, validate_context as validate_question_context, validate_binding as validate_question_binding
+from documents.signing_source_context import CONFIG_KEY as SIGNING_CONTEXT_KEY, CONTEXT as SOURCE_SIGNING_CONTEXT, validate_context as validate_signing_context
 
 MAX_OUTPUT = 2500
 OUTPUT_PROFILE = 'inventory-sized-typed-v1'
@@ -61,7 +62,7 @@ WM_LAYOUT_ADVISORIES = (
 
 SAFE_ERRORS = {'invalid_proposal', 'incomplete_proposal', 'wrong_placement', 'preparation_limit',
                'source_changed', 'source_unavailable', 'parser_timeout', 'parser_failed',
-               'guided_layout', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
+               'guided_layout', 'guided_signing', 'budget_limit', 'deadline', 'provider_unknown', 'membership_lost',
                'invalid_document', 'stale_inventory', 'content_changed', 'unsupported_structure',
                'output_limit', 'invalid_response', 'provider_not_configured', 'invalid_destination'}
 
@@ -451,15 +452,16 @@ def safe_provider_failure(exc,role,stage,elapsed_ms,response_retained,usage_esta
              'APITimeoutError','APIResponseValidationError','TypeError','ValueError','JSONDecodeError',
              'ValidationError','DocumentError','DocumentFailure','KeyboardInterrupt','SystemExit'}
     status=attr('status_code');request_id=attr('request_id');body=attr('body')
-    code=body.get('error',{}).get('type') if isinstance(body,dict) and isinstance(body.get('error'),dict) else None
+    code=body.get('error',{}).get('type') if type(body) is dict and type(body.get('error')) is dict else None
     types={'invalid_request_error','authentication_error','permission_error','not_found_error','request_too_large',
            'rate_limit_error','api_error','overloaded_error','billing_error','timeout_error'}
+    from .preparation_error_evidence import public_request_id
     return {'format':'blank-preparation-provider-failure-v1','role':role if role in {'proposer','checker'} else 'unknown',
             'stage':stage if stage in {'provider_role','response_retained','response_validation','response_parsing','proposal_validation'} else 'unknown',
             'error_class':type(exc).__name__ if type(exc).__name__ in classes else 'other_exception',
-            'http_status':status if type(status) is int and 400<=status<=599 else None,
-            'provider_request_id':request_id if isinstance(request_id,str) and re.fullmatch(r'[A-Za-z0-9_-]{1,140}',request_id) else '',
-            'provider_error_type':code if isinstance(code,str) and code in types else 'unestablished',
+            'http_status':status if type(status) is int and 100<=status<=599 else None,
+            'provider_request_id':public_request_id(request_id),
+            'provider_error_type':code if type(code) is str and code in types else 'unestablished',
             'provider_stop_reason':stop_reason if type(stop_reason) is str and stop_reason in {
                 'end_turn','max_tokens','stop_sequence','tool_use','pause_turn','refusal'} else 'unestablished',
             'elapsed_ms':max(0,int(elapsed_ms)),'response_retained':bool(response_retained),
@@ -518,6 +520,8 @@ def failure_explanation(prep, receipts):
         'invalid_proposal': ('The proposed mapping or answer definitions were incomplete or did not match the original questions, constraints or protected areas. '
                              'Ask support to inspect the retained proposal; this attempt does not establish that '
                              'the original form is unsupported.'),
+        'guided_signing': ('The form contains a signing or attestation area whose manual protection '
+                           'cannot be established. Preparation is held for review. No AI request was sent.'),
         'invalid_destination': ('The AI selected an answer location outside the original field’s allowed locations. '
                                 'Nothing was approved or moved. The returned response and usage are retained; '
                                 'ask support to inspect the physical destination contract before starting a separate preparation.'),
@@ -595,7 +599,7 @@ def call_role(prep, role, deadline, proposal=None):
         receipt = PreparationReceipt.objects.create(preparation=prep, role=role,
             provider=prep.config['provider'], requested_model=prep.config['model'], request_sha256=digest(payload),
             quote_maximum=limit if prep.config['mode']=='live' else Decimal('0'), state='running', started_at=timezone.now())
-    began = time.monotonic();stage='provider_role';provider_invoked=False;stop_reason=None
+    began = time.monotonic();stage='provider_role';provider_invoked=False;stop_reason=None;failed=False
     try:
         def observed(evidence):
             nonlocal stage
@@ -641,29 +645,75 @@ def call_role(prep, role, deadline, proposal=None):
         receipt.state='succeeded'; receipt.save(update_fields=['state'])
         return response
     except BaseException as exc:
+        failed=True
         receipt.state='failed' if receipt.response_path or not provider_invoked else 'unknown'
-        receipt.error_code=(getattr(exc, 'code') if getattr(exc, 'code', '') in SAFE_ERRORS else
+        try:code=getattr(exc,'code',None)
+        except BaseException:code=None
+        receipt.error_code=(code if type(code) is str and code in SAFE_ERRORS else
             'invalid_proposal' if stage == 'proposal_validation' and isinstance(exc, (ValidationError, ValueError)) else 'provider_unknown')
         receipt.failure=safe_provider_failure(exc,role,stage,(time.monotonic()-began)*1000,
                                              bool(receipt.response_path),receipt.computed_cost is not None,stop_reason)
         receipt.failure['provider_invoked']=provider_invoked
+        if not receipt.provider_request_id:
+            receipt.provider_request_id=receipt.failure['provider_request_id']
         # This closed metadata is retained before private-file I/O. File-retention
         # failure cannot erase the original diagnostic or imply free usage.
-        receipt.save(update_fields=['state','error_code','failure'])
         try:
-            receipt.failure_path,receipt.failure_sha256=retain_response(prep,role,receipt.failure)
-            receipt.save(update_fields=['failure_path','failure_sha256'])
-        except Exception:
+            receipt.save(update_fields=['state','error_code','failure','provider_request_id'])
+        except BaseException:
             raise exc from None
+        original_failure=receipt.failure
+        original_request_id=receipt.provider_request_id
+        projected=original_failure
+        projected_request_id=original_request_id
+        # Detailed messages are private, separate immutable evidence. The existing
+        # failure_path remains an exact mirror of the closed metadata JSON, and
+        # no retained provider response or its request binding is overwritten.
+        try:
+            from . import preparation_error_evidence as diagnostics
+            private=diagnostics.build(exc,provider=prep.config['provider'],
+                receipt_id=getattr(receipt,'pk','unestablished'),role=role,stage=stage,
+                metadata=receipt.failure)
+            projected=diagnostics.public_projection(receipt.failure,private)
+            if not projected_request_id:
+                projected_request_id=projected['provider_request_id']
+            path,evidence_sha256=retain_response(prep,role,private)
+            projected={**projected,diagnostics.POINTER_KEY:{'contract':diagnostics.CONTRACT,
+                'path':path,'sha256':evidence_sha256}}
+        except BaseException:
+            # Initial safe metadata is already durable. Diagnostics cannot mask
+            # the original exception, release its hold or cause another send.
+            pass
+        try:
+            path,sha=retain_response(prep,role,projected)
+            original_path,original_sha=receipt.failure_path,receipt.failure_sha256
+            receipt.failure=projected;receipt.provider_request_id=projected_request_id
+            receipt.failure_path=path;receipt.failure_sha256=sha
+            try:
+                # One row update binds the projection to its exact mirror. A
+                # refused update cannot publish only the pointer or only its hash.
+                receipt.save(update_fields=['failure','provider_request_id','failure_path','failure_sha256'])
+            except BaseException:
+                receipt.failure=original_failure;receipt.provider_request_id=original_request_id
+                receipt.failure_path=original_path;receipt.failure_sha256=original_sha
+        except BaseException:
+            pass
         raise
     finally:
         receipt.finished_at=timezone.now(); receipt.elapsed_ms=int((time.monotonic()-began)*1000)
-        receipt.save(update_fields=['finished_at','elapsed_ms'])
+        try:
+            receipt.save(update_fields=['finished_at','elapsed_ms'])
+        except BaseException:
+            if not failed:raise
 
 def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
+    if SIGNING_CONTEXT_KEY in config:
+        validate_signing_context(config[SIGNING_CONTEXT_KEY])
+        if template.sha256 == WM_IOV_SHA256:
+            raise DocumentError('Source-owned signing context requires an ordinary typed Word form.', 'invalid_proposal')
     if QUESTION_CONTEXT_KEY in config:
         validate_question_context(config[QUESTION_CONTEXT_KEY])
         if template.sha256 == WM_IOV_SHA256:
@@ -684,7 +734,7 @@ def create_preparation(template, actor):
         config[component_key] = ENCOUNTER_CONTRACT
         config['semantic_definition_version'] = 4
         config[MEANING_CONTRACT_KEY] = COMPOUND_ANSWER_CONTRACT
-        config['word_signing_context'] = SIGNING_CONTEXT
+        config[SIGNING_CONTEXT_KEY] = SOURCE_SIGNING_CONTEXT
         config[QUESTION_CONTEXT_KEY] = QUESTION_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
     from . import testing_authority
@@ -724,10 +774,11 @@ def run_one(*, preparation_pk=None):
         if prep.template.sha256 == WM_IOV_SHA256: known=inspect_template(original)
         protocol=prep.config.get('word_preparation_protocol')
         signing_args = {}
-        if 'word_signing_context' in prep.config:
-            if prep.config['word_signing_context'] != SIGNING_CONTEXT or protocol != TYPED_PROTOCOL:
+        if SIGNING_CONTEXT_KEY in prep.config:
+            validate_signing_context(prep.config[SIGNING_CONTEXT_KEY])
+            if protocol != TYPED_PROTOCOL:
                 raise DocumentError('Unsupported signing classification policy.', 'invalid_proposal')
-            signing_args['signing_context'] = SIGNING_CONTEXT
+            signing_args['signing_context'] = prep.config[SIGNING_CONTEXT_KEY]
         if QUESTION_CONTEXT_KEY in prep.config:
             validate_question_context(prep.config[QUESTION_CONTEXT_KEY])
             if protocol != TYPED_PROTOCOL or known:
@@ -756,9 +807,11 @@ def run_one(*, preparation_pk=None):
             prep.state='guided' if unresolved else 'review'
     except Exception as exc:
         prep.state='blocked'
-        prep.error_code=(getattr(exc, 'code') if getattr(exc, 'code', '') in SAFE_ERRORS else
+        from .preparation_error_evidence import attribute
+        code=attribute(exc,'code')
+        prep.error_code=(code if type(code) is str and code in SAFE_ERRORS else
             'invalid_proposal' if isinstance(exc, (ValidationError, ValueError)) else 'provider_unknown')
-        processing_limit = validated_processing_limit(getattr(exc, 'processing_limit', None))
+        processing_limit = validated_processing_limit(attribute(exc,'processing_limit'))
     prep.finished_at=timezone.now(); prep.save()
     audit(prep.requested_by, 'template.preparation_finished', prep.pk, department=prep.template.department,
           state=prep.state, error_code=prep.error_code, original_sha256=prep.template.sha256,

@@ -72,7 +72,7 @@ def _domains(text):
     return {key for key, pattern in _DOMAINS.items() if re.search(pattern, text, re.I)}
 
 
-def field_requirements(definition):
+def field_requirements(definition, *, contract=REQUIREMENTS_CONTRACT):
     """Record inclusion, exclusion and optionality with their exact evidence.
 
     Negation scopes over a coordinated content list, including articles. A
@@ -155,7 +155,7 @@ def field_requirements(definition):
         if re.search(r'\b(?:only\s+'+word+r'|'+word+r'(?:\s+(?:findings|observations|symptoms))?\s+only)\b',positive_text,re.I):
             allowed_polarities = [literal]
             broad = []
-    return {'contract': REQUIREMENTS_CONTRACT,
+    result = {'contract': REQUIREMENTS_CONTRACT,
         'definition_sha256': hashlib.sha256(json.dumps(definition, sort_keys=True,
             ensure_ascii=False, separators=(',', ':')).encode()).hexdigest(),
         'scope': deepcopy(definition['scope']), 'answer_mode': definition.get('answer_mode','atomic'),
@@ -168,6 +168,12 @@ def field_requirements(definition):
             else 'typed_components'),
         'allowed_fact_polarities': allowed_polarities,
         'clauses': clauses}
+    if contract != REQUIREMENTS_CONTRACT:
+        from .clinical_field_scope import CONTRACT as current, compile_requirements
+        if contract != current:
+            raise ValueError('Unknown approved field requirements contract.')
+        return compile_requirements(definition, result)
+    return result
 
 
 def conditional_instruction(text, section):
@@ -389,7 +395,7 @@ def current_document_identity(text, source_name):
     return result
 
 
-def assertion_frames(notes, units, context=None):
+def assertion_frames(notes, units, context=None, *, requirements_contract=REQUIREMENTS_CONTRACT):
     context = context or source_context(notes, units)
     rows = []
     for unit in units:
@@ -425,6 +431,11 @@ def assertion_frames(notes, units, context=None):
             'governance_findings': [deepcopy(finding) for finding in context['findings']
                 if unit['id'] in finding['target_unit_ids']],
             'issues': list(dict.fromkeys(row['issues']+time_issues))})
+    if requirements_contract != REQUIREMENTS_CONTRACT:
+        from .clinical_field_scope import CONTRACT as current, source_roles
+        if requirements_contract != current:
+            raise ValueError('Unknown approved field requirements contract.')
+        return source_roles(notes, rows, context)
     return rows
 
 
@@ -530,6 +541,9 @@ def _eligible_domains(requirements, frame):
     # domain. Its existing typed component proofs remain independent below.
     if requirements['coverage_mode'] != 'section':
         return False
+    if requirements['contract'] != REQUIREMENTS_CONTRACT:
+        from .clinical_field_scope import required
+        return required(requirements, frame)
     domains = set(requirements['required_domains'])
     primary = requirements['primary_domain']
     if primary:
@@ -572,14 +586,15 @@ def temporal_projection(notes, definition, fact):
         'rendered_evidence':projected, 'rendered_value':' '.join(projected['quote'].split())}
 
 
-def assignment_issues(notes, definition, picked, units, context):
-    requirements = field_requirements(definition)
+def assignment_issues(notes, definition, picked, units, context, *, requirements_contract=REQUIREMENTS_CONTRACT):
+    requirements = field_requirements(definition, contract=requirements_contract)
+    current = requirements_contract != REQUIREMENTS_CONTRACT
     if definition.get('answer_mode') != 'narrative' or definition['value_type'] != 'text':
         return []
     issues = []
     if requirements['conflicting_domains']:
         issues.append('The approved meaning contains conflicting inclusion and exclusion requirements; clarify its complete scope.')
-    frames = assertion_frames(notes, units, context)
+    frames = assertion_frames(notes, units, context, requirements_contract=requirements_contract)
     from . import semantic_generation as semantic
     typed_obligations = []
     if requirements['coverage_mode'] == 'typed_components':
@@ -594,6 +609,8 @@ def assignment_issues(notes, definition, picked, units, context):
         frame = fact.get('source_assertion')
         if not frame:
             continue
+        if current:
+            frame = next(item for item in frames if item['source_unit_id'] == frame['source_unit_id'])
         if fact['polarity'] not in requirements['allowed_fact_polarities']:
             issues.append('The selected assertion polarity is excluded by the complete approved field meaning.')
         # A model's affirmative annotation cannot erase a negative examination
@@ -605,8 +622,20 @@ def assignment_issues(notes, definition, picked, units, context):
                 and any(value['start'] <= negative['start'] < negative['end'] <= value['end']
                     for negative in frame['negative_evidence'])):
             issues.append('The selected examination assertion contains a documented negative predicate excluded by this positive-only field meaning.')
-        if frame['domain'] in requirements['excluded_domains'] or (requirements['coverage_mode'] == 'section' and not _eligible_domains(requirements, frame)
-                and fact['kind'] != 'identity'):
+        outside = (requirements['coverage_mode'] == 'section' and not _eligible_domains(requirements, frame)
+            and fact['kind'] != 'identity')
+        if current:
+            if requirements['strict_content_scope'] and fact['kind'] == 'identity' and not _eligible_domains(requirements, frame):
+                outside = True
+            outside = outside and frame['domain'] not in requirements['allowed_context_sections']
+            from .clinical_field_scope import exclusion_spans
+            literal_exclusions = [span for span in exclusion_spans(requirements, frame['source_evidence'])
+                if span['resolution'] == 'excluded']
+            if (set(frame['content_roles']) & set(requirements['excluded_groups'])
+                    or any(span['start'] < fact['value_evidence']['end'] and fact['value_evidence']['start'] < span['end']
+                        for span in literal_exclusions)):
+                issues.append('The selected assertion contains content explicitly excluded by the complete approved field meaning.')
+        if frame['domain'] in requirements['excluded_domains'] or outside:
             issues.append('The selected assertion is outside the complete approved field requirements.')
         own = next(unit for unit in units if unit['id'] == frame['source_unit_id'])
         nonuse = bool(re.search(r'\b(?:no\s+longer\s+(?:taking|using)|not\s+(?:taking|using)|stopped|discontinued)\b', own['quote'], re.I))
@@ -650,30 +679,89 @@ def assignment_issues(notes, definition, picked, units, context):
         for qualifier in frame['temporal_qualifiers']:
             if not (value['start'] <= qualifier['start'] and qualifier['end'] <= value['end']):
                 issues.append('The narrative value omits its source temporal qualifier: '+qualifier['quote'])
-    for frame in frames:
+    obligation_frames = frames
+    if current:
+        from .clinical_field_scope import obligation_frames as scoped_obligations
+        obligation_frames = scoped_obligations(requirements, frames)
+    for frame in obligation_frames:
+        if current:
+            from .clinical_field_scope import applicable
+            if not applicable(requirements, frame):
+                continue
+            if frame.get('source_polarity') == 'unresolved':
+                if (_eligible_domains(requirements, frame)
+                        or 'reported_symptoms' in requirements['required_groups']
+                        and 'unclassified_subjective' in frame['content_roles']):
+                    issues.append('The source predicate polarity cannot be independently partitioned for the '
+                        'complete approved field scope; review this assertion without discarding its qualifiers: '
+                        + frame['source_evidence']['quote'])
+                continue
+        if (current and (frame['domain'] == requirements['primary_domain']
+                or frame['domain'] in requirements['required_domains'])
+                and frame['subject'] == 'patient' and frame['encounter_timing'] == 'current'):
+            issues.extend(frame.get('relation_findings', []))
+        if (current and 'reported_symptoms' in requirements['required_groups']
+                and 'unclassified_subjective' in frame['content_roles'] and not frame['issues']):
+            from .clinical_assertions_v4 import soap_heading
+            heading = frame['source_evidence']['quote'].strip().rstrip('.:')
+            source = frame['source_evidence']
+            spans = [(projection['rendered_evidence'] if (projection:=temporal_projection(notes, definition, fact)) else fact['value_evidence'])
+                for fact in picked if fact['value_evidence']['start'] < source['end']
+                and fact['value_evidence']['end'] > source['start']]
+            incomplete = any(not any(span['start'] <= source['start']+word.start()
+                and source['start']+word.end() <= span['end'] for span in spans)
+                for word in re.finditer(r"[\w]+(?:['’][\w]+)?",source['quote']))
+            if (not soap_heading(heading) and not re.fullmatch(
+                    r'(?:[SOAP]\s*[-–:]\s*)?(?:Subjective|History|Objective|Assessment|Plan|Review of systems)',heading,re.I) and incomplete):
+                issues.append('The source role is unresolved for this approved reported-symptom requirement; review its scope: '
+                    + frame['source_evidence']['quote'])
         if not _eligible_domains(requirements, frame) or frame['issues']:
             continue
         source = frame['source_evidence']
+        if current:
+            from .clinical_field_scope import exclusion_spans
+            for span in exclusion_spans(requirements, source):
+                if span['resolution'] == 'requires_review':
+                    issues.append('A source expression may match content explicitly excluded by the '
+                        'complete approved meaning; its polarity or attribute/head interpretation remains unresolved: '
+                        + source['quote'] + ' Exclusion: ' + span['exclusion_evidence']['quote'])
+        if current and set(requirements['required_groups']) & set(frame['content_roles']) == {'patient_name'}:
+            source = frame['content_evidence']['patient_name']
         text = source['quote'].strip().rstrip('.:')
         from .clinical_assertions_v4 import soap_heading
         if (soap_heading(text) or re.fullmatch(r'(?:[SOAP]\s*[-–:]\s*)?(?:Subjective|History|Objective|Assessment|Plan|Review of systems)', text, re.I)):
             continue
-        spans = [(projection['rendered_evidence'] if (projection:=temporal_projection(notes, definition, fact)) else fact['value_evidence']) for fact in picked
-            if not fact['issues'] and fact['value_evidence']['start'] < source['end'] and fact['value_evidence']['end'] > source['start']]
+        present = [fact for fact in picked if fact['value_evidence']['start'] < source['end']
+            and fact['value_evidence']['end'] > source['start']]
+        spans = [(projection['rendered_evidence'] if (projection:=temporal_projection(notes, definition, fact)) else fact['value_evidence']) for fact in present
+            if current or not fact['issues']]
         if not spans:
             issues.append('The answer omits a documented assertion required by the complete field meaning: '+source['quote'])
             continue
         # Complete source coverage may use several extracted facts. Function
         # words can be grammatical scaffolding; content and timing cannot.
         omitted = []
+        exclusions = []
+        if current:
+            from .clinical_field_scope import exclusion_spans
+            exclusions = [span for span in exclusion_spans(requirements, source) if span['resolution'] == 'excluded']
         for word in re.finditer(r"[\w]+(?:['’][\w]+)?", source['quote']):
             start, end = source['start']+word.start(), source['start']+word.end()
             if any(span['start'] <= start and end <= span['end'] for span in spans):
                 continue
-            if word[0].casefold() not in {'he','she','they','it','his','her','their','the','a','an','is','are','was','were','and','or','but', 'patient'}:
+            if any(span['start'] <= start and end <= span['end'] for span in exclusions):
+                continue
+            scaffolding = {'he','she','they','it','his','her','their','the','a','an','is','are','was','were','and','or','but', 'patient'}
+            if current:
+                scaffolding |= {'with'}
+            if word[0].casefold() not in scaffolding:
                 omitted.append(word[0])
         if omitted:
             issues.append('The answer omits part of a source assertion or qualifier required by the complete field meaning: '+source['quote'])
+        elif current and any(fact['issues'] for fact in present):
+            causes = list(dict.fromkeys(issue for fact in present for issue in fact['issues']))
+            issues.append('The required source assertion is present in the selected text but remains held: '
+                + source['quote'] + ' Causes: ' + '; '.join(causes))
     # A narrow historical medicine field can explicitly request a present
     # non-use attribute. Retain the existing typed antecedent/date/completeness
     # proof; a generic medication mention cannot grant that scope.
