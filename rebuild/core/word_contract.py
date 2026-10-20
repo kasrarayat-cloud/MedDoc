@@ -129,6 +129,23 @@ def identity_scope_issues(prep):
     return roles.identity_scope_issues(prep.inventory['fields'], values) if values else {}
 
 
+def fully_reviewed_keys(prep):
+    """Inline v4 component drafts invalidate the previous whole-form review."""
+    if not getattr(prep, 'correction_history', []):
+        return set()
+    last = prep.correction_history[-1]
+    if (last.get('review_scope') == 'field_components'
+            or last.get('answer_definitions') != proposed(prep)):
+        return set()
+    return set(last.get('reviewed_fields', []))
+
+
+def component_draft_pending(prep):
+    return (prep.config.get(CONFIG_KEY) == GRAPH_PROFILE
+            and bool(getattr(prep, 'correction_history', []))
+            and prep.correction_history[-1].get('review_scope') == 'field_components')
+
+
 def approval_issues(prep):
     """Pending semantic decisions, separate from immutable source/layout issues.
 
@@ -143,11 +160,12 @@ def approval_issues(prep):
     issues = roles.identity_scope_issues(prep.inventory['fields'], values)
     issues.update(roles.compound_answer_issues(prep.inventory['fields'], values,
         meaning_contract=roles.configured_meaning_contract(prep.config)))
-    if not prep.corrections.get('answer_definitions'):
+    reviewed = fully_reviewed_keys(prep) if prep.config.get(CONFIG_KEY) == GRAPH_PROFILE else None
+    if reviewed is not None or not prep.corrections.get('answer_definitions'):
         labels = {f['key']: f['label'] for f in prep.inventory['fields']}
         for role, response in (('Proposer', prep.proposal), ('Checker', prep.checker)):
             for row in response['answer_definitions']['fields']:
-                if row['state'] == 'unresolved':
+                if row['state'] == 'unresolved' and (reviewed is None or row['field_key'] not in reviewed):
                     key = row['field_key']
                     detail = (f"Resolve the answer definition for {labels[key]} using Save doctor corrections "
                               f"before approval. {role}: {row['reason']}").strip()
@@ -156,6 +174,8 @@ def approval_issues(prep):
 
 
 def require_resolved(prep, *, generation=False):
+    if component_draft_pending(prep):
+        raise ValidationError('Review the whole form and Save decisions after saving a component draft before approval or generation.')
     issues = approval_issues(prep)
     if issues:
         if generation:

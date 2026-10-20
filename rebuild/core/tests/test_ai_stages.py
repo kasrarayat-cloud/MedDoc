@@ -170,7 +170,18 @@ class IndependentStageTests(TestCase):
 
     def test_scripted_narrative_reaches_concise_review_finalization_and_word_download(self):
         original=private_path(self.template.original_path).read_bytes()
-        job=enqueue(self.encounter,self.user,config=self.live_config())
+        # This original scripted v3 narrative is retained as compatibility
+        # evidence under the installed v24 contract that accepted it. Current
+        # v25 narrow/repair behavior has separate explicit source-scope tests.
+        from core.models import Job
+        insert=Job.objects.create
+        def historical_job(**values):
+            values['config']={**values['config'],
+                'semantic_fact_scope_contract':semantic_generation.LABELLED_PRESENTATION_SCOPE_CONTRACT}
+            return insert(**values)
+        with patch('core.jobs.Job.objects.create',side_effect=historical_job):
+            job=enqueue(self.encounter,self.user,config=self.live_config())
+        self.assertEqual(job.config['semantic_fact_scope_contract'],semantic_generation.LABELLED_PRESENTATION_SCOPE_CONTRACT)
         with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-offline-placeholder'}),patch.object(ai_stages,'_response',side_effect=self.provider(scripted=True)):run_one()
         job.refresh_from_db();self.encounter.refresh_from_db()
         self.assertEqual(job.state,'succeeded',job.error)

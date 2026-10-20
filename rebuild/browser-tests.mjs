@@ -154,30 +154,43 @@ try {
       null, {timeout: 40000});
     await page.locator('[data-document-review]').waitFor();
     assert.equal(await page.locator('textarea[name^=answer_]').count(), 3);
-    assert.equal(await page.locator('.review-evidence').count(), 0);
+    assert.equal(await page.locator('.review-evidence').count(), 9);
     assert.equal(await page.getByRole('link', { name: 'Download provider result', exact: true }).count(), 1);
   });
-  await check('Simulated roles leave answers missing without pretending to infer clinical facts', async () => {
+  await check('Simulated graph roles retain unresolved source evidence without inferring clinical facts', async () => {
     const answers = await page.locator('textarea[name^=answer_]').evaluateAll(inputs => inputs.map(input => input.value));
     const evidence = await page.locator('.review-evidence').allTextContents();
     const expected = ['Synthetic patient reports left wrist discomfort after a fall.',
       'No deformity documented.', 'Follow-up assessment documented.'];
     assert.deepEqual(answers, ['', '', '']);
-    assert.deepEqual(evidence, []);
+    const sourceQuotes = expected.map((value, index) => ['History', 'Findings', 'Plan'][index] + ': ' + value);
+    assert.deepEqual(evidence, Array.from({length: 3}, () => sourceQuotes).flat());
     const id = page.url().match(/\/encounters\/([a-f0-9-]+)\/$/)[1];
     const response = await context.request.get(new URL('/api/encounters/'+id+'/', base).href);
     assert.equal(response.status(), 200);
     const snapshot = await response.json();
     for (let index = 0; index < answers.length; index++) {
       const answer = snapshot.answers['cell_'+index];
-      assert.equal(answer.text, '');assert.equal(answer.status, 'missing');assert.equal(answer.reviewed, false);
-      assert.equal(answer.evidence.length, 0);
+      assert.equal(answer.fact_scope_contract, 'source-assertion-graph-v25');
+      assert.equal(answer.text, '');assert.equal(answer.status, 'ambiguous');assert.equal(answer.reviewed, false);
+      assert.deepEqual(answer.fact_ids, []);assert.deepEqual(answer.facts, []);
+      assert.equal(answer.independent_check.verdict, 'unknown');
+      assert.equal(answer.independent_check.cause, 'interpretation');
+      assert.deepEqual(answer.evidence.map(span => span.quote), sourceQuotes);
+      for (const span of answer.evidence) {
+        assert.equal(snapshot.notes.slice(span.start, span.end), span.quote);
+      }
+      assert(answer.route_diagnostics.holds.some(hold => hold.code === 'unresolved_unit_coverage'));
+      assert(answer.review_reasons.length > 0);
     }
     // Explicit manual UI coverage, never automatic-extraction acceptance.
     assert.equal(await page.locator('[data-document-review] input[type=checkbox]').count(), 0);
     for (let index = 0; index < expected.length; index++) {
       const row = page.locator('.compact-answer').nth(index);
-      await row.locator('details > summary').first().click();
+      const details = row.locator('details').first();
+      if (!(await details.evaluate(node => node.open))) {
+        await row.locator('details > summary').first().click();
+      }
       await row.locator('textarea[name^=answer_]').fill(expected[index]);
       await row.locator('details > summary').first().click();
       assert.equal(await row.locator('[data-saved-answer]').innerText(), expected[index]);

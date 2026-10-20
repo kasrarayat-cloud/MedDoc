@@ -996,13 +996,24 @@ def correct(prep_id, actor, revision, labels, reviewed_anchors, reason,placement
                 d['component_contract']['contract'] != word_contract.component_contract(prep.config)
                 for d in definitions.values()):
             raise ValidationError('Review corrections using this preparation’s original component scope contract.')
+        if prep.config.get(word_contract.CONFIG_KEY) == word_contract.GRAPH_PROFILE:
+            before = word_contract.proposed(prep)
+            semantic_keys = ('meaning', 'scope', 'value_type', 'answer_mode', 'unit', 'choices',
+                             'constraints', 'patient_name_requirement')
+            for key, value in definitions.items():
+                if (any(value[name] != before[key][name] for name in semantic_keys)
+                        and value['component_contract'] == before[key]['component_contract']):
+                    raise ValidationError('Review the required parts with this corrected meaning using Edit required parts before saving.')
     # Manual adjudication is separate from the untouched automatic proposal/checker records.
     if change_placement:build_candidate(prep,placements)
     prep.corrections={'labels':labels,'placements':placements,'reviewed_anchors':sorted(reviewed_anchors),'reason':reason.strip(),
                       'actor_id':str(actor.pk),'at':timezone.now().isoformat()}
     if definitions is not None:
         prep.corrections['answer_definitions'] = definitions
-    prep.correction_history.append({'revision':prep.revision+1,**prep.corrections})
+    history={'revision':prep.revision+1,**prep.corrections}
+    if prep.config.get(word_contract.CONFIG_KEY) == word_contract.GRAPH_PROFILE:
+        history.update(review_scope='answer_definitions', reviewed_fields=sorted(reviewed_definitions))
+    prep.correction_history.append(history)
     prep.revision+=1; prep.state='guided' if word_contract.approval_issues(prep) else 'review'
     prep.save(update_fields=['corrections','correction_history','revision','state','candidate_info'])
     audit(actor,'template.preparation_corrected',prep.pk,department=prep.template.department,revision=prep.revision)

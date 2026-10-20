@@ -54,7 +54,10 @@ def review_items(prep, items):
                             question_label, re.IGNORECASE))
         field_corrected = bool(corrected)
         if definition.get('version') == 4:
-            from .semantic_preparation import fully_reviewed_keys
+            if hasattr(prep, 'candidate_sha256'):
+                from .word_contract import fully_reviewed_keys
+            else:
+                from .semantic_preparation import fully_reviewed_keys
             field_corrected = row['field']['key'] in fully_reviewed_keys(prep)
         if (prep.state != 'approved' and not field_corrected and not qualified
                 and definition.get('value_type') == 'person_name'):

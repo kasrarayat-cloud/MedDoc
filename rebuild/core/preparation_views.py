@@ -45,6 +45,12 @@ def detail(request,pk):
     receipts=list(prep.receipts.order_by('created_at'))
     from .word_contract import review_rows, approval_issues, definition_version
     definition_rows = template_review.review_items(prep, review_rows(prep))
+    if (prep.state in {'review','guided'} and definition_version(prep.config) == 4
+            and membership(request.user, template.department).role in {'owner','clinician'}):
+        from documents.semantic_preparation_roles import protected_field
+        for row in definition_rows:
+            if not protected_field(row['field']):
+                row['components_edit_url'] = reverse('template_preparation_components', args=[template.pk,row['field']['key']])
     definition_issues = {r['field']['key']: r['reason'] for r in definition_rows if r['state'] == 'unresolved'} if prep.state in {'review','guided'} else {}
     from documents.semantic_preparation_roles import ANSWER_TYPES, ANSWER_MODES, SUBJECTS, TEMPORALITIES, POLARITIES
     compact = {'review_rows': template_review.rows(definition_rows, template_review.label_displays(template)),

@@ -490,3 +490,117 @@ class ClinicalSemanticsTests(SimpleTestCase):
                 self.assertNotEqual(answer['status'],'supported')
                 self.assertTrue(any('verified scope' in reason for reason in answer['review_reasons']))
                 self.assertFalse(any('omits a documented assertion' in reason for reason in answer['review_reasons']))
+
+
+    def test_complete_event_history_keeps_the_predicate_and_standalone_adjunct_stays_held(self):
+        quote='She has severe left wrist pain after lifting a box'
+        notes,_,facts=self.values('S\n'+quote+'.',[("history",quote,'history','affirmed','current')])
+        self.assertFalse(facts['history']['issues'])
+        answer=self.assign(notes,facts,'Subjective: complete reported symptoms and history.',['history'])
+        self.assertEqual(answer['status'],'supported',answer['review_reasons'])
+        for value,kind in (('with movement','finding'),('in the left wrist','finding'),
+                ('after lifting a box','history'),('after lifting','history'),('after lifting a box','finding')):
+            report=('She reports severe pain '+value if value in ('with movement','in the left wrist') else quote)
+            with self.subTest(value=value,kind=kind):
+                notes,_,facts=self.values('S\n'+report+'.',[("fragment",value,kind,'affirmed','current')])
+                self.assertTrue(facts['fragment']['issues'])
+                for meaning in ('Subjective: documented patient-reported symptoms and history, retaining clinical qualifiers.',
+                        'Causal event','Precipitating event','The documented injury mechanism.'):
+                    fields,definitions=self.definition(meaning,timing='current')
+                    definitions['answer']['answer_mode']='atomic'
+                    answer=semantic._assign(notes,fields,definitions,facts,assignments(fields,{'answer':['fragment']}),
+                        scope_contract=self.profile,timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)['answer']
+                    self.assertNotEqual(answer['status'],'supported')
+
+
+    def test_current_complete_mixed_observation_reaches_checker_and_canonical_saved_proof(self):
+        report='Examination shows mild swelling over the left lateral ankle, no deformity, and intact distal sensation'
+        notes=self.header+'O\n'+report+'.'
+        fields,definitions=self.definition('Objective: complete documented examination findings.',timing='current')
+        raw=[fact(notes,fields,'observation',report,kind='finding',polarity='mixed')]
+        before=deepcopy(raw)
+        sender=FixtureSender(raw,assignments(fields,{'answer':['observation']}))
+        answer=semantic.run(notes,fields,definitions,sender,
+            reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT,scope_contract=self.profile)['answer']
+        self.assertEqual([(call[0],call[1])for call in sender.calls],[('extractor',1),('assigner',1),('checker',1)])
+        self.assertEqual(raw,before)
+        self.assertEqual(answer['status'],'supported',answer['review_reasons'])
+        self.assertEqual(answer['text'],report)
+        self.assertEqual(answer['fact_scope_contract'],self.profile)
+        self.assertEqual(answer['independent_check']['verdict'],'pass')
+        semantic.validate_stored_answer(notes,fields[0],definitions['answer'],answer)
+
+    def test_clipped_observation_state_retains_conservative_scope_in_atomic_destinations(self):
+        # These literal fragments cannot prove independence from their matrix,
+        # a prior negative list, or a contradictory assertion. Whole predicates
+        # and explicit graph components have their own successful paths.
+        for report,value in (
+                ('Examination shows mild swelling over the left lateral ankle, no deformity, and intact distal sensation','intact distal sensation'),
+                ('Examination reveals mild swelling, no deformity, and preserved distal sensation','preserved distal sensation'),
+                ('Examination never shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('No examination shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('No assessment demonstrates swelling, no tenderness, and normal strength','normal strength'),
+                ('Nobody shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('None shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('Examination possibly shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('A hypothetical examination shows mild swelling, no deformity, and intact distal sensation','intact distal sensation'),
+                ('Examination shows mild swelling, no deformity or preserved sensation and normal strength','normal strength'),
+                ('Examination shows mild swelling, without tenderness or intact reflexes and normal strength','normal strength'),
+                ('Examination shows mild swelling, no deformity or intact distal sensation','intact distal sensation'),
+                ('Examination shows mild swelling, no distal sensation, and intact distal sensation','intact distal sensation'),
+                ('Examination shows mild swelling, no sensation, and intact distal sensation','intact distal sensation'),
+                ('Examination shows mild swelling, no deformity, and intact distal sensation','distal sensation'),
+                ('Examination shows mild swelling, no deformity, and possibly intact distal sensation','possibly intact distal sensation'),
+                ('Examination shows mild swelling despite an unresolved correction, no deformity, and intact distal sensation','intact distal sensation')):
+            with self.subTest(report=report):
+                notes,_,facts=self.values('O\n'+report+'.',[("state",value,'finding','affirmed','current')])
+                self.assertTrue(facts['state']['issues'])
+                fields,definitions=self.definition('Objective: documented examination findings.',timing='current')
+                definitions['answer']['answer_mode']='atomic'
+                answer=semantic._assign(notes,fields,definitions,facts,assignments(fields,{'answer':['state']}),
+                    scope_contract=self.profile,timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)['answer']
+                self.assertNotEqual(answer['status'],'supported')
+
+    def test_causal_denial_cannot_make_a_temporal_adjunct_a_supported_causal_event(self):
+        for correction in ('Lifting the box did not cause the wrist pain.',
+                'No precipitating event is established.'):
+            notes,_,facts=self.values('S\nShe has severe left wrist pain after lifting a box. '+correction,
+                [("fragment",'after lifting a box','history','affirmed','current')])
+            for meaning in ('Causal event','Precipitating event','The documented injury mechanism.'):
+                fields,definitions=self.definition(meaning,timing='current')
+                definitions['answer']['answer_mode']='atomic'
+                answer=semantic._assign(notes,fields,definitions,facts,assignments(fields,{'answer':['fragment']}),
+                    scope_contract=self.profile,timing_reference_contract=semantic.TEMPORAL_REFERENCE_CONTRACT)['answer']
+                self.assertNotEqual(answer['status'],'supported')
+
+    def test_unknown_narrow_scope_stays_held_through_a_well_formed_bounded_repair(self):
+        from core.tests.test_semantic_generation import fact, assignments, checker, FixtureSender
+        notes = self.header+'S\nShe reports heartburn on three days each week.'
+        fields = [{'key':'frequency','label':'Requested frequency','kind':'text','locator':{'cell':0}},
+            {'key':'identity','label':'Patient full name','kind':'text','locator':{'cell':1}}]
+        definitions = default_definitions(fields)
+        for definition in definitions.values():
+            definition.update(version=3,answer_mode='narrative' if definition['value_type']=='text' else 'atomic',
+                patient_name_requirement='none')
+        definitions['frequency'].update(meaning='Document only the current heartburn frequency.',
+            scope={'subject':'patient','temporality':'current','polarity':'any'})
+        definitions['identity'].update(value_type='person_name',answer_mode='atomic')
+        raw = [fact(notes,fields,'symptom','She reports heartburn on three days each week',kind='history'),
+            fact(notes,fields,'patient','Synthetic Ada Tern',kind='identity',name_quote='Synthetic Ada Tern')]
+        original = deepcopy(raw)
+        assigned = assignments(fields,{'frequency':['symptom'],'identity':['patient']})
+        repaired = {'fields':[assigned['fields'][0]]}
+        sender = FixtureSender(raw,assigned,repaired=repaired,rechecked=checker(assigned))
+        answers = semantic.run(notes,fields,definitions,sender,
+            reference_contract=semantic.REFERENCE_INVENTORY_CONTRACT,scope_contract=self.profile)
+        self.assertEqual(raw,original)
+        self.assertEqual([(call[0],call[1])for call in sender.calls],
+            [('extractor',1),('assigner',1),('checker',1),('assigner',2),('checker',2)])
+        self.assertEqual(sender.calls[3][2]['repair_keys'],['frequency'])
+        self.assertEqual(answers['identity']['status'],'supported')
+        self.assertEqual(answers['identity']['text'],'Synthetic Ada Tern')
+        self.assertNotEqual(answers['frequency']['status'],'supported')
+        self.assertEqual(answers['frequency']['text'],'')
+        self.assertTrue(any('verified scope' in reason for reason in answers['frequency']['review_reasons']))
+        for field in fields:
+            semantic.validate_stored_answer(notes,field,definitions[field['key']],answers[field['key']])

@@ -557,7 +557,10 @@ class OrdinaryClinicianWordTests(TestCase):
         self.assertContains(response, 'Save doctor corrections', status_code=409)
         self.assertFalse(template.versions.exists())
         values = word_contract.proposed(prep)
-        values[next(iter(values))]['meaning'] = 'The documented patient answer to the original clinical question.'
+        corrected = values[next(iter(values))]
+        corrected['meaning'] = 'The documented patient answer to the original clinical question.'
+        if corrected['version'] == 4:
+            corrected['component_contract']['components'][0]['meaning'] = corrected['meaning']
         preparation.correct(prep.pk, self.user, prep.revision,
             {f['key']:f['label'] for f in prep.candidate_info['fields']},
             [a['id'] for a in prep.inventory['anchors']],

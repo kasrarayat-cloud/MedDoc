@@ -157,9 +157,8 @@ class CodingWordExport(TestCase):
         # Finished runs/approvals are immutable in PostgreSQL. Exercise the
         # export's independent defensive checks with returned object copies;
         # never disable those guards or rewrite historical database evidence.
-        with patch('core.coding_export.CodingRun.objects.filter') as query, \
+        with patch('core.coding_export.service.displayed_run', return_value=run), \
                 patch('core.coding_export.CodingDecision.objects.filter', return_value=[decision]):
-            query.return_value.first.return_value = run
             yield
 
     def forged_selection(self, ids):
