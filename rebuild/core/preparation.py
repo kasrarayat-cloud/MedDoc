@@ -34,6 +34,9 @@ DESTINATION_KEY = 'word_preparation_destinations'
 IDENTITY_PROFILE = 'source-identity-enums-v1'
 IDENTITY_KEY = 'word_preparation_identities'
 SCHEMA_TRANSPORT_KEY = 'word_preparation_schema_transport'
+REASONING_KEY = 'word_preparation_reasoning'
+REASONING_PROFILE = 'sonnet55-between-tools-high-v1'
+REASONING_MODEL = 'claude-sonnet-5-5'
 MAX_TYPED_OUTPUT = 16000
 MAX_COMPLETE_OUTPUT = 48000
 MAX_PREPARATION_REQUEST_BYTES = 512000
@@ -96,6 +99,22 @@ def streaming_transport(config):
         return stream_transport.enabled(config)
     except ValueError:
         raise DocumentError('Unsupported explicit preparation provider transport.', 'invalid_proposal') from None
+
+
+def reasoning_policy(config):
+    """Version future blank-form requests; historical envelopes stay exact.
+
+    Sonnet 5.5 defaults to up-front adaptive thinking. These single-turn roles
+    have no tools; use the documented between-tools setting with explicit high
+    effort. This changes provider execution, never semantic validation or review.
+    """
+    if config is None or REASONING_KEY not in config:
+        return None
+    if (type(config[REASONING_KEY]) is not str or config[REASONING_KEY] != REASONING_PROFILE
+            or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
+            or type(config.get('model')) is not str or config['model'] != REASONING_MODEL):
+        raise DocumentError('Unsupported explicit preparation reasoning policy.', 'invalid_proposal')
+    return REASONING_PROFILE
 
 
 def finite_destinations(inventory, config):
@@ -279,8 +298,11 @@ def role_schema(role, protocol=None, inventory=None, config=None):
 
 def role_payload(inventory, role, proposal=None, *, source_review_context=None, config=None):
     transport = schema_transport(config)
+    reasoning = reasoning_policy(config)
     validate_question_binding(inventory, config)
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
+    if reasoning is not None:
+        result['provider_reasoning'] = reasoning
     if streaming_transport(config):
         result['provider_transport'] = stream_transport.TRANSPORT
     if transport in choice_transport.TRANSPORTS:
@@ -400,6 +422,9 @@ def provider_request(inventory, role, config, proposal=None):
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False,
             **({'sort_keys':True} if transport in choice_transport.TRANSPORTS else {}))}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
+    if reasoning_policy(config) is not None:
+        envelope['thinking'] = {'type': 'between_tools'}
+        envelope['output_config']['effort'] = 'high'
     if streaming_transport(config):
         envelope['stream'] = True
     if config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE:
@@ -853,6 +878,7 @@ def create_preparation(template, actor):
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
     streaming_transport(config)  # Refuse an invalid explicit marker before queue creation.
+    reasoning_policy(config)
     if SIGNING_CONTEXT_KEY in config:
         validate_signing_context(config[SIGNING_CONTEXT_KEY])
         if template.sha256 == WM_IOV_SHA256:
@@ -869,6 +895,8 @@ def create_preparation(template, actor):
     if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
         config[SCHEMA_TRANSPORT_KEY] = ANTHROPIC_SCHEMA_TRANSPORT
         config[stream_transport.CONFIG_KEY] = stream_transport.TRANSPORT
+        if config.get('model') == REASONING_MODEL:
+            config[REASONING_KEY] = REASONING_PROFILE
     if template.sha256 == WM_IOV_SHA256:
         if prior_transport in choice_transport.TRANSPORTS:
             raise DocumentError('The component choice transport does not apply to the WM source.', 'invalid_proposal')
