@@ -11,7 +11,11 @@ from documents import DocumentError
 ARRAY_TRANSPORT = 'anthropic-shared-component-choices-json-v2'
 QUOTE_TRANSPORT = 'anthropic-shared-component-choices-quote-json-v3'
 TRANSPORT = 'anthropic-shared-components-json-v4'
-TRANSPORTS = (ARRAY_TRANSPORT, QUOTE_TRANSPORT, TRANSPORT)
+COMPACT_TRANSPORT = 'anthropic-shared-component-rows-json-v5'
+TRANSPORTS = (ARRAY_TRANSPORT, QUOTE_TRANSPORT, TRANSPORT, COMPACT_TRANSPORT)
+COMPONENT_COLUMNS = ('id', 'question_quote', 'label', 'meaning', 'value_type', 'scope',
+                     'unit', 'unit_requirement', 'required', 'encounter_scope', 'choices', 'option_quote')
+SCOPE_COLUMNS = ('subject', 'temporality', 'polarity')
 MAX_ENCODED_BYTES = 2 * 1024 * 1024  # The existing retained-response byte bound.
 INSTRUCTIONS = (
     ' Response transport anthropic-shared-component-choices-json-v2: ONLY '
@@ -56,6 +60,30 @@ COMPONENTS_INSTRUCTIONS = (
     'required, protection and bound checks remain mandatory after decoding. This '
     'encoding grants no semantic approval and changes no canonical constraint. '
 )
+COMPACT_INSTRUCTIONS = (
+    ' Response transport anthropic-shared-component-rows-json-v5: ONLY '
+    'answer_definitions.fields[].definition.component_contract.components is a string '
+    'containing one JSON array of complete ordered component ROWS. Each component row '
+    'has EXACTLY twelve values in this order: [id, question_quote, label, meaning, '
+    'value_type, scope, unit, unit_requirement, required, encounter_scope, choices, '
+    'option_quote]. scope is EXACTLY [subject, temporality, polarity], three explicit '
+    'strings in that order. Every position is mandatory; do not omit trailing nulls, '
+    'empty arrays, or other values. id, question_quote, meaning, value_type, '
+    'unit_requirement and encounter_scope are strings. label and unit are strings '
+    'or null; required is a JSON boolean; choices is the complete ordered array of '
+    'strings; option_quote is the exact original source string or null. '
+    'Do not encode any individual position again. Canonical null, the literal string '
+    'null, empty strings and empty arrays are distinct. Preserve all original text, '
+    'Unicode, quotes and backslashes exactly with ordinary JSON escaping. Do not '
+    'shorten, normalize, reorder, omit or infer any component, property or source '
+    'evidence. An empty component array is the string "[]" only where the canonical '
+    'signing/protection contract permits it. All twelve canonical property names '
+    'and three scope names are restored by position before the unchanged complete '
+    'canonical/source/type/ownership/required/protection/bound validation. '
+    'component_contract.contract and rendering and ALL other outer properties '
+    'remain unchanged explicit JSON values. This transport grants no approval '
+    'and changes no canonical constraint. '
+)
 
 
 def invalid():
@@ -66,6 +94,8 @@ def invalid():
 def instructions(transport):
     if transport not in TRANSPORTS:
         raise invalid()
+    if transport == COMPACT_TRANSPORT:
+        return COMPACT_INSTRUCTIONS
     if transport == TRANSPORT:
         return COMPONENTS_INSTRUCTIONS
     return INSTRUCTIONS if transport == ARRAY_TRANSPORT else QUOTE_INSTRUCTIONS
@@ -78,6 +108,21 @@ def wire_schema(canonical, transport=TRANSPORT):
     try:
         contract = (value['properties']['answer_definitions']['properties']['fields']['items']
                     ['properties']['definition']['properties']['component_contract']['properties'])
+        if transport == COMPACT_TRANSPORT:
+            original = contract['components']
+            if (original['type'] != 'array' or original['items']['type'] != 'object'
+                    or set(original['items']['properties']) != set(COMPONENT_COLUMNS)
+                    or set(original['items']['required']) != set(COMPONENT_COLUMNS)):
+                raise invalid()
+            contract['components'] = {'type': 'string', 'description': (
+                'JSON text containing complete ordered rows of EXACTLY twelve values: '
+                + json.dumps(COMPONENT_COLUMNS) + '. The scope position is EXACTLY '
+                + json.dumps(SCOPE_COLUMNS) + ' as three explicit string values in order. '
+                'All positions are mandatory; no defaults, omission, extra positions or nested transport. '
+                'Every canonical value and constraint below is preserved by position and '
+                'checked after strict decoding: '
+                + json.dumps(original, ensure_ascii=False, sort_keys=True))}
+            return value
         if transport == TRANSPORT:
             original = contract['components']
             if original['type'] != 'array' or original['items']['type'] != 'object':
@@ -170,9 +215,58 @@ def decode_components(response):
     return value
 
 
+def decode_component_rows(response):
+    """Restore all explicit values, without inferring or defaulting semantic data."""
+    value = deepcopy(response)
+
+    def constant(_):
+        raise ValueError('Non-JSON constant')
+
+    def unique_object(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON property')
+            result[key] = item
+        return result
+
+    for contract in contracts(value):
+        try:
+            encoded = contract['components']
+            if type(encoded) is not str or len(encoded.encode('utf-8')) > MAX_ENCODED_BYTES:
+                raise invalid()
+            rows = json.loads(encoded, parse_constant=constant, object_pairs_hook=unique_object)
+            if type(rows) is not list:
+                raise invalid()
+            decoded = []
+            for row in rows:
+                if type(row) is not list or len(row) != len(COMPONENT_COLUMNS):
+                    raise invalid()
+                component = dict(zip(COMPONENT_COLUMNS, row))
+                scope = component['scope']
+                if (any(type(component[key]) is not str for key in
+                        ('id', 'question_quote', 'meaning', 'value_type', 'unit_requirement', 'encounter_scope'))
+                        or any(component[key] is not None and type(component[key]) is not str
+                               for key in ('label', 'unit', 'option_quote'))
+                        or type(component['required']) is not bool
+                        or type(scope) is not list or len(scope) != len(SCOPE_COLUMNS)
+                        or any(type(item) is not str for item in scope)
+                        or type(component['choices']) is not list
+                        or any(type(item) is not str for item in component['choices'])):
+                    raise invalid()
+                component['scope'] = dict(zip(SCOPE_COLUMNS, scope))
+                decoded.append(component)
+        except (KeyError, ValueError, TypeError, UnicodeError, RecursionError):
+            raise invalid() from None
+        contract['components'] = decoded
+    return value
+
+
 def decode(response, transport=TRANSPORT):
     """Decode losslessly, then let the unchanged full canonical validator judge it."""
     instructions(transport)
+    if transport == COMPACT_TRANSPORT:
+        return decode_component_rows(response)
     if transport == TRANSPORT:
         return decode_components(response)
     value = deepcopy(response)

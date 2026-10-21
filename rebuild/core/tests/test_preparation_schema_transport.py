@@ -134,7 +134,7 @@ class PreparationSchemaTransportTests(SimpleTestCase):
                 preparation.create_preparation(template, SimpleNamespace(pk='synthetic-actor'))
                 queued = create.call_args.args[2]
                 if (mode, provider) == ('live', 'anthropic'):
-                    self.assertEqual(queued[preparation.SCHEMA_TRANSPORT_KEY], preparation.choice_transport.TRANSPORT)
+                    self.assertEqual(queued[preparation.SCHEMA_TRANSPORT_KEY], preparation.choice_transport.COMPACT_TRANSPORT)
                 else:
                     self.assertNotIn(preparation.SCHEMA_TRANSPORT_KEY, queued)
             self.assertEqual(config, original)

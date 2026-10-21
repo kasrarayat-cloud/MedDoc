@@ -231,6 +231,13 @@ def timing_limits(inventory, config=None):
     validate_inventory(inventory)
     if (config and config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE
             and role_limits(inventory, config)[0] > MAX_TYPED_OUTPUT):
+        # New compact requests share the same overall window between two
+        # complete provider roles, retaining 60s for candidate admission and
+        # 20s for local work. Historical transports retain their exact timing.
+        # Synchronous retention can still overrun; the existing final guards
+        # remain authoritative and no incomplete response is adopted.
+        if config.get(SCHEMA_TRANSPORT_KEY) == choice_transport.COMPACT_TRANSPORT:
+            return (480 - 60 - 20) // 2, 480
         return 180, 480
     if config and word_contract.active(inventory, config):
         return 120, 360
@@ -877,7 +884,7 @@ def create_preparation(template, actor):
         config[QUESTION_CONTEXT_KEY] = QUESTION_CONTEXT
         config[IDENTITY_KEY] = IDENTITY_PROFILE
         if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
-            config[SCHEMA_TRANSPORT_KEY] = choice_transport.TRANSPORT
+            config[SCHEMA_TRANSPORT_KEY] = choice_transport.COMPACT_TRANSPORT
     from . import testing_authority
     if testing_authority.identity(config):
         return testing_authority.create_preparation(template,actor,config)

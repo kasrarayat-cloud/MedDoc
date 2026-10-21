@@ -369,9 +369,9 @@ class PreparationChoiceTransportTests(SimpleTestCase):
                 preparation.decode_role_response(self.inventory, 'proposer', config, value,
                     None, {'response_transport': codec.QUOTE_TRANSPORT}, None)
 
-    def test_queue_keeps_wm_legacy_and_marks_only_new_ordinary_live_v4(self):
+    def test_queue_keeps_wm_legacy_and_marks_only_new_ordinary_live_v5(self):
         from documents.sdk_service import WM_IOV_SHA256
-        for sha, expected in (('a' * 64, codec.TRANSPORT), (WM_IOV_SHA256, ANTHROPIC_SCHEMA_TRANSPORT)):
+        for sha, expected in (('a' * 64, codec.COMPACT_TRANSPORT), (WM_IOV_SHA256, ANTHROPIC_SCHEMA_TRANSPORT)):
             config = {**self.config, 'mode': 'live'}
             with patch.object(preparation, 'configuration', return_value=config), \
                     patch('core.preparation_campaign.active_campaign_config', side_effect=lambda value, _: value), \
