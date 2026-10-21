@@ -371,7 +371,7 @@ class PreparationChoiceTransportTests(SimpleTestCase):
 
     def test_queue_keeps_wm_legacy_and_marks_only_new_ordinary_live_v5(self):
         from documents.sdk_service import WM_IOV_SHA256
-        for sha, expected in (('a' * 64, codec.COMPACT_TRANSPORT), (WM_IOV_SHA256, ANTHROPIC_SCHEMA_TRANSPORT)):
+        for sha, expected in (('a' * 64, codec.UNIT_POLICY_TRANSPORT), (WM_IOV_SHA256, ANTHROPIC_SCHEMA_TRANSPORT)):
             config = {**self.config, 'mode': 'live'}
             with patch.object(preparation, 'configuration', return_value=config), \
                     patch('core.preparation_campaign.active_campaign_config', side_effect=lambda value, _: value), \
