@@ -7,6 +7,7 @@ AI result, checked-by-default control or an unsaved edit cannot do that.
 import hashlib
 import json
 import re
+import unicodedata
 from types import SimpleNamespace
 from django.core import signing
 from django.core.exceptions import ValidationError
@@ -24,6 +25,152 @@ MODE_LABELS = {'atomic': 'One concise value', 'narrative': 'Relevant narrative f
 PATIENT_NAME_LABELS = {'none': 'No additional requirement', 'documented': 'Include documented patient name'}
 
 
+def _printed_name_subject(label):
+    """Resolve the requested person from complete, bounded printed clauses.
+
+    A completion actor is not an answer subject. Unknown instructions, competing
+    requested roles and exclusions of the requested person remain reviewable;
+    neither a model's subject nor its proposed meaning supplies missing context.
+    """
+    text = unicodedata.normalize('NFKC', label)
+    text = re.sub(r'([a-z])([A-Z])', r'\1 \2', text).casefold()
+    text = re.sub(r'(?m)^\s*\d+(?:[.)]\s*|\s+)', '', text)
+    clinical = r'(?:clinician|doctor|physician|provider|nurse|surgeon|therapist|practitioner)'
+    role = (r'(?:(?:referring|treating|attending|consulting|supervising)\s+)?'+clinical+
+            r'|patient|witness|guardian|parent|carer|caregiver|mother|father|contact|referrer|consultant|assessor|author|staff')
+    name = r'(?:(?:full|legal|first|last|given|family|middle|complete)\s+)*names?'
+    # Occupation and functional role are separate dimensions. A referring
+    # physician remains a physician; sibling occupations/roles are not aliases.
+    parents = {'physician': ('clinician',), 'surgeon': ('physician',),
+               'nurse': ('clinician',), 'therapist': ('clinician',),
+               'provider': ('clinician',), 'practitioner': ('clinician',),
+               'mother': ('parent',), 'father': ('parent',)}
+    unspecified_subject_roles = {'staff', 'author', 'assessor'}
+
+    def role_parts(value):
+        parts = value.split()
+        return parts[-1], tuple(parts[:-1])
+
+    def ancestry(occupation):
+        result, pending = set(), [occupation]
+        while pending:
+            current = pending.pop()
+            if current not in result:
+                result.add(current)
+                pending.extend(parents.get(current, ()))
+        return result
+
+    def is_clinical(value):
+        return 'clinician' in ancestry(role_parts(value)[0])
+    verbs = r'(?:record|document|enter|provide|give|identify|specify|state|write(?:\s+down)?|name(?!\s+of\b))'
+    actor = r'(?:the\s+)?(?:'+role+r')\s+(?:to\s+complete|to\s+fill\s+in|use\s+only)'
+    # These annotations affect presentation/completion, never whose name it is.
+    annotation = r'(?:please\s+print|in\s+block\s+letters|if\s+documented|'+actor+r'|for\s+(?:the\s+)?(?:'+role+r')\s+use)'
+    text = re.sub(r'\(\s*'+annotation+r'\s*\)', '', text)
+    text = text.replace('(', ',').replace(')', ',')
+    requested, explicit, excluded = set(), set(), set()
+
+    def person(value):
+        value = value.strip()
+        value = re.sub(r'^(?:the\s+)', '', value)
+        match = re.fullmatch(r'('+role+r')(?:[’\']s)?\s+'+name+
+                             r'|'+name+r'\s+of\s+(?:the\s+)?('+role+r')', value)
+        if match:
+            value = next(part for part in match.groups() if part is not None)
+        elif not re.fullmatch(role, value):
+            # The object of an explicit identity request can itself be qualified
+            # by a relative clause ("the clinician who referred the patient").
+            match = re.fullmatch(r'('+role+r')\s+who\s+(.+)', value)
+            if not match:
+                return None
+            value = match[1]
+            # Do not discard an arbitrary relative clause: it may identify a
+            # different person or exclude the heading's person. Admit a bounded
+            # affirmative identity or care relation; unknown relations stay open.
+            identity = re.fullmatch(r'is\s+(?:the\s+)?('+role+r')', match[2])
+            if identity:
+                return person(identity[1])
+            relation = re.fullmatch(
+                r'(referred|refers|treated|treats|supervised|supervises|'
+                r'assessed|examined|evaluated|saw|cared\s+for)\s+(?:the\s+)?patient', match[2])
+            if not relation:
+                return None
+            modifier = {'referred': 'referring', 'refers': 'referring',
+                        'treated': 'treating', 'treats': 'treating',
+                        'supervised': 'supervising', 'supervises': 'supervising'}.get(relation[1])
+            if modifier and re.fullmatch(clinical, value.split()[-1]):
+                parts = value.split()
+                if len(parts) > 1 and parts[0] != modifier:
+                    return None
+                value = modifier+' '+parts[-1]
+        if value in {'referrer', 'consultant'}:
+            return {'referrer': 'referring clinician', 'consultant': 'consulting clinician'}[value]
+        parts = value.split()
+        if re.fullmatch(clinical, parts[-1]):
+            return ' '.join([*parts[:-1], {'doctor': 'physician'}.get(parts[-1], parts[-1])])
+        return {'caregiver': 'carer'}.get(value, value)
+
+    for clause in re.split(r'[\n;.!?,]+', text):
+        clause = clause.strip(' :*')
+        if not clause:
+            continue
+        clause = re.sub(r'^(?:if|when)\s+documented\s*:\s*|\s+(?:if|when)\s+documented$', '', clause)
+        if re.fullmatch(annotation, clause):
+            continue
+        # A documentation condition controls availability, not the named role.
+        if re.fullmatch(r'(?:if|when)\s+documented', clause):
+            continue
+        negative = re.match(r'^(?:do\s+not\s+'+verbs+r'|exclude|excluding|omit|not|no)\s+', clause)
+        if negative:
+            target = person(clause[negative.end():])
+            if target is None:
+                return None
+            excluded.add(target)
+            continue
+        clause = re.sub(r'^(?:please\s+)?'+verbs+r'\s+(?:only\s+)?|^what\s+is\s+|^who\s+is\s+', '', clause)
+        clause = re.sub(r'\s+only$', '', clause)
+        target = person(clause)
+        if target is None:
+            # A generic continuation cannot qualify a bare name on its own.
+            if re.fullmatch(r'(?:the\s+)?'+name, clause):
+                continue
+            return None
+        requested.add(target)
+        if not (target.endswith('clinician') and re.search(r'\bclinician\s+who\b', clause)):
+            explicit.add(target)
+    # Only a positively established matching care role may refine a generic
+    # clinician to the heading's clinical occupation. Separate requests, unknown
+    # relations and different functional roles cannot refine each other.
+    if len(requested) == 2:
+        generic = [x for x in requested if x not in explicit and x.endswith(' clinician')]
+        specific = [x for x in requested if is_clinical(x) and x.split()[-1] != 'clinician']
+        if (len(generic) == len(specific) == 1
+                and ' '.join(specific[0].split()[:-1]) in ('', ' '.join(generic[0].split()[:-1]))):
+            requested.remove(generic[0])
+    if len(requested) != 1:
+        return None
+    target = next(iter(requested))
+    def excludes_target(value):
+        occupation, relation = role_parts(target)
+        other, other_relation = role_parts(value)
+        if occupation in unspecified_subject_roles or other in unspecified_subject_roles:
+            return True  # Their relationship to the requested person is unknown.
+        if relation and other_relation and relation != other_relation:
+            return False
+        # Exclusions apply to both a complete superclass and an overlapping
+        # unqualified/subclass request; neither can establish a safe sole target.
+        return occupation in ancestry(other) or other in ancestry(occupation)
+    if any(excludes_target(value) for value in excluded):
+        return None
+    if target == 'patient':
+        return 'patient'
+    if role_parts(target)[0] in unspecified_subject_roles:
+        return None
+    if is_clinical(target):
+        return 'clinician'
+    return 'other'
+
+
 def review_items(prep, items):
     """Ask once when a printed name label leaves the person's role unstated.
 
@@ -36,22 +183,12 @@ def review_items(prep, items):
     for item in items:
         row = {**item}
         definition = row.get('definition') or {}
-        # A role can be attached to another word by the legacy Word inspector
-        # (PatientFullname). Use spacing only for classification, not display.
-        # A role in an instruction ("clinician to complete") does not identify
-        # whose name belongs here; only a complete role/name phrase qualifies.
-        role_label = re.sub(r'([a-z])([A-Z])', r'\1 \2', row['field']['label'])
-        question_label = role_label.strip(' :*')
-        role_label = re.sub(r'\([^)]*\)', '', role_label).strip(' :*')
-        role = (r'(?:patient|clinician|doctor|physician|provider|nurse|surgeon|therapist|witness|'
-                r'guardian|parent|carer|caregiver|mother|father|contact|referrer|consultant|assessor|author|staff|practitioner)')
-        name = r'(?:(?:full|legal|first|last|given|family|middle|complete)\s+)*names?'
-        legacy_role_name = r'(?:the\s+)?'+role+r'(?:[’\']s)?\s+'+name+r'|'+name+r'\s+of\s+(?:the\s+)?'+role
-        role_name = r'(?:the\s+)?(?:'+legacy_role_name+r')'
-        qualified = (re.fullmatch(legacy_role_name, role_label, re.IGNORECASE)
-            or re.fullmatch(r'what\s+is\s+(?:'+role_name+r')\s*\?'
-                            r'|who\s+is\s+(?:the\s+)?(?:referring\s+)?'+role+r'\s*\?',
-                            question_label, re.IGNORECASE))
+        # Keep the contract's specific remediation until that finding is resolved.
+        # The printed-label adapter can then report any remaining name ambiguity.
+        if row.get('state') == 'unresolved' and row.get('reason'):
+            result.append(row)
+            continue
+        printed_subject = _printed_name_subject(row['field']['label'])
         field_corrected = bool(corrected)
         if definition.get('version') == 4:
             if hasattr(prep, 'candidate_sha256'):
@@ -59,9 +196,12 @@ def review_items(prep, items):
             else:
                 from .semantic_preparation import fully_reviewed_keys
             field_corrected = row['field']['key'] in fully_reviewed_keys(prep)
-        if (prep.state != 'approved' and not field_corrected and not qualified
+        if (prep.state != 'approved' and not field_corrected
                 and definition.get('value_type') == 'person_name'):
-            row.update(state='unresolved', reason='The name label does not specify whose name belongs here.')
+            if printed_subject is None:
+                row.update(state='unresolved', reason='The name label does not specify whose name belongs here.')
+            elif definition.get('scope', {}).get('subject') not in (None, printed_subject):
+                row.update(state='unresolved', reason='The proposed name subject does not match the person requested by the printed question.')
         result.append(row)
     return result
 

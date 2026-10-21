@@ -246,6 +246,26 @@ def _scope_matches(assertion, scope):
     return subject_ok and temporal_ok and polarity_ok and encounter_ok
 
 
+def _encounter_time_participant(assertion):
+    """A compiled, source-bound time participant can describe an encounter.
+
+    The graph compiler validates the exact performer reference, and the source
+    checker still adjudicates its ownership, topic, time and qualifications.
+    This admission does not turn the participant into the patient.
+    """
+    role = assertion.get('consumer_role')
+    time = assertion.get('time')
+    if (role not in ('time_total', 'time_work', 'time_exclusion', 'time_qualification')
+            or assertion.get('kind') != role or not isinstance(time, dict)):
+        return False
+    if (assertion.get('subject'), time.get('performer')) not in (
+            ('clinician', 'clinician'), ('other', 'staff')):
+        return False
+    performer = time.get('performer_ref')
+    return (isinstance(performer, dict) and bool(performer.get('quote'))
+            and performer.get('source_unit_id') in assertion.get('source_unit_ids', ()))
+
+
 def _component_scope_matches(assertion, definition, component):
     from documents.component_contracts import CONTRACT, ENCOUNTER_CONTRACTS
     contract = definition['component_contract']['contract']
@@ -254,7 +274,8 @@ def _component_scope_matches(assertion, definition, component):
     g.require(contract in ENCOUNTER_CONTRACTS, 'component_encounter_contract')
     scope = component['scope']
     subject = scope['subject']
-    subject_ok = subject=='unspecified' or assertion['subject']==subject or subject=='encounter' and assertion['subject']=='patient'
+    subject_ok = (subject=='unspecified' or assertion['subject']==subject
+        or subject=='encounter' and (assertion['subject']=='patient' or _encounter_time_participant(assertion)))
     temporal_ok = scope['temporality']=='any' or assertion['temporality']==scope['temporality']
     polarity_ok = scope['polarity']=='any' or (scope['polarity']=='positive' and assertion['polarity']=='affirmed') or (
         scope['polarity']=='negative' and assertion['polarity']=='negated')
@@ -303,6 +324,77 @@ def _measurement_display(notes, fact):
         g.require(bool(found),'measurement_display_scale')
         end = max(end,min(found))
     return notes[value['start']:end]
+
+
+def _documented_unit_display(notes, graph, fact, adjudication):
+    """Retain an owned measurement unit, without assigning one to context.
+
+    A complete literal time phrase can already contain its quantity and unit.
+    A scalar may use its compiled owner's exact attached time references. Both
+    forms retain source bytes; neither borrows a nearby measurement's unit.
+    """
+    from . import semantic_generation as literal
+    value = fact['value_evidence']
+    if fact['unit'] is not None or fact['scale'] is not None:
+        return _measurement_display(notes, fact), True
+    scalar = literal._source_number(value['quote']) is not None
+    measurement = fact['kind'] == 'measurement' or scalar
+    owner = graph['assertions'][graph['fact_assertions'][fact['id']]]
+    time = owner['time']
+    if (owner['consumer_role'] in ('time_total', 'time_work', 'time_exclusion', 'time_qualification')
+            and owner['kind'] == owner['consumer_role'] and time is not None):
+        # A full literal time quantity is still a measurement when the model
+        # omits its optional references. Only exact calendar/performer context
+        # can exempt numeric spans; other narrative topics are not retagged.
+        performer = time['performer_ref']
+        context = []
+        if performer is not None:
+            try:
+                _typed_value({'value_type':'person_name'}, performer['quote'])
+            except ValidationError:
+                pass
+            else:
+                role = {'clinician':'clinician_name', 'other':'other_name'}.get(owner['subject'])
+                if adjudication is not None and any(
+                    a['identity_role']==role and a['subject']==owner['subject']
+                    and adjudication['checked']['assertions'][a['id']]['verdict']=='confirmed' and any(
+                    graph['facts'][i]['kind']=='identity'
+                    and graph['facts'][i]['value_evidence']=={k:performer[k] for k in ('start','end','quote')}
+                    for i in a['fact_ids']) for a in graph['assertions'].values()):
+                    context.append(performer)
+        for evidence in (value, fact['timing']['evidence'], time['date_ref']):
+            if evidence is not None:
+                try:
+                    literal.complete_calendar_date(evidence['quote'])
+                except ValueError:
+                    continue
+                context.append(evidence)
+        # Reuse the unsupported fraction/magnitude components guarded by
+        # literal._number_fragment. Recognition requires review, not conversion.
+        unsupported = r'(?:hundred|thousand|million|billion|trillion|'+literal.FRACTION_WORD_PATTERN+r')'
+        number = (r'(?<!\w)(?:'+literal.NUMERIC_LITERAL+r')(?![\d.])|(?<!\w)(?:'
+            +literal.NUMBER_WORD_PATTERN+r'|'+unsupported+r')(?!\w)')
+        numbers = [(value['start']+match.start(), value['start']+match.end())
+            for match in re.finditer(number, value['quote'], re.I)
+            if not any(e['start'] <= value['start']+match.start()
+                < value['start']+match.end() <= e['end'] for e in context)]
+        numbers.extend((value['start']+i, value['start']+i+1)
+            for i, char in enumerate(value['quote']) if char.isnumeric()
+            and not any(e['start'] <= value['start']+i < value['start']+i+1 <= e['end'] for e in context))
+        measurement = measurement or bool(numbers)
+        quantity, unit = time['quantity_ref'], time['unit_ref']
+        own_quantity = quantity is not None and value['start'] <= quantity['start'] < quantity['end'] <= value['end']
+        if own_quantity:
+            measurement = True
+            attached = (unit is not None and quantity['source_unit_id'] == unit['source_unit_id']
+                and literal._source_number(quantity['quote']) is not None
+                and quantity['end'] <= unit['start'] and not notes[quantity['end']:unit['start']].strip()
+                and all(quantity['start'] <= start < end <= quantity['end'] for start, end in numbers))
+            if attached and value['start'] <= unit['start'] < unit['end'] <= value['end']:
+                return value['quote'], True
+            if (attached and scalar and (value['start'], value['end']) == (quantity['start'], quantity['end'])):
+                return notes[value['start']:unit['end']], True
+    return value['quote'], not measurement
 
 
 def _component_render(notes, graph, field, definition, component, selected, adjudication):
@@ -389,7 +481,14 @@ def _component_render(notes, graph, field, definition, component, selected, adju
     for fact in picked:
         value = fact['value_evidence']['quote']
         display = value
-        if component['unit_requirement'] in ('documented','printed'):
+        if (component['unit_requirement']=='documented'
+                and definition['component_contract']['contract'] in ENCOUNTER_CONTRACTS):
+            display, established = _documented_unit_display(notes, graph, fact, adjudication)
+            if not established:
+                error('component_unit_unestablished',fact['evidence'])
+            if definition['value_type'] in ('number','integer'):
+                error('numeric_documented_presentation_conflict',fact['evidence'])
+        elif component['unit_requirement'] in ('documented','printed'):
             if fact['unit'] is None and (component['unit_requirement']=='printed' or fact['scale'] is None):
                 error('component_unit_unestablished',fact['evidence'])
             elif component['unit_requirement']=='printed' and fact['unit'] != component['unit']:
