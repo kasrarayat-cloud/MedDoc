@@ -155,3 +155,129 @@ class QualifiedNameQuestionsTests(SimpleTestCase):
         unresolved=self.row("What is the patient's full name?")
         unresolved.update(state='unresolved',reason='Provider definitions disagree.')
         self.assertEqual(review_items(prep,[unresolved])[0],unresolved)
+
+    def test_complete_printed_questions_and_numbered_headings_identify_the_requested_person(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label in [
+            '17. Referring physician\nRecord the clinician who referred the patient, if documented.',
+            '02  Treating physician\nRecord the name of the treating physician.',
+            '3) Patient full name\nPlease enter the full name of the patient.',
+            'Record the clinician who assessed the patient.',
+            'Enter the guardian\u2019s legal name if documented.',
+            'If documented: record the referring physician\u2019s name.',
+            'When documented, provide the witness name.',
+            'PatientFullName (please print)',
+            'Ｐａｔｉｅｎｔ ｎａｍｅ',
+            'Patient name; clinician to complete',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'pass')
+
+    def test_completion_actors_or_model_subjects_do_not_qualify_generic_name_questions(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label in [
+            'Name', 'Full name', 'Name of person',
+            'Clinician to complete: Name', 'Name (for clinician use)',
+            'Full name (clinician to complete)', 'Clinician to fill in\nFull name',
+            'If documented, clinician to complete: Name',
+            'If the guardian is present, record the guardian name; otherwise record the patient name.',
+        ]:
+            for subject in ('patient', 'clinician', 'other'):
+                with self.subTest(label=label, proposed_subject=subject):
+                    row = self.row(label)
+                    row['definition']['scope'] = {'subject': subject}
+                    self.assertEqual(review_items(prep, [row])[0]['state'], 'unresolved')
+
+    def test_excluded_or_competing_people_do_not_become_the_requested_person(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label in [
+            'Do not record the patient name.', 'Not the physician name',
+            'Patient name; do not record the patient name.',
+            'Patient name (or guardian name)',
+            'Record the patient name or guardian name.',
+            'Physician name; Nurse name',
+            'Clinician name; Referring physician name',
+            'Treating physician name; Referring physician name',
+            'Patient name; Record the clinician who referred the patient.',
+            'Record the clinician who referred the patient or the guardian.',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'unresolved')
+        for label in [
+            'Patient name; do not record the guardian name.',
+            'Record the physician name, not the patient name.',
+            'Patient name (not guardian)',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'pass')
+
+    def test_printed_subject_must_match_the_proposal_without_clearing_other_findings(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label, subject, wrong in [
+            ('Referring physician\nRecord the clinician who referred the patient, if documented.', 'clinician', 'patient'),
+            ('Please enter the patient name.', 'patient', 'other'),
+            ('Record the guardian name.', 'other', 'clinician'),
+        ]:
+            row = self.row(label)
+            row['definition']['scope'] = {'subject': wrong}
+            before = deepcopy(row)
+            result = review_items(prep, [row])[0]
+            self.assertEqual(result['state'], 'unresolved')
+            self.assertIn('does not match', result['reason'])
+            self.assertEqual(row, before)
+            row['definition']['scope']['subject'] = subject
+            row.update(state='unresolved', reason='Independent field-contract finding remains.')
+            before = deepcopy(row)
+            self.assertEqual(review_items(prep, [row])[0], before)
+            self.assertEqual(row, before)
+
+    def test_relative_identity_and_exclusions_cannot_be_discarded_when_refining_a_heading(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label in [
+            'Referring physician name. Record the clinician who is different from the referring physician.',
+            'Referring physician name. Record the clinician who is other than the referring physician.',
+            'Referring physician name. Record the clinician who is not the referring physician.',
+            'Referring physician name. Record the clinician who works elsewhere.',
+            'Referring physician name. Record the clinician who treated the patient.',
+            'Referring physician name. Do not record the referring clinician name.',
+            'Referring clinician name. Exclude the referring physician name.',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'unresolved')
+        for label in [
+            'Referring physician name. Record the clinician who referred the patient.',
+            'Referring physician name. Record the clinician who is the referring physician.',
+            'Treating physician name. Record the clinician who treated the patient.',
+            'Name the referring physician.',
+            'Name of the patient',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'pass')
+
+    def test_role_exclusion_hierarchy_preserves_broader_roles_and_distinct_occupations(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label in [
+            'Staff name. Do not record clinician name.',
+            'Staff name', 'Author name', 'Assessor name',
+            'Referring physician name. Do not record physician name.',
+            'Referring nurse name. Exclude nurse name.',
+            'Surgeon name. Do not record physician name.',
+            'Mother name. Do not record parent name.',
+            'Physician name. Exclude clinician name.',
+            'Clinician name. Exclude physician name.',
+            'Physician name. Exclude staff name.',
+        ]:
+            for subject in ('patient', 'clinician', 'other'):
+                with self.subTest(label=label, proposed_subject=subject):
+                    row = self.row(label)
+                    row['definition']['scope'] = {'subject': subject}
+                    self.assertEqual(review_items(prep, [row])[0]['state'], 'unresolved')
+        for label in [
+            'Nurse name. Do not record physician name.',
+            'Mother name. Do not record father name.',
+            'Treating physician name. Do not record referring physician name.',
+            'Patient name. Exclude clinician name.',
+            'Record the staff who is the physician.',
+        ]:
+            with self.subTest(label=label):
+                self.assertEqual(review_items(prep, [self.row(label)])[0]['state'], 'pass')

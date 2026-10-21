@@ -537,3 +537,380 @@ class SourceAssertionGenerationTests(unittest.TestCase):
         self.assertIn('patient_name_omitted',[h['code'] for h in result['answers']['field0']['route_diagnostics']['holds']])
         case[4]=assignments(case[1],{'field0':['f0','f1']})
         self.assertEqual(run_case(case)[0]['answers']['field0']['status'],'supported')
+
+
+class EncounterTimeParticipantScopeTests(unittest.TestCase):
+    @staticmethod
+    def encounter_case(case):
+        from documents.component_contracts import CHOICE_CONTRACT
+        case = deepcopy(case)
+        definition = case[2]['field0']
+        definition['scope']['subject'] = 'encounter'
+        contract = definition['component_contract']
+        contract['contract'] = CHOICE_CONTRACT
+        for component in contract['components']:
+            component['scope']['subject'] = 'encounter'
+            component.update(encounter_scope='all_documented', choices=[], option_quote=None)
+        return case
+
+    @classmethod
+    def staff_case(cls):
+        phrase = 'Staff spent 6 minutes on intake, excluded from the physician total.'
+        case = list(base_case(phrase))
+        fields, defs = definitions(('Staff time excluded from the encounter',))
+        case[1:3] = fields, defs
+        notes = case[0]
+        value = fact(notes, 'f2', phrase, subject='other')
+        value['subject']['name_span'] = ref(notes, 'Staff')
+        time = {'performer':'staff', 'performer_ref':ref(notes, 'Staff'),
+                'date_ref':None, 'quantity_ref':ref(notes, '6'),
+                'unit_ref':ref(notes, 'minutes'), 'exclusion':'staff'}
+        claim = assertion(notes, 'a2', ['f2'], phrase, subject='other',
+            kind='time_exclusion', consumer_role='time_exclusion', time=time)
+        case[3]['facts'].append(value)
+        case[3]['assertions'].append(claim)
+        case[3] = extraction(notes, case[3]['facts'], case[3]['assertions'])
+        case[4] = assignments(fields, {'field0':['f2']}, {'field0':['a2']})
+        return cls.encounter_case(case)
+
+    def test_encounter_component_retains_typed_clinician_time_without_relabelling(self):
+        case = self.encounter_case(stated_time_case())
+        result, calls = run_case(case)
+        self.assertEqual(result['answers']['field0']['status'], 'supported')
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(result['interpretation']['graph']['assertions']['total']['subject'], 'clinician')
+        self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+
+    def test_encounter_component_retains_typed_staff_exclusion_without_patient_relabelling(self):
+        case = self.staff_case()
+        result, _ = run_case(case)
+        answer = result['answers']['field0']
+        self.assertEqual(answer['status'], 'supported')
+        self.assertIn('Staff spent 6 minutes', answer['text'])
+        self.assertIn('excluded from the physician total', answer['text'])
+        self.assertEqual(result['interpretation']['graph']['assertions']['a2']['subject'], 'other')
+
+    def test_admission_requires_matching_typed_role_performer_and_bound_source(self):
+        case = self.staff_case()
+        compiled = graph.compile_graph(case[0], case[3])
+        claim = compiled['assertions']['a2']
+        definition = case[2]['field0']
+        component = definition['component_contract']['components'][0]
+        self.assertTrue(generation._component_scope_matches(claim, definition, component))
+        for update in ({'kind':'clinical'}, {'consumer_role':'family_history'},
+                       {'consumer_role':'none'}, {'subject':'uncertain'}, {'time':None}):
+            bad = deepcopy(claim); bad.update(update)
+            with self.subTest(update=update):
+                self.assertFalse(generation._component_scope_matches(bad, definition, component))
+        for performer in ('patient', 'other', 'unknown', 'clinician'):
+            bad = deepcopy(claim); bad['time']['performer'] = performer
+            with self.subTest(performer=performer):
+                self.assertFalse(generation._component_scope_matches(bad, definition, component))
+        for evidence in (None, {}, {'quote':'Staff', 'source_unit_id':9999},
+                         {'quote':'', 'source_unit_id':claim['source_unit_ids'][0]}):
+            bad = deepcopy(claim); bad['time']['performer_ref'] = evidence
+            with self.subTest(evidence=evidence):
+                self.assertFalse(generation._component_scope_matches(bad, definition, component))
+
+    def test_all_four_explicit_clinician_time_roles_use_the_same_admission(self):
+        case = self.encounter_case(stated_time_case())
+        claim = graph.compile_graph(case[0], case[3])['assertions']['total']
+        definition = case[2]['field0']; component = definition['component_contract']['components'][0]
+        for role in ('time_total', 'time_work', 'time_exclusion', 'time_qualification'):
+            value = deepcopy(claim); value.update(kind=role, consumer_role=role)
+            with self.subTest(role=role):
+                self.assertTrue(generation._component_scope_matches(value, definition, component))
+        value = deepcopy(claim); value['time']['performer'] = 'staff'
+        self.assertFalse(generation._component_scope_matches(value, definition, component))
+
+    def test_legacy_scope_and_other_destination_owners_do_not_gain_permission(self):
+        from documents.component_contracts import CONTRACT
+        case = self.encounter_case(stated_time_case())
+        claim = graph.compile_graph(case[0], case[3])['assertions']['total']
+        definition = case[2]['field0']; component = definition['component_contract']['components'][0]
+        old = deepcopy(definition); old['component_contract']['contract'] = CONTRACT
+        self.assertFalse(generation._component_scope_matches(claim, old, component))
+        self.assertFalse(generation._scope_matches(claim, component['scope']))
+        for subject in ('patient', 'other'):
+            c = deepcopy(component); c['scope']['subject'] = subject
+            self.assertFalse(generation._component_scope_matches(claim, definition, c))
+
+    def test_time_polarity_and_encounter_restrictions_still_apply(self):
+        case = self.encounter_case(stated_time_case())
+        claim = graph.compile_graph(case[0], case[3])['assertions']['total']
+        definition = case[2]['field0']; component = deepcopy(definition['component_contract']['components'][0])
+        component['encounter_scope'] = 'current'
+        for update in ({'encounter':'unknown'}, {'encounter':'future'}, {'encounter':'past'},
+                       {'temporality':'past'}, {'temporality':'future'}):
+            bad = deepcopy(claim); bad.update(update)
+            self.assertFalse(generation._component_scope_matches(bad, definition, component))
+        component['scope']['polarity'] = 'positive'
+        for polarity in ('negated', 'uncertain', 'mixed'):
+            bad = deepcopy(claim); bad['polarity'] = polarity
+            self.assertFalse(generation._component_scope_matches(bad, definition, component))
+
+    def test_compiler_and_independent_source_checker_remain_gates(self):
+        case = self.staff_case()
+        bad = deepcopy(case)
+        bad[3]['assertions'][-1]['time']['performer_ref'] = None
+        with self.assertRaisesRegex(ValidationError, 'time_performer_evidence'):
+            graph.compile_graph(bad[0], bad[3])
+        def unresolved(check, *_):
+            next(x for x in check['assertions'] if x['id']=='a2').update(
+                verdict='unknown', reason='The source owner is unresolved.')
+        held, _ = run_case(case, unresolved)
+        self.assertNotEqual(held['answers']['field0']['status'], 'supported')
+
+
+class DocumentedUnitParticipantTests(unittest.TestCase):
+    @staticmethod
+    def time_case(*, full_text=False, context=False):
+        case = EncounterTimeParticipantScopeTests.encounter_case(stated_time_case())
+        definition = case[2]['field0']
+        definition.update(value_type='text', answer_mode='narrative')
+        component = definition['component_contract']['components'][0]
+        component.update(value_type='text', unit_requirement='documented')
+        total = next(a for a in case[3]['assertions'] if a['id']=='total')
+        quantity = next(f for f in case[3]['facts'] if f['id']=='ftime')
+        if full_text:
+            quantity.update(kind='finding', value_span=ref(case[0], 'Nora spent 33 minutes on this service date.'))
+        if context:
+            date = fact(case[0], 'fdate', '14 June 2027', subject='clinician', kind='identity')
+            case[3]['facts'].append(date)
+            total['fact_ids'].append('fdate')
+            case[4]['fields'][0]['components'][0]['fact_ids'].append('fdate')
+        return case
+
+    def test_owned_scalar_time_keeps_exact_unit_without_mutating_fact(self):
+        for quantity in ('33', 'thirty-three'):
+            case = self.time_case()
+            if quantity != '33':
+                # Reconstruct every source reference rather than moving offsets.
+                notes, fields, defs, raw, assigned = case
+                notes = notes.replace('33', quantity)
+                raw['facts'] = [fact(notes, f['id'], quantity if f['id']=='ftime' else f['value_span']['quote'],
+                    subject=f['subject']['kind'], kind=f['kind']) for f in raw['facts']]
+                raw['assertions'] = [deepcopy(a) for a in raw['assertions']]
+                for a in raw['assertions']:
+                    a['predicate_refs'] = [ref(notes, r['quote'].replace('33', quantity)) for r in a['predicate_refs']]
+                    if a['time'] is not None and a['time']['quantity_ref'] is not None:
+                        r = a['time']['quantity_ref']; a['time']['quantity_ref'] = {**r, 'quote':r['quote'].replace('33', quantity)}
+                case = [notes, fields, defs, extraction(notes, raw['facts'], raw['assertions'], raw['relationships'], raw['time_accounts']), assigned]
+                case[3]['time_accounts'][0]['total_ref']['quote'] = quantity
+            before = deepcopy(case)
+            result, _ = run_case(case)
+            answer = result['answers']['field0']
+            self.assertEqual(answer['status'], 'supported')
+            self.assertEqual(answer['text'], quantity+' minutes')
+            self.assertIsNone(answer['facts'][0]['unit'])
+            self.assertEqual(case, before)
+            self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+
+    def test_context_date_does_not_invent_a_measurement_unit(self):
+        case = self.time_case(context=True)
+        result, _ = run_case(case)
+        answer = result['answers']['field0']
+        self.assertEqual(answer['status'], 'supported')
+        self.assertEqual(answer['text'], '33 minutes; 14 June 2027')
+        self.assertEqual(answer['facts'][-1]['value_evidence']['quote'], '14 June 2027')
+        self.assertIsNone(answer['facts'][-1]['unit'])
+
+    def test_full_literal_time_and_staff_exclusion_already_retain_owned_units(self):
+        cases = [self.time_case(full_text=True), EncounterTimeParticipantScopeTests.staff_case()]
+        cases[1][2]['field0']['component_contract']['components'][0]['unit_requirement'] = 'documented'
+        for case in cases:
+            result, _ = run_case(case)
+            answer = result['answers']['field0']
+            self.assertEqual(answer['status'], 'supported')
+            self.assertEqual(answer['text'], case[3]['facts'][-1]['value_span']['quote'])
+            self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+
+    def test_numeric_missing_unattached_and_foreign_units_stay_held(self):
+        # The graph compiler allows source refs within an assertion's units;
+        # the rendering fallback must additionally bind this exact quantity.
+        reference = stated_time_case()
+        work = next(a for a in reference[3]['assertions'] if a['id']=='w1')
+        for update in ({'quantity_ref':None, 'unit_ref':None},
+                       {'quantity_ref':work['time']['quantity_ref']},
+                       {'unit_ref':work['time']['unit_ref']}):
+            case = self.time_case()
+            total = next(a for a in case[3]['assertions'] if a['id']=='total')
+            total['time'].update(update)
+            for name in ('quantity_ref', 'unit_ref'):
+                if total['time'][name] is not None:
+                    unit = total['time'][name]['source_unit_id']
+                    if unit not in total['source_unit_ids']: total['source_unit_ids'].append(unit)
+            case[3] = extraction(case[0], case[3]['facts'], case[3]['assertions'], [], [])
+            answer = run_case(case)[0]['answers']['field0']
+            self.assertNotEqual(answer['status'], 'supported')
+            self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_same_statement_unattached_unit_stays_held(self):
+        old = 'Staff spent 6 minutes on intake, excluded from the physician total.'
+        phrase = 'Staff spent 6 while another activity took 9 minutes, excluded from the physician total.'
+        case = EncounterTimeParticipantScopeTests.staff_case()
+        notes = case[0].replace(old, phrase)
+        value = fact(notes, 'f2', phrase, subject='other')
+        value['subject']['name_span'] = ref(notes, 'Staff')
+        claim = assertion(notes, 'a2', ['f2'], phrase, subject='other',
+            kind='time_exclusion', consumer_role='time_exclusion', time={
+                'performer':'staff', 'performer_ref':ref(notes, 'Staff'), 'date_ref':None,
+                'quantity_ref':ref(notes, '6'), 'unit_ref':ref(notes, 'minutes'), 'exclusion':'staff'})
+        case[0] = notes
+        case[3] = extraction(notes, case[3]['facts'][:-1]+[value], case[3]['assertions'][:-1]+[claim])
+        case[2]['field0']['component_contract']['components'][0]['unit_requirement'] = 'documented'
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_full_time_text_cannot_borrow_another_measurements_unit(self):
+        case = self.time_case(full_text=True)
+        total = next(a for a in case[3]['assertions'] if a['id']=='total')
+        other = next(a for a in case[3]['assertions'] if a['id']=='w1')
+        total['time']['unit_ref'] = deepcopy(other['time']['unit_ref'])
+        total['source_unit_ids'].extend(i for i in other['source_unit_ids'] if i not in total['source_unit_ids'])
+        case[3] = extraction(case[0], case[3]['facts'], case[3]['assertions'], [], [])
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_printed_unit_policy_does_not_use_time_fallback(self):
+        case = self.time_case()
+        case[1][0]['label'] = 'Stated minutes'
+        component = case[2]['field0']['component_contract']['components'][0]
+        component.update(question_quote='Stated minutes', unit='minutes', unit_requirement='printed')
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_legacy_component_unit_behavior_is_unchanged(self):
+        from documents.component_contracts import fixture
+        case = self.time_case(context=True)
+        definition = case[2]['field0']
+        definition['scope']['subject'] = 'clinician'
+        definition['component_contract'] = fixture(case[1][0], definition)
+        definition['component_contract']['components'][0]['unit_requirement'] = 'documented'
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertEqual([h['code'] for h in answer['route_diagnostics']['holds']],
+                         ['component_unit_unestablished', 'component_unit_unestablished'])
+
+    def test_bare_number_cannot_escape_required_unit_by_changing_fact_kind(self):
+        for kind in ('measurement', 'finding', 'identity'):
+            case = self.time_case()
+            next(f for f in case[3]['facts'] if f['id']=='ftime')['kind'] = kind
+            total = next(a for a in case[3]['assertions'] if a['id']=='total')
+            total['time'].update(quantity_ref=None, unit_ref=None)
+            case[3] = extraction(case[0], case[3]['facts'], case[3]['assertions'])
+            answer = run_case(case)[0]['answers']['field0']
+            self.assertNotEqual(answer['status'], 'supported')
+            self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    @staticmethod
+    def staff_phrase_case(phrase, *, quantity=None, unit=None, performer='Staff', date=None, kind='finding'):
+        original = 'Staff spent 6 minutes on intake, excluded from the physician total.'
+        case = EncounterTimeParticipantScopeTests.staff_case()
+        notes = case[0].replace(original, phrase)
+        value = fact(notes, 'f2', phrase, subject='other', kind=kind)
+        value['subject']['name_span'] = ref(notes, performer)
+        claim = assertion(notes, 'a2', ['f2'], phrase, subject='other',
+            kind='time_exclusion', consumer_role='time_exclusion', time={
+                'performer':'staff', 'performer_ref':ref(notes, performer),
+                'date_ref':ref(notes, date) if date else None,
+                'quantity_ref':ref(notes, quantity) if quantity else None,
+                'unit_ref':ref(notes, unit) if unit else None, 'exclusion':'staff'})
+        case[0] = notes
+        case[3] = extraction(notes, case[3]['facts'][:-1]+[value], case[3]['assertions'][:-1]+[claim])
+        case[2]['field0']['component_contract']['components'][0]['unit_requirement'] = 'documented'
+        return case
+
+    def test_full_time_quantity_with_omitted_pair_cannot_become_context(self):
+        for phrase in ('Staff spent 6 on intake, excluded from the physician total.',
+                       'Staff spent six on intake, excluded from the physician total.',
+                       'Staff spent 6minutes on intake, excluded from the physician total.',
+                       'Staff spent 6 while another activity took 9 minutes, excluded from the physician total.'):
+            for kind in ('finding', 'history', 'identity', 'measurement'):
+                case = self.staff_phrase_case(phrase, kind=kind)
+                result, _ = run_case(case)
+                answer = result['answers']['field0']
+                self.assertNotEqual(answer['status'], 'supported')
+                self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+                self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+
+    def test_whole_time_phrase_never_borrows_a_second_quantitys_pair(self):
+        phrase = 'Staff spent 6 while another activity took 9 minutes, excluded from the physician total.'
+        case = self.staff_phrase_case(phrase, quantity='9', unit='minutes')
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertNotEqual(answer['status'], 'supported')
+        self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_source_bound_performer_and_calendar_numbers_are_context(self):
+        phrase = 'Team One spent 6 minutes on intake on 14 June 2027, excluded from the physician total.'
+        case = self.staff_phrase_case(phrase, quantity='6', unit='minutes', performer='Team One', date='14 June 2027')
+        name = fact(case[0], 'fperformer', 'Team One', subject='other', kind='identity')
+        name['subject']['name_span'] = ref(case[0], 'Team One')
+        identity = assertion(case[0], 'performer_identity', ['fperformer'], 'Team One', subject='other',
+            kind='identity', identity_role='other_name', consumer_role='none')
+        case[3] = extraction(case[0], case[3]['facts']+[name], case[3]['assertions']+[identity])
+        result, _ = run_case(case)
+        answer = result['answers']['field0']
+        self.assertEqual(answer['status'], 'supported')
+        self.assertEqual(answer['text'], phrase)
+        self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+        def unresolved(check, *_):
+            next(row for row in check['assertions'] if row['id']=='performer_identity').update(
+                verdict='unknown', reason='The performer identity is not established.')
+        held = run_case(case, unresolved)[0]['answers']['field0']
+        self.assertNotEqual(held['status'], 'supported')
+        self.assertIn('component_unit_unestablished', [h['code'] for h in held['route_diagnostics']['holds']])
+        bad = self.staff_phrase_case('Staff spent 6 on intake, excluded from the physician total.', date='6')
+        held = run_case(bad)[0]['answers']['field0']
+        self.assertIn('component_unit_unestablished', [h['code'] for h in held['route_diagnostics']['holds']])
+
+    def test_broad_performer_or_date_reference_cannot_mask_a_time_quantity(self):
+        phrase = 'Staff spent six on intake, excluded from the physician total.'
+        for key in ('performer_ref', 'date_ref'):
+            case = self.staff_phrase_case(phrase)
+            case[3]['assertions'][-1]['time'][key] = ref(case[0], phrase)
+            answer = run_case(case)[0]['answers']['field0']
+            self.assertNotEqual(answer['status'], 'supported')
+            self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+
+    def test_non_time_context_count_is_not_retagged_as_a_time_measurement(self):
+        phrase = 'Reviewed 3 records.'
+        case = list(base_case(phrase))
+        case[3]['facts'].append(fact(case[0], 'f2', phrase))
+        case[3]['assertions'].append(assertion(case[0], 'a2', ['f2'], phrase, kind='context', consumer_role='none'))
+        case[3] = extraction(case[0], case[3]['facts'], case[3]['assertions'])
+        case[4] = assignments(case[1], {'field0':['f2']}, {'field0':['a2']})
+        case = EncounterTimeParticipantScopeTests.encounter_case(case)
+        case[2]['field0']['component_contract']['components'][0]['unit_requirement'] = 'documented'
+        answer = run_case(case)[0]['answers']['field0']
+        self.assertEqual(answer['status'], 'supported')
+        self.assertEqual(answer['text'], phrase)
+
+    def test_unsupported_time_fractions_magnitudes_and_numeric_glyphs_stay_held(self):
+        for expression in ('half', 'a quarter', '½', 'a hundred', 'one thousand',
+                           'a million', 'point five', 'decimal six', '⅓', 'Ⅳ', '²', '四'):
+            phrase = 'Staff spent '+expression+' on intake, excluded from the physician total.'
+            case = self.staff_phrase_case(phrase)
+            before = deepcopy(case)
+            result, _ = run_case(case)
+            answer = result['answers']['field0']
+            self.assertNotEqual(answer['status'], 'supported')
+            self.assertIn('component_unit_unestablished', [h['code'] for h in answer['route_diagnostics']['holds']])
+            self.assertEqual(case, before)
+            self.assertEqual(generation.restore(case[0], result['interpretation']), result['answers'])
+
+    def test_known_quantity_unit_and_nonquantity_time_context_remain_supported(self):
+        for quantity in ('6.5', 'six'):
+            phrase = 'Staff spent '+quantity+' minutes on intake, excluded from the physician total.'
+            case = self.staff_phrase_case(phrase, quantity=quantity, unit='minutes')
+            answer = run_case(case)[0]['answers']['field0']
+            self.assertEqual(answer['status'], 'supported')
+            self.assertEqual(answer['text'], phrase)
+        # 'point' is not itself a quantitative amount; the existing numeric
+        # components in 'point five' are held without inventing a conversion.
+        phrase = 'Staff time is excluded at this point.'
+        case = self.staff_phrase_case(phrase)
+        self.assertEqual(run_case(case)[0]['answers']['field0']['status'], 'supported')
