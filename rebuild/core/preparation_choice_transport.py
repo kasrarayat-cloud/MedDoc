@@ -13,11 +13,14 @@ QUOTE_TRANSPORT = 'anthropic-shared-component-choices-quote-json-v3'
 TRANSPORT = 'anthropic-shared-components-json-v4'
 COMPACT_TRANSPORT = 'anthropic-shared-component-rows-json-v5'
 UNIT_POLICY_TRANSPORT = 'anthropic-shared-component-rows-unit-policy-json-v6'
-TRANSPORTS = (ARRAY_TRANSPORT, QUOTE_TRANSPORT, TRANSPORT, COMPACT_TRANSPORT, UNIT_POLICY_TRANSPORT)
+LABEL_REFERENCE_TRANSPORT = 'anthropic-shared-component-rows-label-reference-json-v7'
+TRANSPORTS = (ARRAY_TRANSPORT, QUOTE_TRANSPORT, TRANSPORT, COMPACT_TRANSPORT, UNIT_POLICY_TRANSPORT,
+              LABEL_REFERENCE_TRANSPORT)
 COMPONENT_COLUMNS = ('id', 'question_quote', 'label', 'meaning', 'value_type', 'scope',
                      'unit', 'unit_requirement', 'required', 'encounter_scope', 'choices', 'option_quote')
 UNIT_POLICY_COLUMNS = ('id', 'question_quote', 'label', 'meaning', 'value_type', 'scope',
                        'unit_policy', 'required', 'encounter_scope', 'choices', 'option_quote')
+LABEL_REFERENCE_COLUMNS = tuple('label_ref' if key == 'label' else key for key in UNIT_POLICY_COLUMNS)
 SCOPE_COLUMNS = ('subject', 'temporality', 'polarity')
 MAX_ENCODED_BYTES = 2 * 1024 * 1024  # The existing retained-response byte bound.
 INSTRUCTIONS = (
@@ -125,6 +128,23 @@ UNIT_POLICY_INSTRUCTIONS = (
     'approval; unresolved source or scope uncertainty remains for explicit review. '
     'This representation grants no semantic approval and changes no canonical constraint. '
 )
+LABEL_REFERENCE_INSTRUCTIONS = UNIT_POLICY_INSTRUCTIONS.replace(
+    UNIT_POLICY_TRANSPORT, LABEL_REFERENCE_TRANSPORT, 1).replace(
+    '[id, question_quote, label, meaning, value_type, scope,',
+    '[id, question_quote, label_ref, meaning, value_type, scope,', 1).replace(
+    'label is a string or null;',
+    'label_ref is null for plain rendering; for labelled rendering it is EXACTLY '
+    '["question_quote"], ["question", start, end], or ["meaning", start, end]. '
+    'Prefer ["question_quote"] when that complete component question_quote is a clear distinct label. '
+    'The first reference restores that same question_quote verbatim. The other references restore '
+    'the exact substring of this field\'s ORIGINAL question label or this outer definition.meaning. '
+    'start/end are zero-based Unicode code-point offsets with an exclusive end, not UTF-8 bytes '
+    'or UTF-16 units; both must be JSON integers with 0 <= start < end <= source length. '
+    'References must select complete literal words/phrases at the unchanged source boundaries. '
+    'Use an exact meaning span only when a generic question needs distinct reviewed component labels. '
+    'No free label text, casing change, inferred label, default or reference to another field is allowed. '
+    'Protected rendering still has no components. Labels are display requirements only, never '
+    'evidence of clinical facts, complete meaning, eligibility, identity or approval;', 1)
 
 
 def invalid():
@@ -135,6 +155,8 @@ def invalid():
 def instructions(transport):
     if transport not in TRANSPORTS:
         raise invalid()
+    if transport == LABEL_REFERENCE_TRANSPORT:
+        return LABEL_REFERENCE_INSTRUCTIONS
     if transport == UNIT_POLICY_TRANSPORT:
         return UNIT_POLICY_INSTRUCTIONS
     if transport == COMPACT_TRANSPORT:
@@ -151,6 +173,29 @@ def wire_schema(canonical, transport=TRANSPORT):
     try:
         contract = (value['properties']['answer_definitions']['properties']['fields']['items']
                     ['properties']['definition']['properties']['component_contract']['properties'])
+        if transport == LABEL_REFERENCE_TRANSPORT:
+            original = contract['components']
+            if (original['type'] != 'array' or original['items']['type'] != 'object'
+                    or set(original['items']['properties']) != set(COMPONENT_COLUMNS)
+                    or set(original['items']['required']) != set(COMPONENT_COLUMNS)):
+                raise invalid()
+            contract['components'] = {'type': 'string', 'description': (
+                'JSON text containing ordered rows of EXACTLY eleven explicit values: '
+                + json.dumps(LABEL_REFERENCE_COLUMNS) + '. scope is exactly '
+                + json.dumps(SCOPE_COLUMNS) + ' as three strings in order. '
+                'label_ref is null only for plain rendering; labelled rendering requires exactly '
+                '["question_quote"], ["question", start, end], or ["meaning", start, end]. '
+                'Restore the same component question_quote or the exact source substring. question '
+                'means this field\'s immutable original question, meaning means its outer definition.meaning. '
+                'Offsets are native integers, zero-based Unicode code points, exclusive end, '
+                '0 <= start < end <= len(source), selecting literal word/phrase boundaries. '
+                'No label string position, normalization, inference, omission or default. '
+                'unit_policy is exactly ["none"], ["documented"], or ["printed", literal_unit]. '
+                'Reference-only RESTORED canonical object schema after decode, NOT a wire row; '
+                'NEVER emit separate label, unit or unit_requirement positions. Every unchanged '
+                'canonical source/label/type/scope/unit/choice/protection check remains mandatory: '
+                + json.dumps(original, ensure_ascii=False, sort_keys=True))}
+            return value
         if transport == UNIT_POLICY_TRANSPORT:
             original = contract['components']
             if (original['type'] != 'array' or original['items']['type'] != 'object'
@@ -414,9 +459,149 @@ def decode_unit_policy_rows(response):
     return value
 
 
-def decode(response, transport=TRANSPORT):
+def _label_bound_rows(value, fields):
+    """Use only the caller's immutable field inventory, never response field text."""
+    if type(fields) is not list:
+        raise invalid()
+    originals = {}
+    for field in fields:
+        if (type(field) is not dict or type(field.get('key')) is not str
+                or field['key'] in originals or type(field.get('label')) is not str):
+            raise invalid()
+        originals[field['key']] = field
+    try:
+        rows = value['answer_definitions']['fields']
+        if type(rows) is not list:
+            raise invalid()
+        seen, bound = set(), []
+        for row in rows:
+            if (type(row) is not dict or type(row.get('field_key')) is not str
+                    or row['field_key'] in seen or row['field_key'] not in originals
+                    or type(row.get('definition')) is not dict):
+                raise invalid()
+            seen.add(row['field_key'])
+            contract = row['definition']['component_contract']
+            if type(contract) is not dict or contract['contract'] != 'field-components-v3':
+                raise invalid()
+            bound.append((row['definition'], contract, originals[row['field_key']]))
+        if seen != set(originals):
+            raise invalid()
+        return bound
+    except (KeyError, TypeError):
+        raise invalid() from None
+
+
+def _label_span(source, start, end):
+    """Exact code-point slice with the same literal boundaries as canonical labels."""
+    if (type(source) is not str or type(start) is not int or type(end) is not int
+            or not 0 <= start < end <= len(source)):
+        raise invalid()
+    source.encode('utf-8')  # Refuse unpaired surrogates; never normalize Unicode.
+    label = source[start:end]
+    if (not label.strip() or len(label) > 2000
+            or start and source[start-1].isalnum() and label[0].isalnum()
+            or end < len(source) and source[end].isalnum() and label[-1].isalnum()):
+        raise invalid()
+    return label
+
+
+def _label_reference(component, definition, field):
+    label = component['label']
+    if definition['component_contract']['rendering'] == 'plain' and label is None:
+        return None
+    if (definition['component_contract']['rendering'] != 'labelled'
+            or type(label) is not str or not label.strip()):
+        raise invalid()
+    if label == component['question_quote']:
+        return ['question_quote']
+    # The canonical validator admits only literal question/outer-meaning labels.
+    # Preserve every such label exactly, including the generic-heading case.
+    for tag, source in (('question', field['label']), ('meaning', definition['meaning'])):
+        start = source.find(label)
+        while start != -1:
+            try:
+                if _label_span(source, start, start + len(label)) == label:
+                    return [tag, start, start + len(label)]
+            except DocumentError:
+                pass
+            start = source.find(label, start + 1)
+    raise invalid()
+
+
+def encode_label_reference_rows(response, fields):
+    """Strict inverse for valid canonical definitions, never historical repair."""
+    from documents.semantic_preparation_roles import validate_definitions
+    try:
+        bound = _label_bound_rows(response, fields)
+        validate_definitions(fields, {row['field_key']: row['definition']
+                                    for row in response['answer_definitions']['fields']})
+        value = encode_unit_policy_rows(response)
+        for (definition, contract, field), (_, encoded, _) in zip(bound, _label_bound_rows(value, fields)):
+            rows = json.loads(encoded['components'])
+            for component, row in zip(contract['components'], rows):
+                row[2] = _label_reference(component, definition, field)
+            encoded['components'] = json.dumps(rows, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+        if decode_label_reference_rows(value, fields) != response:
+            raise invalid()
+        return value
+    except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
+        raise invalid() from None
+
+
+def decode_label_reference_rows(response, fields):
+    """Resolve display references only; all unchanged canonical checks still follow."""
+    value = deepcopy(response)
+
+    def constant(_):
+        raise ValueError('Non-JSON constant')
+
+    def unique_object(pairs):
+        result = {}
+        for key, item in pairs:
+            if key in result:
+                raise ValueError('Duplicate JSON property')
+            result[key] = item
+        return result
+
+    try:
+        for definition, contract, field in _label_bound_rows(value, fields):
+            encoded = contract['components']
+            if type(encoded) is not str or len(encoded.encode('utf-8')) > MAX_ENCODED_BYTES:
+                raise invalid()
+            rows = json.loads(encoded, parse_constant=constant, object_pairs_hook=unique_object)
+            if type(rows) is not list or contract['rendering'] not in ('plain', 'labelled', 'protected'):
+                raise invalid()
+            if contract['rendering'] == 'protected' and rows:
+                raise invalid()
+            for row in rows:
+                if type(row) is not list or len(row) != len(LABEL_REFERENCE_COLUMNS):
+                    raise invalid()
+                reference = row[2]
+                if contract['rendering'] == 'plain' and reference is None:
+                    label = None
+                elif contract['rendering'] == 'labelled' and type(reference) is list:
+                    if reference == ['question_quote'] and type(row[1]) is str:
+                        label = row[1]
+                    elif (len(reference) == 3 and type(reference[0]) is str
+                          and reference[0] in ('question', 'meaning')):
+                        source = field['label'] if reference[0] == 'question' else definition['meaning']
+                        label = _label_span(source, reference[1], reference[2])
+                    else:
+                        raise invalid()
+                else:
+                    raise invalid()
+                row[2] = label
+            contract['components'] = json.dumps(rows, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
+        return decode_unit_policy_rows(value)
+    except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
+        raise invalid() from None
+
+
+def decode(response, transport=TRANSPORT, *, fields=None):
     """Decode losslessly, then let the unchanged full canonical validator judge it."""
     instructions(transport)
+    if transport == LABEL_REFERENCE_TRANSPORT:
+        return decode_label_reference_rows(response, fields)
     if transport == UNIT_POLICY_TRANSPORT:
         return decode_unit_policy_rows(response)
     if transport == COMPACT_TRANSPORT:
