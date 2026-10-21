@@ -22,6 +22,7 @@ from .template_source import approval_binding
 from . import word_contract
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 from . import preparation_choice_transport as choice_transport
+from . import preparation_stream_transport as stream_transport
 from documents.question_context import CONFIG_KEY as QUESTION_CONTEXT_KEY, CONTEXT as QUESTION_CONTEXT, validate_context as validate_question_context, validate_binding as validate_question_binding
 from documents.signing_source_context import CONFIG_KEY as SIGNING_CONTEXT_KEY, CONTEXT as SOURCE_SIGNING_CONTEXT, validate_context as validate_signing_context
 
@@ -88,6 +89,13 @@ def schema_transport(config):
             raise DocumentError('The choice transport requires its complete v3 Word preparation contract.',
                                 'invalid_proposal')
     return value
+
+
+def streaming_transport(config):
+    try:
+        return stream_transport.enabled(config)
+    except ValueError:
+        raise DocumentError('Unsupported explicit preparation provider transport.', 'invalid_proposal') from None
 
 
 def finite_destinations(inventory, config):
@@ -266,6 +274,8 @@ def role_payload(inventory, role, proposal=None, *, source_review_context=None, 
     transport = schema_transport(config)
     validate_question_binding(inventory, config)
     result = {'original': model_inventory(inventory, source_review_context=source_review_context), 'role': role}
+    if streaming_transport(config):
+        result['provider_transport'] = stream_transport.TRANSPORT
     if transport in choice_transport.TRANSPORTS:
         result['response_transport'] = transport
     if finite_identities(inventory, config):
@@ -383,6 +393,8 @@ def provider_request(inventory, role, config, proposal=None):
         'messages':[{'role':'user','content':json.dumps(payload, ensure_ascii=False,
             **({'sort_keys':True} if transport in choice_transport.TRANSPORTS else {}))}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
+    if streaming_transport(config):
+        envelope['stream'] = True
     if config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE:
         # Include schema, system instructions, complete original and (for the
         # checker) the complete proposal. Never trim a payload to make it fit.
@@ -395,7 +407,12 @@ def provider_request(inventory, role, config, proposal=None):
 def decode_role_response(inventory, role, config, response, proposal, evidence, request_sha256):
     """Bind prospective decoding to the immutable request and untouched wire evidence."""
     transport = schema_transport(config)
-    if transport not in choice_transport.TRANSPORTS:
+    try:
+        observed_stop = stream_transport.validate_evidence(config, evidence)
+    except ValueError:
+        raise choice_transport.invalid() from None
+    streaming = streaming_transport(config)
+    if transport not in choice_transport.TRANSPORTS and not streaming:
         if 'response_transport' in evidence:
             raise choice_transport.invalid()
         return response
@@ -404,7 +421,7 @@ def decode_role_response(inventory, role, config, response, proposal, evidence, 
         source_review_context=source_review_mode(config), config=config)
     try:
         raw = evidence['response']
-        if (type(raw) is not dict or raw.get('stop_reason') != 'end_turn'
+        if (type(raw) is not dict or (observed_stop if streaming else raw.get('stop_reason')) != 'end_turn'
                 or type(raw.get('content')) is not list
                 or any(type(block) is not dict for block in raw['content'])):
             raise choice_transport.invalid()
@@ -413,16 +430,19 @@ def decode_role_response(inventory, role, config, response, proposal, evidence, 
             raise choice_transport.invalid()
     except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
         raise choice_transport.invalid() from None
-    if (evidence.get('response_transport') != transport
+    if ((transport in choice_transport.TRANSPORTS and evidence.get('response_transport') != transport)
+            or (transport not in choice_transport.TRANSPORTS and 'response_transport' in evidence)
             or type(envelope) is not dict
+            or (streaming and envelope.get('stream') is not True)
             or evidence.get('request_envelope_sha256') != digest(envelope)
             or request_sha256 != digest(expected_payload)
             or digest(envelope) != digest(provider_request(inventory, role, config, proposal))):
         raise choice_transport.invalid()
-    return choice_transport.decode(response, transport)
+    return choice_transport.decode(response, transport) if transport in choice_transport.TRANSPORTS else response
 
 
-def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None,prepared_client=None):
+def provider_role(inventory, role, config, timeout, proposal=None,on_response=None,*,prepared_request=None,prepared_client=None,
+                  on_transport=None, transport_deadline=None):
     payload = role_payload(inventory, role, proposal,
                            source_review_context=source_review_mode(config), config=config)
     if config['mode'] != 'live':
@@ -451,10 +471,22 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
         return response,evidence
     if config['provider'] != 'anthropic':
         raise ValidationError('Blank preparation currently requires the configured Anthropic provider.')
-    from anthropic import Anthropic
+    from anthropic import Anthropic, AsyncAnthropic
     envelope = prepared_request if prepared_request is not None else provider_request(inventory, role, config, proposal)
-    client = prepared_client if prepared_client is not None else Anthropic(timeout=timeout, max_retries=0)
-    response = client.messages.create(**envelope, timeout=timeout)
+    streaming = streaming_transport(config)
+    client = prepared_client if prepared_client is not None else (AsyncAnthropic if streaming else Anthropic)(timeout=timeout, max_retries=0)
+    trace = None; terminal_error = False
+    if streaming:
+        wall_deadline = min(transport_deadline, time.monotonic()+timeout) if transport_deadline is not None else time.monotonic()+timeout
+        try:
+            response, trace = stream_transport.complete(client, envelope,
+                wall_deadline,
+                on_transport or (lambda phase, document: None))
+        except stream_transport.TerminalStreamError as exc:
+            response, trace = exc.message, exc.trace
+            terminal_error = True
+    else:
+        response = client.messages.create(**envelope, timeout=timeout)
     raw = response.model_dump(mode='json')
     original_evidence={'model':getattr(response,'model',None),'request_id':getattr(response,'_request_id','') or '',
                        'resource_id':getattr(response,'id',''),'usage':raw.get('usage'),
@@ -464,7 +496,7 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
         original_evidence.update(response_transport=schema_transport(config),
                                  request_envelope_sha256=digest(envelope))
     # The untouched response is durable before any usage or content property is judged.
-    if on_response:on_response(original_evidence)
+    if on_response and not streaming:on_response(original_evidence)
     r = rates(config)
     cost=None;units={}
     usage = getattr(response,'usage',None)
@@ -483,6 +515,17 @@ def provider_role(inventory, role, config, timeout, proposal=None,on_response=No
     if schema_transport(config) in choice_transport.TRANSPORTS:
         evidence.update(response_transport=schema_transport(config),
                         request_envelope_sha256=digest(envelope))
+    if streaming:
+        evidence.update(provider_transport=stream_transport.TRANSPORT, stream_complete=True,
+            request_id=trace['provider_request_id'], request_envelope_sha256=digest(envelope),
+            stream_observation=trace['complete_observation'])
+        try:
+            if on_transport:on_transport('complete', trace)
+            if on_response:on_response(evidence)
+        except BaseException:
+            raise stream_transport.CompleteStreamObservationError(evidence) from None
+        if terminal_error or time.monotonic() >= wall_deadline:
+            raise stream_transport.CompleteStreamObservationError(evidence)
     # Raw usage/response is retained by the caller BEFORE JSON/placement adjudication.
     return text, evidence
 
@@ -607,6 +650,7 @@ def failure_explanation(prep, receipts):
 
 
 def call_role(prep, role, deadline, proposal=None):
+    streaming = streaming_transport(prep.config)
     payload = role_payload(prep.inventory, role, proposal,
                            source_review_context=source_review_mode(prep.config), config=prep.config)
     max_output,limit=role_limits(prep.inventory, prep.config)
@@ -621,8 +665,8 @@ def call_role(prep, role, deadline, proposal=None):
             raise DocumentError('The configured preparation provider is unavailable; no request was sent or reserved.',
                                 'provider_not_configured')
         try:
-            from anthropic import Anthropic
-            client = Anthropic(timeout=role_seconds, max_retries=0)
+            from anthropic import Anthropic, AsyncAnthropic
+            client = (AsyncAnthropic if streaming else Anthropic)(timeout=role_seconds, max_retries=0)
         except Exception:
             raise DocumentError('The preparation provider could not be configured; no request was sent or reserved.',
                                 'provider_not_configured') from None
@@ -655,7 +699,25 @@ def call_role(prep, role, deadline, proposal=None):
             provider=prep.config['provider'], requested_model=prep.config['model'], request_sha256=digest(payload),
             quote_maximum=limit if prep.config['mode']=='live' else Decimal('0'), state='running', started_at=timezone.now())
     began = time.monotonic();stage='provider_role';provider_invoked=False;stop_reason=None;failed=False
+    stream_metadata = {}
     try:
+        def observed_transport(phase, document):
+            # Only structural metadata and immutable private-file pointers enter
+            # the ordinary receipt. No partial text is an adoptable response.
+            stream_metadata.update(provider_transport=stream_transport.TRANSPORT,
+                stream_http_status=document['stream_http_status'],
+                local_transport_reason=document['local_transport_reason'])
+            if document['provider_request_id']:
+                receipt.provider_request_id=document['provider_request_id']
+            receipt.failure={**receipt.failure, **stream_metadata}
+            receipt.save(update_fields=['failure','provider_request_id'])
+            path,sha=retain_response(prep,role,document)
+            pointers=stream_metadata.setdefault(stream_transport.POINTER_KEY,
+                {'contract':stream_transport.CONTRACT})
+            pointers[phase]={'path':path,'sha256':sha}
+            receipt.failure={**receipt.failure, **stream_metadata}
+            receipt.save(update_fields=['failure'])
+
         def observed(evidence):
             nonlocal stage
             path,sha=retain_response(prep,role,evidence)
@@ -671,7 +733,9 @@ def call_role(prep, role, deadline, proposal=None):
             if remaining<3:raise DocumentError('Preparation reached its time limit before a provider request started.', 'deadline')
             provider_invoked=True
             response, evidence = provider_role(prep.inventory, role, prep.config, min(role_seconds, remaining), proposal,observed,
-                **({'prepared_request':request, 'prepared_client':client} if request is not None else {}))
+                **({'prepared_request':request, 'prepared_client':client} if request is not None else {}),
+                **({'on_transport':observed_transport,
+                    'transport_deadline':min(deadline,time.monotonic()+role_seconds)} if streaming else {}))
             stage='response_validation'
             if (not isinstance(evidence['model'],str) or not 0<len(evidence['model'])<=100
                     or any(not isinstance(evidence[k],str) or len(evidence[k])>140 for k in ('request_id','resource_id'))
@@ -684,7 +748,8 @@ def call_role(prep, role, deadline, proposal=None):
         if not standing and receipt.computed_cost > limit: raise DocumentError('The returned usage exceeds its reserved cap.', 'budget_limit')
         if not receipt.simulated:
             raw_response=evidence.get('response')
-            stop_reason=raw_response.get('stop_reason') if isinstance(raw_response,dict) else None
+            stop_reason=(stream_transport.validate_evidence(prep.config,evidence) if streaming else
+                raw_response.get('stop_reason') if isinstance(raw_response,dict) else None)
             if stop_reason != 'end_turn':
                 code = 'output_limit' if stop_reason == 'max_tokens' else 'invalid_response'
                 raise DocumentError('The provider returned an incomplete preparation result. '
@@ -703,7 +768,19 @@ def call_role(prep, role, deadline, proposal=None):
         return response
     except BaseException as exc:
         failed=True
-        receipt.state='failed' if receipt.response_path or not provider_invoked else 'unknown'
+        if streaming and isinstance(exc, stream_transport.CompleteStreamObservationError):
+            # A terminal provider message can establish billable usage even if
+            # retention fails. It still cannot become an accepted response.
+            known=exc.complete_evidence
+            if known['cost'] is not None:
+                receipt.usage=known['usage'];receipt.rates=known['rates']
+                receipt.computed_cost=Decimal(known['cost'])
+                receipt.returned_model=known['model'];receipt.provider_request_id=known['request_id']
+                receipt.provider_resource_id=known['resource_id']
+                receipt.save(update_fields=['usage','rates','computed_cost','returned_model',
+                    'provider_request_id','provider_resource_id'])
+        receipt.state=('failed' if receipt.computed_cost is not None or not provider_invoked else 'unknown') if streaming else (
+            'failed' if receipt.response_path or not provider_invoked else 'unknown')
         try:code=getattr(exc,'code',None)
         except BaseException:code=None
         receipt.error_code=(code if type(code) is str and code in SAFE_ERRORS else
@@ -711,6 +788,7 @@ def call_role(prep, role, deadline, proposal=None):
         receipt.failure=safe_provider_failure(exc,role,stage,(time.monotonic()-began)*1000,
                                              bool(receipt.response_path),receipt.computed_cost is not None,stop_reason)
         receipt.failure['provider_invoked']=provider_invoked
+        if streaming:receipt.failure.update(stream_metadata)
         if not receipt.provider_request_id:
             receipt.provider_request_id=receipt.failure['provider_request_id']
         # This closed metadata is retained before private-file I/O. File-retention
@@ -767,6 +845,7 @@ def create_preparation(template, actor):
     if not feature_enabled(): raise ValidationError('AI form preparation is not enabled in this environment.')
     from .preparation_campaign import active_campaign_config,campaign_identity,create_campaign_preparation,legacy_preparations
     config=active_campaign_config(configuration(),template.sha256)
+    streaming_transport(config)  # Refuse an invalid explicit marker before queue creation.
     if SIGNING_CONTEXT_KEY in config:
         validate_signing_context(config[SIGNING_CONTEXT_KEY])
         if template.sha256 == WM_IOV_SHA256:
@@ -782,6 +861,7 @@ def create_preparation(template, actor):
     prior_transport = schema_transport(config)
     if config.get('mode') == 'live' and config.get('provider') == 'anthropic':
         config[SCHEMA_TRANSPORT_KEY] = ANTHROPIC_SCHEMA_TRANSPORT
+        config[stream_transport.CONFIG_KEY] = stream_transport.TRANSPORT
     if template.sha256 == WM_IOV_SHA256:
         if prior_transport in choice_transport.TRANSPORTS:
             raise DocumentError('The component choice transport does not apply to the WM source.', 'invalid_proposal')
@@ -1039,8 +1119,13 @@ def _read_retained_role(receipt):
     response=evidence.get('response')
     if receipt.simulated:
         return response
+    prep = getattr(receipt, 'preparation', None)
+    config = getattr(prep, 'config', None)
+    try:observed_stop = stream_transport.validate_evidence(config,evidence)
+    except ValueError:raise ValidationError('The retained stream observations are invalid.') from None
+    stop_reason = observed_stop if streaming_transport(config) else (response.get('stop_reason') if isinstance(response,dict) else None)
     if (not isinstance(response,dict) or response.get('model')!=receipt.returned_model
-            or response.get('id')!=receipt.provider_resource_id or response.get('stop_reason')!='end_turn'
+            or response.get('id')!=receipt.provider_resource_id or stop_reason!='end_turn'
             or not isinstance(response.get('content'),list)
             or any(not isinstance(block,dict) for block in response['content'])):
         raise ValidationError('The retained provider response is incomplete.')
@@ -1049,11 +1134,9 @@ def _read_retained_role(receipt):
         result = json.loads(text)
     except (KeyError,TypeError,ValueError):
         raise ValidationError('The retained provider result is invalid.') from None
-    prep = getattr(receipt, 'preparation', None)
-    config = getattr(prep, 'config', None)
-    if (config and schema_transport(config) in choice_transport.TRANSPORTS
-            or 'response_transport' in evidence):
-        if prep is None or schema_transport(config) not in choice_transport.TRANSPORTS:
+    if (config and (schema_transport(config) in choice_transport.TRANSPORTS or streaming_transport(config))
+            or 'response_transport' in evidence or 'provider_transport' in evidence or 'stream_complete' in evidence):
+        if prep is None or not (schema_transport(config) in choice_transport.TRANSPORTS or streaming_transport(config)):
             raise choice_transport.invalid()
         result = decode_role_response(prep.inventory, receipt.role, config, result,
             prep.proposal if receipt.role == 'checker' else None, evidence, receipt.request_sha256)
