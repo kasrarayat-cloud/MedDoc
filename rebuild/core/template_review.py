@@ -183,6 +183,11 @@ def review_items(prep, items):
     for item in items:
         row = {**item}
         definition = row.get('definition') or {}
+        # Keep the contract's specific remediation until that finding is resolved.
+        # The printed-label adapter can then report any remaining name ambiguity.
+        if row.get('state') == 'unresolved' and row.get('reason'):
+            result.append(row)
+            continue
         printed_subject = _printed_name_subject(row['field']['label'])
         field_corrected = bool(corrected)
         if definition.get('version') == 4:

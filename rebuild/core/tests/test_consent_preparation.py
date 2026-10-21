@@ -231,6 +231,26 @@ class QualifiedNameQuestionsTests(SimpleTestCase):
             self.assertEqual(review_items(prep, [row])[0], before)
             self.assertEqual(row, before)
 
+    def test_existing_unresolved_guidance_precedes_adapter_feedback(self):
+        prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
+        for label, subject, reason in [
+            ('Patient name', 'unspecified', 'Choose whose name belongs in this field.'),
+            ('Referring physician name', 'patient', 'Provider definitions disagree.'),
+            ('Name', 'patient', 'The requested person must be explicitly selected.'),
+        ]:
+            with self.subTest(label=label, subject=subject):
+                row = self.row(label)
+                row['definition']['scope'] = {'subject': subject}
+                row.update(state='unresolved', reason=reason)
+                before = deepcopy(row)
+                self.assertEqual(review_items(prep, [row])[0], before)
+                self.assertEqual(row, before)
+        row = self.row('Referring physician name')
+        row['definition']['scope'] = {'subject': 'patient'}
+        self.assertIn('does not match', review_items(prep, [row])[0]['reason'])
+        row.update(state='unresolved', reason='')
+        self.assertIn('does not match', review_items(prep, [row])[0]['reason'])
+
     def test_relative_identity_and_exclusions_cannot_be_discarded_when_refining_a_heading(self):
         prep = SimpleNamespace(state='review', corrections={}, candidate_sha256='present')
         for label in [
