@@ -13,7 +13,8 @@ TRANSPORT = 'anthropic-nullable-singleton-arrays-v1'
 EVIDENCE_TRANSPORT = 'anthropic-evidence-reference-table-v2'
 CURRENT_TRANSPORT = 'anthropic-flat-typed-nodes-v3'
 JSON_TRANSPORT = 'anthropic-canonical-json-v4'
-LATEST_TRANSPORT = JSON_TRANSPORT
+DIRECT_TRANSPORT = 'anthropic-canonical-json-text-v5'
+LATEST_TRANSPORT = DIRECT_TRANSPORT
 INSTRUCTIONS = (
     '\nClinical transport anthropic-nullable-singleton-arrays-v1: every schema-declared '
     'nullable value is an array: [] for null, or exactly [value] for a present value. '
@@ -36,7 +37,7 @@ def invalid():
 def selected(config):
     if CONFIG_KEY not in config:
         return False
-    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT, JSON_TRANSPORT)
+    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT, JSON_TRANSPORT, DIRECT_TRANSPORT)
             or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
             or config.get('model') != 'claude-sonnet-5-5'):
         raise invalid()
@@ -48,6 +49,9 @@ def marker(config):
 
 
 def instructions(config, *, schema=None):
+    if marker(config) == DIRECT_TRANSPORT:
+        from . import clinical_json_text_transport as carrier
+        return carrier.INSTRUCTIONS if schema is None else carrier.instructions(schema)
     if marker(config) == JSON_TRANSPORT:
         from . import clinical_json_transport as carrier
         return carrier.INSTRUCTIONS if schema is None else carrier.instructions(schema)
@@ -61,7 +65,10 @@ def instructions(config, *, schema=None):
 
 
 def transmitted_schema(schema, transport):
-    """The exact supported schema passed to the SDK, retained before sending."""
+    """Exact provider format schema, or None when the explicit mode omits it."""
+    if transport == DIRECT_TRANSPORT:
+        _schema(schema)
+        return None
     from anthropic import transform_schema
     from .provider_schema import share_anthropic_schema
     return share_anthropic_schema(transform_schema(wire_schema(schema, transport=transport)))
@@ -159,6 +166,9 @@ def _schema(schema):
 
 
 def wire_schema(schema, *, transport=TRANSPORT):
+    if transport == DIRECT_TRANSPORT:
+        from .clinical_json_text_transport import wire_schema as convert
+        return convert(schema)
     if transport == JSON_TRANSPORT:
         from .clinical_json_transport import wire_schema as convert
         return convert(schema)
@@ -252,7 +262,7 @@ def decode(schema, value):
 def response_value(text, request, *, config, provider, simulated):
     """Decode only a new request whose explicit immutable configuration agrees."""
     transport = request.get('schema_transport')
-    if transport not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT, JSON_TRANSPORT):
+    if transport not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT, JSON_TRANSPORT, DIRECT_TRANSPORT):
         if selected(config):
             raise invalid()
         # Historical readers retain their original parser. Their caller still
@@ -261,6 +271,9 @@ def response_value(text, request, *, config, provider, simulated):
         return json.loads(text)
     if marker(config) != transport or provider != 'anthropic' or simulated is not False:
         raise invalid()
+    if transport == DIRECT_TRANSPORT:
+        from .clinical_json_text_transport import decode as restore
+        return restore(request['schema'], strict_loads(text))
     if transport == JSON_TRANSPORT:
         from .clinical_json_transport import decode as restore
         return restore(request['schema'], strict_loads(text))

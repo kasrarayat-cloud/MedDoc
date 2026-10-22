@@ -183,7 +183,7 @@ class GenerationCapacityV2DatabaseTests(TestCase):
     setUp = previous.GenerationCapacityDatabaseTests.setUp
     def provider(self):
         """The provider double emits the explicitly selected wire contract."""
-        from core import clinical_schema_transport as transport, clinical_evidence_transport as evidence, clinical_node_transport as nodes, clinical_json_transport as document
+        from core import clinical_schema_transport as transport, clinical_evidence_transport as evidence, clinical_node_transport as nodes, clinical_json_transport as document, clinical_json_text_transport as direct
         original = previous.GenerationCapacityDatabaseTests.provider(self)
         def respond(*args):
             schema, config, callback = args[1], args[3], args[-1]
@@ -195,7 +195,8 @@ class GenerationCapacityV2DatabaseTests(TestCase):
                 codec = {transport.TRANSPORT:transport,
                     transport.EVIDENCE_TRANSPORT:evidence,
                     transport.CURRENT_TRANSPORT:nodes,
-                    transport.JSON_TRANSPORT:document}[transport.marker(config)]
+                    transport.JSON_TRANSPORT:document,
+                    transport.DIRECT_TRANSPORT:direct}[transport.marker(config)]
                 text = json.dumps(codec.encode(schema, parsed)); emitted.append(text)
                 response.model_dump = lambda **kw: {
                     **{k:v for k,v in dump(**kw).items() if k!='output'},
@@ -237,10 +238,14 @@ class GenerationCapacityV2DatabaseTests(TestCase):
                 content = json.loads(result)['provider_output']['content']
                 self.assertEqual(len(content), 1)
                 text = content[0]['text']
-                self.assertEqual(json.loads(text)['transport'], before[transport.CONFIG_KEY])
+                canonical = semantic_generation.fixture_stage(receipt.stage, request['payload'])
+                if before[transport.CONFIG_KEY] == transport.DIRECT_TRANSPORT:
+                    self.assertEqual(json.loads(text), canonical)
+                    self.assertEqual(request['transmitted_schema'], 'null')
+                else:
+                    self.assertEqual(json.loads(text)['transport'], before[transport.CONFIG_KEY])
                 self.assertEqual(transport.response_value(text, request, config=before,
-                    provider=receipt.provider, simulated=receipt.simulated),
-                    semantic_generation.fixture_stage(receipt.stage, request['payload']))
+                    provider=receipt.provider, simulated=receipt.simulated), canonical)
             self.assertEqual(job.config, before)
             self.assertTrue(self.backup_accepts(job, before))
             self.assert_audit()

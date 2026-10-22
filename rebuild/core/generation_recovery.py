@@ -12,7 +12,7 @@ from uuid import UUID
 from django.conf import settings
 from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
-from .models import AuditEvent, Job, Usage, ProviderReceipt
+from .models import AuditEvent, Job, Usage, ProviderReceipt, TestingReservation, Reservation
 from .security import private_path
 from . import anthropic_request_policy as request_policy
 from . import clinical_schema_transport as clinical_transport
@@ -23,9 +23,11 @@ CONTRACT_V2='rejected-generation-successor-v2'
 CONTRACT_METERED='metered-thinking-budget-successor-v1'
 CONTRACT_PROFILE='rejected-request-profile-successor-v1'
 CONTRACT_CARRIER='invalid-generation-carrier-successor-v1'
+CONTRACT_TRUNCATED='truncated-json-output-successor-v1'
 METERED_SUCCESSOR_TRANSPORTS=(clinical_transport.TRANSPORT,
     clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT,
-    clinical_transport.JSON_TRANSPORT)
+    clinical_transport.JSON_TRANSPORT,clinical_transport.DIRECT_TRANSPORT)
+CARRIER_SUCCESSOR_TRANSPORTS=(clinical_transport.JSON_TRANSPORT,clinical_transport.DIRECT_TRANSPORT)
 SALT='rejected-generation-successor'
 TRANSPORT_KEY='semantic_schema_transport'
 RECOVERY_KEY='semantic_recovery'
@@ -78,7 +80,7 @@ def _family_limit(config):
     if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS:raise ValueError('per-job recovery bound')
     if type(value)is not dict:raise ValueError('recovery contract')
     if value.get('contract')==CONTRACT:return limit
-    if value.get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER):raise ValueError('recovery contract')
+    if value.get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED):raise ValueError('recovery contract')
     bounds=_v2_bounds(config)
     if bounds is None and value['contract']==CONTRACT_PROFILE:return limit
     if bounds is None or any(not _same(value.get(k),v)for k,v in bounds.items()):raise ValueError('recovery batch bounds')
@@ -156,7 +158,7 @@ def _children(job):
     return list(Job.objects.filter(config__semantic_recovery__job=str(job.pk)).order_by('created_at','pk')[:2])
 
 
-def _local_paid_failure(job,*,carrier=False):
+def _local_paid_failure(job,*,carrier=False,truncated=False):
     """Authenticate a settled first extractor and its exact retained failure.
 
     This is an additional request, not reconciliation or a rewrite of the paid
@@ -164,16 +166,19 @@ def _local_paid_failure(job,*,carrier=False):
     """
     try:
         from . import ai_stages, generation
+        if carrier and truncated:return None
+        explicit_profile=carrier or truncated
         if (job.kind!='generation' or job.state!='failed' or job.finished_at is None
             or job.result_path or job.result_sha256 or not job.error.startswith('platform_failure:')
             or type(job.config)is not dict or job.config.get('mode')!='live'
             or job.config.get('provider')!='anthropic' or job.config.get('model')!='claude-sonnet-5-5'
             or (job.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE
-                if carrier else request_policy.CONFIG_KEY in job.config)
+                if explicit_profile else request_policy.CONFIG_KEY in job.config)
             or not re.fullmatch('[a-f0-9]{40}',job.config.get('queued_release_sha',''))):return None
         old_transport=(clinical_transport.marker(job.config)if clinical_transport.selected(job.config)
                        else ANTHROPIC_SCHEMA_TRANSPORT)
         if carrier and old_transport!=clinical_transport.CURRENT_TRANSPORT:return None
+        if truncated and old_transport!=clinical_transport.JSON_TRANSPORT:return None
         rows=list(job.ai_stage_receipts.all()[:2])
         if len(rows)!=1:return None
         stage=rows[0]
@@ -195,7 +200,7 @@ def _local_paid_failure(job,*,carrier=False):
             or request['timeout_seconds']!=job.config['semantic_timeout_seconds']
             or request.get('schema_transport',ANTHROPIC_SCHEMA_TRANSPORT)!=old_transport
             or (not _same(request.get(request_policy.ENVELOPE_KEY),request_policy.parameters(job.config))
-                if carrier else request_policy.ENVELOPE_KEY in request)
+                if explicit_profile else request_policy.ENVELOPE_KEY in request)
             or not _same(identity,expected_identity) or identity['encounter_id']!=str(job.encounter_id)
             or hashlib.sha256(payload['notes'].encode()).hexdigest()!=job.config['semantic_source_sha256']
             or _digest(payload['approved_definitions'])!=job.config['semantic_definitions_sha256']):return None
@@ -209,8 +214,9 @@ def _local_paid_failure(job,*,carrier=False):
             or output.get('type')!='message' or output.get('role')!='assistant'
             or output.get('stop_reason')!=('end_turn' if carrier else 'max_tokens')
             or type(output.get('content'))is not list or not output['content']
-            or any(type(block)is not dict or block.get('type')!=('text'if carrier else'thinking')
+            or any(type(block)is not dict or block.get('type')!=('text'if explicit_profile else'thinking')
                    for block in output['content'])):return None
+        if truncated and output.get('stop_details')is not None:return None
         counters={'input_tokens':usage['input_tokens'],'output_tokens':usage['output_tokens'],
             'cached_input_tokens':usage.get('cache_read_input_tokens',0),
             'cache_creation_tokens':usage.get('cache_creation_input_tokens',0)}
@@ -219,9 +225,9 @@ def _local_paid_failure(job,*,carrier=False):
                 else counters['output_tokens']!=request['max_output_tokens'])
             or type(usage.get('output_tokens_details'))is not dict
             or type(usage['output_tokens_details'].get('thinking_tokens'))is not int
-            or usage['output_tokens_details']['thinking_tokens']!=(0 if carrier else counters['output_tokens'])
+            or usage['output_tokens_details']['thinking_tokens']!=(0 if explicit_profile else counters['output_tokens'])
             or not _same(stage.usage,counters)):return None
-        if carrier:
+        if explicit_profile:
             from . import source_assertion_graph
             if (not _same(request['schema'],source_assertion_graph.extraction_schema())
                 or type(request.get('transmitted_schema'))is not str
@@ -230,15 +236,18 @@ def _local_paid_failure(job,*,carrier=False):
                 or any(type(block.get('text'))is not str for block in output['content'])):return None
             text=''.join(block['text']for block in output['content'])
             if not text.strip():return None
-            try:
-                clinical_transport.response_value(text,request,config=job.config,
-                    provider='anthropic',simulated=False)
-            except clinical_transport.TransportError:
-                pass
-            else:
-                # A complete canonical graph with clinically unsafe assertions
-                # is not a carrier failure and gains no recovery permission.
-                return None
+            if carrier:
+                try:
+                    clinical_transport.response_value(text,request,config=job.config,
+                        provider='anthropic',simulated=False)
+                except clinical_transport.TransportError:
+                    pass
+                else:
+                    # A complete canonical graph with clinically unsafe assertions
+                    # is not a carrier failure and gains no recovery permission.
+                    return None
+            # max_tokens never certifies a complete response, even if a prefix
+            # happens to parse. Do not decode, adopt or salvage its text here.
         rates=generation.rates(job.config);discount=generation.discount_rate(job.config)
         list_cost=(counters['input_tokens']*rates['input_per_million']
             +counters['cached_input_tokens']*rates['cached_per_million']
@@ -262,11 +271,28 @@ def _local_paid_failure(job,*,carrier=False):
                 or not stage.finished_at<=row.created_at<=job.finished_at):return None
         if (total!=cost or simulated is not False or usages[0].user_id!=job.user_id
             or usages[0].department_id!=job.encounter.department_id):return None
+        settlement={}
+        if truncated:
+            from . import testing_authority
+            authority=testing_authority.identity(job.config)
+            held=list(TestingReservation.objects.filter(job=job)[:2])
+            settled=list(AuditEvent.objects.filter(action='testing.settle',target=str(job.pk),
+                actor_id=job.user_id,department_id=job.encounter.department_id)[:2])
+            if (authority is None or len(held)!=1 or held[0].state!='settled'
+                or held[0].authority_id!=authority or job.payer!='standing:'+authority
+                or held[0].quoted_provider_cost!=testing_authority.quote(job.config.get('testing_quote_usd'))
+                or Reservation.objects.filter(job=job).exists()
+                or usages[0].payer!=job.payer or usages[0].charged_cost!=Decimal('0')
+                or len(settled)!=1 or not stage.finished_at<=settled[0].created_at<=job.finished_at
+                or not _same(settled[0].details,{'authority_id':authority,'calculated_provider_cost':str(total),
+                    'confirmed_provider_charge':None,'user_charge':'0','simulated':False})):return None
+            settlement={'settled_reservation':str(held[0].pk),'settlement_audit':str(settled[0].pk)}
         return {'job':str(job.pk),'stage':str(stage.pk),'request_sha256':stage.request_sha256,
             'result_sha256':stage.result_sha256,'received_audit':str(events[0].pk),
             'metered_usage':str(usages[0].pk),'metered_receipt':str(receipts[0].pk),
             'metered_cost':str(stage.actual_cost),
-            **({'invalid_carrier':old_transport}if carrier else{'old_request_profile':None}),
+            **({'truncated_transport':old_transport,**settlement}if truncated else
+               {'invalid_carrier':old_transport}if carrier else{'old_request_profile':None}),
             'old_transport':old_transport,'prior_calls':1,
             'prior_quote':str(max(_cost(stage.quote_maximum),cost)),
             'old_config_sha256':_digest(job.config)}
@@ -284,8 +310,13 @@ def _local_invalid_carrier(job):
     return _local_paid_failure(job,carrier=True)
 
 
+def _local_truncated_json(job):
+    """A settled v4 first extractor exhausted its budget on text, never a result."""
+    return _local_paid_failure(job,truncated=True)
+
+
 def _local_failure(job):
-    return (_local_metered_exhaustion(job)or _local_invalid_carrier(job))if job.state=='failed'else _local_rejection(job)
+    return (_local_metered_exhaustion(job)or _local_invalid_carrier(job)or _local_truncated_json(job))if job.state=='failed'else _local_rejection(job)
 
 
 def _changed_keys(contract):
@@ -298,16 +329,18 @@ def _edge(predecessor,successor,proof):
     if type(value)is not dict:return False
     metered=value.get('contract')==CONTRACT_METERED
     carrier=value.get('contract')==CONTRACT_CARRIER
+    truncated=value.get('contract')==CONTRACT_TRUNCATED
     profile_changed=value.get('contract')in(CONTRACT_METERED,CONTRACT_PROFILE)
     if metered!=('old_request_profile'in proof):return False
     if carrier!=('invalid_carrier'in proof):return False
+    if truncated!=('truncated_transport'in proof):return False
     if profile_changed:keys.add('new_request_profile')
     if value.get('contract')==CONTRACT:
         # Raising the traversal bound must never broaden a historical v1 edge.
         limit=predecessor.config.get('semantic_max_calls')
         if (type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS
             or type(proof.get('prior_calls'))is not int or not 1<=proof['prior_calls']<limit):return False
-    elif value.get('contract')in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER):
+    elif value.get('contract')in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED):
         try:bounds=_v2_bounds(successor.config)
         except (KeyError,TypeError,ValueError,InvalidOperation,ValidationError):return False
         if bounds is None:
@@ -337,7 +370,11 @@ def _edge(predecessor,successor,proof):
         or (metered and (proof['old_request_profile']is not None
             or value['new_transport']not in METERED_SUCCESSOR_TRANSPORTS))
         or (carrier and (proof['invalid_carrier']!=clinical_transport.CURRENT_TRANSPORT
-            or value['new_transport']!=clinical_transport.JSON_TRANSPORT
+            or value['new_transport']not in CARRIER_SUCCESSOR_TRANSPORTS
+            or predecessor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE
+            or successor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE))
+        or (truncated and (proof['truncated_transport']!=clinical_transport.JSON_TRANSPORT
+            or value['new_transport']!=clinical_transport.DIRECT_TRANSPORT
             or predecessor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE
             or successor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE))
         or (profile_changed and (request_policy.CONFIG_KEY in predecessor.config
@@ -376,7 +413,7 @@ def _lineage(job,*,lock=False):
         seen.add(identifier);nodes.append(parent)
     nodes.reverse();exposure=Decimal('0');transports=set()
     if (len(nodes)>MAX_FAMILY_CALLS
-        and job.config.get(RECOVERY_KEY,{}).get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER)):
+        and job.config.get(RECOVERY_KEY,{}).get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED)):
         raise ValueError('historical recovery family bound')
     for index,(parent,child)in enumerate(zip(nodes,nodes[1:])):
         proof=_local_failure(parent)
@@ -425,8 +462,9 @@ def _proposal(job,encounter,user,config):
     if not proof or job.user_id!=user.pk or encounter.status=='finalized' or encounter.answers:return None
     metered='old_request_profile'in proof
     carrier='invalid_carrier'in proof
+    truncated='truncated_transport'in proof
     profile_changed=(request_policy.CONFIG_KEY not in job.config and config.get(request_policy.CONFIG_KEY)==request_policy.PROFILE)
-    contract=CONTRACT_CARRIER if carrier else CONTRACT_METERED if metered else CONTRACT_PROFILE if profile_changed else None
+    contract=CONTRACT_TRUNCATED if truncated else CONTRACT_CARRIER if carrier else CONTRACT_METERED if metered else CONTRACT_PROFILE if profile_changed else None
     changed=_changed_keys(contract)
     if not _source_matches(job,encounter):return None
     _,_,transports=_lineage(job)
@@ -452,13 +490,16 @@ def _proposal(job,encounter,user,config):
                        for key,value in config.items()if key not in changed)):return None
     except (AttributeError,KeyError,TypeError,ValueError,InvalidOperation,PermissionDenied,ValidationError):return None
     family_limit=V2_FAMILY_MAX_CALLS if bounds is not None else limit
-    if (metered or carrier)and bounds is None:return None
+    if (metered or carrier or truncated)and bounds is None:return None
     if family_limit-proof['prior_calls']<MIN_SUCCESSOR_CALLS:return None
     prospective={k:config[k]for k in CONFIG_KEYS if k in config}
     original={k:job.config[k]for k in CONFIG_KEYS if k in job.config}
     new_transport=prospective.pop(TRANSPORT_KEY,None);original.pop(TRANSPORT_KEY,None)
     if carrier and (proof['invalid_carrier']!=clinical_transport.CURRENT_TRANSPORT
-        or new_transport!=clinical_transport.JSON_TRANSPORT
+        or new_transport not in CARRIER_SUCCESSOR_TRANSPORTS
+        or original.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE):return None
+    if truncated and (proof['truncated_transport']!=clinical_transport.JSON_TRANSPORT
+        or new_transport!=clinical_transport.DIRECT_TRANSPORT
         or original.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE):return None
     if metered or profile_changed:
         profile=prospective.pop(request_policy.CONFIG_KEY,None)
@@ -499,7 +540,7 @@ def offer(encounter,user,config):
 def predecessor(token,encounter,user):
     try:
         value=signing.loads(token,salt=SALT,max_age=600)
-        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER)
+        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED)
             or value.get('actor')!=str(user.pk) or value.get('encounter')!=str(encounter.pk)):raise ValueError()
         job=Job.objects.select_for_update().get(pk=value['job'],encounter=encounter,user=user)
         return job,value
@@ -561,7 +602,7 @@ def enforce_stage_budget(job,previous,cap):
             or len(rows)>=limit or len(nodes)-1+len(rows)>=family_limit):raise ValueError()
         exposure=prior_exposure+sum((max(_cost(row.quote_maximum),_cost(row.actual_cost)if row.actual_cost is not None else Decimal('0'))for row in rows),Decimal('0'))+_cost(cap)
         ceiling=_cost(maximum_cost(job.config))
-        if (job.config[RECOVERY_KEY]['contract']in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER)
+        if (job.config[RECOVERY_KEY]['contract']in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED)
             and _v2_bounds(job.config)is not None
             and Decimal(job.config[RECOVERY_KEY]['family_cost_ceiling'])!=ceiling):raise ValueError()
         if exposure>ceiling:raise ValueError()

@@ -258,15 +258,20 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
         raise StageNotSent('Unknown Anthropic request profile; nothing was sent.') from exc
     if config['provider']=='anthropic':
         from anthropic import Anthropic,transform_schema
+        direct=False
         if clinical_transport.selected(config):
             instructions+=clinical_transport.instructions(config,schema=schema)
-            schema=clinical_transport.transmitted_schema(schema,clinical_transport.marker(config))
+            transport=clinical_transport.marker(config)
+            direct=transport==clinical_transport.DIRECT_TRANSPORT
+            schema=clinical_transport.transmitted_schema(schema,transport)
         else:
             schema=share_anthropic_schema(transform_schema(schema))
-        envelope=anthropic_request_policy.apply({'model':config['model'],
+        envelope={'model':config['model'],
             'max_tokens':max_output_tokens,'system':instructions,
-            'messages':[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
-            'output_config':{'format':{'type':'json_schema','schema':schema}}},config)
+            'messages':[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}]}
+        if not direct:
+            envelope['output_config']={'format':{'type':'json_schema','schema':schema}}
+        envelope=anthropic_request_policy.apply(envelope,config)
         response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(**envelope)
         on_response(response)
         usage=response.usage
@@ -277,8 +282,17 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
         r=generation.rates(config)
         list_cost=(usage.input_tokens*r['input_per_million']+cached*r['cached_per_million']+
                    written*r['input_per_million']*Decimal('1.25')+usage.output_tokens*r['output_per_million'])/1000000
-        text=''.join(block.text for block in response.content if block.type=='text')
-        complete=response.stop_reason=='end_turn'
+        if direct:
+            blocks=response.content if type(response.content) is list else []
+            text=''.join(block.text for block in blocks
+                if getattr(block,'type',None)=='text' and type(getattr(block,'text',None)) is str)
+            complete=(response.stop_reason=='end_turn' and bool(text.strip())
+                and all(getattr(block,'type',None)=='text' and type(getattr(block,'text',None)) is str
+                    for block in blocks)
+                and getattr(response,'stop_details',None) is None)
+        else:
+            text=''.join(block.text for block in response.content if block.type=='text')
+            complete=response.stop_reason=='end_turn'
     else:
         from openai import OpenAI
         response=OpenAI(timeout=timeout_seconds,max_retries=0).responses.create(
@@ -347,7 +361,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
             if definition_preparation is not None:
                 raise StageNotSent('Clinical transport does not apply to definition preparation.')
             envelope['schema_transport']=clinical_transport.marker(config)
-            if envelope['schema_transport'] in (clinical_transport.EVIDENCE_TRANSPORT, clinical_transport.CURRENT_TRANSPORT, clinical_transport.JSON_TRANSPORT):
+            if envelope['schema_transport'] in (clinical_transport.EVIDENCE_TRANSPORT, clinical_transport.CURRENT_TRANSPORT, clinical_transport.JSON_TRANSPORT, clinical_transport.DIRECT_TRANSPORT):
                 if len(encode(envelope))>MAX_REQUEST_BYTES:
                     raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
                 # A string preserves schema property ordering through the
