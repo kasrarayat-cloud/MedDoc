@@ -28,6 +28,7 @@ from .forms import *
 from .security import audit,departments,scoped,membership,digest,token,store_upload,private_path,rate_limit
 from .billing import welcome_credit,credit_payment,reconcile_refund,reconciliation,stripe_test_key_configured,reconcile_usage,release
 from .context import integration_status
+from .generation_recovery import pending_jobs as generation_pending_jobs
 from .jobs import enqueue,cancel,CancellationRefused,public_error,billable_outcome,may_cancel,ended_key,deliverable,RecordingOverLimit,transcription_quote,seconds_text,standard_voice_limit,UPLOAD_NAME,notes_full
 from .billing import available_balance
 from . import wm_review
@@ -559,7 +560,10 @@ def encounter_detail(request,pk):
         or e.template_version.template.format=='docx' and not semantic_definitions)
     from .semantic_revalidation import offer as revalidation_offer
     semantic_revalidation = revalidation_offer(e, request.user)
-    return render(request,'encounter_detail.html',{'encounter':e,'pending_job':any(job.state in ['queued','running','reconciliation'] for job in jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
+    from .generation_recovery import offer,pending_jobs,SALT as generation_recovery_salt
+    recovery_offer=offer(e,request.user,quoted_config) if semantic_definitions else None
+    recovery_value=signing.loads(recovery_offer,salt=generation_recovery_salt) if recovery_offer else {}
+    return render(request,'encounter_detail.html',{'generation_recovery_offer':recovery_offer,'generation_recovery_binding':({'predecessor_job':recovery_value['job'],'predecessor_stage':recovery_value['stage'],'new_transport':quoted_config.get('semantic_schema_transport'),'release':settings.RELEASE_SHA,'max_calls':quoted_config['semantic_max_calls'],'output_tokens':quoted_config['semantic_output_token_limit'],'request_bytes':quoted_config['semantic_request_byte_limit'],'timeout_seconds':quoted_config['semantic_timeout_seconds']}if recovery_offer else None),'encounter':e,'pending_job':pending_jobs(jobs),'transcript_reviews':transcript_reviews,'answer_rows':rows,'wm_template':is_wm,'manual_entry':manual_entry,'wm_requirements':requirements,'wm_review_error':review_error,'wm_conflicts':wm_conflicts,'generation_contract_error':generation_contract_error,'generation_max_charge':maximum_charge,'usage_quote':signing.dumps({'user':str(request.user.pk),'encounter':str(e.pk),'revision':e.revision,'config':base_config,'generation_config':quoted_config},salt='usage-quote'),'voice_max_charge':voice_standard()[0],'voice_fits':voice_standard()[1],'voice_notes_full':notes_full(e.notes),'jobs':jobs,'voice_form':voice_form,'can_finalize':can_finalize,'prior_generations':prior_generations,'prior_transcriptions':prior_transcriptions,
         # The exact name validate_identity compares a signature with, so the page can say what to type.
         'signer_name':' '.join((request.user.get_full_name() or request.user.email).split()),
         'semantic_answers':bool(semantic_definitions),'standing_testing':standing_testing,'generation_provider_estimate':maximum_charge/Decimal('1.5') if maximum_charge is not None else None,
@@ -583,7 +587,7 @@ def encounter_status(request,pk):
     return JsonResponse(result)
 
 @require_POST
-def generate_view(request,pk):
+def generate_view(request,pk,recovery=False):
     e=get_object_or_404(scoped(Encounter,request.user),pk=pk)
     wants_json=request.headers.get('Accept')=='application/json'
     try:
@@ -591,7 +595,8 @@ def generate_view(request,pk):
         if 'revision' in request.POST and request.POST['revision']!=str(e.revision):raise ValidationError('Source notes changed. Reload before generating answers.')
         quoted=usage_quote(request,e,generation_request=True)
         job=enqueue(e,request.user,config=quoted,expected_revision=e.revision,
-                    require_current_generation_quote=bool(request.POST.get('usage_quote')))
+                    require_current_generation_quote=bool(request.POST.get('usage_quote')),
+                    recovery_token=(request.POST.get('recovery_token','') if recovery else None))
         if getattr(job,'reused',False):
             # Reached from a stale page (Back, or a second tab): a generation does not renumber the
             # revision, so the succeeded job still holds this request key. Saying "queued" would
@@ -600,6 +605,8 @@ def generate_view(request,pk):
                 message='These source notes already have an answer draft from an earlier request. No new request was made and nothing was charged. Edit and save the notes to generate again.'
             elif job.state in ('queued','running','reconciliation'):
                 message='This saved revision already has a request in progress. No new request was made and nothing was charged.'
+            elif job.config.get('semantic_recovery'):
+                message='The repaired attempt has already ended. Review its retained status; the original cost remains held for reconciliation. No further request or charge was created.'
             else:
                 message='This saved revision already has an ended attempt. Review its status and error, then save the source notes again (unchanged is fine) to explicitly request another draft. No new job or charge was created.'
             if not wants_json:messages.info(request,message)
@@ -643,7 +650,7 @@ def save_answers(request,pk):
     if e.status=='finalized':return document_refusal(request,e,'Finalized documents are immutable.',409)
     from .document_review import applies
     if applies(e):return document_refusal(request,e,'Reopen this document to use its current compact review and exact-revision approval.',409)
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'Wait until the pending job is resolved.',409)
+    if generation_pending_jobs(Job.objects.filter(encounter=e)):return document_refusal(request,e,'Wait until the pending job is resolved.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'This document changed after you opened it, in another window or by a colleague. Reopen it to see the current version before editing.',409)
     is_wm=bool(e.template_version.document_backend)
     labels=[row['label'] for row in e.template_version.fields+e.template_version.review_requirements]
@@ -880,7 +887,7 @@ def finalize(request,pk):
             if applies(e):raise ValidationError('Reopen this document and use Approve and create Word after reviewing the current answers.')
             if request.POST.get('reviewed')!='on':raise ValidationError('Explicit clinical review confirmation is required.')
             if request.POST.get('revision')!=str(e.revision):raise ValidationError('Document changed; reload before finalizing.')
-            if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():raise ValidationError('Resolve pending jobs before finalizing.')
+            if generation_pending_jobs(Job.objects.filter(encounter=e)):raise ValidationError('Resolve pending jobs before finalizing.')
             unreviewed=[f['label'] for f in e.template_version.fields if not e.answers.get(f['key'],{}).get('reviewed')]
             if unreviewed:raise ValidationError('A clinician must review every field, including missing information. Not yet reviewed: '+field_list(unreviewed))
             order=[f['key'] for f in e.template_version.fields]
@@ -1436,7 +1443,7 @@ def api_encounter(request,pk):
 @transaction.atomic
 def encounter_notes(request,pk):
     e=get_object_or_404(scoped(Encounter,request.user).select_for_update(),pk=pk)
-    if e.status=='finalized' or Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():return document_refusal(request,e,'This document is locked.',409)
+    if e.status=='finalized' or generation_pending_jobs(Job.objects.filter(encounter=e)):return document_refusal(request,e,'This document is locked.',409)
     if request.POST.get('revision')!=str(e.revision):return document_refusal(request,e,'The notes changed after you opened this document, in another window or by a colleague. Reopen it to see the current notes before editing.',409)
     transcript_job=None;raw_transcript=None
     if request.POST.get('transcript_job'):

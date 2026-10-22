@@ -3,6 +3,7 @@ import hashlib
 import json
 
 from .jobs import public_error
+from .generation_recovery import pending_jobs
 
 
 def result_snapshot(encounter, jobs):
@@ -16,7 +17,7 @@ def result_snapshot(encounter, jobs):
              'answers':encounter.answers,'template_review':encounter.template_review,
              'latest_job':job}
     return {'encounter_id':str(encounter.pk),'revision':encounter.revision,
-            'status':encounter.status,'pending':any(j.state in ('queued','running','reconciliation') for j in jobs),
+            'status':encounter.status,'pending':pending_jobs(jobs),
             'latest_job':job,'result_version':hashlib.sha256(
                 json.dumps(version,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
 
