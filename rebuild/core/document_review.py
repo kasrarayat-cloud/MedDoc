@@ -14,6 +14,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from .generation_recovery import pending_jobs
 from .models import Encounter, Job
 from .security import audit, membership, private_path, scoped
 from .semantic_generation import digest
@@ -125,7 +126,7 @@ def submit(request, pk):
             definitions = definitions_for(encounter.template_version)
             if not applies(encounter, definitions):
                 raise ValidationError('This document requires its original form-specific review.')
-            if Job.objects.filter(encounter=encounter, state__in=PENDING).exists():
+            if pending_jobs(Job.objects.filter(encounter=encounter)):
                 raise ValidationError('Wait until the pending generation or transcription is resolved before reviewing these answers.')
             intent = single(request.POST, 'intent')
             if intent not in ('save', 'approve'):

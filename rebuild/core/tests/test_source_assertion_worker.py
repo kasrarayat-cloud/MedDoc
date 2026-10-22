@@ -71,17 +71,36 @@ class SourceAssertionWorkerTests(TestCase):
         self.assertEqual(enqueue(self.encounter, self.user).pk, job.pk)
         self.assertFalse(run_one()); self.assertEqual(SourceInterpretation.objects.count(), 1)
 
-    def test_mocked_live_anthropic_v4_job_adopts_and_reloads_shared_transport(self):
-        from core import source_assertion_generation
+    def test_mocked_live_anthropic_v4_job_adopts_and_reloads_nullable_transport(self):
+        self.assert_mocked_live_v4_adoption(historical=False)
+
+    def test_historical_absent_marker_v4_job_adopts_and_reloads_shared_transport(self):
+        self.assert_mocked_live_v4_adoption(historical=True)
+
+    def assert_mocked_live_v4_adoption(self, *, historical):
+        from core import clinical_schema_transport as codec, source_assertion_generation
         from core.security import private_path
         from core.tests.test_billing_policy import fund
-        fund(Wallet.objects.get(user=self.user, kind='paid'), Decimal('100'), 'payment:shared-v4-offline')
+        fund(Wallet.objects.get(user=self.user, kind='paid'), Decimal('100'), 'payment:worker-v4-offline')
         config = {**generation.configuration(), 'mode': 'live', 'provider': 'anthropic',
             'model': 'claude-sonnet-5-5', 'input_rate': '1', 'cached_rate': '0.1', 'output_rate': '1',
             'discount_rate': '0'}
-        job = enqueue(self.encounter, self.user, config=config)
+        if historical:
+            prospective_configuration = ai_stages.pipeline_config
+            def historical_configuration(value):
+                retained = prospective_configuration(value)
+                retained.pop(codec.CONFIG_KEY, None)
+                return retained
+            # Recreate an already-queued old configuration only in this test.
+            with patch.object(ai_stages, 'pipeline_config', side_effect=historical_configuration):
+                job = enqueue(self.encounter, self.user, config=config)
+            self.assertNotIn(codec.CONFIG_KEY, job.config)
+        else:
+            job = enqueue(self.encounter, self.user, config=config)
+            self.assertEqual(job.config[codec.CONFIG_KEY], codec.TRANSPORT)
         frozen_config = deepcopy(job.config)
         calls = []
+        provider_values = {}
 
         def provider(payload, schema, instructions, stage_config, maximum, timeout, on_response):
             role = ('extractor', 'assigner', 'checker')[len(calls)]
@@ -89,7 +108,11 @@ class SourceAssertionWorkerTests(TestCase):
             self.assertEqual((maximum, timeout), (32000, 240))
             self.assertEqual(stage_config, frozen_config)
             output = source_assertion_generation.fixture_stage(role, payload)
-            text = json.dumps(output)
+            wire = output if historical else codec.encode(schema, output)
+            text = json.dumps(wire)
+            provider_values[role] = {'canonical': deepcopy(output), 'wire': deepcopy(wire),
+                'text': text, 'schema': deepcopy(schema), 'payload': deepcopy(payload),
+                'instructions': instructions}
             number = len(calls)
             body = {'id': 'msg_shared_v4_' + str(number), 'model': stage_config['model'],
                 'content': [{'type': 'text', 'text': text}], 'stop_reason': 'end_turn',
@@ -121,13 +144,31 @@ class SourceAssertionWorkerTests(TestCase):
         for row in job.ai_stage_receipts.order_by('created_at', 'pk'):
             raw = private_path(row.request_path).read_bytes()
             self.assertEqual(hashlib.sha256(raw).hexdigest(), row.request_sha256)
-            self.assertEqual(json.loads(raw)['schema_transport'], ai_stages.ANTHROPIC_SCHEMA_TRANSPORT)
+            request = json.loads(raw)
+            value = provider_values[row.stage]
+            expected_marker = ai_stages.ANTHROPIC_SCHEMA_TRANSPORT if historical else codec.TRANSPORT
+            self.assertEqual(request['schema_transport'], expected_marker)
+            self.assertEqual(request['schema'], value['schema'])
+            self.assertEqual(request['payload'], value['payload'])
+            self.assertEqual(request['instructions'], value['instructions'])
+            result = private_path(row.result_path).read_bytes()
+            self.assertEqual(hashlib.sha256(result).hexdigest(), row.result_sha256)
+            wrapper = json.loads(result)
+            self.assertEqual(wrapper['provider_output']['content'],
+                [{'type': 'text', 'text': value['text']}])
+            self.assertEqual(json.loads(value['text']), value['wire'])
+            self.assertEqual(codec.response_value(value['text'], request, config=frozen_config,
+                provider=row.provider, simulated=row.simulated), value['canonical'])
             self.assertEqual(row.provider, 'anthropic'); self.assertFalse(row.simulated)
-            snapshots.append((row.request_path, raw))
+            snapshots.extend(((row.request_path, raw), (row.result_path, result)))
         for field in self.version.fields:
             answer = self.encounter.answers[field['key']]
             self.assertEqual(semantic_review.validate_answer(self.encounter, field, answer), answer)
             self.assertEqual(semantic_review.displayed_answer(self.encounter, field, answer, self.version.semantic_definitions), answer)
+        lineage_before = deepcopy(lineage.interpretation)
+        lineage.refresh_from_db()
+        self.assertEqual(lineage.interpretation, lineage_before)
+        self.assertEqual(SourceInterpretation.objects.filter(job=job).count(), 1)
         for path, raw in snapshots:
             self.assertEqual(private_path(path).read_bytes(), raw)
         hook.assert_called_once_with(self.encounter.pk, self.user.pk)

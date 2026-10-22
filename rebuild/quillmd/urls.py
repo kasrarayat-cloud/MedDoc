@@ -74,3 +74,5 @@ urlpatterns += [
     path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/approve/', coding_views.approval, name='coding_approval'),
     path('encounters/<uuid:pk>/coding/runs/<uuid:run_pk>/output-decision/', coding_views.output_decision, name='coding_output_decision'),
 ]
+
+urlpatterns += [path('encounters/<uuid:pk>/generation/retry-rejected/',v.generate_view,{'recovery':True},name='retry_rejected_generation')]

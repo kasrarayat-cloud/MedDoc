@@ -13,6 +13,7 @@ from django.db import models, transaction
 from django.utils import timezone
 
 from .coding_licensing import cpt_status
+from .generation_recovery import pending_jobs
 from .models import CodingContext, CodingDecision, CodingRelease, CodingRun, CodingSourceDecision, CodeSet, CodeSuggestion, Encounter, Job
 from .security import audit, membership
 
@@ -169,8 +170,7 @@ def input_snapshot(encounter, *, identity_policy=None):
 
 def eligible(encounter):
     return (encounter.status in ('review', 'finalized') and bool(encounter.notes.strip())
-            and bool(encounter.answers) and not Job.objects.filter(
-                encounter=encounter, state__in=PENDING).exists())
+            and bool(encounter.answers) and not pending_jobs(Job.objects.filter(encounter=encounter)))
 
 
 def locked_encounter(encounter, user, clinician=False):
@@ -517,15 +517,15 @@ def run_one():
     """Claim once, retain provider outcomes, and never mutate an Encounter."""
     mark_abandoned()
     with transaction.atomic():
-        candidate = CodingRun.objects.filter(state='queued').exclude(
-            encounter_id__in=Job.objects.filter(state__in=PENDING).values('encounter_id')).order_by('created_at', 'pk').first()
+        candidate = next((run for run in CodingRun.objects.filter(state='queued').order_by('created_at', 'pk').iterator()
+            if not pending_jobs(Job.objects.filter(encounter_id=run.encounter_id))),None)
         if candidate is None:
             return False
         e = Encounter.objects.select_for_update().get(pk=candidate.encounter_id)
         run = CodingRun.objects.select_for_update(skip_locked=True).filter(pk=candidate.pk, state='queued').first()
         if run is None:
             return False
-        if Job.objects.filter(encounter=e, state__in=PENDING).exists():
+        if pending_jobs(Job.objects.filter(encounter=e)):
             return False
         try:
             membership(run.user, e.department)

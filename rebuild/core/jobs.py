@@ -215,7 +215,7 @@ def generation_maximum(encounter,config=None):
 
 @transaction.atomic
 def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_limit=None,expected_revision=None,
-            require_current_generation_quote=False):
+            require_current_generation_quote=False,recovery_token=None):
     e=Encounter.objects.select_for_update().get(pk=encounter.pk)
     membership(user,e.department)
     if e.status=='finalized': raise ValidationError('Finalized documents are immutable.')
@@ -240,10 +240,22 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # still owns. Announcing that as "queued" tells the doctor a request was made that was not,
     # and invites them to wait for answers that will never change. Not persisted; a per-instance
     # fact about THIS call, never about the row.
-    if old:
+    from . import generation_recovery
+    recovery_parent=recovery_value=recovery_existing=None
+    if recovery_token is not None:
+        if kind!='generation':raise ValidationError('Only an explicit generation can use a repaired request offer.')
+        recovery_parent,recovery_value=generation_recovery.predecessor(recovery_token,e,user)
+        recovery_existing=generation_recovery.successor(recovery_parent)
+        key=generation_recovery.request_key(recovery_parent)
+        pending=list(Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']))
+        if any(item.pk not in {recovery_parent.pk,getattr(recovery_existing,'pk',None)}for item in pending):
+            raise ValidationError('This encounter already has another pending job.')
+    elif old:
+        old=generation_recovery.successor(old) or old
         old.reused=True
         return old
-    if Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists(): raise ValidationError('This encounter already has a pending job.')
+    elif Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
+        raise ValidationError('This encounter has a pending job or unsettled provider exposure. Wait for the current work to finish or be reconciled before submitting again.')
     from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
     config=campaign_job_config(dict(config or generation.configuration()),kind)
     from .word_contract import require_generation
@@ -255,8 +267,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         if require_current_generation_quote:
             quoted_keys=('semantic_contract','semantic_stage_protocol','semantic_max_calls',
                 'semantic_request_byte_limit','semantic_capacity_profile','semantic_timeout_seconds',
-                'semantic_output_token_limit','semantic_maximum_cost')
-            if any(type(config.get(key)) is not type(prospective[key]) or config[key]!=prospective[key] for key in quoted_keys):
+                'semantic_output_token_limit','semantic_maximum_cost','semantic_schema_transport')
+            if any(type(config.get(key)) is not type(prospective.get(key)) or config.get(key)!=prospective.get(key) for key in quoted_keys):
                 raise ValidationError('Generation capacity changed after this quote. Reload to review the current maximum charge. Nothing was queued.')
         config=prospective
         graph_definition = all(d.get('version') == 4 for d in definitions.values())
@@ -328,6 +340,11 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
     # Record the release that accepted this new request. An idempotent replay
     # returns above and must never relabel a retained attempt.
     config['queued_release_sha']=settings.RELEASE_SHA
+    if recovery_parent is not None:
+        config=generation_recovery.bind(recovery_parent,recovery_value,e,user,config)
+        if recovery_existing is not None:
+            recovery_existing.reused=True
+            return recovery_existing
     job=Job.objects.create(encounter=e,user=user,kind=kind,revision=e.revision,request_key=key,input_path=input_path,config=config)
     job.reused=False
     if kind=='transcription':
@@ -337,6 +354,8 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         reserve(job,max_cost)
         charge_limit=max_cost*MULTIPLIER
     audit(user,'job.queued',job.pk,department=e.department,kind=kind,charge_limit=str(charge_limit))
+    if recovery_parent is not None:
+        audit(user,'generation.recovery_queued',job.pk,department=e.department,recovery=config[generation_recovery.RECOVERY_KEY])
     return job
 
 def describe_submission(input_path,ceiling_seconds=None):
