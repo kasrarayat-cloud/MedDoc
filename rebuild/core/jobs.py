@@ -255,7 +255,7 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         old.reused=True
         return old
     elif Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():
-        raise ValidationError('This encounter has active work or unsettled provider exposure. The single repaired attempt cannot be repeated before reconciliation.')
+        raise ValidationError('This encounter has a pending job or unsettled provider exposure. Wait for the current work to finish or be reconciled before submitting again.')
     from .preparation_campaign import campaign_job_config,admit_campaign_job,campaign_identity,JOB_QUOTE_LIMIT
     config=campaign_job_config(dict(config or generation.configuration()),kind)
     from .word_contract import require_generation
