@@ -43,8 +43,15 @@ class RecoveryFixture:
     def prospective(self,config):
         return {**self.original_pipeline(config),recovery.TRANSPORT_KEY:NEW_TRANSPORT}
 
+    def historical_pipeline(self,config):
+        # Reconstruct the actual predecessor protocol; current queues now opt in.
+        value=self.original_pipeline(config)
+        value.pop(recovery.TRANSPORT_KEY,None)
+        return value
+
     def reject(self,encounter,*,status=400,error_type='invalid_request_error',message='The compiled grammar is too large. Simplify the tool schema.',network=False):
-        with override_settings(RELEASE_SHA=OLD_RELEASE):job=enqueue(encounter,self.user,config=self.config())
+        with override_settings(RELEASE_SHA=OLD_RELEASE),patch.object(ai_stages,'pipeline_config',side_effect=self.historical_pipeline):
+            job=enqueue(encounter,self.user,config=self.config())
         if network:exception=TimeoutError('offline transport uncertainty')
         else:
             response=httpx.Response(status,request=httpx.Request('POST','https://synthetic.invalid/messages'),
@@ -79,11 +86,14 @@ class RecoveryFixture:
                     for f in payload['fields']]};assigned=parsed
             else:parsed=checker(payload['graph'],payload['fields'],payload['approved_definitions'],assigned)
             usage={'input_tokens':10,'cached_input_tokens':0,'cache_creation_tokens':0,'output_tokens':0}
+            from core.clinical_schema_transport import encode
+            text='invalid JSON'if fail_checker and role=='checker'else json.dumps(encode(schema,parsed))
             value=SimpleNamespace(id='msg_offlineRecovery'+new.pk.hex+role,_request_id='req_offlineRecovery'+new.pk.hex+role,
-                model=config['model'],model_dump=lambda **kw:{'id':'msg_offlineRecovery'+new.pk.hex+role,'output':parsed,'usage':usage})
+                model=config['model'],model_dump=lambda **kw:{'id':'msg_offlineRecovery'+new.pk.hex+role,
+                    'content':[{'type':'text','text':text}],'usage':usage,'stop_reason':'end_turn'})
             on_response(value);cost=Decimal('0.00002')
             rates=generation.cost_rates(generation.rates(config),cost,Decimal('0'))
-            return value,cost,usage,rates,('invalid JSON'if fail_checker and role=='checker'else json.dumps(parsed)),True
+            return value,cost,usage,rates,text,True
         with patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-offline-placeholder'}),patch.object(ai_stages,'_response',side_effect=response),patch('core.coding_hooks.after_saved_document'):
             self.assertTrue(run_one())
         new.refresh_from_db();self.encounter.refresh_from_db()
@@ -109,7 +119,7 @@ class RecoveryFixture:
 class GenerationRecoveryTests(RecoveryFixture,TestCase):
     def test_retained_rejection_is_not_automatically_retried_or_cost_reconciled(self):
         self.assertIsNotNone(recovery.rejection(self.old))
-        self.assertIsNone(recovery.offer(self.encounter,self.user,self.original_pipeline(self.config())))
+        self.assertIsNone(recovery.offer(self.encounter,self.user,self.historical_pipeline(self.config())))
         self.assertEqual(enqueue(self.encounter,self.user,config=self.config()).pk,self.old.pk)
         self.assertTrue(result_snapshot(self.encounter,[self.old])['pending']);self.unchanged()
 
@@ -275,6 +285,18 @@ class GenerationRecoveryTests(RecoveryFixture,TestCase):
             # choosing the lower estimate or by the old unknown cost being null.
             with self.assertRaises(ai_stages.StageNotSent):recovery.enforce_stage_budget(new,[SimpleNamespace(quote_maximum=Decimal('1'),actual_cost=Decimal('8'))],Decimal('0.01'))
         self.unchanged()
+
+    def test_stage_budget_refusal_precedes_new_receipt_retention_and_provider_send(self):
+        from core import source_assertion_graph as graph
+        new=self.retry();new.state='running';new.save(update_fields=['state'])
+        with patch.object(recovery,'enforce_stage_budget',side_effect=ai_stages.StageNotSent('Offline exhausted exposure'))as budget,\
+            patch.object(ai_stages,'retain')as retain,patch.object(ai_stages,'_response')as send,\
+            patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-offline-placeholder'}):
+            with self.assertRaises(ai_stages.StageNotSent):
+                ai_stages.execute_stage(job=new,stage='extractor',payload={},schema=graph.extraction_schema(),
+                    instructions='Source constraints unchanged.',config=new.config)
+            self.assertEqual(budget.call_count,1);retain.assert_not_called();send.assert_not_called()
+        self.assertEqual(new.ai_stage_receipts.count(),0);self.unchanged()
 
     def test_forged_successor_metadata_without_application_audit_does_not_unlock_original(self):
         with patch.object(ai_stages,'pipeline_config',side_effect=self.prospective):new=self.retry()

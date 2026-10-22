@@ -346,6 +346,9 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         if previous.filter(stage=stage,attempt=attempt).exists():raise StageNotSent('This stage already has a retained attempt; it cannot be resent.')
         if previous.exclude(state='succeeded').exists():raise StageUnknown('An earlier stage remains unresolved; no new request was sent.')
         if previous.count()>=(call_limit(config) if job is not None else 2):raise StageNotSent('The bounded workflow has no further provider requests.')
+        if job is not None:
+            from .generation_recovery import enforce_stage_budget
+            enforce_stage_budget(job,previous,cap)
         if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=call_limit(config) or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=output_limit):
             raise StageNotSent('The immutable generation quote does not cover this workflow.')
         if job is not None:
