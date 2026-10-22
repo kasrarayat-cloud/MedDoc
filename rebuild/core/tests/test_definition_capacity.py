@@ -36,7 +36,12 @@ class DefinitionCapacityPureTests(SimpleTestCase):
         for key,value in [('provider','openai'),('model','other'),('semantic_definition_version',3),
                           ('semantic_definition_version',4.0),('semantic_component_contract','field-components-v1')]:
             with self.subTest(key=key,value=value):
-                config={**CONFIG,key:value};self.assertEqual(ai_stages.definition_pipeline_config(config),historical(config))
+                config={**CONFIG,key:value}
+                expected=historical(config)
+                if (config['provider'],config['model'])==('anthropic','claude-sonnet-5-5'):
+                    expected['anthropic_request_profile']='sonnet55-between-tools-high-v1'
+                self.assertEqual(ai_stages.definition_pipeline_config(config),expected)
+                self.assertNotIn('anthropic_request_profile',historical(config))
 
     def test_explicit_invalid_profile_never_falls_back(self):
         current=ai_stages.definition_pipeline_config(CONFIG)

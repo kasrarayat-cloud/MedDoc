@@ -79,7 +79,8 @@ def configuration():
     price={k:config[k] for k in ('provider','model','input_rate','output_rate','cached_rate','voice_rate_minute','voice_rate_second','discount_rate')}
     price.update(cost_basis='configured_usd_rates',voice_provider='deepgram:nova-3-medical',voice_cost_quantum='0.0000000001',voice_rounding='half_even',multiplier='1.5')
     config['pricing_version']='configured-v1:'+hashlib.sha256(json.dumps(price,sort_keys=True,separators=(',',':')).encode()).hexdigest()
-    return config
+    from . import anthropic_request_policy
+    return anthropic_request_policy.prospective(config)
 
 # Settlement-safe precision: eleven decimals, so the exact 1.5× charge always fits the twelve-decimal ledger.
 COST_QUANTUM=Decimal('0.00000000001')
@@ -1744,6 +1745,10 @@ def validate_selections(notes,fields,selections,*,context_labels=(),evidence_con
 
 def generate(notes,fields,config=None,*,context_labels=()):
     config=config or configuration()
+    from . import anthropic_request_policy
+    try:anthropic_request_policy.parameters(config)
+    except anthropic_request_policy.PolicyError as exc:
+        raise ValidationError('Unsupported explicit Anthropic request profile.') from exc
     if len(notes)>50000 or len(fields)>100: raise ValidationError('Source exceeds supported limits; split explicitly. Nothing was truncated.')
     contract=generation_evidence_contract(fields,config)
     if config['mode']!='live':
@@ -1779,10 +1784,11 @@ def generate(notes,fields,config=None,*,context_labels=()):
         from anthropic import Anthropic
         client=Anthropic(timeout=60,max_retries=0)
         r=rates(config)
-        response=client.messages.create(model=config['model'],max_tokens=6000,
-            system=instructions,
-            messages=[{'role':'user','content':json.dumps(payload)}],
-            output_config={'format':{'type':'json_schema','schema':schema.model_json_schema()}})
+        envelope=anthropic_request_policy.apply({'model':config['model'],'max_tokens':6000,
+            'system':instructions,
+            'messages':[{'role':'user','content':json.dumps(payload)}],
+            'output_config':{'format':{'type':'json_schema','schema':schema.model_json_schema()}}},config)
+        response=client.messages.create(**envelope)
         u=response.usage
         cached=getattr(u,'cache_read_input_tokens',0) or 0
         written=getattr(u,'cache_creation_input_tokens',0) or 0
