@@ -791,7 +791,8 @@ def instructions_for(definitions, instructions):
     return instructions
 
 
-def run(notes, fields, definitions, send, *, identity):
+def run(notes, fields, definitions, send, *, identity, allow_repair=True):
+    g.require(type(allow_repair) is bool,'invalid_repair_policy')
     _definitions(fields,definitions)
     _identity(identity)
     units = g.units_for(notes)
@@ -807,7 +808,7 @@ def run(notes, fields, definitions, send, *, identity):
     attempts = [{'assignment':deepcopy(assignment),'checker':deepcopy(checker)}]
     evaluated = _evaluate(notes,fields,definitions,identity,graph,attempts)
     repair = _repair_keys(evaluated['adjudication'],evaluated['answers'])
-    if repair:
+    if repair and allow_repair:
         assignment = send('assigner',2,{**base,'graph':graph,'previous_assignment':assignment,
             'prior_checker':checker,'repair_keys':repair},assignment_schema(),instructions_for(definitions,ASSIGN_INSTRUCTIONS))
         selected = validate_assignments(graph,fields,definitions,assignment)

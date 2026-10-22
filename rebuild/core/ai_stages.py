@@ -397,7 +397,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         if previous.count()>=(call_limit(config) if job is not None else 2):raise StageNotSent('The bounded workflow has no further provider requests.')
         if job is not None:
             from .generation_recovery import enforce_stage_budget
-            enforce_stage_budget(job,previous,cap)
+            enforce_stage_budget(job,previous,cap,stage=stage,attempt=attempt)
         if job is not None and (config.get('semantic_stage_protocol')!=PROTOCOL or config.get('semantic_max_calls')!=call_limit(config) or config.get('semantic_request_byte_limit')!=MAX_REQUEST_BYTES or config.get('semantic_output_token_limit')!=output_limit):
             raise StageNotSent('The immutable generation quote does not cover this workflow.')
         if job is not None:
@@ -418,6 +418,15 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
             requested_model=config['model'],quote_maximum=cap,simulated=not live)
     with stage_slot(receipt,config):
         parent_context(job,definition_preparation,config)
+        if job is not None:
+            from . import clinical_call_authority as scoped
+            if scoped.selected(config):
+                # Recheck after acquiring the shared actual-send lock. Other
+                # associated work appearing after reservation cannot be ignored.
+                with transaction.atomic():
+                    Job.objects.select_for_update().get(pk=job.pk)
+                    enforce_stage_budget(job,AIStageReceipt.objects.filter(job=job).exclude(pk=receipt.pk),
+                        cap,stage=stage,attempt=attempt)
         receipt.state='sending';receipt.started_at=timezone.now();receipt.save(update_fields=['state','started_at'])
         try:
             if live:
