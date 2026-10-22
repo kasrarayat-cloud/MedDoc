@@ -30,13 +30,17 @@ def retained_request_matches(request, expected, *, config, provider, simulated):
     try:new_transport=clinical.selected(config)
     except clinical.TransportError:return False
     if new_transport:
-        if (request.get('schema_transport')!=clinical.TRANSPORT or provider!='anthropic'
+        if (request.get('schema_transport')!=clinical.marker(config) or provider!='anthropic'
                 or simulated is not False):
             return False
-        expected={**expected,'schema_transport':clinical.TRANSPORT}
+        expected={**expected,'schema_transport':clinical.marker(config)}
+        if clinical.marker(config)==clinical.CURRENT_TRANSPORT:
+            try:expected={**expected,'transmitted_schema':json.dumps(clinical.transmitted_schema(
+                expected['schema'],clinical.marker(config)),ensure_ascii=False,separators=(',',':'),allow_nan=False)}
+            except (KeyError,TypeError,ValueError):return False
     if 'schema_transport' in request:
         marker = request['schema_transport']
-        if (type(marker) is not str or marker != (clinical.TRANSPORT if new_transport else ANTHROPIC_SCHEMA_TRANSPORT)
+        if (type(marker) is not str or marker != (clinical.marker(config) if new_transport else ANTHROPIC_SCHEMA_TRANSPORT)
                 or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
                 or provider != 'anthropic' or simulated is not False):
             return False

@@ -350,7 +350,8 @@ def _offer(encounter,user):
     if prior:
         return {'available':False,'reason':'The one independent recheck already has a retained attempt.',
                 'prior_job_id':str(prior.pk),'prior_job_state':prior.state,'provider_calls':0}
-    if Job.objects.filter(encounter=encounter,state__in=['queued','running','reconciliation']).exists():
+    from .generation_recovery import pending_jobs
+    if pending_jobs(Job.objects.filter(encounter=encounter,state__in=['queued','running','reconciliation'])):
         _fail('Another request is still pending for this encounter.')
     runs=list(CodingRun.objects.filter(encounter=encounter,user=user,config__provider='corti',config__mode='live').exclude(
         state__in=['queued','running','unknown','failed']))
