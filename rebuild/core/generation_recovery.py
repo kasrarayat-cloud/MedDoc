@@ -11,11 +11,12 @@ import re
 from uuid import UUID
 from django.conf import settings
 from django.core import signing
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from .models import AuditEvent, Job, Usage, ProviderReceipt
 from .security import private_path
 
 CONTRACT='rejected-generation-successor-v1'
+CONTRACT_V2='rejected-generation-successor-v2'
 SALT='rejected-generation-successor'
 TRANSPORT_KEY='semantic_schema_transport'
 RECOVERY_KEY='semantic_recovery'
@@ -25,6 +26,11 @@ CONFIG_KEYS=('provider','model','mode','prompt_version','pricing_version','input
     'semantic_output_token_limit','semantic_maximum_cost',TRANSPORT_KEY)
 CHANGED_KEYS=frozenset({TRANSPORT_KEY,'queued_release_sha',RECOVERY_KEY})
 MAX_FAMILY_CALLS=5
+V2_FAMILY_MAX_CALLS=8
+PER_BATCH_MAX_CALLS=5
+# A rejected first extractor has no reusable output: its successor must still
+# complete extractor, assigner and checker under the original family limit.
+MIN_SUCCESSOR_CALLS=3
 
 
 def _digest(value):
@@ -41,6 +47,32 @@ def _cost(value):
     if type(value)is not Decimal or not value.is_finite() or value<0:
         raise ValueError('invalid retained exposure')
     return value
+
+
+def _v2_bounds(config):
+    """Server-selected technical batch bounds, never new funding or credits."""
+    from . import testing_authority
+    if testing_authority.identity(config) is None:return None
+    if (config['testing_purpose']!=testing_authority.PURPOSES['generation']
+        or type(config.get('semantic_max_calls'))is not int
+        or config['semantic_max_calls']!=PER_BATCH_MAX_CALLS
+        or type(config.get('semantic_maximum_cost'))is not str):raise ValueError('recovery authority or batch bounds')
+    _cost(Decimal(config['semantic_maximum_cost']))
+    return {'per_batch_max_calls':PER_BATCH_MAX_CALLS,'family_max_calls':V2_FAMILY_MAX_CALLS,
+        'family_cost_ceiling':config['semantic_maximum_cost'],
+        **{key:config[key]for key in testing_authority.KEYS}}
+
+
+def _family_limit(config):
+    value=config.get(RECOVERY_KEY)
+    limit=config.get('semantic_max_calls')
+    if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS:raise ValueError('per-job recovery bound')
+    if type(value)is not dict:raise ValueError('recovery contract')
+    if value.get('contract')==CONTRACT:return limit
+    if value.get('contract')!=CONTRACT_V2:raise ValueError('recovery contract')
+    bounds=_v2_bounds(config)
+    if bounds is None or any(not _same(value.get(k),v)for k,v in bounds.items()):raise ValueError('recovery batch bounds')
+    return V2_FAMILY_MAX_CALLS
 
 
 def _retained(path,digest):
@@ -117,7 +149,21 @@ def _children(job):
 def _edge(predecessor,successor,proof):
     value=successor.config.get(RECOVERY_KEY)
     keys={'contract',*proof,'encounter','actor','revision','new_transport','accepted_release','new_configuration_sha256'}
-    if type(value)is not dict or set(value)!=keys or value.get('contract')!=CONTRACT:return False
+    if type(value)is not dict:return False
+    if value.get('contract')==CONTRACT:
+        # Raising the traversal bound must never broaden a historical v1 edge.
+        limit=predecessor.config.get('semantic_max_calls')
+        if (type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS
+            or type(proof.get('prior_calls'))is not int or not 1<=proof['prior_calls']<limit):return False
+    elif value.get('contract')==CONTRACT_V2:
+        try:bounds=_v2_bounds(successor.config)
+        except (KeyError,TypeError,ValueError,InvalidOperation,ValidationError):return False
+        if bounds is None or any(not _same(value.get(k),v)for k,v in bounds.items()):return False
+        keys.update(bounds)
+        if (type(proof.get('prior_calls'))is not int
+            or proof['prior_calls']<1 or V2_FAMILY_MAX_CALLS-proof['prior_calls']<MIN_SUCCESSOR_CALLS):return False
+    else:return False
+    if set(value)!=keys:return False
     if any(not _same(value.get(k),v)for k,v in proof.items()):return False
     if (successor.kind!='generation' or successor.pk==predecessor.pk
         or successor.encounter_id!=predecessor.encounter_id or successor.user_id!=predecessor.user_id
@@ -155,7 +201,7 @@ def _lineage(job,*,lock=False):
         value=nodes[-1].config[RECOVERY_KEY]
         if type(value)is not dict or type(value.get('job'))is not str:raise ValueError('malformed recovery parent')
         identifier=UUID(value['job'])
-        if str(identifier)!=value['job'] or identifier in seen or len(nodes)>=MAX_FAMILY_CALLS:
+        if str(identifier)!=value['job'] or identifier in seen or len(nodes)>=V2_FAMILY_MAX_CALLS:
             raise ValueError('cyclic or excessive recovery family')
         manager=Job.objects.select_for_update()if lock else Job.objects
         parent=manager.get(pk=identifier)
@@ -163,6 +209,9 @@ def _lineage(job,*,lock=False):
             or parent.revision!=job.revision):raise ValueError('recovery family identity')
         seen.add(identifier);nodes.append(parent)
     nodes.reverse();exposure=Decimal('0');transports=set()
+    if (len(nodes)>MAX_FAMILY_CALLS
+        and job.config.get(RECOVERY_KEY,{}).get('contract')!=CONTRACT_V2):
+        raise ValueError('historical recovery family bound')
     for index,(parent,child)in enumerate(zip(nodes,nodes[1:])):
         proof=_local_rejection(parent)
         if not proof:raise ValueError('unproved recovery ancestor')
@@ -212,7 +261,26 @@ def _proposal(job,encounter,user,config):
     children=_children(job)
     if children and (len(children)!=1 or not linked(job,children[0])):return None
     limit=job.config.get('semantic_max_calls')
-    if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS or proof['prior_calls']>=limit:return None
+    if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS:return None
+    try:
+        bounds=_v2_bounds(job.config)
+        if bounds is not None:
+            from . import testing_authority
+            # The page's price quote is deliberately not a queued job config.
+            # Apply the same prospective authority/enrollment admission as the
+            # enqueue path, without copying authority from a historical job.
+            authorized=testing_authority.active_config(config,'generation')
+            authorized=testing_authority.bind_actor_config(authorized,user,encounter.department_id)
+            testing_authority.validate_config(authorized,'generation')
+            testing_authority.admit_encounter(user,encounter)
+            if (not _same(_v2_bounds(authorized),bounds)
+                or not _same(authorized.get(testing_authority.ACTOR_ENROLLMENT_KEY),
+                             job.config.get(testing_authority.ACTOR_ENROLLMENT_KEY))
+                or any(key not in job.config or not _same(value,job.config[key])
+                       for key,value in config.items()if key not in CHANGED_KEYS)):return None
+    except (AttributeError,KeyError,TypeError,ValueError,InvalidOperation,PermissionDenied,ValidationError):return None
+    family_limit=V2_FAMILY_MAX_CALLS if bounds is not None else limit
+    if family_limit-proof['prior_calls']<MIN_SUCCESSOR_CALLS:return None
     prospective={k:config[k]for k in CONFIG_KEYS if k in config}
     original={k:job.config[k]for k in CONFIG_KEYS if k in job.config}
     new_transport=prospective.pop(TRANSPORT_KEY,None);original.pop(TRANSPORT_KEY,None)
@@ -220,14 +288,15 @@ def _proposal(job,encounter,user,config):
     if (not _same(prospective,original) or type(new_transport)is not str or not new_transport
         or new_transport in transports|{proof['old_transport']} or not re.fullmatch('[a-f0-9]{40}',release)
         or release==job.config['queued_release_sha']):return None
-    return {'contract':CONTRACT,**proof,'encounter':str(encounter.pk),'actor':str(user.pk),
+    return {'contract':CONTRACT_V2 if bounds is not None else CONTRACT,**(bounds or {}),
+        **proof,'encounter':str(encounter.pk),'actor':str(user.pk),
         'revision':encounter.revision,'new_transport':new_transport,'accepted_release':release,
         'new_configuration_sha256':_digest({k:config[k]for k in CONFIG_KEYS if k in config})}
 
 
 def offer(encounter,user,config):
     """Read-only offer; a GET neither authorizes nor reserves a successor."""
-    jobs=list(Job.objects.filter(encounter=encounter,state__in=['queued','running','reconciliation']).order_by('-created_at','-pk')[:MAX_FAMILY_CALLS+1])
+    jobs=list(Job.objects.filter(encounter=encounter,state__in=['queued','running','reconciliation']).order_by('-created_at','-pk')[:V2_FAMILY_MAX_CALLS+1])
     try:
         tips=[job for job in jobs if successor(job)is None]
         if len(tips)!=1:return None
@@ -242,7 +311,8 @@ def offer(encounter,user,config):
 def predecessor(token,encounter,user):
     try:
         value=signing.loads(token,salt=SALT,max_age=600)
-        if value.get('contract')!=CONTRACT or value.get('actor')!=str(user.pk) or value.get('encounter')!=str(encounter.pk):raise ValueError()
+        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2)
+            or value.get('actor')!=str(user.pk) or value.get('encounter')!=str(encounter.pk)):raise ValueError()
         job=Job.objects.select_for_update().get(pk=value['job'],encounter=encounter,user=user)
         return job,value
     except (signing.BadSignature,Job.DoesNotExist,KeyError,TypeError,ValueError):
@@ -278,7 +348,7 @@ def successor(job):
 def latest(job):
     """Idempotent normal submissions resolve to the tip, never buy a new family."""
     seen={job.pk}
-    for _ in range(MAX_FAMILY_CALLS-1):
+    for _ in range(V2_FAMILY_MAX_CALLS-1):
         child=successor(job)
         if child is None or child.pk in seen:return job
         seen.add(child.pk);job=child
@@ -297,8 +367,13 @@ def enforce_stage_budget(job,previous,cap):
     try:
         nodes,prior_exposure,_=_lineage(job,lock=True);rows=list(previous)
         limit=job.config['semantic_max_calls']
-        if len(nodes)<2 or type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS or len(nodes)-1+len(rows)>=limit:raise ValueError()
+        family_limit=_family_limit(job.config)
+        if (len(nodes)<2 or type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS
+            or len(rows)>=limit or len(nodes)-1+len(rows)>=family_limit):raise ValueError()
         exposure=prior_exposure+sum((max(_cost(row.quote_maximum),_cost(row.actual_cost)if row.actual_cost is not None else Decimal('0'))for row in rows),Decimal('0'))+_cost(cap)
-        if exposure>_cost(maximum_cost(job.config)):raise ValueError()
+        ceiling=_cost(maximum_cost(job.config))
+        if (job.config[RECOVERY_KEY]['contract']==CONTRACT_V2
+            and Decimal(job.config[RECOVERY_KEY]['family_cost_ceiling'])!=ceiling):raise ValueError()
+        if exposure>ceiling:raise ValueError()
     except (Job.DoesNotExist,AttributeError,KeyError,TypeError,ValueError,OSError,InvalidOperation,ValidationError):
         raise StageNotSent('The repaired workflow has exhausted or lost its original bounded-call and cost evidence; nothing was sent.') from None

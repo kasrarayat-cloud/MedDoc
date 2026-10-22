@@ -10,7 +10,8 @@ import math
 
 CONFIG_KEY = 'semantic_schema_transport'
 TRANSPORT = 'anthropic-nullable-singleton-arrays-v1'
-CURRENT_TRANSPORT = 'anthropic-evidence-reference-table-v2'
+EVIDENCE_TRANSPORT = 'anthropic-evidence-reference-table-v2'
+CURRENT_TRANSPORT = 'anthropic-flat-typed-nodes-v3'
 INSTRUCTIONS = (
     '\nClinical transport anthropic-nullable-singleton-arrays-v1: every schema-declared '
     'nullable value is an array: [] for null, or exactly [value] for a present value. '
@@ -33,7 +34,7 @@ def invalid():
 def selected(config):
     if CONFIG_KEY not in config:
         return False
-    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] not in (TRANSPORT, CURRENT_TRANSPORT)
+    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT)
             or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
             or config.get('model') != 'claude-sonnet-5-5'):
         raise invalid()
@@ -46,6 +47,9 @@ def marker(config):
 
 def instructions(config):
     if marker(config) == CURRENT_TRANSPORT:
+        from .clinical_node_transport import INSTRUCTIONS as value
+        return value
+    if marker(config) == EVIDENCE_TRANSPORT:
         from .clinical_evidence_transport import INSTRUCTIONS as value
         return value
     return INSTRUCTIONS
@@ -151,6 +155,9 @@ def _schema(schema):
 
 def wire_schema(schema, *, transport=TRANSPORT):
     if transport == CURRENT_TRANSPORT:
+        from .clinical_node_transport import wire_schema as convert
+        return convert(schema)
+    if transport == EVIDENCE_TRANSPORT:
         from .clinical_evidence_transport import wire_schema as convert
         return convert(schema)
     if transport != TRANSPORT:
@@ -237,7 +244,7 @@ def decode(schema, value):
 def response_value(text, request, *, config, provider, simulated):
     """Decode only a new request whose explicit immutable configuration agrees."""
     transport = request.get('schema_transport')
-    if transport not in (TRANSPORT, CURRENT_TRANSPORT):
+    if transport not in (TRANSPORT, EVIDENCE_TRANSPORT, CURRENT_TRANSPORT):
         if selected(config):
             raise invalid()
         # Historical readers retain their original parser. Their caller still
@@ -247,6 +254,9 @@ def response_value(text, request, *, config, provider, simulated):
     if marker(config) != transport or provider != 'anthropic' or simulated is not False:
         raise invalid()
     if transport == CURRENT_TRANSPORT:
+        from .clinical_node_transport import decode as restore
+        return restore(request['schema'], strict_loads(text))
+    if transport == EVIDENCE_TRANSPORT:
         from .clinical_evidence_transport import decode as restore
         return restore(request['schema'], strict_loads(text))
     return decode(request['schema'], strict_loads(text))
