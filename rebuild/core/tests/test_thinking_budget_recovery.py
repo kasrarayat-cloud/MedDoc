@@ -243,6 +243,84 @@ class ThinkingBudgetRecoveryTests(SimpleTestCase):
             recovery.enforce_stage_budget(child,[],Decimal('6.069115'))
             with self.assertRaises(ai_stages.StageNotSent):recovery.enforce_stage_budget(child,[],Decimal('6.069115000001'))
 
+    def test_authenticated_metered_v3_can_bind_current_v4_profile_and_preserve_history(self):
+        # metered_family authenticates the actual raw request/result, received
+        # audit and exact Usage/ProviderReceipt before constructing query doubles.
+        tip=self.metered_family()
+        config={**self.prospective(tip),
+            recovery.TRANSPORT_KEY:recovery.clinical_transport.LATEST_TRANSPORT}
+        self.assertEqual(config[recovery.TRANSPORT_KEY],recovery.clinical_transport.JSON_TRANSPORT)
+        self.assertEqual(tip.config[recovery.TRANSPORT_KEY],recovery.clinical_transport.CURRENT_TRANSPORT)
+        self.assertNotIn(policy.CONFIG_KEY,tip.config)
+        before=deepcopy((self.jobs,self.stage,self.receipts,self.usages,self.received))
+        with self.lineage_scope():
+            value=recovery._proposal(tip,self.encounter,self.user,config)
+            self.assertIsNotNone(value)
+            self.assertEqual(value['contract'],recovery.CONTRACT_METERED)
+            self.assertEqual(value['old_transport'],recovery.clinical_transport.CURRENT_TRANSPORT)
+            self.assertEqual(value['new_transport'],recovery.clinical_transport.JSON_TRANSPORT)
+            self.assertIsNone(value['old_request_profile'])
+            self.assertEqual(value['new_request_profile'],policy.PROFILE)
+            self.assertEqual(value['prior_calls'],4)
+            self.assertEqual(Decimal(value['prior_quote']),Decimal('2.080885'))
+            self.assertEqual(value['per_batch_max_calls'],5)
+            self.assertEqual(value['family_max_calls'],8)
+            self.assertEqual(value['family_cost_ceiling'],'8.15000000000')
+            parent,decoded=recovery.predecessor(signing.dumps(value,salt=recovery.SALT),
+                self.encounter,self.user)
+            self.assertIs(parent,tip);self.assertEqual(decoded,value)
+            self.assertEqual(recovery.bind(tip,value,self.encounter,self.user,config)[recovery.RECOVERY_KEY],value)
+            # This same proposal was denied by the former finite whitelist.
+            historical=(recovery.clinical_transport.TRANSPORT,
+                recovery.clinical_transport.EVIDENCE_TRANSPORT,recovery.clinical_transport.CURRENT_TRANSPORT)
+            with patch.object(recovery,'METERED_SUCCESSOR_TRANSPORTS',historical):
+                self.assertIsNone(recovery._proposal(tip,self.encounter,self.user,config))
+        self.assertEqual((self.jobs,self.stage,self.receipts,self.usages,self.received),before)
+        child=self.successor(tip,value,config)
+        proof={key:value[key]for key in self.metered_proof}
+        with self.lineage_scope():
+            self.assertTrue(recovery._edge(tip,child,proof))
+            self.assertTrue(recovery.linked(tip,child))
+            self.assertEqual(len(recovery.family_ids(child)),5)
+            with patch.object(recovery,'METERED_SUCCESSOR_TRANSPORTS',historical):
+                self.assertFalse(recovery._edge(tip,child,proof))
+
+    def test_current_metered_successor_still_refuses_unsupported_carrier_and_changed_scope(self):
+        tip=self.metered_family()
+        config={**self.prospective(tip),
+            recovery.TRANSPORT_KEY:recovery.clinical_transport.JSON_TRANSPORT}
+        unsupported=['anthropic-canonical-json-v5','unrecognized',None,True]
+        before=deepcopy(self.jobs)
+        with self.lineage_scope():
+            value=recovery._proposal(tip,self.encounter,self.user,config)
+            self.assertIsNotNone(value)
+            for marker in unsupported:
+                with self.subTest(unsupported_transport=marker):
+                    self.assertIsNone(recovery._proposal(tip,self.encounter,self.user,
+                        {**config,recovery.TRANSPORT_KEY:marker}))
+            for key,bad in [(policy.CONFIG_KEY,None),(policy.CONFIG_KEY,'other'),
+                    ('semantic_source_sha256','0'*64),('semantic_definitions_sha256','0'*64),
+                    ('semantic_max_calls',6),('semantic_maximum_cost','8.16'),
+                    ('semantic_timeout_seconds',241),('input_rate','2.1')]:
+                with self.subTest(changed_scope=key,bad=bad):
+                    self.assertIsNone(recovery._proposal(tip,self.encounter,self.user,{**config,key:bad}))
+        self.assertEqual(self.jobs,before)
+        child=self.successor(tip,value,config)
+        proof={key:value[key]for key in self.metered_proof}
+        with self.lineage_scope():
+            self.assertTrue(recovery._edge(tip,child,proof))
+            for marker in unsupported:
+                # Recompute the digest and audit so rejection exercises the
+                # carrier boundary, rather than an unrelated stale hash.
+                forged={**config,recovery.TRANSPORT_KEY:marker}
+                edge={**value,'new_transport':marker,
+                    'new_configuration_sha256':recovery._digest({k:forged[k]
+                        for k in recovery.CONFIG_KEYS if k in forged})}
+                child.config={**forged,recovery.RECOVERY_KEY:edge}
+                self.events[str(child.pk)][0].details={'recovery':deepcopy(edge)}
+                with self.subTest(edge_unsupported_transport=marker):
+                    self.assertFalse(recovery._edge(tip,child,proof))
+
     def test_unchanged_profile_transport_release_actor_source_and_forged_caps_refuse(self):
         tip=self.metered_family();config=self.prospective(tip)
         with self.lineage_scope():
@@ -378,6 +456,14 @@ class ThinkingBudgetRecoveryRouteTests(TestCase):
                 for job in self.previous for stage in job.ai_stage_receipts.all()}}
 
     def test_real_get_post_double_click_and_three_stage_success_preserve_four_old_attempts(self):
+        # This retained test exercises the historical same-v3/new-profile
+        # contract. A newer prospective carrier must not relabel that fixture.
+        pipeline=ai_stages.pipeline_config
+        with patch.object(ai_stages,'pipeline_config',side_effect=lambda config:{
+                **pipeline(config),recovery.TRANSPORT_KEY:recovery.clinical_transport.CURRENT_TRANSPORT}):
+            self._assert_real_v3_get_post_double_click_and_three_stage_success()
+
+    def _assert_real_v3_get_post_double_click_and_three_stage_success(self):
         from core.security import private_path
         from core import clinical_node_transport as codec, source_assertion_graph as graph
         from core.tests.test_source_assertion_graph import checker

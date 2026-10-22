@@ -40,7 +40,7 @@ def retained_request_matches(request, expected, *, config, provider, simulated):
                 or simulated is not False):
             return False
         expected={**expected,'schema_transport':clinical.marker(config)}
-        if clinical.marker(config) in (clinical.EVIDENCE_TRANSPORT, clinical.CURRENT_TRANSPORT):
+        if clinical.marker(config) in (clinical.EVIDENCE_TRANSPORT, clinical.CURRENT_TRANSPORT, clinical.JSON_TRANSPORT):
             try:expected={**expected,'transmitted_schema':json.dumps(clinical.transmitted_schema(
                 expected['schema'],clinical.marker(config)),ensure_ascii=False,separators=(',',':'),allow_nan=False)}
             except (KeyError,TypeError,ValueError):return False

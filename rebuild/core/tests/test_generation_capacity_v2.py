@@ -183,7 +183,7 @@ class GenerationCapacityV2DatabaseTests(TestCase):
     setUp = previous.GenerationCapacityDatabaseTests.setUp
     def provider(self):
         """The provider double emits the explicitly selected wire contract."""
-        from core import clinical_schema_transport as transport, clinical_evidence_transport as evidence, clinical_node_transport as nodes
+        from core import clinical_schema_transport as transport, clinical_evidence_transport as evidence, clinical_node_transport as nodes, clinical_json_transport as document
         original = previous.GenerationCapacityDatabaseTests.provider(self)
         def respond(*args):
             schema, config, callback = args[1], args[3], args[-1]
@@ -194,7 +194,8 @@ class GenerationCapacityV2DatabaseTests(TestCase):
                 parsed = dump()['output']
                 codec = {transport.TRANSPORT:transport,
                     transport.EVIDENCE_TRANSPORT:evidence,
-                    transport.CURRENT_TRANSPORT:nodes}[transport.marker(config)]
+                    transport.CURRENT_TRANSPORT:nodes,
+                    transport.JSON_TRANSPORT:document}[transport.marker(config)]
                 text = json.dumps(codec.encode(schema, parsed)); emitted.append(text)
                 response.model_dump = lambda **kw: {
                     **{k:v for k,v in dump(**kw).items() if k!='output'},

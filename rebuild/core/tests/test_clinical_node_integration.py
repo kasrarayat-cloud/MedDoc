@@ -22,7 +22,7 @@ class ClinicalNodeIntegrationTests(SimpleTestCase):
     def test_actual_SDK_preserves_payload_bounds_and_uses_complete_flat_carrier(self):
         from core import source_assertion_graph as graph
         schema = graph.extraction_schema()
-        config = ai_stages.pipeline_config(CONFIG)
+        config = {**ai_stages.pipeline_config(CONFIG), transport.CONFIG_KEY: nodes.TRANSPORT}
         self.assertEqual(config[transport.CONFIG_KEY], nodes.TRANSPORT)
         self.assertEqual(ai_stages.generation_limits(config), (32000, 240))
         self.assertEqual(Decimal(config['semantic_maximum_cost']), Decimal('8.15'))
@@ -91,7 +91,7 @@ class ClinicalNodeIntegrationTests(SimpleTestCase):
 
     @override_settings(RELEASE_SHA='b'*40)
     def test_offer_and_bind_require_three_remaining_roles_before_any_new_work(self):
-        config = ai_stages.pipeline_config(CONFIG)
+        config = {**ai_stages.pipeline_config(CONFIG), transport.CONFIG_KEY: nodes.TRANSPORT}
         original = {**config, transport.CONFIG_KEY: evidence.TRANSPORT, 'queued_release_sha': 'a'*40}
         actor = SimpleNamespace(pk=uuid4())
         encounter = SimpleNamespace(pk=uuid4(), status='draft', answers={}, revision=0)
@@ -100,14 +100,17 @@ class ClinicalNodeIntegrationTests(SimpleTestCase):
             'error_audit': str(uuid4()), 'error_sha256': 'b'*64, 'old_transport': evidence.TRANSPORT,
             'prior_calls': 2, 'prior_quote': '1.022172500000', 'old_config_sha256': recovery._digest(original)}
         queryset = MagicMock(); queryset.order_by.return_value.__getitem__.return_value = [job]
+        failed = MagicMock(); failed.order_by.return_value.__getitem__.return_value = []
         before = deepcopy(original)
         with patch.object(recovery, 'rejection', return_value=proof) as rejected, \
+             patch.object(recovery, '_local_failure', return_value=None), \
              patch.object(recovery, '_source_matches', return_value=True), \
              patch.object(recovery, '_lineage', return_value=([job], Decimal('0'), set())), \
              patch.object(recovery, '_children', return_value=[]), \
              patch.object(recovery, 'successor', return_value=None), \
              patch.object(recovery, 'family_ids', return_value={job.pk}), \
-             patch.object(recovery.Job.objects, 'filter', return_value=queryset), \
+             patch.object(recovery.Job.objects, 'filter', side_effect=lambda **query:
+                 failed if query.get('state') == 'failed' else queryset), \
              patch.object(recovery.Job.objects, 'create') as create_job, \
              patch('core.models.Reservation.objects.create') as reserve, \
              patch.object(ai_stages, '_response') as send:

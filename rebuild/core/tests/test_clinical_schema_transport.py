@@ -145,7 +145,7 @@ class ClinicalSchemaTransportTests(SimpleTestCase):
 
     def test_prospective_selection_old_limits_and_explicit_bad_markers(self):
         current = ai_stages.pipeline_config(CONFIG)
-        self.assertEqual(current[codec.CONFIG_KEY], codec.CURRENT_TRANSPORT)
+        self.assertEqual(current[codec.CONFIG_KEY], codec.LATEST_TRANSPORT)
         self.assertEqual(ai_stages.generation_limits(current), (32000, 240))
         self.assertEqual(Decimal(current['semantic_maximum_cost']), Decimal('8.15'))
         self.assertNotIn(codec.CONFIG_KEY, CONFIG)
