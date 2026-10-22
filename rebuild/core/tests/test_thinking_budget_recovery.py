@@ -378,6 +378,14 @@ class ThinkingBudgetRecoveryRouteTests(TestCase):
                 for job in self.previous for stage in job.ai_stage_receipts.all()}}
 
     def test_real_get_post_double_click_and_three_stage_success_preserve_four_old_attempts(self):
+        # This retained test exercises the historical same-v3/new-profile
+        # contract. A newer prospective carrier must not relabel that fixture.
+        pipeline=ai_stages.pipeline_config
+        with patch.object(ai_stages,'pipeline_config',side_effect=lambda config:{
+                **pipeline(config),recovery.TRANSPORT_KEY:recovery.clinical_transport.CURRENT_TRANSPORT}):
+            self._assert_real_v3_get_post_double_click_and_three_stage_success()
+
+    def _assert_real_v3_get_post_double_click_and_three_stage_success(self):
         from core.security import private_path
         from core import clinical_node_transport as codec, source_assertion_graph as graph
         from core.tests.test_source_assertion_graph import checker

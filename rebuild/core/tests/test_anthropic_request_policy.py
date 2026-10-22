@@ -92,7 +92,9 @@ class AnthropicRequestPolicyTests(SimpleTestCase):
         from core import source_assertion_graph as graph
         raw = base_case()[3]; schema = graph.extraction_schema()
         self.response_text = json.dumps(nodes.encode(schema, raw))
-        old = ai_stages.pipeline_config(CONFIG); old.pop(policy.CONFIG_KEY)
+        # Isolate the historical v3 policy comparison from newer carrier defaults.
+        old = {**ai_stages.pipeline_config(CONFIG), transport.CONFIG_KEY: nodes.TRANSPORT}
+        old.pop(policy.CONFIG_KEY)
         new = policy.prospective(old)
         payload = {'notes': 'Unchanged synthetic source.\r\n', 'source_units': [], 'all_fields': ['one', 'two']}
         old_body, old_result, _ = self.sdk(lambda callback: ai_stages._response(

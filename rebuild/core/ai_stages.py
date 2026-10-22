@@ -98,7 +98,7 @@ def pipeline_config(config):
              else GENERATION_CAPACITY_PROFILE)
     prospective=_pipeline_config(config,profile)
     if config.get('mode')=='live' and _supports_generation_capacity_v2(config):
-        prospective[clinical_transport.CONFIG_KEY]=clinical_transport.CURRENT_TRANSPORT
+        prospective[clinical_transport.CONFIG_KEY]=clinical_transport.LATEST_TRANSPORT
     return prospective
 
 
@@ -259,8 +259,8 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
     if config['provider']=='anthropic':
         from anthropic import Anthropic,transform_schema
         if clinical_transport.selected(config):
+            instructions+=clinical_transport.instructions(config,schema=schema)
             schema=clinical_transport.transmitted_schema(schema,clinical_transport.marker(config))
-            instructions+=clinical_transport.instructions(config)
         else:
             schema=share_anthropic_schema(transform_schema(schema))
         envelope=anthropic_request_policy.apply({'model':config['model'],
@@ -347,7 +347,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
             if definition_preparation is not None:
                 raise StageNotSent('Clinical transport does not apply to definition preparation.')
             envelope['schema_transport']=clinical_transport.marker(config)
-            if envelope['schema_transport'] in (clinical_transport.EVIDENCE_TRANSPORT, clinical_transport.CURRENT_TRANSPORT):
+            if envelope['schema_transport'] in (clinical_transport.EVIDENCE_TRANSPORT, clinical_transport.CURRENT_TRANSPORT, clinical_transport.JSON_TRANSPORT):
                 if len(encode(envelope))>MAX_REQUEST_BYTES:
                     raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
                 # A string preserves schema property ordering through the

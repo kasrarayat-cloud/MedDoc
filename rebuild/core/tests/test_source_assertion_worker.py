@@ -78,34 +78,37 @@ class SourceAssertionWorkerTests(TestCase):
         self.assert_mocked_live_v4_adoption(historical=False, evidence=True)
 
     def test_mocked_live_anthropic_v4_job_adopts_and_reloads_flat_node_transport(self):
+        self.assert_mocked_live_v4_adoption(historical=False, node=True)
+
+    def test_mocked_live_anthropic_v4_job_adopts_and_reloads_JSON_carrier(self):
         self.assert_mocked_live_v4_adoption(historical=False)
 
     def test_historical_absent_marker_v4_job_adopts_and_reloads_shared_transport(self):
         self.assert_mocked_live_v4_adoption(historical=True)
 
-    def assert_mocked_live_v4_adoption(self, *, historical, nullable=False, evidence=False):
-        from core import clinical_schema_transport as codec, clinical_evidence_transport, clinical_node_transport, source_assertion_generation
+    def assert_mocked_live_v4_adoption(self, *, historical, nullable=False, evidence=False, node=False):
+        from core import clinical_schema_transport as codec, clinical_evidence_transport, clinical_node_transport, clinical_json_transport, source_assertion_generation
         from core.security import private_path
         from core.tests.test_billing_policy import fund
         fund(Wallet.objects.get(user=self.user, kind='paid'), Decimal('100'), 'payment:worker-v4-offline')
         config = {**generation.configuration(), 'mode': 'live', 'provider': 'anthropic',
             'model': 'claude-sonnet-5-5', 'input_rate': '1', 'cached_rate': '0.1', 'output_rate': '1',
             'discount_rate': '0'}
-        if historical or nullable or evidence:
+        if historical or nullable or evidence or node:
             prospective_configuration = ai_stages.pipeline_config
             def historical_configuration(value):
                 retained = prospective_configuration(value)
                 if historical:retained.pop(codec.CONFIG_KEY, None)
-                else:retained[codec.CONFIG_KEY]=codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT
+                else:retained[codec.CONFIG_KEY]=codec.CURRENT_TRANSPORT if node else codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT
                 return retained
             # Recreate an already-queued old configuration only in this test.
             with patch.object(ai_stages, 'pipeline_config', side_effect=historical_configuration):
                 job = enqueue(self.encounter, self.user, config=config)
             if historical:self.assertNotIn(codec.CONFIG_KEY, job.config)
-            else:self.assertEqual(job.config[codec.CONFIG_KEY],codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT)
+            else:self.assertEqual(job.config[codec.CONFIG_KEY],codec.CURRENT_TRANSPORT if node else codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT)
         else:
             job = enqueue(self.encounter, self.user, config=config)
-            self.assertEqual(job.config[codec.CONFIG_KEY], codec.CURRENT_TRANSPORT)
+            self.assertEqual(job.config[codec.CONFIG_KEY], codec.LATEST_TRANSPORT)
         frozen_config = deepcopy(job.config)
         calls = []
         provider_values = {}
@@ -118,7 +121,7 @@ class SourceAssertionWorkerTests(TestCase):
             output = source_assertion_generation.fixture_stage(role, payload)
             marker = stage_config.get(codec.CONFIG_KEY)
             selected = {codec.TRANSPORT:codec, codec.EVIDENCE_TRANSPORT:clinical_evidence_transport,
-                codec.CURRENT_TRANSPORT:clinical_node_transport}
+                codec.CURRENT_TRANSPORT:clinical_node_transport, codec.JSON_TRANSPORT:clinical_json_transport}
             wire = output if marker is None else selected[marker].encode(schema, output)
             text = json.dumps(wire)
             provider_values[role] = {'canonical': deepcopy(output), 'wire': deepcopy(wire),
@@ -159,7 +162,7 @@ class SourceAssertionWorkerTests(TestCase):
             value = provider_values[row.stage]
             expected_marker = frozen_config.get(codec.CONFIG_KEY, ai_stages.ANTHROPIC_SCHEMA_TRANSPORT)
             self.assertEqual(request['schema_transport'], expected_marker)
-            if expected_marker in (codec.EVIDENCE_TRANSPORT, codec.CURRENT_TRANSPORT):
+            if expected_marker in (codec.EVIDENCE_TRANSPORT, codec.CURRENT_TRANSPORT, codec.JSON_TRANSPORT):
                 self.assertEqual(request['transmitted_schema'], json.dumps(codec.transmitted_schema(
                     value['schema'],expected_marker),ensure_ascii=False,separators=(',',':'),allow_nan=False))
                 self.assertEqual(json.loads(value['text'])['transport'], expected_marker)
