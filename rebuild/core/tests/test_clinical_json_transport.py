@@ -119,7 +119,7 @@ class ClinicalJSONTransportTests(SimpleTestCase):
 
     def test_exact_new_envelope_schema_and_profile_replay_binding(self):
         schema = object_schema({'value': nullable({'type': 'string'})})
-        config = ai_stages.pipeline_config(CONFIG)
+        config = {**ai_stages.pipeline_config(CONFIG), legacy.CONFIG_KEY: codec.TRANSPORT}
         expected = {'stage': 'extractor', 'schema': schema, 'payload': {'notes': 'Complete unchanged source'}}
         request = {**expected, 'schema_transport': codec.TRANSPORT,
             policy.ENVELOPE_KEY: policy.parameters(config), 'transmitted_schema': json.dumps(
@@ -147,13 +147,13 @@ class ClinicalJSONTransportTests(SimpleTestCase):
             text = json.dumps(module.encode(schema, value))
             self.assertEqual(legacy.response_value(text, request, config=cfg, provider='anthropic', simulated=False), value)
         self.assertEqual(legacy.CURRENT_TRANSPORT, nodes.TRANSPORT)
-        self.assertEqual(legacy.LATEST_TRANSPORT, codec.TRANSPORT)
+        self.assertEqual(legacy.JSON_TRANSPORT, codec.TRANSPORT)
 
     def test_actual_SDK_full_canonical_schema_once_complete_payload_and_same_profile(self):
         from core import source_assertion_graph as graph
         schema = graph.extraction_schema()
         payload = {'notes': 'Complete original notes', 'all_original_units': [1, 2]}
-        config = ai_stages.pipeline_config(CONFIG)
+        config = {**ai_stages.pipeline_config(CONFIG), legacy.CONFIG_KEY: codec.TRANSPORT}
         sent, callbacks = [], []
         def handle(request):
             sent.append(json.loads(request.content))

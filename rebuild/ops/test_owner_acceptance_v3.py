@@ -502,10 +502,80 @@ class ExactCILockTests(unittest.TestCase):
 
 
 class PublishedCILockPinTests(unittest.TestCase):
-    def test_current_public_lock_and_unchanged_manifests_match_reviewed_raw_pins(self):
-        self.assertEqual(v3.sha((v3.SOURCE / v3.CI_LOCK).read_bytes()), v3.CI_LOCK_AFTER_SHA)
+    # The commit that introduced the archived, exact CI-lock correction.
+    # Its pin is historical authority, not an allowlist for every later release.
+    REVIEWED_REVISION = 'a579a65a8d4af2e12267dbf8435dd7753d2b06cf'
+
+    def reviewed_git(self, *args):
+        result = subprocess.run(['/usr/bin/git', '-C', str(v3.SOURCE), *args],
+                                capture_output=True, timeout=15)
+        self.assertEqual(result.returncode, 0,
+                         'The full-history checkout must contain the reviewed CI-lock revision and ancestry.')
+        return result.stdout
+
+    def test_historical_public_lock_and_manifests_match_reviewed_raw_pins(self):
+        self.reviewed_git('merge-base', '--is-ancestor', v3.M6, self.REVIEWED_REVISION)
+        self.reviewed_git('merge-base', '--is-ancestor', self.REVIEWED_REVISION, 'HEAD')
+        for relative, expected in {v3.CI_LOCK: v3.CI_LOCK_AFTER_SHA, **v3.CI_MANIFEST_PINS}.items():
+            raw = self.reviewed_git('show', self.REVIEWED_REVISION + ':' + relative)
+            self.assertEqual(v3.sha(raw), expected)
+
+    def test_current_manifests_and_lock_workspace_declarations_remain_unchanged(self):
+        lock = json.loads((v3.SOURCE / v3.CI_LOCK).read_bytes())
         for relative, expected in v3.CI_MANIFEST_PINS.items():
-            self.assertEqual(v3.sha((v3.SOURCE / relative).read_bytes()), expected)
+            raw = (v3.SOURCE / relative).read_bytes()
+            self.assertEqual(v3.sha(raw), expected)
+            manifest = json.loads(raw)
+            workspace = '' if relative == 'package.json' else str(Path(relative).parent)
+            entry = lock['packages'][workspace]
+            for field in ('dependencies', 'devDependencies', 'optionalDependencies', 'workspaces'):
+                self.assertEqual(entry.get(field, {}), manifest.get(field, {}))
+
+    @patch.multiple(v3, **CI_FIXTURE_PINS)
+    def test_new_descendant_lock_is_not_mistaken_for_the_historical_artifact(self):
+        def historical(*args):
+            if args[0] == 'merge-base': return b''
+            relative = args[1].split(':', 1)[1]
+            return CI_AFTER if relative == v3.CI_LOCK else CI_MANIFEST
+        with tempfile.TemporaryDirectory() as temp, patch.object(v3, 'SOURCE', Path(temp)), \
+             patch.object(self, 'reviewed_git', side_effect=historical):
+            (Path(temp) / v3.CI_LOCK).write_bytes(b'{"packages":{"":{},"apps/marketing":{}}}\n')
+            for relative in v3.CI_MANIFEST_PINS:
+                path = Path(temp) / relative; path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(CI_MANIFEST)
+            self.assertNotEqual(v3.sha((Path(temp) / v3.CI_LOCK).read_bytes()), v3.CI_LOCK_AFTER_SHA)
+            self.test_historical_public_lock_and_manifests_match_reviewed_raw_pins()
+            self.test_current_manifests_and_lock_workspace_declarations_remain_unchanged()
+            original = (Path(temp) / v3.CI_LOCK).read_bytes()
+            for workspace in ('', 'apps/marketing'):
+                changed = json.loads(original)
+                changed['packages'][workspace]['dependencies'] = {'unreviewed': '*'}
+                (Path(temp) / v3.CI_LOCK).write_text(json.dumps(changed))
+                with self.subTest(workspace=workspace), self.assertRaises(AssertionError):
+                    self.test_current_manifests_and_lock_workspace_declarations_remain_unchanged()
+            (Path(temp) / v3.CI_LOCK).write_bytes(original)
+            for relative in v3.CI_MANIFEST_PINS:
+                path = Path(temp) / relative; path.write_bytes(b'{"changed":"manifest"}\n')
+                with self.subTest(manifest=relative), self.assertRaises(AssertionError):
+                    self.test_current_manifests_and_lock_workspace_declarations_remain_unchanged()
+                path.write_bytes(CI_MANIFEST)
+
+    @patch.multiple(v3, **CI_FIXTURE_PINS)
+    def test_corrupt_historical_artifact_still_fails_its_original_pin(self):
+        for corrupted in (v3.CI_LOCK, *v3.CI_MANIFEST_PINS):
+            def historical(*args):
+                if args[0] == 'merge-base': return b''
+                relative = args[1].split(':', 1)[1]
+                return b'corrupt historical bytes' if relative == corrupted else CI_AFTER if relative == v3.CI_LOCK else CI_MANIFEST
+            with self.subTest(path=corrupted), patch.object(self, 'reviewed_git', side_effect=historical), \
+                 self.assertRaises(AssertionError):
+                self.test_historical_public_lock_and_manifests_match_reviewed_raw_pins()
+
+    def test_missing_historical_object_fails_closed(self):
+        missing = subprocess.CompletedProcess([], 128, b'', b'missing historical object')
+        with patch.object(subprocess, 'run', return_value=missing), \
+             self.assertRaisesRegex(AssertionError, 'full-history checkout'):
+            self.reviewed_git('show', self.REVIEWED_REVISION + ':' + v3.CI_LOCK)
 
 
 class FixtureOwnerOS:

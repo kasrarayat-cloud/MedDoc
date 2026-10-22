@@ -243,13 +243,13 @@ class ThinkingBudgetRecoveryTests(SimpleTestCase):
             recovery.enforce_stage_budget(child,[],Decimal('6.069115'))
             with self.assertRaises(ai_stages.StageNotSent):recovery.enforce_stage_budget(child,[],Decimal('6.069115000001'))
 
-    def test_authenticated_metered_v3_can_bind_current_v4_profile_and_preserve_history(self):
+    def _assert_metered_v3_binds_transport(self,transport):
         # metered_family authenticates the actual raw request/result, received
         # audit and exact Usage/ProviderReceipt before constructing query doubles.
         tip=self.metered_family()
         config={**self.prospective(tip),
-            recovery.TRANSPORT_KEY:recovery.clinical_transport.LATEST_TRANSPORT}
-        self.assertEqual(config[recovery.TRANSPORT_KEY],recovery.clinical_transport.JSON_TRANSPORT)
+            recovery.TRANSPORT_KEY:transport}
+        self.assertEqual(config[recovery.TRANSPORT_KEY],transport)
         self.assertEqual(tip.config[recovery.TRANSPORT_KEY],recovery.clinical_transport.CURRENT_TRANSPORT)
         self.assertNotIn(policy.CONFIG_KEY,tip.config)
         before=deepcopy((self.jobs,self.stage,self.receipts,self.usages,self.received))
@@ -258,7 +258,7 @@ class ThinkingBudgetRecoveryTests(SimpleTestCase):
             self.assertIsNotNone(value)
             self.assertEqual(value['contract'],recovery.CONTRACT_METERED)
             self.assertEqual(value['old_transport'],recovery.clinical_transport.CURRENT_TRANSPORT)
-            self.assertEqual(value['new_transport'],recovery.clinical_transport.JSON_TRANSPORT)
+            self.assertEqual(value['new_transport'],transport)
             self.assertIsNone(value['old_request_profile'])
             self.assertEqual(value['new_request_profile'],policy.PROFILE)
             self.assertEqual(value['prior_calls'],4)
@@ -271,8 +271,7 @@ class ThinkingBudgetRecoveryTests(SimpleTestCase):
             self.assertIs(parent,tip);self.assertEqual(decoded,value)
             self.assertEqual(recovery.bind(tip,value,self.encounter,self.user,config)[recovery.RECOVERY_KEY],value)
             # This same proposal was denied by the former finite whitelist.
-            historical=(recovery.clinical_transport.TRANSPORT,
-                recovery.clinical_transport.EVIDENCE_TRANSPORT,recovery.clinical_transport.CURRENT_TRANSPORT)
+            historical=tuple(t for t in recovery.METERED_SUCCESSOR_TRANSPORTS if t!=transport)
             with patch.object(recovery,'METERED_SUCCESSOR_TRANSPORTS',historical):
                 self.assertIsNone(recovery._proposal(tip,self.encounter,self.user,config))
         self.assertEqual((self.jobs,self.stage,self.receipts,self.usages,self.received),before)
@@ -284,6 +283,13 @@ class ThinkingBudgetRecoveryTests(SimpleTestCase):
             self.assertEqual(len(recovery.family_ids(child)),5)
             with patch.object(recovery,'METERED_SUCCESSOR_TRANSPORTS',historical):
                 self.assertFalse(recovery._edge(tip,child,proof))
+
+    def test_authenticated_metered_v3_can_bind_historical_v4_profile_and_preserve_history(self):
+        self._assert_metered_v3_binds_transport(recovery.clinical_transport.JSON_TRANSPORT)
+
+    def test_authenticated_metered_v3_can_bind_latest_v5_profile_and_preserve_history(self):
+        self.assertEqual(recovery.clinical_transport.LATEST_TRANSPORT,recovery.clinical_transport.DIRECT_TRANSPORT)
+        self._assert_metered_v3_binds_transport(recovery.clinical_transport.LATEST_TRANSPORT)
 
     def test_current_metered_successor_still_refuses_unsupported_carrier_and_changed_scope(self):
         tip=self.metered_family()

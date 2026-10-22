@@ -330,8 +330,8 @@ class InvalidCarrierRecoveryRouteTests(TestCase):
         self.assertIsNotNone(recovery._local_invalid_carrier(failed))
         self.previous.append(failed);self.failed=failed
 
-    def test_real_five_ancestor_get_post_dedupe_and_v4_three_stage_adoption(self):
-        from core import clinical_json_transport as codec
+    def test_real_five_ancestor_get_post_dedupe_and_latest_v5_three_stage_adoption(self):
+        from core import clinical_json_text_transport as codec
         from core.tests.test_source_assertion_graph import checker
         before=self.preserved();revision=self.encounter.revision
         with patch('core.generation.configuration',return_value=self.config()):
@@ -341,7 +341,8 @@ class InvalidCarrierRecoveryRouteTests(TestCase):
             self.assertEqual(value['contract'],recovery.CONTRACT_CARRIER)
             self.assertEqual(value['prior_calls'],5);self.assertEqual(value['family_max_calls'],8)
             self.assertEqual(value['invalid_carrier'],recovery.clinical_transport.CURRENT_TRANSPORT)
-            self.assertEqual(value['new_transport'],recovery.clinical_transport.JSON_TRANSPORT)
+            self.assertEqual(value['new_transport'],recovery.clinical_transport.LATEST_TRANSPORT)
+            self.assertEqual(value['new_transport'],recovery.clinical_transport.DIRECT_TRANSPORT)
             post={'revision':str(revision),'recovery_token':token,'usage_quote':page.context['usage_quote']}
             url=f'/encounters/{self.encounter.pk}/generation/retry-rejected/'
             first=self.client.post(url,post,HTTP_ACCEPT='application/json')
