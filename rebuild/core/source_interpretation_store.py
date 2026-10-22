@@ -105,7 +105,7 @@ def _read(path, expected):
         raise ValidationError('Source interpretation: unreadable_receipt') from exc
 
 
-def _output(wrapper, row):
+def _output(wrapper, row, request=None):
     if row.simulated:
         require(wrapper.get('simulated') is True and 'output' in wrapper, 'simulated_receipt')
         return deepcopy(wrapper['output'])
@@ -122,7 +122,9 @@ def _output(wrapper, row):
     else:
         raise ValidationError('Source interpretation: unknown_provider')
     try:
-        result = json.loads(text)
+        from .clinical_schema_transport import response_value
+        result = response_value(text,request or {},config=row.config,
+            provider=row.provider,simulated=row.simulated)
         require(type(result) is dict, 'provider_output_object')
         return result
     except (ValueError, TypeError) as exc:
@@ -144,7 +146,7 @@ def _retained(job, interpretation, answers):
             and row.started_at is not None and row.finished_at is not None
             and row.started_at <= row.finished_at and same(row.config, job.config), 'stage_state')
         request = _read(row.request_path, row.request_sha256)
-        output = _output(_read(row.result_path, row.result_sha256), row)
+        output = _output(_read(row.result_path, row.result_sha256), row, request)
         require(same(output, expected_output), 'stage_output_binding')
         requests.append(request); outputs.append(output)
         manifest.append({'id': str(row.pk), 'stage': row.stage, 'attempt': row.attempt,

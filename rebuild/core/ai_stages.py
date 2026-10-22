@@ -12,6 +12,7 @@ from . import generation
 from .models import AIStageReceipt, Job, TemplateDefinitionPreparation
 from .security import audit, membership, private_path
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
+from . import clinical_schema_transport as clinical_transport
 
 PROTOCOL='quillmd-ai-stages-v1'
 MAX_REQUEST_BYTES=512000
@@ -55,6 +56,9 @@ def quote(config,input_bytes=MAX_REQUEST_BYTES,output_tokens=MAX_OUTPUT_TOKENS):
 
 def generation_limits(config):
     """Absent means historical; an explicit invalid profile never falls back."""
+    try:clinical_transport.selected(config)
+    except clinical_transport.TransportError as exc:
+        raise StageNotSent('Unknown clinical schema transport; nothing was sent.') from exc
     if 'semantic_capacity_profile' not in config:
         if 'semantic_timeout_seconds' in config:
             raise StageNotSent('The generation timeout has no capacity profile.')
@@ -77,10 +81,16 @@ def generation_limits(config):
 
 
 def pipeline_config(config):
+    try:clinical_transport.selected(config)
+    except clinical_transport.TransportError as exc:
+        raise StageNotSent('Unknown clinical schema transport; nothing was queued.') from exc
     profile=(GENERATION_CAPACITY_PROFILE_V2
              if _supports_generation_capacity_v2(config)
              else GENERATION_CAPACITY_PROFILE)
-    return _pipeline_config(config,profile)
+    prospective=_pipeline_config(config,profile)
+    if config.get('mode')=='live' and _supports_generation_capacity_v2(config):
+        prospective[clinical_transport.CONFIG_KEY]=clinical_transport.TRANSPORT
+    return prospective
 
 
 def _supports_generation_capacity_v2(config):
@@ -230,6 +240,9 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
     schema=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     if config['provider']=='anthropic':
         from anthropic import Anthropic,transform_schema
+        if clinical_transport.selected(config):
+            schema=clinical_transport.wire_schema(schema)
+            instructions+=clinical_transport.INSTRUCTIONS
         response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(
             model=config['model'],max_tokens=max_output_tokens,system=instructions,
             messages=[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
@@ -304,12 +317,20 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
     if config.get('mode')=='live' and config.get('provider')=='anthropic':
-        envelope['schema_transport']=ANTHROPIC_SCHEMA_TRANSPORT
+        if clinical_transport.selected(config):
+            if definition_preparation is not None:
+                raise StageNotSent('Clinical transport does not apply to definition preparation.')
+            envelope['schema_transport']=clinical_transport.TRANSPORT
+        else:envelope['schema_transport']=ANTHROPIC_SCHEMA_TRANSPORT
     if ((job is not None and 'semantic_capacity_profile' in config)
         or (definition_preparation is not None and 'definition_capacity_profile' in config)):
         envelope['timeout_seconds']=timeout_seconds
     raw=encode(envelope)
     if len(raw)>MAX_REQUEST_BYTES:raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
+    if envelope.get('schema_transport')==clinical_transport.TRANSPORT:
+        try:clinical_transport.wire_schema(schema_json)
+        except clinical_transport.TransportError as exc:
+            raise StageNotSent('The clinical schema cannot be transported; nothing was sent.') from exc
     if config.get('mode') not in ('live','fixture'):raise StageNotSent('Unknown provider execution mode; nothing was sent.')
     live=config.get('mode')=='live'
     if live and fixture_output is not None:raise StageNotSent('Simulated output cannot be used for a live request.')
@@ -393,7 +414,8 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
                   calculated_provider_cost=str(cost),provider_request_id=request_id,provider_resource_id=resource_id,simulated=not live)
             try:
                 if not complete:raise ValueError('incomplete')
-                parsed=json.loads(text)
+                parsed=clinical_transport.response_value(text,envelope,config=config,
+                    provider=config.get('provider'),simulated=not live)
                 if hasattr(schema,'model_validate'):schema.model_validate(parsed)
             except Exception as exc:
                 receipt.state='failed';receipt.error_code='invalid_response';receipt.finished_at=timezone.now();receipt.save(update_fields=['state','error_code','finished_at'])

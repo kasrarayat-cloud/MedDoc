@@ -26,13 +26,21 @@ def retained_request_matches(request, expected, *, config, provider, simulated):
     """
     if not isinstance(request, dict) or not isinstance(expected, dict):
         return False
+    from . import clinical_schema_transport as clinical
+    try:new_transport=clinical.selected(config)
+    except clinical.TransportError:return False
+    if new_transport:
+        if (request.get('schema_transport')!=clinical.TRANSPORT or provider!='anthropic'
+                or simulated is not False):
+            return False
+        expected={**expected,'schema_transport':clinical.TRANSPORT}
     if 'schema_transport' in request:
         marker = request['schema_transport']
-        if (type(marker) is not str or marker != ANTHROPIC_SCHEMA_TRANSPORT
+        if (type(marker) is not str or marker != (clinical.TRANSPORT if new_transport else ANTHROPIC_SCHEMA_TRANSPORT)
                 or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
                 or provider != 'anthropic' or simulated is not False):
             return False
-        expected = {**expected, 'schema_transport': ANTHROPIC_SCHEMA_TRANSPORT}
+        expected = {**expected, 'schema_transport': marker}
     # JSON equality keeps booleans distinct from numbers, as the source store
     # already requires for immutable request reconstruction.
     def canonical(value):

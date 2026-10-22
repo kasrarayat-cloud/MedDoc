@@ -58,7 +58,7 @@ def _read(path, expected):
     return json.loads(raw)
 
 
-def _output(wrapper):
+def _output(wrapper, request=None, config=None, *, provider=None, simulated=None):
     if wrapper.get('simulated') is True:
         return deepcopy(wrapper['output'])
     response = wrapper.get('provider_output', {})
@@ -68,7 +68,9 @@ def _output(wrapper):
         text = ''.join(c.get('text','') for item in response.get('output', [])
                        for c in item.get('content', []) if c.get('type') == 'output_text')
     try:
-        return json.loads(text)
+        if request is None:return json.loads(text)
+        from .clinical_schema_transport import response_value
+        return response_value(text,request,config=config or {},provider=provider,simulated=simulated)
     except (TypeError, ValueError):
         _fail('The original provider response cannot be read without another inference call.')
 
@@ -88,7 +90,8 @@ def _retained(parent):
         if (request.get('protocol') != ai_stages.PROTOCOL or request.get('stage') != row.stage
                 or request.get('attempt') != row.attempt):
             _fail('An original request does not match its retained stage.')
-        requests.append(request); outputs.append(_output(raw))
+        requests.append(request); outputs.append(_output(raw,request,parent.config,
+            provider=row.provider,simulated=row.simulated))
         manifest.append({'id':str(row.pk),'stage':row.stage,'attempt':row.attempt,
             'request_sha256':row.request_sha256,'result_sha256':row.result_sha256,
             'config_sha256':semantic.digest(row.config),'actual_cost':str(row.actual_cost),
@@ -160,6 +163,16 @@ def prepare(notes, fields, definitions, requests, outputs, original_answers, ori
         if (request.get('payload') != payload or request.get('schema') != schema
                 or request.get('instructions') != instructions):
             _fail('The retained original generation request cannot be reconstructed exactly.')
+        from . import clinical_schema_transport
+        if clinical_schema_transport.selected(original_config):
+            from .provider_schema import retained_request_matches
+            limit, timeout = ai_stages.generation_limits(original_config)
+            expected = {'protocol': ai_stages.PROTOCOL, 'stage': role, 'attempt': attempt,
+                'payload': payload, 'schema': schema, 'instructions': instructions, 'max_output_tokens': limit}
+            if 'semantic_capacity_profile' in original_config:expected['timeout_seconds'] = timeout
+            if not retained_request_matches(request, expected, config=original_config,
+                    provider=original_config['provider'], simulated=False):
+                _fail('The retained original generation transport cannot be reconstructed exactly.')
         return deepcopy(outputs[index])
     historical=semantic.run(notes,fields,definitions,replay,
         reference_contract=original_config['semantic_fact_reference_contract'],
@@ -465,7 +478,8 @@ def _checked_result(job):
             or not retained_request_matches(envelope,expected,config=job.config,
                 provider=getattr(row,'provider',None),simulated=getattr(row,'simulated',None))):
         _fail('The independent checker receipt does not bind its exact retained proposal.')
-    checked=_finish(job.encounter,proposal,definitions,_output(_read(row.result_path,row.result_sha256)))
+    checked=_finish(job.encounter,proposal,definitions,_output(_read(row.result_path,row.result_sha256),envelope,job.config,
+        provider=row.provider,simulated=row.simulated))
     retained=_read(job.result_path,job.result_sha256)
     if (retained!={'contract':semantic.CONTRACT,'answers':checked,'stages':[str(row.pk)],
                           'revalidation':deepcopy(job.config['semantic_revalidation'])}):
