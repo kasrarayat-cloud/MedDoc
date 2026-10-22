@@ -72,32 +72,37 @@ class SourceAssertionWorkerTests(TestCase):
         self.assertFalse(run_one()); self.assertEqual(SourceInterpretation.objects.count(), 1)
 
     def test_mocked_live_anthropic_v4_job_adopts_and_reloads_nullable_transport(self):
+        self.assert_mocked_live_v4_adoption(historical=False, nullable=True)
+
+    def test_mocked_live_anthropic_v4_job_adopts_and_reloads_evidence_transport(self):
         self.assert_mocked_live_v4_adoption(historical=False)
 
     def test_historical_absent_marker_v4_job_adopts_and_reloads_shared_transport(self):
         self.assert_mocked_live_v4_adoption(historical=True)
 
-    def assert_mocked_live_v4_adoption(self, *, historical):
-        from core import clinical_schema_transport as codec, source_assertion_generation
+    def assert_mocked_live_v4_adoption(self, *, historical, nullable=False):
+        from core import clinical_schema_transport as codec, clinical_evidence_transport, source_assertion_generation
         from core.security import private_path
         from core.tests.test_billing_policy import fund
         fund(Wallet.objects.get(user=self.user, kind='paid'), Decimal('100'), 'payment:worker-v4-offline')
         config = {**generation.configuration(), 'mode': 'live', 'provider': 'anthropic',
             'model': 'claude-sonnet-5-5', 'input_rate': '1', 'cached_rate': '0.1', 'output_rate': '1',
             'discount_rate': '0'}
-        if historical:
+        if historical or nullable:
             prospective_configuration = ai_stages.pipeline_config
             def historical_configuration(value):
                 retained = prospective_configuration(value)
-                retained.pop(codec.CONFIG_KEY, None)
+                if historical:retained.pop(codec.CONFIG_KEY, None)
+                else:retained[codec.CONFIG_KEY]=codec.TRANSPORT
                 return retained
             # Recreate an already-queued old configuration only in this test.
             with patch.object(ai_stages, 'pipeline_config', side_effect=historical_configuration):
                 job = enqueue(self.encounter, self.user, config=config)
-            self.assertNotIn(codec.CONFIG_KEY, job.config)
+            if historical:self.assertNotIn(codec.CONFIG_KEY, job.config)
+            else:self.assertEqual(job.config[codec.CONFIG_KEY],codec.TRANSPORT)
         else:
             job = enqueue(self.encounter, self.user, config=config)
-            self.assertEqual(job.config[codec.CONFIG_KEY], codec.TRANSPORT)
+            self.assertEqual(job.config[codec.CONFIG_KEY], codec.CURRENT_TRANSPORT)
         frozen_config = deepcopy(job.config)
         calls = []
         provider_values = {}
@@ -108,7 +113,7 @@ class SourceAssertionWorkerTests(TestCase):
             self.assertEqual((maximum, timeout), (32000, 240))
             self.assertEqual(stage_config, frozen_config)
             output = source_assertion_generation.fixture_stage(role, payload)
-            wire = output if historical else codec.encode(schema, output)
+            wire = output if historical else (codec if nullable else clinical_evidence_transport).encode(schema, output)
             text = json.dumps(wire)
             provider_values[role] = {'canonical': deepcopy(output), 'wire': deepcopy(wire),
                 'text': text, 'schema': deepcopy(schema), 'payload': deepcopy(payload),
@@ -146,8 +151,11 @@ class SourceAssertionWorkerTests(TestCase):
             self.assertEqual(hashlib.sha256(raw).hexdigest(), row.request_sha256)
             request = json.loads(raw)
             value = provider_values[row.stage]
-            expected_marker = ai_stages.ANTHROPIC_SCHEMA_TRANSPORT if historical else codec.TRANSPORT
+            expected_marker = ai_stages.ANTHROPIC_SCHEMA_TRANSPORT if historical else codec.TRANSPORT if nullable else codec.CURRENT_TRANSPORT
             self.assertEqual(request['schema_transport'], expected_marker)
+            if not historical and not nullable:
+                self.assertEqual(request['transmitted_schema'], json.dumps(codec.transmitted_schema(
+                    value['schema'],codec.CURRENT_TRANSPORT),ensure_ascii=False,separators=(',',':'),allow_nan=False))
             self.assertEqual(request['schema'], value['schema'])
             self.assertEqual(request['payload'], value['payload'])
             self.assertEqual(request['instructions'], value['instructions'])

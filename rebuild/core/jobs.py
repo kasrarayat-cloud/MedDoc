@@ -248,10 +248,12 @@ def enqueue(encounter,user,kind='generation',input_path='',config=None,approved_
         recovery_existing=generation_recovery.successor(recovery_parent)
         key=generation_recovery.request_key(recovery_parent)
         pending=list(Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']))
-        if any(item.pk not in {recovery_parent.pk,getattr(recovery_existing,'pk',None)}for item in pending):
+        family=generation_recovery.family_ids(recovery_parent)
+        if recovery_existing is not None:family.add(recovery_existing.pk)
+        if not family or any(item.pk not in family for item in pending):
             raise ValidationError('This encounter already has another pending job.')
     elif old:
-        old=generation_recovery.successor(old) or old
+        old=generation_recovery.latest(old)
         old.reused=True
         return old
     elif Job.objects.filter(encounter=e,state__in=['queued','running','reconciliation']).exists():

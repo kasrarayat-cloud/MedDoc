@@ -288,7 +288,8 @@ class GenerationRecoveryTests(RecoveryFixture,TestCase):
 
     def test_stage_budget_refusal_precedes_new_receipt_retention_and_provider_send(self):
         from core import source_assertion_graph as graph
-        new=self.retry();new.state='running';new.save(update_fields=['state'])
+        with patch.object(ai_stages,'pipeline_config',side_effect=self.prospective):new=self.retry()
+        new.state='running';new.save(update_fields=['state'])
         with patch.object(recovery,'enforce_stage_budget',side_effect=ai_stages.StageNotSent('Offline exhausted exposure'))as budget,\
             patch.object(ai_stages,'retain')as retain,patch.object(ai_stages,'_response')as send,\
             patch.dict(os.environ,{'ANTHROPIC_API_KEY':'synthetic-offline-placeholder'}):

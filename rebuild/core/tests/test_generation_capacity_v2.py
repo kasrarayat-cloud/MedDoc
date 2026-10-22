@@ -180,7 +180,28 @@ class GenerationCapacityV2PureTests(SimpleTestCase):
         'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class GenerationCapacityV2DatabaseTests(TestCase):
     setUp = previous.GenerationCapacityDatabaseTests.setUp
-    provider = previous.GenerationCapacityDatabaseTests.provider
+    def provider(self):
+        """The provider double emits the explicitly selected wire contract."""
+        from core import clinical_schema_transport as transport, clinical_evidence_transport as evidence
+        original = previous.GenerationCapacityDatabaseTests.provider(self)
+        def respond(*args):
+            schema, config, callback = args[1], args[3], args[-1]
+            if not transport.selected(config):return original(*args)
+            emitted = []
+            def retain(response):
+                dump = response.model_dump
+                parsed = dump()['output']
+                codec = evidence if transport.marker(config)==transport.CURRENT_TRANSPORT else transport
+                text = json.dumps(codec.encode(schema, parsed)); emitted.append(text)
+                response.model_dump = lambda **kw: {
+                    **{k:v for k,v in dump(**kw).items() if k!='output'},
+                    'content':[{'type':'text','text':text}]}
+                callback(response)
+            result = list(original(*args[:-1], retain))
+            self.assertEqual(len(emitted), 1)
+            result[-2] = emitted[0]
+            return tuple(result)
+        return respond
     another_encounter = previous.GenerationCapacityDatabaseTests.another_encounter
     historical_job = previous.GenerationCapacityDatabaseTests.historical_job
     backup_accepts = previous.GenerationCapacityDatabaseTests.backup_accepts

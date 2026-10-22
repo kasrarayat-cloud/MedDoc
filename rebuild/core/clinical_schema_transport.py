@@ -10,6 +10,7 @@ import math
 
 CONFIG_KEY = 'semantic_schema_transport'
 TRANSPORT = 'anthropic-nullable-singleton-arrays-v1'
+CURRENT_TRANSPORT = 'anthropic-evidence-reference-table-v2'
 INSTRUCTIONS = (
     '\nClinical transport anthropic-nullable-singleton-arrays-v1: every schema-declared '
     'nullable value is an array: [] for null, or exactly [value] for a present value. '
@@ -32,11 +33,29 @@ def invalid():
 def selected(config):
     if CONFIG_KEY not in config:
         return False
-    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] != TRANSPORT
+    if (type(config[CONFIG_KEY]) is not str or config[CONFIG_KEY] not in (TRANSPORT, CURRENT_TRANSPORT)
             or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
             or config.get('model') != 'claude-sonnet-5-5'):
         raise invalid()
     return True
+
+
+def marker(config):
+    return config[CONFIG_KEY] if selected(config) else None
+
+
+def instructions(config):
+    if marker(config) == CURRENT_TRANSPORT:
+        from .clinical_evidence_transport import INSTRUCTIONS as value
+        return value
+    return INSTRUCTIONS
+
+
+def transmitted_schema(schema, transport):
+    """The exact supported schema passed to the SDK, retained before sending."""
+    from anthropic import transform_schema
+    from .provider_schema import share_anthropic_schema
+    return share_anthropic_schema(transform_schema(wire_schema(schema, transport=transport)))
 
 
 def _json(value):
@@ -130,7 +149,12 @@ def _schema(schema):
             _json(value)
 
 
-def wire_schema(schema):
+def wire_schema(schema, *, transport=TRANSPORT):
+    if transport == CURRENT_TRANSPORT:
+        from .clinical_evidence_transport import wire_schema as convert
+        return convert(schema)
+    if transport != TRANSPORT:
+        raise invalid()
     _schema(schema)
     def convert(node):
         child = _nullable(node)
@@ -212,13 +236,17 @@ def decode(schema, value):
 
 def response_value(text, request, *, config, provider, simulated):
     """Decode only a new request whose explicit immutable configuration agrees."""
-    if request.get('schema_transport') != TRANSPORT:
+    transport = request.get('schema_transport')
+    if transport not in (TRANSPORT, CURRENT_TRANSPORT):
         if selected(config):
             raise invalid()
         # Historical readers retain their original parser. Their caller still
         # requires the entire envelope through retained_request_matches; an
         # unknown marker can never become an adopted historical request.
         return json.loads(text)
-    if not selected(config) or provider != 'anthropic' or simulated is not False:
+    if marker(config) != transport or provider != 'anthropic' or simulated is not False:
         raise invalid()
+    if transport == CURRENT_TRANSPORT:
+        from .clinical_evidence_transport import decode as restore
+        return restore(request['schema'], strict_loads(text))
     return decode(request['schema'], strict_loads(text))

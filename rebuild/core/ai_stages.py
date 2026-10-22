@@ -89,7 +89,7 @@ def pipeline_config(config):
              else GENERATION_CAPACITY_PROFILE)
     prospective=_pipeline_config(config,profile)
     if config.get('mode')=='live' and _supports_generation_capacity_v2(config):
-        prospective[clinical_transport.CONFIG_KEY]=clinical_transport.TRANSPORT
+        prospective[clinical_transport.CONFIG_KEY]=clinical_transport.CURRENT_TRANSPORT
     return prospective
 
 
@@ -241,12 +241,14 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
     if config['provider']=='anthropic':
         from anthropic import Anthropic,transform_schema
         if clinical_transport.selected(config):
-            schema=clinical_transport.wire_schema(schema)
-            instructions+=clinical_transport.INSTRUCTIONS
+            schema=clinical_transport.transmitted_schema(schema,clinical_transport.marker(config))
+            instructions+=clinical_transport.instructions(config)
+        else:
+            schema=share_anthropic_schema(transform_schema(schema))
         response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(
             model=config['model'],max_tokens=max_output_tokens,system=instructions,
             messages=[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
-            output_config={'format':{'type':'json_schema','schema':share_anthropic_schema(transform_schema(schema))}})
+            output_config={'format':{'type':'json_schema','schema':schema}})
         on_response(response)
         usage=response.usage
         cached=getattr(usage,'cache_read_input_tokens',0) or 0
@@ -320,15 +322,24 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
         if clinical_transport.selected(config):
             if definition_preparation is not None:
                 raise StageNotSent('Clinical transport does not apply to definition preparation.')
-            envelope['schema_transport']=clinical_transport.TRANSPORT
+            envelope['schema_transport']=clinical_transport.marker(config)
+            if envelope['schema_transport']==clinical_transport.CURRENT_TRANSPORT:
+                if len(encode(envelope))>MAX_REQUEST_BYTES:
+                    raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
+                # A string preserves schema property ordering through the
+                # canonical private-envelope serializer as well as every rule.
+                try:envelope['transmitted_schema']=json.dumps(clinical_transport.transmitted_schema(
+                    schema_json,envelope['schema_transport']),ensure_ascii=False,separators=(',',':'),allow_nan=False)
+                except clinical_transport.TransportError as exc:
+                    raise StageNotSent('The clinical schema cannot be transported; nothing was sent.') from exc
         else:envelope['schema_transport']=ANTHROPIC_SCHEMA_TRANSPORT
     if ((job is not None and 'semantic_capacity_profile' in config)
         or (definition_preparation is not None and 'definition_capacity_profile' in config)):
         envelope['timeout_seconds']=timeout_seconds
     raw=encode(envelope)
     if len(raw)>MAX_REQUEST_BYTES:raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
-    if envelope.get('schema_transport')==clinical_transport.TRANSPORT:
-        try:clinical_transport.wire_schema(schema_json)
+    if clinical_transport.selected(config):
+        try:clinical_transport.wire_schema(schema_json,transport=clinical_transport.marker(config))
         except clinical_transport.TransportError as exc:
             raise StageNotSent('The clinical schema cannot be transported; nothing was sent.') from exc
     if config.get('mode') not in ('live','fixture'):raise StageNotSent('Unknown provider execution mode; nothing was sent.')
