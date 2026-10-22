@@ -290,12 +290,22 @@ class PreparationStreamTransportTests(SimpleTestCase):
 
     def test_late_complete_response_callback_never_adopts_but_keeps_known_usage(self):
         original=preparation.retain_response
-        def slow(prep,role,evidence):
-            if 'response' in evidence:time.sleep(.08)
+        clock=time.monotonic;elapsed=[0.0];completed=[]
+        def monotonic():return clock()+elapsed[0]
+        def late(prep,role,evidence):
+            if 'response' in evidence:
+                self.assertTrue(evidence['stream_complete'])
+                self.assertEqual(evidence['stream_observation']['terminal']['stop_reason'],'end_turn')
+                completed.append(True);elapsed[0]=61.0
             return original(prep,role,evidence)
         body=Body(events(self.canonical()))
-        result,receipt,sent,client,*_=self.invoke(body,seconds=.06,
-            fault=patch.object(preparation,'retain_response',side_effect=slow))
+        # Cross the deadline only after the complete response is observed;
+        # leave asyncio's scheduling clock and preterminal wall tests intact.
+        with patch.object(preparation,'time',SimpleNamespace(monotonic=monotonic)), \
+                patch.object(transport,'time',SimpleNamespace(monotonic=monotonic)):
+            result,receipt,sent,client,*_=self.invoke(body,seconds=60,
+                fault=patch.object(preparation,'retain_response',side_effect=late))
+        self.assertEqual(completed,[True])
         self.assertIsInstance(result,transport.CompleteStreamObservationError)
         self.assertEqual(receipt.state,'failed');self.assertIsNotNone(receipt.computed_cost)
         self.assertTrue(receipt.response_path);self.assertTrue(body.closed);self.assertTrue(client.is_closed())
