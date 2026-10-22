@@ -23,6 +23,9 @@ CONTRACT_V2='rejected-generation-successor-v2'
 CONTRACT_METERED='metered-thinking-budget-successor-v1'
 CONTRACT_PROFILE='rejected-request-profile-successor-v1'
 CONTRACT_CARRIER='invalid-generation-carrier-successor-v1'
+METERED_SUCCESSOR_TRANSPORTS=(clinical_transport.TRANSPORT,
+    clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT,
+    clinical_transport.JSON_TRANSPORT)
 SALT='rejected-generation-successor'
 TRANSPORT_KEY='semantic_schema_transport'
 RECOVERY_KEY='semantic_recovery'
@@ -332,7 +335,7 @@ def _edge(predecessor,successor,proof):
         or successor.config.get(TRANSPORT_KEY)!=value['new_transport']
         or (not metered and value['new_transport']==proof['old_transport'])
         or (metered and (proof['old_request_profile']is not None
-            or value['new_transport']not in(clinical_transport.TRANSPORT,clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT)))
+            or value['new_transport']not in METERED_SUCCESSOR_TRANSPORTS))
         or (carrier and (proof['invalid_carrier']!=clinical_transport.CURRENT_TRANSPORT
             or value['new_transport']!=clinical_transport.JSON_TRANSPORT
             or predecessor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE
@@ -462,7 +465,7 @@ def _proposal(job,encounter,user,config):
         if request_policy.CONFIG_KEY in original or profile!=request_policy.PROFILE:return None
     release=settings.RELEASE_SHA
     if (not _same(prospective,original) or type(new_transport)is not str or not new_transport
-        or (new_transport not in(clinical_transport.TRANSPORT,clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT)
+        or (new_transport not in METERED_SUCCESSOR_TRANSPORTS
             if metered else new_transport in transports|{proof['old_transport']})
         or not re.fullmatch('[a-f0-9]{40}',release)
         or release==job.config['queued_release_sha']):return None

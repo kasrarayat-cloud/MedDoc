@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 
 from core import ai_stages, generation, generation_recovery as recovery
 from core import clinical_schema_transport as transport
-from core import clinical_node_transport as codec
+from core import clinical_json_transport as codec
 from core import source_assertion_graph as graph
 from core.jobs import enqueue, run_one
 from core.models import AuditEvent, Job, Reservation, SourceInterpretation, Usage
@@ -65,12 +65,12 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
 
         with override_settings(RELEASE_SHA=CURRENT_RELEASE):
             active=ai_stages.pipeline_config(self.config())
-            self.assertEqual(active[transport.CONFIG_KEY],transport.CURRENT_TRANSPORT)
+            self.assertEqual(active[transport.CONFIG_KEY],transport.LATEST_TRANSPORT)
             self.assertEqual(active[transport.CONFIG_KEY],codec.TRANSPORT)
             token=recovery.offer(self.encounter,self.user,active);self.assertIsNotNone(token)
             new=enqueue(self.encounter,self.user,config=self.config(),
                 expected_revision=self.encounter.revision,recovery_token=token)
-            self.assertEqual(new.config[transport.CONFIG_KEY],transport.CURRENT_TRANSPORT)
+            self.assertEqual(new.config[transport.CONFIG_KEY],transport.LATEST_TRANSPORT)
             self.assertEqual(new.config['queued_release_sha'],CURRENT_RELEASE)
             self.assertEqual(new.config[recovery.RECOVERY_KEY]['job'],str(second.pk))
             self.assertEqual(new.config[recovery.RECOVERY_KEY]['prior_calls'],2)
@@ -78,10 +78,10 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
             def provider(payload,schema,instructions,config,maximum,timeout,on_response):
                 nonlocal assigned
                 role=('extractor','assigner','checker')[len(calls)];calls.append(role)
-                self.assertEqual(config[transport.CONFIG_KEY],transport.CURRENT_TRANSPORT)
+                self.assertEqual(config[transport.CONFIG_KEY],transport.LATEST_TRANSPORT)
                 # Retain the original schema's ordering here, just as the
                 # sending code does before canonical envelope serialization.
-                transmitted.append(transport.transmitted_schema(schema,transport.CURRENT_TRANSPORT))
+                transmitted.append(transport.transmitted_schema(schema,transport.LATEST_TRANSPORT))
                 if role=='extractor':
                     parsed={'contract':graph.CONTRACT,'facts':[],'assertions':[],'relationships':[],
                         'time_accounts':[],'unit_coverage':[{'source_unit_id':u['id'],
@@ -95,7 +95,7 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
                         for f in payload['fields']]};assigned=parsed
                 else:parsed=checker(payload['graph'],payload['fields'],payload['approved_definitions'],assigned)
                 wire=codec.encode(schema,parsed)
-                self.assertEqual(wire['transport'],transport.CURRENT_TRANSPORT)
+                self.assertEqual(wire['transport'],transport.LATEST_TRANSPORT)
                 self.assertEqual(codec.decode(schema,wire),parsed)
                 text=json.dumps(wire)
                 usage={'input_tokens':10,'cached_input_tokens':0,'cache_creation_tokens':0,'output_tokens':0}
@@ -119,7 +119,7 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
         self.assertTrue(all(r.state=='succeeded'and r.actual_cost==Decimal('0.00002')for r in rows))
         for row,expected_transmitted in zip(rows,transmitted):
             request=json.loads(private_path(row.request_path).read_bytes())
-            self.assertEqual(request['schema_transport'],transport.CURRENT_TRANSPORT)
+            self.assertEqual(request['schema_transport'],transport.LATEST_TRANSPORT)
             self.assertEqual(json.loads(request['transmitted_schema']),expected_transmitted)
         self.assertTrue(SourceInterpretation.objects.filter(job=new,encounter=self.encounter).exists())
         self.assertTrue(self.encounter.answers)
