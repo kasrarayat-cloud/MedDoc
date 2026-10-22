@@ -26,6 +26,12 @@ def retained_request_matches(request, expected, *, config, provider, simulated):
     """
     if not isinstance(request, dict) or not isinstance(expected, dict):
         return False
+    from . import anthropic_request_policy
+    try:parameters=anthropic_request_policy.parameters(config)
+    except anthropic_request_policy.PolicyError:return False
+    if parameters:
+        if provider!='anthropic' or simulated is not False:return False
+        expected={**expected,anthropic_request_policy.ENVELOPE_KEY:parameters}
     from . import clinical_schema_transport as clinical
     try:new_transport=clinical.selected(config)
     except clinical.TransportError:return False

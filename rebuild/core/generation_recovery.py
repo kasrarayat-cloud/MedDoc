@@ -14,16 +14,21 @@ from django.core import signing
 from django.core.exceptions import PermissionDenied, ValidationError
 from .models import AuditEvent, Job, Usage, ProviderReceipt
 from .security import private_path
+from . import anthropic_request_policy as request_policy
+from . import clinical_schema_transport as clinical_transport
+from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT
 
 CONTRACT='rejected-generation-successor-v1'
 CONTRACT_V2='rejected-generation-successor-v2'
+CONTRACT_METERED='metered-thinking-budget-successor-v1'
+CONTRACT_PROFILE='rejected-request-profile-successor-v1'
 SALT='rejected-generation-successor'
 TRANSPORT_KEY='semantic_schema_transport'
 RECOVERY_KEY='semantic_recovery'
 CONFIG_KEYS=('provider','model','mode','prompt_version','pricing_version','input_rate','cached_rate',
     'output_rate','discount_rate','semantic_contract','semantic_stage_protocol','semantic_max_calls',
     'semantic_request_byte_limit','semantic_capacity_profile','semantic_timeout_seconds',
-    'semantic_output_token_limit','semantic_maximum_cost',TRANSPORT_KEY)
+    'semantic_output_token_limit','semantic_maximum_cost',TRANSPORT_KEY,request_policy.CONFIG_KEY)
 CHANGED_KEYS=frozenset({TRANSPORT_KEY,'queued_release_sha',RECOVERY_KEY})
 MAX_FAMILY_CALLS=5
 V2_FAMILY_MAX_CALLS=8
@@ -69,8 +74,9 @@ def _family_limit(config):
     if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS:raise ValueError('per-job recovery bound')
     if type(value)is not dict:raise ValueError('recovery contract')
     if value.get('contract')==CONTRACT:return limit
-    if value.get('contract')!=CONTRACT_V2:raise ValueError('recovery contract')
+    if value.get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE):raise ValueError('recovery contract')
     bounds=_v2_bounds(config)
+    if bounds is None and value['contract']==CONTRACT_PROFILE:return limit
     if bounds is None or any(not _same(value.get(k),v)for k,v in bounds.items()):raise ValueError('recovery batch bounds')
     return V2_FAMILY_MAX_CALLS
 
@@ -146,22 +152,133 @@ def _children(job):
     return list(Job.objects.filter(config__semantic_recovery__job=str(job.pk)).order_by('created_at','pk')[:2])
 
 
+def _local_metered_exhaustion(job):
+    """Authenticate a settled first extractor that emitted only thinking, never JSON.
+
+    This is an additional request, not reconciliation or a rewrite of the paid
+    failure. Both its metered cost and conservative quote remain in the family.
+    """
+    try:
+        from . import ai_stages, generation
+        if (job.kind!='generation' or job.state!='failed' or job.finished_at is None
+            or job.result_path or job.result_sha256 or not job.error.startswith('platform_failure:')
+            or type(job.config)is not dict or job.config.get('mode')!='live'
+            or job.config.get('provider')!='anthropic' or job.config.get('model')!='claude-sonnet-5-5'
+            or request_policy.CONFIG_KEY in job.config
+            or not re.fullmatch('[a-f0-9]{40}',job.config.get('queued_release_sha',''))):return None
+        old_transport=(clinical_transport.marker(job.config)if clinical_transport.selected(job.config)
+                       else ANTHROPIC_SCHEMA_TRANSPORT)
+        rows=list(job.ai_stage_receipts.all()[:2])
+        if len(rows)!=1:return None
+        stage=rows[0]
+        if (stage.stage!='extractor' or type(stage.attempt)is not int or stage.attempt!=1
+            or stage.state!='failed' or stage.error_code!='invalid_response' or stage.simulated is not False
+            or _cost(stage.actual_cost)<=0 or stage.started_at is None or stage.finished_at is None
+            or not stage.started_at<=stage.finished_at<=job.finished_at
+            or not _same(stage.config,job.config) or stage.provider!='anthropic'
+            or stage.requested_model!=job.config['model'] or stage.returned_model!=job.config['model']
+            or not re.fullmatch(r'req_[A-Za-z0-9]+',stage.provider_request_id or'')
+            or not re.fullmatch(r'msg_[A-Za-z0-9]+',stage.provider_resource_id or'')):return None
+        request=_retained(stage.request_path,stage.request_sha256)
+        payload=request['payload'];identity=payload['identity']
+        expected_identity={**job.config['semantic_encounter_binding'],'generation_job_id':str(job.pk)}
+        if (request['protocol']!=job.config['semantic_stage_protocol'] or request['stage']!='extractor'
+            or type(request['attempt'])is not int or request['attempt']!=1
+            or type(request['max_output_tokens'])is not int
+            or request['max_output_tokens']<=0 or request['max_output_tokens']!=job.config['semantic_output_token_limit']
+            or request['timeout_seconds']!=job.config['semantic_timeout_seconds']
+            or request.get('schema_transport',ANTHROPIC_SCHEMA_TRANSPORT)!=old_transport
+            or request_policy.ENVELOPE_KEY in request
+            or not _same(identity,expected_identity) or identity['encounter_id']!=str(job.encounter_id)
+            or hashlib.sha256(payload['notes'].encode()).hexdigest()!=job.config['semantic_source_sha256']
+            or _digest(payload['approved_definitions'])!=job.config['semantic_definitions_sha256']):return None
+        result=_retained(stage.result_path,stage.result_sha256)
+        output=result['provider_output'];usage=output['usage']
+        if (set(result)!={'provider_output','provider_request_id','provider_resource_id','returned_model'}
+            or result['provider_request_id']!=stage.provider_request_id
+            or result['provider_resource_id']!=stage.provider_resource_id
+            or result['returned_model']!=stage.returned_model
+            or output.get('id')!=stage.provider_resource_id or output.get('model')!=stage.returned_model
+            or output.get('type')!='message' or output.get('role')!='assistant'
+            or output.get('stop_reason')!='max_tokens'
+            or type(output.get('content'))is not list or not output['content']
+            or any(type(block)is not dict or block.get('type')!='thinking' for block in output['content'])):return None
+        counters={'input_tokens':usage['input_tokens'],'output_tokens':usage['output_tokens'],
+            'cached_input_tokens':usage.get('cache_read_input_tokens',0),
+            'cache_creation_tokens':usage.get('cache_creation_input_tokens',0)}
+        if (any(type(v)is not int or v<0 for v in counters.values()) or counters['input_tokens']<=0
+            or counters['output_tokens']!=request['max_output_tokens']
+            or type(usage.get('output_tokens_details'))is not dict
+            or type(usage['output_tokens_details'].get('thinking_tokens'))is not int
+            or usage['output_tokens_details']['thinking_tokens']!=counters['output_tokens']
+            or not _same(stage.usage,counters)):return None
+        rates=generation.rates(job.config);discount=generation.discount_rate(job.config)
+        list_cost=(counters['input_tokens']*rates['input_per_million']
+            +counters['cached_input_tokens']*rates['cached_per_million']
+            +counters['cache_creation_tokens']*rates['input_per_million']*Decimal('1.25')
+            +counters['output_tokens']*rates['output_per_million'])/1000000
+        cost=generation.discounted_cost(list_cost,discount)
+        if cost!=stage.actual_cost or not _same(stage.rates,generation.cost_rates(rates,list_cost,discount)):return None
+        events=list(AuditEvent.objects.filter(action='ai.stage_received',target=str(stage.pk),
+            actor_id=job.user_id,department_id=job.encounter.department_id)[:2])
+        details={'stage':'extractor','attempt':1,'calculated_provider_cost':str(cost),
+            'provider_request_id':stage.provider_request_id,'provider_resource_id':stage.provider_resource_id,'simulated':False}
+        if (len(events)!=1 or not stage.started_at<=events[0].created_at<=stage.finished_at
+            or not _same(events[0].details,details)):return None
+        receipts=list(ProviderReceipt.objects.filter(job=job)[:2]);usages=list(Usage.objects.filter(job=job)[:2])
+        if len(receipts)!=1 or len(usages)!=1:return None
+        total,units,aggregate_rates,provider,_,simulated=ai_stages.aggregate(job)
+        for row in [receipts[0],usages[0]]:
+            if (row.actual_cost!=total or row.provider!=provider or row.simulated is not False
+                or row.provider_request_id or row.provider_resource_id
+                or not _same(row.units,units) or not _same(row.rates,aggregate_rates)
+                or not stage.finished_at<=row.created_at<=job.finished_at):return None
+        if (total!=cost or simulated is not False or usages[0].user_id!=job.user_id
+            or usages[0].department_id!=job.encounter.department_id):return None
+        return {'job':str(job.pk),'stage':str(stage.pk),'request_sha256':stage.request_sha256,
+            'result_sha256':stage.result_sha256,'received_audit':str(events[0].pk),
+            'metered_usage':str(usages[0].pk),'metered_receipt':str(receipts[0].pk),
+            'metered_cost':str(stage.actual_cost),'old_request_profile':None,
+            'old_transport':old_transport,'prior_calls':1,
+            'prior_quote':str(max(_cost(stage.quote_maximum),cost)),
+            'old_config_sha256':_digest(job.config)}
+    except (AttributeError,KeyError,TypeError,ValueError,OSError,InvalidOperation,ValidationError):
+        return None
+
+
+def _local_failure(job):
+    return _local_metered_exhaustion(job) if job.state=='failed' else _local_rejection(job)
+
+
+def _changed_keys(contract):
+    return CHANGED_KEYS|{request_policy.CONFIG_KEY} if contract in(CONTRACT_METERED,CONTRACT_PROFILE)else CHANGED_KEYS
+
+
 def _edge(predecessor,successor,proof):
     value=successor.config.get(RECOVERY_KEY)
     keys={'contract',*proof,'encounter','actor','revision','new_transport','accepted_release','new_configuration_sha256'}
     if type(value)is not dict:return False
+    metered=value.get('contract')==CONTRACT_METERED
+    profile_changed=value.get('contract')in(CONTRACT_METERED,CONTRACT_PROFILE)
+    if metered!=('old_request_profile'in proof):return False
+    if profile_changed:keys.add('new_request_profile')
     if value.get('contract')==CONTRACT:
         # Raising the traversal bound must never broaden a historical v1 edge.
         limit=predecessor.config.get('semantic_max_calls')
         if (type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS
             or type(proof.get('prior_calls'))is not int or not 1<=proof['prior_calls']<limit):return False
-    elif value.get('contract')==CONTRACT_V2:
+    elif value.get('contract')in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE):
         try:bounds=_v2_bounds(successor.config)
         except (KeyError,TypeError,ValueError,InvalidOperation,ValidationError):return False
-        if bounds is None or any(not _same(value.get(k),v)for k,v in bounds.items()):return False
-        keys.update(bounds)
+        if bounds is None:
+            if value['contract']!=CONTRACT_PROFILE:return False
+            family_limit=successor.config.get('semantic_max_calls')
+            if type(family_limit)is not int or not 1<=family_limit<=MAX_FAMILY_CALLS:return False
+        else:
+            if any(not _same(value.get(k),v)for k,v in bounds.items()):return False
+            keys.update(bounds);family_limit=V2_FAMILY_MAX_CALLS
         if (type(proof.get('prior_calls'))is not int
-            or proof['prior_calls']<1 or V2_FAMILY_MAX_CALLS-proof['prior_calls']<MIN_SUCCESSOR_CALLS):return False
+            or proof['prior_calls']<1 or family_limit-proof['prior_calls']<MIN_SUCCESSOR_CALLS):return False
     else:return False
     if set(value)!=keys:return False
     if any(not _same(value.get(k),v)for k,v in proof.items()):return False
@@ -176,10 +293,15 @@ def _edge(predecessor,successor,proof):
         or value['accepted_release']==predecessor.config.get('queued_release_sha')
         or type(value.get('new_transport'))is not str or not value['new_transport']
         or successor.config.get(TRANSPORT_KEY)!=value['new_transport']
-        or value['new_transport']==proof['old_transport']
+        or (not metered and value['new_transport']==proof['old_transport'])
+        or (metered and (proof['old_request_profile']is not None
+            or value['new_transport']not in(clinical_transport.TRANSPORT,clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT)))
+        or (profile_changed and (request_policy.CONFIG_KEY in predecessor.config
+            or value.get('new_request_profile')!=request_policy.PROFILE
+            or successor.config.get(request_policy.CONFIG_KEY)!=request_policy.PROFILE))
         or _digest({k:successor.config[k]for k in CONFIG_KEYS if k in successor.config})!=value.get('new_configuration_sha256')
-        or not _same({k:v for k,v in successor.config.items()if k not in CHANGED_KEYS},
-                     {k:v for k,v in predecessor.config.items()if k not in CHANGED_KEYS})
+        or not _same({k:v for k,v in successor.config.items()if k not in _changed_keys(value['contract'])},
+                     {k:v for k,v in predecessor.config.items()if k not in _changed_keys(value['contract'])})
         or predecessor.finished_at is None or predecessor.finished_at>successor.created_at):return False
     children=_children(predecessor)
     if len(children)!=1 or children[0].pk!=successor.pk:return False
@@ -210,17 +332,18 @@ def _lineage(job,*,lock=False):
         seen.add(identifier);nodes.append(parent)
     nodes.reverse();exposure=Decimal('0');transports=set()
     if (len(nodes)>MAX_FAMILY_CALLS
-        and job.config.get(RECOVERY_KEY,{}).get('contract')!=CONTRACT_V2):
+        and job.config.get(RECOVERY_KEY,{}).get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE)):
         raise ValueError('historical recovery family bound')
     for index,(parent,child)in enumerate(zip(nodes,nodes[1:])):
-        proof=_local_rejection(parent)
+        proof=_local_failure(parent)
         if not proof:raise ValueError('unproved recovery ancestor')
         exposure+=Decimal(proof['prior_quote'])
         proof={**proof,'prior_calls':index+1,'prior_quote':str(exposure)}
         if not _edge(parent,child,proof):raise ValueError('unauthenticated recovery edge')
         transports.add(proof['old_transport'])
         transport=child.config.get(TRANSPORT_KEY)
-        if transport in transports:raise ValueError('repeated recovery transport')
+        if transport in transports and child.config[RECOVERY_KEY]['contract']!=CONTRACT_METERED:
+            raise ValueError('repeated recovery transport')
     return nodes,exposure,transports
 
 
@@ -228,7 +351,7 @@ def rejection(job):
     """Authenticate the complete rejected family and count every prior call."""
     try:
         nodes,exposure,_=_lineage(job)
-        proof=_local_rejection(job)
+        proof=_local_failure(job)
         if proof is None:return None
         return {**proof,'prior_calls':len(nodes),'prior_quote':str(exposure+Decimal(proof['prior_quote']))}
     except (Job.DoesNotExist,AttributeError,KeyError,TypeError,ValueError,OSError,InvalidOperation,ValidationError):
@@ -256,6 +379,10 @@ def _source_matches(job,encounter):
 def _proposal(job,encounter,user,config):
     proof=rejection(job)
     if not proof or job.user_id!=user.pk or encounter.status=='finalized' or encounter.answers:return None
+    metered='old_request_profile'in proof
+    profile_changed=(request_policy.CONFIG_KEY not in job.config and config.get(request_policy.CONFIG_KEY)==request_policy.PROFILE)
+    contract=CONTRACT_METERED if metered else CONTRACT_PROFILE if profile_changed else None
+    changed=_changed_keys(contract)
     if not _source_matches(job,encounter):return None
     _,_,transports=_lineage(job)
     children=_children(job)
@@ -277,18 +404,25 @@ def _proposal(job,encounter,user,config):
                 or not _same(authorized.get(testing_authority.ACTOR_ENROLLMENT_KEY),
                              job.config.get(testing_authority.ACTOR_ENROLLMENT_KEY))
                 or any(key not in job.config or not _same(value,job.config[key])
-                       for key,value in config.items()if key not in CHANGED_KEYS)):return None
+                       for key,value in config.items()if key not in changed)):return None
     except (AttributeError,KeyError,TypeError,ValueError,InvalidOperation,PermissionDenied,ValidationError):return None
     family_limit=V2_FAMILY_MAX_CALLS if bounds is not None else limit
+    if metered and bounds is None:return None
     if family_limit-proof['prior_calls']<MIN_SUCCESSOR_CALLS:return None
     prospective={k:config[k]for k in CONFIG_KEYS if k in config}
     original={k:job.config[k]for k in CONFIG_KEYS if k in job.config}
     new_transport=prospective.pop(TRANSPORT_KEY,None);original.pop(TRANSPORT_KEY,None)
+    if metered or profile_changed:
+        profile=prospective.pop(request_policy.CONFIG_KEY,None)
+        if request_policy.CONFIG_KEY in original or profile!=request_policy.PROFILE:return None
     release=settings.RELEASE_SHA
     if (not _same(prospective,original) or type(new_transport)is not str or not new_transport
-        or new_transport in transports|{proof['old_transport']} or not re.fullmatch('[a-f0-9]{40}',release)
+        or (new_transport not in(clinical_transport.TRANSPORT,clinical_transport.EVIDENCE_TRANSPORT,clinical_transport.CURRENT_TRANSPORT)
+            if metered else new_transport in transports|{proof['old_transport']})
+        or not re.fullmatch('[a-f0-9]{40}',release)
         or release==job.config['queued_release_sha']):return None
-    return {'contract':CONTRACT_V2 if bounds is not None else CONTRACT,**(bounds or {}),
+    return {'contract':contract or(CONTRACT_V2 if bounds is not None else CONTRACT),**(bounds or {}),
+        **({'new_request_profile':request_policy.PROFILE}if metered or profile_changed else {}),
         **proof,'encounter':str(encounter.pk),'actor':str(user.pk),
         'revision':encounter.revision,'new_transport':new_transport,'accepted_release':release,
         'new_configuration_sha256':_digest({k:config[k]for k in CONFIG_KEYS if k in config})}
@@ -297,6 +431,9 @@ def _proposal(job,encounter,user,config):
 def offer(encounter,user,config):
     """Read-only offer; a GET neither authorizes nor reserves a successor."""
     jobs=list(Job.objects.filter(encounter=encounter,state__in=['queued','running','reconciliation']).order_by('-created_at','-pk')[:V2_FAMILY_MAX_CALLS+1])
+    ended_rows=list(Job.objects.filter(encounter=encounter,kind='generation',revision=encounter.revision,state='failed').order_by('-created_at','-pk')[:1])
+    ended=ended_rows[0]if ended_rows else None
+    if ended is not None and _local_metered_exhaustion(ended)is not None:jobs.append(ended)
     try:
         tips=[job for job in jobs if successor(job)is None]
         if len(tips)!=1:return None
@@ -311,7 +448,7 @@ def offer(encounter,user,config):
 def predecessor(token,encounter,user):
     try:
         value=signing.loads(token,salt=SALT,max_age=600)
-        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2)
+        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE)
             or value.get('actor')!=str(user.pk) or value.get('encounter')!=str(encounter.pk)):raise ValueError()
         job=Job.objects.select_for_update().get(pk=value['job'],encounter=encounter,user=user)
         return job,value
@@ -323,8 +460,9 @@ def bind(job,value,encounter,user,config):
     expected=_proposal(job,encounter,user,config)
     if expected is None or not _same(value,expected):
         raise ValidationError('The rejection evidence, source or repaired configuration changed. Nothing was queued.')
-    if not _same({k:v for k,v in config.items()if k not in CHANGED_KEYS},
-                 {k:v for k,v in job.config.items()if k not in CHANGED_KEYS}):
+    changed=_changed_keys(value['contract'])
+    if not _same({k:v for k,v in config.items()if k not in changed},
+                 {k:v for k,v in job.config.items()if k not in changed}):
         raise ValidationError('A repaired request must retain the exact original provider, rates, source and authority.')
     return {**config,RECOVERY_KEY:value}
 
@@ -372,7 +510,8 @@ def enforce_stage_budget(job,previous,cap):
             or len(rows)>=limit or len(nodes)-1+len(rows)>=family_limit):raise ValueError()
         exposure=prior_exposure+sum((max(_cost(row.quote_maximum),_cost(row.actual_cost)if row.actual_cost is not None else Decimal('0'))for row in rows),Decimal('0'))+_cost(cap)
         ceiling=_cost(maximum_cost(job.config))
-        if (job.config[RECOVERY_KEY]['contract']==CONTRACT_V2
+        if (job.config[RECOVERY_KEY]['contract']in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE)
+            and _v2_bounds(job.config)is not None
             and Decimal(job.config[RECOVERY_KEY]['family_cost_ceiling'])!=ceiling):raise ValueError()
         if exposure>ceiling:raise ValueError()
     except (Job.DoesNotExist,AttributeError,KeyError,TypeError,ValueError,OSError,InvalidOperation,ValidationError):

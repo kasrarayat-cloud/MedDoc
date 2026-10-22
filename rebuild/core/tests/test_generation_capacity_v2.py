@@ -11,7 +11,7 @@ from unittest.mock import patch
 from django.core import signing
 from django.test import SimpleTestCase, TestCase, override_settings
 
-from core import ai_stages
+from core import ai_stages, anthropic_request_policy
 from core.jobs import enqueue, generation_maximum, mark_stale, run_one
 from core.models import Job, LedgerEntry, PlatformCost, ProviderReceipt, Reservation, Usage
 from core.security import private_path
@@ -79,7 +79,8 @@ class GenerationCapacityV2PureTests(SimpleTestCase):
     def test_definition_and_all_retained_checker_contracts_stay_v1(self):
         from core.semantic_revalidation import CONTRACTS
         config = ai_stages.definition_pipeline_config(LIVE)
-        self.assertEqual(config, {**LIVE, 'definition_stage_protocol': 'quillmd-ai-stages-v1',
+        self.assertEqual(config, {**LIVE, anthropic_request_policy.CONFIG_KEY: anthropic_request_policy.PROFILE,
+            'definition_stage_protocol': 'quillmd-ai-stages-v1',
             'definition_max_calls': 2, 'definition_request_byte_limit': 512000,
             'definition_output_token_limit': 16000, 'definition_maximum_cost': '2.94000000000'})
         for contract in CONTRACTS:

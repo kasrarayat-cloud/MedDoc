@@ -13,6 +13,7 @@ from .models import AIStageReceipt, Job, TemplateDefinitionPreparation
 from .security import audit, membership, private_path
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 from . import clinical_schema_transport as clinical_transport
+from . import anthropic_request_policy
 
 PROTOCOL='quillmd-ai-stages-v1'
 MAX_REQUEST_BYTES=512000
@@ -56,9 +57,13 @@ def quote(config,input_bytes=MAX_REQUEST_BYTES,output_tokens=MAX_OUTPUT_TOKENS):
 
 def generation_limits(config):
     """Absent means historical; an explicit invalid profile never falls back."""
-    try:clinical_transport.selected(config)
+    try:
+        clinical_transport.selected(config)
+        anthropic_request_policy.parameters(config)
     except clinical_transport.TransportError as exc:
         raise StageNotSent('Unknown clinical schema transport; nothing was sent.') from exc
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was sent.') from exc
     if 'semantic_capacity_profile' not in config:
         if 'semantic_timeout_seconds' in config:
             raise StageNotSent('The generation timeout has no capacity profile.')
@@ -81,9 +86,13 @@ def generation_limits(config):
 
 
 def pipeline_config(config):
-    try:clinical_transport.selected(config)
+    try:
+        clinical_transport.selected(config)
+        config=anthropic_request_policy.prospective(config)
     except clinical_transport.TransportError as exc:
         raise StageNotSent('Unknown clinical schema transport; nothing was queued.') from exc
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was queued.') from exc
     profile=(GENERATION_CAPACITY_PROFILE_V2
              if _supports_generation_capacity_v2(config)
              else GENERATION_CAPACITY_PROFILE)
@@ -111,6 +120,9 @@ def _pipeline_config(config,profile):
 
 
 def definition_pipeline_config(config):
+    try:config=anthropic_request_policy.prospective(config)
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was queued.') from exc
     if 'definition_capacity_profile' in config or 'definition_timeout_seconds' in config:
         definition_limits(config)
     prospective={**config,'definition_stage_protocol':PROTOCOL,'definition_max_calls':2,
@@ -174,6 +186,9 @@ def revalidation_config(config,*,contract='retained-facts-independent-check-v1')
     if contract not in CONTRACTS:
         raise StageNotSent('Unknown retained revalidation contract; nothing was sent.')
     # Existing retained-check contracts bind their original 16k/120s envelope.
+    try:config=anthropic_request_policy.prospective(config)
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was queued.') from exc
     prospective=_pipeline_config(config,GENERATION_CAPACITY_PROFILE)
     prospective.update(semantic_revalidation_contract=contract,semantic_max_calls=1)
     prospective['semantic_maximum_cost']=str(maximum_cost(prospective))
@@ -238,6 +253,9 @@ def parent_context(job,definition_preparation,config):
 
 def _response(payload,schema,instructions,config,max_output_tokens,timeout_seconds,on_response):
     schema=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
+    try:anthropic_request_policy.parameters(config)
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was sent.') from exc
     if config['provider']=='anthropic':
         from anthropic import Anthropic,transform_schema
         if clinical_transport.selected(config):
@@ -245,10 +263,11 @@ def _response(payload,schema,instructions,config,max_output_tokens,timeout_secon
             instructions+=clinical_transport.instructions(config)
         else:
             schema=share_anthropic_schema(transform_schema(schema))
-        response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(
-            model=config['model'],max_tokens=max_output_tokens,system=instructions,
-            messages=[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
-            output_config={'format':{'type':'json_schema','schema':schema}})
+        envelope=anthropic_request_policy.apply({'model':config['model'],
+            'max_tokens':max_output_tokens,'system':instructions,
+            'messages':[{'role':'user','content':json.dumps(payload,ensure_ascii=False)}],
+            'output_config':{'format':{'type':'json_schema','schema':schema}}},config)
+        response=Anthropic(timeout=timeout_seconds,max_retries=0).messages.create(**envelope)
         on_response(response)
         usage=response.usage
         cached=getattr(usage,'cache_read_input_tokens',0) or 0
@@ -295,6 +314,9 @@ def stage_slot(receipt,config):
 
 def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,instructions,config,
                   max_output_tokens=None,timeout_seconds=None,attempt=1,fixture_output=None):
+    try:request_parameters=anthropic_request_policy.parameters(config)
+    except anthropic_request_policy.PolicyError as exc:
+        raise StageNotSent('Unknown Anthropic request profile; nothing was sent.') from exc
     if stage not in STAGES or type(attempt) is not int or not 1<=attempt<=STAGES[stage]:
         raise StageNotSent('This stage is outside the bounded workflow.')
     if (job is None)!=stage.startswith('definition_'):raise StageNotSent('The stage does not match its parent.')
@@ -318,6 +340,8 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
     schema_json=schema.model_json_schema() if hasattr(schema,'model_json_schema') else schema
     envelope={'protocol':PROTOCOL,'stage':stage,'attempt':attempt,'payload':payload,
               'schema':schema_json,'instructions':instructions,'max_output_tokens':max_output_tokens}
+    if request_parameters:
+        envelope[anthropic_request_policy.ENVELOPE_KEY]=request_parameters
     if config.get('mode')=='live' and config.get('provider')=='anthropic':
         if clinical_transport.selected(config):
             if definition_preparation is not None:

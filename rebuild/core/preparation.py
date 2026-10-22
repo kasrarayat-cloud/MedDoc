@@ -23,6 +23,7 @@ from . import word_contract
 from .provider_schema import ANTHROPIC_SCHEMA_TRANSPORT, share_anthropic_schema
 from . import preparation_choice_transport as choice_transport
 from . import preparation_stream_transport as stream_transport
+from . import anthropic_request_policy
 from documents.question_context import CONFIG_KEY as QUESTION_CONTEXT_KEY, CONTEXT as QUESTION_CONTEXT, validate_context as validate_question_context, validate_binding as validate_question_binding
 from documents.signing_source_context import CONFIG_KEY as SIGNING_CONTEXT_KEY, CONTEXT as SOURCE_SIGNING_CONTEXT, validate_context as validate_signing_context
 
@@ -35,8 +36,8 @@ IDENTITY_PROFILE = 'source-identity-enums-v1'
 IDENTITY_KEY = 'word_preparation_identities'
 SCHEMA_TRANSPORT_KEY = 'word_preparation_schema_transport'
 REASONING_KEY = 'word_preparation_reasoning'
-REASONING_PROFILE = 'sonnet55-between-tools-high-v1'
-REASONING_MODEL = 'claude-sonnet-5-5'
+REASONING_PROFILE = anthropic_request_policy.PROFILE
+REASONING_MODEL = anthropic_request_policy.MODEL
 MAX_TYPED_OUTPUT = 16000
 MAX_COMPLETE_OUTPUT = 48000
 MAX_PREPARATION_REQUEST_BYTES = 512000
@@ -108,8 +109,11 @@ def reasoning_policy(config):
     have no tools; use the documented between-tools setting with explicit high
     effort. This changes provider execution, never semantic validation or review.
     """
+    try:shared=anthropic_request_policy.parameters(config or {})
+    except anthropic_request_policy.PolicyError:
+        raise DocumentError('Unsupported explicit preparation reasoning policy.', 'invalid_proposal') from None
     if config is None or REASONING_KEY not in config:
-        return None
+        return REASONING_PROFILE if shared else None
     if (type(config[REASONING_KEY]) is not str or config[REASONING_KEY] != REASONING_PROFILE
             or config.get('mode') != 'live' or config.get('provider') != 'anthropic'
             or type(config.get('model')) is not str or config['model'] != REASONING_MODEL):
@@ -424,8 +428,8 @@ def provider_request(inventory, role, config, proposal=None):
             **({'sort_keys':True} if transport in choice_transport.TRANSPORTS else {}))}],
         'output_config':{'format':{'type':'json_schema','schema':schema}}}
     if reasoning_policy(config) is not None:
-        envelope['thinking'] = {'type': 'between_tools'}
-        envelope['output_config']['effort'] = 'high'
+        envelope = anthropic_request_policy.apply(envelope,
+            {**config, anthropic_request_policy.CONFIG_KEY: REASONING_PROFILE})
     if streaming_transport(config):
         envelope['stream'] = True
     if config.get('word_preparation_output_profile') == COMPLETE_OUTPUT_PROFILE:
