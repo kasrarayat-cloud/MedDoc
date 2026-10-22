@@ -79,6 +79,11 @@ def _family_limit(config):
     limit=config.get('semantic_max_calls')
     if type(limit)is not int or not 1<=limit<=MAX_FAMILY_CALLS:raise ValueError('per-job recovery bound')
     if type(value)is not dict:raise ValueError('recovery contract')
+    from . import clinical_call_authority as scoped
+    if scoped.selected(config):
+        grant=scoped.record(value['grant_id'])
+        if value.get('grant_sha256')!=scoped._digest(grant):raise ValueError('scoped recovery authority')
+        return scoped.FAMILY_CALLS
     if value.get('contract')==CONTRACT:return limit
     if value.get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED):raise ValueError('recovery contract')
     bounds=_v2_bounds(config)
@@ -324,6 +329,8 @@ def _changed_keys(contract):
 
 
 def _edge(predecessor,successor,proof):
+    from . import clinical_call_authority as scoped
+    if scoped.selected(successor.config):return scoped.edge(predecessor,successor,proof)
     value=successor.config.get(RECOVERY_KEY)
     keys={'contract',*proof,'encounter','actor','revision','new_transport','accepted_release','new_configuration_sha256'}
     if type(value)is not dict:return False
@@ -413,7 +420,7 @@ def _lineage(job,*,lock=False):
         seen.add(identifier);nodes.append(parent)
     nodes.reverse();exposure=Decimal('0');transports=set()
     if (len(nodes)>MAX_FAMILY_CALLS
-        and job.config.get(RECOVERY_KEY,{}).get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED)):
+        and job.config.get(RECOVERY_KEY,{}).get('contract')not in(CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED,'scoped-clinical-call-grant-successor-v1')):
         raise ValueError('historical recovery family bound')
     for index,(parent,child)in enumerate(zip(nodes,nodes[1:])):
         proof=_local_failure(parent)
@@ -458,6 +465,9 @@ def _source_matches(job,encounter):
 
 
 def _proposal(job,encounter,user,config):
+    from . import clinical_call_authority as scoped
+    value=scoped.proposal(job,encounter,user,config)
+    if value is not None:return value
     proof=rejection(job)
     if not proof or job.user_id!=user.pk or encounter.status=='finalized' or encounter.answers:return None
     metered='old_request_profile'in proof
@@ -540,7 +550,7 @@ def offer(encounter,user,config):
 def predecessor(token,encounter,user):
     try:
         value=signing.loads(token,salt=SALT,max_age=600)
-        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED)
+        if (type(value)is not dict or value.get('contract')not in(CONTRACT,CONTRACT_V2,CONTRACT_METERED,CONTRACT_PROFILE,CONTRACT_CARRIER,CONTRACT_TRUNCATED,'scoped-clinical-call-grant-successor-v1')
             or value.get('actor')!=str(user.pk) or value.get('encounter')!=str(encounter.pk)):raise ValueError()
         job=Job.objects.select_for_update().get(pk=value['job'],encounter=encounter,user=user)
         return job,value
@@ -590,11 +600,15 @@ def pending_jobs(jobs):
     return any(job.state in ('queued','running') or (job.state=='reconciliation' and successor(job)is None) for job in jobs)
 
 
-def enforce_stage_budget(job,previous,cap):
+def enforce_stage_budget(job,previous,cap,*,stage=None,attempt=None):
     """Called under the stage's parent-row lock; prior unknown exposure is counted."""
     if RECOVERY_KEY not in job.config:return
     from .ai_stages import StageNotSent,maximum_cost
     try:
+        from . import clinical_call_authority as scoped
+        if scoped.selected(job.config):
+            scoped.enforce(job,previous,cap,stage,attempt)
+            return
         nodes,prior_exposure,_=_lineage(job,lock=True);rows=list(previous)
         limit=job.config['semantic_max_calls']
         family_limit=_family_limit(job.config)

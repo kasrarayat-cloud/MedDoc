@@ -5039,7 +5039,8 @@ def _validate_current_numeric_answers(notes, fields, definitions, facts, answers
 
 
 def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE_CONTRACT,
-        scope_contract=POSITIONED_SCOPE_CONTRACT):
+        scope_contract=POSITIONED_SCOPE_CONTRACT, allow_repair=True):
+    if type(allow_repair) is not bool: _fail('Unsupported repair policy; nothing was sent.')
     from .generation import source_units
     if type(reference_contract) is not str or reference_contract not in (LEGACY_REFERENCE_CONTRACT, REFERENCE_INVENTORY_CONTRACT):
         _fail('Unsupported semantic fact reference contract; nothing was sent.')
@@ -5240,7 +5241,7 @@ def run(notes, fields, definitions, send, *, reference_contract=LEGACY_REFERENCE
         or scope_contract in CLINICAL_SEMANTICS_SCOPE_CONTRACTS else {})
     repair += [key for key in assignment_findings if key not in repair
         and not any(i in bad for i in answers[key]['fact_ids'])]
-    if repair:
+    if repair and allow_repair:
         previous_checks, previous_bad = checks, bad
         local_findings = {'local_patient_name_findings': identity_findings} if scope_contract in DOCUMENT_IDENTITY_SCOPE_CONTRACTS else {}
         if literal_findings:

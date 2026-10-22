@@ -620,6 +620,8 @@ def run_semantic_job(job):
             raise ai_stages.StageNotSent('The approved generation source or definitions changed before processing.')
         from .source_assertion_graph import SCOPE_CONTRACT as graph_scope
         graph_run = job.config.get('semantic_fact_scope_contract') == graph_scope
+        from . import clinical_call_authority as scoped
+        repair_options = {'allow_repair':False} if scoped.selected(job.config) else {}
         interpretation = None
         def send(role,attempt,payload,schema,instructions):
             options = {}
@@ -634,14 +636,16 @@ def run_semantic_job(job):
             identity = identity_for(e, definitions, generation_job_id=str(job.pk))
             if {key: value for key, value in identity.items() if key != 'generation_job_id'} != job.config.get('semantic_encounter_binding'):
                 raise ai_stages.StageNotSent('The encounter identity or date changed after the interpretation was quoted; nothing was sent.')
-            output = graph_generation.run(e.notes, e.template_version.fields, definitions, send, identity=identity)
+            output = graph_generation.run(e.notes, e.template_version.fields, definitions, send, identity=identity,
+                **repair_options)
             answers, interpretation = output['answers'], output['interpretation']
             for field in e.template_version.fields:
                 graph_generation.validate_stored_answer(e.notes, field, definitions[field['key']], answers[field['key']], interpretation)
         else:
             answers=semantic_generation.run(e.notes,e.template_version.fields,definitions,send,
                 reference_contract=job.config.get('semantic_fact_reference_contract',semantic_generation.LEGACY_REFERENCE_CONTRACT),
-                scope_contract=job.config.get('semantic_fact_scope_contract',semantic_generation.POSITIONED_SCOPE_CONTRACT))
+                scope_contract=job.config.get('semantic_fact_scope_contract',semantic_generation.POSITIONED_SCOPE_CONTRACT),
+                **repair_options)
             for field in e.template_version.fields:
                 semantic_generation.validate_stored_answer(e.notes,field,definitions[field['key']],answers[field['key']])
         result_path,result_sha=ai_stages.retain({'contract':semantic_generation.CONTRACT,'answers':answers,
