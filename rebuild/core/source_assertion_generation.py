@@ -18,6 +18,18 @@ Return source-assertion-graph-v25. Offer exact references with a complete-unit I
 exact quote and explicit occurrence, never offsets or paraphrased facts. Every
 original unit has one exhaustive coverage disposition, including headings,
 nonclinical text and unknown instructions. Every fact belongs to one assertion.
+Each fact's subject.kind, timing.kind and polarity must exactly equal its sole
+owner assertion's subject, temporality and polarity. Split differently owned,
+timed, negated or uncertain claims into separate facts/assertions; share exact
+source references and explicit relationships when appropriate, never a fact ID
+between owners. Do not hide a disagreement by relabelling a documented claim.
+Keep complete compound, qualified and ranged values. If value_span already
+contains its unit, set both unit and unit_span to null while preserving the unit
+verbatim in value_span, as in a whole compound-age identity phrase. Otherwise
+separate unit metadata must be literal, disjoint and attached after value_span:
+whitespace only, except degrees before celsius or fahrenheit. A hyphen or words
+between value and unit do not meet that rule. Never strip approximation, a range
+or other material qualifiers to produce a bare exact number or attach a unit.
 Distinguish predicate event time from encounter date, owner from speaker, and
 conditional plans from actual symptoms. Keep uncertainty, negatives, coordinated
 objects, retractions, corrections and prior history. predicate_refs identify the
