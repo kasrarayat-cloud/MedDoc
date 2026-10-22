@@ -75,31 +75,34 @@ class SourceAssertionWorkerTests(TestCase):
         self.assert_mocked_live_v4_adoption(historical=False, nullable=True)
 
     def test_mocked_live_anthropic_v4_job_adopts_and_reloads_evidence_transport(self):
+        self.assert_mocked_live_v4_adoption(historical=False, evidence=True)
+
+    def test_mocked_live_anthropic_v4_job_adopts_and_reloads_flat_node_transport(self):
         self.assert_mocked_live_v4_adoption(historical=False)
 
     def test_historical_absent_marker_v4_job_adopts_and_reloads_shared_transport(self):
         self.assert_mocked_live_v4_adoption(historical=True)
 
-    def assert_mocked_live_v4_adoption(self, *, historical, nullable=False):
-        from core import clinical_schema_transport as codec, clinical_evidence_transport, source_assertion_generation
+    def assert_mocked_live_v4_adoption(self, *, historical, nullable=False, evidence=False):
+        from core import clinical_schema_transport as codec, clinical_evidence_transport, clinical_node_transport, source_assertion_generation
         from core.security import private_path
         from core.tests.test_billing_policy import fund
         fund(Wallet.objects.get(user=self.user, kind='paid'), Decimal('100'), 'payment:worker-v4-offline')
         config = {**generation.configuration(), 'mode': 'live', 'provider': 'anthropic',
             'model': 'claude-sonnet-5-5', 'input_rate': '1', 'cached_rate': '0.1', 'output_rate': '1',
             'discount_rate': '0'}
-        if historical or nullable:
+        if historical or nullable or evidence:
             prospective_configuration = ai_stages.pipeline_config
             def historical_configuration(value):
                 retained = prospective_configuration(value)
                 if historical:retained.pop(codec.CONFIG_KEY, None)
-                else:retained[codec.CONFIG_KEY]=codec.TRANSPORT
+                else:retained[codec.CONFIG_KEY]=codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT
                 return retained
             # Recreate an already-queued old configuration only in this test.
             with patch.object(ai_stages, 'pipeline_config', side_effect=historical_configuration):
                 job = enqueue(self.encounter, self.user, config=config)
             if historical:self.assertNotIn(codec.CONFIG_KEY, job.config)
-            else:self.assertEqual(job.config[codec.CONFIG_KEY],codec.TRANSPORT)
+            else:self.assertEqual(job.config[codec.CONFIG_KEY],codec.EVIDENCE_TRANSPORT if evidence else codec.TRANSPORT)
         else:
             job = enqueue(self.encounter, self.user, config=config)
             self.assertEqual(job.config[codec.CONFIG_KEY], codec.CURRENT_TRANSPORT)
@@ -113,7 +116,10 @@ class SourceAssertionWorkerTests(TestCase):
             self.assertEqual((maximum, timeout), (32000, 240))
             self.assertEqual(stage_config, frozen_config)
             output = source_assertion_generation.fixture_stage(role, payload)
-            wire = output if historical else (codec if nullable else clinical_evidence_transport).encode(schema, output)
+            marker = stage_config.get(codec.CONFIG_KEY)
+            selected = {codec.TRANSPORT:codec, codec.EVIDENCE_TRANSPORT:clinical_evidence_transport,
+                codec.CURRENT_TRANSPORT:clinical_node_transport}
+            wire = output if marker is None else selected[marker].encode(schema, output)
             text = json.dumps(wire)
             provider_values[role] = {'canonical': deepcopy(output), 'wire': deepcopy(wire),
                 'text': text, 'schema': deepcopy(schema), 'payload': deepcopy(payload),
@@ -151,11 +157,13 @@ class SourceAssertionWorkerTests(TestCase):
             self.assertEqual(hashlib.sha256(raw).hexdigest(), row.request_sha256)
             request = json.loads(raw)
             value = provider_values[row.stage]
-            expected_marker = ai_stages.ANTHROPIC_SCHEMA_TRANSPORT if historical else codec.TRANSPORT if nullable else codec.CURRENT_TRANSPORT
+            expected_marker = frozen_config.get(codec.CONFIG_KEY, ai_stages.ANTHROPIC_SCHEMA_TRANSPORT)
             self.assertEqual(request['schema_transport'], expected_marker)
-            if not historical and not nullable:
+            if expected_marker in (codec.EVIDENCE_TRANSPORT, codec.CURRENT_TRANSPORT):
                 self.assertEqual(request['transmitted_schema'], json.dumps(codec.transmitted_schema(
-                    value['schema'],codec.CURRENT_TRANSPORT),ensure_ascii=False,separators=(',',':'),allow_nan=False))
+                    value['schema'],expected_marker),ensure_ascii=False,separators=(',',':'),allow_nan=False))
+                self.assertEqual(json.loads(value['text'])['transport'], expected_marker)
+            else:self.assertNotIn('transmitted_schema', request)
             self.assertEqual(request['schema'], value['schema'])
             self.assertEqual(request['payload'], value['payload'])
             self.assertEqual(request['instructions'], value['instructions'])

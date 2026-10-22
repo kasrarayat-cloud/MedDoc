@@ -323,7 +323,7 @@ def execute_stage(*,job=None,definition_preparation=None,stage,payload,schema,in
             if definition_preparation is not None:
                 raise StageNotSent('Clinical transport does not apply to definition preparation.')
             envelope['schema_transport']=clinical_transport.marker(config)
-            if envelope['schema_transport']==clinical_transport.CURRENT_TRANSPORT:
+            if envelope['schema_transport'] in (clinical_transport.EVIDENCE_TRANSPORT, clinical_transport.CURRENT_TRANSPORT):
                 if len(encode(envelope))>MAX_REQUEST_BYTES:
                     raise StageNotSent('The complete stage request exceeds its limit; nothing was truncated or sent.')
                 # A string preserves schema property ordering through the

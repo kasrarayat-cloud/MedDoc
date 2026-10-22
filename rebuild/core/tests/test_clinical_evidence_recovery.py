@@ -1,4 +1,4 @@
-"""Real v2 recovery/adoption after two retained rejections; provider I/O is mocked."""
+"""Current transport adoption after two retained rejections; provider I/O is mocked."""
 from copy import deepcopy
 from decimal import Decimal
 import hashlib
@@ -14,7 +14,7 @@ from django.test import TestCase, override_settings
 
 from core import ai_stages, generation, generation_recovery as recovery
 from core import clinical_schema_transport as transport
-from core import clinical_evidence_transport as codec
+from core import clinical_node_transport as codec
 from core import source_assertion_graph as graph
 from core.jobs import enqueue, run_one
 from core.models import AuditEvent, Job, Reservation, SourceInterpretation, Usage
@@ -23,14 +23,14 @@ from core.tests.test_billing_policy import STORAGES
 from core.tests.test_generation_recovery import RecoveryFixture, NEW_RELEASE
 from core.tests.test_source_assertion_graph import checker
 
-V2_RELEASE='e'*40
+CURRENT_RELEASE='e'*40
 
 
 @override_settings(WORD_PREPARATION_ENABLED=True,AI_MODE='fixture',ADMIN_SITE=False,
     TESTING_AUTHORITY_MODE='',TESTING_AUTHORITY_ID='',TESTING_AUTHORITY_SHA256='',
     STORAGES=STORAGES,RELEASE_SHA=NEW_RELEASE)
 class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
-    def test_real_v2_three_stage_adoption_shares_five_calls_with_two_immutable_rejections(self):
+    def test_current_three_stage_adoption_shares_five_calls_with_two_immutable_rejections(self):
         self.assertNotIn(transport.CONFIG_KEY,self.old.config)
         self.assertIsNotNone(recovery.rejection(self.old))
         # Reconstruct the already-supported historical v1 request only for the
@@ -63,7 +63,7 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
                 retained[name]=private_path(name).read_bytes()
                 self.assertEqual(hashlib.sha256(retained[name]).hexdigest(),digest)
 
-        with override_settings(RELEASE_SHA=V2_RELEASE):
+        with override_settings(RELEASE_SHA=CURRENT_RELEASE):
             active=ai_stages.pipeline_config(self.config())
             self.assertEqual(active[transport.CONFIG_KEY],transport.CURRENT_TRANSPORT)
             self.assertEqual(active[transport.CONFIG_KEY],codec.TRANSPORT)
@@ -71,7 +71,7 @@ class ClinicalEvidenceRecoveryTests(RecoveryFixture,TestCase):
             new=enqueue(self.encounter,self.user,config=self.config(),
                 expected_revision=self.encounter.revision,recovery_token=token)
             self.assertEqual(new.config[transport.CONFIG_KEY],transport.CURRENT_TRANSPORT)
-            self.assertEqual(new.config['queued_release_sha'],V2_RELEASE)
+            self.assertEqual(new.config['queued_release_sha'],CURRENT_RELEASE)
             self.assertEqual(new.config[recovery.RECOVERY_KEY]['job'],str(second.pk))
             self.assertEqual(new.config[recovery.RECOVERY_KEY]['prior_calls'],2)
             calls=[];transmitted=[];assigned=None
