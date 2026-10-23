@@ -12,6 +12,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 from .generation_errors import NoProviderRequest, PlatformFailure
+from .clinical_validation_diagnostics import SourceAssertionValidationError, safe_validation_diagnostic
 from .models import AuditEvent, Job, Encounter, Usage, ProviderReceipt, CodeSuggestion
 from .security import membership,audit,private_path
 from .media import (AMBIGUOUS,MISSING,RETRYABLE,SUBMISSION_BUDGET_SECONDS,TOO_LARGE,TOO_SLOW,UNAVAILABLE,UNREADABLE,NotNormalised,
@@ -168,7 +169,8 @@ def failure_reason(exc):
     """Display text for a post-settlement failure. Only QuillMD's own fixed messages are shown; any other exception is named by class,
     because provider or validation messages can quote the source text."""
     if isinstance(exc,(NotAdoptedByUser,PlatformFailure,NoProviderRequest)): return '; '.join(exc.messages)
-    return f'Output could not be adopted ({type(exc).__name__}); review required.'
+    name = 'ValidationError' if isinstance(exc, SourceAssertionValidationError) else type(exc).__name__
+    return f'Output could not be adopted ({name}); review required.'
 
 
 def recording_charge_limit(e,input_path,config,approved_limit=None):
@@ -693,8 +695,11 @@ def run_semantic_job(job):
         if known and not declined:
             try:absorb_failed_job(job)
             except Exception as absorb_error:audit(job.user,'usage.absorb_failed',job.pk,department=job.encounter.department,error_class=type(absorb_error).__name__)
-        audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,error_class=type(exc).__name__,
-              billing='not_adopted' if declined else 'platform_failure' if known else 'not_processed' if unsent else 'uncertain')
+        diagnostic = safe_validation_diagnostic(exc)
+        audit(job.user,'job.'+job.state,job.pk,department=job.encounter.department,
+              error_class='ValidationError' if isinstance(exc, SourceAssertionValidationError) else type(exc).__name__,
+              billing='not_adopted' if declined else 'platform_failure' if known else 'not_processed' if unsent else 'uncertain',
+              **({'validation_diagnostic':diagnostic} if diagnostic is not None else {}))
     return True
 
 

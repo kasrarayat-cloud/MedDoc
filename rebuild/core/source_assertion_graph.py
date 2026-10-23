@@ -9,6 +9,7 @@ import json
 import re
 
 from django.core.exceptions import ValidationError
+from .clinical_validation_diagnostics import SourceAssertionValidationError
 
 CONTRACT = 'source-assertion-graph-v25'
 SCOPE_CONTRACT = CONTRACT
@@ -42,7 +43,7 @@ IDENTITY_KEYS = ('patient_id', 'encounter_id', 'department_id', 'service_date',
 
 def require(condition, code):
     if not condition:
-        raise ValidationError('Source assertion graph: '+code, code=code)
+        raise SourceAssertionValidationError(code)
 
 
 def canonical(value):
@@ -517,14 +518,55 @@ REF = object_schema({'quote':{'type':'string','minLength':1,'maxLength':50000},
 def extraction_schema():
     from .semantic_generation import API_FACT_INVENTORY_SCHEMA
     fact_schema = deepcopy(API_FACT_INVENTORY_SCHEMA['properties']['facts'])
-    fact_schema['items']['properties']['polarity'] = enum(POLARITIES)
+    fact_properties = fact_schema['items']['properties']
+    fact_schema['items']['description'] = (
+        'Every fact ID has exactly one owner assertion. Its subject.kind, timing.kind and polarity '
+        'must equal that assertion\'s subject, temporality and polarity. Split claims with different '
+        'owners, event times or polarity into separate facts and assertions; they may cite the same '
+        'literal source evidence and use explicit relationships, but may not share a fact ID.')
+    fact_properties['value_span']['description'] += (
+        ' Preserve complete compound, qualified and ranged source values without stripping their '
+        'qualifiers or selecting a bare approximate/range endpoint as an exact number. If the '
+        'self-contained value already contains its unit, retain that unit verbatim here and set '
+        'both unit and unit_span to null; for example, the whole identity phrase 37-year-old has '
+        'no separate unit metadata. This never converts a qualified value into an exact numeric value.')
+    unit_description = (
+        'Optional separate literal unit metadata, never a replacement for source wording. '
+        'Use null for both unit and unit_span when value_span already contains the unit, '
+        'including a complete compound or qualified phrase. Otherwise a non-null unit must '
+        'equal unit_span.quote ignoring case and follow value_span as a disjoint attached unit: '
+        'only whitespace may separate them, except degrees before celsius or fahrenheit. '
+        'A hyphen, intervening words, an earlier unit or a unit inside value_span is not attached. '
+        'Never shorten a qualified or ranged value merely to attach a unit.')
+    fact_properties['unit']['description'] = unit_description
+    fact_properties['subject']['description'] += (
+        ' Its kind must exactly match the single owner assertion\'s subject; split differently '
+        'owned claims instead of borrowing or relabelling another person\'s facts.')
+    fact_properties['timing']['properties']['kind']['description'] += (
+        ' This value must exactly match the single owner assertion\'s temporality. '
+        'Differently timed claims require separate facts and assertions, not a shared fact ID.')
+    fact_properties['polarity'] = {**enum(POLARITIES), 'description':
+        'Must exactly match the single owner assertion\'s polarity. Split differently negated '
+        'or uncertain claims into separate facts/assertions while preserving their exact qualifiers.'}
     nullable = lambda item: {'anyOf':[item,{'type':'null'}]}
     return object_schema({'contract':enum((CONTRACT,)),
         'facts':fact_schema,
-        'assertions':list_schema(object_schema({'id':ID,'fact_ids':list_schema(ID,200),
+        'assertions':list_schema(object_schema({'id':ID,'fact_ids':{**list_schema(ID,200), 'description':
+            'Exactly the facts owned by this assertion. Every fact ID must occur in exactly one '
+            'assertion, with matching subject, temporality and polarity. Separate differently '
+            'scoped claims into separate fact IDs; sharing literal references or explicit '
+            'relationships never permits multiple owners of one fact ID.'},
             'source_unit_ids':list_schema({'type':'integer','minimum':1}), 'kind':enum(ASSERTION_KINDS),
-            'subject':enum(SUBJECTS),'encounter':enum(ENCOUNTERS),'temporality':enum(TIMES),
-            'polarity':enum(POLARITIES),'certainty':enum(CERTAINTIES),'identity_role':enum(IDENTITY_ROLES),
+            'subject':{**enum(SUBJECTS),'description':
+                'The assertion\'s documented subject; must equal subject.kind on every owned fact. '
+                'A different subject requires a separate assertion and facts.'},
+            'encounter':enum(ENCOUNTERS),'temporality':{**enum(TIMES),'description':
+                'The assertion\'s documented event time; must equal timing.kind on every owned fact. '
+                'Split past and current claims rather than assigning one fact to both.'},
+            'polarity':{**enum(POLARITIES),'description':
+                'The assertion\'s documented polarity; must equal polarity on every owned fact. '
+                'Split differently qualified claims and preserve their source qualifiers.'},
+            'certainty':enum(CERTAINTIES),'identity_role':enum(IDENTITY_ROLES),
             'clinically_relevant':{'type':'boolean'},'consumer_role':enum(CONSUMER_ROLES),'consumer_value':nullable(enum(sorted(set(v for vs in CONSUMER_VALUES.values() for v in vs)))),
             'consumer_ref':nullable(REF),
             'time':nullable(object_schema({'performer':enum(PERFORMERS),'exclusion':enum(EXCLUSIONS),
