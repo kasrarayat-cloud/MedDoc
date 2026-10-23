@@ -34,8 +34,29 @@ Distinguish predicate event time from encounter date, owner from speaker, and
 conditional plans from actual symptoms. Keep uncertainty, negatives, coordinated
 objects, retractions, corrections and prior history. predicate_refs identify the
 assertion; context_refs retain ownership/time context; qualifier_refs identify
-clinically material words that the answer must preserve. Unknown scope names its
+clinically material words that the answer must preserve. For EVERY assertion,
+polarity negated, uncertain or mixed OR certainty possible, conditional or
+hypothetical REQUIRES at least one exact governing qualifier in qualifier_refs
+from that assertion's declared source units. This applies to every consumer_role,
+including none, and to unused assertions and time-qualification claims. Keeping
+negation or uncertainty in predicate_refs, context_refs or a fact value_span does
+not populate qualifier_refs; a reference may appear in multiple reference lists
+when it serves both roles. Never change the documented polarity/certainty or omit
+an assertion to evade this requirement. Affirmed, established assertions may also
+retain other material qualifier_refs. Unknown scope names its
 possible affected assertions; if it cannot be bounded, leave affected IDs empty.
+For each unit_coverage row, assertion_ids exactly lists every assertion declaring
+that source unit. Only disposition unknown may have nonempty affected_assertion_ids;
+assertions, context and nonclinical dispositions require that list to be empty.
+Use explicit context references and relationships for resolved descriptive links,
+never the unresolved-dependency list. Every time_total, time_work, time_exclusion
+or time_qualification consumer_role requires kind equal to that role and a non-null
+time object, including a qualification claim that states no duration. Its keys are
+performer, performer_ref, date_ref, quantity_ref, unit_ref and exclusion. References
+must be literal and within the assertion's declared source units; quantity_ref and
+unit_ref are both present or both null. Keep missing references null and an unknown
+performer unknown; any known performer requires its exact performer_ref. Do not
+invent evidence, borrow undeclared source units or change a role to evade this rule.
 Identity roles are explicit claims, never derived from free concept names. Source
 patient names/references must be literal; registry identity is comparison-only.
 Each assertion has an explicit clinically_relevant boolean (relevance to assessment/management, never implied by position), a closed consumer_role and consumer_value, independently verified; never derive them from concept prose. Time assertions retain exact performer/date/quantity/unit and exclusion purpose. Relationships have exact evidence and explicit endpoints. Only validity_dependency asserts that a target's validity relies on its source; descriptive causes/independent_of are not validity dependencies. Do not create global
