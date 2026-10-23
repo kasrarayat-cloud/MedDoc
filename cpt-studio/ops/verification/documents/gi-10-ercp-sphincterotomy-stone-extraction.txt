@@ -1,0 +1,40 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+St. Brigid Medical Center (fictional) - Advanced Endoscopy
+ERCP procedure report
+
+Patient: Rosa Delgado (fictional)
+Synthetic record: SYN-GI-0010
+Date of procedure: 2026-10-22
+Place of service: Hospital outpatient department, endoscopy unit
+Endoscopist: Dr. Ian Mercer, MD, Gastroenterology (fictional)
+Billing: Professional services of the endoscopist only; facility and radiology services are billed separately.
+
+Procedure
+Endoscopic retrograde cholangiopancreatography (ERCP) with biliary sphincterotomy and balloon extraction of common bile duct stones.
+
+Indication
+Choledocholithiasis: two common bile duct stones on magnetic resonance cholangiopancreatography, with right upper quadrant pain and elevated liver tests. The gallbladder is in situ.
+
+Sedation
+General anesthesia by the anesthesia service (fictional).
+
+Technique
+After informed consent was obtained, the duodenoscope was passed through the mouth to the second portion of the duodenum. The major papilla appeared normal. Deep cannulation of the common bile duct was achieved with a sphincterotome and guidewire; the pancreatic duct was not cannulated or injected. The cholangiogram showed a common bile duct dilated to 11 mm containing two filling defects of 8 mm and 10 mm, consistent with stones. A biliary sphincterotomy of moderate size was performed with blended current. The bile duct was swept with an extraction balloon, and both stones were removed. An occlusion cholangiogram at the end of the procedure showed no residual filling defects. Fluoroscopy time was 3.8 minutes; the radiology interpretation is reported separately by the radiologist (fictional).
+
+Findings
+1. Two common bile duct stones, 8 mm and 10 mm, removed by balloon extraction after biliary sphincterotomy.
+2. Normal major papilla.
+
+Complications
+None. No immediate bleeding after the sphincterotomy.
+
+Impression
+Choledocholithiasis treated with biliary sphincterotomy and complete balloon stone extraction.
+
+Plan
+1. Observe in recovery; advance the diet as tolerated.
+2. Surgical referral for cholecystectomy.
+3. Office follow-up with gastroenterology in four weeks.
+
+Electronically signed: Dr. Ian Mercer, MD (fictional), 2026-10-22 15:44

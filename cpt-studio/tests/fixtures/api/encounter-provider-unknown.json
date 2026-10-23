@@ -1,0 +1,178 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000004",
+ "title": "Screening colonoscopy report",
+ "state": "provider_unknown",
+ "state_label": "Provider outcome unknown",
+ "service_date": "2026-10-20",
+ "families": [],
+ "source_kind": "txt",
+ "open_clarifications": 0,
+ "created_at": "2026-10-23T14:04:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000041",
+  "number": 1,
+  "kind": "upload",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": {
+   "name": "synthetic-screening-colonoscopy.txt",
+   "media_type": "text/plain",
+   "size": 214,
+   "sha256": "c3a05e758307499d23f721c2c67e45c3d01dac06e41292693135a62b9719535f"
+  },
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "txt",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nScreening colonoscopy report (fictional)\nDate of service: 2026-10-20\n\nThe colonoscope was advanced to the cecum. No polyps were found. Bowel preparation was adequate.",
+  "text_sha256": "e20ecc2a37b22054aa3ac64621ea2f0841556b1e91068ba9a8caa45e60fde9e6",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 211
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-20",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 86,
+      "end": 113,
+      "text": "Date of service: 2026-10-20",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "The care setting is not documented."
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   },
+   "patient_status": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "Patient status is not documented."
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.colonoscopy",
+    "label": "Colonoscopy",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "unknown",
+    "error": "The request was sent but no response was received before the read deadline.",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "cancelled",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000004",
+   "provider": "corti",
+   "mode": "live",
+   "state": "unknown",
+   "http_status": null,
+   "latency_ms": 120004.0,
+   "usage": {},
+   "usage_basis": "",
+   "request_sha256": "48e2ddb76df56f530deebe62057b6a8bad9c688762eeea96ff05c02b5b84668e",
+   "response_sha256": "",
+   "reused_from": null,
+   "error": "Read timed out after 120 s; the provider may have processed the request.",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": null,
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": false,
+  "reviewed": false,
+  "blockers": [
+   "The provider outcome is unknown"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document uploaded (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "provider.unknown",
+   "summary": "Provider outcome unknown; resubmission blocked until reconciled",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

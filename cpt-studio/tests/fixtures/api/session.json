@@ -1,0 +1,28 @@
+{
+ "workspace": {
+  "id": "a0000000-0000-4000-8000-000000000001",
+  "name": "Gastroenterology",
+  "subtitle": "Synthetic demonstration workspace",
+  "category": {
+   "slug": "gastroenterology",
+   "name": "Gastroenterology",
+   "profiles_version": "gi-profiles@1"
+  }
+ },
+ "role": "reviewer",
+ "can_review": true,
+ "counts": {
+  "documents": 8,
+  "queue": 4
+ },
+ "synthetic_only": true,
+ "provider_mode": "live",
+ "release": "fixture-release",
+ "user": {
+  "id": "b0000000-0000-4000-8000-000000000001",
+  "username": "reviewer",
+  "label": "Synthetic Reviewer",
+  "actor_kind": "human",
+  "initials": "SR"
+ }
+}

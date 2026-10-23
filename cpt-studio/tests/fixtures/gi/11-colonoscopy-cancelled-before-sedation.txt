@@ -1,0 +1,21 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Ambulatory Surgery Center (fictional)
+Pre-procedure note
+
+Patient: Drew Kowalczyk (fictional)
+Synthetic record: SYN-GI-3011
+Date of service: 2026-10-22
+Location: Lakeside Ambulatory Surgery Center
+
+Procedure
+Colonoscopy.
+
+Indications
+Screening colonoscopy, average risk.
+
+Pre-procedure assessment
+At check-in the patient reported eating a full breakfast this morning and the preparation was incomplete. The colonoscopy was cancelled before sedation; the colonoscope was not inserted and no sedation was given.
+
+Plan
+The colonoscopy will be rescheduled within 2 weeks with repeat preparation instructions.

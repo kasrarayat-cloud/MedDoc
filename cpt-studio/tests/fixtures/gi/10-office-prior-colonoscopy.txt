@@ -1,0 +1,36 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health (fictional practice)
+Follow-up office visit
+
+Patient: Lee Varga-Holm (fictional)
+Synthetic record: SYN-GI-1010
+Date of service: 2026-10-20
+Place of service: Office
+Patient status: Established patient
+
+Chief complaint
+Follow-up of irritable bowel syndrome with constipation.
+
+History of present illness
+47-year-old with irritable bowel syndrome with constipation, improved on daily fiber. Her last colonoscopy in 2019 was normal to the cecum. No rectal bleeding, no weight loss, no family history of colon cancer.
+
+Past medical/surgical history
+Colonoscopy 2019 (normal). Cholecystectomy 2015.
+
+Examination
+Abdomen soft, mildly tender in the left lower quadrant, no masses.
+
+Assessment
+Irritable bowel syndrome with constipation, improved.
+
+Plan
+Continue fiber and add polyethylene glycol as needed. Return in 6 months.
+
+Medical decision making
+Low: one stable chronic illness; over-the-counter drug management.
+
+Time
+Total time spent on the date of the encounter: 22 minutes.
+
+Electronically signed: Dr. Samuel Achebe, MD (fictional), 2026-10-20 15:30

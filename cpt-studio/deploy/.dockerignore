@@ -1,0 +1,13 @@
+# Staged at the build-context root as .dockerignore by ops/install.py (docker
+# reads the ignore file only from the context root). Tests stay in the image so
+# the suite can run against the exact shipped bytes.
+.venv
+**/__pycache__
+**/*.pyc
+.runtime
+staticfiles
+ops
+deploy/nginx
+deploy/Dockerfile
+.dockerignore
+.gitignore

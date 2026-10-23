@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Ambulatory Surgery Center (fictional)
+COLONOSCOPY REPORT
+
+Patient: Morgan Ellery (fictional)
+Synthetic record: SYN-GI-3005
+Date of service: 2026-10-21
+Place of service: 24 (ambulatory surgical center)
+Endoscopist: Dr. Mei Tanaka, MD (fictional)
+
+Procedure
+Colonoscopy with cold snare polypectomy and cold forceps biopsy.
+
+Indications
+Screening colonoscopy, average risk; no prior colonoscopy.
+
+Bowel preparation
+Split-dose preparation. Boston Bowel Preparation Scale 8 (3-3-2); the bowel preparation was good.
+
+Technique
+The colonoscope was inserted into the rectum and advanced to the cecum, identified by the appendiceal orifice and ileocecal valve. Withdrawal time was 9 minutes.
+
+Findings
+Two sessile polyps, 4 mm and 6 mm, were found in the ascending colon; both were removed with a cold snare and retrieved.
+A 3 mm area of nodular mucosa in the rectum was biopsied with cold forceps.
+Small internal hemorrhoids. No other abnormalities.
+
+Impression
+Two ascending colon polyps removed by cold snare; rectal nodularity biopsied.
+
+Recommendations
+Await pathology. Repeat colonoscopy in 7 years, interval to be confirmed by pathology.

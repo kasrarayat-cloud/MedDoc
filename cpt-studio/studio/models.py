@@ -95,6 +95,13 @@ class Encounter(models.Model):
     current_revision = models.ForeignKey('SourceRevision', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     current_context = models.ForeignKey('EncounterContext', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     current_assessment = models.ForeignKey('Assessment', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    # Encounter metadata supplied by members (service date, setting, billing
+    # context). Copied into every EncounterContext snapshot; never clinical facts.
+    user_values = models.JSONField(default=dict)
+    # A member's Stop. While set, no stage of this encounter starts and nothing is
+    # sent; a member action that asks for processing again clears it.
+    stopped_at = models.DateTimeField(null=True, blank=True)
+    stopped_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     # Derived list state, recomputed by review.refresh_state(); never authoritative.
     state = models.CharField(max_length=32, default='processing')
     updated_at = models.DateTimeField(auto_now=True)
@@ -207,7 +214,7 @@ class ProviderRun(models.Model):
     http_status = models.PositiveIntegerField(null=True, blank=True)
     provider_request_id = models.CharField(max_length=120, blank=True)
     response_sha256 = models.CharField(max_length=64, blank=True)  # of the original raw bytes
-    response_body = models.TextField(blank=True)
+    response_bytes = models.BinaryField(blank=True, default=bytes)  # the provider's raw bytes, exactly as received
     latency_ms = models.FloatField(null=True, blank=True)
     usage = models.JSONField(default=dict)
     usage_basis = models.CharField(max_length=60, blank=True)
@@ -334,6 +341,8 @@ class Job(models.Model):
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='jobs')
     revision = models.ForeignKey(SourceRevision, on_delete=models.PROTECT, related_name='jobs')
     context = models.ForeignKey(EncounterContext, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    # The provider run an 'assess' job consumes (null: provider disabled or not run).
+    provider_run = models.ForeignKey(ProviderRun, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     kind = models.CharField(max_length=10)
     idempotency_key = models.CharField(max_length=200, unique=True)
     state = models.CharField(max_length=10, default=QUEUED)

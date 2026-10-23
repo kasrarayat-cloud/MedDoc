@@ -1,0 +1,70 @@
+name: cpt-studio
+
+# Default pull_request activity types only (opened, synchronize, reopened):
+# subscribing to ready_for_review or labeled turns those API calls into
+# cancellations of in-flight runs (AGENTS.md, "a third door").
+on:
+  pull_request:
+    paths:
+      - 'cpt-studio/**'
+      - '.github/workflows/cpt-studio.yml'
+      - 'scripts/ci/verify-cpt-studio.sh'
+  push:
+    branches: [main]
+    paths:
+      - 'cpt-studio/**'
+      - '.github/workflows/cpt-studio.yml'
+      - 'scripts/ci/verify-cpt-studio.sh'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cpt-studio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: CPT Studio checks and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cptstudio_ci
+          POSTGRES_PASSWORD: synthetic-cpt-ci-database-only
+          POSTGRES_DB: cptstudio_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cptstudio_ci -d cptstudio_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CPT_STUDIO_SECRET_KEY: synthetic-cpt-ci-only-key-with-no-external-access-20261023
+      CPT_STUDIO_DB_NAME: cptstudio_ci
+      CPT_STUDIO_DB_USER: cptstudio_ci
+      CPT_STUDIO_DB_PASSWORD: synthetic-cpt-ci-database-only
+      CPT_STUDIO_DB_HOST: 127.0.0.1
+      CPT_STUDIO_DB_PORT: '5432'
+      CPT_STUDIO_TEST_DB_SUFFIX: ci
+      CPT_STUDIO_PROVIDER_MODE: disabled
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: |
+            cpt-studio/requirements.txt
+            cpt-studio/requirements-dev.txt
+      # The suite exercises real OCR; without these it would test only the
+      # "OCR unavailable" path, which is not what the image ships.
+      - name: Install OCR tools
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng poppler-utils
+      - name: Install locked Python dependencies (runtime + test tooling)
+        run: python -m pip install -r cpt-studio/requirements-dev.txt
+      - name: Checks, migrations, tests and dependency audit
+        run: bash scripts/ci/verify-cpt-studio.sh

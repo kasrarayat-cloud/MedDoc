@@ -1,0 +1,44 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Westbrook Digestive Health (fictional practice)
+Procedure report - flexible sigmoidoscopy
+
+Patient: Helen Marsh (fictional)
+Synthetic record: SYN-GI-0008
+Date of procedure: 2026-10-07
+Place of service: Office endoscopy suite
+Endoscopist: Dr. Victor Lindqvist, MD, Gastroenterology (fictional)
+
+Procedure
+Flexible sigmoidoscopy with cold forceps biopsy.
+
+Indication
+Intermittent bright red blood per rectum and urgency for three weeks; evaluation for proctosigmoiditis. A colonoscopy two years ago was normal.
+
+Preparation and sedation
+Two enemas were given before the procedure. No sedation was administered.
+
+Technique
+After informed consent was obtained, a digital rectal examination was normal. The flexible sigmoidoscope was inserted into the rectum and advanced under direct visualization to 50 cm from the anal verge, in the descending colon. The examination was limited by design to the rectum, the sigmoid colon and the distal descending colon. Retroflexion was performed in the rectum.
+
+Findings
+Rectum and distal sigmoid colon to 20 cm: continuous mild erythema with loss of the vascular pattern and friability. Proximal sigmoid colon and descending colon to 50 cm: normal mucosa. Cold forceps biopsies were taken from the rectum and from the normal-appearing descending colon at 40 cm, as listed below.
+
+Specimens
+Jar | Site | Method
+A | Rectum, 8 cm from the anal verge | Cold forceps biopsy, 3 fragments
+B | Descending colon, 40 cm from the anal verge | Cold forceps biopsy, 2 fragments
+
+Complications
+None.
+
+Impression
+1. Mild distal proctosigmoiditis to 20 cm; biopsies taken.
+2. Normal mucosa from 20 cm to 50 cm; biopsies taken at 40 cm.
+
+Plan
+1. Await pathology.
+2. Start a mesalamine suppository nightly.
+3. Office follow-up in four weeks.
+
+Electronically signed: Dr. Victor Lindqvist, MD (fictional), 2026-10-07 16:20

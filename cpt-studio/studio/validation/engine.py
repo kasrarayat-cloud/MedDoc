@@ -1,0 +1,347 @@
+"""Validation engine (ARCHITECTURE 5.6): provider codes -> one combined, checked assessment.
+
+Pure apart from the reference lookup it is given. Only provider-selected codes
+become reviewable proposals (bucket ``selected``, or ``excluded`` with the
+reason); candidates and alternatives are informational and never approvable.
+When the provider did not succeed there are no proposals, and an encounter
+check says exactly why.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass, replace
+from datetime import date
+from typing import Mapping, Optional, Sequence
+
+from studio.gi.profiles import PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
+from studio.reference.store import PFS, applied_sources
+from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
+                          FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
+                          ReferenceLookup, ReferenceSourceInfo, RoutingResult, sha256_json)
+from studio.validation import checks, rationale
+
+ENGINE_VERSION = 'cpt-studio-validation@1'
+PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
+EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
+NO_EVIDENCE = 'No exact source evidence'
+MAX_LISTED_CODE = 10  # what a stored proposal code holds; codes are never truncated
+
+
+@dataclass(frozen=True)
+class _Evaluation:
+    """What is known about a code that is in scope and has exact evidence."""
+    finding: Optional[FamilyFinding]
+    outcome: checks.StatusOutcome
+    reference: CodeReference
+
+
+@dataclass(frozen=True)
+class _Selection:
+    """One provider-selected code (duplicates merged), before the checks that depend on other proposals."""
+    code: str
+    units: int
+    display: str
+    code_kind: str
+    scope_reason: str
+    evidence: tuple[EvidenceSpan, ...]
+    dropped: tuple[str, ...]
+    family: str
+    evaluation: Optional[_Evaluation] = None  # None: excluded for scope or evidence, not reinstatable
+
+    @property
+    def profile(self) -> ServiceProfile:
+        return PROFILES[self.family]
+
+    @property
+    def excluded(self) -> bool:
+        return self.evaluation is None or self.evaluation.outcome.state == 'not_performed'
+
+    @property
+    def performed(self) -> bool:
+        return self.evaluation is not None and self.evaluation.outcome.state in checks.POSITIVE
+
+
+@dataclass(frozen=True)
+class _Encounter:
+    """Encounter-level inputs shared by every proposal's checks."""
+    provider: str
+    context: Mapping[str, Fact]
+    sources: tuple[ReferenceSourceInfo, ...]
+    date_state: checks.DateState
+    pfs_source: Optional[ReferenceSourceInfo]
+    active_pfs: Mapping[str, dict]  # code -> PFS row of every selected, non-excluded proposal that has one
+    procedure_labels: tuple[str, ...]  # procedure families performed on this date
+    global_days: str
+
+
+def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], routing: RoutingResult,
+           normalized: Optional[NormalizedResponse], reference: ReferenceLookup, service_date: Optional[date],
+           provider_status: str, extraction_status: Optional[str] = None,
+           extraction_messages: Sequence[str] = ()) -> AssessmentResult:
+    if provider_status not in PROVIDER_STATUSES:
+        raise ValueError(f'Unknown provider status {provider_status!r}.')
+    if extraction_status is not None and extraction_status not in EXTRACTION_STATUSES:
+        raise ValueError(f'Unknown extraction status {extraction_status!r}.')
+    response = normalized if provider_status == 'succeeded' else None
+    if provider_status == 'succeeded' and response is None:
+        raise ValueError('A succeeded provider status needs its normalized response.')
+    date_state = checks.service_date_state(context, service_date)
+    sources = tuple(reference.sources())
+    selections: list[_Selection] = []
+    proposals: tuple[ProposalAssessment, ...] = ()
+    provider = list(checks.provider_checks(provider_status, response))
+    coverage: list[Check] = []
+    if response is not None:
+        listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
+        if len(listable) < len(response.codes):
+            provider.append(checks.unlisted_codes_check(len(response.codes) - len(listable), MAX_LISTED_CODE))
+        selections = [_select(group, text, pages, routing, reference, date_state.value)
+                      for group in _merge_selected(listable)]
+        encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
+        alternatives = (c for c in listable if c.role != 'selected')
+        proposals = (_keyed(selections, encounter)
+                     + tuple(_alternative(index, item, text, pages, response.provider)
+                             for index, item in enumerate(alternatives)))
+        coverage.append(checks.unproposed_check(*_missed(routing, selections, bool(encounter.procedure_labels))))
+    unsupported = _unsupported(routing, selections)
+    encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
+                        checks.service_date_check(date_state), *coverage, checks.unsupported_check(unsupported)]
+    clarification = checks.service_date_clarification(date_state)
+    return AssessmentResult(
+        profiles_version=PROFILES_VERSION, engine_version=ENGINE_VERSION, proposals=proposals,
+        encounter_checks=tuple(encounter_checks), clarifications=(clarification,) if clarification else (),
+        unsupported=unsupported, reference_sources=checks.reference_source_entries(sources, date_state.value),
+        summary=_summary(proposals, provider_status, extraction_status, date_state))
+
+
+# --- phase 1: each selected code on its own --------------------------------------------
+
+def _merge_selected(codes: Sequence[ProviderCode]) -> list[list[ProviderCode]]:
+    """Selected codes grouped by code, in the provider's order of first appearance."""
+    groups: dict[str, list[ProviderCode]] = {}
+    for item in codes:
+        if item.role == 'selected':
+            groups.setdefault(item.code, []).append(item)
+    return list(groups.values())
+
+
+def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult, reference: ReferenceLookup,
+            day: Optional[date]) -> _Selection:
+    code = group[0].code
+    code_kind, scope_reason = checks.code_scope(code)
+    kept, dropped = checks.exact_evidence([span for item in group for span in item.evidence], text, pages)
+    displays = dict.fromkeys(item.display for item in group if item.display)
+    selection = _Selection(code=code, units=len(group), display=' | '.join(displays), code_kind=code_kind,
+                           scope_reason=scope_reason, evidence=kept, dropped=dropped, family=family_for_code(code))
+    if scope_reason or not kept:
+        return selection
+    finding = routing.finding(selection.family)
+    outcome = checks.resolve_status(checks.evidence_readings(text, kept) + checks.routing_readings(finding))
+    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day)))
+
+
+# --- phase 2: checks that depend on the other proposals -----------------------------------
+
+def _encounter(provider, context, routing, sources, date_state, selections) -> _Encounter:
+    active = [s for s in selections if not s.excluded]
+    pfs_source = applied_sources(sources, date_state.value).get(PFS)
+    procedures = [s for s in active if s.profile.procedure and s.performed]
+    labels = [PROFILES[f.family].label for f in routing.findings
+              if f.family in PROFILES and PROFILES[f.family].procedure and f.status in checks.POSITIVE]
+    labels += [s.profile.label for s in procedures]
+    rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
+    return _Encounter(provider=provider, context=context, sources=sources, date_state=date_state,
+                      pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
+                      global_days=_global_days(procedures, pfs_source, sources, date_state.value))
+
+
+def _global_days(procedures: Sequence[_Selection], pfs_source, sources, day) -> str:
+    if pfs_source is None:
+        return checks.global_days_note((), '', checks.unavailable_reason(PFS, sources, day))
+    entries = [(s.code, s.evaluation.reference.pfs['global_days']) for s in procedures
+               if s.evaluation and s.evaluation.reference.pfs]
+    unavailable = (f'the same-day procedure codes are not listed in {pfs_source.release}.' if procedures
+                   else 'no same-day procedure code is selected.')
+    return checks.global_days_note(entries, pfs_source.release, unavailable)
+
+
+def _keyed(selections: Sequence[_Selection], encounter: _Encounter) -> tuple[ProposalAssessment, ...]:
+    """Selected-bucket proposals first, then excluded; keys count within each bucket in provider order."""
+    selected, excluded = [], []
+    for selection in selections:
+        bucket, prefix = (excluded, 'exc') if selection.excluded else (selected, 'sel')
+        bucket.append(_proposal(selection, f'{prefix}:{len(bucket)}', encounter))
+    return tuple(selected + excluded)
+
+
+def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
+    if s.evaluation is None:
+        return _excluded_early(s, key, enc.provider)
+    finding, outcome, ref = s.evaluation.finding, s.evaluation.outcome, s.evaluation.reference
+    profile, name, day = s.profile, checks.service_name(s.profile, s.code), enc.date_state.value
+    release = enc.pfs_source.release if enc.pfs_source else ''
+    found: list[Check] = [checks.scope_check(s.code_kind, s.scope_reason),
+                          *checks.evidence_checks(s.evidence, s.dropped),
+                          checks.routing_check(profile, finding), checks.status_check(outcome, name)]
+    clarifications: list[ClarificationSpec] = []
+    considerations: list[str] = []
+    if outcome.state == 'incomplete':
+        found.append(checks.incomplete_check(outcome))
+        considerations.append(checks.incomplete_consideration(s.code, ref.pfs, release))
+    states = checks.required_fact_states(profile, finding, enc.context)
+    facts_check = checks.required_facts_check(profile, states)
+    if facts_check:
+        found.append(facts_check)
+    if not s.excluded:
+        if outcome.state == 'uncertain':
+            clarifications.append(checks.performed_clarification(outcome, name, s.family, key))
+        clarifications += checks.fact_clarifications(states, profile, s.family, key)
+        if s.family in checks.EM_FAMILIES and enc.procedure_labels:
+            documented = checks.separate_em_statement(finding)
+            found.append(checks.em_procedure_check(enc.procedure_labels, enc.global_days, documented))
+            if documented is None:
+                clarifications.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key))
+            considerations.append(checks.SEPARATE_EM_CONSIDERATION)
+    if day is None:
+        found.append(checks.PROPOSAL_DATE_CHECK)
+    found += [checks.pfs_check(s.code, ref, enc.sources, day), checks.mue_check(s.code, s.units, ref, enc.sources, day)]
+    if profile.procedure or (ref.pfs and ref.pfs.get('endo_base')):
+        found.append(checks.endoscopic_check(s.code, ref, enc.active_pfs, enc.sources, day))
+    found += checks.NOT_CONNECTED_CHECKS
+    if s.units > 1:
+        found.append(checks.duplicate_check(s.code, s.units))
+    pctc = checks.pctc_consideration(s.code, ref.pfs, release, _billing(enc.context))
+    if pctc:
+        considerations.append(pctc)
+
+    if s.excluded:
+        status = 'excluded'
+    elif clarifications or day is None:  # an unknown service date holds every proposal on the encounter question
+        status = 'needs_clarification'
+    else:
+        status = 'ready'
+    return ProposalAssessment(
+        key=key, bucket='excluded' if s.excluded else 'selected', code=s.code, code_kind=s.code_kind,
+        family=s.family, profile_version=profile.version, status=status,
+        exclusion_reason=checks.exclusion_reason(outcome, name) if s.excluded else '', reinstatable=s.excluded,
+        provider_display=s.display, evidence=s.evidence,
+        rationale=rationale.selected_rationale(provider=enc.provider, units=s.units, evidence_count=len(s.evidence),
+                                               profile=profile, detected=finding is not None, outcome=outcome,
+                                               facts=_documented_facts(finding, states)),
+        checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
+        fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found,
+                                 _relevant_context(s.family, enc, bool(pctc)), s.units, status),
+        clarifications=tuple(clarifications))
+
+
+def _excluded_early(s: _Selection, key: str, provider: str) -> ProposalAssessment:
+    """Out of scope, or no exact evidence: not reinstatable, and only the checks that ran."""
+    found = [checks.scope_check(s.code_kind, s.scope_reason)]
+    if not s.scope_reason:
+        found += checks.evidence_checks(s.evidence, s.dropped)
+    profile = s.profile
+    return ProposalAssessment(
+        key=key, bucket='excluded', code=s.code, code_kind=s.code_kind, family=s.family,
+        profile_version=profile.version, status='excluded', exclusion_reason=s.scope_reason or NO_EVIDENCE,
+        reinstatable=False, provider_display=s.display, evidence=s.evidence,
+        rationale=rationale.selected_rationale(provider=provider, units=s.units, evidence_count=len(s.evidence),
+                                               profile=profile, detected=False, outcome=None, facts=()),
+        checks=tuple(found), modifier_considerations=(), units=s.units,
+        fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found, {}, s.units, 'excluded'))
+
+
+def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str) -> ProposalAssessment:
+    code_kind, scope_reason = checks.code_scope(item.code)
+    kept, _ = checks.exact_evidence(item.evidence, text, pages)
+    family = family_for_code(item.code)
+    found = (checks.scope_check(code_kind, scope_reason),)
+    profile_version = PROFILES[family].version
+    return ProposalAssessment(
+        key=f'alt:{index}', bucket='alternative', code=item.code, code_kind=code_kind, family=family,
+        profile_version=profile_version, status='informational',
+        exclusion_reason=rationale.alternative_note(item.role, item.parent_code), reinstatable=False,
+        provider_display=item.display, evidence=kept,
+        rationale=rationale.alternative_rationale(provider=provider, role=item.role, parent_code=item.parent_code,
+                                                  evidence_count=len(kept)),
+        checks=found, modifier_considerations=(), units=1,
+        fingerprint=_fingerprint(item.code, family, profile_version, kept, found, {}, 1, 'informational'))
+
+
+def _billing(context: Mapping[str, Fact]) -> str:
+    fact = context.get('billing_context')
+    return str(fact.value) if fact is not None and checks.is_documented(fact) else 'not documented'
+
+
+def _documented_facts(finding: Optional[FamilyFinding], states) -> list[tuple[str, str]]:
+    facts = [(f.name, str(f.value)) for f in (finding.facts if finding else ()) if checks.is_documented(f)]
+    facts += [(state.name, str(state.fact.value)) for state in states
+              if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS]
+    return list(dict.fromkeys(facts))
+
+
+def _relevant_context(family: str, enc: _Encounter, pctc: bool) -> dict:
+    """Context values a decision on this proposal depends on; a change to any of them changes the fingerprint."""
+    day = enc.date_state.value
+    values = {'service_date': day.isoformat() if day else None}
+    names = ('setting', 'patient_status', 'billing_context') if family in checks.EM_FAMILIES else (
+        ('billing_context',) if pctc else ())
+    for name in names:
+        fact = enc.context.get(name)
+        values[name] = fact.value if fact is not None and checks.is_documented(fact) else None
+    return values
+
+
+def _fingerprint(code, family, profile_version, evidence, found, context_values, units, status) -> str:
+    return sha256_json({'code': code, 'family': family, 'profile_version': profile_version,
+                        'evidence': sorted(span.text for span in evidence),
+                        'checks': sorted([check.id, check.status] for check in found),
+                        'context': context_values, 'units': units, 'status': status})
+
+
+# --- encounter level -------------------------------------------------------------------
+
+def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool) -> tuple[list[str], bool]:
+    """(labels of performed, profiled families without a selected proposal, whether an E/M was not counted).
+
+    On a procedure day an unproposed E/M is never reported as missed: that would push toward adding an office
+    visit because a procedure report contains history or examination text.
+    """
+    proposed = {s.family for s in selections if not s.excluded}
+    unproposed = [f.family for f in routing.findings
+                  if f.family in PROFILES and PROFILES[f.family].supported and f.status in checks.POSITIVE
+                  and f.family not in proposed]
+    visit_skipped = procedure_day and any(family in checks.EM_FAMILIES for family in unproposed)
+    labels = [PROFILES[family].label for family in unproposed
+              if not (procedure_day and family in checks.EM_FAMILIES)]
+    return list(dict.fromkeys(labels)), visit_skipped
+
+
+def _unsupported(routing: RoutingResult, selections: Sequence[_Selection]) -> tuple[dict, ...]:
+    entries: dict[str, dict] = {}
+    for finding in routing.findings:
+        profile = PROFILES.get(finding.family)
+        if (profile is None or not profile.supported) and finding.status in checks.POSITIVE:
+            entries.setdefault(finding.family, _unsupported_entry(finding.family, finding.status))
+    for s in selections:
+        if s.performed and not s.profile.supported:
+            entry = entries.setdefault(s.family, _unsupported_entry(s.family, s.evaluation.outcome.state))
+            entry['codes'].append(s.code)
+    return tuple(entries.values())
+
+
+def _unsupported_entry(family: str, status: str) -> dict:
+    profile = PROFILES.get(family)
+    detail = (profile.note if profile and profile.note
+              else 'Not covered by any GI profile in this release; review required.')
+    return {'family': family, 'label': profile.label if profile else family, 'status': status, 'detail': detail,
+            'codes': []}
+
+
+def _summary(proposals: Sequence[ProposalAssessment], provider_status: str, extraction_status: Optional[str],
+             date_state: checks.DateState) -> dict:
+    def count(field: str, value: str) -> int:
+        return sum(1 for proposal in proposals if getattr(proposal, field) == value)
+    return {'selected': count('bucket', 'selected'), 'alternatives': count('bucket', 'alternative'),
+            'excluded': count('bucket', 'excluded'), 'ready': count('status', 'ready'),
+            'needs_clarification': count('status', 'needs_clarification'), 'provider_status': provider_status,
+            'extraction_status': extraction_status,
+            'service_date': date_state.value.isoformat() if date_state.value else None}

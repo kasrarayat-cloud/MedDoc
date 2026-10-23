@@ -1,0 +1,45 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+St. Brigid Medical Center (fictional) - Advanced Endoscopy
+Endoscopic ultrasound procedure report
+
+Patient: Arthur Benson (fictional)
+Synthetic record: SYN-GI-0009
+Date of procedure: 2026-10-19
+Place of service: Hospital outpatient department, endoscopy unit
+Endoscopist: Dr. Mei Takahashi, MD, Gastroenterology (fictional)
+
+Procedure
+Upper endoscopic ultrasound (EUS) with EUS-guided fine-needle biopsy (FNB) of a pancreatic head mass.
+
+Indication
+A 2.4 cm hypodense pancreatic head mass on contrast-enhanced CT, with mild biliary dilation and weight loss; tissue diagnosis requested.
+
+Sedation
+Monitored anesthesia care by the anesthesia service (fictional). The endoscopist did not administer sedation.
+
+Technique
+After informed consent was obtained, the linear echoendoscope was introduced under direct visualization and advanced through the esophagus and stomach into the duodenal bulb and the second portion of the duodenum. Endosonographic examination was performed from the esophagus, stomach and duodenum, including the pancreas, the bile duct and adjacent structures.
+
+Endosonographic findings
+Pancreas: a 24 x 21 mm hypoechoic, irregular mass in the pancreatic head, abutting but not encasing the superior mesenteric vein. The upstream pancreatic duct measured 4 mm. The pancreatic body and tail were otherwise unremarkable.
+Bile duct: the common bile duct was dilated to 9 mm and tapered at the mass.
+Lymph nodes: one 8 mm round peripancreatic lymph node, not sampled.
+No ascites. No lesions in the visualized left lobe of the liver.
+
+Tissue acquisition
+EUS-guided fine-needle biopsy of the pancreatic head mass was performed from the duodenal bulb with a 22-gauge fine-needle biopsy needle, using three passes with the fanning technique. Visible tissue cores were obtained and placed in formalin for histology. Rapid on-site cytologic evaluation was not available.
+
+Complications
+None. No bleeding at the puncture site on Doppler examination.
+
+Impression
+1. Hypoechoic pancreatic head mass, 24 x 21 mm, with upstream pancreatic duct dilation and common bile duct dilation; EUS-guided fine-needle biopsy performed with three passes.
+2. Peripancreatic lymph node, not sampled.
+
+Plan
+1. Await histology.
+2. Review at the multidisciplinary pancreas conference after pathology.
+3. ERCP with biliary stent placement only if cholangitis or a rising bilirubin develops.
+
+Electronically signed: Dr. Mei Takahashi, MD (fictional), 2026-10-19 13:31

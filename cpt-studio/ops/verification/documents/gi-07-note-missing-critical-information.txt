@@ -1,0 +1,12 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Gastroenterology note
+
+Patient: Riley Okafor (fictional)
+
+Evaluated for bloating and loose stools. Symptoms ongoing, with some improvement after dietary changes. No blood in the stool.
+Abdomen soft and non-tender.
+Impression: bloating with loose stools; possible irritable bowel syndrome with diarrhea.
+Plan: trial of a low-FODMAP diet; celiac serologies ordered; follow up after the results.
+
+Dr. Nadia Petrov (fictional)

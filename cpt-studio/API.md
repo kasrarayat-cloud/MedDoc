@@ -32,8 +32,10 @@ Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
 ```
 
 Encounter `state` ∈ `processing`, `stopped`, `extraction_failed`,
-`provider_not_run`, `provider_failed`, `provider_unknown`,
+`processing_failed`, `provider_not_run`, `provider_failed`, `provider_unknown`,
 `needs_clarification`, `ready_for_review`, `reviewed`, `no_codes`.
+`counts.queue` in the session counts `needs_clarification`, `ready_for_review`
+and `provider_unknown`.
 `state_label` is the human label (design vocabulary).
 
 ## POST /api/encounters (multipart/form-data)
@@ -52,7 +54,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
   "revision": {
     "id": "uuid", "number": 1, "kind": "upload", "revisions_total": 1, "created_at": "...",
     "source_file": {"name": "note.pdf", "media_type": "application/pdf", "size": 12345, "sha256": "..."},
-    "addendum_text": "",
+    "addendum_text": "", "addendum_offset": null,
     "extraction": {"status": "ok", "method": "pdf-text", "messages": [], "ocr_pages": [], "page_count": 2, "engine": {}},
     "text": "...", "text_sha256": "...", "pages": [{"page": 1, "start": 0, "end": 812}]
   },
@@ -67,7 +69,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
        "mentions": [{"status": "performed", "section": "procedure", "cues": ["..."], "span": {"start": 0, "end": 0, "text": ""}}],
        "facts": [{"name": "extent", "value": "cecum", "origin": "document", "evidence": [], "note": ""}],
        "missing": []}]},
-  "pipeline": {"busy": false, "can_stop": false,
+  "pipeline": {"busy": false, "can_stop": false, "can_resume": false,
                "stages": [{"kind": "extract", "state": "succeeded", "error": "", "finished_at": "..."}]},
   "provider_runs": [{"id": "uuid", "provider": "corti", "mode": "live", "state": "succeeded", "http_status": 200,
                      "latency_ms": 6123.4, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
@@ -131,11 +133,19 @@ decisions, runs the pipeline.
 "billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Empty string clears a
 user value. Re-assesses; re-predicts only when the provider input changes (service date).
 
-## POST /api/encounters/{id}/stop · POST /api/encounters/{id}/reconcile
+## POST /api/encounters/{id}/stop · /resume · /reconcile
 
-Stop: cancels queued stages and prevents an unsent provider request.
-Reconcile: `{"provider_run_id": "uuid", "note": "..."}` after an `unknown`
-outcome; allows exactly one new attempt.
+Stop: records an encounter-level Stop; queued stages are cancelled, no further
+stage starts and no provider request is sent while it stands. Resume (when
+`pipeline.can_resume`): lifts the Stop and re-runs the stage it cancelled, with
+the current context. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
+(note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
+attempt.
+
+Notes and acknowledgements are at most 2,000 characters (400 beyond that,
+never truncated). An addendum is at most 20,000 characters. `revision.addendum_offset`
+is the offset where the latest addendum begins (null when the revision is not
+an addendum). `proposal.decision` has the same shape as a `decisions.history` entry.
 
 ## POST /api/encounters/{id}/reports → GET /api/reports/{id}/download
 

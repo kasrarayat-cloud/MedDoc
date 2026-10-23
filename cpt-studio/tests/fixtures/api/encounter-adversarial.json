@@ -1,0 +1,439 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000007",
+ "title": "<img src=x onerror=\"window.__xss=1\">Adversarial \"quotes\" & <b>tags</b>",
+ "state": "ready_for_review",
+ "state_label": "Ready for review",
+ "service_date": "2026-10-18",
+ "families": [
+  "Family <img src=x onerror=\"window.__xss=1\">",
+  "Colonoscopy"
+ ],
+ "source_kind": "pdf",
+ "open_clarifications": 1,
+ "created_at": "2026-10-23T14:07:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000071",
+  "number": 1,
+  "kind": "upload",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": {
+   "name": "\"><svg onload=\"window.__xss=4\">.pdf",
+   "media_type": "application/pdf",
+   "size": 1024,
+   "sha256": "46a03c170cbb6f8a8d61b35d86b0aa919744aa12da0a36c61491899ffae1c4ab"
+  },
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "pdf-mixed",
+   "messages": [
+    "Message with markup <img src=x onerror=\"window.__xss=1\">"
+   ],
+   "ocr_pages": [
+    2
+   ],
+   "page_count": 2,
+   "engine": {}
+  },
+  "text": "🩺 SYNTHETIC ADVERSARIAL DOCUMENT 𝒳 — NOT A REAL PATIENT\nTitle line with markup <img src=x onerror=\"window.__xss=1\"> & \"quotes\" 'single'\n\nThe colonoscope 🔬 was advanced to the cecum.\n\nAn 8 mm polyp was removed with a cold snare.\n\nContinued on page two: specimen retrieved.\n\nEmoji at the end 🧪",
+  "text_sha256": "f46e5128df2f9123f83f6f2240753e95826c4ceaf765b141ef17dd03e6f8570d",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 227
+   },
+   {
+    "page": 2,
+    "start": 229,
+    "end": 291
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-18",
+    "origin": "document",
+    "evidence": [],
+    "note": ""
+   },
+   "setting": {
+    "value": "office<img src=x onerror=\"window.__xss=1\">",
+    "origin": "document",
+    "evidence": [],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "facility",
+    "origin": "conflict",
+    "evidence": [],
+    "note": "Two different billing contexts are documented."
+   },
+   "patient_status": {
+    "value": "new",
+    "origin": "document",
+    "evidence": [],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.colonoscopy",
+    "label": "Colonoscopy",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000007",
+   "provider": "replay",
+   "mode": "replay",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 6123.4,
+   "usage": {
+    "creditsConsumed": 0.0281
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "a8fbf5f18c10907f573c8af1171cbf96c11357d7f2618b9da302df13b3f68527",
+   "response_sha256": "e77cd50327a2e2dce62c32c7fe7bb9d29f18f0c96c14549c3190c98c15e9213a",
+   "reused_from": null,
+   "error": "error <img src=x onerror=\"window.__xss=1\">",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": {
+  "id": "90000000-0000-4000-8000-000000000007",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-23T14:02:40Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000701",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "45385<b>",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Family <img src=x onerror=\"window.__xss=1\">",
+    "eyebrow": "EYEBROW <img src=x onerror=\"window.__xss=1\">",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Status <img src=x onerror=\"window.__xss=1\">",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 137,
+      "end": 167,
+      "text": "The colonoscope 🔬 was advanced",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 159,
+      "end": 196,
+      "text": "advanced to the cecum.\n\nAn 8 mm polyp",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 216,
+      "end": 250,
+      "text": "cold snare.\n\nContinued on page two",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 252,
+      "end": 271,
+      "text": "specimen discarded.",
+      "exact": true,
+      "page": 2
+     },
+     {
+      "start": 288,
+      "end": 331,
+      "text": "beyond the end",
+      "exact": true,
+      "page": 2
+     },
+     {
+      "start": 273,
+      "end": 289,
+      "text": "Emoji at the end",
+      "exact": false,
+      "page": 2
+     }
+    ],
+    "rationale": "<script>window.__xss=2</script> rationale with <img src=x onerror=\"window.__xss=1\">",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Label <img src=x onerror=\"window.__xss=1\">",
+      "status": "warn",
+      "detail": "Detail <img src=x onerror=\"window.__xss=1\">",
+      "source": "source <img src=x onerror=\"window.__xss=1\">"
+     }
+    ],
+    "modifier_considerations": [
+     "Modifier note <img src=x onerror=\"window.__xss=1\">"
+    ],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000702",
+    "key": "sel:1",
+    "bucket": "selected",
+    "code": "45378",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 153,
+      "end": 181,
+      "text": "🔬 was advanced to the cecum.",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "Overlaps the first proposal's first passage.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "45378 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ]
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "x",
+    "label": "Encounter <img src=x onerror=\"window.__xss=1\">",
+    "status": "fail",
+    "detail": "Detail <img src=x onerror=\"window.__xss=1\">",
+    "source": ""
+   }
+  ],
+  "unsupported": [
+   {
+    "family": "gi.unsupported",
+    "label": "Unsupported <img src=x onerror=\"window.__xss=1\">",
+    "status": "performed",
+    "detail": "Detail <img src=x onerror=\"window.__xss=1\">"
+   }
+  ],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 2,
+   "alternatives": 0,
+   "excluded": 0
+  }
+ },
+ "clarifications": [
+  {
+   "id": "70000000-0000-4000-8000-000000000071",
+   "scope": "proposal",
+   "proposal_id": "d0000000-0000-4000-8000-000000000701",
+   "family": "gi.colonoscopy",
+   "fact": "extent",
+   "question": "Question <img src=x onerror=\"window.__xss=1\">",
+   "reason": "Reason <img src=x onerror=\"window.__xss=1\">",
+   "state": "open"
+  }
+ ],
+ "decisions": {
+  "history": [
+   {
+    "id": "80000000-0000-4000-8000-000000000071",
+    "proposal_id": "d0000000-0000-4000-8000-000000000701",
+    "code": "45385",
+    "action": "reject",
+    "note": "\"><img src=x onerror=window.__xss=3>",
+    "reviewer": "Reviewer <img src=x onerror=\"window.__xss=1\">",
+    "reviewer_kind": "human",
+    "created_at": "2026-10-23T14:00:00Z",
+    "acknowledgement": "",
+    "carried_from": null,
+    "revision_number": 1,
+    "invalidated": {
+     "reason": "Reason <img src=x onerror=\"window.__xss=1\">",
+     "created_at": "2026-10-23T14:01:00Z"
+    }
+   }
+  ]
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": false,
+  "blockers": [
+   "Blocker <img src=x onerror=\"window.__xss=1\">"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "x",
+   "summary": "Summary <img src=x onerror=\"window.__xss=1\">",
+   "actor": "Actor <img src=x onerror=\"window.__xss=1\">",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

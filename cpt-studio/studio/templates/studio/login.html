@@ -1,0 +1,28 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#183d35">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sign in — CPT Studio</title>
+  <link rel="icon" href="{% static 'studio/favicon.svg' %}" type="image/svg+xml">
+  <link rel="stylesheet" href="{% static 'studio/styles.css' %}">
+</head>
+<body class="login-body">
+  <main class="login-card">
+    <div class="brand"><span class="brand-symbol" aria-hidden="true"><span></span></span><span>cpt<span class="brand-light">studio</span></span></div>
+    <span class="eyebrow">SYNTHETIC DEMONSTRATION</span>
+    <h1>Sign in to continue.</h1>
+    <p class="dialog-copy">Review CPT proposals beside the original documentation.</p>
+    {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    <form class="login-form" method="post" action="">{% csrf_token %}
+      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+      <label class="field-label">Username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="150" required autofocus value="{{ username }}"></label>
+      <label class="field-label">Password<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="button primary" type="submit">Sign in</button>
+    </form>
+    <p class="login-footnote"><span class="preview-badge"><span></span>Synthetic demonstration · Authorized users only</span></p>
+  </main>
+</body>
+</html>

@@ -1,0 +1,25 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Hospital outpatient endoscopy unit (fictional)
+ERCP procedure report
+
+Patient: Charlie Nwosu (fictional)
+Synthetic record: SYN-GI-5015
+Date of service: 2026-10-23
+Place of service: 22
+Endoscopist: Dr. Ana Lucia Prieto, MD (fictional)
+
+Procedure
+ERCP, attempted.
+
+Indications
+Suspected choledocholithiasis with a dilated common bile duct on ultrasound.
+
+Technique
+The duodenoscope was advanced to the second part of the duodenum. The major papilla was located at the rim of a large periampullary diverticulum. Multiple attempts at biliary cannulation were unsuccessful. No sphincterotomy was performed and no stent was placed.
+
+Impression
+Failed biliary cannulation due to a periampullary diverticulum.
+
+Recommendations
+EUS-guided rendezvous or percutaneous access will be considered at a tertiary center.

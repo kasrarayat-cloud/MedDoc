@@ -1,0 +1,578 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000005",
+ "title": "Colonoscopy with biopsies",
+ "state": "reviewed",
+ "state_label": "Reviewed",
+ "service_date": "2026-10-19",
+ "families": [
+  "Colonoscopy",
+  "Office / outpatient evaluation and management"
+ ],
+ "source_kind": "docx",
+ "open_clarifications": 0,
+ "created_at": "2026-10-23T14:05:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000052",
+  "number": 2,
+  "kind": "addendum",
+  "revisions_total": 2,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": {
+   "name": "synthetic-colonoscopy.docx",
+   "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "size": 18234,
+   "sha256": "80f385682bd0b13f687a0de8c2427c410ffcf87cfc62cc09c92aec5ceb976d55"
+  },
+  "addendum_text": "Biopsies were sent to pathology in two jars; the procedure was completed without complication.",
+  "addendum_offset": 315,
+  "extraction": {
+   "status": "ok",
+   "method": "docx",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nColonoscopy report (fictional)\nDate of service: 2026-10-19\n\nThe colonoscope was advanced to the cecum, identified by the appendiceal orifice.\nCold forceps biopsies were taken from the transverse colon for chronic diarrhea.\n\nAn office visit was not separately documented.\n\nADDENDUM (synthetic, revision 2)\nBiopsies were sent to pathology in two jars; the procedure was completed without complication.",
+  "text_sha256": "ba4257e95811d89d1faf2d9ddd363db023ec2e77021cd3a0de0b9ad9b3683100",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 444
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-19",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 76,
+      "end": 103,
+      "text": "Date of service: 2026-10-19",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": "hospital_outpatient",
+    "origin": "user",
+    "evidence": [],
+    "note": "Entered by a member as encounter metadata."
+   },
+   "billing_context": {
+    "value": "professional",
+    "origin": "user",
+    "evidence": [],
+    "note": "Entered by a member as encounter metadata."
+   },
+   "patient_status": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "Patient status is not documented."
+   }
+  },
+  "user_values": {
+   "setting": "hospital_outpatient",
+   "billing_context": "professional"
+  }
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.colonoscopy",
+    "label": "Colonoscopy",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000005",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 6123.4,
+   "usage": {
+    "creditsConsumed": 0.0212
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "41cface5593f18b494f39cc2a245d93ac3740a50ee5e12de4c41f673caa02dd4",
+   "response_sha256": "6862ee902e9e9f21a4913d22758b50d4ed7688462323ca59c2303f41a254480a",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  },
+  {
+   "id": "e0000000-0000-4000-8000-000000000055",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 6123.4,
+   "usage": {
+    "creditsConsumed": 0.0231
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "0364de60a17bb1c235841dcd903bc8fd97dd07cc70d40a356f1d04a5a0e3f262",
+   "response_sha256": "3ea56a806b21abd7ca2d804cb68dba42da0f380eabd772b463a004c3cb3c80cc",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": {
+  "id": "90000000-0000-4000-8000-000000000005",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-23T14:02:40Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000501",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "45380",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 105,
+      "end": 186,
+      "text": "The colonoscope was advanced to the cecum, identified by the appendiceal orifice.",
+      "exact": true
+     },
+     {
+      "start": 187,
+      "end": 245,
+      "text": "Cold forceps biopsies were taken from the transverse colon",
+      "exact": true
+     }
+    ],
+    "rationale": "Colonoscopy to the cecum with cold forceps biopsies is documented as performed.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "45380 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": {
+     "id": "80000000-0000-4000-8000-000000000052",
+     "action": "approve",
+     "note": "",
+     "reviewer": "CPT Studio review agent (automated agent)",
+     "reviewer_kind": "agent",
+     "created_at": "2026-10-23T14:05:00Z",
+     "revision_number": 2
+    },
+    "decision_state": "approved",
+    "allowed_actions": [
+     "revoke"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000502",
+    "key": "sel:1",
+    "bucket": "selected",
+    "code": "99213",
+    "code_kind": "cpt1",
+    "family": "gi.office_em",
+    "family_label": "Office / outpatient evaluation and management",
+    "eyebrow": "EVALUATION & MANAGEMENT",
+    "supported": true,
+    "profile_version": "gi.office_em@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 269,
+      "end": 315,
+      "text": "An office visit was not separately documented.",
+      "exact": true
+     }
+    ],
+    "rationale": "The provider selected an office visit on the procedure date.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "99213 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     },
+     {
+      "id": "em.same_day_procedure",
+      "label": "Separately identifiable E/M on a procedure day",
+      "status": "warn",
+      "detail": "A separately identifiable E/M service is not established by this document.",
+      "source": "cpt-studio:em-procedure@1"
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": {
+     "id": "80000000-0000-4000-8000-000000000053",
+     "action": "reject",
+     "note": "No separately identifiable office visit is documented.",
+     "reviewer": "Synthetic Reviewer",
+     "reviewer_kind": "human",
+     "created_at": "2026-10-23T14:06:00Z",
+     "revision_number": 2
+    },
+    "decision_state": "rejected",
+    "allowed_actions": [
+     "revoke"
+    ]
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "extraction.status",
+    "label": "Text extraction",
+    "status": "pass",
+    "detail": "The document text was extracted completely.",
+    "source": "cpt-studio:extraction@1"
+   },
+   {
+    "id": "context.service_date",
+    "label": "Service date",
+    "status": "pass",
+    "detail": "A single service date is documented.",
+    "source": "cpt-studio:context@1"
+   },
+   {
+    "id": "services.unsupported",
+    "label": "Services outside the GI profiles",
+    "status": "pass",
+    "detail": "No performed service falls outside the GI profiles.",
+    "source": "cpt-studio:routing@1"
+   },
+   {
+    "id": "services.unproposed",
+    "label": "Performed services without a proposal",
+    "status": "pass",
+    "detail": "Every performed service has a selected proposal.",
+    "source": "cpt-studio:routing@1"
+   }
+  ],
+  "unsupported": [],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 2,
+   "alternatives": 0,
+   "excluded": 0
+  }
+ },
+ "clarifications": [
+  {
+   "id": "70000000-0000-4000-8000-000000000051",
+   "scope": "proposal",
+   "proposal_id": "d0000000-0000-4000-8000-000000000591",
+   "family": "gi.colonoscopy",
+   "fact": "specimen_count",
+   "question": "How many specimen jars were submitted?",
+   "reason": "Specimen handling was not documented.",
+   "state": "answered"
+  }
+ ],
+ "decisions": {
+  "history": [
+   {
+    "id": "80000000-0000-4000-8000-000000000051",
+    "proposal_id": "d0000000-0000-4000-8000-000000000591",
+    "code": "45380",
+    "action": "approve",
+    "note": "",
+    "reviewer": "CPT Studio review agent (automated agent)",
+    "reviewer_kind": "agent",
+    "created_at": "2026-10-23T13:40:00Z",
+    "acknowledgement": "I am an automated agent and reviewed the source evidence for this code. This agent-executed synthetic review is not clinical approval or billing advice.",
+    "carried_from": null,
+    "revision_number": 1,
+    "invalidated": {
+     "reason": "Source changed: revision 2 (addendum) replaced revision 1.",
+     "created_at": "2026-10-23T13:55:00Z"
+    }
+   },
+   {
+    "id": "80000000-0000-4000-8000-000000000052",
+    "proposal_id": "d0000000-0000-4000-8000-000000000501",
+    "code": "45380",
+    "action": "approve",
+    "note": "",
+    "reviewer": "CPT Studio review agent (automated agent)",
+    "reviewer_kind": "agent",
+    "created_at": "2026-10-23T14:05:00Z",
+    "acknowledgement": "I am an automated agent and reviewed the source evidence for this code. This agent-executed synthetic review is not clinical approval or billing advice.",
+    "carried_from": null,
+    "revision_number": 2,
+    "invalidated": null
+   },
+   {
+    "id": "80000000-0000-4000-8000-000000000053",
+    "proposal_id": "d0000000-0000-4000-8000-000000000502",
+    "code": "99213",
+    "action": "reject",
+    "note": "No separately identifiable office visit is documented.",
+    "reviewer": "Synthetic Reviewer",
+    "reviewer_kind": "human",
+    "created_at": "2026-10-23T14:06:00Z",
+    "acknowledgement": "",
+    "carried_from": null,
+    "revision_number": 2,
+    "invalidated": null
+   }
+  ]
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": true,
+  "blockers": []
+ },
+ "reports": [
+  {
+   "id": "60000000-0000-4000-8000-000000000051",
+   "kind": "draft",
+   "fmt": "txt",
+   "filename": "cpt-studio-draft-colonoscopy-r1.txt",
+   "sha256": "07a27cb1f8c18dc8453125929981c1aa69af06a3cf8874f9ab37027e1a605032",
+   "generated_at": "2026-10-23T13:45:00Z",
+   "generated_by": "Synthetic Reviewer",
+   "download_url": "/api/reports/60000000-0000-4000-8000-000000000051/download"
+  }
+ ],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document uploaded (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Approved 45380 (agent-executed synthetic review)",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "created_at": "2026-10-23T13:40:00Z",
+   "data": {}
+  },
+  {
+   "event": "revision.created",
+   "summary": "Addendum added as revision 2; earlier decisions invalidated",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T13:55:00Z",
+   "data": {}
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Approved 45380 (agent-executed synthetic review)",
+   "actor": "CPT Studio review agent (automated agent)",
+   "actor_kind": "agent",
+   "created_at": "2026-10-23T14:05:00Z",
+   "data": {}
+  },
+  {
+   "event": "decision.recorded",
+   "summary": "Rejected 99213",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:06:00Z",
+   "data": {}
+  }
+ ]
+}

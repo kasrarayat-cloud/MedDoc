@@ -1,0 +1,42 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Community Hospital (fictional) - Endoscopy Unit
+Colonoscopy procedure report
+
+Patient: Oliver Grant (fictional)
+Synthetic record: SYN-GI-0006
+Date of procedure: 2026-10-13
+Place of service: Hospital outpatient department, endoscopy unit
+Endoscopist: Dr. Aisha Rahman, MD, Gastroenterology (fictional)
+
+Procedure
+Diagnostic colonoscopy, attempted; incomplete.
+
+Indication
+Iron deficiency anemia and a change in bowel habit for two months.
+
+Sedation
+Monitored anesthesia care by the anesthesia service (fictional). The endoscopist did not administer sedation.
+
+Bowel preparation
+The patient reported completing the split-dose preparation, but a large amount of solid and semi-solid stool was present throughout the left colon. A full Boston Bowel Preparation Scale score could not be assigned because the right colon was not reached; the left colon segment score was 1.
+
+Technique and findings
+After informed consent was obtained, the adult colonoscope was inserted into the rectum and advanced under direct visualization to the splenic flexure. Further advancement was not attempted because the stool burden precluded a safe and adequate examination. The cecum was not reached. The visualized rectum, sigmoid colon and descending colon showed no mass or bleeding source within the limits of the preparation. No biopsies were taken and no polyps were removed.
+
+Procedure status
+Incomplete colonoscopy: the examination was terminated at the splenic flexure because of inadequate bowel preparation.
+
+Complications
+None.
+
+Impression
+1. Incomplete colonoscopy to the splenic flexure because of inadequate bowel preparation.
+2. No mass or bleeding source in the examined left colon, within the limits of the preparation.
+
+Plan
+1. A repeat colonoscopy with an extended two-day bowel preparation is planned within six weeks.
+2. Continue oral iron.
+3. If the repeat examination cannot be completed, consider CT colonography.
+
+Electronically signed: Dr. Aisha Rahman, MD (fictional), 2026-10-13 14:05

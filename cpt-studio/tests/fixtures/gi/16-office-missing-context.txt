@@ -1,0 +1,22 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health (fictional practice)
+Gastroenterology note
+
+Patient: Kai Lindgren (fictional)
+Synthetic record: SYN-GI-1016
+
+Chief complaint
+Bloating and abdominal discomfort after meals.
+
+History of present illness
+36-year-old with six months of postprandial bloating and intermittent loose stools, worse with dairy products. No rectal bleeding, no weight loss, no nocturnal symptoms.
+
+Examination
+Abdomen soft, mildly distended, non-tender, normal bowel sounds.
+
+Assessment
+Postprandial bloating, likely lactose intolerance or irritable bowel syndrome.
+
+Plan
+Trial of a lactose-free diet for four weeks. Lactose breath test ordered. Return in six weeks.

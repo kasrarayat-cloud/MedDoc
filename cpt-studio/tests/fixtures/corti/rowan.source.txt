@@ -1,0 +1,24 @@
+FICTIONAL PATIENT FOR SOFTWARE TESTING ONLY
+
+Patient: Synthetic Rowan Blake
+Age: 52 years
+Clinic record number: SYN-RB-1016
+Date of service: 16 October 2026
+Visit: In-person gastroenterology office visit. This is an established patient who was seen by this same gastroenterologist five months ago.
+
+S - Subjective
+Synthetic Rowan Blake reports intermittent epigastric pain after large meals for 10 days. Episodes last about 20 minutes and the pain is rated 4 out of 10. The patient also reports abdominal bloating for three weeks. The patient denies heartburn, constipation, diarrhea, difficulty swallowing, vomiting, hematemesis, black stools, rectal bleeding and unintentional weight loss. No daily medicines or supplements are reported.
+
+O - Objective
+Blood pressure 118/74 mmHg, pulse 72 beats per minute, temperature 36.7 degrees Celsius. The patient is alert and in no acute distress. The abdomen is soft with mild epigastric tenderness. There is no rebound tenderness or guarding. No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.
+
+A - Assessment
+1. Epigastric pain.
+2. Abdominal bloating.
+Both epigastric pain and bloating were evaluated and discussed during this encounter.
+The cause of these symptoms has not been established. GERD, gastritis, peptic ulcer disease and irritable bowel syndrome have not been diagnosed.
+
+P - Plan
+Discussed smaller meals and keeping a food and symptom diary. Requested the previous gastroenterology records. No medication was prescribed today. Further testing will be considered after review of the prior records; no procedure has been ordered or performed today. Follow up in three weeks. The patient was advised to seek prompt assessment for severe or worsening pain, vomiting blood, black stools or fainting.
+
+Total physician time on the date of service was 24 minutes, including review of available records, obtaining history, performing the examination, counseling and documentation. This total excludes clinical staff time and time for separately reported services. Office E/M selection is based on total physician time.

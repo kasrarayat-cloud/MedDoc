@@ -103,7 +103,7 @@ row and refuse `delete()`; corrections are new rows.
 | `SourceRevision` | `encounter`, `number`, `kind` ∈ {upload, paste, addendum}, `source_file`, `parent`, `addendum_text`, `answers_clarification`, `synthetic_attested_by/_at`, extraction fields (`extraction_status` ∈ {pending, ok, partial, failed}, `extraction_method`, `text`, `text_sha256`, `pages` JSON, `messages` JSON, `engine` JSON, `extracted_at`) | extraction fields are write-once (pending → final) |
 | `EncounterContext` | `encounter`, `revision`, `facts` JSON (name → {value, origin, evidence, note}), `user_values` JSON, `sha256`, `created_by` | **immutable** snapshot; `current_context` points at the latest |
 | `RoutingRun` | `revision`, `version`, `result` JSON, `sha256` | deterministic, recomputable |
-| `ProviderRun` | `encounter`, `revision`, `provider`, `adapter_version`, `request_sha256`, `request_body` JSON, `contexts` JSON, `state` ∈ {reserved, sending, succeeded, failed, unknown, not_sent, cancelled}, `sent`, `http_status`, `provider_request_id`, `response_sha256`, `response_body` (text), `latency_ms`, `usage` JSON, `usage_basis`, `error`, `run_identity`, `authorization_ref`, `reused_from`, `reconciled_by/_at/_note` | one row per send attempt; never resent automatically |
+| `ProviderRun` | `encounter`, `revision`, `provider`, `adapter_version`, `request_sha256`, `request_body` JSON, `contexts` JSON, `state` ∈ {reserved, sending, succeeded, failed, unknown, not_sent, cancelled}, `sent`, `http_status`, `provider_request_id`, `response_sha256`, `response_bytes` (raw bytes as received), `latency_ms`, `usage` JSON, `usage_basis`, `error`, `run_identity`, `authorization_ref`, `reused_from`, `reconciled_by/_at/_note` | one row per send attempt; never resent automatically |
 | `Assessment` | `encounter`, `revision`, `context`, `routing`, `provider_run`, `profiles_version`, `engine_version`, `reference_sources` JSON, `encounter_checks` JSON, `unsupported` JSON, `sha256` | **immutable** |
 | `Proposal` | `assessment`, `key`, `bucket` ∈ {selected, alternative, excluded}, `code`, `code_kind`, `family`, `profile_version`, `status` ∈ {ready, needs_clarification, excluded, informational}, `exclusion_reason`, `reinstatable`, `provider_display`, `evidence` JSON, `rationale`, `checks` JSON, `modifier_considerations` JSON, `units`, `fingerprint` | **immutable** |
 | `Clarification` | `encounter`, `assessment`, `proposal` (nullable), `scope` ∈ {encounter, service, proposal}, `fact`, `question`, `reason`, `state` ∈ {open, answered, withdrawn}, `answered_by_revision` | |
@@ -125,8 +125,8 @@ changed — section 5.4).
 
 ### 5.1 `studio/ingest` — extraction
 
-`extract(data: bytes, media_type: str, filename: str) -> ExtractionResult`
-runs in a subprocess with CPU/memory/file-size rlimits and a wall-clock
+`extract_document(data, filename, media_type, *, limits=None, ocr=DETECT) -> ExtractionResult`
+(and `extract_paste(text, *, method, limits)` for pasted text and addenda) runs in a subprocess with CPU/memory/file-size rlimits and a wall-clock
 timeout. Result: `status` (ok | partial | failed), `method` (txt | docx |
 pdf-text | pdf-ocr | pdf-mixed | paste), canonical `text`, `pages`
 (`[{page, start, end}]` over the canonical text), `messages` (explicit,
@@ -172,6 +172,8 @@ dates default to `planned`; history sections to `historical`.
 
 ### 5.4 `studio/providers` — proposal adapters
 
+`get_provider()` reads the provider mode (the only settings reader);
+`normalizer_for(provider)` re-reads a STORED run without credentials.
 `ProposalProvider` protocol: `name`, `adapter_version`,
 `build_request(text, service_date) -> ProviderRequest` (body, canonical
 sha256, contexts as sent), `send(request, deadline_s) -> RawExchange`
@@ -264,7 +266,7 @@ decision; anything else is draft-only, with the blocking items listed.
 
 ### 5.8 `studio/reports` — exports
 
-`build(encounter, kind, fmt, user) -> ReportArtifact` renders from a snapshot
+`generate(encounter, kind, fmt, user) -> ReportArtifact` renders from a snapshot
 of persisted rows, stores bytes + sha256 + snapshot sha256, and downloads
 stream the stored bytes. TXT is the coding report; CSV is one row per item
 (approved, rejected, undecided, excluded, alternative) with formula

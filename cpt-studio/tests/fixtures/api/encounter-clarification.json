@@ -1,0 +1,474 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000003",
+ "title": "Upper abdominal discomfort follow-up",
+ "state": "needs_clarification",
+ "state_label": "Needs clarification",
+ "service_date": null,
+ "families": [
+  "Office / outpatient evaluation and management",
+  "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"
+ ],
+ "source_kind": "paste",
+ "open_clarifications": 1,
+ "created_at": "2026-10-23T14:03:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000031",
+  "number": 1,
+  "kind": "paste",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": null,
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "paste",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nGastroenterology clinic (fictional) · Office follow-up\n\nEstablished patient returns for ongoing upper abdominal discomfort.\n\nAssessment and plan: Symptoms remain under evaluation. An upper endoscopy (EGD) is scheduled for next week. A hydrogen breath test was performed in the office today.\nMedical decision making: low complexity.",
+  "text_sha256": "ab28c853389c0d0be90343f0ffda129042b1aca65c53c4babd018faa3729e7a3",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 376
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "No service date is documented."
+   },
+   "setting": {
+    "value": "office",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 83,
+      "end": 99,
+      "text": "Office follow-up",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   },
+   "patient_status": {
+    "value": "established",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 101,
+      "end": 120,
+      "text": "Established patient",
+      "exact": true
+     }
+    ],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "office_note",
+  "families": [
+   {
+    "family": "gi.office_em",
+    "label": "Office / outpatient evaluation and management",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   },
+   {
+    "family": "gi.egd",
+    "label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "supported": true,
+    "status": "planned",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000003",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 6123.4,
+   "usage": {
+    "creditsConsumed": 0.0194
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "6a9bf8080a9636f003c3b91da45caf49d44e2fb974eca1d0a3ad51fd943f942b",
+   "response_sha256": "5a4b1527e1201c61802ebc0b9646a3f06c8dae8a61237124acea82cd27e6b46d",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": {
+  "id": "90000000-0000-4000-8000-000000000003",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-23T14:02:40Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000301",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "99213",
+    "code_kind": "cpt1",
+    "family": "gi.office_em",
+    "family_label": "Office / outpatient evaluation and management",
+    "eyebrow": "EVALUATION & MANAGEMENT",
+    "supported": true,
+    "profile_version": "gi.office_em@1",
+    "status": "needs_clarification",
+    "status_label": "Needs clarification",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 101,
+      "end": 168,
+      "text": "Established patient returns for ongoing upper abdominal discomfort.",
+      "exact": true
+     },
+     {
+      "start": 336,
+      "end": 376,
+      "text": "Medical decision making: low complexity.",
+      "exact": true
+     }
+    ],
+    "rationale": "An established-patient office visit with low-complexity medical decision making is documented.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "99213 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     },
+     {
+      "id": "context.service_date",
+      "label": "Service date",
+      "status": "fail",
+      "detail": "No service date is documented; date-dependent checks cannot run.",
+      "source": "cpt-studio:context@1"
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "reject"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000302",
+    "key": "sel:1",
+    "bucket": "selected",
+    "code": "43235",
+    "code_kind": "cpt1",
+    "family": "gi.egd",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "eyebrow": "UPPER GI ENDOSCOPY",
+    "supported": true,
+    "profile_version": "gi.egd@1",
+    "status": "excluded",
+    "status_label": "Excluded",
+    "exclusion_reason": "Documented as scheduled for a future date; a planned service is not coded as performed.",
+    "reinstatable": true,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 225,
+      "end": 277,
+      "text": "An upper endoscopy (EGD) is scheduled for next week.",
+      "exact": true
+     }
+    ],
+    "rationale": "The provider selected a diagnostic EGD.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "fail",
+      "detail": "The documented status needs review.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "43235 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "reinstate"
+    ]
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "extraction.status",
+    "label": "Text extraction",
+    "status": "pass",
+    "detail": "The pasted text was recorded as submitted.",
+    "source": "cpt-studio:extraction@1"
+   },
+   {
+    "id": "context.service_date",
+    "label": "Service date",
+    "status": "fail",
+    "detail": "No service date is documented. Reference applicability cannot be established.",
+    "source": "cpt-studio:context@1"
+   },
+   {
+    "id": "services.unsupported",
+    "label": "Services outside the GI profiles",
+    "status": "warn",
+    "detail": "A performed service has no GI profile in this release.",
+    "source": "cpt-studio:routing@1"
+   }
+  ],
+  "unsupported": [
+   {
+    "family": "gi.other",
+    "label": "Other GI service",
+    "status": "performed",
+    "detail": "A hydrogen breath test is documented as performed today; this release has no profile for it, so it needs manual review."
+   }
+  ],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 2,
+   "alternatives": 0,
+   "excluded": 0
+  }
+ },
+ "clarifications": [
+  {
+   "id": "70000000-0000-4000-8000-000000000031",
+   "scope": "encounter",
+   "proposal_id": null,
+   "family": "",
+   "fact": "service_date",
+   "question": "What is the date of service for this visit? Add it to the documentation as an addendum.",
+   "reason": "No service date is documented, and every reference check depends on it.",
+   "state": "open"
+  }
+ ],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": false,
+  "blockers": [
+   "Open clarification: service date",
+   "99213 has no decision"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Pasted text submitted (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "assessment.created",
+   "summary": "Proposals checked; a service date is needed",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

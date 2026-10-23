@@ -1,0 +1,38 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Gastroenterology Associates (fictional practice)
+Office follow-up visit - progress note
+
+Patient: Grace Whitfield (fictional)
+Synthetic record: SYN-GI-0005
+Date of service: 2026-10-20
+Place of service: Office, in-person outpatient visit
+Clinician: Dr. Priya Ramos, MD, Gastroenterology (fictional)
+Patient status: Established patient. Last seen by Dr. Ramos in this practice on 2026-03-02.
+
+Reason for visit
+Follow-up of chronic constipation and discussion of colon polyp surveillance.
+
+History of present illness
+61-year-old with chronic constipation that has been stable on daily polyethylene glycol, with one to two soft bowel movements per day. No rectal bleeding, black stools, abdominal pain or weight loss. A colonoscopy in May 2021 by Dr. Ramos removed two small tubular adenomas from the sigmoid colon; no other polyps were found and the preparation was excellent. The patient asks when the next colonoscopy is due.
+
+Current medications
+Polyethylene glycol 17 g by mouth once daily.
+
+Examination
+Blood pressure 122/76, heart rate 68, weight 70 kg.
+Abdomen: soft, non-tender, non-distended, normal bowel sounds.
+
+Assessment
+1. Chronic idiopathic constipation, stable on current therapy.
+2. History of colon adenomas removed in 2021; surveillance colonoscopy is due.
+
+Plan
+1. Continue polyethylene glycol 17 g daily; may increase to twice daily as needed.
+2. Surveillance colonoscopy to be scheduled; tentative date 2026-12-09. Bowel preparation instructions were provided. No colonoscopy or other procedure was performed today.
+3. Return visit after the colonoscopy.
+
+Medical decision making
+Low: one stable chronic illness (constipation controlled on current therapy) and surveillance planning for a prior adenoma history; review of the prior colonoscopy and pathology reports; over-the-counter medication management.
+
+Electronically signed: Dr. Priya Ramos, MD (fictional), 2026-10-20 16:05

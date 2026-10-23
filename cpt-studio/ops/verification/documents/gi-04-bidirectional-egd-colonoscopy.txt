@@ -1,0 +1,40 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Northgate Ambulatory Endoscopy Center (fictional)
+Procedure report - upper endoscopy and colonoscopy in the same session
+
+Patient: Daniel Kim (fictional)
+Synthetic record: SYN-GI-0004
+Date of procedure: 2026-10-16
+Place of service: Ambulatory surgery center
+Endoscopist: Dr. Laura Mendes, MD, Gastroenterology (fictional)
+
+Procedures
+1. Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.
+2. Diagnostic colonoscopy to the terminal ileum with random cold forceps biopsies.
+
+Indications
+Chronic watery diarrhea for four months with iron deficiency anemia; evaluation for celiac disease and microscopic colitis.
+
+Sedation
+Monitored anesthesia care by the anesthesia service (fictional). The endoscopist did not administer sedation.
+
+Upper endoscopy
+The gastroscope was introduced under direct visualization and advanced through the esophagus and stomach to the second portion of the duodenum. The esophagus and stomach were normal. The duodenal folds appeared mildly scalloped. Cold forceps biopsies were obtained from the second portion of the duodenum (four fragments) and from the duodenal bulb (two fragments) to evaluate for celiac disease.
+
+Colonoscopy
+Bowel preparation was good, with a Boston Bowel Preparation Scale score of 8. The colonoscope was advanced to the cecum, identified by the appendiceal orifice and the ileocecal valve, and the terminal ileum was intubated and examined for 10 cm; the terminal ileum was normal. The colonic mucosa appeared normal throughout. Random cold forceps biopsies were obtained from the right colon and from the left colon, placed in separate containers, to evaluate for microscopic colitis. Withdrawal time was 12 minutes.
+
+Complications
+None.
+
+Impression
+1. Mild scalloping of the duodenal folds; duodenal biopsies taken.
+2. Normal terminal ileum and colon; random colon biopsies taken.
+
+Plan
+1. Await pathology.
+2. Check celiac serologies if they have not already been done.
+3. Return to the office in three weeks to discuss the results.
+
+Electronically signed: Dr. Laura Mendes, MD (fictional), 2026-10-16 09:58

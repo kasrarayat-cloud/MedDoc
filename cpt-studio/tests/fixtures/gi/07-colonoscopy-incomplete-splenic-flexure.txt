@@ -1,0 +1,29 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Ambulatory Surgery Center (fictional)
+Colonoscopy report
+
+Patient: Jamie Castellanos (fictional)
+Synthetic record: SYN-GI-3007
+Date of service: 2026-10-22
+Place of service: Ambulatory surgery center
+Endoscopist: Dr. Mei Tanaka, MD (fictional)
+
+Procedure
+Colonoscopy.
+
+Indications
+Surveillance colonoscopy for a personal history of adenomatous polyps; last colonoscopy in 2021.
+
+Technique
+The colonoscope was inserted into the rectum and advanced to the splenic flexure. Large amounts of solid stool were present throughout the left colon. Poor bowel preparation precluded safe advancement beyond the splenic flexure, and the procedure was terminated.
+
+Findings
+The visualized rectum, sigmoid colon and descending colon contained solid stool; no mass lesions were seen in the visualized mucosa.
+The transverse colon, ascending colon and cecum were not examined.
+
+Impression
+Incomplete colonoscopy to the splenic flexure due to poor bowel preparation.
+
+Recommendations
+Repeat colonoscopy with an extended two-day bowel preparation in 4 to 6 weeks.

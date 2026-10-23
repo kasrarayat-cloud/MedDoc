@@ -1,0 +1,179 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000002",
+ "title": "Constipation follow-up visit",
+ "state": "processing",
+ "state_label": "Processing",
+ "service_date": "2026-10-22",
+ "families": [],
+ "source_kind": "paste",
+ "open_clarifications": 0,
+ "created_at": "2026-10-23T14:02:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000021",
+  "number": 1,
+  "kind": "paste",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": null,
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "paste",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nOffice visit · Gastroenterology clinic (fictional)\nDate of service: 2026-10-22\n\nEstablished patient seen for follow-up of chronic constipation.\nMedical decision making: moderate. Total time on the date of service: 32 minutes.",
+  "text_sha256": "9547252ee6d1e3699ccdbcc24a040b85ebe9d4da544632655dc642adfe8d1d4b",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 270
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-22",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 96,
+      "end": 123,
+      "text": "Date of service: 2026-10-22",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": "office",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 45,
+      "end": 57,
+      "text": "Office visit",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   },
+   "patient_status": {
+    "value": "established",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 125,
+      "end": 144,
+      "text": "Established patient",
+      "exact": true
+     }
+    ],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "office_note",
+  "families": [
+   {
+    "family": "gi.office_em",
+    "label": "Office / outpatient evaluation and management",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "busy": true,
+  "can_stop": true,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "running",
+    "error": "",
+    "finished_at": null
+   },
+   {
+    "kind": "assess",
+    "state": "queued",
+    "error": "",
+    "finished_at": null
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000002",
+   "provider": "corti",
+   "mode": "live",
+   "state": "sending",
+   "http_status": null,
+   "latency_ms": null,
+   "usage": {},
+   "usage_basis": "",
+   "request_sha256": "6fc63565247226593c49a36e9da488e6e1c33a9a1fcd8a76f55573483136b880",
+   "response_sha256": "",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": null,
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": false,
+  "reviewed": false,
+  "blockers": [
+   "Processing has not finished"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Pasted text submitted (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

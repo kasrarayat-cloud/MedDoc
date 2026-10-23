@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health endoscopy suite (fictional)
+Flexible sigmoidoscopy report
+
+Patient: Quinn Abernathy (fictional)
+Synthetic record: SYN-GI-3012
+Date of service: 2026-10-21
+Place of service: 11 office
+Endoscopist: Dr. Noor Haddad, MD (fictional)
+
+Procedure
+Flexible sigmoidoscopy with cold snare polypectomy.
+
+Indications
+Intermittent hematochezia in a 34-year-old; evaluate for a distal source.
+
+Technique
+Two enemas were given before the examination. The sigmoidoscope was inserted and advanced to 40 cm from the anal verge without difficulty. No sedation was used.
+
+Findings
+Grade I internal hemorrhoids.
+A 5 mm sessile polyp in the sigmoid colon at 25 cm was removed with a cold snare and retrieved.
+The examined mucosa was otherwise normal.
+
+Impression
+Internal hemorrhoids, likely source of bleeding. Sigmoid polyp removed.
+
+Recommendations
+Await pathology. High-fiber diet.
