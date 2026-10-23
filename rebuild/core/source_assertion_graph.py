@@ -539,7 +539,6 @@ def extraction_schema():
         'A hyphen, intervening words, an earlier unit or a unit inside value_span is not attached. '
         'Never shorten a qualified or ranged value merely to attach a unit.')
     fact_properties['unit']['description'] = unit_description
-    fact_properties['unit_span']['description'] = unit_description
     fact_properties['subject']['description'] += (
         ' Its kind must exactly match the single owner assertion\'s subject; split differently '
         'owned claims instead of borrowing or relabelling another person\'s facts.')
