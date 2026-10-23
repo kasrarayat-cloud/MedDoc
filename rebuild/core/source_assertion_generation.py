@@ -34,7 +34,16 @@ Distinguish predicate event time from encounter date, owner from speaker, and
 conditional plans from actual symptoms. Keep uncertainty, negatives, coordinated
 objects, retractions, corrections and prior history. predicate_refs identify the
 assertion; context_refs retain ownership/time context; qualifier_refs identify
-clinically material words that the answer must preserve. Unknown scope names its
+clinically material words that the answer must preserve. For EVERY assertion,
+polarity negated, uncertain or mixed OR certainty possible, conditional or
+hypothetical REQUIRES at least one exact governing qualifier in qualifier_refs
+from that assertion's declared source units. This applies to every consumer_role,
+including none, and to unused assertions and time-qualification claims. Keeping
+negation or uncertainty in predicate_refs, context_refs or a fact value_span does
+not populate qualifier_refs; a reference may appear in multiple reference lists
+when it serves both roles. Never change the documented polarity/certainty or omit
+an assertion to evade this requirement. Affirmed, established assertions may also
+retain other material qualifier_refs. Unknown scope names its
 possible affected assertions; if it cannot be bounded, leave affected IDs empty.
 Identity roles are explicit claims, never derived from free concept names. Source
 patient names/references must be literal; registry identity is comparison-only.
