@@ -591,7 +591,9 @@ class V2HedgeAfterTheNameTests(unittest.TestCase):
               'Biopsy of the lesion was attempted.', 'Biopsies could have been taken.',
               'Biopsies were apparently obtained.', 'Biopsies were presumably taken.',
               'Biopsy of the cecal lesion, if possible.', 'Biopsies of the cecum may have been taken.',
-              'Biopsies possibly taken.', 'Biopsies of the cecum may have been taken during the colonoscopy.')
+              'Biopsies possibly taken.', 'Biopsies of the cecum may have been taken during the colonoscopy.',
+              'Biopsies probably were taken.', 'Biopsies were thought to have been taken.',
+              'Biopsies of the cecum were reported to have been obtained.')
 
     def test_the_claimed_hedges(self):
         for hedge in self.HEDGES:
@@ -626,7 +628,8 @@ class V2HedgeAfterTheNameTests(unittest.TestCase):
                          'Cold snare polypectomy, possibly adenomatous.',
                          'Biopsies were taken from the cecum, which may have been inflamed.',
                          'Cold snare polypectomy: possible adenoma, retrieved.',
-                         'Biopsy of the cecal lesion was attempted and obtained.'):
+                         'Biopsy of the cecal lesion was attempted and obtained.',
+                         'Biopsies were taken; the lesion was felt to be an adenoma.'):
             text = colon_lesion(sentence)
             with self.subTest(sentence=sentence):
                 self.assertEqual(read(text, sentence)[0], 'performed')

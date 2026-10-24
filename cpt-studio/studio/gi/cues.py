@@ -448,7 +448,12 @@ _HEDGE_ACT = (r'(?:performed|done|completed|undertaken|carried\s+out|attempted|o
 _HEDGE_ADVERB = (r'(?:possibly|probably|likely|presumably|apparently|perhaps|maybe|reportedly|supposedly|seemingly|'
                  r'allegedly)')
 _HEDGE_MODAL = (r'(?:may|might|could|would|should|must)\s+(?:(?:possibly|perhaps|also|well|then)\s+)?(?:have\s+been|have)'
-                r'|(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+' + _HEDGE_ADVERB)
+                r'|(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+' + _HEDGE_ADVERB
+                # the adverb before the auxiliary, and a report or a belief: "probably were taken", "were thought to have
+                # been taken", "were reported to have been obtained"
+                + r'|' + _HEDGE_ADVERB + r'\s+(?:was|were|has\s+been|have\s+been|had\s+been)'
+                r'|(?:was|were|is|are)\s+(?:thought|believed|felt|presumed|assumed|suspected|reported|said)\s+to\s+'
+                r'(?:have\s+been|be)')
 # A short phrase of place or means: up to four words, none of which opens a new clause or a verb phrase.
 _PLACE_WORD = (r'(?!(?:after|before|when|while|once|until|because|since|as|and|or|but|so|then|if|unless|it|its|this|that|'
                r'these|those|which|who|whom|whose|where|was|were|is|are|had|has|have|been|being|be)\b)[\w/-]+')
