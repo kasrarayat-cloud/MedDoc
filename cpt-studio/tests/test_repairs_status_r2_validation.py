@@ -420,6 +420,95 @@ BANDING = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office
            'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 
 
+class Status19OtherServiceTests(EngineCase):
+    """status:19 (a), per the shared contract: a routed gi.other finding counts as a same-day procedure under the
+    rule applied to a detected procedure family. Routing does not emit gi.other at this commit, so the readings
+    are stated explicitly."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Office visit: established patient seen for rectal bleeding.',
+                'Total time 32 minutes.',
+                'Procedure: Rubber band ligation of an internal hemorrhoid was performed today.')
+    VISIT, TIME = 'Office visit: established patient seen for rectal bleeding.', 'Total time 32 minutes.'
+    BAND = 'Procedure: Rubber band ligation of an internal hemorrhoid was performed today.'
+
+    def run_case(self, status, section, *cues):
+        self.statuses = {self.TIME: None}
+        found = [finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                         facts={'em_basis': 'total time 32 minutes'}),
+                 finding('gi.other', status, placed(self.NOTE, 'gi.other', status, self.BAND, section, *cues))]
+        return self.run_engine(self.NOTE, selected('99214', self.NOTE.span(self.TIME)), findings=found,
+                               ctx=visit_context())
+
+    def test_a_performed_other_service_holds_the_visit(self):
+        result = self.run_case('performed', 'procedure', 'performed: was performed')
+        visit = self.proposal(result, '99214')
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertEqual([c.fact for c in visit.clarifications], ['separate_em'])
+        self.assertIn('Other GI service is documented as performed on the same date',
+                      self.check(visit, 'em.same_day_procedure').detail)
+        self.assertEqual(visit.modifier_considerations, (checks.SEPARATE_EM_CONSIDERATION,))
+        self.assertIn('Possible missed service: Other GI service',
+                      self.encounter_check(result, 'services.unproposed').detail)
+        self.assertEqual([entry['family'] for entry in result.unsupported], ['gi.other'])
+
+    def test_an_uncertain_other_service_follows_the_mention_rule(self):
+        cases = (('procedure', ("uncertain: unresolved negation 'not' in its clause",), 'needs_clarification'),
+                 ('other', ('uncertain: Possible',), 'needs_clarification'),
+                 ('plan', ('uncertain: Possible',), 'ready'),
+                 ('other', (SILENT_CUE,), 'ready'),
+                 ('indication', ('uncertain: ?',), 'ready'))
+        for section, cues, expected in cases:
+            with self.subTest(section=section, cues=cues):
+                visit = self.proposal(self.run_case('uncertain', section, *cues), '99214')
+                self.assertEqual(visit.status, expected)
+                if expected != 'ready':
+                    self.assertIn('Other GI service is possibly performed on the same date',
+                                  self.check(visit, 'em.same_day_procedure').detail)
+
+    def test_a_planned_other_service_does_not_hold_the_visit(self):
+        visit = self.proposal(self.run_case('planned', 'plan', 'planned: scheduled'), '99214')
+        self.assertEqual(visit.status, 'ready')
+        self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])
+
+
+class Status19CoverageTests(RealCase):
+    """status:19 (b): the coverage checks are scoped to what routing recognises, and an office E/M says that a
+    same-day procedure outside the recognised families is not detected."""
+
+    def test_the_claimed_input_carries_no_false_coverage_pass(self):
+        proposals, result = real(BANDING, ('99214', VISIT_SENTENCE))
+        visit = proposals['99214']
+        # Routing does not detect the banding at this commit (the integrated routing emits gi.other for it).
+        coverage = check_of(visit, 'em.same_day_coverage')
+        self.assertEqual(coverage.status, 'not_verified')
+        self.assertIn('not verified', coverage.detail)
+        self.assertIn('hemorrhoid banding', coverage.detail)
+        unproposed = encounter_check(result, 'services.unproposed')
+        self.assertEqual(unproposed.status, 'pass')
+        self.assertNotEqual(unproposed.detail, 'Every performed service has a selected proposal.')
+        self.assertIn('not verified', unproposed.detail)
+        unsupported = encounter_check(result, 'services.unsupported')
+        self.assertEqual(unsupported.status, 'not_verified')
+        self.assertNotIn('No performed service falls outside the GI profiles.', unsupported.detail)
+        for slug in DETECTED_FAMILIES:
+            self.assertIn(PROFILES[slug].label, unsupported.detail)
+            if PROFILES[slug].procedure:
+                self.assertIn(PROFILES[slug].label, coverage.detail)
+
+    def test_a_held_visit_carries_no_coverage_line(self):
+        text = BANDING.replace('Rubber band ligation of an internal hemorrhoid was performed today without '
+                               'complication.', 'Flexible sigmoidoscopy. The sigmoidoscope was advanced to 40 cm. A '
+                                                'biopsy was taken from the rectum.')
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE), ('45331', 'A biopsy was taken from the rectum.'))
+        self.assertEqual(proposals['99214'].status, 'needs_clarification')
+        self.assertIsNone(check_of(proposals['99214'], 'em.same_day_coverage'))
+
+    def test_a_found_service_outside_the_profiles_still_warns(self):
+        text = HEAD + 'Esophageal motility study performed today.\n'
+        _, result = real(text, ('91010', 'Esophageal motility study performed today.'))
+        self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
+
+
 # --- review:0 at the validation layer: a reinstatable same-day procedure is named on the E/M ------------------
 
 

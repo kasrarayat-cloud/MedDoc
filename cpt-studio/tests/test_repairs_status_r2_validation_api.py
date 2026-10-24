@@ -157,3 +157,16 @@ class Status13ApiTests(MultiEvidenceApiCase, TestCase):
         self.assertEqual(self.decide(encounter_id, '45380', 'approve').status_code, 409)
 
 
+@override_settings(**LIVE)
+class Status19ApiTests(ApiCase, TestCase):
+    """status:19 (b) — the report never certifies coverage routing does not have."""
+
+    def test_the_report_carries_no_false_coverage_pass(self):
+        note = office_note(['Grade II internal hemorrhoids.'],
+                           procedure_lines=['Rubber band ligation of an internal hemorrhoid was performed today '
+                                            'without complication.'])
+        encounter_id = self.run_note(note, ('99213', TIME))
+        text = self.report_text(encounter_id)
+        self.assertNotIn('Every performed service has a selected proposal.', text)
+        self.assertNotIn('No performed service falls outside the GI profiles.', text)
+        self.assertIn('[NOT_VERIFIED] em.same_day_coverage', text)

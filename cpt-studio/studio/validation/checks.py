@@ -12,7 +12,7 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
-from studio.gi.profiles import PROFILES_VERSION, ServiceProfile
+from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile
 from studio.reference.store import (KIND_LABELS, MUE, PFS, UNKNOWN_DATE_NOTE, applied_sources,
                                     modifier_only_prefix, source_applies)
 from studio.types import (CONTEXT_FACTS, SERVICE_STATUSES, Check, ClarificationSpec, CodeReference, EvidenceSpan,
@@ -834,6 +834,24 @@ def extraction_check(status: Optional[str], messages: Sequence[str]) -> Check:
 
 VISIT_NOT_MISSED = ('An E/M mention beside a same-day procedure is not counted as a missed service: a separate E/M '
                     'needs significant, separately identifiable documentation.')
+# What routing recognises in document text. Coverage is never claimed beyond it: a service of another kind is
+# detected only from a selected code or where routing happens to recognise it.
+RECOGNISED = _join([PROFILES[family].label for family in DETECTED_FAMILIES])
+RECOGNISED_PROCEDURES = _join([PROFILES[family].label for family in DETECTED_FAMILIES if PROFILES[family].procedure])
+# Names no family: a family named here would read as one that was examined and found missing.
+UNPROPOSED_PASS = ('Every performed service that routing detected in the document has a selected proposal. Routing '
+                   'detects the profiled GI service families; a performed service of another kind may not be '
+                   'detected, so whether it has a proposal is not verified.')
+UNSUPPORTED_NONE = ('No selected code or detected service falls outside the GI profiles. Routing recognises '
+                    f'{RECOGNISED} in the document text, so a performed service of another kind with no selected code '
+                    'may not be detected; that is not verified.')
+# On an office E/M with no same-day procedure detected: what that absence does not establish.
+SAME_DAY_COVERAGE_CHECK = Check(
+    'em.same_day_coverage', 'Same-day procedures outside the recognised families', 'not_verified',
+    f'No same-day procedure is detected. Routing recognises {RECOGNISED_PROCEDURES} in the document text; a same-day '
+    'procedure of another kind (for example hemorrhoid banding or anoscopy) holds this E/M only when its code is '
+    'selected or routing detects it. Whether one was performed on the date of service, which would need a '
+    'significant, separately identifiable E/M service, is not verified.', COVERAGE_SOURCE)
 
 
 def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Check:
@@ -847,15 +865,13 @@ def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Che
         return Check('services.unproposed', label, 'warn', detail, COVERAGE_SOURCE)
     if visit_beside_procedure:
         return Check('services.unproposed', label, 'info', VISIT_NOT_MISSED, COVERAGE_SOURCE)
-    return Check('services.unproposed', label, 'pass', 'Every performed service has a selected proposal.',
-                 COVERAGE_SOURCE)
+    return Check('services.unproposed', label, 'pass', UNPROPOSED_PASS, COVERAGE_SOURCE)
 
 
 def unsupported_check(entries: Sequence[dict]) -> Check:
     label = 'Services outside the GI profiles'
     if not entries:
-        return Check('services.unsupported', label, 'pass', 'No performed service falls outside the GI profiles.',
-                     COVERAGE_SOURCE)
+        return Check('services.unsupported', label, 'not_verified', UNSUPPORTED_NONE, COVERAGE_SOURCE)
     names = [entry['label'] for entry in entries]
     return Check('services.unsupported', label, 'warn',
                  f'Performed without a GI profile in this release: {_join(names)}. Review required.', COVERAGE_SOURCE)

@@ -24,6 +24,7 @@ PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
 MAX_LISTED_CODE = 10  # what a stored proposal code holds; codes are never truncated
+OTHER_GI = 'gi.other'
 
 
 @dataclass(frozen=True)
@@ -172,8 +173,12 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
 
 
 def _same_day_family(finding: FamilyFinding) -> bool:
+    """A routed family that is a procedure for the same-day E/M rule: a procedure profile, or another GI service.
+    Routing emits a gi.other finding only for a procedure documented at this encounter that names none of the
+    recognised families (the shared routing contract); with no code its global period is unknown, so it counts the
+    way a code without a fee-schedule row does (fail-closed)."""
     profile = PROFILES.get(finding.family)
-    return profile is not None and profile.procedure
+    return profile is not None and (profile.procedure or finding.family == OTHER_GI)
 
 
 def _encounter(provider, context, routing, sources, date_state, selections) -> _Encounter:
@@ -249,6 +254,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
     facts_check = checks.required_facts_check(profile, states)
     if facts_check:
         found.append(facts_check)
+    if s.family in checks.EM_FAMILIES and not enc.procedure_day:
+        found.append(checks.SAME_DAY_COVERAGE_CHECK)
     if not s.excluded:
         if outcome.state == 'uncertain':
             clarifications.append(checks.performed_clarification(outcome, name, s.family, key))
@@ -369,15 +376,16 @@ def _fingerprint(code, family, profile_version, evidence, found, context_values,
 # --- encounter level -------------------------------------------------------------------
 
 def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_day: bool) -> tuple[list[str], bool]:
-    """(labels of performed, profiled families without a selected proposal, whether an E/M was not counted).
+    """(labels of performed, profiled families - and other GI services routing detected - without a selected
+    proposal, whether an E/M was not counted).
 
     On a procedure day an unproposed E/M is never reported as missed: that would push toward adding an office
     visit because a procedure report contains history or examination text.
     """
     proposed = {s.family for s in selections if not s.excluded}
     unproposed = [f.family for f in routing.findings
-                  if f.family in PROFILES and PROFILES[f.family].supported and f.status in checks.POSITIVE
-                  and f.family not in proposed]
+                  if f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI)
+                  and f.status in checks.POSITIVE and f.family not in proposed]
     visit_skipped = procedure_day and any(family in checks.EM_FAMILIES for family in unproposed)
     labels = [PROFILES[family].label for family in unproposed
               if not (procedure_day and family in checks.EM_FAMILIES)]
