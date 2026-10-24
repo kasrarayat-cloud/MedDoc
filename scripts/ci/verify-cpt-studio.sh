@@ -22,44 +22,44 @@ cd "$repo_root/cpt-studio"
 "$python" manage.py check
 "$python" manage.py makemigrations --check --dry-run
 
-# Django reports success when discovery finds nothing, so a suite that vanished
-# (a renamed package, a broken __init__) would pass silently. Require tests ran.
+# Django and unittest report success when discovery finds nothing, and their
+# "Ran N" counts SKIPPED tests too, so a suite that vanished (a renamed package, a
+# broken __init__) or whose every test is skipped would pass silently. Each
+# runner must show more tests ran than were skipped.
+require_ran() {  # <log> <label>
+  local count skipped
+  count=$(sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p' "$1" | tail -n 1)
+  skipped=$(sed -nE 's/^(OK|FAILED) \(.*skipped=([0-9]+).*\)$/\2/p' "$1" | tail -n 1)
+  if [[ -z "$count" || "$count" -le "${skipped:-0}" ]]; then
+    echo "$2: no tests ran (ran ${count:-none}, skipped ${skipped:-0})." >&2
+    exit 1
+  fi
+}
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 "$python" manage.py test tests --noinput 2>&1 | tee "$log"
-ran=$(sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p' "$log" | tail -n 1)
-if [[ -z "$ran" || "$ran" -eq 0 ]]; then
-  echo 'No CPT Studio Django tests were discovered.' >&2
-  exit 1
-fi
+require_ran "$log" 'CPT Studio Django tests'
 
 # Installer, download-verifier, verification-generator and browser-verifier unit
-# tests: no Docker or sudo. unittest and node also report success when they find
-# nothing, so every suite must show that it ran: a count floor per runner and the
-# named ops modules. ops/verification has no __init__.py, so `discover -s ops`
-# never reaches it; it is discovered on its own.
-require_ran() {  # <log> <label>
-  local count
-  count=$(sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p' "$1" | tail -n 1)
-  if [[ -z "$count" || "$count" -eq 0 ]]; then
-    echo "$2: no tests ran." >&2
+# tests: no Docker or sudo. Every suite must show that it ran: a count floor per
+# runner, and at least one PASSING test in each named ops module (a module whose
+# tests are all skipped prints its test lines too, ending '... skipped').
+# ops/verification has no __init__.py, so `discover -s ops` never reaches it; it
+# is discovered on its own.
+require_module_passed() {  # <log> <module> <label>
+  if ! grep -qE "\\($2\\.[^)]*\\) \\.\\.\\. ok\$" "$1"; then
+    echo "$3 did not run: no test in it passed." >&2
     exit 1
   fi
 }
 "$python" -B -m unittest discover -s ops -p 'test_*.py' -v 2>&1 | tee "$log"
 require_ran "$log" 'ops unit tests'
 for module in test_install test_verify_downloads; do
-  if ! grep -q "($module\." "$log"; then
-    echo "The ops suite $module did not run." >&2
-    exit 1
-  fi
+  require_module_passed "$log" "$module" "The ops suite $module"
 done
 "$python" -B -m unittest discover -s ops/verification -p 'test_*.py' -v 2>&1 | tee "$log"
 require_ran "$log" 'verification generator tests'
-if ! grep -q '(test_generate\.' "$log"; then
-  echo 'The verification generator suite test_generate did not run.' >&2
-  exit 1
-fi
+require_module_passed "$log" test_generate 'The verification generator suite test_generate'
 # node counts a test FILE that registers no tests as one passing test, so a count alone proves nothing:
 # require the TAP summary, a pass floor near the committed count, and a named test that guards truth rule 5.
 node --test --test-reporter=tap ops/verification/test_verify_browser.cjs 2>&1 | tee "$log"
