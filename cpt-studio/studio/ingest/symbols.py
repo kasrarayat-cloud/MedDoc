@@ -39,10 +39,15 @@ def as_box(glyph: str) -> str:
 # regular-expression sources, compiled by each reader.
 BOX_UNREAD_MARK = '[?]'  # the unread mark: extraction writes it where a box's state or place cannot be read
 BOX_PAD = r'[ \t\u00a0\u2000-\u200a\u202f\u205f\u3000]'  # a box's padding: any whitespace but a line break
-# The bare glyphs read as an unchecked and as a checked box: every box shape above and, checked, the check marks and
-# the filled square typed as boxes (as_box keeps U+25A0 as it is: a symbol font draws it as a bullet as often as a
-# box).
-BOX_OFF_GLYPHS = ''.join(glyph for glyph, box in _BOX_SHAPES.items() if box == UNCHECKED_BOX)
+# The bare glyphs read as an unchecked and as a checked box: the unchecked box glyphs routing has always read (U+2610
+# U+25A1 U+25FB U+25FD U+274F U+2750 U+2751 U+2752), and every checked box shape above with the check marks and the
+# filled square typed as boxes (as_box keeps U+25A0 as it is: a symbol font draws it as a bullet as often as a box).
+# The other unchecked shapes above (U+25A2, U+2B1C, the white squares of every weight) are a bullet as often as a box
+# when typed, so read as unread marks that hold their item, never as a box that excludes it (BOX_UNREAD_PATTERN); a
+# check-box widget over one still replaces it with its own state (BOX_PRINTED_PATTERN).
+BOX_OFF_GLYPHS = '\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752'
+BOX_HELD_GLYPHS = ''.join(glyph for glyph, box in _BOX_SHAPES.items()
+                          if box == UNCHECKED_BOX and glyph not in BOX_OFF_GLYPHS)
 BOX_ON_GLYPHS = ''.join(glyph for glyph, box in _BOX_SHAPES.items() if box == CHECKED_BOX) + '\u2713\u2714\u25a0'
 # Unchecked: a box glyph, "[ ]" with any inner whitespace (or none), "[_]", "( )" with some inner whitespace.
 BOX_OFF_PATTERN = '[' + BOX_OFF_GLYPHS + r']|\[' + BOX_PAD + r'*\]|\[_\]|\(' + BOX_PAD + r'+\)'
@@ -53,14 +58,15 @@ BOX_ON_PATTERN = ('[' + BOX_ON_GLYPHS + r']|\[' + BOX_PAD + r'*[xX\u2713\u2714]'
 # over. Square brackets or parentheses round one radio, check, cross or query mark ("(\u2022)", "(\u25cf)",
 # "[\u221a]", "(\u2713)", "[?]", "(*)", "(o)", "[/]"); square brackets round one dash, plus, underscore or answer
 # letter ("[-]", "[+]", "[N]", "[Y]", "[V]"; "[_]" and "[v]" alone are boxes); braces or angle brackets round only
-# spaces or one such mark ("{ }", "{x}", "< >", "<x>"). An answer in parentheses ("(N)", "(-)") is ordinary text
+# spaces or one such mark ("{ }", "{x}", "< >", "<x>"); and a bare unchecked shape outside routing's box glyphs
+# (BOX_HELD_GLYPHS). An answer in parentheses ("(N)", "(-)") is ordinary text
 # ("H. pylori (-)") unless its line marks options in boxes (BOX_PAREN_ANSWER_PATTERN, read by routing).
 _BOX_UNREAD_CHARS = r'[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717\u2718\u2715\u2716?*o/\\]'
 _BOX_ANSWER_CHARS = r'[-+_NYnyVv]'
 _BOX_ANY_CHAR = r'(?:' + _BOX_UNREAD_CHARS + '|' + _BOX_ANSWER_CHARS + r'|[xX])'
 BOX_UNREAD_PATTERN = (r'[\[(]' + BOX_PAD + '*' + _BOX_UNREAD_CHARS + BOX_PAD + r'*[\])]|\[' + BOX_PAD + '*'
                       + _BOX_ANSWER_CHARS + BOX_PAD + r'*\]|\{' + BOX_PAD + '*' + _BOX_ANY_CHAR + '?' + BOX_PAD
-                      + r'*\}|<' + BOX_PAD + '*' + _BOX_ANY_CHAR + '?' + BOX_PAD + '*>')
+                      + r'*\}|<' + BOX_PAD + '*' + _BOX_ANY_CHAR + '?' + BOX_PAD + '*>|[' + BOX_HELD_GLYPHS + ']')
 # Radio glyphs written bare ("\u25cb Biopsy \u25cf Cold snare polypectomy", "\u25cb Yes \u25cf No"): a bullet as often
 # as a box, so read as unread marks only where their line holds another one (routing), or before an option word (the
 # option-row guard).
@@ -74,7 +80,8 @@ BOX_PAREN_ANSWER_PATTERN = r'\(' + BOX_PAD + '*[-+NYny]' + BOX_PAD + r'*\)'
 # A printed box in a PDF page's text that a check-box widget over it replaces with its own state (pdf._placed_boxes):
 # every unchecked spelling, and the contract's two checked ones (U+2612, "[x]"). A printed checked mark of another
 # spelling stays as printed, so a widget never newly writes an unchecked box over a mark a viewer may show checked.
-BOX_PRINTED_PATTERN = '(?P<off>' + BOX_OFF_PATTERN + ')|(?P<on>' + CHECKED_BOX + r'|\[[xX]\])'
+BOX_PRINTED_PATTERN = ('(?P<off>' + BOX_OFF_PATTERN + '|[' + BOX_HELD_GLYPHS + '])|(?P<on>' + CHECKED_BOX
+                       + r'|\[[xX]\])')
 
 
 # The built-in encodings of the two Adobe symbol fonts: glyph names in code order from each run's first code

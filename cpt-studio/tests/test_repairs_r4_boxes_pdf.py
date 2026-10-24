@@ -5,7 +5,7 @@ extract_document, then routing for the document's own date and the real validati
   in a text font, made fillable: the widget over the printed box replaces it with its own state, so a checked
   polypectomy is never excluded;
 - release:12 (b): a Word document whose box cell or paragraph is a plain box character (U+25A2, U+2B1C) in a text font:
-  the unchecked biopsy is never ready;
+  the unchecked biopsy is never ready (held as an unread mark);
 - structure:6, evidence:4, contract:2 and contract:4: fillable PDFs whose fields answer 'No' or 'None' to a question
   that names no item, to one that names an item among other words, or give the procedure a status: an ordinary field
   holds nothing, a qualified one holds only itself, and a status field that says the procedure was not done holds it;
@@ -116,7 +116,7 @@ def glyph_docx(layout, glyph):
 
 class Release12PlainBoxCharactersInWordTests(unittest.TestCase):
     """release:12 (b) (critical). A Word document whose box is the plain character U+25A2 or U+2B1C in a text font (not
-    a content control) was passed over, so the unchecked biopsy was a ready 45380."""
+    a content control) was passed over, so the unchecked biopsy was a ready 45380. It is now an unread mark: held."""
 
     def test_the_unchecked_biopsy_is_never_ready(self):
         for layout in ('table', 'paragraphs'):
@@ -125,8 +125,8 @@ class Release12PlainBoxCharactersInWordTests(unittest.TestCase):
                     result = docx_result(glyph_docx(layout, glyph))
                     self.assertEqual(result.status, 'ok', result.messages)
                     self.assertIn(glyph, result.text)
-                    self.assertEqual(read(result.text, 'Biopsy')[0], 'negated')
-                    self.assertEqual(codes(result.text, ('45380', 'Biopsy'), ('45385', SNARE)), ('excluded', 'ready'))
+                    self.assertEqual(read(result.text, 'Biopsy')[0], 'uncertain')
+                    self.assertEqual(codes(result.text, ('45380', 'Biopsy'), ('45385', SNARE)), ('held', 'ready'))
 
 
 DATE_LINES = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'), (72, 720, 'Date of service: 2026-10-21')]

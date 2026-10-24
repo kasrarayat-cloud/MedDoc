@@ -61,18 +61,26 @@ class OneBoxVocabularyTests(unittest.TestCase):
     studio.ingest.symbols, so a spelling one of them reads is never a spelling another passes over."""
 
     def test_routing_reads_every_box_shape_symbols_lists(self):
+        """Its established box glyphs as boxes; the other unchecked shapes, a bullet as often as a box, as unread."""
         for glyph, box in symbols._BOX_SHAPES.items():
             with self.subTest(glyph=hex(ord(glyph))):
+                if glyph in symbols.BOX_HELD_GLYPHS:
+                    self.assertIsNone(detect._BOX.fullmatch(glyph))
+                    self.assertIsNotNone(detect._BOX_UNREAD.fullmatch(glyph))
+                    continue
                 match = detect._BOX.fullmatch(glyph)
                 self.assertIsNotNone(match)
                 self.assertEqual('off' if match.group('off') else 'on', 'off' if box == symbols.UNCHECKED_BOX else 'on')
 
     def test_every_typed_box_routing_reads_is_a_printed_box_when_unchecked(self):
         from studio.ingest.pdf import PRINTED_BOX
-        for typed in ('[ ]', '[  ]', '[\t]', '[' + NBSP + ']', '[]', '[_]', '( )', '(  )', '(\t)', '☐', '□', '▢', '⬜',
-                      '❑', '◻', '◽'):
+        for typed in ('[ ]', '[  ]', '[\t]', '[' + NBSP + ']', '[]', '[_]', '( )', '(  )', '(\t)', '☐', '□', '❑', '◻', '◽'):
             with self.subTest(typed=typed):
                 self.assertEqual(detect._BOX.fullmatch(typed).group('off'), typed)
+                self.assertEqual(PRINTED_BOX.fullmatch(typed).group('off'), typed)
+        for typed in symbols.BOX_HELD_GLYPHS:  # unread when typed, replaced by a widget's state when printed under one
+            with self.subTest(typed=hex(ord(typed))):
+                self.assertTrue(detect._BOX_UNREAD.fullmatch(typed))
                 self.assertEqual(PRINTED_BOX.fullmatch(typed).group('off'), typed)
         for typed in ('☒', '[x]', '[X]'):
             self.assertEqual(PRINTED_BOX.fullmatch(typed).group('on'), typed)
@@ -432,12 +440,20 @@ class Release12BoxShapesAndShortAnswersTests(BoxCase):
     a form field answered 'N' or '0' read silent: the biopsy not taken was a ready 45380."""
 
     def test_pasted_box_shapes(self):
+        """Never ready: held as unread marks (typed, these shapes are a bullet as often as a box)."""
         for rows in ('▢ | Biopsy\n☑ | Cold snare polypectomy', '⬜ Biopsy\n✔ Cold snare polypectomy', 'Biopsy | ▢\n'
                      'Cold snare polypectomy | ☒', '\U0001f78e Biopsy\n\U0001f5f9 Cold snare polypectomy'):
             with self.subTest(rows=rows):
                 text = BOXED + rows + '\n'
-                self.assert_outcome(text, '45380', 'Biopsy', 'excluded')
+                self.assertEqual(read(text, 'Biopsy')[1], (detect.BOX_UNREAD,))
+                self.assert_outcome(text, '45380', 'Biopsy', 'held')
                 self.assert_outcome(text, '45385', 'Cold snare polypectomy', 'ready')
+
+    def test_a_decorative_square_bullet_never_excludes(self):
+        text = (HEADER + 'Procedure:\n⬜ Colonoscopy with cold snare polypectomy\nFindings: The colonoscope was advanced to '
+                'the cecum.\n')
+        self.assertNotIn(family(text, 'gi.colonoscopy'), NOT_TODAY)
+        self.assert_outcome(text, '45385', 'Colonoscopy with cold snare polypectomy', ('held', 'ready'))
 
     def test_short_answers_hold(self):
         page = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 5 mm polyp was '
