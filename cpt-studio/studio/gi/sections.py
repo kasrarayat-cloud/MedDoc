@@ -30,8 +30,8 @@ the same way ("2. Upcoming procedures"), so a statement in a numbered list
 its noun. Such a line that reads as a phrase ("Changes of prior radiation
 therapy", "Specimens sent for further testing") is a finding or a statement:
 inside a procedure, findings or technique section it opens an ``other``
-section with no default, elsewhere the section in force goes on, and in a
-numbered list it is content.
+section with no default (elsewhere it opens its plan or history section, as
+before), and in a numbered list it is content.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
@@ -682,13 +682,16 @@ def layout(text: str) -> Layout:
                    key=lambda mark: mark[:2])
     line_only = {label_line for _, label_line in line_ends} | set(held)
     # A phrase line (structure:4) and a held line (structure:11) only ever stand in for a procedure, findings or
-    # technique section: in any other section the section in force goes on, so a plan or a history keeps its reading.
+    # technique section. In any other section the reading of 4347acd24 stands: a held line takes the section in force,
+    # and a phrase line opens the plan or history section it opened then.
     gated = {i for i, h in headings.items() if h and _sec_phrase_heading(text, h)} | set(held)
     opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
     for i, what, value in marks:
         if what in (heading, held_open) and i in gated and current[0] not in POSITIVE_KINDS:
-            skipped.add(i)
-            continue
+            if what == held_open:
+                skipped.add(i)
+                continue
+            value = ('plan' if _PLAN_LABEL.search(value[1]) else 'history', value[1], value[2])
         if what == line_end and value in skipped:
             continue
         if what in (heading, held_open):

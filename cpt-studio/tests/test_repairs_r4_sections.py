@@ -277,6 +277,23 @@ class Structure4PhraseLinesTests(unittest.TestCase):
                 self.assertEqual(kind_at(text, RELEASE2_EMR), kind)
                 self.assertEqual(run_engine(text, [('45390', RELEASE2_EMR)])['45390'].bucket, 'excluded')
 
+    def test_a_phrase_line_in_any_other_section_reads_as_at_head(self):
+        """Outside a procedure, findings or technique section a phrase line opens the plan or history section it opened at
+        4347acd24, so the planned EMR after it is still excluded, never released through the colonoscopy performed in
+        the note."""
+        line = 'Surgical opinion for further management'
+        base = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading '
+                'polyp was tattooed.\n')
+        for text in (base + 'Impression: Sigmoid polyp.\n' + line + '\n' + RELEASE2_EMR + '\n',
+                     base + 'Indication: Positive FIT.\n' + line + '\n' + RELEASE2_EMR + '\n',
+                     HEADER + line + '\n' + RELEASE2_EMR + '\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+                     'the cecum.\n'):
+            with self.subTest(text=text[-120:]):
+                self.assertEqual(kind_at(text, RELEASE2_EMR), 'plan')
+                self.assertEqual(run_engine(text, [('45390', RELEASE2_EMR)])['45390'].bucket, 'excluded')
+        text = base + 'Impression: Sigmoid polyp.\nChanges of prior radiation therapy\n' + RELEASE2_EMR + '\n'
+        self.assertEqual(kind_at(text, RELEASE2_EMR), 'history')
+
     def test_findings_lines_without_a_phrase_are_unchanged(self):
         for line in ('Prior radiation therapy changes', 'Small internal hemorrhoids', 'Diverticulosis in the sigmoid colon'):
             text = structure4_note(line)
