@@ -778,6 +778,102 @@ class Status8UndatedHistoryTests(unittest.TestCase):
         self.assertEqual(visit.status, 'performed', visit.cues)
 
 
+class Status12DeniedFindingBesideAnActTests(unittest.TestCase):
+    """status:12 - a cited sentence that states the act and denies a finding reads performed; a
+    denied finding quoted alone is still held."""
+
+    def test_the_claimed_input_and_variants(self):
+        for procedure, sentence, code in (
+                ('Colonoscopy', 'The colonoscope was advanced to the cecum and no polyps were seen.', '45378'),
+                ('Colonoscopy', 'The colonoscope was advanced to the terminal ileum without looping.', '45378'),
+                ('Colonoscopy', 'The scope was advanced to the cecum; no masses or polyps were identified.', '45378'),
+                ('Colonoscopy', 'The colonoscope was advanced to the cecum without difficulty and no polyps were seen.',
+                 '45378'),
+                ('Colonoscopy', 'The colonoscope was inserted into the rectum and advanced to the cecum; no lesions were '
+                                'found.', '45378'),
+                ('EGD', 'The endoscope was advanced to the second part of the duodenum and no ulcers were seen.', '43235')):
+            text = HEADER + f'Procedure: {procedure}\nFindings: {sentence}\n'
+            with self.subTest(sentence=sentence):
+                status, cues = read(text, sentence)
+                self.assertEqual(status, 'performed', cues)
+                self.assertTrue(ready(run_engine(text, [(code, sentence)])[0][code]))
+
+    def test_a_denied_finding_alone_is_still_held(self):
+        text = HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. No polyps were seen.\n'
+        self.assertEqual(read(text, 'No polyps were seen.')[0], 'uncertain')
+        proposals, _ = run_engine(text, [('45385', 'No polyps were seen.')])
+        self.assertEqual(proposals['45385'].status, 'needs_clarification')
+        # a performance word inside the denied finding itself states no act
+        text = HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. No polyps were visualized.\n'
+        self.assertEqual(read(text, 'No polyps were visualized.')[0], 'uncertain')
+        text = HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced; no polyps were removed.\n'
+        self.assertEqual(read(text, 'no polyps were removed.')[0], 'negated')
+
+
+class Status16LineWrapTests(unittest.TestCase):
+    """status:16 - a layout line break after a word a sentence cannot end on never splits a negation
+    from the service named on the next line."""
+
+    CLAIM = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
+             'was removed with a\ncold snare. The patient asked about the pancreatic cyst; because of time constraints, '
+             'no\nEUS of the pancreatic cyst was performed today.\n')
+
+    def test_the_claimed_pdf_text(self):
+        self.assertEqual(family(self.CLAIM, 'gi.eus'), 'negated')
+        proposals, _ = run_engine(self.CLAIM, [('43259', 'EUS of the pancreatic cyst was performed today.')])
+        self.assertNotEqual(proposals['43259'].status, 'ready')
+        self.assertEqual(family(self.CLAIM, 'gi.colonoscopy'), 'performed')
+
+    def test_the_variants(self):
+        for body, slug in (('Findings: The cecum was reached. No\nEGD was done.', 'gi.egd'),
+                           ('Findings: The cecum was reached.\nThe mucosa was normal. No\nEGD was done.', 'gi.egd'),
+                           ('Findings: The cecum was reached.\nThe patient declined the\nEGD.', 'gi.egd'),
+                           ('Findings: The papilla was not seen, so no\nERCP was performed during this session.', 'gi.ercp'),
+                           ('Findings: The examination was completed without\nEUS being performed.', 'gi.eus')):
+            text = HEADER + 'Procedure: Colonoscopy\n' + body + '\n'
+            with self.subTest(body=body):
+                self.assertNotIn(family(text, slug), POSITIVE)
+
+    def test_fields_lists_and_table_rows_never_run_on(self):
+        for prev, nxt in (('Biopsy: no', 'EGD: performed'), ('Interventions | No', 'EGD | Performed'),
+                          ('The polyp was removed, with no', '1. EGD was performed.'),
+                          ('The patient was seen today. No', 'Date of service: 2026-10-21'), ('No', 'EGD was done.'),
+                          ('The polyp was removed with the snare', 'EGD was performed.')):
+            text = HEADER + 'Findings: The colonoscope was advanced to the cecum.\n' + prev + '\n' + nxt + '\n'
+            with self.subTest(prev=prev, nxt=nxt):
+                start = text.index(nxt)
+                self.assertEqual(layout(text).sentence_for(start, start + 1)[0], start)
+        text = HEADER + 'Procedure: EGD with biopsy.\nBiopsy: No\nEGD: performed\n'
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+
+
+class Status17IntentFromAQuestionTests(unittest.TestCase):
+    """status:17 - intent is never read from a question or a hedge; a stated intent still is."""
+
+    @staticmethod
+    def note(indication):
+        return (HEADER + f'Indication: {indication}\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+                'cecum. The colon was normal.\n')
+
+    def test_questioned_intents(self):
+        for indication in ('Is this a screening colonoscopy? The patient reports intermittent hematochezia.',
+                           'Screening colonoscopy?', '?screening.', 'Is this a surveillance colonoscopy?',
+                           'Unclear whether this is a screening colonoscopy.'):
+            with self.subTest(indication=indication):
+                self.assertIsNone(fact_value(self.note(indication), 'gi.colonoscopy', 'intent'))
+        proposals, _ = run_engine(self.note('Is this a screening colonoscopy? The patient reports intermittent '
+                                            'hematochezia.'), [('45378', 'The colonoscope was advanced to the cecum.')])
+        self.assertNotIn('screening', proposals['45378'].rationale)
+
+    def test_stated_intents_are_kept(self):
+        for indication, intent in (('Screening colonoscopy, average risk.', 'screening'),
+                                   ('Screening colonoscopy, average risk. Is the patient on anticoagulation?', 'screening'),
+                                   ('Surveillance colonoscopy; prior colonoscopy in 2019 showed adenomas.', 'surveillance'),
+                                   ('Diagnostic colonoscopy for hematochezia.', 'diagnostic')):
+            with self.subTest(indication=indication):
+                self.assertEqual(fact_value(self.note(indication), 'gi.colonoscopy', 'intent'), intent)
+
+
 BOXED = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
          'was found.\nInterventions performed\n')
 

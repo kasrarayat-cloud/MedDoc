@@ -216,12 +216,33 @@ def _lines(text: str) -> list[tuple[int, int]]:
         start = nl + 1
 
 
+# Words a sentence cannot end on: a line cut after one goes on in the next line whatever its case, so a
+# layout break never splits "no" or "declined the" from the service named on the next line ("... because
+# of time constraints, no\nEUS of the pancreatic cyst was performed today").
+_WRAP_WORDS = frozenset((
+    'no', 'not', 'nor', 'neither', 'never', 'without', 'w/o', 'declined', 'refused', 'denies', 'denied', 'the', 'a',
+    'an', 'any', 'of', 'to', 'and', 'or', 'with', 'for', 'by', 'from', 'in', 'on', 'at', 'into', 'than', 'that',
+    'which', 'her', 'his', 'their', 'its', 'this', 'further', 'additional', 'repeat', 'was', 'were', 'is', 'are',
+    'be', 'been', 'had', 'has', 'have', 'after', 'before', 'during', 'under', 'via', 'per', 'but'))
+_LAST_TOKEN = re.compile(r'(?:^|[\s(])([A-Za-z][A-Za-z/]*)$', re.A)
+# A next line that starts a list item, a field ("Date of service: ...") or a table row never continues one.
+_LIST_OR_FIELD = re.compile(r'[ \t]*(?:[-*]\s|\d{1,2}[.)]\s|[A-Za-z][.)]\s|[^:\n|]{1,40}:[ \t]*\S)', re.A)
+
+
 def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
-    """A line break inside a sentence: the line has no closing punctuation and
-    the next line continues in lower case."""
+    """A line break inside a sentence: the line (from ``prev[0]``, after any heading label) has no
+    closing punctuation, and the next line continues in lower case, or the line is prose cut on a word
+    a sentence cannot end on (_WRAP_WORDS) and the next line is no list item, field or table row."""
     before = text[prev[0]:prev[1]].rstrip()
     after = text[nxt[0]:nxt[1]].lstrip()
-    return bool(before) and before[-1] not in '.!?:;' and bool(after) and after[0].islower()
+    if not before or before[-1] in '.!?:;' or not after:
+        return False
+    if after[0].islower():
+        return True
+    if ' | ' in before or ' | ' in after or _LIST_OR_FIELD.match(after) or len(before.split()) < 3:
+        return False
+    last = _LAST_TOKEN.search(before)
+    return bool(last) and last.group(1).lower() in _WRAP_WORDS
 
 
 _STOP = re.compile(r'[.!?](?=\s)')
@@ -355,10 +376,13 @@ def layout(text: str) -> Layout:
     breaks: set[int] = set()
     for i, (ls, le) in enumerate(lines):
         breaks.update(_sentence_breaks(text, ls, le))
+        content = ls
         if headings[i]:
-            breaks.update((ls, headings[i][2].end, le))
-        joined = i + 1 < len(lines) and not headings[i] and not headings[i + 1] and i not in inside \
-            and _soft_wrap(text, (ls, le), lines[i + 1])
+            content = headings[i][2].end  # a heading's inline content may run on into the next line
+            breaks.update((ls, content))
+        joined = i + 1 < len(lines) and not headings[i + 1] and i not in inside \
+            and not (headings[i] and FORM_BLOCK.fullmatch(text[ls:le].strip())) \
+            and _soft_wrap(text, (content, le), lines[i + 1])
         if not joined:
             breaks.add(le)
     sentences = _segments(text, sorted(breaks | {0, len(text)}))

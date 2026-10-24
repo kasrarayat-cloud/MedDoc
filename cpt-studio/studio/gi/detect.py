@@ -468,10 +468,13 @@ def _unexplained(an: Analysis, clause: tuple[int, int], cs: int, ce: int, token:
     if _covered(token, explains):
         return False
     target = (ts, max(te, ts + 1))
-    # Inside a passage that names a service or an intervention, a denied finding or other act
-    # is incidental to it ("Biopsies were taken where no ulcers were seen"); inside a passage
-    # that names neither, it is what the passage says ("No polyps were seen.").
-    named = bool(an.services_in(*target) or an.interventions_in(*target))
+    # Inside a passage that names a service or an intervention, or states an act ("The colonoscope was
+    # advanced to the cecum and no polyps were seen"), a denied finding or other act is incidental to it
+    # ("Biopsies were taken where no ulcers were seen"); inside a passage that does neither, it is what
+    # the passage says ("No polyps were seen."). The act's cue must lie outside the denial itself.
+    named = bool(an.services_in(*target) or an.interventions_in(*target)
+                 or any(c.status == 'performed' and not any(_overlaps(c.start, c.end, *w) for w in outside_only)
+                        for c in an.cues_in(*target)))
     outside = [w for w in outside_only if named or not _overlaps(*w, *target)]
     outside += [w for _, w in _memberless_negations(an, cs, ce) if not _overlaps(*w, *target)]
     return not _covered(token, outside) and not _anchored_explains(an, cs, ce, token)
@@ -1512,7 +1515,10 @@ def _intent(an: Analysis, attributed: list[Optional[str]], only_family: bool, to
         for cs, ce in _clauses_in(an, s, e):
             for m in cues.INTENT.finditer(text, cs, ce):
                 reading = _generic_reading(an, m.start(), m.end())
-                if reading.status in skipped or reading.doubt \
+                # a question or a hedge ("Is this a screening colonoscopy?", "unclear whether") states no
+                # intent; the silent default of an indication does
+                hedged = reading.status == 'uncertain' and reading.basis == 'cue'
+                if reading.status in skipped or reading.doubt or hedged \
                         or _INTENT_DENIED.search(text, max(cs, m.start() - 40), m.start()):
                     continue
                 services = an.services_in(cs, ce)
