@@ -16,7 +16,7 @@ distro==1.9.0
 Django==5.2.17
 django-otp==1.7.3
 docstring_parser==0.18.0
-filelock==4.0.0
+filelock==4.2.1
 gunicorn==23.0.0
 h11==0.16.0
 httpcore==1.0.9
@@ -44,7 +44,7 @@ pydantic==2.13.5
 pydantic_core==2.46.5
 Pygments==2.21.0
 pyparsing==3.3.2
-pypdf==6.21.1
+pypdf==6.21.2
 python-docx==1.2.0
 python-dotenv==1.2.3
 reportlab==4.5.1
