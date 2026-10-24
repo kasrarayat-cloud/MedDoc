@@ -397,28 +397,67 @@ class ArgumentTests(unittest.TestCase):
 # --- door and tree ------------------------------------------------------------------
 
 class DoorTests(TemporaryDirectoryTest):
-    def declaration(self, text):
-        path = self.tmp / 'declaration.md'
-        path.write_text(text)
-        return str(path)
+    """The door binds a phase to a COMMITTED declaration (refutation finding installer:0), on a real git repo."""
+
+    NAME = 'docs/declaration.md'
+
+    def setUp(self):
+        super().setUp()
+        self.repo = self.tmp / 'repo'
+        (self.repo / 'docs').mkdir(parents=True)
+        self.git('init', '-q')
+        patcher = mock.patch.object(install, 'ROOT', self.repo)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def git(self, *args):
+        return subprocess.run(['git', '-C', str(self.repo), '-c', 'user.name=Synthetic', '-c',
+                               'user.email=synthetic@example.invalid', '-c', 'commit.gpgsign=false', *args],
+                              check=True, capture_output=True, text=True).stdout.strip()
+
+    def commit(self, name, text):
+        (self.repo / name).write_text(text)
+        self.git('add', name)
+        self.git('commit', '-q', '--no-verify', '-m', f'synthetic {name}')
+        return self.git('rev-parse', 'HEAD')
+
+    def door(self, declaration, commit):
+        return install.check_door({'RULED_MUTATION_DECLARATION': str(declaration),
+                                   'RULED_MUTATION_DECL_COMMIT': commit}, REVISION)
+
+    def refuses(self, declaration, commit, message):
+        with self.assertRaisesRegex(install.InstallError, message):
+            self.door(declaration, commit)
 
     def test_door_requires_both_variables(self):
         for environ in ({}, {'RULED_MUTATION_DECLARATION': 'x'}, {'RULED_MUTATION_DECL_COMMIT': OTHER}):
-            with self.subTest(environ=environ), self.assertRaises(install.InstallError):
+            with self.subTest(environ=environ), self.assertRaisesRegex(install.InstallError, 'run-ruled-mutation'):
                 install.check_door(environ, REVISION)
 
-    def test_door_requires_a_complete_declaration_naming_the_revision(self):
-        cases = {'short commit': (self.declaration(f'installs {REVISION}'), 'abc'),
-                 'placeholder': (self.declaration(f'installs {REVISION} and <REVISION>'), OTHER),
-                 'other revision': (self.declaration(f'installs {OTHER}'), OTHER),
-                 'unreadable': (str(self.tmp / 'missing.md'), OTHER)}
-        for label, (path, commit) in cases.items():
-            environ = {'RULED_MUTATION_DECLARATION': path, 'RULED_MUTATION_DECL_COMMIT': commit}
-            with self.subTest(label), self.assertRaises(install.InstallError):
-                install.check_door(environ, REVISION)
-        environ = {'RULED_MUTATION_DECLARATION': self.declaration(f'installs {REVISION}'),
-                   'RULED_MUTATION_DECL_COMMIT': OTHER}
-        self.assertEqual(install.check_door(environ, REVISION)['declaration_commit'], OTHER)
+    def test_a_committed_declaration_naming_the_revision_is_accepted(self):
+        commit = self.commit(self.NAME, f'Revision installed: {REVISION}\n')
+        self.assertEqual(self.door(self.NAME, commit)['declaration_commit'], commit)
+        self.assertEqual(self.door(self.repo / self.NAME, commit)['declaration_commit'], commit)
+
+    def test_content_refusals(self):
+        commit = self.commit(self.NAME, f'Revision installed: {REVISION} and <REVISION>\n')
+        self.refuses(self.NAME, commit, 'placeholder')
+        commit = self.commit(self.NAME, f'Revision installed: {OTHER}\n')
+        self.refuses(self.NAME, commit, 'does not name the revision')
+        self.refuses('docs/missing.md', commit, 'cannot be read')
+        self.refuses(self.NAME, 'abc', 'full commit sha')
+
+    def test_an_uncommitted_or_foreign_declaration_is_refused(self):
+        ancestor = self.commit('docs/other.md', 'unrelated\n')
+        outside = self.tmp / 'forged.md'
+        outside.write_text(f'Revision installed: {REVISION}\n')
+        self.refuses(outside, ancestor, 'inside this repository')
+        (self.repo / self.NAME).write_text(f'Revision installed: {REVISION}\n')
+        self.refuses(self.NAME, ancestor, 'not tracked')
+        commit = self.commit(self.NAME, f'Revision installed: {REVISION}\n')
+        self.refuses(self.NAME, ancestor, 'not the commit that last touched')
+        (self.repo / self.NAME).write_text(f'Revision installed: {REVISION}, edited after the commit\n')
+        self.refuses(self.NAME, commit, 'differs from its committed copy')
 
 
 class TreeTests(unittest.TestCase):
@@ -1110,6 +1149,100 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
                 self.assertRaises(install.InstallError):
             install.publish_vhost(self.ctx(), mock.Mock(side_effect=AssertionError('applied')), mock.Mock(),
                                   mock.Mock())
+
+    def republish_case(self, *, recorded=True, reproducible=True):
+        """Live: the OLD revision's HTTPS stage. Running: the NEW revision, whose HTTPS template changed."""
+        old = rendered()
+        new = {'http': old['http'], 'https': old['https'].replace('client_max_body_size 20m;', 'client_max_body_size 25m;')}
+        self.assertNotEqual(old['https'], new['https'])
+        old_sha = hashlib.sha256(old['https'].encode()).hexdigest()
+        self.receipt('preflight', {'routing': {}, 'app_health': {'status': 200}})
+        if recorded:
+            install.write_receipt(self.tmp, 'https-vhost', {'phase': 'https-vhost', 'ok': True, 'revision': OTHER,
+                                                            'details': {'vhost_sha256': old_sha}})
+        by_revision = {REVISION: new, OTHER: old if reproducible else new}
+        live = {'file_exists': True, 'file_sha256': old_sha, 'link_exists': True,
+                'link_target': install.VHOST_LINK_TARGET}
+        return by_revision, live, old
+
+    def test_rollback_vhost_removes_a_stage_an_earlier_receipt_recorded_and_restores_its_exact_bytes(self):
+        by_revision, live, old = self.republish_case()
+        operations, captured = [], {}
+        states = iter([live, {'file_exists': False, 'link_exists': False, 'file_sha256': None, 'link_target': None}])
+
+        def publish(ctx, apply, undo, verify):
+            apply()
+            undo()  # as on a failed verification: the removal is put back exactly
+            return {}
+        with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
+                mock.patch.object(install, 'vhost_state', side_effect=lambda: next(states)), \
+                mock.patch.object(install, 'vhost_operation', side_effect=lambda op, **kw: operations.append((op, kw))), \
+                mock.patch.object(install, 'publish_vhost', side_effect=publish):
+            install.phase_rollback_vhost(self.ctx('rollback-vhost'))
+        old_sha = hashlib.sha256(old['https'].encode()).hexdigest()
+        self.assertEqual(operations[0][0], 'remove')
+        self.assertIn(old_sha, operations[0][1]['allowed_sha256'])
+        self.assertEqual(operations[1], ('install', {'content': base64.b64encode(old['https'].encode()).decode()}))
+
+    def test_rollback_vhost_refuses_a_stage_no_receipt_recorded_or_that_cannot_be_reproduced(self):
+        for recorded, reproducible, message in ((False, True, 'did not write'), (True, False, 're-render')):
+            with self.subTest(recorded=recorded, reproducible=reproducible):
+                for path in self.tmp.glob('*.json'):
+                    path.unlink()
+                by_revision, live, _ = self.republish_case(recorded=recorded, reproducible=reproducible)
+                with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
+                        mock.patch.object(install, 'vhost_state', return_value=live), \
+                        mock.patch.object(install, 'vhost_operation') as operation, \
+                        mock.patch.object(install, 'publish_vhost') as publish, \
+                        self.assertRaisesRegex(install.InstallError, message):
+                    install.phase_rollback_vhost(self.ctx('rollback-vhost'))
+                operation.assert_not_called()
+                publish.assert_not_called()
+
+    def test_verify_compares_other_lineages_without_this_domains_own_on_both_sides(self):
+        own = f'{install.DOMAIN}.conf'
+        baseline = {'renewal': {own: 'a', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        now = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        self.assertEqual(install.other_lineages(now), install.other_lineages(baseline))
+        changed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'X'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        self.assertNotEqual(install.other_lineages(changed), install.other_lineages(baseline))
+
+    def run_verify(self, le_now):
+        own = f'{install.DOMAIN}.conf'
+        https_sha = hashlib.sha256(rendered()['https'].encode()).hexdigest()
+        files = {'available': {'quillmd': install.QUILLMD_VHOST_SHA256, install.VHOST_NAME: '1' * 64},
+                 'enabled': {'quillmd': 'quillmd', install.VHOST_NAME: install.VHOST_LINK_TARGET},
+                 'nginx_conf_sha256': '2' * 64, 'conf_d': {}}
+        # A reinstall: the preflight baseline already holds this domain's vhost and its lineage.
+        self.receipt('preflight', {'nginx_files': files, 'routing': {}, 'app_health': {'status': 200},
+                                   'cotenants': {'ok': True}, 'containers': {}, 'volumes': ['v'],
+                                   'letsencrypt': {'renewal': {own: 'a', 'app.quillmd.com.conf': 'b'},
+                                                   'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}})
+        current = {**files, 'available': {**files['available'], install.VHOST_NAME: https_sha}}
+        running = {'State': {'Running': True}, 'Id': 'x'}
+        with mock.patch.object(install, 'installed_image', return_value='sha256:' + 'c' * 64), \
+                mock.patch.object(install, 'nginx_file_state', return_value=current), \
+                mock.patch.object(install, 'rendered_vhosts', return_value=rendered()), \
+                mock.patch.object(install, 'ingress_checks', return_value=[]), \
+                mock.patch.object(install, 'cotenant_check', return_value={'ok': True}), \
+                mock.patch.object(install, 'containers', return_value={}), \
+                mock.patch.object(install, 'volumes', return_value=['v']), \
+                mock.patch.object(install, 'le_state', return_value=le_now), \
+                mock.patch.object(install, 'inspect', return_value=running), \
+                mock.patch.object(install, 'db_container_problems', return_value=[]), \
+                mock.patch.object(install, 'service_problems', return_value=[]), \
+                mock.patch.object(install, 'https_checks', return_value=([], {})), \
+                mock.patch.object(install, 'foreign_uid_tasks', return_value=0), \
+                mock.patch.object(install, 'own_service_ids', return_value=[]):
+            return install.phase_verify(self.ctx('verify'))
+
+    def test_verify_after_a_reinstall_accepts_this_domains_own_renewed_lineage(self):
+        own = f'{install.DOMAIN}.conf'
+        renewed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'b'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        self.assertIn('verified', self.run_verify(renewed)['summary'])
+        changed = {'renewal': {own: 'c', 'app.quillmd.com.conf': 'X'}, 'live': {install.DOMAIN: {}, 'app.quillmd.com': {}}}
+        with self.assertRaisesRegex(install.InstallError, 'another Let.s Encrypt lineage changed'):
+            self.run_verify(changed)
 
     def test_reference_refuses_a_file_that_is_not_the_pinned_one(self):
         fake = self.tmp / 'rvu.zip'

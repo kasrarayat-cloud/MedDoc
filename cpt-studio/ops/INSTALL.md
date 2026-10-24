@@ -3,7 +3,9 @@
 `ops/install.py` is a ruled-mutation installer. It refuses to run outside
 `scripts/run-ruled-mutation.sh`, so every phase is bound to a committed
 declaration (`docs/foundation/mutations/20261023-cpt-studio-install.md`) whose
-commit time precedes the act. Run one phase at a time, read its receipt, then
+commit time precedes the act. The installer re-checks the binding itself: the
+declaration must be tracked, unmodified, last touched by the commit the door
+names, and byte-identical to that commit's copy. Run one phase at a time, read its receipt, then
 run the next. Nothing here was executed by the session that wrote it.
 
 ## What gets installed
@@ -123,6 +125,11 @@ refuse rather than repeat. If `deploy/nginx/` changed between the revisions,
 `verify` reports the vhost as different: republish with `rollback-vhost`,
 `http-vhost`, `cert` (a no-op for a lineage not yet due for renewal; it records
 the receipt `https-vhost` requires) and `https-vhost` under the new declaration.
+`rollback-vhost` removes a stage an earlier successful vhost receipt recorded
+only when that receipt's revision re-renders it byte-for-byte, so a failed
+removal is restored to exactly what was live. `verify` compares the other
+Let's Encrypt lineages only; this domain's own lineage may already be in the
+reinstall's preflight baseline.
 
 ## Recovery notes
 

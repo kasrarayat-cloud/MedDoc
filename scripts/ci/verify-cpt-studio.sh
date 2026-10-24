@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # CPT Studio gates: Django system checks, migration drift, the full Django suite
-# (discovered from tests/, never an explicit list), the ops unit tests and a
+# (discovered from tests/, never an explicit list), every ops unit-test suite and a
 # dependency audit. Synthetic data only; no provider, production service or
 # host configuration is touched. Needs a disposable PostgreSQL and the
 # CPT_STUDIO_* variables the workflow sets.
@@ -33,8 +33,36 @@ if [[ -z "$ran" || "$ran" -eq 0 ]]; then
   exit 1
 fi
 
-# Installer and verifier unit tests: standard library only, no Docker or sudo.
-"$python" -B -m unittest discover -s ops -p 'test_*.py' -v
+# Installer, download-verifier, verification-generator and browser-verifier unit
+# tests: no Docker or sudo. unittest and node also report success when they find
+# nothing, so every suite must show that it ran: a count floor per runner and the
+# named ops modules. ops/verification has no __init__.py, so `discover -s ops`
+# never reaches it; it is discovered on its own.
+require_ran() {  # <log> <label>
+  local count
+  count=$(sed -nE 's/^Ran ([0-9]+) tests? in .*/\1/p' "$1" | tail -n 1)
+  if [[ -z "$count" || "$count" -eq 0 ]]; then
+    echo "$2: no tests ran." >&2
+    exit 1
+  fi
+}
+"$python" -B -m unittest discover -s ops -p 'test_*.py' -v 2>&1 | tee "$log"
+require_ran "$log" 'ops unit tests'
+for module in test_install test_verify_downloads; do
+  if ! grep -q "($module\." "$log"; then
+    echo "The ops suite $module did not run." >&2
+    exit 1
+  fi
+done
+"$python" -B -m unittest discover -s ops/verification -p 'test_*.py' -v 2>&1 | tee "$log"
+require_ran "$log" 'verification generator tests'
+node --test ops/verification/test_verify_browser.cjs 2>&1 | tee "$log"
+node_tests=$(sed -nE 's/^# tests ([0-9]+)$/\1/p' "$log" | tail -n 1)
+node_failed=$(sed -nE 's/^# fail ([0-9]+)$/\1/p' "$log" | tail -n 1)
+if [[ -z "$node_tests" || "$node_tests" -eq 0 || "$node_failed" != 0 ]]; then
+  echo "Browser-verifier tests: ran ${node_tests:-none}, failed ${node_failed:-unknown}." >&2
+  exit 1
+fi
 
 cd "$repo_root"
 "$python" -m pip_audit -r cpt-studio/requirements.txt -r cpt-studio/requirements-dev.txt

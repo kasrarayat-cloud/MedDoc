@@ -207,14 +207,34 @@ def check_door(environ, revision) -> dict:
         raise InstallError('RULED_MUTATION_DECL_COMMIT is not a full commit sha.')
     path = Path(declaration) if Path(declaration).is_absolute() else ROOT / declaration
     try:
-        text = path.read_text(encoding='utf-8')
+        data = path.read_bytes()
+        text = data.decode('utf-8')
     except (OSError, UnicodeDecodeError):
         raise InstallError('The declaration named by RULED_MUTATION_DECLARATION cannot be read.') from None
     if '<REVISION>' in text:
         raise InstallError('The declaration still carries the <REVISION> placeholder.')
     if revision not in text:
         raise InstallError('The declaration does not name the revision being installed.')
-    return {'declaration': declaration, 'declaration_commit': commit, 'declaration_sha256': sha256(text.encode())}
+    committed_declaration(path, commit, data)
+    return {'declaration': declaration, 'declaration_commit': commit, 'declaration_sha256': sha256(data)}
+
+
+def committed_declaration(path: Path, commit: str, data: bytes) -> None:
+    """The phase is bound to a COMMITTED declaration, as the door's strict gate requires: inside this repository,
+    tracked, unmodified, last touched by ``commit``, and byte-identical to that commit's copy. Two exported
+    variables naming an arbitrary file and an arbitrary ancestor are refused."""
+    try:
+        rel = path.resolve(strict=True).relative_to(ROOT.resolve()).as_posix()
+    except (OSError, ValueError):
+        raise InstallError('The declaration is not a file inside this repository.') from None
+    if run(['git', '-C', str(ROOT), 'ls-files', '--error-unmatch', '--', rel], check=False, quiet=True).returncode:
+        raise InstallError('The declaration is not tracked; commit it and run through the door.')
+    if run(['git', '-C', str(ROOT), 'diff', '--quiet', 'HEAD', '--', rel], check=False, quiet=True).returncode:
+        raise InstallError('The declaration differs from its committed copy.')
+    if git('log', '-1', '--format=%H', '--', rel) != commit:
+        raise InstallError('RULED_MUTATION_DECL_COMMIT is not the commit that last touched the declaration.')
+    if run(['git', '-C', str(ROOT), 'show', f'{commit}:{rel}'], check=False, quiet=True).stdout != data:
+        raise InstallError("The declaration's bytes differ from the copy in RULED_MUTATION_DECL_COMMIT.")
 
 
 def check_tree(revision, declaration_commit) -> dict:
@@ -1955,6 +1975,13 @@ def phase_https_vhost(ctx) -> dict:
             'summary': f'https://{DOMAIN}/ serves {ctx.revision[:12]}'}
 
 
+def other_lineages(le: dict) -> tuple:
+    """Let's Encrypt state without this domain's own lineage, on both sides of any comparison: a reinstall's
+    preflight baseline already holds that lineage."""
+    return ({name: digest for name, digest in le['renewal'].items() if name != f'{DOMAIN}.conf'},
+            set(le['live']) - {DOMAIN})
+
+
 def phase_verify(ctx) -> dict:
     preflight = require_receipt(ctx, 'preflight')['details']
     image_id = installed_image(ctx)
@@ -1984,10 +2011,7 @@ def phase_verify(ctx) -> dict:
     missing_volumes = sorted(set(preflight['volumes']) - set(volumes()))
     if missing_volumes:
         problems.append(f'volumes disappeared: {missing_volumes}')
-    le = le_state()
-    before_le = preflight['letsencrypt']
-    if ({k: v for k, v in le['renewal'].items() if k != f'{DOMAIN}.conf'} != before_le['renewal']
-            or set(le['live']) - {DOMAIN} != set(before_le['live'])):
+    if other_lineages(le_state()) != other_lineages(preflight['letsencrypt']):
         problems.append('another Let\'s Encrypt lineage changed')
     postgres = inspect('image', POSTGRES_IMAGE) or {}
     db = inspect('container', DB_CONTAINER)
@@ -2024,15 +2048,40 @@ def phase_rollback_app(ctx) -> dict:
             'summary': 'web and worker removed; database, volumes, images and secrets kept'}
 
 
+def recorded_vhosts(ctx) -> dict:
+    """sha256 -> (revision, kind) of every vhost stage an earlier successful vhost phase installed, any revision."""
+    found = {}
+    for phase, kind in (('http-vhost', 'http'), ('https-vhost', 'https')):
+        for path in sorted(ctx.receipts.glob(f'{phase}-*.json')):
+            record = json.loads(path.read_text(encoding='utf-8'))
+            digest = (record.get('details') or {}).get('vhost_sha256')
+            if (record.get('phase') == phase and record.get('ok') and isinstance(digest, str)
+                    and re.fullmatch(r'[0-9a-f]{64}', digest) and SHA_RE.fullmatch(str(record.get('revision')))):
+                found.setdefault(digest, (record['revision'], kind))
+    return found
+
+
 def phase_rollback_vhost(ctx) -> dict:
+    """Remove quillmd-cpt when it holds a stage this installer wrote: this revision's, or one an earlier
+    successful vhost receipt recorded (the documented republish after deploy/nginx changed). The removal is
+    undone with the exact bytes it removed, re-rendered from the revision that installed them."""
     preflight = require_receipt(ctx, 'preflight')
     confs = rendered_vhosts(ctx.revision)
     state = vhost_state()
     if not state['file_exists'] and not state['link_exists']:
         return {'state': state, 'summary': 'quillmd-cpt already absent'}
-    allowed = [sha256(confs['http'].encode()), sha256(confs['https'].encode())]
-    if state['file_exists'] and state['file_sha256'] not in allowed:
-        raise InstallError('quillmd-cpt holds content this installer did not write; refusing to remove it.')
+    restorable = {sha256(confs['http'].encode()): confs['http'], sha256(confs['https'].encode()): confs['https']}
+    if state['file_exists'] and state['file_sha256'] not in restorable:
+        recorded = recorded_vhosts(ctx).get(state['file_sha256'])
+        if recorded is None:
+            raise InstallError('quillmd-cpt holds content this installer did not write; refusing to remove it.')
+        content = rendered_vhosts(recorded[0])[recorded[1]]
+        if sha256(content.encode()) != state['file_sha256']:
+            raise InstallError('quillmd-cpt holds a stage an earlier receipt recorded, but revision '
+                               f'{recorded[0][:12]} does not re-render it exactly; refusing to remove what could '
+                               'not be restored.')
+        restorable[state['file_sha256']] = content
+    allowed = sorted(restorable)
     previous = state['file_sha256']
 
     def apply():
@@ -2040,9 +2089,8 @@ def phase_rollback_vhost(ctx) -> dict:
 
     def undo():
         now = vhost_state()
-        if previous in allowed and state['link_exists'] and not now['file_exists'] and not now['link_exists']:
-            content = confs['http'] if previous == allowed[0] else confs['https']
-            vhost_operation('install', content=base64.b64encode(content.encode()).decode())
+        if previous in restorable and state['link_exists'] and not now['file_exists'] and not now['link_exists']:
+            vhost_operation('install', content=base64.b64encode(restorable[previous].encode()).decode())
 
     def verify():
         # Without the vhost the domain must land exactly where an unknown host lands.
