@@ -145,20 +145,30 @@ Never silently partial (`cpt-studio-ingest@3`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
 - Check boxes (a contract with routing, 5.3): every box extraction recognises
   is written as ☐ (U+2610, unchecked) or ☒ (U+2612, checked), never another
-  box glyph. DOCX: symbol-font boxes (Wingdings, Wingdings 2, Zapf Dingbats;
-  the tables in `studio/ingest/symbols.py` are shared with PDF), content-control
-  boxes, and a legacy FORMCHECKBOX, written in place of the field from
-  `w:checked`, else `w:default`. A filled square ■ is kept as written (it is a
-  bullet as often as a box). PDF: a form check box writes its glyph and a space
-  at the start of the one upright page-level line it sits beside (baseline
-  within the box's height, text starting at most three box sizes to its right,
-  no other box or radio button on the row, the line claimed by no other box);
-  otherwise nothing is written in the page text. Either way the form block
-  keeps `<label>: checked` / `<label>: not checked`.
+  box glyph. DOCX: symbol-font boxes (Wingdings, Wingdings 2, Webdings, Zapf
+  Dingbats; the tables in `studio/ingest/symbols.py` are shared with PDF and
+  include every box shape Unicode maps those fonts to), a `w14:checkbox`
+  content control by its structure whatever symbols it is set to (from
+  `w14:checked`), a list paragraph whose numbering bullet is a box, and a legacy
+  FORMCHECKBOX, written in place of the field from `w:checked`, else
+  `w:default`. A filled square ■ is kept as written (it is a bullet as often as
+  a box). PDF: a displayed check-box widget over a printed box replaces that
+  glyph with its own state, and a FreeText or stamp mark (X, ✓) over a printed
+  box makes it ☒; otherwise a widget writes its glyph beside the line it can be
+  tied to (at the start of the upright line to its right, or after the line
+  that ends just left of it, also inside form XObjects), and writes nothing when
+  two lines or boxes compete. A yes/no set (a check-box field with /Opt or
+  several on-states) and a radio group write their chosen option in the form
+  block (`<label>: <option>` or `<label>: no option selected`), with ☐/☒
+  before each option word they can be tied to. Either way the form block keeps
+  `<label>: checked` / `<label>: not checked`, one blank-free line per entry.
 - PDF symbol fonts read as the glyphs they draw: a simple symbol font through a
-  copy whose ToUnicode maps every code (widths, and so the layout, unchanged), a
-  composite one character by character. A composite font that writes glyph
-  indices (Identity, no ToUnicode, no CIDToGIDMap stream) is dropped.
+  copy whose ToUnicode maps every code (widths, and so the layout, unchanged),
+  with /Encoding /Differences names resolved through the ZapfDingbats and
+  Symbol glyph names (and uniXXXX); a composite one character by character,
+  its Latin echo of a symbol code read as that code. A composite font that
+  writes glyph indices (Identity, no ToUnicode, no CIDToGIDMap stream) is
+  dropped, and a malformed ToUnicode entry never fails the document.
   Private-use and control characters are dropped and counted per page; the
   status stays ok, and dropped characters are not readable text.
 - PDF forms and annotations: filled form values (text, choice, checked / not
@@ -168,20 +178,29 @@ read or reported, and content it would not show is excluded with a message.
   page N]` are fixed. A field whose stored value differs from what its
   appearance draws, or any XFA form, makes the result partial. The comparison
   first applies Acrobat's standard formats to the value (`AFNumber_Format`,
-  `AFPercent_Format`, `AFDate_FormatEx`, `AFDate_Format`, `AFSpecial_Format`,
-  exactly one call with literal arguments); any other script, a time format or
-  an unparsable value keeps the difference. An appearance that exists but draws
+  `AFPercent_Format`, `AFDate_FormatEx`, `AFDate_Format`, `AFTime_Format`,
+  `AFTime_FormatEx`, `AFSpecial_Format`, exactly one call with literal
+  arguments, rendered as pdf.js renders them); any other script or an
+  unparsable value keeps the difference. An appearance that exists but draws
   no text differs from a non-empty value; one that cannot be read is counted as
-  unreadable; a FreeText whose own appearance layer is off is hidden.
+  unreadable; a FreeText whose own appearance layer is off is hidden. StrikeOut
+  and Redact marks and opaque annotations laid over text are named and make the
+  result partial: the text under them was read as written.
 - PDF pages: a page at least half covered by images with under 200 characters
   of text is OCRed; without OCR it is named and the result is partial, keeping
   its text layer (a page with no text at all fails). Images a displayed
   annotation's appearance paints count as page images. Dense images covering a
-  fifth of the page or more get the large-image note. Text drawn wholly outside
-  the visible page (the crop box within the media box) by more than one em, or
-  inside a form whose box lies outside it, is excluded and the page named; OCR
-  renders the crop box. Optional content that is OFF by default is excluded and
-  named.
+  fifth of the page or more get the large-image note. Text is judged where it
+  lands on the page, at every depth of forms: drawn wholly outside the visible
+  page (the crop box within the media box) by more than one em, outside a
+  form's box, or outside a clipping path (rectangles exactly, other paths as
+  polygons), it is excluded and the page named; OCR renders the crop box.
+  Text a viewer may not show is read, named, and makes the result partial:
+  white text with nothing painted under it, text a later opaque fill or image
+  covers, invisible text (render mode 3, or under 5% opacity) over nothing,
+  zero-size text, a line drawn through text, and clips or pages too complex to
+  follow within the work budgets. Optional content that is OFF by default is
+  excluded and named.
 - PDF integrity: every stream the text depends on must decode to the end its
   encoding declares (Flate; LZW to its end-of-data code; RunLength to its
   end-of-data byte). On OCR pages so must every image: Flate followed to its
@@ -234,15 +253,22 @@ default to `planned`; history sections to `historical`.
 The six supported families are `DETECTED_FAMILIES`. Routing also emits one
 `gi.other` finding for procedures documented at this encounter that name none
 of them. It is recognised by form, not by a list of names (-scopy, -ectomy and
-similar endings, ligation, banding, biopsy...), in three places: the first
-sentence of a procedure section and the items on its check-box lines; the
-subject of "<procedure> was performed"; and the object of "underwent" or "we
-performed". A name is never `gi.other` if it belongs to a detected family, is
-an examination, test, sedation, consent or person, or opens with a negation,
-condition or plan word. Each mention is read on its own; the family reads
-performed, then incomplete, then uncertain if any mention does, otherwise the
-usual aggregate. `gi.other` stays outside `DETECTED_FAMILIES`: a `gi.other`
-code's own status comes from its own passage (5.6).
+similar endings, ligation, banding, biopsy...): the first sentence of a
+procedure section and the items on its check-box lines; the subject of
+"<procedure> was performed" (also with the act as a verb: "were banded today",
+"we banded"); the object of "underwent" or "we performed"; and a label line
+("Anoscopy: grade 2 ..."). A name is never `gi.other` if it belongs to a
+detected family, is an examination, test, sedation, consent or person, opens
+with a negation, condition or plan word, or is told as history (a history
+qualifier before it, or a time or visit that is not today's). Each mention is
+read on its own; the family reads performed, then incomplete, then uncertain if
+any mention does, otherwise the usual aggregate. `gi.other` stays outside
+`DETECTED_FAMILIES`: a `gi.other` code's own status comes from its own passage
+(5.6).
+
+New wording rules only hold (uncertain, with a non-silent cue): they never
+newly exclude a service or release one. The rules below follow that, except
+where a rule restores what an ordinary note read before round 3b.
 
 - A family's status ranks what its mentions say of today's service
   (incomplete, cancelled, negated today, uncertain) before what they say of
@@ -251,36 +277,92 @@ code's own status comes from its own passage (5.6).
   family's reading reaches its explicitly performed passages only as
   cancelled, incomplete or uncertain, never as planned, historical or negated.
 - A service's whole clause is read for qualifiers (a later or outside date,
-  outside provider, pending, TBD, last year, a refusal before its name); a
-  status line or a later denial ("Status: Cancelled.", "Not performed.",
-  "Patient declined.") denies the line above. History told by relative time
+  outside provider, pending, TBD, last year, a refusal before its name or
+  after its interventions); a time expression in its own clause that is not
+  today's and no listed cue reads ("next Tuesday", "in 2 wks", "recently",
+  "two weeks prior") holds it. A relative time or an outside place is the
+  service's only when it dates the service's own act: never the time of a
+  test, result or diagnosis named between them ("for a positive FIT last
+  month", "to review a CT scan done last week"), never in a clause that says
+  today, and never on an E/M visit statement. History told by relative time
   or by another provider reads historical; an explicit performance cue under
-  Indication reads uncertain unless its clause says today. "As scheduled",
-  "as planned" and "as arranged" keep a done service done; a request
-  ("requested by the referring physician") reads uncertain, never historical.
+  Indication reads uncertain unless its clause says today.
+- In a plan section an explicit performance is held, and the plan default
+  reads planned, except: a past-tense performance with a same-clause today
+  marker ("today", "this morning") and no condition, possibility, future,
+  plan word or question in the passage reads performed; and a clause that
+  says today with none of those holds (`PLAN_TODAY`), so a conditional plan
+  line ("Repeat colonoscopy today if bleeding recurs.") still plans. "As
+  scheduled", "as planned" and "as arranged" keep a done service done; a
+  request ("requested by the referring physician") reads uncertain, never
+  historical.
+- A status line or a later denial denies or holds the line above it: the next
+  sentence ("Status: Cancelled.", "Not performed.", "Patient declined.",
+  "Rescheduled."), a next line that names the same service and reschedules
+  it, and a denying status line or a cancellation of the procedure up to six
+  sentences further down (headings not counted) hold it; a service listed
+  under a label that denies performance ("Procedures not performed:") is held.
+  A short line denying another act or care step ("Sedation was not needed.",
+  "Fluoroscopy was not used.") never denies the service, and an option its own
+  unchecked box leaves unselected ("Procedure cancelled | ☐") states nothing.
+- Hedges and hypotheticals hold: a hedge after the name ("Biopsies may have
+  been taken", "were possibly obtained"), counterfactual and conditional
+  wording ("Had there been a stricture, it would have been dilated", "If
+  colonoscopy were done today, ..."), and bare "defer" / "postpone" under a
+  positive section.
 - No fact is read from a clause about another procedure (a dated, planned,
-  denied or doubtful one); a failed sub-act (terminal ileum, retroflexion)
-  does not make a family that reached its expected extent incomplete;
-  shorthand extents ("to cecum", "to TI", "to 30 cm", "to D2") are read;
-  intent is never read from a question.
+  denied or doubtful one, or a prior exam named without a service name: "On a
+  prior exam the cecum was reached"); a failed sub-act (terminal ileum,
+  retroflexion) does not make a family that reached its expected extent
+  incomplete; shorthand extents ("to cecum", "to TI", "to 30 cm", "to D2")
+  and an extent label ("Extent: cecum", also an addendum's "Furthest extent
+  reached: cecum.") are read, never one led by "Intended", "Expected" or
+  "Target"; a denied finding followed by the act it needed ("no polyps were
+  found to remove") stays unresolved; a purpose clause may use "to further
+  evaluate", "to eval", "to r/o"; intent is never read from a question or a
+  presumed or unconfirmed statement.
 - Sections open on a heading with or without a colon; discussion,
-  counseling, education and "risks and benefits" headings are plan sections.
-  A prose line cut on a word a sentence cannot end on runs on into the next
-  line, whatever its case.
+  counseling, education and "risks and benefits" headings are plan sections,
+  as are "Pending procedures", "Orders", "Referrals" and "To do";
+  "Procedures performed today:" and its variants open a procedure section. A
+  numbered or bulleted list item is never a colon-less heading, and a
+  colon-less label must end with its section noun. The product's addendum
+  header is a section boundary of kind `other` that inherits nothing, and a
+  heading on the line where a form block's section resumes wins. A prose line
+  runs on into the next line after a word a sentence cannot end on, or after
+  an auxiliary or subject with its verb (or "not to" / "to" with a listed
+  verb) when the next line has no verb of its own; a line that answers a field
+  ("Schatzki ring present: no") or marks an option ("☐ Yes ☒ No") never runs
+  on. A joined line reads exactly as the same text on one line.
 - The separately identifiable E/M statement counts only when it is about this
   encounter: no conditional or normative wording, no other encounter, no date
-  other than the date of service.
+  or time expression for another encounter ("yesterday", "two days ago", "on
+  10/14"), and no box governing it that is unchecked, disagrees or cannot be
+  read.
 - Check boxes (the contract with 5.1; pasted text is read the same way):
-  unchecked ☐ □ ◻ ◽ ❏ ❐ ❑ ❒, `[ ]`, `[_]`, `( )`; checked ☑ ☒ ✓ ✔ ■ ⌧,
-  `[x]`, `(x)`. A box governs an item on its own sentence and line within
+  unchecked ☐ □ ◻ ◽ ❏ ❐ ❑ ❒, `[ ]` and `( )` with any inner whitespace,
+  `[_]`; checked ☑ ☒ ✓ ✔ ■ ⌧, `[x]` and `(x)` with optional inner
+  whitespace, `[*]`, `[v]`. Another bracketed mark (`(•)`, `[?]`, `(o)`,
+  `[/]`) is unreadable and holds its item, as do boxes for one item that
+  disagree. A box governs the item(s) on its own line or cell within
   `BOX_REACH`, before it (`☐ Biopsy`) or after it (`Biopsy | ☐`,
-  `Biopsy: ☐`); a yes/no pair is read by the option marked. The
-  `[PDF form fields on page N]` and `[PDF annotation text on page N]` blocks
-  are section boundaries of kind `other` with no default; `<label>: not
-  checked` (unchecked, no option selected) negates the item its label names;
-  `<label>: checked` is silent, so the rest of the document decides.
-- Validation reads three cue prefixes (5.6): `uncertain: no performance
-  evidence` (silent), `performed:` and `section: <kind>`.
+  `Biopsy: ☐`); remarks after the last box do not change that, a label that
+  names several items (`Biopsy/polypectomy | ☐`) is governed as a whole, a
+  cell ending in a period stays one cell, and a yes/no pair is read by the
+  option marked. The `[PDF form fields on page N]` and `[PDF annotation text
+  on page N]` blocks are section boundaries of kind `other` with no default
+  (a field labelled with a procedure, findings or technique heading reads its
+  value as that printed line would). `<label>: not checked`, `unchecked`, `no
+  option selected` or a chosen denial option (`No`, `None`, `Not done`, `Not
+  performed`) negates the printed item its label names on that page; when the
+  label matches no printed line, the page's service and intervention mentions
+  without an explicit performance cue are held. `<label>: checked` and
+  `<label>: Yes` are silent, so the rest of the document decides.
+- Validation reads routing's cues by prefix (5.6): `uncertain: no performance
+  evidence` (silent), `performed:`, `section: <kind>`, and `PLAN_TODAY`.
+- Cost: each mention stores a bounded window of its sentence, not the whole
+  sentence, and a member's pre-triggers are read once from its own bounded
+  start, so a long coordinated list stays linear.
 
 ### 5.4 `studio/providers` — proposal adapters
 
