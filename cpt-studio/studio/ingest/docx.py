@@ -19,6 +19,11 @@ and text boxes. Rules:
   each kind applies when none is named). A direct w:vanish on the run decides
   over any style. Word toggles vanish when both a paragraph and a character
   style set it; that combination is treated as hidden.
+- Text formatted as struck through (w:strike or w:dstrike, resolved as w:vanish
+  is) and white text with nothing that may be painted behind it (no shading or
+  highlight on the run, its styles, paragraph, table cell or table, no text box,
+  no page colour) is read as written, counted and named; the result is
+  'partial', as for the same marks in a PDF.
 - Markup Compatibility: the first mc:Choice whose required namespaces this
   reader understands is read, else mc:Fallback; a skipped Choice that holds
   text is counted, and one with no Fallback to read instead makes the result
@@ -38,8 +43,11 @@ and text boxes. Rules:
   content, whatever symbols its checked and unchecked states are set to; a
   hidden control writes nothing and is counted.
 - A list paragraph whose numbering bullet is a box glyph (Wingdings, Wingdings
-  2, Zapf Dingbats or a box character in any font) starts with ☐ or ☒. Other
-  bullets and numbering are not written.
+  2, Zapf Dingbats or a box character in any font) starts with ☐ or ☒ when the
+  document's list bullets show checked boxes too (a checklist); when none is a
+  checked box, a box-shaped bullet may be a bullet or an empty box, so it is
+  written as the unread mark '[?]' (routing holds the item) and counted in a
+  note. Other bullets and numbering are not written.
 - Text boxes are read after the paragraph that anchors them.
 - Header, footer, footnote, endnote and comment text is not extracted; when
   present its size is reported. Content that has no text here (images,
@@ -155,6 +163,16 @@ _SIDE_PARTS = {RT.HEADER: 'Header/footer text', RT.FOOTER: 'Header/footer text',
 _SIDE_ORDER = ('Header/footer text', 'Footnote/endnote text', 'Comment text')
 _OFF = ('0', 'false', 'off')
 
+# Run formatting that changes what the text shows (named, partial: the text is read as written), and the shading that
+# can be painted behind a run, so that white text on it shows.
+_ING_STRIKES = (f'{_W}strike', f'{_W}dstrike')
+_ING_COLOR, _ING_SHD, _ING_HIGHLIGHT, _ING_BACKGROUND, _ING_TC_PR = (
+    f'{_W}{name}' for name in ('color', 'shd', 'highlight', 'background', 'tcPr'))
+_ING_WHITE_LEVEL = 0xFD  # each channel of a colour at least this is white (0.99 of full, as for PDF text)
+# The unread mark of the box contract (studio.ingest.pdf): a box bullet that may be a bullet or an unchecked box.
+_ING_UNREAD_BOX = '[?]'
+_ING_BULLET = '\x00'  # stands for an unchecked box bullet until every bullet is read (XML text holds no NUL)
+
 
 def extract_docx(data: bytes, limits: Limits) -> ExtractionResult:
     engine = {'ingest': INGEST_VERSION, 'python-docx': docx.__version__}
@@ -172,11 +190,12 @@ def extract_docx(data: bytes, limits: Limits) -> ExtractionResult:
     if part.element.getroottree().docinfo.doctype:
         return failed('docx', engine, DTD)
     styles = _Styles.of(part)
-    walker = _Walker(styles, _Numbering.of(part, styles))
+    walker = _Walker(styles, _Numbering.of(part, styles), _ING_background(part))
     body = part.element.find(BODY)
     lines = walker.blocks(body) if body is not None else []
+    text = walker.bulleted('\n'.join(lines))
     notes = walker.notes() + _side_notes(part)
-    result = single_page(canonicalize('\n'.join(lines)), 'docx', limits, 'Word document', engine, notes)
+    result = single_page(canonicalize(text), 'docx', limits, 'Word document', engine, notes)
     if result.status == 'ok' and walker.unread:
         return dataclasses.replace(result, status='partial')
     return result
@@ -275,6 +294,9 @@ class _Styles:
         self.document_rpr = None
         self._vanish: dict = {}
         self._fonts: dict = {}
+        self._toggles: dict = {}
+        self._colours: dict = {}
+        self._shaded: dict = {}
         if root is None:
             return
         for style in root.iter(STYLE):
@@ -333,6 +355,36 @@ class _Styles:
     def document_font(self, attribute: str) -> str | None:
         return font_choice(self.document_rpr.find(RFONTS), attribute) if self.document_rpr is not None else None
 
+    def toggle(self, style_id, tag: str) -> bool | None:
+        """An on/off run property (strike, dstrike) along the style chain, read as vanish is."""
+        key = (style_id, tag)
+        if key not in self._toggles:
+            flags = (is_on(style.find(f'{RPR}/{tag}')) for style in self.chain(style_id))
+            self._toggles[key] = next((flag for flag in flags if flag is not None), None)
+        return self._toggles[key]
+
+    def document_toggle(self, tag: str) -> bool | None:
+        return is_on(self.document_rpr.find(tag)) if self.document_rpr is not None else None
+
+    def colour(self, style_id) -> str | None:
+        """The style chain's text colour (w:color), None if unset."""
+        if style_id not in self._colours:
+            colours = (style.find(f'{RPR}/{_ING_COLOR}') for style in self.chain(style_id))
+            self._colours[style_id] = next((c.get(VAL) for c in colours if c is not None and c.get(VAL)), None)
+        return self._colours[style_id]
+
+    def document_colour(self) -> str | None:
+        found = self.document_rpr.find(_ING_COLOR) if self.document_rpr is not None else None
+        return found.get(VAL) if found is not None else None
+
+    def shaded(self, style_id) -> bool:
+        """Whether the style chain may paint behind text: any shading or highlight it sets (a table style's
+        conditional formatting included)."""
+        if style_id not in self._shaded:
+            self._shaded[style_id] = any(_ING_paints(found) for style in self.chain(style_id)
+                                         for found in style.iter(_ING_SHD, _ING_HIGHLIGHT))
+        return self._shaded[style_id]
+
 
 def is_on_attribute(value) -> bool:
     return value is not None and value.strip().lower() not in _OFF
@@ -347,6 +399,45 @@ def font_choice(fonts, attribute: str) -> str | None:
     return fonts.get(f'{_W}{attribute}')
 
 
+def _ING_white(value) -> bool:
+    """Whether a colour value (RRGGBB) is white: every channel at least _ING_WHITE_LEVEL. 'auto' is not."""
+    if not value or len(value) != 6:
+        return False
+    try:
+        return all(int(value[i:i + 2], 16) >= _ING_WHITE_LEVEL for i in (0, 2, 4))
+    except ValueError:
+        return False
+
+
+def _ING_paints(element) -> bool:
+    """Whether a w:shd or w:highlight paints something behind text: a highlight that is neither none nor white, a
+    shading pattern, or a fill that is neither auto nor white."""
+    if element.tag == _ING_HIGHLIGHT:
+        return (element.get(VAL) or 'none').strip().lower() not in ('none', 'white')
+    fill = (element.get(f'{_W}fill') or 'auto').strip()
+    return (element.get(VAL) or 'clear').strip().lower() not in ('clear', 'nil') or \
+        (fill.lower() != 'auto' and not _ING_white(fill))
+
+
+def _ING_numbering(sources) -> tuple:
+    """(numId, ilvl) from w:numPr elements in order of precedence: each the first one that sets it."""
+    num_id = ilvl = None
+    for numbering in sources:
+        if numbering is None:
+            continue
+        if num_id is None and numbering.find(NUM_ID) is not None:
+            num_id = numbering.find(NUM_ID).get(VAL)
+        if ilvl is None and numbering.find(ILVL) is not None:
+            ilvl = numbering.find(ILVL).get(VAL)
+    return num_id, ilvl
+
+
+def _ING_background(part) -> bool:
+    """Whether the document has a page colour (w:background) that is not white: white text may show on it."""
+    background = part.element.find(_ING_BACKGROUND)
+    return background is not None and not _ING_white(background.get(f'{_W}color'))
+
+
 class _Numbering:
     """Numbering levels from numbering.xml: w:num (with w:lvlOverride) over w:abstractNum, following
     w:numStyleLink through the numbering style's w:numPr."""
@@ -355,6 +446,10 @@ class _Numbering:
         self.nums: dict[str, object] = {}
         self.abstracts: dict[str, object] = {}
         self.styles = styles or _Styles()
+        # Each w:num and w:abstractNum is read once, on first use: a level is then found by dictionary lookups, so the
+        # cost does not grow with the number of levels times the number of list paragraphs.
+        self._nums: dict = {}  # numId -> ({ilvl: the level of its first override for that ilvl}, abstract reference)
+        self._abstracts: dict = {}  # abstractNumId -> ({ilvl: its first level for that ilvl}, numbering style link)
         if root is None:
             return
         for num in root.iter(NUM):
@@ -379,20 +474,33 @@ class _Numbering:
             num = self.nums.get(num_id) if num_id not in (None, '0') else None
             if num is None:
                 return None
-            for override in num.iter(LVL_OVERRIDE):
-                if override.get(f'{_W}ilvl') == ilvl and override.find(LVL) is not None:
-                    return override.find(LVL)
-            reference = num.find(ABSTRACT_NUM_ID)
-            abstract = self.abstracts.get(reference.get(VAL)) if reference is not None else None
+            if num_id not in self._nums:
+                overrides = {}
+                for override in num.iter(LVL_OVERRIDE):  # the first override for an ilvl that holds a level
+                    found = override.find(LVL)
+                    if found is not None:
+                        overrides.setdefault(override.get(f'{_W}ilvl'), found)
+                reference = num.find(ABSTRACT_NUM_ID)
+                self._nums[num_id] = (overrides, (reference.get(VAL),) if reference is not None else None)
+            overrides, reference = self._nums[num_id]
+            if ilvl in overrides:
+                return overrides[ilvl]
+            abstract = self.abstracts.get(reference[0]) if reference is not None else None
             if abstract is None:
                 return None
-            link = abstract.find(NUM_STYLE_LINK)
+            if reference[0] not in self._abstracts:
+                levels = {}
+                for found in abstract.iter(LVL):  # the first level for an ilvl, in document order
+                    levels.setdefault(found.get(f'{_W}ilvl'), found)
+                link = abstract.find(NUM_STYLE_LINK)
+                self._abstracts[reference[0]] = (levels, (link.get(VAL),) if link is not None else None)
+            levels, link = self._abstracts[reference[0]]
             if link is not None:  # the levels live with the numbering style's own numbering
-                style = self.styles.by_id.get(link.get(VAL))
+                style = self.styles.by_id.get(link[0])
                 linked = style.find(f'{PPR}/{NUM_PR}/{NUM_ID}') if style is not None else None
                 num_id = linked.get(VAL) if linked is not None else None
                 continue
-            return next((lvl for lvl in abstract.iter(LVL) if lvl.get(f'{_W}ilvl') == ilvl), None)
+            return levels.get(ilvl)
         return None
 
 
@@ -409,17 +517,35 @@ class _Context:
 class _Walker:
     """Text of WordprocessingML content in document order, plus what it could not read."""
 
-    def __init__(self, styles: _Styles | None = None, numbering: _Numbering | None = None):
+    def __init__(self, styles: _Styles | None = None, numbering: _Numbering | None = None, background: bool = False):
         self.styles = styles or _Styles()
         self.numbering = numbering or _Numbering()
         self.skipped: collections.Counter[str] = collections.Counter()
         self.tracked_changes = False
         self.unread_alternates = 0
+        self.background = background  # the page has a colour: white text may show on it
+        self.struck = 0  # runs of text formatted as struck through, read as written
+        self.unseen = 0  # runs of white text with nothing shaded behind them, read
+        self.checked_bullets = 0  # list paragraphs whose bullet is a checked box
+        self.unread_bullets = 0  # unchecked box bullets written unread (no checked box bullet in the document)
+        self._style_numbering: dict = {}  # paragraph style -> (numId, ilvl) its chain gives
 
     @property
     def unread(self) -> bool:
-        """Content that may be displayed was not read: the result is partial."""
-        return bool(self.unread_alternates)
+        """Content that may be displayed was not read, or was read although a viewer shows it struck through or may
+        not show it: the result is partial."""
+        return bool(self.unread_alternates or self.struck or self.unseen)
+
+    def bulleted(self, text: str) -> str:
+        """``text`` with each unchecked box bullet written: ☐ when the document's list bullets show checked boxes too (a
+        checklist), else the unread mark, counted: a box-shaped bullet on its own may be a bullet or an empty box."""
+        count = text.count(_ING_BULLET)
+        if not count:
+            return text
+        if self.checked_bullets:
+            return text.replace(_ING_BULLET, UNCHECKED_BOX)
+        self.unread_bullets = count
+        return text.replace(_ING_BULLET, _ING_UNREAD_BOX)
 
     def notes(self) -> list[str]:
         notes = []
@@ -434,6 +560,19 @@ class _Walker:
             notes.append(f'The document has {count} block{"" if count == 1 else "s"} of content for newer Word '
                          f'versions that could not be read and {"has" if count == 1 else "have"} no '
                          'backward-compatible version.')
+        if self.struck:
+            notes.append(f'The document has text formatted as struck through ({self.struck} '
+                         f'run{"" if self.struck == 1 else "s"}); it was read as written, so check it against the '
+                         'original.')
+        if self.unseen:
+            notes.append(f'The document has text that a viewer may not show (white text with nothing shaded behind it, '
+                         f'{self.unseen} run{"" if self.unseen == 1 else "s"}); it was read, so check it against the '
+                         'original.')
+        if self.unread_bullets:
+            count = self.unread_bullets
+            notes.append(f'The document has {count} list item{"" if count == 1 else "s"} whose bullet is a box, and no '
+                         f'list bullet that is a checked box; {"it was" if count == 1 else "they were"} written as '
+                         'unread ([?]), so check the original.')
         return notes
 
     def blocks(self, container, table_style: str | None = None) -> list[str]:
@@ -523,7 +662,11 @@ class _Walker:
                 if self._run_hidden(child, context):
                     self.skipped['hidden'] += 1
                 else:
+                    before = len(parts)
                     self._inline(child, parts, boxes, self._run_context(child, context))
+                    if ''.join(parts[before:]).strip():
+                        self.struck += self._run_struck(child, context)
+                        self.unseen += self._run_unseen(child, context)
             elif tag == FF_DATA:
                 box = child.find(CHECK_BOX)
                 if box is not None:  # a legacy FORMCHECKBOX: Word draws its state in place of the field
@@ -575,19 +718,21 @@ class _Walker:
             else:
                 shown.append(as_box(char))
         glyph = ''.join(shown).strip()
-        return glyph if glyph in (UNCHECKED_BOX, CHECKED_BOX) else ''
+        if glyph == CHECKED_BOX:
+            self.checked_bullets += 1
+            return CHECKED_BOX
+        return _ING_BULLET if glyph == UNCHECKED_BOX else ''  # written once every bullet is read (bulleted)
 
     def _numbering_of(self, paragraph, style: str | None) -> tuple[str | None, str]:
-        """(numId, ilvl) of the paragraph: its own w:numPr, else its paragraph style chain's."""
-        num_id = ilvl = None
-        sources = [paragraph.find(f'{PPR}/{NUM_PR}')] + [s.find(f'{PPR}/{NUM_PR}') for s in self.styles.chain(style)]
-        for numbering in sources:
-            if numbering is None:
-                continue
-            if num_id is None and numbering.find(NUM_ID) is not None:
-                num_id = numbering.find(NUM_ID).get(VAL)
-            if ilvl is None and numbering.find(ILVL) is not None:
-                ilvl = numbering.find(ILVL).get(VAL)
+        """(numId, ilvl) of the paragraph: its own w:numPr, else its paragraph style chain's (read once per style)."""
+        num_id, ilvl = _ING_numbering([paragraph.find(f'{PPR}/{NUM_PR}')])
+        if num_id is None or ilvl is None:
+            if style not in self._style_numbering:
+                self._style_numbering[style] = _ING_numbering(found.find(f'{PPR}/{NUM_PR}')
+                                                              for found in self.styles.chain(style))
+            inherited = self._style_numbering[style]
+            num_id = num_id if num_id is not None else inherited[0]
+            ilvl = ilvl if ilvl is not None else inherited[1]
         return num_id, ilvl or '0'
 
     # Hidden text -------------------------------------------------------------------
@@ -600,6 +745,51 @@ class _Walker:
         levels = (styles.document_vanish(), styles.vanish(context.table_style),
                   styles.vanish(context.paragraph_style), styles.vanish(character))
         return any(level is True for level in levels)
+
+    # Text a viewer shows struck through, or may not show -----------------------------
+    def _run_struck(self, run, context: _Context) -> bool:
+        """Whether a run is formatted as struck through (w:strike or w:dstrike), resolved as w:vanish is: set on the run
+        decides; else on in its character, paragraph or table style or the document defaults (each through basedOn).
+        Word's toggling of a property both a paragraph and a character style set is read as on."""
+        styles = self.styles
+        character = styles.style_id(run.find(f'{RPR}/{RSTYLE}'), 'character')
+        for tag in _ING_STRIKES:
+            direct = is_on(run.find(f'{RPR}/{tag}'))
+            if direct is not None:
+                if direct:
+                    return True
+                continue
+            levels = (styles.document_toggle(tag), styles.toggle(context.table_style, tag),
+                      styles.toggle(context.paragraph_style, tag), styles.toggle(character, tag))
+            if any(level is True for level in levels):
+                return True
+        return False
+
+    def _run_unseen(self, run, context: _Context) -> bool:
+        """Whether a run's text is white (on the run, else from its character, paragraph or table style or the document
+        defaults) with nothing that may be painted behind it: no shading or highlight on the run, its styles, its
+        paragraph, table cell or table, no text box, no page colour."""
+        styles = self.styles
+        character = styles.style_id(run.find(f'{RPR}/{RSTYLE}'), 'character')
+        direct = run.find(f'{RPR}/{_ING_COLOR}')
+        choices = (direct.get(VAL) if direct is not None else None, styles.colour(character),
+                   styles.colour(context.paragraph_style), styles.colour(context.table_style), styles.document_colour())
+        if not _ING_white(next((choice for choice in choices if choice), None)) or self.background:
+            return False
+        properties = run.find(RPR)
+        if properties is not None and any(_ING_paints(found) for found in properties
+                                          if found.tag in (_ING_SHD, _ING_HIGHLIGHT)):
+            return False
+        if styles.shaded(character) or styles.shaded(context.paragraph_style) or styles.shaded(context.table_style):
+            return False
+        for node in run.iterancestors():
+            if node.tag == TXBX_CONTENT:
+                return False
+            holder = {P: PPR, TC: _ING_TC_PR, TBL: TBL_PR}.get(node.tag)
+            found = node.find(holder) if holder else None
+            if found is not None and any(_ING_paints(shading) for shading in found if shading.tag == _ING_SHD):
+                return False
+        return True
 
     # Symbol fonts ------------------------------------------------------------------
     def _run_context(self, run, context: _Context) -> _Context:
