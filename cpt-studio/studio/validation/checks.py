@@ -338,11 +338,12 @@ def states_no_procedure(reading: Reading) -> bool:
 
 def restated(reading: Reading) -> bool:
     """An explicit performance statement that only its section downgraded ("Colonoscopy with cold snare polypectomy
-    was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else. It
-    restates the act; it is not a hedge."""
+    was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else but
+    routing's PLAN_TODAY cue, which a plan-section performance statement that says today carries since round 4
+    withdrew its release (routing:1). It restates the act; it is not a hedge."""
     return (reading.status == 'uncertain' and any(cue.startswith(PERFORMED_CUE_PREFIX) for cue in reading.cues)
             and any(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
-            and all(cue.startswith((PERFORMED_CUE_PREFIX, SECTION_CUE_PREFIX)) for cue in reading.cues))
+            and all(cue.startswith((PERFORMED_CUE_PREFIX, SECTION_CUE_PREFIX, PLAN_TODAY_CUE)) for cue in reading.cues))
 
 
 def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> StatusOutcome:

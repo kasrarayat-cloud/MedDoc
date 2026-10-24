@@ -452,31 +452,33 @@ separately identifiable E/M not established, modifier *considerations*
 PTP `not_verified`. Encounter checks: extraction status, service date,
 services outside the GI profiles (`services.unsupported`: warn when any is
 selected or detected — a selected one held for clarification is listed as not
-established, never as performed and never left out — otherwise `not_verified`,
+established, and one its documented status excluded (reinstatable) in a third
+group with status `excluded`, never as performed and never left out —
+otherwise `not_verified`,
 since routing recognises only the profiled families), performed services with
 no proposal
 (`services.unproposed`, a possible missed code; each performed `gi.other`
-procedure counts unless a selected `gi.other` code's exact evidence lies in its
-sentence, and is named when another `gi.other` code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+procedure counts unless an exact evidence span of a selected, non-excluded
+`gi.other` code speaks for it: the span overlaps that procedure's sentence and
+no other done procedure's sentence, or its name and no other's, so a passage
+across two procedures speaks for neither; it is named when another `gi.other`
+code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 
 Same-day procedure, for the E/M hold (fail-closed): a performed non-E/M code
 with a procedure profile or a global period other than XXX (no fee-schedule
 row counts); a selected procedural code whose performance is uncertain; a
 routed procedure family, or a routed `gi.other` service (global period
-unknown, so it counts), read as performed — unless a selected, non-excluded
-`gi.other` code whose fee-schedule row gives the global period XXX covers that
-mention's name with its exact evidence and the name holds one procedure (a coded
-test such as 91010 manometry); one read as uncertain through a
-mention that can speak for the date of service — in procedure, findings,
-technique, unheaded and other sections a mention that hedges or doubts (never a
-silent one); in assessment, impression, examination, MDM and time sections,
-which weigh a procedure as a plan does, one whose cues are not all routing's own
-hedge words (pending, an abort, anything validation does not read as a hedge),
-whose sentence says today near it, or that is a downgraded performance
-statement;
-inside plan, history and indication / chief-complaint sections only an explicit
-performance statement that routing downgraded for its section; and an excluded procedural code whose own passage
+unknown, so it counts), read as performed — a coded test such as 91010
+manometry counts too (round 4 removed round 3b's XXX discount); one read as
+uncertain through a mention that can speak for the date of service — outside
+plan, history and indication / chief-complaint sections any mention that hedges
+or doubts (never a silent one; round 4 removed round 3b's release of hedges in
+assessment, impression, examination and MDM sections, accepting round 3's
+over-hold there); inside plan, history and indication / chief-complaint sections
+an explicit performance statement that routing downgraded for its section, a
+passage routing holds with PLAN_TODAY, and a mention routing holds as a stated
+act or finding (OTHER_STATED) or at another time (ANOTHER_TIME); and an excluded procedural code whose own passage
 states the act although only the family's document-level reading makes it
 negative. A routed `gi.other` finding gathers different procedures, so it is
 read mention by mention (one mention read as done is a same-day procedure,
@@ -504,15 +506,20 @@ E/M code's own passage that reads planned or historical only by its section
 default (its HPI, its plan, its counseling) is silent too, so routing's E/M
 reading decides; a cue that dates or plans the visit, or a visit statement
 routing reads in that section ("Follow-up office visit." under Plan), keeps
-its reading. A positive passage cannot establish a family that routing documents only as not
+its reading. An E/M code's negative reading decided by a cue, in a passage that
+touches no routed E/M mention and names another service (a routed mention of
+another family, a procedure or service name, or a test, imaging or laboratory
+word), is about that service, not the visit: it holds the code, never excludes
+it. A positive passage cannot establish a family that routing documents only as not
 performed, nor a recognisable family the document never names or names only
 as uncertain. A `gi.other` code's passage that reads performed by its section
 alone, or only as the office visit's own documentation (no other `performed:`
-cue), counts only where it names a procedure — a
-sentence of it opens with a procedure name by routing's `gi.other` form rule,
-it states a procedure's act by its participle ("were banded"), or a routed
-`gi.other` mention read as done lies in it; otherwise (`section_only`) the code
-is held, never excluded. An exclusion never presents the code's own passage as the
+cue), counts only where it names the code's OWN procedure done (by the
+`gi.other` profile's number ranges, an internal list used only to hold): a
+routed `gi.other` mention of that procedure read as done lies in it, or it lies
+in the first sentence of a procedure section whose routed mention is done, or
+it states the code's own act today ("were banded today"), not in a relative
+clause; otherwise (`section_only`) the code is held, never excluded. An exclusion never presents the code's own passage as the
 service "documented as performed elsewhere". Routing and span status read
 dated history against the encounter's effective service date (a member value
 overrides the document's).
@@ -524,8 +531,8 @@ performance statement), `section: <kind>` (a section downgrade),
 procedure's) and routing's PLAN_TODAY cue (`uncertain: its clause says today,
 so its plan section does not make it planned`): such a plan mention can speak
 for the date of service, and for an E/M code's own passage it is a section
-default like any other. It reads a hedge only from routing's own hedge words
-(5.3's uncertain cue lists), so any other uncertain cue is a doubt. A passage
+default like any other. It also reads routing's OTHER_STATED and ANOTHER_TIME
+holds by their prefixes (the stated-act and another-time cues of 5.3). A passage
 that states the act but is held because of its section is reported as
 "stated as performed under <section>; confirm it was performed on the date of
 service", citing the section cue, never as "no documentation establishes".
