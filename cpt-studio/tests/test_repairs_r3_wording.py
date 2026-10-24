@@ -801,3 +801,41 @@ class X1AddendumExtentLabelAnswerTests(unittest.TestCase):
             self.skipTest('the addendum header is not yet a section boundary in this tree (SECTIONS routing:24)')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
         self.assertTrue(ready(run_engine(text, [('45385', SNARED)])[0]['45385']))
+
+
+# --- extra item 2 ---------------------------------------------------------------------------------------------
+
+CYST = 'Procedure: EUS of the pancreatic cyst.'
+
+
+class X2DeferVerbTests(unittest.TestCase):
+    """Extra item 2: the bare verb "defer" (or "postpone") before the service is no cue, so "we decided to defer EUS of
+    the pancreatic cyst" read performed under a procedure or findings heading. It now withholds "performed" like an
+    unresolved negation: the service is held (uncertain, non-silent), never newly excluded as planned or cancelled."""
+
+    def test_the_claimed_line_and_variants(self):
+        for body in (f'{CYST} After discussion we decided to defer EUS of the pancreatic cyst.',
+                     f'{CYST}\nFindings: We decided to defer EUS of the pancreatic cyst.',
+                     f'{CYST}\nFindings: We decided to postpone EUS of the pancreatic cyst.',
+                     f'{CYST}\nFindings: The team is deferring EUS of the pancreatic cyst.',
+                     'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. We decided to defer EUS '
+                     'of the pancreatic cyst.'):
+            text = HEADER + body + '\n'
+            phrase = next(w for w in ('defer EUS', 'postpone EUS', 'deferring EUS') if w in body)
+            with self.subTest(body=body):
+                status, cues = read(text, phrase)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                self.assertEqual(family(text, 'gi.eus'), 'uncertain')  # held, not planned or cancelled
+                self.assertFalse(ready(run_engine(text, [('43259', 'EUS of the pancreatic cyst')])[0]['43259']))
+
+    def test_an_explicit_deferral_keeps_its_reading(self):
+        text = HEADER + f'{CYST}\nFindings: EUS deferred.\n'
+        self.assertEqual(family(text, 'gi.eus'), 'cancelled')
+
+    def test_ordinary_lines_are_unchanged(self):
+        for body, status in ((f'{CYST}\nFindings: The pancreatic cyst was examined from the stomach.', 'performed'),
+                             (f'{CYST}\nPlan: We will defer repeat EUS for 1 year.', 'performed'),
+                             (f'{CYST}\nFindings: No complications.', 'performed')):
+            with self.subTest(body=body):
+                self.assertEqual(family(HEADER + body + '\n', 'gi.eus'), status)

@@ -142,6 +142,9 @@ NEGATION_ABOUT_PAST = rx(r'\b(?:prior|previous|previously|never|ever|history|bef
 # anchored pattern above, a clause cue, or one of the narrow exceptions below accounts for
 # it. An exception list that misses a wording fails safe: the reading becomes uncertain.
 DOUBT_TOKEN = rx(r"\b(?:no|not|never|neither|nor|none|without|cannot|unable|declined|declines|refused|refuses|refusal"
+                 # the bare verbs of putting a service off ("we decided to defer EUS"): no cue reads them, and the
+                 # participles "deferred" / "postponed" are cancellation cues that explain themselves
+                 r"|defer|defers|deferring|deferral|postpone|postpones|postponing"
                  r")\b|n't\b|(?<![\w/])(?:w/o|n/a)(?![\w/])"
                  r'|\b(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to|in\s+place\s+of|substituted\s+for)\b')
 # The exceptions are matched against the masked clause (service names read "svc").
