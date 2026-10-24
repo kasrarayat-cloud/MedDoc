@@ -33,6 +33,13 @@ and text boxes. Rules:
   encode them.
 - A legacy check-box field (FORMCHECKBOX, w:ffData/w:checkBox) is written as
   ☐ or ☒ in place of the field: w:checked when present, else w:default.
+- A check-box content control (a w:sdt whose w:sdtPr holds w14:checkbox) is
+  written as ☒ when w14:checked is on and ☐ otherwise, in place of its
+  content, whatever symbols its checked and unchecked states are set to; a
+  hidden control writes nothing and is counted.
+- A list paragraph whose numbering bullet is a box glyph (Wingdings, Wingdings
+  2, Zapf Dingbats or a box character in any font) starts with ☐ or ☒. Other
+  bullets and numbering are not written.
 - Text boxes are read after the paragraph that anchors them.
 - Header, footer, footnote, endnote and comment text is not extracted; when
   present its size is reported. Content that has no text here (images,
@@ -57,7 +64,7 @@ from docx.package import Package
 
 from studio.types import ExtractionResult
 
-from .symbols import SYMBOL_FONTS, CHECKED_BOX, UNCHECKED_BOX, symbol_table  # noqa: F401 (SYMBOL_FONTS re-exported)
+from .symbols import SYMBOL_FONTS, CHECKED_BOX, UNCHECKED_BOX, as_box, symbol_table  # noqa: F401 (SYMBOL_FONTS re-exported)
 from .text import INGEST_VERSION, canonicalize, failed, non_space_count, single_page
 
 if TYPE_CHECKING:
@@ -77,6 +84,12 @@ DTD = 'The document declares a DTD, which Word documents do not use; it was not 
 
 _W = '{http://schemas.openxmlformats.org/wordprocessingml/2006/main}'
 _MC = '{http://schemas.openxmlformats.org/markup-compatibility/2006}'
+_W14 = '{http://schemas.microsoft.com/office/word/2010/wordml}'
+W14_CHECKBOX, W14_CHECKED, W14_VAL = f'{_W14}checkbox', f'{_W14}checked', f'{_W14}val'
+NUM_PR, NUM_ID, ILVL, NUM, ABSTRACT_NUM, ABSTRACT_NUM_ID, LVL, LVL_OVERRIDE, NUM_FMT, LVL_TEXT, NUM_STYLE_LINK = (
+    f'{_W}{name}' for name in ('numPr', 'numId', 'ilvl', 'num', 'abstractNum', 'abstractNumId', 'lvl', 'lvlOverride',
+                               'numFmt', 'lvlText', 'numStyleLink'))
+MAX_NUMBERING_LINKS = 4  # numStyleLink indirections followed (a cycle or a runaway chain is cut)
 BODY, P, R, RPR, VANISH, TBL, TR, TC, T = (
     f'{_W}{name}' for name in ('body', 'p', 'r', 'rPr', 'vanish', 'tbl', 'tr', 'tc', 't'))
 PPR, PSTYLE, RSTYLE, TBL_PR, TBL_STYLE, RFONTS, SYM = (
@@ -158,7 +171,8 @@ def extract_docx(data: bytes, limits: Limits) -> ExtractionResult:
         return failed('docx', engine, _content_type_problem(part.content_type))
     if part.element.getroottree().docinfo.doctype:
         return failed('docx', engine, DTD)
-    walker = _Walker(_Styles.of(part))
+    styles = _Styles.of(part)
+    walker = _Walker(styles, _Numbering.of(part, styles))
     body = part.element.find(BODY)
     lines = walker.blocks(body) if body is not None else []
     notes = walker.notes() + _side_notes(part)
@@ -226,6 +240,20 @@ def is_on(element) -> bool | None:
     if element is None:
         return None
     return (element.get(VAL) or 'true').strip().lower() not in _OFF
+
+
+def check_box_control(sdt) -> bool | None:
+    """A check-box content control's state (w:sdtPr/w14:checkbox): w14:checked on or off, None for any other
+    control. w14:checked is an on/off value in the w14 namespace: absent attribute means on; 0, false or off mean
+    off; no w14:checked element means unchecked."""
+    properties = sdt.find(SDT_PR)
+    box = properties.find(W14_CHECKBOX) if properties is not None else None
+    if box is None:
+        return None
+    checked = box.find(W14_CHECKED)
+    if checked is None:
+        return False
+    return (checked.get(W14_VAL) or 'true').strip().lower() not in _OFF
 
 
 def legacy_box_checked(box) -> bool:
@@ -319,6 +347,55 @@ def font_choice(fonts, attribute: str) -> str | None:
     return fonts.get(f'{_W}{attribute}')
 
 
+class _Numbering:
+    """Numbering levels from numbering.xml: w:num (with w:lvlOverride) over w:abstractNum, following
+    w:numStyleLink through the numbering style's w:numPr."""
+
+    def __init__(self, root=None, styles: _Styles | None = None):
+        self.nums: dict[str, object] = {}
+        self.abstracts: dict[str, object] = {}
+        self.styles = styles or _Styles()
+        if root is None:
+            return
+        for num in root.iter(NUM):
+            self.nums.setdefault(num.get(f'{_W}numId'), num)
+        for abstract in root.iter(ABSTRACT_NUM):
+            self.abstracts.setdefault(abstract.get(f'{_W}abstractNumId'), abstract)
+
+    @classmethod
+    def of(cls, part, styles: _Styles) -> _Numbering:
+        try:
+            numbering = part.part_related_by(RT.NUMBERING)
+            root = numbering.element if isinstance(numbering, XmlPart) else parse_xml(numbering.blob)
+        except MemoryError:
+            raise
+        except Exception:  # no numbering part, or one that cannot be parsed: no numbering
+            return cls(styles=styles)
+        return cls(root, styles)
+
+    def level(self, num_id: str | None, ilvl: str):
+        """The w:lvl element for (numId, ilvl), or None (numId 0 means no numbering)."""
+        for _ in range(MAX_NUMBERING_LINKS):
+            num = self.nums.get(num_id) if num_id not in (None, '0') else None
+            if num is None:
+                return None
+            for override in num.iter(LVL_OVERRIDE):
+                if override.get(f'{_W}ilvl') == ilvl and override.find(LVL) is not None:
+                    return override.find(LVL)
+            reference = num.find(ABSTRACT_NUM_ID)
+            abstract = self.abstracts.get(reference.get(VAL)) if reference is not None else None
+            if abstract is None:
+                return None
+            link = abstract.find(NUM_STYLE_LINK)
+            if link is not None:  # the levels live with the numbering style's own numbering
+                style = self.styles.by_id.get(link.get(VAL))
+                linked = style.find(f'{PPR}/{NUM_PR}/{NUM_ID}') if style is not None else None
+                num_id = linked.get(VAL) if linked is not None else None
+                continue
+            return next((lvl for lvl in abstract.iter(LVL) if lvl.get(f'{_W}ilvl') == ilvl), None)
+        return None
+
+
 # --- walking the body ---------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -332,8 +409,9 @@ class _Context:
 class _Walker:
     """Text of WordprocessingML content in document order, plus what it could not read."""
 
-    def __init__(self, styles: _Styles | None = None):
+    def __init__(self, styles: _Styles | None = None, numbering: _Numbering | None = None):
         self.styles = styles or _Styles()
+        self.numbering = numbering or _Numbering()
         self.skipped: collections.Counter[str] = collections.Counter()
         self.tracked_changes = False
         self.unread_alternates = 0
@@ -366,6 +444,10 @@ class _Walker:
                 lines.extend(self._paragraph(child, table_style))
             elif tag == TBL:
                 lines.extend(self._table(child))
+            elif tag == SDT and check_box_control(child) is not None:
+                glyph = self._check_box(child, _Context(table_style=table_style))
+                if glyph:
+                    lines.append(glyph)
             elif tag in (SDT, CUSTOM_XML, INS, MOVE_TO, ALTERNATE_CONTENT):
                 content = self._content(child)
                 if content is not None:
@@ -414,7 +496,11 @@ class _Walker:
         parts: list[str] = []
         boxes: list[str] = []
         self._inline(paragraph, parts, boxes, _Context(table_style=table_style, paragraph_style=style))
-        return [''.join(parts), *boxes]
+        line = ''.join(parts)
+        bullet = self._box_bullet(paragraph, style)
+        if bullet:  # a checklist drawn with box bullets: Word shows the box before the item
+            line = bullet + (' ' + line if line else '')
+        return [line, *boxes]
 
     def _inline(self, node, parts: list[str], boxes: list[str], context: _Context) -> None:
         for child in node:
@@ -446,12 +532,63 @@ class _Walker:
                     self.skipped['form_field'] += 1
             elif tag == TXBX_CONTENT:
                 boxes.extend(self.blocks(child))
+            elif tag == SDT and check_box_control(child) is not None:
+                parts.append(self._check_box(child, context))
             elif tag in (SDT, CUSTOM_XML, INS, MOVE_TO, ALTERNATE_CONTENT):
                 content = self._content(child)
                 if content is not None:
                     self._inline(content, parts, boxes, context)
             else:
                 self._inline(child, parts, boxes, context)
+
+    # Check boxes -------------------------------------------------------------------
+    def _check_box(self, sdt, context: _Context) -> str:
+        """A check-box content control's glyph, written in place of its content: '' (counted) when it shows a
+        placeholder or its content is hidden."""
+        content = self._content(sdt)  # a placeholder is skipped and counted, as for any control
+        if content is None:
+            return ''
+        runs = list(content.iter(R))
+        if runs and all(self._run_hidden(run, context) for run in runs):
+            self.skipped['hidden'] += len(runs)
+            return ''
+        return CHECKED_BOX if check_box_control(sdt) else UNCHECKED_BOX
+
+    def _box_bullet(self, paragraph, style: str | None) -> str:
+        """☐ or ☒ when the paragraph's numbering level is a bullet that draws a box, else ''."""
+        level = self.numbering.level(*self._numbering_of(paragraph, style))
+        if level is None:
+            return ''
+        fmt = level.find(NUM_FMT)
+        text = level.find(LVL_TEXT)
+        if fmt is None or fmt.get(VAL) != 'bullet' or text is None or is_on(level.find(f'{RPR}/{VANISH}')):
+            return ''
+        fonts = level.find(f'{RPR}/{RFONTS}')
+        low, high = symbol_table(font_choice(fonts, 'ascii')), symbol_table(font_choice(fonts, 'hAnsi'))
+        shown = []
+        for char in text.get(VAL) or '':
+            code = ord(char)
+            if 0xF000 <= code <= 0xF0FF:
+                shown.append(((low if low is not None else high) or {}).get(code - 0xF000, ''))
+            elif code <= 0xFF and (low if code < 0x80 else high) is not None:
+                shown.append((low if code < 0x80 else high).get(code, ''))
+            else:
+                shown.append(as_box(char))
+        glyph = ''.join(shown).strip()
+        return glyph if glyph in (UNCHECKED_BOX, CHECKED_BOX) else ''
+
+    def _numbering_of(self, paragraph, style: str | None) -> tuple[str | None, str]:
+        """(numId, ilvl) of the paragraph: its own w:numPr, else its paragraph style chain's."""
+        num_id = ilvl = None
+        sources = [paragraph.find(f'{PPR}/{NUM_PR}')] + [s.find(f'{PPR}/{NUM_PR}') for s in self.styles.chain(style)]
+        for numbering in sources:
+            if numbering is None:
+                continue
+            if num_id is None and numbering.find(NUM_ID) is not None:
+                num_id = numbering.find(NUM_ID).get(VAL)
+            if ilvl is None and numbering.find(ILVL) is not None:
+                ilvl = numbering.find(ILVL).get(VAL)
+        return num_id, ilvl or '0'
 
     # Hidden text -------------------------------------------------------------------
     def _run_hidden(self, run, context: _Context) -> bool:
