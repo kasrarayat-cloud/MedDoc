@@ -310,7 +310,10 @@ decision; anything else is draft-only, with the blocking items listed.
 of persisted rows, stores bytes + sha256 + snapshot sha256, and downloads
 stream the stored bytes. TXT is the coding report; CSV is one row per item
 (approved, rejected, undecided, excluded, alternative) with formula
-neutralisation (`=`, `+`, `-`, `@`, tab, CR prefixed with `'`). Draft:
+neutralisation (`=`, `+`, `-`, `@`, tab, CR prefixed with `'`). In both formats
+a C0 control other than tab and line breaks, DEL and a C1 control print as
+`\xNN`; in the TXT a line break of any form continues the value at seven
+spaces or deeper, below every structural line. Draft:
 "DRAFT — NOT REVIEWED", no "approved selections" section. Reviewed: approved
 selections only in the approved section; rejected listed as excluded from
 approved results; reviewer identity, kind and time; agent review labelled

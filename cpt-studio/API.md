@@ -178,10 +178,14 @@ names who reinstated an excluded proposal that now carries a decision.
 `{"kind": "draft|reviewed", "fmt": "txt|csv"}` → `201 {"id", "filename", "sha256", "download_url"}`;
 409 with `details.blockers` when a reviewed report is not ready. The download
 streams the stored bytes as an attachment; its sha256 equals the response's.
-Format `cpt-studio-report@2`: the CSV's `decided_at` is the reviewer's own
+Format `cpt-studio-report@3`: the CSV's `decided_at` is the reviewer's own
 decision time; a carried decision also fills `decision_carried_from` and
 `decision_carried_at`. A CSV with no proposals has one placeholder row
-(`item_list` = `none`) carrying the report kind and SYNTHETIC.
+(`item_list` = `none`) carrying the report kind and SYNTHETIC. In both formats a
+C0 control character other than tab and line breaks, DEL and a C1 control are
+shown as `\xNN` (two lowercase hex digits), so no rendering of a file shows a line
+or row the file does not contain; a TXT line break of any form continues the
+value on an indented line (`@3`; `@2` escaped the TXT only).
 
 ## GET /api/encounters/{id}/original
 

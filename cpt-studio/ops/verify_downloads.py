@@ -29,7 +29,7 @@ Per report file:
 Exit status: 0 all checks passed; 1 at least one check failed; 2 nothing failed
 but at least one check could not be performed (fail closed).
 
-The report format is studio/reports.py ('cpt-studio-report@2'); the item-list
+The report format is studio/reports.py ('cpt-studio-report@3'); the item-list
 rules below mirror its _list_for. When the format changes, change these
 constants and expected_list with it; never loosen a check to fit.
 """
@@ -58,12 +58,24 @@ AGENT_LABEL = re.compile(r'agent-executed synthetic review', re.I)
 CODE = r'(?:\d{5}|\d{4}[FTU]|[A-V]\d{4})'
 # A code may carry a trailing '-modifier'; a leading '-' (an identifier or a range end) is not a code.
 CODE_TOKEN = re.compile(rf'(?<![\w.@/-]){CODE}(?![\w/])')
-# Structural item lines only: the renderer puts them at exactly two spaces; stored text always continues at
-# seven or more (reports.CONTINUATION), so a note quoting "  2. 45385 ..." is never read as an item.
-ITEM_LINE = re.compile(rf'^ {{2}}(?:\d+\.|[-*•])\s+(?P<code>{CODE})\b(?P<rest>.*)$')
+# Item lines: the renderer prints them at two spaces and stored text always continues at seven or more
+# (reports.CONTINUATION), so a note quoting "2. 45385 ..." is never an item, while any shallower numbered or
+# bulleted code line still counts (a forged item at column 0-6 must not pass as "not itemised").
+ITEM_LINE = re.compile(rf'^ {{0,6}}(?:\d+\.|[-*•])\s+(?P<code>{CODE})\b(?P<rest>.*)$')
+CONTINUATION = '       '  # reports.CONTINUATION
 UNITS = re.compile(r'\bunits?\s+(\d+)\b', re.I)
 TXT_OFFSETS = re.compile(r'\[chars (\d+)[–-](\d+)\b')
 CSV_OFFSETS = re.compile(r'\[(\d+)-(\d+)(?:, p\d+)?\]')
+# Offsets are read only where the renderer prints them: the closing bracket of a quoted passage at the end of a
+# TXT evidence entry, and each ' | '-separated CSV evidence item's trailing bracket. Stored text (a note, an
+# acknowledgement, a passage that itself contains '[2-3]') is never read as an offset pair.
+TXT_EVIDENCE_END = re.compile(r'" \[chars (\d+)[–-](\d+)(?:, page \d+)?\]$')
+CSV_EVIDENCE_OFFSETS = re.compile(r'(?<=" )\[(\d+)-(\d+)(?:, p\d+)?\](?= \| "|$)')
+# Mirrors reports._join/_visible: in the TXT a line break of any form (str.splitlines) continues a value on an
+# indented line, and every other C0 control but tab, DEL and C1 prints as \xNN; the CSV keeps line breaks inside
+# its quoted cells and escapes the same controls. Passages are compared as the renderer shows them.
+TXT_LINE_BREAKS = re.compile('[\n\r\x0b\x0c\x1c\x1d\x1e\x85\u2028\u2029]')
+CONTROL = re.compile('[\x00-\x08\x0e-\x1f\x7f-\x9f]')
 HEX64 = re.compile(r'\b[0-9a-f]{64}\b', re.I)
 UUID = re.compile(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', re.I)
 RULE_LINE = re.compile(r'^[\s=\-_*~─━—]+$')
@@ -111,8 +123,11 @@ class Item:
     reviewer_kind: str
     evidence: list
     labels: tuple
-    reinstated_by: str = ''
+    reinstated_by: str = ''        # what the encounter JSON says (proposal.reinstated_by)
     reinstated_by_kind: str = ''
+    decision_id: str = ''
+    derived_by: str = ''           # re-derived here from decisions.history, following carries
+    derived_kind: str = ''
 
 
 # --- helpers ------------------------------------------------------------------
@@ -130,6 +145,42 @@ def cp_slice(text: str, start, end):
     if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text):
         return None
     return text[start:end]
+
+
+def escaped(text: str) -> str:
+    return CONTROL.sub(lambda m: f'\\x{ord(m.group()):02x}', text)
+
+
+def txt_shown(text: str) -> str:
+    """A passage as the TXT prints it (line breaks become continuation lines; collapse() then reads them as spaces)."""
+    return escaped(TXT_LINE_BREAKS.sub('\n', text))
+
+
+def who(reviewer: str, kind: str) -> str:
+    """reports._who: an agent always reads as an automated agent, once."""
+    if kind == 'agent':
+        return reviewer if 'automated agent' in reviewer else f'{reviewer} (automated agent)'
+    return f'{reviewer} ({kind})'
+
+
+def reinstatement_from_history(api: dict, decision_id: str):
+    """The reinstate decision a current decision rests on, re-derived from decisions.history as
+    review.reinstatement_for derives it: the decision itself; else the latest earlier, not invalidated reinstate on
+    the same proposal; else the same question for the decision it was carried from. History is in sequence order."""
+    history = list(((api.get('decisions') or {}).get('history')) or [])
+    index = {str(entry.get('id')): n for n, entry in enumerate(history)}
+    node, seen = index.get(str(decision_id)) if decision_id else None, set()
+    while node is not None and node not in seen:
+        seen.add(node)
+        entry = history[node]
+        if entry.get('action') == 'reinstate':
+            return entry
+        prior = [e for e in history[:node] if e.get('proposal_id') == entry.get('proposal_id')
+                 and e.get('action') == 'reinstate' and not e.get('invalidated')]
+        if prior:
+            return prior[-1]
+        node = index.get(str(entry['carried_from'])) if entry.get('carried_from') else None
+    return None
 
 
 def undo_neutralisation(cell: str) -> str:
@@ -166,13 +217,17 @@ def items_from_api(api: dict, kind: str) -> dict[str, Item]:
     for p in ((api.get('assessment') or {}).get('proposals')) or []:
         decision = p.get('decision') or {}
         labels = tuple(x for x in (p.get('family_label'), p.get('eyebrow'), p.get('family')) if x)
+        # Mirrors serializers._reinstated_by: only an excluded proposal is ever reinstated.
+        derived = (reinstatement_from_history(api, decision.get('id', '')) or {}) if p.get('bucket') == 'excluded' else {}
         items[str(p['id'])] = Item(
             proposal_id=str(p['id']), code=str(p.get('code', '')), item_list=expected_list(p, kind),
             bucket=p.get('bucket', ''), status=p.get('status', ''), units=str(p.get('units', '')),
             action=decision.get('action', ''), reviewer=decision.get('reviewer', ''),
             reviewer_kind=decision.get('reviewer_kind', ''), evidence=list(p.get('evidence') or []), labels=labels,
             reinstated_by=(p.get('reinstated_by') or {}).get('reviewer', ''),
-            reinstated_by_kind=(p.get('reinstated_by') or {}).get('reviewer_kind', ''))
+            reinstated_by_kind=(p.get('reinstated_by') or {}).get('reviewer_kind', ''),
+            decision_id=str(decision.get('id', '')), derived_by=derived.get('reviewer', ''),
+            derived_kind=derived.get('reviewer_kind', ''))
     return items
 
 
@@ -280,9 +335,9 @@ def check_txt(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     out.extend(_txt_lists(doc, name, sections, items, kind))
     if kind == 'reviewed' and len(approved) == 1:
         out.extend(_approved_mentions(doc, name, approved[0], items))
-    out.extend(_reviewer_labels(doc, name, text, items))
+    out.extend(_reviewer_labels(doc, name, text, items, sections, kind))
     listed = [i for i in items.values() if i.item_list == ('approved' if kind == 'reviewed' else 'undecided')]
-    out.extend(_txt_passages(doc, name, text, listed, revision_text))
+    out.extend(_txt_passages(doc, name, text, listed, revision_text, sections, kind))
     return out
 
 
@@ -353,26 +408,99 @@ def _approved_mentions(doc, name, body, items) -> list[Result]:
                    f'non-approved codes mentioned (not itemised) in APPROVED SELECTIONS: {sorted(mentioned)}')]
 
 
-def _reviewer_labels(doc, name, text, items) -> list[Result]:
+def item_blocks(body) -> list[tuple[str, list[str]]]:
+    """A numbered list section split into item blocks, each from one item line to the next."""
+    blocks: list[tuple[str, list[str]]] = []
+    for line in body:
+        match = ITEM_LINE.match(line)
+        if match:
+            blocks.append((match.group('code'), [line]))
+        elif blocks:
+            blocks[-1][1].append(line)
+    return blocks
+
+
+def _numbered_prefix(kind) -> str:
+    """The list whose items the renderer prints as numbered blocks: approved (reviewed) or undecided (draft)."""
+    return TXT_LIST_SECTIONS['approved' if kind == 'reviewed' else 'undecided']
+
+
+def _reviewer_labels(doc, name, text, items, sections, kind) -> list[Result]:
     decided = [i for i in items.values() if i.action]
     reviewers = sorted({i.reviewer for i in decided if i.reviewer})
     missing = [r for r in reviewers if r not in text]
     out = [Result(doc, name, 'reviewer.identity', 'fail' if missing else 'pass',
                   f'reviewer not named: {missing}' if missing else ', '.join(reviewers) or 'no decisions')]
-    if any(i.reviewer_kind == 'agent' or i.reinstated_by_kind == 'agent' for i in decided):
+    # Who reinstated a code is re-derived from decisions.history (following carries); the encounter JSON's own
+    # proposal.reinstated_by must agree with it, so neither can silently lose the agent.
+    disagree = [f'{i.code}: history says {i.derived_by or "none"} ({i.derived_kind or "-"}), proposal.reinstated_by '
+                f'says {i.reinstated_by or "none"} ({i.reinstated_by_kind or "-"})'
+                for i in items.values() if (i.derived_by, i.derived_kind) != (i.reinstated_by, i.reinstated_by_kind)]
+    if disagree:
+        out.append(Result(doc, name, 'reviewer.reinstated_by.consistent', 'fail', '; '.join(disagree)))
+    if any(i.reviewer_kind == 'agent' for i in decided) or any(i.derived_kind == 'agent' for i in items.values()):
         ok = bool(AGENT_LABEL.search(text))
         out.append(Result(doc, name, 'reviewer.agent_label', 'pass' if ok else 'fail',
                           'agent-executed synthetic review labelled' if ok else 'agent review not labelled'))
-    for item in decided:
-        if item.reinstated_by_kind == 'agent':
-            named = f'Reinstated from exclusion by {item.reinstated_by}' in text and '(automated agent)' in text
-            out.append(Result(doc, name, f'reviewer.reinstated_by.{item.code}', 'pass' if named else 'fail',
-                              f'{item.code}: reinstated by {item.reinstated_by} (automated agent)'
-                              + ('' if named else ' is not named in the report')))
+    # The renderer names the reinstater inside the item's OWN block, for the numbered list only (a rejected code's
+    # short line names no reinstater): one named block per agent-reinstated item, never a match elsewhere.
+    numbered = 'approved' if kind == 'reviewed' else 'undecided'
+    due = [i for i in items.values() if i.derived_kind == 'agent' and i.item_list == numbered]
+    if due:
+        bodies = [body for heading, body in sections if heading.startswith(_numbered_prefix(kind))]
+        blocks = item_blocks(bodies[0]) if len(bodies) == 1 else []
+        used: set[int] = set()
+        for item in due:
+            label = who(item.derived_by, item.derived_kind)
+            phrase = collapse(f'Reinstated from exclusion by {label}')
+            found = next((n for n, (code, block) in enumerate(blocks)
+                          if n not in used and code == item.code and phrase in collapse('\n'.join(block))), None)
+            if found is not None:
+                used.add(found)
+            out.append(Result(doc, name, f'reviewer.reinstated_by.{item.code}', 'pass' if found is not None else 'fail',
+                              f'{item.code}: reinstated by {label}' + ('' if found is not None
+                                                                     else ' is not named in its own item block')))
     return out
 
 
-def _txt_passages(doc, name, text, listed, revision_text) -> list[Result]:
+def _evidence_entries(sections, kind) -> list[tuple[str, int, int]]:
+    """(entry text, start, end) for each evidence entry printed where the renderer prints one: after an item
+    block's '     Evidence:' line (up to the block's next field), and '    Evidence: "' lines in ENCOUNTER CONTEXT.
+    A passage that continues over several lines is one entry; its offsets are its closing bracket."""
+    entries: list[tuple[str, int, int]] = []
+
+    def scan(lines, opener, prefix):
+        current = None
+        for line in lines:
+            if line.startswith(opener):
+                current = [line[len(prefix):]]
+            elif current is not None and line.startswith(CONTINUATION):
+                current.append(line.strip())
+            else:
+                current = None
+                continue
+            match = TXT_EVIDENCE_END.search(line)
+            if match:
+                entries.append(('\n'.join(current), int(match.group(1)), int(match.group(2))))
+                current = None
+
+    for heading, body in sections:
+        if heading.startswith(_numbered_prefix(kind)):
+            for _, block in item_blocks(body):
+                if '     Evidence:' not in block:
+                    continue
+                region = []
+                for line in block[block.index('     Evidence:') + 1:]:
+                    if not line.startswith(CONTINUATION):
+                        break  # the block's next field (Rationale:, Modifier considerations ...)
+                    region.append(line)
+                scan(region, '       - "', '       - ')
+        elif heading == 'ENCOUNTER CONTEXT':
+            scan(body, '    Evidence: "', '    Evidence: ')
+    return entries
+
+
+def _txt_passages(doc, name, text, listed, revision_text, sections, kind) -> list[Result]:
     flat = collapse(text)
     missing = []
     for item in listed:
@@ -380,29 +508,20 @@ def _txt_passages(doc, name, text, listed, revision_text) -> list[Result]:
         if not spans:
             missing.append(f'{item.code}: no exact evidence span in the encounter JSON')
         for span in spans:
-            quoted = collapse(f'"{span["text"]}" [chars {span["start"]}')
+            quoted = collapse(f'"{txt_shown(span["text"])}" [chars {span["start"]}')
             if quoted not in flat:
                 missing.append(f'{item.code}[{span["start"]}:{span["end"]}]')
-    wrong = _printed_offsets(TXT_OFFSETS, text, revision_text, '[chars {s}', collapse_text=True)
+    wrong = []
+    for entry, start, end in _evidence_entries(sections, kind):
+        passage = cp_slice(revision_text, start, end)
+        if passage is None or not collapse(entry).startswith(collapse(f'"{txt_shown(passage)}" [chars {start}')):
+            wrong.append(f'{start}-{end}')
     return [Result(doc, name, 'evidence.present', 'fail' if missing else 'pass',
                    f'missing: {missing}' if missing else f'{sum(len(exact_spans(i, revision_text)) for i in listed)}'
                                                          ' passage(s) present with their offsets'),
             Result(doc, name, 'evidence.offsets', 'fail' if wrong else 'pass',
                    f'printed offsets that do not quote the revision text: {wrong}' if wrong
                    else 'every printed offset pair quotes the revision text exactly')]
-
-
-def _printed_offsets(pattern, text, revision_text, template, collapse_text=False) -> list[str]:
-    """Offset pairs printed in text whose quoted passage is not exactly revision_text[s:e]."""
-    haystack = collapse(text) if collapse_text else text
-    wrong = []
-    for match in pattern.finditer(text):
-        start, end = int(match.group(1)), int(match.group(2))
-        passage = cp_slice(revision_text, start, end)
-        quoted = None if passage is None else f'"{passage}" ' + template.format(s=start)
-        if quoted is None or (collapse(quoted) if collapse_text else quoted) not in haystack:
-            wrong.append(f'{start}-{end}')
-    return wrong
 
 
 # --- CSV ----------------------------------------------------------------------
@@ -562,13 +681,18 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
     for item in items.values():
         cells = '\n'.join(groups.get((item.code, item.item_list), []))
         for span in exact_spans(item, revision_text):
-            if f'"{span["text"]}" [{span["start"]}-{span["end"]}' not in cells:
+            if f'"{escaped(span["text"])}" [{span["start"]}-{span["end"]}' not in cells:
                 (missing if item.item_list in SELECTED_LISTS else missing_other).append(
                     f'{item.code}[{span["start"]}:{span["end"]}]')
     wrong = []
     for row in rows:
         cell = _cell(row, columns, 'evidence')
-        wrong += _printed_offsets(CSV_OFFSETS, cell, revision_text, '[{s}-')
+        for match in CSV_EVIDENCE_OFFSETS.finditer(cell):
+            start, end = int(match.group(1)), int(match.group(2))
+            passage = cp_slice(revision_text, start, end)
+            # The item's quoted passage ends right before its bracket and is exactly the (escaped) revision text.
+            if passage is None or not cell[:match.start()].endswith(f'"{escaped(passage)}" '):
+                wrong.append(f'{start}-{end}')
     out = [Result(doc, name, 'csv.evidence.present', 'fail' if missing else 'pass',
                   f'missing passages of selected proposals: {missing}' if missing
                   else 'every exact passage of a selected proposal present with its offsets'),

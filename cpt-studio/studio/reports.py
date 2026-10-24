@@ -26,7 +26,7 @@ from .types import CONTEXT_FACTS, sha256_json
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
-FORMAT_VERSION = 'cpt-studio-report@2'
+FORMAT_VERSION = 'cpt-studio-report@3'
 HEADLINES = {DRAFT: 'CPT STUDIO CODING REPORT — DRAFT — NOT REVIEWED', REVIEWED: 'CPT STUDIO CODING REPORT — REVIEWED'}
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
 SYNTHETIC_CELL = 'SYNTHETIC — NOT FOR BILLING'
@@ -650,7 +650,9 @@ def render_csv(snap) -> bytes:
     order = {name: index for index, name in enumerate(LISTS)}
     rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
     for row in rows or [_placeholder_row(snap)]:
-        writer.writerow([neutralise(cell) for cell in row])
+        # Control characters are shown escaped here too (round 3, review3:5): a cited passage carrying ESC/CSI,
+        # backspace or DEL must not redraw a row when the file is printed in a terminal.
+        writer.writerow([neutralise(_visible(cell) if isinstance(cell, str) else cell) for cell in row])
     return buffer.getvalue().encode('utf-8')
 
 

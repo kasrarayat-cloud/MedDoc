@@ -10,6 +10,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -507,6 +508,20 @@ if __name__ == '__main__':
 HUMAN = 'Reviewer One'
 
 
+def with_history(doc, reinstated=None):
+    """doc['decisions']['history'] as the API carries it, in sequence order: a reinstate before the decision it led to."""
+    entries = []
+    for p in doc['assessment']['proposals']:
+        if p['id'] in (reinstated or {}):
+            reviewer, kind = reinstated[p['id']]
+            entries.append({'id': f'r-{p["id"]}', 'proposal_id': p['id'], 'code': p['code'], 'action': 'reinstate',
+                            'reviewer': reviewer, 'reviewer_kind': kind, 'carried_from': None, 'invalidated': None})
+        if p.get('decision'):
+            entries.append({'carried_from': None, **p['decision'], 'invalidated': None})
+    doc['decisions'] = {'history': entries}
+    return doc
+
+
 def human(p, action):
     p['decision'] = {'id': f'd-{p["id"]}', 'proposal_id': p['id'], 'code': p['code'], 'action': action,
                      'reviewer': HUMAN, 'reviewer_kind': 'human', 'created_at': '2026-10-23T21:00:00+00:00'}
@@ -539,8 +554,9 @@ class Round2VerifierTests(unittest.TestCase):
         proposals[3]['reinstated_by'] = {'reviewer': 'Reviewbot (automated agent)', 'reviewer_kind': 'agent'}
         decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
                      for p in proposals if p['decision']]
+        snapshot = with_history(api(proposals), reinstated={'p-egd': ('Reviewbot (automated agent)', 'agent')})
         bare = txt_report('reviewed', proposals, agent_line=False, reviewer=HUMAN)
-        results = Workspace([('reviewed', 'txt', bare)], snapshot=api(proposals), decisions=decisions).run()[1]
+        results = Workspace([('reviewed', 'txt', bare)], snapshot=snapshot, decisions=decisions).run()[1]
         self.assertIn('reviewer.agent_label', failed(results))
         self.assertIn('reviewer.reinstated_by.43239', failed(results))
 
@@ -549,6 +565,182 @@ class Round2VerifierTests(unittest.TestCase):
             return lines[:at] + ['     Reinstated from exclusion by Reviewbot (automated agent) at 2026-10-23T21:00:00Z: '
                                  'planned'] + lines[at:]
         labelled = txt_report('reviewed', proposals, agent_line=True, reviewer=HUMAN, mutate_lines=named)
-        results = Workspace([('reviewed', 'txt', labelled)], snapshot=api(proposals), decisions=decisions).run()[1]
+        results = Workspace([('reviewed', 'txt', labelled)], snapshot=snapshot, decisions=decisions).run()[1]
         self.assertEqual(statuses(results, 'reviewer.agent_label'), ['pass'])
         self.assertEqual(statuses(results, 'reviewer.reinstated_by.43239'), ['pass'])
+
+
+AGENT_R = 'Reviewbot (automated agent)'
+
+
+def reinstated_block(code, reviewer=AGENT_R):
+    """Insert the renderer's reinstater line right under a code's item line."""
+    def mutate(lines):
+        at = next(i for i, line in enumerate(lines) if re.match(rf'^  \d+\. {code} · ', line)) + 1
+        who = f'by {reviewer} at 2026-10-23T21:00:00Z' if reviewer else 'by a reviewer'
+        return lines[:at] + [f'     Reinstated from exclusion {who}: planned'] + lines[at:]
+    return mutate
+
+
+def doc_with(text, proposals):
+    """An encounter JSON over a custom revision text (for passages TEXT does not hold)."""
+    doc = api(proposals)
+    doc['revision'] = {**doc['revision'], 'text': text, 'text_sha256': hashlib.sha256(text.encode()).hexdigest()}
+    return doc
+
+
+def span_in(text, passage, page=1):
+    start = text.index(passage)
+    return {'context_index': 0, 'start': start, 'end': start + len(passage), 'text': passage, 'exact': True,
+            'page': page}
+
+
+class Round3VerifierTests(unittest.TestCase):
+    """Refutation round 3 over the round-2 verifier repairs (review3:0-4, evidence:5, 6, 9)."""
+
+    def agent_reinstated(self, *excluded_codes, then='approve'):
+        """base proposals, where each listed excluded code was reinstated by the agent and then decided by a human."""
+        proposals = base_proposals()
+        human(proposals[0], 'approve')
+        human(proposals[1], 'reject')
+        extra = []
+        for n, code in enumerate(excluded_codes):
+            p = proposals[3] if n == 0 else proposal(f'p-ex{n}', code, 'excluded', 'excluded', PLANNED)
+            human(p, then)
+            p['reinstated_by'] = {'reviewer': AGENT_R, 'reviewer_kind': 'agent'}
+            if n:
+                extra.append(p)
+        proposals += extra
+        reinstated = {p['id']: (AGENT_R, 'agent') for p in proposals if p.get('reinstated_by')}
+        return proposals, with_history(api(proposals), reinstated=reinstated)
+
+    def test_a_forged_item_at_any_shallow_column_is_counted(self):
+        # review3:2 — only column 2 used to count, so a rejected code itemised at another indent passed.
+        for indent in (0, 1, 3, 4, 5, 6):
+            def forge(lines, indent=indent):
+                at = lines.index('APPROVED SELECTIONS') + 1
+                return lines[:at] + [' ' * indent + '2. 45380 · Colonoscopy · units 1'] + lines[at:]
+            with self.subTest(indent=indent):
+                results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=forge))]).run()[1]
+                self.assertEqual(statuses(results, 'approved.codes'), ['fail'])
+
+    def test_a_note_at_the_renderers_continuation_depth_is_not_an_item(self):
+        # evidence:9 — the renderer continues a note at column 7 (reports.CONTINUATION), not 9.
+        def note(lines):
+            at = lines.index('APPROVED SELECTIONS') + 2
+            return lines[:at] + ['     Note: Checked against the pathology report:', '       1. 45385 benign',
+                                 '       2. 45380 sigmoid polyp, not removed'] + lines[at:]
+        results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=note))]).run()[1]
+        self.assertEqual(statuses(results, 'approved.codes'), ['pass'])
+
+    def test_a_reinstated_code_that_was_then_rejected_passes(self):
+        # review3:0 — the renderer never names the reinstater of a rejected code; its own files must pass.
+        proposals, snapshot = self.agent_reinstated('43239', then='reject')
+        files = [('draft', 'txt', txt_report('draft', proposals, reviewer=HUMAN)),
+                 ('reviewed', 'txt', txt_report('reviewed', proposals, reviewer=HUMAN))]
+        decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
+                     for p in proposals if p['decision']]
+        code, results = Workspace(files, snapshot=snapshot, decisions=decisions).run()
+        self.assertEqual([r for r in results if r['check'].startswith('reviewer.') and r['status'] == 'fail'], [])
+        self.assertEqual(statuses(results, 'reviewer.agent_label'), ['pass', 'pass'])
+
+    def test_the_reinstater_must_be_named_in_its_own_block(self):
+        # review3:4 — with two codes reinstated by the same agent, naming one used to satisfy both.
+        proposals, snapshot = self.agent_reinstated('43239', '45388')
+        decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
+                     for p in proposals if p['decision']]
+        one_named = txt_report('reviewed', proposals, reviewer=HUMAN, mutate_lines=lambda lines: reinstated_block(
+            '45388', reviewer=None)(reinstated_block('43239')(lines)))
+        results = Workspace([('reviewed', 'txt', one_named)], snapshot=snapshot, decisions=decisions).run()[1]
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.43239'), ['pass'])
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.45388'), ['fail'])
+        both = txt_report('reviewed', proposals, reviewer=HUMAN, mutate_lines=lambda lines: reinstated_block(
+            '45388')(reinstated_block('43239')(lines)))
+        results = Workspace([('reviewed', 'txt', both)], snapshot=snapshot, decisions=decisions).run()[1]
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.45388'), ['pass'])
+
+    def test_the_agent_named_elsewhere_does_not_name_the_reinstater(self):
+        # evidence:6 — an audit line naming the agent must not satisfy an item block that says 'by a reviewer'.
+        proposals, snapshot = self.agent_reinstated('43239')
+        decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
+                     for p in proposals if p['decision']]
+
+        def audit_but_unnamed(lines):
+            lines = reinstated_block('43239', reviewer=None)(lines)
+            at = lines.index('NOT VERIFIED')
+            return lines[:at] + ['AUDIT — DECISION HISTORY', f'  - 2026-10-23T21:00:00Z · 43239 · reinstate · {AGENT_R}'
+                                 ' · revision 1 · this assessment', ''] + lines[at:]
+        text = txt_report('reviewed', proposals, reviewer=HUMAN, mutate_lines=audit_but_unnamed)
+        results = Workspace([('reviewed', 'txt', text)], snapshot=snapshot, decisions=decisions).run()[1]
+        self.assertEqual(statuses(results, 'reviewer.agent_label'), ['pass'])
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.43239'), ['fail'])
+
+    def test_a_carried_reinstatement_is_derived_from_history(self):
+        # evidence:5 — the reinstater is found in decisions.history through the carry, and the JSON's own
+        # proposal.reinstated_by must agree with it.
+        proposals = base_proposals()
+        human(proposals[0], 'approve')
+        human(proposals[1], 'reject')
+        egd = human(proposals[3], 'approve')
+        egd['decision']['carried_from'] = 'a-old'
+        egd['reinstated_by'] = {'reviewer': AGENT_R, 'reviewer_kind': 'agent'}
+        snapshot = api(proposals)
+        snapshot['decisions'] = {'history': [
+            {'id': 'r-old', 'proposal_id': 'p-old', 'code': '43239', 'action': 'reinstate', 'reviewer': AGENT_R,
+             'reviewer_kind': 'agent', 'carried_from': None, 'invalidated': None},
+            {'id': 'a-old', 'proposal_id': 'p-old', 'code': '43239', 'action': 'approve', 'reviewer': HUMAN,
+             'reviewer_kind': 'human', 'carried_from': None, 'invalidated': None},
+            *[{'carried_from': None, **p['decision'], 'invalidated': None} for p in proposals if p['decision']]]}
+        decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
+                     for p in proposals if p['decision']]
+        named = txt_report('reviewed', proposals, reviewer=HUMAN, mutate_lines=reinstated_block('43239'))
+        results = Workspace([('reviewed', 'txt', named)], snapshot=snapshot, decisions=decisions).run()[1]
+        self.assertEqual(failed(results), [])
+        unnamed = txt_report('reviewed', proposals, reviewer=HUMAN, mutate_lines=reinstated_block('43239', None))
+        results = Workspace([('reviewed', 'txt', unnamed)], snapshot=snapshot, decisions=decisions).run()[1]
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.43239'), ['fail'])
+        lost = copy.deepcopy(snapshot)
+        next(p for p in lost['assessment']['proposals'] if p['id'] == 'p-egd')['reinstated_by'] = None
+        results = Workspace([('reviewed', 'txt', unnamed)], snapshot=lost, decisions=decisions).run()[1]
+        self.assertIn('reviewer.reinstated_by.consistent', failed(results))
+        self.assertIn('reviewer.reinstated_by.43239', failed(results))
+
+    def test_offsets_are_read_only_at_evidence_positions(self):
+        # review3:3 — stored text that looks like an offset pair never fails a genuine file.
+        def note(lines):
+            at = lines.index('APPROVED SELECTIONS') + 2
+            return lines[:at] + ['     Note: Matches the procedure line [chars 10–20].'] + lines[at:]
+        results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=note))]).run()[1]
+        self.assertEqual(statuses(results, 'evidence.offsets'), ['pass'])
+        text = TEXT + 'Cold forceps biopsies [2-3] were taken from the gastric antrum.\n'
+        passage = 'Cold forceps biopsies [2-3] were taken from the gastric antrum.'
+        proposals = base_proposals()
+        proposals[0]['evidence'] = [span_in(text, passage)]
+        rows = csv_rows('reviewed', proposals)
+        results = Workspace([('reviewed', 'csv', csv_report(rows))], snapshot=doc_with(text, proposals)).run()[1]
+        self.assertEqual(statuses(results, 'csv.evidence.offsets'), ['pass'])
+        shifted = [{**row, 'evidence': row['evidence'].replace(f'[{span_in(text, passage)["start"]}-',
+                                                               f'[{span_in(text, passage)["start"] + 1}-')}
+                   for row in rows]
+        results = Workspace([('reviewed', 'csv', csv_report(shifted))], snapshot=doc_with(text, proposals)).run()[1]
+        self.assertEqual(statuses(results, 'csv.evidence.offsets'), ['fail'])
+
+    def test_passages_are_compared_as_the_renderer_prints_them(self):
+        # review3:1 — the TXT shows C0/DEL/C1 controls as \xNN; so does the CSV now (review3:5).
+        passage = 'Total time on the date of the patient\x92s encounter was 24\x1b[1G minutes.'
+        text = TEXT + passage + '\n'
+        proposals = base_proposals()
+        proposals[0]['evidence'] = [span_in(text, passage)]
+        shown = passage.replace('\x92', '\\x92').replace('\x1b', '\\x1b')
+
+        def as_rendered(lines):
+            return [line.replace(passage, shown) for line in lines]
+        doc = doc_with(text, proposals)
+        genuine = txt_report('reviewed', proposals, mutate_lines=as_rendered)
+        rows = [{**row, 'evidence': row['evidence'].replace(passage, shown)} for row in csv_rows('reviewed', proposals)]
+        results = Workspace([('reviewed', 'txt', genuine), ('reviewed', 'csv', csv_report(rows))], snapshot=doc).run()[1]
+        self.assertEqual([r for r in results if r['check'].startswith(('evidence.', 'csv.evidence'))
+                          and r['status'] != 'pass'], [])
+        raw = txt_report('reviewed', proposals)  # the raw control characters, as no genuine file prints them
+        results = Workspace([('reviewed', 'txt', raw)], snapshot=doc).run()[1]
+        self.assertIn('evidence.present', failed(results))
