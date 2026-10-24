@@ -683,7 +683,9 @@ class Status10FormBlockTests(unittest.TestCase):
             'Cold snare polypectomy: checked\nBiopsy: not checked',
             'procedure: colonoscopy with cold snare polypectomy\nfollow-up scheduled: 2026-12-01')
         status, cues = read(text, 'procedure: colonoscopy with cold snare polypectomy')
-        self.assertEqual(status, 'uncertain', cues)
+        # round 3 contract:10: a "procedure:" field reads as its printed line would, for itself alone
+        self.assertNotIn(status, ('planned', 'historical'), cues)
+        self.assertFalse(any('scheduled' in cue for cue in cues), cues)
         self.assertTrue(ready(run_engine(text, [('45385', 'procedure: colonoscopy with cold snare polypectomy')])[0]['45385']))
 
     def test_other_unchecked_values(self):
@@ -698,10 +700,13 @@ class Status10FormBlockTests(unittest.TestCase):
                 'procedure: Colonoscopy, screening, to the cecum\nplan: Repeat colonoscopy in 3 years\n'
                 'intervention: polyp removed with cold snare\nbiopsy: checked')
         kinds = {layout(text).section_at(text.index(phrase)).kind for phrase in
-                 ('procedure: Colonoscopy', 'plan: Repeat', 'intervention:', 'biopsy: checked')}
+                 ('plan: Repeat', 'intervention:', 'biopsy: checked')}
         self.assertEqual(kinds, {'other'})
+        # round 3 contract:10: a field labelled with a procedure heading reads as its printed line would, for that
+        # line only; no field label governs another field
+        self.assertEqual(layout(text).section_at(text.index('procedure: Colonoscopy')).kind, 'procedure')
         mention = routed(text).finding('gi.colonoscopy').mentions[0]
-        self.assertEqual((mention.section, mention.status), ('other', 'uncertain'))
+        self.assertEqual((mention.section, mention.status), ('procedure', 'performed'))
         self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'interventions'))
 
     def test_the_section_before_the_block_resumes_after_it(self):

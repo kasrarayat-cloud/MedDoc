@@ -612,5 +612,98 @@ class BlockResumeOnAHeadingTests(unittest.TestCase):
         self.assertTrue(ready(run_engine(text, POLYP_PICK)['45385']))
 
 
+# --- contract:10: a form-field line labelled with a positive heading -------------------------------------------
+
+REPORT_FIELDS = (('Procedure', 'Upper endoscopy (EGD)'), ('Extent', 'Second portion of the duodenum'),
+                 ('Findings', 'Erythematous mucosa in the gastric antrum.'),
+                 ('Interventions', 'Cold forceps biopsies of the antrum (jar A).'),
+                 ('Impression', 'Antral gastritis, biopsied.'))
+BIOPSY_FIELD = 'Cold forceps biopsies of the antrum (jar A).'
+
+
+def fillable_report_pdf(fields=REPORT_FIELDS):
+    """The claimed s10 input: printed labels, each with a filled text field on its row (reportlab AcroForm)."""
+    import io
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen.canvas import Canvas
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, pagesize=letter, invariant=1)
+    canvas.setFont('Helvetica', 11)
+    canvas.drawString(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT')
+    canvas.drawString(72, 722, 'Date of service: 2026-10-21')
+    y = 690
+    for name, value in fields:
+        canvas.drawString(72, y, name + ':')
+        canvas.acroForm.textfield(name=name, x=170, y=y - 5, width=380, height=16, value=value, borderWidth=0,
+                                  fontSize=10)
+        y -= 26
+    canvas.showPage()
+    canvas.save()
+    return buffer.getvalue()
+
+
+def form_block(*fields):
+    return (HEADER + 'Endoscopy unit - procedure form\nProcedure:\nFindings:\nPlan:\n\n[PDF form fields on page 1]\n'
+            + '\n'.join(fields))
+
+
+class Contract10LabelledFormFieldTests(unittest.TestCase):
+    """contract:10 (an over-correction from round 2b status:10) - a form-field line whose own label is a procedure,
+    findings or technique heading reads as the same printed line would, for that line only: a fillable procedure
+    report's typed "Procedure: Upper endoscopy (EGD)" establishes the EGD again. No other field is governed by it,
+    and a box or option value, a plan field and annotation text stay silent."""
+
+    def assert_egd_established(self, text):
+        self.assertEqual(layout(text).section_at(text.index('Upper endoscopy (EGD)')).kind, 'procedure')
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+        biopsy = run_engine(text, [('43239', BIOPSY_FIELD)])['43239']
+        self.assertEqual(biopsy.bucket, 'selected')
+        self.assertNotIn('performed_status', clarified(biopsy))
+
+    def test_the_claimed_fillable_report(self):
+        from studio.ingest import extract_document
+        result = extract_document(fillable_report_pdf(), 'report.pdf', 'application/pdf', ocr=None)
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertIn('[PDF form fields on page 1]\nProcedure: Upper endoscopy (EGD)\n', result.text)
+        self.assertTrue(result.text.endswith('Impression: Antral gastritis, biopsied.'), result.text)
+        self.assert_egd_established(result.text)
+
+    def test_the_same_block_as_text(self):
+        self.assert_egd_established(form_block(*(f'{name}: {value}' for name, value in REPORT_FIELDS)))
+
+    def test_the_section_covers_only_its_own_line(self):
+        text = form_block('Procedure: Colonoscopy with cold snare polypectomy', 'Plan: Repeat colonoscopy with EMR',
+                          'Intervention: polyp removed with cold snare', 'Biopsy: checked')
+        lay = layout(text)
+        self.assertEqual(lay.section_at(text.index('Colonoscopy with cold snare')).kind, 'procedure')
+        for phrase in ('Plan: Repeat', 'Repeat colonoscopy with EMR', 'Intervention:', 'Biopsy: checked'):
+            with self.subTest(phrase=phrase):
+                self.assertEqual(lay.section_at(text.index(phrase)).kind, 'other')
+        self.assertNotIn('EMR', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        text = form_block('Procedure: EGD with biopsy', 'Findings: Erythematous mucosa in the gastric antrum.',
+                          'Comment: none')
+        lay = layout(text)
+        self.assertEqual([lay.section_at(text.index(p)).kind for p in ('EGD with biopsy', 'Erythematous', 'Comment')],
+                         ['procedure', 'findings', 'other'])
+
+    def test_states_and_other_labels_stay_silent(self):
+        for field in ('Procedure: checked', 'Procedure: Yes', 'Findings: No', 'Procedure: not checked.',
+                      'Procedure: no option selected', 'Plan: Colonoscopy with EMR at a tertiary center',
+                      'Indication: Colonoscopy for anemia', 'Colonoscopy: checked', 'Extent: Cecum'):
+            text = form_block('Date: 2026-10-21', field)
+            with self.subTest(field=field):
+                self.assertEqual(layout(text).section_at(text.rindex(field.split(':')[0])).kind, 'other')
+        text = (HEADER + 'Procedure: EGD\nPlan: Await pathology.\n\n[PDF annotation text on page 1]\nFindings: Colonoscopy '
+                'to the cecum.')
+        self.assertEqual(layout(text).section_at(text.index('Colonoscopy to the cecum')).kind, 'other')
+
+    def test_the_box_contract_is_unchanged_beside_it(self):
+        text = form_block('Procedure: Colonoscopy', 'Cold snare polypectomy: checked', 'Biopsy: not checked')
+        self.assertEqual(read(text, 'Biopsy: not checked')[0], 'negated')
+        self.assertNotIn(read(text, 'Cold snare polypectomy: checked')[0], NOT_TODAY)
+        self.assertEqual(layout(text).section_at(text.index('Cold snare polypectomy: checked')).kind, 'other')
+
+
 if __name__ == '__main__':
     unittest.main()

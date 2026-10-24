@@ -24,6 +24,10 @@ N]" and "[PDF annotation text on page N]", are ``other`` sections with no
 default: their lines never open sections of their own, each line is a
 sentence, and the section before the block resumes after the blank line that
 ends it (unless a heading opens on that line, as the next page often does).
+The one exception is a form-field line whose own label is a procedure,
+findings or technique heading ("Procedure: Upper endoscopy (EGD)"): it reads
+as the same printed line would, for that line only, and the block's section
+resumes on the next line; a box or option value keeps it silent.
 The header an addendum opens with ("ADDENDUM (revision 2, added 2026-10-22
 10:00 UTC)") is likewise an ``other`` section with no default, so an addendum
 never takes the reading of the section the document ended in.
@@ -445,42 +449,73 @@ def split_sections(text: str) -> tuple[Section, ...]:
     return layout(text).sections
 
 
-def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], list[tuple[int, int]]]:
+POSITIVE_KINDS = ('procedure', 'findings', 'technique')
+# A form-field value that is a box's or an option's state: the field stays silent whatever its label.
+_STATE_VALUE = re.compile(r'(?:not[ \t]+)?checked|unchecked|no[ \t]+option[ \t]+selected|yes|no|none|done|performed|'
+                          r'not[ \t]+done|not[ \t]+performed|on|off', re.A | re.I)
+
+
+def _field_heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
+    """The heading a form-field line opens for itself alone: its own label is a procedure, findings or
+    technique heading in HEADINGS ("Procedure: Upper endoscopy (EGD)"), so its value reads as the same
+    printed line would. Never a box's or an option's state ("Procedure: checked"), never another kind (a
+    "Plan:" field is content), and never another field: the block's section resumes on the next line."""
+    heading = _heading(text, ls, le)
+    if heading is None or heading[0] not in POSITIVE_KINDS or HEADINGS.get(heading[1]) != heading[0]:
+        return None
+    value = text[heading[2].end:le].strip().rstrip('.').strip()
+    return heading if value and not _STATE_VALUE.fullmatch(value) else None
+
+
+def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], list[tuple[int, int]],
+                                                                 list[tuple[int, int]]]:
     """Each line's heading (or None); the lines inside an extraction block, which never open a
-    section; and (line, header line) for each block's end: the line after the blank line that ends
-    it, where the section in force before the block's header resumes."""
-    headings, inside, resumes = {}, set(), []
-    header = None
+    section beyond themselves; (line, header line) for each block's end: the line after the blank
+    line that ends it, where the section in force before the block's header resumes; and (line,
+    header line) after each form-field line that opened a section of its own (_field_heading), where
+    the block's own section resumes."""
+    headings, inside, resumes, field_ends = {}, set(), [], []
+    header, fields = None, False
     for i, (ls, le) in enumerate(lines):
-        if FORM_BLOCK.fullmatch(text[ls:le].strip()):
-            headings[i], header = _heading(text, ls, le), i
+        block = FORM_BLOCK.fullmatch(text[ls:le].strip())
+        if block:
+            headings[i], header, fields = _heading(text, ls, le), i, block.group('what') == 'form fields'
             continue
         headings[i] = None
         if header is None:
             headings[i] = _heading(text, ls, le)
         elif text[ls:le].strip():
             inside.add(i)
+            headings[i] = _field_heading(text, ls, le) if fields else None
+            if headings[i]:
+                field_ends.append((i + 1, header))
         else:
             resumes.append((i + 1, header))
             header = None
-    return headings, inside, resumes
+    return headings, inside, resumes, field_ends
 
 
 @functools.lru_cache(maxsize=16)
 def layout(text: str) -> Layout:
     lines = _lines(text)
-    headings, inside, resumes = _headings(text, lines)
-    # Where a block's section resumes on a heading line (the next page opens with "Findings:", an addendum's
-    # header), the heading wins: the resume is placed first.
-    marks = sorted([(i, 'heading', h) for i, h in headings.items() if h]
-                   + [(i, 'resume', header) for i, header in resumes if i < len(lines)],
-                   key=lambda mark: (mark[0], mark[1] == 'heading'))
+    headings, inside, resumes, field_ends = _headings(text, lines)
+    # The marks of one line, in this order: the section in force before a block resumes (after the blank line
+    # that ends it), the block's own section resumes (after a field line that opened its own), a heading opens.
+    # So a heading wins where a resume falls on its line (the next page opens with "Findings:", an addendum's
+    # header).
+    resume, field_end, heading = 0, 1, 2
+    marks = sorted([(i, heading, h) for i, h in headings.items() if h]
+                   + [(i, resume, header) for i, header in resumes if i < len(lines)]
+                   + [(i, field_end, header) for i, header in field_ends if i < len(lines)],
+                   key=lambda mark: mark[:2])
     opened, current, before_block = [], ('other', '', None), {}
     for i, what, value in marks:
-        if what == 'heading':
+        if what == heading:
             if FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
                 before_block[i] = current
             current = value
+        elif what == field_end:
+            current = headings[value]
         else:
             current = before_block.get(value, current)
         opened.append((i, current))
