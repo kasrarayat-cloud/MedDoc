@@ -70,7 +70,7 @@ def _payload(request):
     if request.content_type == 'application/json':
         try:
             data = json.loads(request.body or b'{}')
-        except ValueError:
+        except (ValueError, RecursionError):  # RecursionError: nesting deeper than the parser allows
             raise ApiError(400, 'The request body is not valid JSON.')
         if not isinstance(data, dict):
             raise ApiError(400, 'The request body must be a JSON object.')

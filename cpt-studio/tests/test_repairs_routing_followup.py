@@ -71,3 +71,15 @@ class CheckboxTests(SimpleTestCase):
         from studio.gi.detect import route
         families = {f.family: f.status for f in route(DOS + 'Procedures performed today:\n☐ EGD\n☒ Colonoscopy\n').findings}
         self.assertEqual(families['gi.egd'], 'negated')
+
+
+class CheckboxReachTests(SimpleTestCase):
+    """The box rule's reach is bounded: a per-span scan back to the start of a long line made routing a long
+    single-line document quadratic (28 s against 4.9 s without the rule, measured)."""
+
+    def test_a_box_governs_only_an_item_within_reach(self):
+        from studio.gi.detect import BOX_REACH
+        near = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * 20 + 'Biopsy\n'
+        far = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * (BOX_REACH // 2 + 10) + 'Biopsy\n'
+        self.assertEqual(status(near, 'Biopsy'), 'negated')
+        self.assertNotEqual(status(far, 'Biopsy'), 'negated')

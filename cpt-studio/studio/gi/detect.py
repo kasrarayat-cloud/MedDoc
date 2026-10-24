@@ -828,9 +828,14 @@ _BOX = re.compile(r'(?P<off>\u2610|\u25a1|\[[ _]?\])|(?P<on>\u2611|\u2612|\u2713
 UNCHECKED = 'negated: an unchecked box'
 
 
+BOX_REACH = 200  # a box governs only an item within this many characters after it (bounds the work per span)
+
+
 def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
-    """Whether the item at [start, end) is governed by an unchecked box on its own line."""
-    line_start = an.text.rfind('\n', 0, start) + 1
+    """Whether the item at [start, end) is governed by an unchecked box on its own line, within BOX_REACH."""
+    reach = max(0, start - BOX_REACH)
+    newline = an.text.rfind('\n', reach, start)
+    line_start = newline + 1 if newline >= 0 else reach
     last = None
     for m in _BOX.finditer(an.text, line_start, max(end, start + 1)):
         last = m

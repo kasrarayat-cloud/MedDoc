@@ -107,7 +107,10 @@ def _routing_json(encounter):
     revision = encounter.current_revision
     if revision is None:
         return None
-    run = revision.routings.order_by('-created_at').first()
+    # The routing the current assessment used: routing is stored per effective service date, so the
+    # latest stored run may belong to another date than the one on screen.
+    assessment = encounter.current_assessment
+    run = assessment.routing if assessment is not None and assessment.revision_id == revision.pk else None
     if run is None:
         return None
     families = []
@@ -245,7 +248,7 @@ def encounter_detail(encounter, membership):
                     'user_values': encounter.user_values or {}},
         'routing': _routing_json(encounter),
         'pipeline': {'busy': busy(encounter), 'can_stop': busy(encounter) and membership.can_review,
-                     'can_resume': encounter.state == 'stopped' and membership.can_review,
+                     'can_resume': review.can_resume(encounter) and membership.can_review,
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
                                  'finished_at': _iso(j.finished_at)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],

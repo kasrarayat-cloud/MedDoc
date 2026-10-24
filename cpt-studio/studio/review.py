@@ -550,6 +550,18 @@ def _review_state(encounter, assessment):
     return 'ready_for_review'
 
 
+def latest_job(encounter):
+    """The most recently created job of the encounter's current revision, or None."""
+    if encounter.current_revision_id is None:
+        return None
+    return encounter.jobs.filter(revision_id=encounter.current_revision_id).order_by('-created_at', '-pk').first()
+
+
+def can_resume(encounter):
+    """Whether a member may resume: the current revision's latest stage was cancelled and nothing runs."""
+    return _derive_state(encounter) == 'stopped'
+
+
 def _derive_state(encounter):
     revision = encounter.current_revision
     if revision is None or _active_jobs(encounter):

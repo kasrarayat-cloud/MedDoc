@@ -35,6 +35,8 @@ class ScriptedProvider(FakeProvider):
     def send(self, request, *, deadline_s):
         self.requests.append(request)
         outcome = self.outcomes.pop(0) if self.outcomes else self.outcome
+        if outcome == 'not_sent':
+            return RawExchange(outcome='not_sent', sent=False, error='Authentication failed (synthetic).')
         if outcome == 'failed':
             self.sent.append(request.canonical_sha256)
             return RawExchange(outcome='failed', sent=True, http_status=503, error='Service unavailable (synthetic).')

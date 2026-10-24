@@ -124,6 +124,22 @@ def routing_for(revision, service_date=None):
     return models.RoutingRun.objects.create(revision=revision, version=result.version, result=data, sha256=digest)
 
 
+DATE_CONTEXT_PREFIX = 'Date of service: '
+
+
+def run_service_date(run):
+    """The service date a run's request was built with: the recorded column, or for a run recorded before the
+    column existed, the one 'Date of service: ' context its request carried (None when it carried none)."""
+    if run.service_date is not None or not run.request_sha256:
+        return run.service_date
+    dates = [c[len(DATE_CONTEXT_PREFIX):] for c in (run.contexts or [])[1:]
+             if isinstance(c, str) and c.startswith(DATE_CONTEXT_PREFIX)]
+    try:
+        return date.fromisoformat(dates[0]) if len(dates) == 1 else None
+    except ValueError:
+        return None
+
+
 def addendum_block_text(number, created_at, text):
     stamp = created_at.strftime('%Y-%m-%d %H:%M UTC')
     return f'\n\nADDENDUM (revision {number}, added {stamp})\n{text.strip()}\n'
@@ -335,7 +351,7 @@ def stage_assess(job):
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists'}
     revision.refresh_from_db()
-    if run is not None and run.service_date != context_service_date(context):
+    if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
     routing_run = routing_for(revision, context_service_date(context))
@@ -369,7 +385,9 @@ def claim_next():
         if job.stop_requested_at or is_stopped(job.encounter_id):
             job.state, job.error, job.finished_at = Job.CANCELLED, 'Stopped before it started.', now
         elif job.deadline_at < now:
-            job.state, job.error, job.finished_at = Job.FAILED, 'The stage expired before it could start.', now
+            # Nothing ran, so nothing was recorded: the stage stays resumable rather than failing the encounter.
+            job.state, job.error, job.finished_at = (Job.CANCELLED, 'The stage expired before it could start; '
+                                                     'resume to run it.', now)
         else:
             job.state, job.started_at = Job.RUNNING, now
             job.attempts += 1
@@ -423,8 +441,11 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
-            job.state = Job.UNKNOWN if unknown else Job.FAILED
-            job.error = 'The worker stopped while this stage was running.'
+            # A send in flight is unknown (reconcile it); any other stage recorded nothing it would not redo,
+            # so it is cancelled and can be resumed rather than stranding the encounter.
+            job.state = Job.UNKNOWN if unknown else Job.CANCELLED
+            job.error = ('The worker stopped while this stage was running.' if unknown else
+                         'The worker stopped while this stage was running; resume to run it again.')
             job.finished_at = timezone.now()
             job.save(update_fields=['state', 'error', 'finished_at'])
         review.refresh_state(job.encounter)
@@ -496,12 +517,17 @@ def resume(encounter, user):
         encounter = _locked(encounter)
         if busy(encounter):
             raise Refused('Wait for processing to finish (or stop it) before resuming.')
-        last = encounter.jobs.filter(state=Job.CANCELLED).order_by('-created_at').first()
-        if last is None or last.revision_id != encounter.current_revision_id:
+        # The same rule as the API's can_resume: only the current revision's LATEST stage, when it was
+        # cancelled (a Stop, the stale-stage sweep or a queue expiry), runs again - never an older one.
+        if not review.can_resume(encounter):
             return None
+        last = review.latest_job(encounter)
         context = encounter.current_context if last.kind in {Job.PREDICT, Job.ASSESS} else last.context
         if last.kind == Job.ASSESS and context is not None and last.context_id != context.pk:
             kind, provider_run = Job.PREDICT, None  # the context changed while stopped: re-run from predict
+        elif last.kind == Job.EXTRACT and last.revision.extraction_status in {models.SourceRevision.OK,
+                                                                               models.SourceRevision.PARTIAL}:
+            kind, provider_run = Job.ANALYZE, None  # the text was recorded before the stage was cut short
         else:
             kind, provider_run = last.kind, last.provider_run
         clear_stop(encounter)
@@ -545,8 +571,8 @@ def _run_answers(run, revision, context):
     Compared on the request itself (provider, adapter and canonical request hash), never
     on the previous context: the run in use may have been requested for another date.
     """
-    if run is None or not run.request_sha256:
-        return False
+    if run is None or not run.request_sha256 or run.state != models.ProviderRun.SUCCEEDED:
+        return False  # no answer to reuse: not sent, unknown or failed goes through predict (reuse is free there)
     try:
         provider = get_provider()
         if provider is None or (provider.name, provider.adapter_version) != (run.provider, run.adapter_version):
