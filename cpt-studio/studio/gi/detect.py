@@ -333,12 +333,10 @@ def _outside_a_service(an: Analysis, pos: int) -> int:
 
 
 def _masked_post(an: Analysis, me: int, ce: int) -> str:
-    """``_masked(an, me, ce)``, once per (member end, window end): the text after a member is read whole, since a
-    post pattern may end at the window's end ('was not' followed by nothing)."""
-    key = ('masked-post', me, ce)
-    if key not in an.memo:
-        an.memo[key] = _masked(an, me, ce)
-    return an.memo[key]
+    """``_masked(an, me, ce)``: the text after a member is read whole, since a post pattern may end at the window's end
+    ('was not' followed by nothing). Not memoised: round 4 (pipeline:0) measured a memo of these tails at 1.5 GiB on a
+    20 KB paste, for no time saved."""
+    return _masked(an, me, ce)
 
 
 def _pre_negations(an: Analysis, start: int, ms: int) -> list[tuple[str, str, int]]:
@@ -1035,26 +1033,51 @@ def _procedure_called_off(an: Analysis, start: int, end: int) -> bool:
     return an.memo[key]
 
 
+# A typed answer that the procedure was not performed: "Procedure performed: No (patient refused).", "Exam
+# completed? no" (round 4 release:8). Only these label words, then a separator, then a denial that opens the value.
+_PERFORMED_ANSWERED_NO = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
+                                    r'(?:performed|done|completed)[ \t]*[:?=|\u2013\u2014-][ \t]*'
+                                    r'(?:no|n|not\s+(?:done|performed|completed))\b', re.A | re.I)
+
+
+def _calls_off(an: Analysis, ks: int, ke: int) -> bool:
+    """Whether the sentence [ks, ke) is a status line or a typed answer that denies the service, or says the procedure
+    was called off."""
+    line = an.text.rfind('\n', 0, ks) + 1  # the answer's label may be a heading, read as a sentence of its own
+    return ((_status_line(an, ks, ke) and _denies(an, ks, ke, bare=False))
+            or bool(_PERFORMED_ANSWERED_NO.match(an.text, line, ke)) or _procedure_called_off(an, ks, ke))
+
+
 def _called_off_further(an: Analysis, index: int) -> Optional[str]:
-    """A status line that denies the service ("Status: Cancelled - ...", "Procedure status: Not performed.") or a
-    sentence that says the procedure was called off, within the DENIAL_SENTENCES sentences after the service line at
-    ``index`` - in any section but a plan or a history, so also after the indication line - and before the next
-    sentence that names a service (that one speaks of its own service). It holds the line above it."""
+    """A status line that denies the service ("Status: Cancelled - ...", "Procedure status: Not performed."), a typed
+    "Procedure performed: No", or a sentence that says the procedure was called off, within DENIAL_SENTENCES sentences
+    after - or before - the service line at ``index``, in any section but a plan or a history. Reading stops at a
+    sentence that names a service of another family (that one speaks of its own service); a sentence naming only the
+    line's own family ("The risks and benefits of EUS were discussed.") is read on (round 4 routing:6). It holds the
+    line above it, never excludes."""
     key = ('called-off-further', index)
     if key not in an.memo:
         an.memo[key] = None
-        read = 0
-        for ks, ke in an.lay.sentences[index + 1:index + 1 + 2 * DENIAL_SENTENCES]:
-            heading = an.lay.section_at(ks).heading
-            if heading is not None and heading.start == ks and ke <= heading.end:
-                continue  # a heading line ("Indication:") is structure, not a sentence about the service
-            read += 1
-            if read > DENIAL_SENTENCES or an.services_in(ks, ke):
-                break
-            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS or _unchecked_option(an, ks, ke):
-                continue
-            if (_status_line(an, ks, ke) and _denies(an, ks, ke, bare=False)) or _procedure_called_off(an, ks, ke):
-                an.memo[key] = an.text[ks:ke]
+        own = {m.family for m in an.services_in(*an.lay.sentences[index])}
+        sentences = an.lay.sentences
+        for step in (1, -1):
+            read = 0
+            position = index + step
+            while 0 <= position < len(sentences) and abs(position - index) <= 2 * DENIAL_SENTENCES:
+                ks, ke = sentences[position]
+                position += step
+                heading = an.lay.section_at(ks).heading
+                if heading is not None and heading.start == ks and ke <= heading.end:
+                    continue  # a heading line ("Indication:") is structure, not a sentence about the service
+                read += 1
+                if read > DENIAL_SENTENCES or {m.family for m in an.services_in(ks, ke)} - own:
+                    break
+                if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS or _unchecked_option(an, ks, ke):
+                    continue
+                if _calls_off(an, ks, ke):
+                    an.memo[key] = an.text[ks:ke]
+                    break
+            if an.memo[key] is not None:
                 break
     return an.memo[key]
 
@@ -1117,23 +1140,25 @@ def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optio
     label = _denying_label_above(an, s)
     if label is not None:
         return label
-    for cs, ce in _clauses_in(an, after, e)[:DENIAL_CLAUSES]:
+    for cs, ce in _first_clauses_in(an, after, e, DENIAL_CLAUSES):
         if an.services_in(cs, ce):
             return None
         if _denies(an, cs, ce, bare=False):
             return an.text[cs:ce]
     index = _sentence_index(an, s)
-    if index < 0 or index + 1 >= len(an.lay.sentences):
+    if index < 0:
         return None
-    ns, ne = an.lay.sentences[index + 1]
-    if an.lay.section_at(ns) is an.lay.section_at(s):
-        named = an.services_in(ns, ne)
-        if not named and _denies(an, ns, ne, bare):
-            return an.text[ns:ne]
-        if named and _reschedules(an, ns, ne):
-            own = {m.family for m in an.services_in(s, after)}
-            if own and all(m.family in own for m in named):
+    if index + 1 < len(an.lay.sentences):
+        ns, ne = an.lay.sentences[index + 1]
+        if an.lay.section_at(ns) is an.lay.section_at(s):
+            named = an.services_in(ns, ne)
+            if not named and _denies(an, ns, ne, bare):
                 return an.text[ns:ne]
+            if named and _reschedules(an, ns, ne):
+                own = {m.family for m in an.services_in(s, after)}
+                if own and all(m.family in own for m in named):
+                    return an.text[ns:ne]
+    # also for the last sentence: a status line may stand above it (round 4 routing:6)
     return _called_off_further(an, index)
 
 
@@ -1600,6 +1625,12 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
         return Reading('historical', (label,), 'section')
     if section.kind in EM_SECTIONS and not an.touches_service(start, end):
         return Reading('performed', (label + EM_DOCUMENTATION,), 'section')
+    heading = section.heading
+    if (section.kind == 'other' and heading is not None and heading.end - heading.start <= 80
+            and _DENYING_LABEL.fullmatch(an.text, heading.start, heading.end)):
+        # "Cancelled procedures:" opens a section of its own: what is listed under it is not silent (round 4 release:9)
+        return Reading('uncertain', (f"uncertain: listed under '{an.text[heading.start:heading.end].strip()}', a "
+                                     'label that denies performance',), 'cue', doubt=True)
     return Reading('uncertain', (SILENT,), 'default')
 
 
@@ -2046,6 +2077,10 @@ def _names_an_item(an: Analysis, start: int, end: int) -> bool:
 BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0])  # the cues of the holds above
 
 
+_DEFERRAL_CUE = re.compile(r"'(?:defer|defers|deferring|deferral|postpone|postpones|postponing)' in its clause$",
+                           re.A | re.I)
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
@@ -2058,6 +2093,12 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
             an.memo[key] = boxed
     if key not in an.memo:
         reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
+        if reading.cues == (SILENT,):
+            # A silent mention whose clause puts the service off ("we decided to defer EUS"): a doubt, not silence,
+            # so it contradicts the section evidence of the procedure line (round 4 release:10).
+            doubt = _doubt(an, start, end)
+            if doubt and _DEFERRAL_CUE.search(doubt):
+                reading = Reading('uncertain', (doubt,), 'cue', doubt=True)
         if reading.status == 'performed' and not reading.cues[0].endswith(EM_DOCUMENTATION):
             doubt = (reading.basis == 'section' and _silent_section(an, start, end)) or _doubt(an, start, end)
             if doubt:
@@ -2162,6 +2203,35 @@ def _clauses_in(an: Analysis, s: int, e: int) -> list[tuple[int, int]]:
             break
         if c[1] <= e:
             found.append(c)
+    return found
+
+
+def _first_clauses_in(an: Analysis, s: int, e: int, limit: int) -> list[tuple[int, int]]:
+    """Exactly ``_clauses_in(an, s, e)[:limit]``, without listing the clauses past the first ``limit`` (round 4
+    routing:14: a 200 KB semicolon list made _later_denial list every later clause for every mention)."""
+    clauses = an.lay.clauses
+    found = []
+    for i in range(bisect.bisect_left(clauses, (s, -1)), len(clauses)):
+        c = clauses[i]
+        if c[0] >= e or len(found) >= limit:
+            break
+        if c[1] <= e:
+            found.append(c)
+    return found
+
+
+def _last_clauses_in(an: Analysis, s: int, e: int, limit: int) -> list[tuple[int, int]]:
+    """Exactly ``_clauses_in(an, s, e)[-limit:]``, walking back from ``e`` (round 4 routing:10: a 280 KB clause chain
+    made _continues_another_procedure list every earlier clause for every fact)."""
+    clauses = an.lay.clauses
+    low = bisect.bisect_left(clauses, (s, -1))
+    found = []
+    for i in range(bisect.bisect_left(clauses, (e, -1)) - 1, low - 1, -1):
+        if len(found) >= limit:
+            break
+        if clauses[i][1] <= e:
+            found.append(clauses[i])
+    found.reverse()
     return found
 
 
@@ -2556,7 +2626,7 @@ def _continues_another_procedure(an: Analysis, clause: tuple[int, int]) -> bool:
     none between says today ("She recently underwent EGD; the endoscope was advanced to the second part of the
     duodenum"). A later clause never speaks for an earlier one ("The cecum was reached; her prior colonoscopy ...")."""
     s, _ = an.lay.sentence_for(*clause)
-    for pc in reversed(_clauses_in(an, s, clause[0])[-DENIAL_CLAUSES:]):
+    for pc in reversed(_last_clauses_in(an, s, clause[0], DENIAL_CLAUSES)):
         ps, pe = an.lay.window(pc, max(pc[0], pc[1] - 1), pc[1], CLAUSE_REACH)
         if cues.TODAY.search(an.text, ps, pe):
             return False
@@ -2815,9 +2885,10 @@ def _today_doubt(reading: Reading, kind: str) -> bool:
     """An uncertain reading about this encounter that leaves today's service open: a doubt (an
     unresolved negation, an unread section, "pending", an abort that does not say whether the
     procedure started) anywhere, or a hedge ("?", "possible") in a procedure, findings or
-    technique section. Silence (no evidence at all) is never one: it is no doubt, and a positive
-    section never reads silent."""
-    return reading.status == 'uncertain' and (reading.doubt or kind in POSITIVE_SECTIONS)
+    technique section, or a plan passage held because its clause says today (PLAN_TODAY: round 4 release:4, so a
+    second plan, history or negated mention of the family cannot outrank it). Silence (no evidence at all) is never
+    one: it is no doubt, and a positive section never reads silent."""
+    return reading.status == 'uncertain' and (reading.doubt or kind in POSITIVE_SECTIONS or PLAN_TODAY in reading.cues)
 
 
 def _aggregate(readings: list[Reading], section_suffices: bool = True, kinds: tuple = (),

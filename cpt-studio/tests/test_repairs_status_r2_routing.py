@@ -822,10 +822,11 @@ class AsScheduledTests(unittest.TestCase):
             self.assertEqual(read(HEADER + line + '\n', 'Colonoscopy')[0], 'performed', line)
         band = 'Rubber band ligation of an internal hemorrhoid was performed today as scheduled.'
         status, cues = read(self.BANDING, band)
-        # round 3b routing:26: a past-tense performance that says today, with no condition or hedge, is not
-        # downgraded by its plan section (tests/test_repairs_r3_time.py Routing26PlanSectionTodayTests)
-        self.assertEqual(status, 'performed', cues)
+        # round 4 routing:1 withdrew round 3b's release of this plan-section clause: it is held (uncertain, with
+        # PLAN_TODAY), never performed and never planned (tests/test_repairs_r3_time.py Routing26PlanSectionTodayTests)
+        self.assertEqual(status, 'uncertain', cues)
         self.assertIn('performed: was performed', cues)
+        self.assertIn(detect.PLAN_TODAY, cues)
         proposals, _ = run_engine(self.BANDING, [('46221', band)])
         self.assertEqual(proposals['46221'].bucket, 'selected', proposals['46221'].exclusion_reason)
 
