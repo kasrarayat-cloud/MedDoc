@@ -20,9 +20,11 @@ from pathlib import Path
 from studio.gi import detect
 from studio.gi.context import extract_context
 from studio.gi.detect import route, status_for_span
+from studio.gi.sections import layout
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode, RoutingResult, from_jsonable,
                           to_jsonable)
+from studio.validation import engine as validation_engine
 from studio.validation.engine import assess
 
 HEADER = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
@@ -511,6 +513,203 @@ class Status5CancelledNextLineTests(unittest.TestCase):
         text = colon_with_plan('Colonoscopy\nPatient not sedated.')
         self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
         self.assertTrue(ready(run_engine(text, [('45385', POLYPS)])[0]['45385']))
+
+
+EMR_LINE = 'Colonoscopy with EMR of the ascending colon polyp at a tertiary center.'
+
+
+def emr_note(heading):
+    return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally '
+            'spreading polyp in the ascending colon was tattooed and not removed.\n' + heading + '\n' + EMR_LINE + '\n')
+
+
+class Status7ColonlessHeadingTests(unittest.TestCase):
+    """status:7 - an unknown heading without a colon no longer continues the previous positive section
+    when its words name a plan or a history; a findings sub-label or a title stays content."""
+
+    def assert_planned_emr_excluded(self, text, kind):
+        self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, kind)
+        self.assertNotIn('EMR', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        proposals, _ = run_engine(text, [('45390', EMR_LINE)])
+        self.assertEqual(proposals['45390'].bucket, 'excluded', proposals['45390'].status)
+
+    def test_the_claimed_headings(self):
+        for heading in ('Further management', 'Planned procedures', 'Future plan', 'Further management:'):
+            with self.subTest(heading=heading):
+                self.assert_planned_emr_excluded(emr_note(heading), 'plan')
+        for heading in ('Further management:', 'Planned procedures:', 'Future plan:'):  # with the line inline
+            text = emr_note(heading).replace(heading + '\n', heading + ' ')
+            with self.subTest(inline=heading):
+                self.assert_planned_emr_excluded(text, 'plan')
+
+    def test_unknown_plan_and_history_labels_without_a_colon(self):
+        for heading, kind in (('Upcoming procedures', 'plan'), ('Recommended interventions', 'plan'),
+                              ('Endoscopic management', 'plan'), ('Further evaluation', 'plan'),
+                              ('Summary and recommendations', 'plan'), ('Next appointments', 'plan'),
+                              ('Earlier endoscopic work-up', 'history'), ('Previous endoscopic studies', 'history')):
+            with self.subTest(heading=heading):
+                self.assert_planned_emr_excluded(emr_note(heading), kind)
+
+    def test_round1_case_a_with_the_colon_removed(self):
+        for heading in ('Summary and recommendations', 'Planned procedures', 'Next appointments'):
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. The colon was '
+                    'normal.\n' + heading + '\nEUS for evaluation of the pancreatic cyst seen on CT.\n')
+            with self.subTest(heading=heading):
+                self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+                self.assertIsNone(fact_value(text, 'gi.eus', 'target'))
+
+    def test_a_word_heading_paragraph(self):
+        import io
+
+        import docx
+        from studio.ingest import Limits
+        from studio.ingest import docx as docx_ingest
+        document = docx.Document()
+        document.add_paragraph('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT')
+        document.add_paragraph('Date of service: 2026-10-21')
+        document.add_paragraph('Procedure: Colonoscopy')
+        document.add_paragraph('Findings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading polyp in '
+                               'the ascending colon was tattooed and not removed.')
+        document.add_heading('Upcoming procedures', level=2)
+        document.add_paragraph(EMR_LINE)
+        buffer = io.BytesIO()
+        document.save(buffer)
+        result = docx_ingest.extract_docx(buffer.getvalue(), Limits())
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertIn('\nUpcoming procedures\n', result.text)
+        self.assert_planned_emr_excluded(result.text, 'plan')
+
+    def test_findings_sub_labels_and_titles_stay_content(self):
+        for heading in ('Previous anastomosis', 'Prior polypectomy site', 'Sigmoid colon', 'Old blood',
+                        'Previous stent procedures'):
+            text = emr_note(heading)
+            with self.subTest(heading=heading):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'findings')
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nOffice follow-up visit - progress note\nDate of service: '
+                '2026-10-21\nPlace of service: Office\nPatient status: Established patient.\nChief complaint\nReflux.\n')
+        self.assertEqual(layout(text).section_at(text.index('Place of service')).kind, 'other')
+        self.assertEqual(extract_context(text)['setting'].value, 'office')
+
+
+DISCUSSED = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+             'Established patient office visit.\nChief complaint: Change in bowel habits.\n{section}\n'
+             'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+VISIT = [('99214', 'Established patient office visit.')]
+NEW_ENGINE = validation_engine.ENGINE_VERSION != 'cpt-studio-validation@2'
+
+
+class DiscussionHeadingTests(unittest.TestCase):
+    """Coordination with the validation repair: discussion, counseling and education sections never
+    document a procedure done at this encounter, so they are plan sections; a procedure performed in a
+    Procedure section still holds the visit."""
+
+    SECTIONS = ('Discussion: Colonoscopy was discussed; the patient will consider it.',
+                'Counseling: Risks and benefits of colonoscopy were reviewed.',
+                'Patient education: Colonoscopy preparation was explained.',
+                'Risks and benefits: Colonoscopy, including perforation and bleeding.',
+                'Recommendations discussed: Colonoscopy in 3 months.')
+
+    def test_the_headings_open_plan_sections(self):
+        for section in self.SECTIONS:
+            text = DISCUSSED.format(section=section)
+            with self.subTest(section=section):
+                mention = routed(text).finding('gi.colonoscopy').mentions[0]
+                self.assertEqual(mention.section, 'plan')
+                self.assertNotIn(mention.status, POSITIVE)
+                self.assertFalse(any(cue.startswith('performed:') for cue in mention.cues), mention.cues)
+                self.assertNotIn(family(text, 'gi.colonoscopy'), POSITIVE)
+
+    def test_a_discussed_procedure_read_as_planned_does_not_hold_the_visit(self):
+        for section in self.SECTIONS[1:]:
+            text = DISCUSSED.format(section=section)
+            with self.subTest(section=section):
+                self.assertTrue(ready(run_engine(text, VISIT)[0]['99214']))
+
+    @unittest.skipUnless(NEW_ENGINE, 'a hedged plan-section mention releases the visit from cpt-studio-validation@3 on')
+    def test_a_hedged_discussed_procedure_does_not_hold_the_visit(self):
+        self.assertTrue(ready(run_engine(DISCUSSED.format(section=self.SECTIONS[0]), VISIT)[0]['99214']))
+
+    def test_a_performed_procedure_still_holds_the_visit(self):
+        text = DISCUSSED.format(section='Procedure: Colonoscopy with cold snare polypectomy.\nFindings: The colonoscope '
+                                        'was advanced to the cecum. A polyp was removed with a cold snare.')
+        visit = run_engine(text, VISIT)[0]['99214']
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertIn('separate_em', clarified(visit))
+
+
+FORM = '\n\n[PDF form fields on page 1]\nCold snare polypectomy: checked\nBiopsy: not checked'
+
+
+def form_note(last):
+    return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm polyp was '
+            'seen.\n' + last + FORM)
+
+
+class Status10FormBlockTests(unittest.TestCase):
+    """status:10 - the '[PDF form fields on page N]' block is a section of its own with no default: a
+    checked box is never planned or historical, an unchecked one denies its item, whatever printed
+    section precedes the block."""
+
+    LASTS = ('Plan: Await pathology.', 'Recommendations: Await pathology.', 'Impression: Small polyp.',
+             'Findings: Small polyp.')
+
+    def test_the_block_reads_the_same_after_any_printed_section(self):
+        readings = set()
+        for last in self.LASTS:
+            text = form_note(last)
+            with self.subTest(last=last):
+                checked, unchecked = read(text, 'Cold snare polypectomy: checked'), read(text, 'Biopsy: not checked')
+                self.assertNotIn(checked[0], ('planned', 'historical'), checked)
+                self.assertEqual(unchecked[0], 'negated', unchecked)
+                proposals, _ = run_engine(text, [('45385', 'Cold snare polypectomy: checked')])
+                self.assertTrue(ready(proposals['45385']), proposals['45385'].exclusion_reason)
+                for phrase in ('Biopsy: not checked', 'Biopsy'):
+                    excluded, _ = run_engine(text, [('45380', phrase)])
+                    self.assertEqual(excluded['45380'].bucket, 'excluded', phrase)
+                readings.add((checked, unchecked))
+        self.assertEqual(len(readings), 1, readings)
+
+    def test_each_field_line_is_its_own_sentence(self):
+        """Field labels are often lower case; a field never runs on into the next one."""
+        text = form_note('Impression: Small polyp.').replace(
+            'Cold snare polypectomy: checked\nBiopsy: not checked', 'biopsy: not checked\ncold snare polypectomy: checked')
+        status, cues = read(text, 'cold snare polypectomy: checked')
+        self.assertEqual(status, 'uncertain')
+        self.assertTrue(all(c.startswith(SILENT) for c in cues), cues)
+        self.assertTrue(ready(run_engine(text, [('45385', 'cold snare polypectomy: checked')])[0]['45385']))
+        # a cue in the next field ("scheduled") never reaches the field before it
+        text = form_note('Impression: Small polyp.').replace(
+            'Cold snare polypectomy: checked\nBiopsy: not checked',
+            'procedure: colonoscopy with cold snare polypectomy\nfollow-up scheduled: 2026-12-01')
+        status, cues = read(text, 'procedure: colonoscopy with cold snare polypectomy')
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertTrue(ready(run_engine(text, [('45385', 'procedure: colonoscopy with cold snare polypectomy')])[0]['45385']))
+
+    def test_other_unchecked_values(self):
+        for line in ('Biopsy: unchecked', 'Biopsy: no option selected', 'Biopsy: Not checked.'):
+            text = form_note('Plan: Await pathology.').replace('Biopsy: not checked', line)
+            with self.subTest(line=line):
+                self.assertEqual(read(text, line)[0], 'negated')
+
+    def test_block_lines_never_open_sections(self):
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nEndoscopy unit - procedure form\nDate of service:\n'
+                'Procedure performed:\nExtent reached:\n\n[PDF form fields on page 1]\ndos: 2026-10-21\n'
+                'procedure: Colonoscopy, screening, to the cecum\nplan: Repeat colonoscopy in 3 years\n'
+                'intervention: polyp removed with cold snare\nbiopsy: checked')
+        kinds = {layout(text).section_at(text.index(phrase)).kind for phrase in
+                 ('procedure: Colonoscopy', 'plan: Repeat', 'intervention:', 'biopsy: checked')}
+        self.assertEqual(kinds, {'other'})
+        mention = routed(text).finding('gi.colonoscopy').mentions[0]
+        self.assertEqual((mention.section, mention.status), ('other', 'uncertain'))
+        self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'interventions'))
+
+    def test_the_section_before_the_block_resumes_after_it(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nPlan: Repeat'
+                + FORM + '\n\ncolonoscopy with EMR in 3 months.\n')
+        self.assertEqual(layout(text).section_at(text.index('colonoscopy with EMR')).kind, 'plan')
+        self.assertEqual(read(text, 'colonoscopy with EMR')[0], 'planned')
+        annotations = form_note('Plan: Await pathology.').replace('[PDF form fields', '[PDF annotation text')
+        self.assertNotIn(read(annotations, 'Cold snare polypectomy: checked')[0], ('planned', 'historical'))
 
 
 STATUS9 = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the splenic flexure, where an '

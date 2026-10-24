@@ -1045,13 +1045,29 @@ def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
     return last is not None and last.group('off') is not None
 
 
+# A form line whose whole value says its box is off ("Biopsy: not checked", "Extent reached: no option
+# selected"; extraction writes PDF form fields so): it denies the item its label names.
+_STATE_OFF = re.compile(r'[^:\n]{1,120}:[ \t]*(?:not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected)[ \t.]*', re.A | re.I)
+
+
+def _unchecked_state(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) lies on one line that is a form line whose value is off. The line is looked
+    for within BOX_REACH of the span; a longer line never matches (its label is at most 120 characters)."""
+    text = an.text
+    if '\n' in text[start:end]:
+        return False
+    before = text.rfind('\n', max(0, start - BOX_REACH), start)
+    after = text.find('\n', end, end + BOX_REACH)
+    return bool(_STATE_OFF.fullmatch(text, before + 1, len(text) if after < 0 else after))
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
     negation sits in its clause, or when only its section speaks for a named service whose
     words are not those of a procedure description ("Colonoscopy declined by patient")."""
     key = ('reading', start, end)
-    if key not in an.memo and _unchecked_box(an, start, end):
+    if key not in an.memo and (_unchecked_box(an, start, end) or _unchecked_state(an, start, end)):
         an.memo[key] = Reading('negated', (UNCHECKED,), 'cue')
     if key not in an.memo:
         reading = _cue_reading(an, start, end) or _default_reading(an, start, end)

@@ -10,7 +10,17 @@ Labels in ``HEADINGS`` open a section. A key-value line such as
 A line that is only an unrecognised "Label:" also opens a section, so the text
 under it never inherits the previous section's reading: a plan or history
 section when the label says so ("Next procedures:", "Earlier work-up:"),
-otherwise an ``other`` section with no default.
+otherwise an ``other`` section with no default. A label line without a colon
+("Planned procedures", "Further management", a Word heading paragraph) opens a
+plan or history section when its words say so and it names a section of a
+note (procedures, plan, management, work-up ...), never a service, an
+intervention or a landmark.
+
+The blocks extraction adds after a PDF page's text, "[PDF form fields on page
+N]" and "[PDF annotation text on page N]", are ``other`` sections with no
+default: their lines never open sections of their own, each line is a
+sentence, and the section before the block resumes after the blank line that
+ends it.
 """
 from __future__ import annotations
 
@@ -73,7 +83,14 @@ HEADINGS: dict[str, str] = {
             'recommendations/plan', 'plan/recommendations', 'plan and recommendations', 'recommendations and follow-up',
             'follow-up plan', 'follow-up recommendations', 'post-procedure plan', 'postprocedure plan',
             'post procedure plan', 'post-procedure recommendations', 'postprocedure recommendations',
-            'post-procedure care', 'disposition and plan', 'plan and disposition'),
+            'post-procedure care', 'disposition and plan', 'plan and disposition', 'management', 'management plan',
+            'further management', 'planned procedures', 'future plan', 'future plans',
+            # discussion, counseling and education never document a procedure done at this encounter
+            'discussion', 'discussions', 'counseling', 'counselling', 'patient counseling', 'patient counselling',
+            'patient education', 'education', 'counseling and education', 'education and counseling',
+            'risks and benefits', 'risks, benefits and alternatives', 'risks, benefits, and alternatives',
+            'risks benefits and alternatives', 'recommendations discussed', 'shared decision making',
+            'shared decision-making'),
     **_kind('mdm', 'medical decision making', 'medical decision-making', 'mdm', 'decision making'),
     **_kind('time', 'time', 'total time', 'time statement', 'time spent', 'visit time', 'time documentation'),
     **_kind('other', 'medications', 'current medications', 'medication', 'allergies', 'review of systems', 'ros',
@@ -87,7 +104,7 @@ _CLOCK = re.compile(r'[ \t]*\d{1,2}:\d{2}', re.A)
 # An unrecognised bare "Label:" (nothing after the colon) is a heading: a plan or history one
 # when its words say so, otherwise "other". A sentence that ends in a colon is not a label.
 _PLAN_LABEL = re.compile(r'\b(?:plans?|planned|recommend\w*|follow[- ]?up|next|future|upcoming|scheduled|'
-                         r'instructions?|disposition|to\s+do)\b', re.A | re.I)
+                         r'instructions?|disposition|management|further|to\s+do)\b', re.A | re.I)
 _HISTORY_LABEL = re.compile(r'\b(?:history|historical|hx|prior|previous|past|earlier|old)\b', re.A | re.I)
 _LABEL_VERB = re.compile(r'\b(?:was|were|is|are|be|been|being|has|have|had|will|shall|should|would|could|can|may|'
                          r'might|did|does|do|follows|following|include[sd]?|including|noted|showed|revealed|'
@@ -98,6 +115,33 @@ def _bare_label(raw: str) -> bool:
     words = raw.split()
     return (0 < len(words) <= 6 and words[0][0].isalpha() and not _LABEL_VERB.search(raw)
             and raw.rstrip()[-1] not in '.!?;')
+
+
+# A label line without a colon is a heading only when it names a section of a note, with no service,
+# intervention or landmark in it: "Planned procedures", "Further management", "Earlier endoscopic work-up";
+# never "Previous anastomosis" or "Prior polypectomy site", which are findings.
+_COLONLESS_HISTORY = re.compile(r'\b(?:history|historical|hx|prior|previous|past|earlier)\b', re.A | re.I)
+_SECTION_NOUN = re.compile(r'\b(?:plans?|procedures?|management|recommendations?|follow[- ]?up|instructions?|steps|'
+                           r'disposition|history|work[- ]?ups?|studies|evaluations?|interventions?|appointments?|'
+                           r'care|treatments?|therap(?:y|ies)|tests?|testing|imaging|records?)\b', re.A | re.I)
+# A document title is never such a label: "Office follow-up visit - progress note", "Prior procedure report".
+_TITLE_WORDS = re.compile(r'\b(?:note|report|visit|consultation|encounter)\b', re.A | re.I)
+FORM_BLOCK = re.compile(r'\[PDF (?P<what>form fields|annotation text) on page \d+\]', re.A)
+
+
+def _colonless_label(line: str) -> Optional[str]:
+    """'plan' or 'history' when a line without a colon is a label of that kind (see above)."""
+    if not _SECTION_NOUN.search(line) or _TITLE_WORDS.search(line) or _service_named(line) \
+            or _act_or_place_named(line):
+        return None
+    if _PLAN_LABEL.search(line):
+        return 'plan'
+    return 'history' if _COLONLESS_HISTORY.search(line) else None
+
+
+def _act_or_place_named(line: str) -> bool:
+    return (any(p.search(line) for _, p, _ in cues.INTERVENTIONS)
+            or any(p.search(line) for _, _, p in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS))
 
 
 _TITLE_QUALIFIER = re.compile(r'\b(?:prior|previous|last|planned|scheduled|next|outside|old)\b', re.A | re.I)
@@ -134,6 +178,11 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     """(kind, label, heading span) when the line [ls, le) is a heading line."""
     body_start = _PREFIX.match(text, ls, le).end()
     line = text[body_start:le]
+    block = FORM_BLOCK.fullmatch(line.strip())
+    if block:
+        lead = len(line) - len(line.lstrip())
+        return 'other', f"pdf {block.group('what')}", Span(body_start + lead, body_start + lead + len(line.strip()),
+                                                          line.strip())
     colon = line.find(':')
     raw = line if colon < 0 else line[:colon]
     if not raw.strip() or len(raw) > 60:
@@ -146,6 +195,8 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
         kind = 'procedure'
     if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
         kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
+    if kind is None and colon < 0 and _bare_label(raw):
+        kind = _colonless_label(raw)
     if kind is None or (kind == 'time' and _CLOCK.match(content)):
         return None
     lead = len(raw) - len(raw.lstrip())
@@ -255,25 +306,58 @@ def split_sections(text: str) -> tuple[Section, ...]:
     return layout(text).sections
 
 
+def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], list[tuple[int, int]]]:
+    """Each line's heading (or None); the lines inside an extraction block, which never open a
+    section; and (line, header line) for each block's end: the line after the blank line that ends
+    it, where the section in force before the block's header resumes."""
+    headings, inside, resumes = {}, set(), []
+    header = None
+    for i, (ls, le) in enumerate(lines):
+        if FORM_BLOCK.fullmatch(text[ls:le].strip()):
+            headings[i], header = _heading(text, ls, le), i
+            continue
+        headings[i] = None
+        if header is None:
+            headings[i] = _heading(text, ls, le)
+        elif text[ls:le].strip():
+            inside.add(i)
+        else:
+            resumes.append((i + 1, header))
+            header = None
+    return headings, inside, resumes
+
+
 @functools.lru_cache(maxsize=16)
 def layout(text: str) -> Layout:
     lines = _lines(text)
-    headings = {i: _heading(text, ls, le) for i, (ls, le) in enumerate(lines)}
+    headings, inside, resumes = _headings(text, lines)
+    marks = sorted([(i, 'heading', h) for i, h in headings.items() if h]
+                   + [(i, 'resume', header) for i, header in resumes if i < len(lines)])
+    opened, current, before_block = [], ('other', '', None), {}
+    for i, what, value in marks:
+        if what == 'heading':
+            if FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
+                before_block[i] = current
+            current = value
+        else:
+            current = before_block.get(value, current)
+        opened.append((i, current))
     sections: list[Section] = []
-    opened = [(i, h) for i, h in headings.items() if h]
     first = lines[opened[0][0]][0] if opened else len(text)
     if first > 0 or not opened:
         sections.append(Section('other', '', None, 0, first))
     for n, (i, (kind, label, span)) in enumerate(opened):
+        start = lines[i][0]
         end = lines[opened[n + 1][0]][0] if n + 1 < len(opened) else len(text)
-        sections.append(Section(kind, label, span, lines[i][0], end))
+        if end > start or n + 1 == len(opened):
+            sections.append(Section(kind, label, span, start, end))
 
     breaks: set[int] = set()
     for i, (ls, le) in enumerate(lines):
         breaks.update(_sentence_breaks(text, ls, le))
         if headings[i]:
             breaks.update((ls, headings[i][2].end, le))
-        joined = i + 1 < len(lines) and not headings[i] and not headings[i + 1] \
+        joined = i + 1 < len(lines) and not headings[i] and not headings[i + 1] and i not in inside \
             and _soft_wrap(text, (ls, le), lines[i + 1])
         if not joined:
             breaks.add(le)
