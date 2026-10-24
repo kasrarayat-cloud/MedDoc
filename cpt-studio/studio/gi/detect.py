@@ -1328,11 +1328,21 @@ def _time_owner(an: Analysis, start: int, end: int, members: list[tuple[int, int
         anchor = max(before)
         if _trails_another_thing(an, start, anchor):
             return 'other'
+        if _another_familys_anchor(an, members, anchor):
+            return 'unclear'  # "Colonoscopy ... after a normal EGD performed last week": maybe not the colonoscopy's
         return 'service' if _only_its_own_act(an, anchor, start, history) else 'unclear'
     if _trails_another_thing(an, start, cs):
         return 'other'
     after = [s for s, e in members if s >= end]
     return 'service' if after and _only_its_own_act(an, end, min(after), history) else 'unclear'
+
+
+def _another_familys_anchor(an: Analysis, members: list[tuple[int, int]], anchor: int) -> bool:
+    """Whether the member ending at ``anchor`` is a service of another family than the first service of ``members``
+    (round 4 routing:5). Then a time after it may be that service's, so it holds the target rather than dating it."""
+    services = [m for s, e in sorted(members) for m in an.services_in(s, e) if m.kind == 'service']
+    at_anchor = [m for m in services if m.end == anchor]
+    return bool(services and at_anchor) and at_anchor[-1].family != services[0].family
 
 
 def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], window: tuple[int, int], em: bool,
@@ -2125,6 +2135,13 @@ def _read_span(an: Analysis, start: int, end: int) -> Reading:
     if reading.status == 'performed' and (an.touches_service(start, end)
                                           or an.lay.section_at(start).kind in POSITIVE_SECTIONS):
         return _adjusted(reading, an.adjustments.get(_family_of_span(an, start, end)))
+    if reading.status in NOT_TODAY and an.touches_service(start, end) and any(
+            m.kind == 'em-visit' and _overlaps(m.start, m.end, start, max(end, start + 1)) for m in an.em):
+        # A visit statement that names another service ("Follow-up office visit to discuss the EGD performed last
+        # week") takes that service's status from its time; the visit itself is today's, so it holds, never
+        # excludes (round 4 routing:4).
+        return Reading('uncertain', (f'uncertain: the visit statement names another service, read {reading.status}',)
+                       + reading.cues, reading.basis)
     return reading
 
 

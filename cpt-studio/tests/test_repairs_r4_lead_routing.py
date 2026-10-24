@@ -224,3 +224,39 @@ class Routing7QualifiedMonthTests(unittest.TestCase):
             text = eus_note('Procedure: EUS with fine-needle biopsy of the pancreatic head mass ' + tail, INDICATION)
             with self.subTest(tail=tail):
                 self.assertEqual(family(text, 'gi.eus'), 'performed')
+
+
+def office(visit):
+    return (HEADER + 'Place of service: Office (POS 11)\n' + visit + '\nChief complaint: GI symptoms.\nAssessment: '
+            'Stable.\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Routing4And5AnotherServicesTimeTests(unittest.TestCase):
+    """routing:4 and routing:5: another service's time made a visit statement, or today's colonoscopy line, read
+    historical, so the E/M or 45385 was excluded."""
+
+    def test_a_visit_to_discuss_a_past_procedure_is_never_excluded(self):
+        for visit in ('Follow-up office visit to discuss the EGD performed last week.',
+                      'Established patient office visit to review the colonoscopy done last week.',
+                      'Office visit to review her colonoscopy from 2 weeks ago.',
+                      'Follow-up office visit to discuss the EGD performed last month.'):
+            text = office(visit)
+            with self.subTest(visit=visit):
+                proposals, _ = run_engine(text, [('99214', visit)])
+                self.assertNotEqual(proposals['99214'].bucket, 'excluded', proposals['99214'].exclusion_reason)
+
+    def test_another_services_time_never_excludes_todays_colonoscopy(self):
+        findings = 'Findings: The colonoscope was advanced to the cecum. A 6 mm polyp was removed with a cold snare.\n'
+        for line in ('Colonoscopy with cold snare polypectomy for iron deficiency anemia after a normal EGD performed '
+                     'last week.', 'Colonoscopy with cold snare polypectomy for a polyp seen on a flexible '
+                     'sigmoidoscopy at an outside hospital.'):
+            text = HEADER + 'Procedure: ' + line + '\n' + findings
+            with self.subTest(line=line):
+                proposals, _ = run_engine(text, [('45385', 'Procedure: ' + line)])
+                self.assertNotEqual(proposals['45385'].bucket, 'excluded', proposals['45385'].exclusion_reason)
+
+    def test_a_services_own_time_still_dates_it(self):
+        for text, slug in ((HEADER + 'History: EGD was performed last month at an outside hospital.\n', 'gi.egd'),
+                           (HEADER + 'Indication: She underwent EGD last year.\n', 'gi.egd')):
+            with self.subTest(text=text):
+                self.assertEqual(family(text, slug), 'historical')
