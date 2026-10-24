@@ -2332,12 +2332,16 @@ OTHER_FAMILY = 'gi.other'  # outside DETECTED_FAMILIES: a gi.other code's status
 _PROCEDURE_WORD = re.compile(r'\b(?:\w+(?:scop(?:y|ies)|ectom(?:y|ies)|otom(?:y|ies)|ostom(?:y|ies)|plast(?:y|ies)|'
                              r'centesis|pex(?:y|ies)|rrhaph(?:y|ies))|ligations?|banding|biops(?:y|ies)|injections?|'
                              r'dilat(?:ion|ation)s?|drainage|excisions?|incisions?|resections?|ablations?|sclerotherapy|'
-                             r'cauterization|cautery|manometry|debridement)\b', re.A | re.I)
-# Never such a procedure: an E/M service, an examination, sedation, consent, a test, or a person.
+                             r'cauterization|cautery|manometry|debridement'
+                             # the act nouns' standard abbreviations (routing:22): incision and drainage, rubber band
+                             # ligation
+                             r'|I[ \t]*&[ \t]*D|RBL)\b', re.A | re.I)
+# Never such a procedure: an E/M service, an examination, sedation, consent, a test, or a person ("I", never the "I" of
+# "I&D").
 _NOT_A_PROCEDURE = re.compile(r'\b(?:visits?|evaluations?|management|E/M|consult\w*|counsel\w*|exam(?:ination)?s?|'
                               r'histor(?:y|ies)|reviews?|assessments?|discussions?|education|sedation|anesthesia|'
                               r'anaesthesia|consent|labs?|laboratory|imaging|tests?|testing|time|MDM|separately|'
-                              r'patient|pt|she|he|they|we|i)\b', re.A | re.I)
+                              r'patient|pt|she|he|they|we|i(?![ \t]*&))\b', re.A | re.I)
 # A name led by a negation, a condition or a plan documents no procedure done ("No endoscopy or other
 # procedure was performed", "None performed today", "If banding were done", "Discussed hemorrhoid banding").
 _NOT_DONE_LED = re.compile(r'(?:no|none|not|neither|nor|without|w/o|if|unless|whether|should|would|could|may|might|'
@@ -2374,6 +2378,24 @@ _BANDING = re.compile(r'\bband(?:s|ed|ing)?\b|\bligat\w*|\bRBL\b', re.A | re.I)
 _LOWER_FAMILIES = ('gi.colonoscopy', 'gi.flex_sig')
 _RETROFLEXION = re.compile(r'\bretroflex\w*', re.A | re.I)
 OTHER_CONTEXT_SENTENCES = 6  # how many earlier sentences of its section speak for a banding (bounds the work)
+# Further forms of a procedure done (routing:22), each told by its form and each only ever adding a hold:
+# - the act of an act noun, as a participle after an auxiliary ("Two internal hemorrhoids were banded today") or after
+#   "we" / "I" ("Today we banded two internal hemorrhoids"); never "dilated" or "injected", which name findings;
+# - a -scopy name labelling its findings in an office note ("Anoscopy: grade 2 internal hemorrhoids, no fissure.");
+# - the subject of "was performed" written with an appositive or a list between commas ("Rubber band ligation of
+#   internal hemorrhoids, columns 1 and 2, was performed today").
+_ACT_PARTICIPLE = r'(?:banded|ligated|excised|resected|ablated|cauteri[sz]ed|incised|drained|debrided|sclerosed|biopsied)'
+_ACT_DONE = re.compile(r'\b(?:was|were|has[ \t]+been|have[ \t]+been|had[ \t]+been)[ \t]+(?:(?:then|also|successfully|'
+                       r'uneventfully|safely|subsequently)[ \t]+)?' + _ACT_PARTICIPLE + r'\b', re.A | re.I)
+_WE_ACT = re.compile(r'\b(?:we|I)[ \t]+(?:(?:then|also|successfully|subsequently)[ \t]+)?(?P<act>' + _ACT_PARTICIPLE
+                     + r')\b', re.A | re.I)
+_SCOPY_LABEL = re.compile(r'[ \t]*(?:[-*•][ \t]+)?(?P<name>(?:[A-Za-z][\w/-]*[ \t]+){0,3}[A-Za-z]+scop(?:y|ies))'
+                          r'[ \t]*:[ \t]*(?=\S)', re.A | re.I)
+_APPOSITIVE_GAP = re.compile(r'(?:[ \t]*,[ \t]*(?:(?!\b(?:was|were|is|are|has|have|had|not|no|never|which|that|who|if|'
+                             r'when|unless|whether)\b)[^,;:.()\n]){1,60}?)+[ \t]*,?' + _DONE_GAP.pattern, re.A | re.I)
+# A stated act or a findings label whose ordinary reading is silent still speaks of a procedure: held, never
+# performed (validation then holds a same-day E/M as possibly beside it).
+OTHER_STATED = 'uncertain: a procedure is stated by its act or its findings, with no performance cue'
 
 
 def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[str]) -> bool:
@@ -2425,23 +2447,52 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
     readings, so a planned or denied procedure reads planned or negated."""
     text, found = an.text, {}
 
-    def consider(span, clause):
+    def consider(span, clause, form=''):
+        """``form``: 'act' (a stated act: its participle is the procedure's word) or 'label' (a findings label), the
+        routing:22 forms, whose mentions carry it as their value (see _other_finding)."""
         if span is None:
             return
         s, e = span
         name = text[s:e]
-        if not _PROCEDURE_WORD.search(name) or _NOT_A_PROCEDURE.search(name) or _NOT_DONE_LED.match(name):
+        if (form != 'act' and not _PROCEDURE_WORD.search(name)) or _NOT_A_PROCEDURE.search(name) \
+                or _NOT_DONE_LED.match(name):
             return
         scope = (max(clause[0], s - CLAUSE_REACH), min(clause[1], e + CLAUSE_REACH))
-        if not _about_a_detected_family(an, *scope, detected) and not _lower_tract_banding(an, s, e, detected):
-            found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name)
+        if _about_a_detected_family(an, *scope, detected) or _lower_tract_banding(an, s, e, detected):
+            return
+        if form and _in_a_detected_procedures_text(an, s, e, detected):
+            return
+        found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name, form)
 
-    def told_done(span, clause):
+    def told_done(span, clause, form=''):
         """An explicit performed clause names a same-day procedure only when it tells no other time: one that does
         ("was performed at her last visit", "was done as a child", "in June") is history, as it read at 57b4b3747,
         before gi.other existed (routing:21)."""
         if span is not None and not _another_time(an, *span):
-            consider(span, clause)
+            consider(span, clause, form)
+
+    def subject(m, cs):
+        """The subject written before the verb at ``m``: from the last break before it (_SUBJECT_BREAK), else, past
+        comma breaks only, from an earlier one when the rest up to the verb is an appositive or a list (routing:22)."""
+        breaks = [(b.end(), b.group(0)) for b in _SUBJECT_BREAK.finditer(text, cs, m.start())]
+        starts = [breaks[-1][0] if breaks else cs]
+        for index in range(len(breaks) - 1, -1, -1):
+            if breaks[index][1] != ',':
+                break
+            starts.append(breaks[index - 1][0] if index else cs)
+        for n, at in enumerate(starts):
+            word = _WORD.search(text, at, m.start())
+            name = word and _procedure_name(an, word.start(), m.start())
+            if not name:
+                continue
+            named = bool(_PROCEDURE_WORD.search(text, *name))
+            if n == 0:
+                if not named:
+                    continue  # nothing is named after the last break: an earlier comma may open the subject
+                return name if _DONE_GAP.fullmatch(text, name[1], m.start()) else None
+            if named and _APPOSITIVE_GAP.fullmatch(text, name[1], m.start()):
+                return name
+        return None
 
     def names(pos, sentence):  # the name written at pos and, along a check-box line, each item's name
         for _ in range(OTHER_BOX_ITEMS):
@@ -2464,20 +2515,52 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
         for sentence in an.lay.sentences[index + 1:bisect.bisect_left(an.lay.sentences, (section.end, -1))]:
             if _BOX.search(text, *sentence):
                 names(sentence[0], sentence)  # a later check-box line names its own procedures
-    for m in _DONE.finditer(text):
+    def subject_start(m):
         clause = _clause_at(an, m.start())
         heading = an.lay.section_at(m.start()).heading
         cs = heading.end if heading is not None and clause[0] < heading.end <= m.start() else clause[0]
-        cs = max(cs, m.start() - OTHER_NAME_REACH)
-        breaks = [b.end() for b in _SUBJECT_BREAK.finditer(text, cs, m.start())]
-        word = _WORD.search(text, breaks[-1] if breaks else cs, m.start())
-        name = word and _procedure_name(an, word.start(), m.start())
-        if name and _DONE_GAP.fullmatch(text, name[1], m.start()):
-            told_done(name, clause)
+        return clause, max(cs, m.start() - OTHER_NAME_REACH)
+
+    for m in _DONE.finditer(text):
+        clause, cs = subject_start(m)
+        told_done(subject(m, cs), clause)
     for m in _OTHER_OBJECT_CUE.finditer(text):
         clause = _clause_at(an, m.start())
         told_done(_procedure_name(an, m.end(), clause[1]), clause)
+    # routing:22: a stated act ("<subject> were banded", "we banded <object>") and an office note's findings label
+    for m in _ACT_DONE.finditer(text):
+        clause, cs = subject_start(m)
+        breaks = [b.end() for b in _SUBJECT_BREAK.finditer(text, cs, m.start())]
+        word = _WORD.search(text, breaks[-1] if breaks else cs, m.start())
+        if word is not None:
+            told_done(_trimmed_span(text, _NAME_LEAD.match(text, word.start(), m.start()).end(), m.end()), clause, 'act')
+    for m in _WE_ACT.finditer(text):
+        clause = _clause_at(an, m.start())
+        obj = _procedure_name(an, m.end(), clause[1])
+        if obj is not None:
+            told_done((m.start('act'), obj[1]), clause, 'act')
+    if any(m.kind in ('em-visit', 'em-time', 'em-mdm') for m in an.em):
+        for s, e in an.lay.sentences:
+            label = _SCOPY_LABEL.match(text, s, e)
+            if label:
+                told_done(label.span('name'), (s, e), 'label')
     return sorted(found.values(), key=lambda mention: mention.start)
+
+
+def _in_a_detected_procedures_text(an: Analysis, s: int, e: int, detected: list[str]) -> bool:
+    """Whether [s, e) lies in a detected procedure's own text: a procedure, findings or technique section whose
+    heading, or one of the OTHER_CONTEXT_SENTENCES sentences before it, names a detected family or its instrument
+    ("Findings: The gastroscope was advanced ... Three columns were banded.")."""
+    if not detected:
+        return False
+    section = an.lay.section_at(s)
+    index = _sentence_index(an, s)
+    if section.kind not in POSITIVE_SECTIONS or index < 0:
+        return False
+    lo = max(section.start, an.lay.sentences[max(0, index - OTHER_CONTEXT_SENTENCES)][0])
+    if any(m.family in detected for m in an.services_in(lo, e)):
+        return True
+    return any(p.search(an.text, lo, e) for family, p in cues.INSTRUMENTS if family in detected)
 
 
 def _lower_tract_banding(an: Analysis, s: int, e: int, detected: list[str]) -> bool:
@@ -2505,7 +2588,7 @@ def _other_finding(an: Analysis, others: list[Mention], has_basis: bool) -> Fami
     never adjusts another's passage. The family is performed, incomplete or uncertain when any of its
     procedures is (in that order: one procedure's denial does not make the family read "negated" while
     another may have been done); else the usual aggregate of all of them."""
-    raw = [_generic_reading(an, m.start, m.end) for m in others]
+    raw = [_stated(_generic_reading(an, m.start, m.end), m) for m in others]
     kinds = tuple(an.lay.section_at(m.start).kind for m in others)
     away = tuple(_elsewhere(an, m) for m in others)
     statuses, readings = [], []
@@ -2518,6 +2601,14 @@ def _other_finding(an: Analysis, others: list[Mention], has_basis: bool) -> Fami
         raw, section_suffices=not has_basis, kinds=kinds, away=away)
     return FamilyFinding(OTHER_FAMILY, status, tuple(_mention(an, m, r) for m, r in zip(others, readings)), (),
                          _missing(OTHER_FAMILY, []))
+
+
+def _stated(reading: Reading, m: Mention) -> Reading:
+    """A routing:22 mention (a stated act or a findings label, its value) whose ordinary reading is silent: held with
+    OTHER_STATED, never performed; every other reading as it is."""
+    if m.value in ('act', 'label') and reading.status == 'uncertain' and reading.cues == (SILENT,):
+        return Reading('uncertain', (OTHER_STATED,), 'cue')
+    return reading
 
 
 def _route(an: Analysis) -> RoutingResult:

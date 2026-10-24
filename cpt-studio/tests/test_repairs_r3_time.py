@@ -641,5 +641,69 @@ class Routing21OtherHistoryTests(unittest.TestCase):
                 self.assertIn('separate_em', clarified(proposals['99214']))
 
 
+
+# --- routing:22 --------------------------------------------------------------------------------------------------
+
+def same_day_office(body):
+    return (OFFICE_HEAD + BLEEDING_VISIT + '\n' + body + '\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Routing22OtherSameDayFormsTests(unittest.TestCase):
+    """routing:22 (medium, under). Same-day procedures the structural gi.other rule did not see ('hemorrhoids were
+    banded', a subject with commas, 'Anoscopy: grade 2 ...', 'we banded', 'I&D') left the E/M ready with no same-day
+    check. Each is read by its form, never by a list of names, and only ever adds a hold."""
+
+    CLAIMED = ('Two internal hemorrhoids were banded today without complication.',
+               'Rubber band ligation of internal hemorrhoids, columns 1 and 2, was performed today.',
+               'Anoscopy: grade 2 internal hemorrhoids, no fissure.', 'Today we banded two internal hemorrhoids.',
+               'I&D of a perianal abscess was performed today.')
+    VARIANTS = ('Banding of the right anterior, right posterior and left lateral hemorrhoid columns was performed today.',
+                'Procedure: Two internal hemorrhoids were banded today without complication.',
+                'Internal hemorrhoids were banded x3 today.', 'RBL x2 performed today.',
+                'Procedure: After informed consent was obtained, the patient was placed in the left lateral position. '
+                'Two internal hemorrhoid columns were ligated with rubber bands.',
+                'Physical exam: Rectal: normal tone. Anoscopy: grade 2 internal hemorrhoids.',
+                'A perianal abscess was incised and drained today.')
+
+    def test_the_claimed_and_variant_procedures_hold_the_visit(self):
+        for body in self.CLAIMED + self.VARIANTS:
+            text = same_day_office(body)
+            with self.subTest(body=body):
+                other = other_finding(text)
+                self.assertIsNotNone(other)
+                self.assertIn(other.status, POSITIVE + ('uncertain',))
+                self.assertFalse(any(c.startswith('uncertain: no performance evidence')
+                                     for m in other.mentions for c in m.cues))
+                proposals, _ = run_engine(text, [('99214', BLEEDING_VISIT)])
+                self.assertEqual(proposals['99214'].status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_nothing_done_today_names_no_procedure(self):
+        for body in ('No hemorrhoids were banded today.', 'Hemorrhoids were not banded.',
+                     'The bile duct was dilated on MRCP.', 'Banding, if needed, was performed.',
+                     'Two internal hemorrhoids were banded at her last visit.', 'She was seen for banding.',
+                     'Anoscopy: deferred to the next visit.', 'Anoscopy: patient declined.'):
+            text = same_day_office(body)
+            with self.subTest(body=body):
+                other = other_finding(text)
+                self.assertTrue(other is None or other.status not in POSITIVE + ('uncertain',),
+                                other and [(m.span.text, m.status, m.cues) for m in other.mentions])
+                proposals, _ = run_engine(text, [('99214', BLEEDING_VISIT)])
+                self.assertTrue(ready(proposals['99214']), clarified(proposals['99214']))
+
+    def test_a_detected_procedures_own_act_is_never_other(self):
+        for text in (HEADER + 'Procedure: EGD\nFindings: The gastroscope was advanced to the duodenum. Grade 3 '
+                              'esophageal varices. Three columns were banded.\n',
+                     HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Two '
+                              'internal hemorrhoids were banded on retroflexion.\n',
+                     HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Anoscopy: '
+                              'normal.\n',
+                     # a findings label is read only in an office note (a document with E/M documentation)
+                     HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n'
+                              'Impression: Anoscopy: small internal hemorrhoids.\n'):
+            with self.subTest(text=text.splitlines()[-1][:60]):
+                self.assertIsNone(other_finding(text))
+
+
 if __name__ == '__main__':
     unittest.main()
