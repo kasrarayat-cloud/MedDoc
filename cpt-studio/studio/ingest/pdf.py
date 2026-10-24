@@ -35,7 +35,9 @@ What a page shows is read, or the result says what was not read:
 - **Integrity.** A page count that disagrees with the page tree, a file that
   ends inside an unfinished incremental update, or no end-of-file marker
   fails the document. A page whose compressed content does not decode
-  completely is named and the result is 'partial'.
+  completely is named and the result is 'partial', as is a page read with
+  OCR whose image's encoding cannot be checked to its end
+  (studio.ingest.pdfcontent).
 
 A document is never truncated: too many pages or too much text fails the
 whole document.
@@ -61,8 +63,9 @@ from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
 from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
 from .symbols import CHECKED_BOX, UNCHECKED_BOX
-from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, object_key, resolved,
-                         stream_damaged)
+from . import pdfcontent
+from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
+                         object_key, resolved, stream_damaged)
 from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
                    page_phrase, pdf_method, replace_surrogates)
 
@@ -137,6 +140,7 @@ class _Page:
     limited: bool = False  # pypdf stopped reading form XObjects at its invocation limit
     undecodable: int = 0  # glyphs of the text layer that name no character, dropped
     placed: int = 0  # check-box glyphs written into the layer (not read from it)
+    unverified: bool = False  # read with OCR, and an image's encoding could not be checked to its end
 
     @property
     def text(self) -> str:
@@ -195,7 +199,9 @@ def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult
     texts = [ocr.texts.get(n, page.text) for n, page in enumerate(read, 1)]
     for n in ocr.texts:  # the page's text came from its images: they must be whole
         page = read[n - 1]
-        page.damaged = page.damaged or any(stream_damaged(image) for image in page.content.images)
+        states = {image_state(image) for image in page.content.images}
+        page.damaged = page.damaged or pdfcontent.DAMAGED in states
+        page.unverified = pdfcontent.UNVERIFIED in states
 
     unavailable = [] if tools else candidates
     unread = sorted(set(unavailable) | set(ocr.problems))
@@ -584,6 +590,11 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         its = agree(damaged, 'its', 'their')
         messages.append(f'{page_phrase(damaged)} {agree(damaged, "is", "are")} damaged: part of {its} content could '
                         f'not be decoded, so {its} text may be incomplete or wrong.')
+    unchecked = [n for n, page in enumerate(read, 1) if page.unverified and not page.damaged]
+    if unchecked:
+        messages.append(f'{page_phrase(unchecked)} {agree(unchecked, "was", "were")} read with OCR, but '
+                        f'{agree(unchecked, "its image", "their images")} could not be checked for completeness, so '
+                        f'{agree(unchecked, "its", "their")} text may be incomplete.')
     limited = [n for n, page in enumerate(read, 1) if page.limited]
     if limited:
         messages.append(f'{page_phrase(limited)} {agree(limited, "draws", "draw")} more form objects than the '
@@ -597,7 +608,7 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(outside)} {agree(outside, "has", "have")} text placed outside the visible page '
                         'area; that text was not extracted.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
-    return messages, bool(damaged or limited) or annotation_partial
+    return messages, bool(damaged or unchecked or limited) or annotation_partial
 
 
 def _scanned_phrase(pages) -> str:

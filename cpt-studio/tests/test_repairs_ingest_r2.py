@@ -15,6 +15,7 @@ import io
 import os
 import re
 import tempfile
+import time
 import unittest
 import zlib
 
@@ -980,6 +981,227 @@ class PartialPageInsertTests(unittest.TestCase):
                 result = pdf_extract(insert_pdf(pixels, placed), ocr=None)
                 self.assertEqual((result.status, result.messages), ('ok', (LARGE_IMAGE,)))
                 self.assertEqual(result.text.strip(), '\n'.join(INSERT_HEADER))
+
+
+# --- ingest:4 — every encoding a page's text depends on must be seen to end ------------------------
+
+DAMAGED_PAGE = ('Page {n} is damaged: part of its content could not be decoded, so its text may be incomplete or '
+                'wrong.')
+UNCHECKED_IMAGE = ('Page 1 was read with OCR, but its image could not be checked for completeness, so its text may '
+                   'be incomplete.')
+OCR_READ = 'Page 1 was read with OCR; OCR can misread characters — check evidence against the original.'
+
+
+def in_process(data: bytes, tools=None):
+    from studio.ingest.pdf import extract_pdf
+    with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as workdir:
+        return extract_pdf(data, Limits(), tools, time.monotonic() + 120, workdir)
+
+
+def run_length(data: bytes) -> bytes:
+    """A RunLengthDecode encoding of ``data``: literal runs of up to 128 bytes, then the EOD byte."""
+    out = bytearray()
+    for start in range(0, len(data), 128):
+        piece = data[start:start + 128]
+        out += bytes([len(piece) - 1]) + piece
+    return bytes(out + b'\x80')
+
+
+def two_page_pdf(filter_name: str, page2_stream: bytes) -> bytes:
+    """The round-1 two-page shape; page 2's content is ``page2_stream`` under ``filter_name``."""
+    from tests.test_repairs_ingest_pdf import PAGE1_LINES, page_content
+    first = page_content(PAGE1_LINES)
+    page = ('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 7 0 R >> >> '
+            '/Contents {} 0 R >>')
+    return serialise({1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>',
+                      3: page.format(5).encode(), 4: page.format(6).encode(),
+                      5: b'<< /Length %d >>\nstream\n' % len(first) + first + b'\nendstream',
+                      6: (b'<< /Length %d /Filter /%s >>\nstream\n' % (len(page2_stream), filter_name.encode())
+                          + page2_stream + b'\nendstream'),
+                      7: HELVETICA})
+
+
+def image_page(image_dict: str, data: bytes) -> bytes:
+    """One image-only page (no text layer, so it is read with OCR): ``data`` drawn over the whole page."""
+    return serialise({1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+                      3: (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Im0 4 0 R '
+                          b'>> >> /Contents 5 0 R >>'),
+                      4: f'<< /Type /XObject /Subtype /Image {image_dict} /Length {len(data)} >>\nstream\n'.encode()
+                         + data + b'\nendstream',
+                      5: stream('q 612 0 0 792 0 0 cm /Im0 Do Q')})
+
+
+def fax_strip(compression: str, size=(1728, 2200)) -> bytes:
+    """One CCITT strip, as libtiff writes it (Group 4 ends with EOFB, Group 3 with RTC)."""
+    image = Image.new('1', size, 1)
+    draw = ImageDraw.Draw(image)
+    for row in range(40, size[1] - 40, 60):
+        for column in range(60, size[0] - 200, 180):
+            draw.rectangle((column, row, column + 120, row + 18), fill=0)
+    from PIL import TiffImagePlugin
+    saved, TiffImagePlugin.STRIP_SIZE = TiffImagePlugin.STRIP_SIZE, 1 << 30
+    try:
+        buffer = io.BytesIO()
+        image.save(buffer, format='TIFF', compression=compression)
+    finally:
+        TiffImagePlugin.STRIP_SIZE = saved
+    tiff = Image.open(io.BytesIO(buffer.getvalue()))
+    (offset,), (count,) = tiff.tag_v2[273], tiff.tag_v2[279]
+    return buffer.getvalue()[offset:offset + count]
+
+
+def jbig2_segment(number: int, kind: int, data: bytes, length: int | None = None) -> bytes:
+    """A JBIG2 segment: header (no referred-to segments, 1-byte page association) and data."""
+    declared = len(data) if length is None else length
+    return (number.to_bytes(4, 'big') + bytes([kind, 0x00, 0x01]) + declared.to_bytes(4, 'big') + data)
+
+
+JBIG2 = (jbig2_segment(0, 48, (1728).to_bytes(4, 'big') + (2200).to_bytes(4, 'big') + bytes(11))
+         + jbig2_segment(1, 38, bytes(range(256)) * 40))
+
+
+class StrictDecodingTests(unittest.TestCase):
+    """ingest:4 — LZW and RunLength text streams, and CCITT, JBIG2 and JPEG 2000 images on OCR pages."""
+
+    def test_lzw_content_stream_cut_anywhere_is_reported(self):
+        from pypdf._codecs._codecs import LzwCodec
+        from tests.test_repairs_ingest_pdf import PAGE2_LINES, page_content
+        whole = LzwCodec().encode(page_content(PAGE2_LINES))
+        intact = in_process(two_page_pdf('LZWDecode', whole))
+        self.assertEqual((intact.status, intact.messages), ('ok', ()))
+        self.assertIn('Retroflexion in the rectum performed', intact.text)
+        for cut in range(1, len(whole)):
+            with self.subTest(cut=cut):
+                result = in_process(two_page_pdf('LZWDecode', whole[:cut]))
+                self.assertNotEqual(result.status, 'ok')
+                self.assertTrue(any(message.startswith('Page 2') for message in result.messages), result.messages)
+        for keep in range(1, len(whole), 7):
+            with self.subTest(zero_filled_from=keep):
+                result = in_process(two_page_pdf('LZWDecode', whole[:keep] + bytes(len(whole) - keep)))
+                self.assertIn(DAMAGED_PAGE.format(n=2), result.messages)
+        through_child = pdf_extract(two_page_pdf('LZWDecode', whole[:128]), ocr=None)
+        self.assertEqual(through_child.status, 'partial')
+        self.assertIn(DAMAGED_PAGE.format(n=2), through_child.messages)
+
+    def test_lzw_stream_without_an_initial_clear_code_is_whole(self):
+        # pypdf's encoder starts with a clear-table code; a stream may also start without one. The table fills
+        # past 511 entries here, so the code width grows exactly where the encoder's does.
+        from pypdf._codecs._codecs import LzwCodec
+        from tests.test_repairs_ingest_pdf import PAGE2_LINES, page_content
+        content = page_content(PAGE2_LINES * 3)
+        whole = LzwCodec().encode(content)
+        bits = ''.join(f'{byte:08b}' for byte in whole)
+        self.assertEqual(bits[:9], f'{256:09b}')
+        rest = bits[9:] + '0' * (-len(bits[9:]) % 8)
+        unclear = int(rest, 2).to_bytes(len(rest) // 8, 'big')
+        self.assertEqual(LzwCodec().decode(unclear), content)
+        result = in_process(two_page_pdf('LZWDecode', unclear))
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+
+    def test_lzw_code_the_table_does_not_hold_is_reported(self):
+        def packed(codes):  # 9-bit codes, most significant bit first, as LZWDecode reads them
+            bits = ''.join(f'{code:09b}' for code in codes)
+            bits += '0' * (-len(bits) % 8)
+            return int(bits, 2).to_bytes(len(bits) // 8, 'big')
+
+        text = [ord(char) for char in 'BT /F1 11 Tf 72 720 Td (Cold snare polypectomy.) Tj ET']
+        self.assertEqual(in_process(two_page_pdf('LZWDecode', packed([256] + text + [257]))).status, 'ok')
+        result = in_process(two_page_pdf('LZWDecode', packed([256] + text[:20] + [400] + text[20:] + [257])))
+        self.assertIn(DAMAGED_PAGE.format(n=2), result.messages)
+
+    def test_cut_run_length_scan_read_with_ocr_is_damaged(self):
+        pixels = bytes(range(256)) * (850 * 1100 // 256 + 1)
+        whole = run_length(pixels[:850 * 1100])
+        image = '/Width 850 /Height 1100 /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /RunLengthDecode'
+        self.assertEqual(self.ocr(image_page(image, whole)).messages, (OCR_READ,))
+        for label, data in (('cut inside a run', whole[:len(whole) // 2]), ('only its end-of-data byte cut', whole[:-1])):
+            with self.subTest(label):
+                result = self.ocr(image_page(image, data))
+                self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, DAMAGED_PAGE.format(n=1))))
+
+    def test_run_length_content_stream_cut_is_reported(self):
+        from tests.test_repairs_ingest_pdf import PAGE2_LINES, page_content
+        whole = run_length(page_content(PAGE2_LINES))
+        self.assertEqual(in_process(two_page_pdf('RunLengthDecode', whole)).status, 'ok')
+        for cut in range(1, len(whole), 5):
+            with self.subTest(cut=cut):
+                self.assertNotEqual(in_process(two_page_pdf('RunLengthDecode', whole[:cut])).status, 'ok')
+
+    def ocr(self, data: bytes):
+        with FakeOcr() as fake:
+            return pdf_extract(data, ocr=fake.tools)
+
+    def test_cut_fax_scan_read_with_ocr_is_damaged(self):
+        for compression, k in (('group4', -1), ('group3', 0)):
+            strip = fax_strip(compression)
+            image = f'/Width 1728 /Height 2200 /BitsPerComponent 1 /ImageMask false /ColorSpace /DeviceGray ' \
+                    f'/Filter /CCITTFaxDecode /DecodeParms << /K {k} /Columns 1728 /Rows 2200 >>'
+            with self.subTest(compression):
+                whole = self.ocr(image_page(image, strip))
+                self.assertEqual((whole.status, whole.method, whole.messages), ('ok', 'pdf-ocr', (OCR_READ,)))
+                # Group 4 ends with EOFB, so any cut shows; Group 3 is checked by its EOL codes (one per row), so a
+                # cut inside the very last row (at most one pixel row) cannot be seen: cut a few rows instead.
+                end_cut = strip[:-3] if k < 0 else strip[:-200]
+                for label, data in (('cut to a third', strip[:len(strip) // 3]),
+                                    ('zero-filled from a third', strip[:len(strip) // 3]
+                                     + bytes(len(strip) - len(strip) // 3)),
+                                    ('end cut', end_cut)):
+                    with self.subTest(label):
+                        result = self.ocr(image_page(image, data))
+                        self.assertEqual((result.status, result.messages), ('partial', (OCR_READ,
+                                                                                        DAMAGED_PAGE.format(n=1))))
+
+    def test_fax_scan_without_end_of_block_cannot_be_checked(self):
+        image = ('/Width 1728 /Height 2200 /BitsPerComponent 1 /ColorSpace /DeviceGray /Filter /CCITTFaxDecode '
+                 '/DecodeParms << /K -1 /Columns 1728 /Rows 2200 /EndOfBlock false >>')
+        result = self.ocr(image_page(image, fax_strip('group4')))
+        self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, UNCHECKED_IMAGE)))
+
+    def test_cut_jbig2_scan_read_with_ocr_is_damaged(self):
+        image = '/Width 1728 /Height 2200 /BitsPerComponent 1 /ColorSpace /DeviceGray /Filter /JBIG2Decode'
+        self.assertEqual(self.ocr(image_page(image, JBIG2)).messages, (OCR_READ,))
+        for cut in (len(JBIG2) // 3, len(JBIG2) - 1, 20):
+            with self.subTest(cut=cut):
+                result = self.ocr(image_page(image, JBIG2[:cut]))
+                self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, DAMAGED_PAGE.format(n=1))))
+        unknown = JBIG2[:30] + jbig2_segment(1, 38, bytes(64), length=0xFFFFFFFF)
+        result = self.ocr(image_page(image, JBIG2[:30] + unknown[30:]))
+        self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, UNCHECKED_IMAGE)))
+
+    def test_cut_jpeg_2000_scan_read_with_ocr_is_damaged(self):
+        buffer = io.BytesIO()
+        Image.new('L', (850, 1100), 255).save(buffer, format='JPEG2000')
+        jp2 = buffer.getvalue()
+        image = '/Width 850 /Height 1100 /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /JPXDecode'
+        self.assertEqual(self.ocr(image_page(image, jp2)).messages, (OCR_READ,))
+        for label, data in (('cut by a third', jp2[:len(jp2) * 2 // 3]), ('end marker cut', jp2[:-2])):
+            with self.subTest(label):
+                result = self.ocr(image_page(image, data))
+                self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, DAMAGED_PAGE.format(n=1))))
+
+
+# --- ingest:9 — a large lossless scan that decodes completely is not damaged --------------------------
+
+class LargeLosslessScanTests(unittest.TestCase):
+    """ingest:9 — past 75 MB decoded, an OCR image is still checked to its end, not called damaged."""
+
+    def test_intact_scan_over_75_mb_is_ok_and_a_cut_one_is_damaged(self):
+        width, height = 5000, 5001  # RGB: 75,015,000 bytes decoded
+        row = (b'\xff' * 3 * 400 + b'\x00' * 3 * 100) * (width // 500)
+        whole = zlib.compress(row * height, 6)
+        image = f'/Width {width} /Height {height} /BitsPerComponent 8 /ColorSpace /DeviceRGB /Filter /FlateDecode'
+        with FakeOcr() as fake:
+            intact = pdf_extract(image_page(image, whole), ocr=fake.tools)
+            cut = pdf_extract(image_page(image, whole[:len(whole) * 6 // 10]), ocr=fake.tools)
+        self.assertEqual((intact.status, intact.method, intact.messages), ('ok', 'pdf-ocr', (OCR_READ,)))
+        self.assertEqual((cut.status, cut.messages), ('partial', (OCR_READ, DAMAGED_PAGE.format(n=1))))
+
+    def test_image_that_inflates_far_past_its_size_cannot_be_checked(self):
+        bomb = zlib.compress(bytes(200 * 1024 * 1024), 9)  # 200 MiB of zeros for a 100 x 100 image
+        image = '/Width 100 /Height 100 /BitsPerComponent 8 /ColorSpace /DeviceGray /Filter /FlateDecode'
+        with FakeOcr() as fake:
+            result = pdf_extract(image_page(image, bomb), ocr=fake.tools)
+        self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, UNCHECKED_IMAGE)))
 
 
 if __name__ == '__main__':

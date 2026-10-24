@@ -26,14 +26,20 @@ form XObjects it draws, with the current transformation matrix tracked:
   split into bands adds up; and the largest image's pixel count. The images
   a displayed annotation's appearance paints are added by pdfannots, placed
   as viewers place the appearance.
-- **Integrity.** Every FlateDecode stream the page's text depends on — its
-  content streams, the form XObjects it draws and their fonts' ToUnicode and
-  encoding CMaps — must decompress completely, checksum included. pypdf
-  decodes a truncated stream silently into a shorter one, so a stream that
-  does not reach its end marks the page damaged. The images are listed too:
-  a page read with OCR is damaged when one of its images is cut short (a
-  Flate image that does not decompress completely, a JPEG without its
-  end-of-image marker).
+- **Integrity.** Every stream the page's text depends on — its content
+  streams, the form XObjects it draws and their fonts' ToUnicode and encoding
+  CMaps — must decode to the end its filters declare (Flate with its
+  checksum, LZW to its end-of-data code, RunLength to its end-of-data byte,
+  the ASCII filters to their end markers). pypdf decodes a truncated stream
+  silently into a shorter one, so a stream that does not reach its end marks
+  the page damaged. The images are listed too: a page read with OCR is
+  damaged when one of its images is cut short (Flate followed to its end
+  whatever its size, a JPEG or JPEG 2000 image without its end marker, JBIG2
+  segments that run past the data, Group 4 fax data without its
+  end-of-block pattern, Group 3 fax data with fewer EOL codes than rows),
+  and unverified when its encoding cannot be checked (a filter this cannot
+  check, fax data declared without an end-of-block pattern, a JBIG2 segment
+  of unknown length, an image that inflates far past its declared size).
 
 Importable without Django (the extraction child imports it).
 """
@@ -42,6 +48,7 @@ from __future__ import annotations
 import dataclasses
 import functools
 import math
+import re
 import zlib
 from dataclasses import dataclass, field
 from itertools import pairwise
@@ -745,35 +752,213 @@ def extraction_page(page, content: PageContent) -> PageObject:
 
 # --- integrity ----------------------------------------------------------------------
 
+OK, DAMAGED, UNVERIFIED, TOO_LARGE = 'ok', 'damaged', 'unverified', 'too large'
+LZW = frozenset({'/LZWDecode', '/LZW'})
+RUN_LENGTH = frozenset({'/RunLengthDecode', '/RL'})
+CCITT = frozenset({'/CCITTFaxDecode', '/CCF'})
+JBIG2 = frozenset({'/JBIG2Decode'})
+JPX = frozenset({'/JPXDecode'})
+INFLATE_CHUNK = 1 << 20
+# An image's stream is followed to its end through at most this many decoded bytes: its declared size times
+# the factor (for four 8-bit components, an upper bound), within the floor and ceiling. Past it, the image is
+# too large to check (a decompression bomb cannot run the check long); output volume alone is never damage.
+IMAGE_INFLATE_FACTOR, IMAGE_INFLATE_FLOOR, IMAGE_INFLATE_CEILING = 4, 64 * 1024 * 1024, 1024 * 1024 * 1024
+LZW_WIDEN = {9: 512, 10: 1024, 11: 2048}  # the table size at which the code width grows (less EarlyChange)
+FAX_G4_END = re.compile(r'0{11,}10{11,}1$')  # EOFB: two EOL codes (T.6)
+FAX_G3_END = {False: re.compile(r'(?:0{11,}1){6}$'), True: re.compile(r'(?:0{11,}11){6}$')}  # RTC: six EOLs
+FAX_EOL = re.compile(r'0{11,}1')
+
+
 def stream_damaged(stream) -> bool:
-    """Whether ``stream`` fails a strict decode: an incomplete or corrupt Flate stream, an ASCII
-    filter without its end marker, or a JPEG that does not reach its end-of-image marker. Filters
-    this cannot check strictly (LZW, RunLength, CCITT, JBIG2, JPEG 2000) are left to pypdf, whose
-    decoding warnings are watched separately."""
+    """Whether a stream the page's text depends on (its content, a form, a font's CMap, an object stream) fails
+    a strict decode. pypdf decodes these itself and reads one that does not reach its end silently short."""
+    return stream_state(stream, image=False) == DAMAGED
+
+
+def image_state(stream) -> str:
+    """OK, DAMAGED or UNVERIFIED for an image on a page read with OCR. pypdf never decodes these and the
+    renderer draws one cut short as far as it goes, so each must be seen to end."""
+    return stream_state(stream, image=True)
+
+
+def stream_state(stream, *, image: bool) -> str:
+    """OK, DAMAGED or UNVERIFIED (images only: a filter, or a size, this cannot check).
+
+    Every filter must reach the end its encoding declares: Flate its stream end and checksum, LZW its
+    end-of-data code (with every code one the table holds), RunLength its end-of-data byte, the ASCII filters
+    their end markers, a JPEG its end-of-image marker, JPEG 2000 its end-of-codestream marker, JBIG2 a whole
+    number of complete segments, and CCITT its end-of-block pattern (EOFB for Group 4; for Group 3 its RTC, or
+    an EOL code for every row).
+    For a stream the text depends on, output beyond pypdf's own limit is damage (pypdf reads no further); a
+    filter this cannot check is left to pypdf, whose decoding warnings are watched separately.
+    """
     try:
         filters = [resolved(item) for item in as_list(stream.get('/Filter'))]
+        parameters = as_list(stream.get('/DecodeParms'))
         data = stream._data  # the stored bytes: decrypted, still encoded
     except Exception:
-        return True
+        return DAMAGED
     if not filters or not isinstance(data, bytes) or not data.strip(b'\x00\t\n\x0c\r '):
-        return False  # unfiltered, or empty: nothing a decoder could lose
-    for name in filters:
-        if name in FLATE:
-            complete, data = inflate_strict(data)
-            if not complete:
-                return True
-        elif name in DCT:
-            return not jpeg_complete(data)
+        return OK  # unfiltered, or empty: nothing a decoder could lose
+    for index, name in enumerate(filters):
+        params = resolved(parameters[index]) if index < len(parameters) else None
+        params = params if isinstance(params, DictionaryObject) else DictionaryObject()
+        last = index == len(filters) - 1
+        if name in FLATE and image and last:
+            return inflate_complete(data, image_budget(stream))
+        if name in FLATE or name in LZW or name in RUN_LENGTH:
+            if name in FLATE:
+                state, data = inflate_strict(data)
+            elif name in LZW:
+                state, data = lzw_strict(data, int(number(params.get('/EarlyChange'), 1)), keep=not last)
+            else:
+                state, data = run_length_strict(data, keep=not last)
+            if state == TOO_LARGE:
+                return UNVERIFIED if image else DAMAGED
+            if state != OK:
+                return DAMAGED
         elif name in ASCII_HEX or name in ASCII_85:
             if (b'>' if name in ASCII_HEX else b'~>') not in data:
-                return True
+                return DAMAGED
             try:
                 data = (ASCIIHexDecode if name in ASCII_HEX else ASCII85Decode).decode(data)
             except Exception:
-                return True
+                return DAMAGED
+        elif name in DCT:
+            return OK if jpeg_complete(data) else DAMAGED
+        elif name in JPX:
+            return OK if jpx_complete(data) else DAMAGED
+        elif name in JBIG2:
+            return jbig2_state(data, resolved(params.get('/JBIG2Globals')))
+        elif name in CCITT:
+            return ccitt_state(data, params, int(number(stream.get('/Height'), 0)))
         else:
-            return False
-    return False
+            return UNVERIFIED if image else OK
+    return OK
+
+
+def image_budget(stream) -> int:
+    width, height = max(0.0, number(stream.get('/Width'))), max(0.0, number(stream.get('/Height')))
+    bits = max(8.0, number(stream.get('/BitsPerComponent'), 8))
+    declared = width * height * 4 * bits / 8 + height  # four components, plus a predictor byte per row
+    return int(min(IMAGE_INFLATE_CEILING, max(IMAGE_INFLATE_FLOOR, IMAGE_INFLATE_FACTOR * declared)))
+
+
+def inflate_strict(data: bytes) -> tuple[str, bytes]:
+    """(OK | DAMAGED | TOO_LARGE, output): OK only when the zlib stream ends and its checksum matches within
+    pypdf's own output limit."""
+    decompressor = zlib.decompressobj()
+    try:
+        output = decompressor.decompress(data, MAX_STRICT_OUTPUT_BYTES)
+    except zlib.error:
+        return DAMAGED, b''
+    if decompressor.unconsumed_tail:  # past the output limit: pypdf reads no further either
+        return TOO_LARGE, b''
+    return (OK if decompressor.eof else DAMAGED), output
+
+
+def inflate_complete(data: bytes, budget: int) -> str:
+    """OK when the zlib stream reaches its end (checksum included), DAMAGED on a zlib error or when the data
+    ends first, UNVERIFIED when more than ``budget`` bytes come out before either. The output is discarded."""
+    decompressor = zlib.decompressobj()
+    pending, produced = data, 0
+    try:
+        while not decompressor.eof:
+            produced += len(decompressor.decompress(pending, INFLATE_CHUNK))
+            pending = decompressor.unconsumed_tail
+            if decompressor.eof:
+                break
+            if produced > budget:
+                return UNVERIFIED
+            if not pending:  # all input taken: what zlib still holds, then the verdict
+                while not decompressor.eof:
+                    more = decompressor.decompress(b'', INFLATE_CHUNK)
+                    if not more:
+                        break
+                    produced += len(more)
+                    if produced > budget:
+                        return UNVERIFIED
+                break
+    except zlib.error:
+        return DAMAGED
+    return OK if decompressor.eof else DAMAGED
+
+
+def lzw_strict(data: bytes, early_change: int = 1, *, keep: bool = True) -> tuple[str, bytes]:
+    """(OK | DAMAGED | TOO_LARGE, output) for an LZWDecode stream (PDF 32000-1 7.4.4), decoded with pypdf's
+    table rules. OK only when the end-of-data code (257) is read before the data runs out and every code is
+    one the table holds; pypdf itself stops silently when the data runs out."""
+    early = 1 if early_change else 0
+    table = [bytes((code,)) for code in range(256)] + [b'', b'']
+    width, widen = 9, LZW_WIDEN[9] - early
+    buffer = bits = position = produced = 0
+    size = len(data)
+    previous = None
+    out = bytearray()
+    while True:
+        while bits < width:
+            if position >= size:
+                return DAMAGED, b''  # the data ends before its end-of-data code
+            buffer = ((buffer << 8) | data[position]) & 0xFFFFFF
+            position += 1
+            bits += 8
+        bits -= width
+        code = (buffer >> bits) & ((1 << width) - 1)
+        if code == 256:
+            del table[258:]
+            width, widen, previous = 9, LZW_WIDEN[9] - early, None
+            continue
+        if code == 257:
+            return OK, bytes(out)
+        if previous is None:  # the first code, or the first after a clear-table code: a single byte
+            if code >= 256:
+                return DAMAGED, b''
+            entry = table[code]
+        elif code < len(table):
+            entry = table[code]
+            if len(table) < 4096:
+                table.append(table[previous] + entry[:1])
+        elif code == len(table) and len(table) < 4096:  # the code being defined: the previous string, extended
+            entry = table[previous] + table[previous][:1]
+            table.append(entry)
+        else:
+            return DAMAGED, b''  # a code the table does not hold
+        produced += len(entry)
+        if keep:
+            if produced > MAX_STRICT_OUTPUT_BYTES:
+                return TOO_LARGE, b''
+            out += entry
+        previous = code
+        if width < 12 and len(table) >= widen:
+            width += 1
+            widen = LZW_WIDEN.get(width, 4096) - early
+
+
+def run_length_strict(data: bytes, *, keep: bool = True) -> tuple[str, bytes]:
+    """(OK | DAMAGED | TOO_LARGE, output) for a RunLengthDecode stream: every run whole, then the EOD byte."""
+    out = bytearray()
+    position, size, produced = 0, len(data), 0
+    while position < size:
+        length = data[position]
+        position += 1
+        if length == 128:
+            return OK, bytes(out)
+        if length < 128:
+            if position + length + 1 > size:
+                return DAMAGED, b''
+            piece = data[position:position + length + 1]
+            position += length + 1
+        else:
+            if position >= size:
+                return DAMAGED, b''
+            piece = data[position:position + 1] * (257 - length)
+            position += 1
+        produced += len(piece)
+        if keep:
+            if produced > MAX_STRICT_OUTPUT_BYTES:
+                return TOO_LARGE, b''
+            out += piece
+    return DAMAGED, b''  # no end-of-data byte
 
 
 def jpeg_complete(data: bytes) -> bool:
@@ -818,13 +1003,94 @@ def jpeg_complete(data: bytes) -> bool:
     return False
 
 
-def inflate_strict(data: bytes) -> tuple[bool, bytes]:
-    """(complete, output): complete only when the zlib stream ends and its checksum matches."""
-    decompressor = zlib.decompressobj()
-    try:
-        output = decompressor.decompress(data, MAX_STRICT_OUTPUT_BYTES)
-    except zlib.error:
-        return False, b''
-    if decompressor.unconsumed_tail:  # past the output limit: completeness cannot be shown
-        return False, b''
-    return decompressor.eof, output
+def jpx_complete(data: bytes) -> bool:
+    """Whether a JPEG 2000 image (a raw codestream, or a JP2 file's contiguous codestream box) reaches its
+    end-of-codestream marker (FFD9), which cannot occur inside the coded data. Padding after it is allowed."""
+    if data.startswith(b'\xff\x4f'):  # SOC: a raw codestream
+        return data.rstrip(b'\x00\t\n\r ').endswith(b'\xff\xd9')
+    position, size = 0, len(data)
+    while position + 8 <= size:
+        length, kind, header = int.from_bytes(data[position:position + 4], 'big'), data[position + 4:position + 8], 8
+        if length == 1:
+            if position + 16 > size:
+                return False
+            length, header = int.from_bytes(data[position + 8:position + 16], 'big'), 16
+        elif length == 0:  # the box runs to the end of the data
+            length = size - position
+        if length < header or position + length > size:
+            return False
+        if kind == b'jp2c':
+            return data[position + header:position + length].rstrip(b'\x00').endswith(b'\xff\xd9')
+        position += length
+    return False
+
+
+def jbig2_state(data: bytes, global_segments=None) -> str:
+    """OK when an embedded JBIG2 stream (and its /JBIG2Globals) is a whole number of complete segments
+    (ITU-T T.88 7.2), DAMAGED when a segment runs past the data, UNVERIFIED when one does not state its length.
+    A stream cut exactly between two segments cannot be told from a whole one."""
+    if isinstance(global_segments, StreamObject):
+        try:
+            state = jbig2_segments(global_segments.get_data())
+        except Exception:
+            return DAMAGED
+        if state != OK:
+            return state
+    return jbig2_segments(data)
+
+
+def jbig2_segments(data: bytes) -> str:
+    position, size = 0, len(data)
+    while position < size:
+        if size - position < 6:
+            return DAMAGED
+        number_ = int.from_bytes(data[position:position + 4], 'big')
+        flags, count = data[position + 4], data[position + 5] >> 5
+        position += 5
+        if count <= 4:
+            position += 1
+        elif count == 7:
+            if position + 4 > size:
+                return DAMAGED
+            count = int.from_bytes(data[position:position + 4], 'big') & 0x1FFFFFFF
+            position += 4 + (count + 8) // 8
+        else:
+            return DAMAGED  # counts 5 and 6 are not allowed
+        position += count * (1 if number_ <= 256 else 2 if number_ <= 65536 else 4)
+        position += 4 if flags & 0x40 else 1
+        if position + 4 > size:
+            return DAMAGED
+        length = int.from_bytes(data[position:position + 4], 'big')
+        position += 4
+        if length == 0xFFFFFFFF:
+            return UNVERIFIED  # an unknown length, ended only by a marker inside the coded data
+        position += length
+        if position > size:
+            return DAMAGED
+    return OK
+
+
+def ccitt_state(data: bytes, params, rows: int = 0) -> str:
+    """OK, DAMAGED or UNVERIFIED for CCITT fax data (ITU-T T.4 / T.6, PDF 32000-1 7.4.6).
+
+    Group 4 (/K < 0) must end with its end-of-block pattern (EOFB), followed only by fill. Group 3 must end
+    with its RTC, or hold an EOL code for every row: an EOL (eleven or more zeros, then a one) occurs nowhere
+    else in the coded data, and libtiff, the usual encoder, writes one before each row and no RTC. With
+    /EndOfBlock false, or Group 3 data without EOLs, completeness could only be shown by decoding: UNVERIFIED.
+    """
+    end_of_block = resolved(params.get('/EndOfBlock'))
+    k = number(params.get('/K'), 0)
+    rows = int(number(params.get('/Rows'), 0)) or rows
+    core = data.rstrip(b'\x00')
+    if k < 0:
+        if getattr(end_of_block, 'value', end_of_block) is False:
+            return UNVERIFIED
+        tail = ''.join(f'{byte:08b}' for byte in core[-64:]).rstrip('0')
+        return OK if FAX_G4_END.search(tail) else DAMAGED
+    bits = ''.join(f'{byte:08b}' for byte in core).rstrip('0')
+    if FAX_G3_END[k > 0].search(bits[-1024:]):
+        return OK
+    lines = len(FAX_EOL.findall(bits))
+    if lines and rows:
+        return OK if lines >= rows else DAMAGED
+    return UNVERIFIED
