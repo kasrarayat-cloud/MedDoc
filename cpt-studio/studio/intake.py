@@ -48,5 +48,6 @@ def create_encounter(*, membership, user, title, service_date='', data=None, fil
         encounter.save(update_fields=['current_revision', 'updated_at'])
         audit.record(membership.workspace, 'encounter.created', encounter=encounter, actor=user, kind=revision.kind,
                      sha256=source_file.sha256 if source_file else None, media_type=media_type or 'text/plain')
-        transaction.on_commit(lambda: jobs.start_pipeline(revision, user))
+        # Queued in the same transaction: the encounter is never visible without its pipeline.
+        jobs.start_pipeline(revision, user)
     return encounter

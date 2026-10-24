@@ -46,6 +46,13 @@ class Requeue(Exception):
     """The stage could not start now (e.g. provider lock busy); try again later."""
 
 
+class Refused(Exception):
+    """A member action was refused; the message says why (the API answers 409)."""
+
+
+STALE_SWEEP_SECONDS = 60  # how often a running worker settles stages a dead worker left 'running'
+
+
 # --- enqueueing --------------------------------------------------------------
 
 def enqueue(kind, *, encounter, revision, key, context=None, provider_run=None, requested_by=None):
@@ -117,9 +124,13 @@ def routing_for(revision):
                                             sha256=sha256_json(data))
 
 
+def addendum_block_text(number, created_at, text):
+    stamp = created_at.strftime('%Y-%m-%d %H:%M UTC')
+    return f'\n\nADDENDUM (revision {number}, added {stamp})\n{text.strip()}\n'
+
+
 def addendum_block(revision):
-    stamp = revision.created_at.strftime('%Y-%m-%d %H:%M UTC')
-    return f'\n\nADDENDUM (revision {revision.number}, added {stamp})\n{revision.addendum_text.strip()}\n'
+    return addendum_block_text(revision.number, revision.created_at, revision.addendum_text)
 
 
 def _unreconciled_unknown(encounter):
@@ -145,22 +156,31 @@ def stage_extract(job):
         result = extract_paste(parent.text + addendum_block(revision), method='addendum', limits=_limits())
         if result.status != models.SourceRevision.FAILED and not result.text.startswith(parent.text):
             raise StageFailure('The addendum changed the existing document text; it was not recorded.')
+    status, messages = result.status, list(result.messages)
+    ocr_pages, engine = list(result.ocr_pages), dict(result.engine)
+    if revision.kind == models.SourceRevision.ADDENDUM and status != models.SourceRevision.FAILED:
+        # The addendum revision's text contains the parent's text unchanged, so the
+        # parent's extraction limitations still describe it: they are carried, never dropped.
         pages_override = list(parent.pages)
+        if parent.extraction_status == models.SourceRevision.PARTIAL:
+            status = models.SourceRevision.PARTIAL
+        messages = list(parent.messages) + messages
+        ocr_pages = list(parent.ocr_pages)
+        engine = {**dict(parent.engine or {}), 'addendum': engine}
     pages = pages_override if pages_override is not None else [
         {'page': p.page, 'start': p.start, 'end': p.end} for p in result.pages]
     models.SourceRevision.record_extraction(
-        revision.pk, extraction_status=result.status, extraction_method=result.method, text=result.text,
+        revision.pk, extraction_status=status, extraction_method=result.method, text=result.text,
         text_sha256=hashlib.sha256(result.text.encode('utf-8')).hexdigest(), pages=pages,
-        messages=list(result.messages), ocr_pages=list(result.ocr_pages), engine=dict(result.engine),
-        extracted_at=timezone.now())
+        messages=messages, ocr_pages=ocr_pages, engine=engine, extracted_at=timezone.now())
     audit.record(job.encounter.workspace, 'revision.extracted', encounter=job.encounter, revision=str(revision.pk),
-                 status=result.status, method=result.method, pages=len(pages), ocr_pages=list(result.ocr_pages),
+                 status=status, method=result.method, pages=len(pages), ocr_pages=ocr_pages,
                  characters=len(result.text))
-    if result.status == models.SourceRevision.FAILED:
+    if status == models.SourceRevision.FAILED:
         return {'status': 'failed'}
     enqueue(Job.ANALYZE, encounter=job.encounter, revision=revision, key=f'analyze:{revision.pk}',
             requested_by=job.requested_by)
-    return {'status': result.status}
+    return {'status': status}
 
 
 def stage_analyze(job):
@@ -201,7 +221,11 @@ def stage_predict(job):
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists; nothing was sent'}
+    if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
+        # Provider input is only ever the current revision's text with that revision's current context.
+        return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
     provider = get_provider()
+    service_date = context_service_date(context)
     assess_key = f'assess:{context.pk}'
 
     def next_assess(run):
@@ -212,12 +236,13 @@ def stage_predict(job):
         next_assess(None)
         return {'provider': 'disabled'}
     try:
-        request = provider.build_request(revision.text, context_service_date(context))
+        request = provider.build_request(revision.text, service_date)
     except ProviderUnavailable as exc:
         run = models.ProviderRun.objects.create(
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT, error=str(exc),
-            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, finished_at=timezone.now())
+            authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, service_date=service_date,
+            finished_at=timezone.now())
         next_assess(run)
         return {'provider': 'not_sent'}
 
@@ -234,7 +259,7 @@ def stage_predict(job):
             provider_request_id=prior.provider_request_id, response_sha256=prior.response_sha256,
             response_bytes=bytes(prior.response_bytes), usage={}, usage_basis='reused_retained_result_no_new_usage',
             authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by, reused_from=prior,
-            started_at=timezone.now(), finished_at=timezone.now())
+            service_date=service_date, started_at=timezone.now(), finished_at=timezone.now())
         audit.record(encounter.workspace, 'provider.reused', encounter=encounter, run=str(run.pk), reused_from=str(prior.pk))
         next_assess(run)
         return {'provider': 'reused', 'run': str(run.pk)}
@@ -261,7 +286,7 @@ def stage_predict(job):
             encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
             request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
             state=models.ProviderRun.RESERVED, authorization_ref=settings.AUTHORIZATION_REF,
-            requested_by=job.requested_by)
+            requested_by=job.requested_by, service_date=service_date)
         job.refresh_from_db(fields=['stop_requested_at'])
         if job.stop_requested_at or is_stopped(encounter.pk):
             run.state = models.ProviderRun.CANCELLED
@@ -310,6 +335,9 @@ def stage_assess(job):
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists'}
     revision.refresh_from_db()
+    if run is not None and run.service_date != context_service_date(context):
+        raise StageFailure('The provider result was requested for a different service date than this context; '
+                           'it was not used. Change the context again to request proposals for this date.')
     routing_run = routing_for(revision)
     provider_status, normalized = _provider_inputs(run)
     result = run_assessment(
@@ -345,7 +373,7 @@ def claim_next():
         else:
             job.state, job.started_at = Job.RUNNING, now
             job.attempts += 1
-        job.save()
+        job.save(update_fields=['state', 'error', 'started_at', 'finished_at', 'attempts'])
         return job
 
 
@@ -370,7 +398,8 @@ def run_job(job):
         job.state, job.error = Job.FAILED, f'The {job.kind} stage failed unexpectedly; the error was logged.'
     if job.state != Job.QUEUED:
         job.finished_at = timezone.now()
-    job.save()
+    # Only the columns the worker owns: a Stop recorded on this row meanwhile must survive.
+    job.save(update_fields=['state', 'started_at', 'attempts', 'result', 'error', 'finished_at'])
     if job.state == Job.QUEUED:
         time.sleep(1)
     review.refresh_state(job.encounter)
@@ -389,15 +418,15 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.UNKNOWN,
                                                          'The worker stopped while the request was in flight.',
                                                          timezone.now())
-                run.save()
+                run.save(update_fields=['state', 'error', 'finished_at'])
             for run in reserved:
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())
-                run.save()
+                run.save(update_fields=['state', 'error', 'finished_at'])
             job.state = Job.UNKNOWN if unknown else Job.FAILED
             job.error = 'The worker stopped while this stage was running.'
             job.finished_at = timezone.now()
-            job.save()
+            job.save(update_fields=['state', 'error', 'finished_at'])
         review.refresh_state(job.encounter)
 
 
@@ -412,10 +441,16 @@ def remove_stale_ingest_dirs():
             shutil.rmtree(path, ignore_errors=True)
 
 
-def work(should_stop, *, poll_seconds=1.0):
+def work(should_stop, *, poll_seconds=1.0, clock=time.monotonic):
     remove_stale_ingest_dirs()
     mark_stale()
+    swept = clock()
     while not should_stop():
+        # A worker that died mid-stage and came straight back must still settle that stage
+        # once it is old enough, so the sweep repeats rather than running only at start.
+        if clock() - swept >= STALE_SWEEP_SECONDS:
+            mark_stale()
+            swept = clock()
         job = claim_next()
         if job is None:
             time.sleep(poll_seconds)
@@ -424,9 +459,19 @@ def work(should_stop, *, poll_seconds=1.0):
 
 
 # --- member actions ----------------------------------------------------------
+#
+# Every action that can queue a stage runs inside one transaction holding the
+# encounter row lock, and refuses while any stage is queued or running. So at
+# most one stage chain is ever queued per encounter, each provider attempt
+# answers exactly one member action, and two concurrent actions cannot
+# interleave their reads and writes.
 
 def busy(encounter):
     return encounter.jobs.filter(state__in=[Job.QUEUED, Job.RUNNING]).exists()
+
+
+def _locked(encounter):
+    return models.Encounter.objects.select_for_update().get(pk=encounter.pk)
 
 
 def stop_encounter(encounter, user):
@@ -438,7 +483,7 @@ def stop_encounter(encounter, user):
             job.stop_requested_at, job.stop_requested_by = now, user
             if job.state == Job.QUEUED:
                 job.state, job.error, job.finished_at = Job.CANCELLED, 'Stopped by a workspace member.', now
-            job.save()
+            job.save(update_fields=['stop_requested_at', 'stop_requested_by', 'state', 'error', 'finished_at'])
             stopped += 1
     audit.record(encounter.workspace, 'pipeline.stopped', encounter=encounter, actor=user, jobs=stopped)
     review.refresh_state(encounter)
@@ -447,70 +492,107 @@ def stop_encounter(encounter, user):
 
 def resume(encounter, user):
     """Re-enqueue the stage a Stop cancelled, under a fresh key."""
-    encounter.refresh_from_db()
-    last = encounter.jobs.filter(state=Job.CANCELLED).order_by('-created_at').first()
-    if last is None or busy(encounter) or last.revision_id != encounter.current_revision_id:
-        return None
-    context = encounter.current_context if last.kind in {Job.PREDICT, Job.ASSESS} else last.context
-    if last.kind == Job.ASSESS and context is not None and last.context_id != context.pk:
-        kind, provider_run = Job.PREDICT, None  # the context changed while stopped: re-run from predict
-    else:
-        kind, provider_run = last.kind, last.provider_run
-    clear_stop(encounter)
-    job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
-                  provider_run=provider_run, key=f'{last.idempotency_key}:resume:{uuid.uuid4()}',
-                  requested_by=user)
-    audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user, stage=last.kind)
-    review.refresh_state(encounter)
+    with transaction.atomic():
+        encounter = _locked(encounter)
+        if busy(encounter):
+            raise Refused('Wait for processing to finish (or stop it) before resuming.')
+        last = encounter.jobs.filter(state=Job.CANCELLED).order_by('-created_at').first()
+        if last is None or last.revision_id != encounter.current_revision_id:
+            return None
+        context = encounter.current_context if last.kind in {Job.PREDICT, Job.ASSESS} else last.context
+        if last.kind == Job.ASSESS and context is not None and last.context_id != context.pk:
+            kind, provider_run = Job.PREDICT, None  # the context changed while stopped: re-run from predict
+        else:
+            kind, provider_run = last.kind, last.provider_run
+        clear_stop(encounter)
+        job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
+                      provider_run=provider_run, key=f'{last.idempotency_key}:resume:{uuid.uuid4()}',
+                      requested_by=user)
+        audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user, stage=last.kind)
+        review.refresh_state(encounter)
     return job
 
 
 def reconcile(encounter, run, user, note):
-    """Record a member's reconciliation of an UNKNOWN outcome and allow one new attempt."""
+    """Record a member's reconciliation of an UNKNOWN outcome and allow one new attempt.
+
+    True when recorded, None when ``run`` is not an unreconciled unknown outcome.
+    The one attempt is a predict for the current revision's current context; when
+    the current revision has no context (its extraction failed) nothing is queued.
+    """
     with transaction.atomic():
+        encounter = _locked(encounter)
+        if busy(encounter):
+            raise Refused('Wait for processing to finish (or stop it) before reconciling.')
         run = models.ProviderRun.objects.select_for_update().get(pk=run.pk, encounter=encounter)
         if run.state != models.ProviderRun.UNKNOWN or run.reconciled_at is not None:
             return None
         run.reconciled_by, run.reconciled_at, run.reconciliation_note = user, timezone.now(), note
         run.save(update_fields=['reconciled_by', 'reconciled_at', 'reconciliation_note'])
-    context = encounter.current_context
-    clear_stop(encounter)
-    job = enqueue(Job.PREDICT, encounter=encounter, revision=encounter.current_revision, context=context,
-                  key=f'predict:{context.pk}:after-reconcile:{run.pk}', requested_by=user)
-    audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk))
-    review.refresh_state(encounter)
-    return job
+        revision, context = encounter.current_revision, encounter.current_context
+        clear_stop(encounter)
+        if context is not None and revision is not None and context.revision_id == revision.pk:
+            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
+                    key=f'predict:{context.pk}:after-reconcile:{run.pk}', requested_by=user)
+        audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk))
+        review.refresh_state(encounter)
+    return True
+
+
+def _run_answers(run, revision, context):
+    """Whether ``run`` already answers the request the provider would build for ``context`` now.
+
+    Compared on the request itself (provider, adapter and canonical request hash), never
+    on the previous context: the run in use may have been requested for another date.
+    """
+    if run is None or not run.request_sha256:
+        return False
+    try:
+        provider = get_provider()
+        if provider is None or (provider.name, provider.adapter_version) != (run.provider, run.adapter_version):
+            return False
+        request = provider.build_request(revision.text, context_service_date(context))
+    except ProviderUnavailable:
+        return False
+    return request.canonical_sha256 == run.request_sha256
 
 
 def change_context(encounter, user, values):
-    """Apply member-supplied metadata, snapshot a new context and re-assess (re-predict only if inputs changed)."""
+    """Apply member-supplied metadata, snapshot a new context and re-assess.
+
+    Re-assesses with the run already in use only when that run answers exactly the
+    request the new context would send; otherwise re-predicts (an identical retained
+    result is still reused for free by the predict stage).
+    """
     with transaction.atomic():
-        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
-        merged = dict(locked.user_values or {})
+        encounter = _locked(encounter)
+        revision = encounter.current_revision
+        if revision is None or revision.extraction_status not in {models.SourceRevision.OK,
+                                                                  models.SourceRevision.PARTIAL}:
+            raise Refused('Context can be set once the document text has been extracted.')
+        if busy(encounter):
+            raise Refused('Wait for processing to finish (or stop it) before changing context.')
+        merged = dict(encounter.user_values or {})
         for key, value in values.items():
             if value:
                 merged[key] = value
             else:
                 merged.pop(key, None)
-        locked.user_values = merged
-        locked.save(update_fields=['user_values', 'updated_at'])
-    encounter.refresh_from_db()
-    revision = encounter.current_revision
-    previous = encounter.current_context
-    context = make_context(encounter, revision, created_by=user)
-    encounter.current_context = context
-    encounter.save(update_fields=['current_context', 'updated_at'])
-    audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
-                 fields=sorted(values), context=str(context.pk))
-    date_changed = previous is None or context_service_date(previous) != context_service_date(context)
-    assessment = encounter.current_assessment
-    last_run = assessment.provider_run if assessment and assessment.revision_id == revision.pk else None
-    clear_stop(encounter)
-    if date_changed or last_run is None:
-        enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
-                key=f'predict:{context.pk}', requested_by=user)
-    else:
-        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
-                key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
-    review.refresh_state(encounter)
+        encounter.user_values = merged
+        encounter.save(update_fields=['user_values', 'updated_at'])
+        context = make_context(encounter, revision, created_by=user)
+        encounter.current_context = context
+        encounter.save(update_fields=['current_context', 'updated_at'])
+        audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
+                     fields=sorted(values), context=str(context.pk))
+        assessment = encounter.current_assessment
+        last_run = assessment.provider_run if assessment and assessment.revision_id == revision.pk else None
+        clear_stop(encounter)
+        if _run_answers(last_run, revision, context):
+            enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
+                    key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
+        else:
+            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
+                    key=f'predict:{context.pk}', requested_by=user)
+        review.refresh_state(encounter)
     return context

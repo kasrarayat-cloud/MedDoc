@@ -12,6 +12,9 @@ from django.db import models
 from django.db.models import Q
 
 
+DECISION_SEQUENCE = 'studio_decision_sequence'
+
+
 class ImmutableQuerySet(models.QuerySet):
     def update(self, **kwargs):
         raise ValidationError(f'{self.model.__name__} rows are immutable; write a new row instead.')
@@ -226,6 +229,9 @@ class ProviderRun(models.Model):
     reconciled_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
     reconciled_at = models.DateTimeField(null=True, blank=True)
     reconciliation_note = models.TextField(blank=True)
+    # The service date the request was built with (null: none was sent). An
+    # assessment pairs a run only with a context carrying this same date.
+    service_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
@@ -318,10 +324,15 @@ class Decision(ImmutableModel):
     profile_version = models.CharField(max_length=40)
     proposal_fingerprint = models.CharField(max_length=64)
     carried_from = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='carries')
+    # Recording order, assigned by a database sequence at insert. Every writer
+    # holds the encounter row lock, so for one encounter a later decision always
+    # has a larger number, whatever the wall clock says. created_at is display only.
+    sequence = models.BigIntegerField(
+        db_default=models.Func(models.Value(DECISION_SEQUENCE), function='nextval'), unique=True, editable=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['created_at']
+        ordering = ['sequence']
 
 
 class DecisionInvalidation(ImmutableModel):

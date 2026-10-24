@@ -17,15 +17,26 @@ from django.views.decorators.http import require_GET, require_POST
 
 from . import audit, intake, jobs, models, reports, review, serializers
 from .access import active_membership, scoped_encounter
+from .ingest import canonicalize
 from .storage import read_original
 
 SETTINGS_CHOICES = {'hospital_outpatient', 'office', 'asc', 'inpatient', 'emergency', 'telehealth'}
 BILLING_CHOICES = {'professional', 'facility'}
 MAX_NOTE_CHARS = 2000
+# PostgreSQL text cannot hold NUL, and a lone surrogate cannot be encoded at all.
+UNSTORABLE = re.compile('[\x00\ud800-\udfff]')
+
+
+def _storable(value, label):
+    """Refuse text the database cannot store exactly, rather than altering what the member submitted."""
+    if UNSTORABLE.search(value):
+        raise ApiError(400, f'{label} contains a NUL character or an invalid Unicode code point; '
+                            'remove it and try again.')
+    return value
 
 
 def _text_field(data, name, label):
-    value = str(data.get(name, '') or '')
+    value = _storable(str(data.get(name, '') or ''), label)
     if len(value) > MAX_NOTE_CHARS:
         raise ApiError(400, f'{label} can be at most {MAX_NOTE_CHARS} characters.')
     return value
@@ -87,7 +98,7 @@ def _parse_date(value, field):
 
 
 def _clean_title(raw, fallback):
-    title = re.sub(r'\s+', ' ', str(raw or '')).strip()[:160]
+    title = re.sub(r'\s+', ' ', UNSTORABLE.sub(' ', str(raw or ''))).strip()[:160]
     return title or fallback
 
 
@@ -110,7 +121,7 @@ def encounters(request):
     _require_reviewer(membership)
     _attested(request.POST.get('synthetic_attestation'))
     upload = request.FILES.get('file')
-    text = request.POST.get('text', '')
+    text = _storable(request.POST.get('text', ''), 'The pasted text')
     if bool(upload) == bool(text.strip()):
         raise ApiError(400, 'Provide either a file or pasted text.')
     service_date = _parse_date(request.POST.get('service_date'), 'Service date')
@@ -118,15 +129,16 @@ def encounters(request):
         if upload.size > settings.MAX_UPLOAD_BYTES:
             raise ApiError(400, f'The file is larger than {settings.MAX_UPLOAD_BYTES // (1024 * 1024)} MB.')
         data = upload.read(settings.MAX_UPLOAD_BYTES + 1)
-        fallback_title = upload.name.rsplit('.', 1)[0][:160] or 'Uploaded document'
+        filename = UNSTORABLE.sub('', upload.name)
+        fallback_title = filename.rsplit('.', 1)[0][:160] or 'Uploaded document'
     else:
-        data = None
+        data, filename = None, ''
         fallback_title = f'Pasted note {timezone.now():%Y-%m-%d %H:%M}'
     title = _clean_title(request.POST.get('title'), fallback_title)
     try:
         encounter = intake.create_encounter(
             membership=membership, user=request.user, title=title, service_date=service_date, data=data,
-            filename=upload.name if upload is not None else '', text='' if upload is not None else text)
+            filename=filename, text='' if upload is not None else text)
     except ValidationError as exc:
         raise ApiError(400, ' '.join(exc.messages))
     return JsonResponse({'id': str(encounter.pk)}, status=201)
@@ -167,7 +179,7 @@ def addenda(request, encounter_id):
         encounter, membership = scoped_encounter(request.user, encounter_id, for_update=True)
         _require_reviewer(membership)
         _attested(data.get('synthetic_attestation'))
-        text = str(data.get('text', '')).strip()
+        text = _storable(str(data.get('text', '')), 'The addendum').strip()
         if not text:
             raise ApiError(400, 'Write the additional documentation to add.')
         if len(text) > 20000:
@@ -177,6 +189,11 @@ def addenda(request, encounter_id):
         parent = encounter.current_revision
         if parent is None or parent.extraction_status not in {models.SourceRevision.OK, models.SourceRevision.PARTIAL}:
             raise ApiError(409, 'This document has no extracted text to add to.')
+        number, now = encounter.revisions.count() + 1, timezone.now()
+        combined = len(canonicalize(parent.text + jobs.addendum_block_text(number, now, text)))
+        if combined > settings.MAX_PASTE_CHARS:
+            raise ApiError(400, f'With this addendum the document would have {combined:,} characters; '
+                                f'the limit is {settings.MAX_PASTE_CHARS:,}.')
         clarification = None
         if data.get('clarification_id'):
             try:
@@ -184,9 +201,8 @@ def addenda(request, encounter_id):
                                                             state=models.Clarification.OPEN)
             except (models.Clarification.DoesNotExist, ValueError, ValidationError):
                 raise ApiError(404, 'That clarification is not open on this document.')
-        now = timezone.now()
         revision = models.SourceRevision.objects.create(
-            encounter=encounter, number=encounter.revisions.count() + 1, kind=models.SourceRevision.ADDENDUM,
+            encounter=encounter, number=number, kind=models.SourceRevision.ADDENDUM,
             parent=parent, addendum_text=text, answers_clarification=clarification,
             synthetic_attested_by=request.user, synthetic_attested_at=now, created_by=request.user)
         if clarification is not None:
@@ -198,7 +214,9 @@ def addenda(request, encounter_id):
         audit.record(encounter.workspace, 'revision.addendum', encounter=encounter, actor=request.user,
                      revision=str(revision.pk), number=revision.number,
                      clarification=str(clarification.pk) if clarification else None)
-        transaction.on_commit(lambda: jobs.start_pipeline(revision, request.user))
+        # Queued in the same transaction, so the encounter is never seen idle between the
+        # new revision and its pipeline (a context change or reconcile would slip in there).
+        jobs.start_pipeline(revision, request.user)
     return JsonResponse({'revision_id': str(revision.pk)}, status=201)
 
 
@@ -208,11 +226,6 @@ def context(request, encounter_id):
     data = _payload(request)
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
-    if encounter.current_revision is None or encounter.current_revision.extraction_status not in {
-            models.SourceRevision.OK, models.SourceRevision.PARTIAL}:
-        raise ApiError(409, 'Context can be set once the document text has been extracted.')
-    if jobs.busy(encounter):
-        raise ApiError(409, 'Wait for processing to finish (or stop it) before changing context.')
     values = {}
     if 'service_date' in data:
         values['service_date'] = _parse_date(data.get('service_date'), 'Service date')
@@ -228,7 +241,10 @@ def context(request, encounter_id):
         values['billing_context'] = billing
     if not values:
         raise ApiError(400, 'Nothing to change.')
-    ctx = jobs.change_context(encounter, request.user, values)
+    try:
+        ctx = jobs.change_context(encounter, request.user, values)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
     return JsonResponse({'context_id': str(ctx.pk)}, status=201)
 
 
@@ -245,7 +261,10 @@ def stop(request, encounter_id):
 def resume(request, encounter_id):
     encounter, membership = scoped_encounter(request.user, encounter_id)
     _require_reviewer(membership)
-    job = jobs.resume(encounter, request.user)
+    try:
+        job = jobs.resume(encounter, request.user)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
     if job is None:
         raise ApiError(409, 'There is no stopped stage to resume.')
     return JsonResponse({'resumed': job.kind}, status=201)
@@ -264,8 +283,11 @@ def reconcile(request, encounter_id):
         run = encounter.provider_runs.get(pk=data.get('provider_run_id'))
     except (models.ProviderRun.DoesNotExist, ValueError, ValidationError):
         raise ApiError(404, 'That provider request is not part of this document.')
-    job = jobs.reconcile(encounter, run, request.user, note)
-    if job is None:
+    try:
+        recorded = jobs.reconcile(encounter, run, request.user, note)
+    except jobs.Refused as exc:
+        raise ApiError(409, str(exc))
+    if recorded is None:
         raise ApiError(409, 'Only an unreconciled unknown outcome can be reconciled.')
     return JsonResponse({'reconciled': str(run.pk)}, status=201)
 

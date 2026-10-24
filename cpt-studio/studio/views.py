@@ -13,6 +13,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 
 from .access import active_membership
+from .api import UNSTORABLE
 from .models import LoginAttempt
 
 
@@ -57,19 +58,23 @@ def login_view(request):
         next_url = '/'
     error = ''
     if request.method == 'POST':
-        username = request.POST.get('username', '').strip()[:150]
+        submitted = request.POST.get('username', '').strip()[:150]
+        # A name the database cannot store (NUL, lone surrogate) matches no account; it is
+        # still counted, under a storable form, so the throttle sees every attempt.
+        username = UNSTORABLE.sub('\ufffd', submitted)
         password = request.POST.get('password', '')
-        client = _client(request)
+        client = UNSTORABLE.sub('\ufffd', _client(request))
         if _throttled(username, client):
             error = 'Too many failed attempts. Wait 15 minutes and try again.'
         else:
-            user = authenticate(request, username=username, password=password)
+            user = authenticate(request, username=username, password=password) if username == submitted else None
             LoginAttempt.objects.create(username=username, client=client, succeeded=user is not None)
             if user is not None and user.memberships.filter(active=True).exists():
                 login(request, user)
                 return redirect(next_url)
             error = 'The username or password is not correct.'
-    context = {'error': error, 'next': next_url, 'username': request.POST.get('username', '')[:150] if error else ''}
+    context = {'error': error, 'next': next_url,
+               'username': UNSTORABLE.sub('\ufffd', request.POST.get('username', ''))[:150] if error else ''}
     return render(request, 'studio/login.html', context, status=200 if not error else 400)
 
 
