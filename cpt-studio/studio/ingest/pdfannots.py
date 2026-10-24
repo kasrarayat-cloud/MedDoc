@@ -21,7 +21,10 @@ where that can be done exactly, and accounts for the rest:
   — are not read and are counted.
 - An appearance is read like page content: optional content hidden by
   default inside it is dropped (and named), an appearance whose own /OC group
-  is off draws nothing, and its streams are integrity-checked. An annotation
+  is off draws nothing, symbol fonts are read as the characters their glyphs
+  show, and its streams are integrity-checked. Characters that name no glyph
+  (private-use or control codes, unmapped symbol glyphs) are counted and
+  dropped from what is written. An annotation
   that must be read from its appearance and whose appearance cannot be read
   (a damaged stream, a parse error) is counted as unreadable.
 
@@ -36,6 +39,7 @@ from lxml import etree
 from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
 
 from .pdfcontent import OptionalContent, as_list, clip, number, page_box, raw_entry, resolved, visible_form
+from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
 
 HIDDEN_FLAGS = 2 | 32  # Hidden, NoView (PDF 32000-1 12.5.3)
@@ -60,6 +64,7 @@ class PageAnnotations:
     drawn: int = 0
     note_chars: int = 0
     hidden_text: bool = False  # an appearance held text in optional content that is hidden by default
+    undecodable: int = 0  # characters dropped from what is written: they name no glyph
 
     def block(self, page: int) -> str:
         """The labelled text added after the page's own text ('' when there is none)."""
@@ -165,10 +170,16 @@ class _Reader:
         key = id(info.node)
         if key in self.lines:
             if replace:
-                self.found.fields[self.lines[key]] = line
+                self.found.fields[self.lines[key]] = self.clean(line)
             return
         self.lines[key] = len(self.found.fields)
-        self.found.fields.append(line)
+        self.found.fields.append(self.clean(line))
+
+    def clean(self, text: str) -> str:
+        """``text`` without the characters that name no glyph, which are counted."""
+        kept = ''.join(char for char in text if not undecodable(char))
+        self.found.undecodable += len(text) - len(kept)
+        return kept
 
     # Other annotations -------------------------------------------------------------
     def free_text(self, annotation, shown: bool) -> None:
@@ -186,7 +197,7 @@ class _Reader:
         drawn = squeezed(appearance or '')
         if contents.strip() and drawn and drawn != squeezed(contents):
             self.found.mismatched.append('text annotation')
-        self.found.texts.append(text)
+        self.found.texts.append(self.clean(text))
 
     def other(self, annotation, subtype, shown: bool) -> None:
         note = canonicalize(text_of(annotation.get('/Contents')))
@@ -198,7 +209,7 @@ class _Reader:
         if appearance is None:
             self.found.unreadable += 1
         elif appearance.strip():
-            self.found.texts.append(appearance.strip('\n'))
+            self.found.texts.append(self.clean(appearance.strip('\n')))
         elif subtype in DRAWINGS and self.drawn_appearance(annotation):
             self.found.drawn += 1
 

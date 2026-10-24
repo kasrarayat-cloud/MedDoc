@@ -4,7 +4,11 @@ pages without a usable text layer, page spans over the final canonical text.
 What a page shows is read, or the result says what was not read:
 
 - **Text layer.** pypdf's text layer, with text in optional content that is
-  hidden by default removed (named in the messages). A page whose readable
+  hidden by default removed (named in the messages). Symbol fonts are read
+  as the characters their glyphs show, check boxes as ☐ / ☒; glyphs that
+  name no character (unmapped symbol glyphs, private-use or control codes,
+  glyph-index fonts without a ToUnicode map) are counted and dropped, never
+  shown as the letters that encode them (studio.ingest.pdffonts). A page whose readable
   text has fewer than ``min_text_chars_per_page`` non-whitespace characters
   has no usable text layer: it is OCRed when OCR is available; otherwise — or
   when OCR fails or time runs out — it is named and the result is 'partial'
@@ -46,6 +50,7 @@ from studio.types import ExtractionResult
 
 from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
+from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
 from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, object_key, resolved,
                          stream_damaged)
 from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
@@ -114,6 +119,7 @@ class _Page:
     block: str  # labelled form-field and annotation text ('' for none)
     damaged: bool
     limited: bool = False  # pypdf stopped reading form XObjects at its invocation limit
+    undecodable: int = 0  # glyphs of the text layer that name no character, dropped
 
     @property
     def text(self) -> str:
@@ -313,29 +319,109 @@ def _watching():
 def _read_page(page, reader, optional, acroform, number: int) -> _Page:
     with _watching() as warnings:
         content = analyse_page(page, reader, optional)
-        layer, replaced = _layer_text(page, content)
+        layer = _layer_text(page, content)
         annotations = read_annotations(page, optional, acroform)
+    text, replaced = replace_surrogates(layer.text)
     block, block_replaced = replace_surrogates(annotations.block(number))
-    return _Page(layer=layer, replaced=replaced or block_replaced, content=content, annotations=annotations,
-                 block=block, damaged=content.damaged or warnings.seen, limited=warnings.limited)
+    return _Page(layer=canonicalize(text), replaced=replaced or block_replaced, content=content,
+                 annotations=annotations, block=block, damaged=content.damaged or warnings.seen,
+                 limited=warnings.limited, undecodable=layer.undecodable)
 
 
-def _layer_text(page, content: PageContent) -> tuple[str, bool]:
-    """Canonical text-layer text, and whether invalid characters were replaced.
+@dataclass(frozen=True)
+class _Layer:
+    text: str = ''  # decoded text-layer text, before canonicalisation
+    undecodable: int = 0  # glyphs that name no character, dropped
+    lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
 
-    A page whose text layer cannot be parsed is treated as having none, so it
-    goes to OCR (or is reported) instead of failing the whole document.
+
+def _layer_text(page, content: PageContent) -> _Layer:
+    """The page's text layer, decoded font by font (studio.ingest.pdffonts).
+
+    pypdf reports each piece of text it writes with the font and the position
+    it was drawn at; the pieces make up its output exactly, so the text is
+    rebuilt from them, dropping glyphs that name no character. If the pieces
+    ever disagree with the output, the output is read as text in an ordinary
+    font. A page whose text layer cannot be parsed is treated as having none,
+    so it goes to OCR (or is reported) instead of failing the whole document.
     """
     if content.operations is None:
-        return '', False
+        return _Layer()
+    pieces: list = []
+    depth = [0]  # form XObjects being read: their pieces are positioned in the form's own space
+
+    def before(operator, operands, cm, tm):
+        if operator == b'Do':
+            depth[0] += 1
+
+    def after(operator, operands, cm, tm):
+        if operator == b'Do':
+            depth[0] -= 1
+
+    def visit(text, cm, tm, font, size):
+        if text:
+            pieces.append((text, _origin(cm, tm) if depth[0] == 0 else None, font))
+
     try:
-        raw = extraction_page(page, content).extract_text()
+        raw = extraction_page(page, content).extract_text(visitor_operand_before=before, visitor_operand_after=after,
+                                                          visitor_text=visit)
     except (DependencyError, MemoryError):
         raise
     except Exception:
-        return '', False
-    text, replaced = replace_surrogates(raw)
-    return canonicalize(text), replaced
+        return _Layer()
+    if ''.join(piece[0] for piece in pieces) != raw:
+        pieces = [(raw, None, None)]
+    return _decoded(pieces)
+
+
+def _origin(cm, tm) -> tuple[float, float, bool] | None:
+    """Where a piece of text starts, in default user space, and whether it is upright."""
+    try:
+        a, b, c, d, e, f = (float(v) for v in tm)
+        a2, b2, c2, d2, e2, f2 = (float(v) for v in cm)
+    except (TypeError, ValueError):
+        return None
+    m = (a * a2 + b * c2, a * b2 + b * d2, c * a2 + d * c2, c * b2 + d * d2, e * a2 + f * c2 + e2,
+         e * b2 + f * d2 + f2)
+    upright = m[0] > 0 and m[3] > 0 and abs(m[1]) <= 0.01 * m[0] and abs(m[2]) <= 0.01 * m[3]
+    return m[4], m[5], upright
+
+
+def _decoded(pieces) -> _Layer:
+    out: list[str] = []
+    size, dropped, lines, starting = 0, 0, [], True
+    decoders: dict[int, object] = {}
+    for text, origin, font in pieces:
+        if id(font) not in decoders:
+            decoders[id(font)] = _decoder(font)
+        decode = decoders[id(font)]
+        for index, char in enumerate(text):
+            mapped = decode(char, index == len(text) - 1)
+            if mapped is None:
+                dropped += char != ' '  # a space may be pypdf's own, between pieces of text
+                continue
+            if mapped == '\n':
+                out.append(mapped)
+                size += 1
+                starting = True
+                continue
+            if starting:
+                lines.append((size, origin))
+                starting = False
+            out.append(mapped)
+            size += len(mapped)
+    return _Layer(''.join(out), dropped, tuple(lines))
+
+
+def _decoder(font):
+    """(char, last in its piece) -> the character it stands for, or None for a glyph that names none."""
+    style = kind(font) if font is not None else 'text'
+    if style == 'glyph-index':  # nothing it writes is a character; pypdf's own line break ends a piece
+        return lambda char, last: '\n' if char == '\n' and last else None
+    if style == 'symbol-composite':
+        trusted, table = composite_map(font), symbol_glyphs(font) or {}
+        return lambda char, last: composite_glyph(char, trusted, table)
+    return lambda char, last: None if undecodable(char) else char
 
 
 def _ocr_pages(data, pages, limits, tools, deadline, workdir) -> tuple[dict[int, str], dict[int, str | None]]:
@@ -429,6 +515,14 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
     if invalid:
         messages.append(f'{page_phrase(invalid)} {agree(invalid, "contains", "contain")} characters the PDF does '
                         'not encode as valid text; they are shown as �.')
+    unmapped = [(n, page.undecodable + page.annotations.undecodable) for n, page in enumerate(read, 1)
+                if n not in ocr.texts and page.undecodable + page.annotations.undecodable]
+    if unmapped:
+        pages, total = [n for n, _ in unmapped], sum(count for _, count in unmapped)
+        one = total == 1
+        messages.append(f'{page_phrase(pages)} {agree(pages, "has", "have")} {total:,} character{"" if one else "s"} '
+                        f'that {"does" if one else "do"} not map to text (symbol-font glyphs, private-use or control '
+                        f'codes); {"it was" if one else "they were"} not extracted.')
     damaged = [n for n, page in enumerate(read, 1) if page.damaged]
     if damaged:
         its = agree(damaged, 'its', 'their')

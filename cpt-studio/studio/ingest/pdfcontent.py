@@ -11,6 +11,9 @@ form XObjects it draws, with the current transformation matrix tracked:
   ``extraction_page`` returns a copy of the page whose content omits the
   text-showing operators and XObjects inside hidden content; graphics- and
   text-state operators are kept, as a viewer keeps executing them.
+- **Symbol fonts.** A simple symbol font in the resources of the page or of a
+  form it draws is replaced, in the copy extraction reads, by one that maps
+  its glyphs to the characters they show (studio.ingest.pdffonts).
 - **Painted images.** Each visible image placement (image XObjects and inline
   images, inside forms too) as a bounding box clipped to the page, so a scan
   split into bands adds up; and the largest image's pixel count.
@@ -35,6 +38,8 @@ from itertools import pairwise
 from pypdf import PageObject
 from pypdf.filters import ASCII85Decode, ASCIIHexDecode
 from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, StreamObject
+
+from .pdffonts import mapped_simple_font
 
 IDENTITY = (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
 MAX_FORM_DEPTH = 12  # a form nested deeper is assumed to paint an image over its whole bounding box
@@ -282,6 +287,7 @@ class _Walker:
         self.forms: dict[tuple, _Form] = {}  # each form is walked once; its images are re-placed per use
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
+        self.font_copies: dict[int, DictionaryObject | None] = {}  # id(font) -> its glyph-mapped copy, or None
 
     def page(self, page) -> PageContent:
         resources = resolved(page.get('/Resources'))
@@ -300,8 +306,9 @@ class _Walker:
         self.check_fonts(resources)
         kept, replaced, _ = self.walk(operations, resources, IDENTITY, 0, self.content.placements)
         self.content.operations = kept
-        if replaced:
-            self.content.resources = with_replacements(resources, replaced)
+        fonts = self.mapped_fonts(resources)
+        if replaced or fonts:
+            self.content.resources = with_replacements(resources, replaced, fonts)
         return self.content
 
     def walk(self, operations, resources, ctm, depth: int, placements: list) -> tuple[list, dict, bool]:
@@ -417,12 +424,13 @@ class _Walker:
         finally:
             self.active.discard(id(xobject))
         replacement = None
-        if changed:
+        fonts = self.mapped_fonts(resources)
+        if changed or fonts:
             replacement = ContentStream(None, self.reader)
             for name in xobject:
                 if name not in ('/Filter', '/DecodeParms', '/Length', '/Resources'):
                     replacement[NameObject(name)] = xobject.raw_get(name)
-            replacement[NameObject('/Resources')] = with_replacements(resources, replaced)
+            replacement[NameObject('/Resources')] = with_replacements(resources, replaced, fonts)
             replacement.operations = kept
         self.forms[key] = _Form(replacement, placements)
         return self.forms[key]
@@ -451,13 +459,30 @@ class _Walker:
                 for entry in ('/ToUnicode', '/Encoding'):
                     self.check_stream(resolved(font.get(entry)))
 
+    def mapped_fonts(self, resources) -> dict:
+        """{font name: its glyph-mapped copy} for the simple symbol fonts ``resources`` names."""
+        fonts = resolved(resources.get('/Font'))
+        if not isinstance(fonts, DictionaryObject):
+            return {}
+        mapped = {}
+        for key in list(fonts):
+            font = resolved(fonts.raw_get(key))
+            if not isinstance(font, DictionaryObject):
+                continue
+            if id(font) not in self.font_copies:
+                self.font_copies[id(font)] = mapped_simple_font(font)
+            if self.font_copies[id(font)] is not None:
+                mapped[key] = self.font_copies[id(font)]
+        return mapped
+
 
 def pixel_count(width, height) -> int:
     return max(0, int(number(width))) * max(0, int(number(height)))
 
 
-def with_replacements(resources, replaced: dict) -> DictionaryObject:
-    """A copy of ``resources`` whose XObject table also names each filtered form."""
+def with_replacements(resources, replaced: dict, fonts: dict | None = None) -> DictionaryObject:
+    """A copy of ``resources`` whose XObject table also names each filtered form, and whose font table
+    names each glyph-mapped symbol font in place of the original."""
     copy = DictionaryObject({NameObject(key): resources.raw_get(key) for key in resources})
     table = resolved(resources.get('/XObject'))
     entries = DictionaryObject({NameObject(key): table.raw_get(key) for key in table}) \
@@ -465,6 +490,12 @@ def with_replacements(resources, replaced: dict) -> DictionaryObject:
     for name, form in replaced.items():
         entries[NameObject(name + REPLACEMENT_SUFFIX)] = form
     copy[NameObject('/XObject')] = entries
+    if fonts:
+        font_table = resolved(resources.get('/Font'))
+        names = DictionaryObject({NameObject(key): font_table.raw_get(key) for key in font_table})
+        for name, font in fonts.items():
+            names[NameObject(name)] = font
+        copy[NameObject('/Font')] = names
     return copy
 
 
