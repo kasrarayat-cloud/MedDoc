@@ -17,15 +17,21 @@ label that answers nothing ("Procedures performed today: none") opens none.
 "Referral:", "Orders:", "To do:" and the other plan labels round 3b added are
 field labels as often as headings: "Orders: none" is a field, and with an
 answer of their own followed by more fields they speak for their own line
-only. A label line without
-a colon ("Planned procedures", "Further management", a Word heading paragraph)
-opens a plan or history section when its words say so and it ends with the
-section of a note it names (procedures, plan, management, work-up ...), or
-starts with the plan or the procedures and a plan word ("Procedures planned",
-"Plan going forward"); never a service, an intervention or a landmark. A
-numbered or bulleted line is read the same way ("2. Upcoming procedures"), so a
-statement in a numbered list ("3. Further workup recommended") stays content
-because it does not end with its noun.
+only.
+
+A label line without a colon ("Planned procedures", "Further management", a
+Word heading paragraph) opens a plan or history section when its words say so
+and it ends with the section of a note it names (procedures, plan,
+management, work-up ...), or starts with the plan or the procedures and a
+plan word ("Procedures planned", "Plan going forward", never today's); never
+a service, an intervention or a landmark. A numbered or bulleted line is read
+the same way ("2. Upcoming procedures"), so a statement in a numbered list
+("3. Further workup recommended") stays content because it does not end with
+its noun. Such a line that reads as a phrase ("Changes of prior radiation
+therapy", "Specimens sent for further testing") is a finding or a statement:
+inside a procedure, findings or technique section it opens an ``other``
+section with no default, elsewhere the section in force goes on, and in a
+numbered list it is content.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
@@ -36,13 +42,15 @@ The one exception is a form-field line whose own label is a procedure,
 findings or technique heading ("Procedure: Upper endoscopy (EGD)"): it reads
 as the same printed line would, for that line only, and the block's section
 resumes on the next line; a box or option value keeps it silent.
-A service line after a line cut on a plan, cancellation or denial verb that its
-own clause leaves without an object ("Dr. Smith recommended\nEUS with FNA of
-the pancreatic head mass.") is held: it is an ``other`` section of its own, with
-no default, and the section before it resumes on the next line.
 The header an addendum opens with ("ADDENDUM (revision 2, added 2026-10-22
 10:00 UTC)") is likewise an ``other`` section with no default, so an addendum
 never takes the reading of the section the document ended in.
+
+In a procedure, findings or technique section, a service line after a line cut
+on a plan, cancellation or denial verb that its own clause leaves without an
+object ("Dr. Smith recommended", then "EUS with FNA of the pancreatic head
+mass." on the next line) is held: it is an ``other`` section of its own, with
+no default, and the section before it resumes on the next line.
 """
 from __future__ import annotations
 
@@ -147,6 +155,7 @@ _SEC_TODAY_LABELS = frozenset(('procedure performed today', 'procedures performe
                                'procedures done today', 'intervention performed', 'interventions performed',
                                'intervention performed today', 'interventions performed today'))
 # A key-value line ("Extent: cecum"): after a field-label line with an answer, it ends that label's reach.
+_SEC_NO_ANSWER_LABELS = _SEC_FIELD_PLAN_LABELS | _SEC_TODAY_LABELS
 _SEC_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][^:\n|]{0,39}:[ \t]*\S', re.A)
 _SEC_FIELD_REACH = 3  # how many lines after a field-label line are read for the next field (bounds the work)
 _PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
@@ -298,7 +307,7 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     label = normalize_label(raw)
     kind = HEADINGS.get(label)
     content = '' if colon < 0 else line[colon + 1:]
-    if label in _SEC_FIELD_PLAN_LABELS | _SEC_TODAY_LABELS and content.strip() and _SEC_NO_ANSWER.fullmatch(content):
+    if label in _SEC_NO_ANSWER_LABELS and content.strip() and _SEC_NO_ANSWER.fullmatch(content):
         return None  # "Orders: none", "Procedures performed today: N/A": a field, as at R3B-BASE (structure:5, :9)
     if kind is None and colon < 0 and cues.PROCEDURE_TITLE.match(line.strip()) and _service_named(line) \
             and not _TITLE_QUALIFIER.search(line):
