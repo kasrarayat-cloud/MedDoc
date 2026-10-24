@@ -839,3 +839,48 @@ class X2DeferVerbTests(unittest.TestCase):
                              (f'{CYST}\nFindings: No complications.', 'performed')):
             with self.subTest(body=body):
                 self.assertEqual(family(HEADER + body + '\n', 'gi.eus'), status)
+
+
+# --- extra item 3 ---------------------------------------------------------------------------------------------
+
+EGD_DILATION = 'EGD to the second portion of the duodenum with balloon dilation.'
+
+
+def under_label(label, lines=(EGD_DILATION,)):
+    return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n' + label + '\n'
+            + '\n'.join(lines) + '\n')
+
+
+class X3DenyingLabelAboveTests(unittest.TestCase):
+    """Extra item 3: a label line whose own words deny performance ("Procedures not performed:", "Not done:") is no
+    heading (its verb keeps it content), so the line under it took the previous section's reading: a findings line
+    read performed and 43249 was ready. The service under such a label is now held (uncertain, non-silent)."""
+
+    def test_the_claimed_input_and_variants(self):
+        for label in ('Procedures not performed:', 'Procedure not performed:', 'Not performed:', 'Procedures not done:',
+                      'Not done:', 'Procedures not performed today:'):
+            text = under_label(label)
+            with self.subTest(label=label):
+                status, cues = read(text, EGD_DILATION)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+                self.assertFalse(ready(run_engine(text, [('43249', EGD_DILATION)])[0]['43249']))
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+    def test_every_item_of_the_list_under_the_label(self):
+        text = under_label('Procedures not performed:', (EGD_DILATION, 'EUS of the pancreatic head.'))
+        self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+
+    def test_other_labels_and_lists_are_unchanged(self):
+        # a label that keeps the findings section (its verb makes it content), a blank line that ends the list, and a
+        # later label that is not a denial
+        for label, lines in (('Procedures performed:', (EGD_DILATION,)), ('Additional findings noted:', (EGD_DILATION,)),
+                             ('Procedures not performed:', ('', EGD_DILATION)),
+                             ('Procedures not performed:', ('EUS of the pancreatic head.', 'Additional findings noted:',
+                                                            EGD_DILATION)),
+                             ('Procedures not performed:', ('Findings: ' + EGD_DILATION,))):
+            text = under_label(label, lines)
+            with self.subTest(label=label, lines=lines):
+                self.assertEqual(read(text, EGD_DILATION)[0], 'performed')

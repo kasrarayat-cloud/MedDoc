@@ -970,6 +970,39 @@ def _called_off_further(an: Analysis, index: int) -> Optional[str]:
     return an.memo[key]
 
 
+# A label line whose own words deny performance: "Procedures not performed:", "Not done:", "Procedures not performed
+# today:". With its verb it is no heading (sections keep it content), so the lines under it take the section before
+# it. ("Cancelled procedures:", with no verb, is a heading of its own: the lines under it read its silent default.)
+_DENYING_LABEL = re.compile(r'[ \t]*(?:[-*][ \t]*)?(?:[A-Za-z][\w/-]*[ \t]+){0,3}?(?:not[ \t]+(?:performed|done)|cancell?ed|'
+                            r'deferred|declined)(?:[ \t]+[\w/-]+){0,5}[ \t]*:[ \t]*', re.A | re.I)
+LABEL_ITEMS = 12  # item lines read back to their label (bounds the work per span)
+
+
+def _denying_label_above(an: Analysis, s: int) -> Optional[str]:
+    """The label line over the list that the line of the sentence at ``s`` belongs to, when that label denies
+    performance (_DENYING_LABEL): read back over at most LABEL_ITEMS lines of the same section, stopping at a blank
+    line or at any other label line (a line that ends with a colon), which then governs instead."""
+    key = ('denying-label', s)
+    if key not in an.memo:
+        an.memo[key] = None
+        text = an.text
+        starts = an.memo.get(('line-starts',))
+        if starts is None:
+            starts = an.memo[('line-starts',)] = [0] + [m.end() for m in re.finditer('\n', text)]
+        index = bisect.bisect_right(starts, s) - 1
+        section = an.lay.section_at(s)
+        for line in range(index - 1, max(-1, index - 1 - LABEL_ITEMS), -1):
+            ls, le = starts[line], starts[line + 1] - 1
+            words = text[ls:le].strip()
+            if not words or an.lay.section_at(ls) is not section:
+                break
+            if words.endswith(':'):
+                if len(words) <= 80 and _DENYING_LABEL.fullmatch(text, ls, le):
+                    an.memo[key] = words
+                break
+    return an.memo[key]
+
+
 def _denies_an_act(an: Analysis, start: int, end: int) -> bool:
     """Whether the short line [start, end) carries an act denial that nothing explains ("Not performed.", "Patient
     declined.") and that is not the denial of another act or care step written right after its name
@@ -989,7 +1022,12 @@ def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optio
     or else the next sentence of the same section, that denies the service named before it (see
     _denies); None when none does. A clause or a sentence that names a service speaks of that one,
     unless it names only this service and reschedules it ("The EUS will be rescheduled because ...").
-    Then a denying status line or a cancellation further down (_called_off_further)."""
+    Then a denying status line or a cancellation further down (_called_off_further). Also the label line
+    above the service's line when its own words deny performance (_denying_label_above): read here, as
+    the one denial a section-read service is asked about, although it stands before the line."""
+    label = _denying_label_above(an, s)
+    if label is not None:
+        return label
     for cs, ce in _clauses_in(an, after, e)[:DENIAL_CLAUSES]:
         if an.services_in(cs, ce):
             return None
