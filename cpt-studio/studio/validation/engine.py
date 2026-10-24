@@ -70,7 +70,12 @@ class _Encounter:
     pfs_source: Optional[ReferenceSourceInfo]
     active_pfs: Mapping[str, dict]  # code -> PFS row of every selected, non-excluded proposal that has one
     procedure_labels: tuple[str, ...]  # procedure families performed on this date
+    possible_labels: tuple[str, ...]  # procedure families whose performance on this date is not established
     global_days: str
+
+    @property
+    def procedure_day(self) -> bool:
+        return bool(self.procedure_labels or self.possible_labels)
 
 
 def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], routing: RoutingResult,
@@ -101,7 +106,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         proposals = (_keyed(selections, encounter)
                      + tuple(_alternative(index, item, text, pages, response.provider)
                              for index, item in enumerate(alternatives)))
-        coverage.append(checks.unproposed_check(*_missed(routing, selections, bool(encounter.procedure_labels))))
+        coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day)))
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
                         checks.service_date_check(date_state), *coverage, checks.unsupported_check(unsupported)]
@@ -146,19 +151,29 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     active = [s for s in selections if not s.excluded]
     pfs_source = applied_sources(sources, date_state.value).get(PFS)
     procedures = [s for s in active if _same_day_procedure(s)]
+    possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
     labels = [PROFILES[f.family].label for f in routing.findings
               if f.family in PROFILES and PROFILES[f.family].procedure and f.status in checks.POSITIVE]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]
+    possible_labels = [PROFILES[f.family].label for f in routing.findings
+                       if f.family in PROFILES and PROFILES[f.family].procedure and f.status == 'uncertain']
+    possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
+    possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
     return _Encounter(provider=provider, context=context, sources=sources, date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
-                      global_days=_global_days(procedures, pfs_source, sources, date_state.value))
+                      possible_labels=tuple(possible_labels),
+                      global_days=_global_days(procedures + possible, pfs_source, sources, date_state.value))
 
 
-def _same_day_procedure(s: _Selection) -> bool:
-    """A performed, non-E/M code that is procedural: a procedure profile, or a CMS global period other than
-    XXX. A code with no fee-schedule row for the date counts (fail-closed): the E/M is then held."""
-    if not s.performed or s.family in checks.EM_FAMILIES:
+def _same_day_procedure(s: _Selection, state: str = 'performed') -> bool:
+    """A non-E/M code that is procedural: a procedure profile, or a CMS global period other than XXX. A code
+    with no fee-schedule row for the date counts (fail-closed): the E/M is then held. ``state`` 'performed'
+    asks for a performed or incomplete code, 'uncertain' for one whose performance is not established."""
+    if s.family in checks.EM_FAMILIES or s.evaluation is None:
+        return False
+    matches = s.performed if state == 'performed' else s.evaluation.outcome.state == 'uncertain'
+    if not matches:
         return False
     if s.profile.procedure:
         return True
@@ -207,11 +222,13 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         if outcome.state == 'uncertain':
             clarifications.append(checks.performed_clarification(outcome, name, s.family, key))
         clarifications += checks.fact_clarifications(states, profile, s.family, key)
-        if s.family in checks.EM_FAMILIES and enc.procedure_labels:
+        if s.family in checks.EM_FAMILIES and enc.procedure_day:
             documented = checks.separate_em_statement(finding)
-            found.append(checks.em_procedure_check(enc.procedure_labels, enc.global_days, documented))
+            found.append(checks.em_procedure_check(enc.procedure_labels, enc.global_days, documented,
+                                                   enc.possible_labels))
             if documented is None:
-                clarifications.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key))
+                clarifications.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key,
+                                                                        enc.possible_labels))
             considerations.append(checks.SEPARATE_EM_CONSIDERATION)
     if day is None:
         found.append(checks.PROPOSAL_DATE_CHECK)
@@ -227,8 +244,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
 
     if s.excluded:
         holds = list(checks.fact_clarifications(states, profile, s.family, key))
-        if s.family in checks.EM_FAMILIES and enc.procedure_labels and checks.separate_em_statement(finding) is None:
-            holds.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key))
+        if s.family in checks.EM_FAMILIES and enc.procedure_day and checks.separate_em_statement(finding) is None:
+            holds.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key, enc.possible_labels))
         found.append(checks.reinstatement_check(holds, date_unknown=day is None))
     if s.excluded:
         status = 'excluded'

@@ -458,10 +458,20 @@ SEPARATE_EM_CONSIDERATION = ('Modifier 25 is a consideration only if a significa
                              'service is documented; CPT Studio never assigns it.')
 
 
-def same_day_reason(labels: Sequence[str]) -> str:
-    verb = 'is' if len(labels) == 1 else 'are'
-    return (f'{_join(labels)} {verb} documented as performed on the same date; a significant, separately '
-            'identifiable E/M service is not established by this document.')
+def _same_day_subject(labels: Sequence[str], possible: Sequence[str] = ()) -> str:
+    """Procedures documented as performed, then procedures whose performance is not established (fail-closed:
+    an uncertain procedure holds the E/M as a performed one does, until its status is answered)."""
+    parts = []
+    for items, phrase in ((labels, 'documented as performed on the same date'),
+                          (possible, 'possibly performed on the same date (its performance is not established)')):
+        if items:
+            parts.append(f'{_join(items)} {"is" if len(items) == 1 else "are"} {phrase}')
+    return '; '.join(parts)
+
+
+def same_day_reason(labels: Sequence[str], possible: Sequence[str] = ()) -> str:
+    return (f'{_same_day_subject(labels, possible)}; a significant, separately identifiable E/M service is not '
+            'established by this document.')
 
 
 def separate_em_statement(finding) -> Optional[str]:
@@ -472,16 +482,16 @@ def separate_em_statement(finding) -> Optional[str]:
     return None
 
 
-def em_procedure_check(labels: Sequence[str], global_days_note: str, documented: Optional[str] = None) -> Check:
+def em_procedure_check(labels: Sequence[str], global_days_note: str, documented: Optional[str] = None,
+                       possible: Sequence[str] = ()) -> Check:
     if documented is not None:
-        verb = 'is' if len(labels) == 1 else 'are'
-        detail = (f'{_join(labels)} {verb} documented as performed on the same date. The documentation states a '
-                  f'significant, separately identifiable E/M service (\u201c{documented}\u201d); whether it '
-                  'supports a separate E/M code is the reviewer\u2019s judgement.')
+        detail = (f'{_same_day_subject(labels, possible)}. The documentation states a significant, separately '
+                  f'identifiable E/M service (\u201c{documented}\u201d); whether it supports a separate E/M code is '
+                  'the reviewer\u2019s judgement.')
         return Check('em.same_day_procedure', 'Separately identifiable E/M on a procedure day', 'warn',
                      f'{detail} {global_days_note}'.strip(), EM_SOURCE)
     return Check('em.same_day_procedure', 'Separately identifiable E/M on a procedure day', 'warn',
-                 f'{same_day_reason(labels)} {global_days_note}'.strip(), EM_SOURCE)
+                 f'{same_day_reason(labels, possible)} {global_days_note}'.strip(), EM_SOURCE)
 
 
 def reinstatement_check(holds: Sequence[ClarificationSpec], *, date_unknown: bool) -> Check:
@@ -503,9 +513,10 @@ def reinstatement_check(holds: Sequence[ClarificationSpec], *, date_unknown: boo
                  '(add it as an addendum): ' + ' '.join(waits), REINSTATEMENT_SOURCE)
 
 
-def separate_em_clarification(labels: Sequence[str], family: str, key: str) -> ClarificationSpec:
+def separate_em_clarification(labels: Sequence[str], family: str, key: str,
+                              possible: Sequence[str] = ()) -> ClarificationSpec:
     return ClarificationSpec(scope='proposal', fact='separate_em', question=SEPARATE_EM_QUESTION,
-                             reason=same_day_reason(labels), family=family, proposal_key=key)
+                             reason=same_day_reason(labels, possible), family=family, proposal_key=key)
 
 
 def global_days_note(entries: Sequence[tuple[str, str]], release: str, unavailable: str) -> str:

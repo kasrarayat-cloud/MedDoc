@@ -17,7 +17,7 @@ from studio.validation import checks
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE, ApiHarness
-from tests.test_validation import (COLON, EGD, EM, MUE_INFO, MUE_ROWS, PFS_INFO, PFS_ROWS, EngineCase, Note, finding,
+from tests.test_validation import (COLON, EGD, EGD_LABEL, EM, MUE_INFO, MUE_ROWS, PFS_INFO, PFS_ROWS, EngineCase, Note, finding,
                                    mention, pfs, selected, listed, visit_context)
 from tests.test_reports import APPROVED, parse_csv, section
 
@@ -319,3 +319,43 @@ class LineBreakGuardUnitTests(SimpleTestCase):
                 lines = out.split('\n')
                 self.assertEqual(lines[:2], ['  1. 43239 · Upper GI endoscopy', '     Note: ok'])
                 self.assertTrue(all(line.startswith(reports.CONTINUATION) for line in lines[2:]), lines)
+
+
+class UncertainSameDayProcedureTests(EngineCase):
+    """Routing repair follow-up — a procedure whose performance is not established holds a same-day E/M too."""
+
+    NOTE = Note('Date of service: 2026-10-21',
+                'Office visit: established patient seen for dysphagia. Total time 32 minutes.',
+                'EGD with dilation if the stricture is confirmed.')
+    VISIT = 'Office visit: established patient seen for dysphagia.'
+    TIME = 'Total time 32 minutes.'
+    HEDGE = 'EGD with dilation if the stricture is confirmed.'
+
+    def run_case(self, egd_status=None, *codes):
+        found = [finding(EM, 'performed', mention(self.NOTE, EM, 'performed', self.VISIT, 'seen'),
+                         facts={'em_basis': 'total time 32 minutes'})]
+        if egd_status:
+            found.append(finding(EGD, egd_status, mention(self.NOTE, EGD, egd_status, self.HEDGE, f'{egd_status}: cue')))
+        result = self.run_engine(self.NOTE, selected('99213', self.NOTE.span(self.TIME)), *codes, findings=found,
+                                 ctx=visit_context())
+        return self.proposal(result, '99213')
+
+    def test_an_uncertain_routed_procedure_family_holds_the_visit(self):
+        self.statuses = {self.TIME: None}
+        visit = self.run_case('uncertain')
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+        self.assertIn(f'{EGD_LABEL} is possibly performed on the same date (its performance is not established)',
+                      self.check(visit, 'em.same_day_procedure').detail)
+
+    def test_an_uncertain_procedure_proposal_holds_the_visit(self):
+        self.statuses = {self.TIME: None, self.HEDGE: HEDGED}
+        visit = self.run_case(None, selected('43235', self.NOTE.span(self.HEDGE)))
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertIn('possibly performed on the same date', self.check(visit, 'em.same_day_procedure').detail)
+
+    def test_a_planned_procedure_does_not_hold_the_visit(self):
+        self.statuses = {self.TIME: None}
+        visit = self.run_case('planned')
+        self.assertEqual(visit.status, 'ready')
+        self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])

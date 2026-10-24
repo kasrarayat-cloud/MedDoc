@@ -16,6 +16,7 @@ from django.utils import timezone
 from studio import jobs, models
 from studio.types import ExtractionResult, PageSpan, RawExchange
 from tests.support import factories as f
+from tests.test_frontend import PLAIN_STATIC
 from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider, drain
 
 LIVE = dict(PROVIDER_MODE='live', AUTHORIZATION_REF='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
@@ -272,6 +273,7 @@ class InputBoundaryTests(ApiHarness, TestCase):
                              {'proposal_id': str(proposal.pk), 'action': 'reject', 'note': 'bad\x00note'})
         self.assertEqual(response.status_code, 400, response.content)
 
+    @override_settings(STORAGES=PLAIN_STATIC)  # renders the login page; a fresh checkout has no static manifest
     def test_login_with_nul_in_username_fails_normally_and_is_counted(self):
         anonymous = Client(enforce_csrf_checks=False)
         response = anonymous.post('/login/', {'username': 'reviewer\x00', 'password': 'synthetic-pass-123!'})
