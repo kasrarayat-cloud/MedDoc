@@ -375,3 +375,93 @@ class R9RefusalAfterTheInterventionTests(unittest.TestCase):
                            ('EGD with dilation; patient declined.', 'gi.egd')):
             with self.subTest(line=line):
                 self.assertNotIn(family(procedure_line(line), slug), POSITIVE)
+
+
+# --- routing:7 ------------------------------------------------------------------------------------------------
+
+EUS_LINE = 'EUS with fine-needle biopsy of the pancreatic head mass.'
+EUS_P = f'Procedure: {EUS_LINE}\n'
+EUS_I = 'Indication: A 2.4 cm pancreatic head mass on CT.\n'
+
+
+class R7CancelledOrRescheduledFurtherDownTests(unittest.TestCase):
+    """routing:7 - a denying status line one line further down (after the indication), a status value with a
+    reason, "Rescheduled." under the procedure line, or a next line that names the same service and reschedules
+    it holds the section-read service: never performed, no FNB fact, 43242 never ready, and held (never newly
+    cancelled or negated)."""
+
+    def assert_held(self, body):
+        text = HEADER + body
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+        self.assertNotEqual(fact_value(text, 'gi.eus', 'tissue_sampling'), 'FNB')
+        status, cues = read(text, EUS_LINE)
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+        proposals, _ = run_engine(text, [('43242', EUS_LINE)])
+        self.assertFalse(ready(proposals['43242']), proposals['43242'].status)
+
+    def assert_performed(self, body):
+        text = HEADER + body
+        self.assertEqual(family(text, 'gi.eus'), 'performed')
+        self.assertEqual(read(text, EUS_LINE)[0], 'performed')
+
+    def test_a_status_line_one_line_further_down(self):
+        for line in ('Status: Cancelled - the patient had eaten breakfast.', 'Procedure status: Not performed.',
+                     'Status: Cancelled.', 'Status: Not performed.', 'Status: Postponed until the INR is corrected.',
+                     'The procedure was cancelled because the patient had eaten breakfast.'):
+            with self.subTest(line=line):
+                self.assert_held(EUS_P + EUS_I + line + '\n')
+
+    def test_a_status_value_with_a_reason(self):
+        for line in ('Status: Cancelled - the patient had eaten breakfast.',
+                     'Status: Cancelled because the patient had eaten breakfast.',
+                     'Status: Rescheduled to next week because the patient had eaten breakfast.',
+                     'Procedure status: Rebooked for next week because of a scheduling conflict.'):
+            with self.subTest(line=line):
+                self.assert_held(EUS_P + line + '\n' + EUS_I)
+
+    def test_rescheduled_under_the_procedure_line(self):
+        for line in ('Rescheduled.', 'Rescheduled to next week.', 'Rebooked.', 'Moved to next week.'):
+            with self.subTest(line=line):
+                self.assert_held(EUS_P + line + '\n' + EUS_I)
+
+    def test_a_next_line_naming_the_service_and_rescheduling_it(self):
+        for line in ('The EUS will be rescheduled because the patient had eaten breakfast.',
+                     'The EUS was rescheduled because the patient had eaten breakfast.', 'EUS will be rescheduled.',
+                     'The procedure was rescheduled because the patient had eaten breakfast.'):
+            with self.subTest(line=line):
+                self.assert_held(EUS_P + line + '\n' + EUS_I)
+
+    def test_ordinary_lines_keep_the_service_performed(self):
+        for body in (EUS_P + EUS_I + 'Status: Completed.\n', EUS_P + 'Repeat EUS in 3 months.\n' + EUS_I,
+                     EUS_P + EUS_I + 'Plan: Repeat EUS in 3 months.\n', EUS_P + 'No complications.\n' + EUS_I,
+                     EUS_P + EUS_I + 'Status: stable.\n', EUS_P + 'Moved to recovery in stable condition.\n' + EUS_I,
+                     EUS_P + 'This EUS was rescheduled from last week.\n' + EUS_I,
+                     EUS_P + 'Rescheduled from last week; performed today without difficulty.\n' + EUS_I,
+                     EUS_P + EUS_I + 'Plan: Status: pending pathology review.\n',
+                     EUS_P + EUS_I + 'History: The procedure was cancelled once last year.\n',
+                     EUS_P + 'ERCP with stent placement will be rescheduled to next week.\n' + EUS_I):
+            with self.subTest(body=body):
+                self.assert_performed(body)
+
+    def test_a_status_line_speaks_for_the_nearest_service_line_above_it(self):
+        text = (HEADER + 'Procedures:\nEGD with biopsy of the antrum.\nColonoscopy with cold snare polypectomy.\n'
+                'Status: Cancelled - inadequate preparation.\n')
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+        self.assertNotIn(family(text, 'gi.colonoscopy'), POSITIVE)
+        self.assertEqual(read(text, 'Colonoscopy with cold snare polypectomy.')[0], 'uncertain')
+
+    def test_heading_lines_are_not_counted_as_sentences_between(self):
+        self.assert_held(EUS_P + 'Indication:\nA 2.4 cm pancreatic head mass on CT.\nWeight loss of 5 kg.\nPainless '
+                                 'jaundice.\nSedation:\nMonitored anesthesia care.\nStatus: Cancelled - the patient had '
+                                 'eaten breakfast.\n')
+
+    def test_a_rescheduling_to_today_is_no_denial(self):
+        self.assert_performed(EUS_P + 'Rescheduled to today; performed without difficulty.\n' + EUS_I)
+
+    def test_an_abort_after_the_start_in_a_long_status_value_stays_incomplete(self):
+        text = HEADER + ('Procedure: Colonoscopy with biopsy.\nStatus: Aborted at 30 cm because of looping in the '
+                         'sigmoid colon.\n')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+        status, cues = read(text, 'Colonoscopy with biopsy.')
+        self.assertEqual(status, 'incomplete', cues)

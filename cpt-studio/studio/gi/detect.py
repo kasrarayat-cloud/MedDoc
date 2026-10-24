@@ -876,14 +876,86 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
         value = key.end()
         if _STATUS_DONE.match(text, value, ne):
             return False
-        return bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
+        return (bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
+                or _value_calls_off(an, value, ne))
     if bare and _bare_denial(an, body, ne):
         return True
-    if len(text[body:ne].split()) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)):
+    if len(text[body:ne].split()) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)
+                                            or _reschedules(an, body, ne)):
         return True
     if not _REFERRING_SUBJECT.match(text, body, ne):
         return False
-    return _cancels(an, ns, ne) or bool(_denying_word(an, ns, ne))
+    return _cancels(an, ns, ne) or bool(_denying_word(an, ns, ne)) or _reschedules(an, ns, ne)
+
+
+# A rescheduling of today's service: "Rescheduled.", "Rebooked for next week", "Moved to next week", "The procedure
+# was rescheduled because ...". Not one that brought it to today ("rescheduled from last week"; _reschedules also
+# skips any text that says today). Read only where a line or a status value is asked whether it denies a service.
+_RESCHEDULED = re.compile(r'\bre-?(?:schedul|book)\w*\b(?!\s+(?:from|after)\b)'
+                          r'|\b(?:moved|pushed|bumped)\s+(?:back\s+)?to\s+(?:next|tomorrow|later|a\s+later|another|'
+                          r'a\s+(?:different|future|new))\b', re.A | re.I)
+DENIAL_SENTENCES = 6  # later sentences read for a status line or a cancellation (bounds the work per span)
+
+
+def _reschedules(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) reschedules the service (_RESCHEDULED) and does not say today."""
+    key = ('reschedules', start, end)
+    if key not in an.memo:
+        an.memo[key] = bool(_RESCHEDULED.search(an.text, start, end)) and not cues.TODAY.search(an.text, start, end)
+    return an.memo[key]
+
+
+def _value_calls_off(an: Analysis, value: int, end: int) -> bool:
+    """Whether a status value opens with a cancellation (not an abort after the start), a rescheduling, or another
+    status that is not completion, whatever reason follows it ("Status: Cancelled - the patient had eaten
+    breakfast.", "Status: Rescheduled to next week because ..."): the bare-line tests read only short values."""
+    at = _SEPARATOR.match(an.text, value, end).end()
+    if _RESCHEDULED.match(an.text, at, end):
+        return True
+    return any(c.start == at and c.status in ('cancelled', 'planned', 'uncertain', 'historical')
+               and (c.name != 'aborted' or _abort_status(an, c)[0] != 'incomplete')
+               for c in an.cues_in(at, min(end, at + 60)))
+
+
+def _status_line(an: Analysis, start: int, end: int) -> bool:
+    at = _SEPARATOR.match(an.text, start, end).end()
+    opener = _OPENER.match(an.text, at, end)
+    return bool(_STATUS_KEY.match(an.text, opener.end() if opener else at, end))
+
+
+def _procedure_called_off(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) says the procedure was cancelled, postponed, rescheduled or not performed ("The procedure
+    was cancelled because the patient had eaten breakfast."), and not of an earlier encounter."""
+    key = ('called-off', start, end)
+    if key not in an.memo:
+        an.memo[key] = any(_generic_reading(an, m.start(), m.end()).status != 'historical'
+                           for pattern in (cues.PROCEDURE_CANCELLED, cues.PROCEDURE_NOT_PERFORMED)
+                           for m in pattern.finditer(an.text, start, end))
+    return an.memo[key]
+
+
+def _called_off_further(an: Analysis, index: int) -> Optional[str]:
+    """A status line that denies the service ("Status: Cancelled - ...", "Procedure status: Not performed.") or a
+    sentence that says the procedure was called off, within the DENIAL_SENTENCES sentences after the service line at
+    ``index`` - in any section but a plan or a history, so also after the indication line - and before the next
+    sentence that names a service (that one speaks of its own service). It holds the line above it."""
+    key = ('called-off-further', index)
+    if key not in an.memo:
+        an.memo[key] = None
+        read = 0
+        for ks, ke in an.lay.sentences[index + 1:index + 1 + 2 * DENIAL_SENTENCES]:
+            heading = an.lay.section_at(ks).heading
+            if heading is not None and heading.start == ks and ke <= heading.end:
+                continue  # a heading line ("Indication:") is structure, not a sentence about the service
+            read += 1
+            if read > DENIAL_SENTENCES or an.services_in(ks, ke):
+                break
+            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS:
+                continue
+            if (_status_line(an, ks, ke) and _denies(an, ks, ke, bare=False)) or _procedure_called_off(an, ks, ke):
+                an.memo[key] = an.text[ks:ke]
+                break
+    return an.memo[key]
 
 
 def _denies_an_act(an: Analysis, start: int, end: int) -> bool:
@@ -903,7 +975,9 @@ def _denies_an_act(an: Analysis, start: int, end: int) -> bool:
 def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optional[str]:
     """The later clause of the sentence [s, e) (after ``after``, the end of the service's own clause),
     or else the next sentence of the same section, that denies the service named before it (see
-    _denies); None when none does. A clause or a sentence that names a service speaks of that one."""
+    _denies); None when none does. A clause or a sentence that names a service speaks of that one,
+    unless it names only this service and reschedules it ("The EUS will be rescheduled because ...").
+    Then a denying status line or a cancellation further down (_called_off_further)."""
     for cs, ce in _clauses_in(an, after, e)[:DENIAL_CLAUSES]:
         if an.services_in(cs, ce):
             return None
@@ -913,9 +987,14 @@ def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optio
     if index < 0 or index + 1 >= len(an.lay.sentences):
         return None
     ns, ne = an.lay.sentences[index + 1]
-    if an.lay.section_at(ns) is not an.lay.section_at(s) or an.services_in(ns, ne):
-        return None
-    return an.text[ns:ne] if _denies(an, ns, ne, bare) else None
+    if an.lay.section_at(ns) is an.lay.section_at(s):
+        named = an.services_in(ns, ne)
+        own = {m.family for m in an.services_in(s, after)}
+        if not named and _denies(an, ns, ne, bare):
+            return an.text[ns:ne]
+        if named and own and all(m.family in own for m in named) and _reschedules(an, ns, ne):
+            return an.text[ns:ne]
+    return _called_off_further(an, index)
 
 
 def _clause_end(an: Analysis, pos: int, e: int) -> int:
