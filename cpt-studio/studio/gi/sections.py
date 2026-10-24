@@ -36,6 +36,10 @@ The one exception is a form-field line whose own label is a procedure,
 findings or technique heading ("Procedure: Upper endoscopy (EGD)"): it reads
 as the same printed line would, for that line only, and the block's section
 resumes on the next line; a box or option value keeps it silent.
+A service line after a line cut on a plan, cancellation or denial verb that its
+own clause leaves without an object ("Dr. Smith recommended\nEUS with FNA of
+the pancreatic head mass.") is held: it is an ``other`` section of its own, with
+no default, and the section before it resumes on the next line.
 The header an addendum opens with ("ADDENDUM (revision 2, added 2026-10-22
 10:00 UTC)") is likewise an ``other`` section with no default, so an addendum
 never takes the reading of the section the document ended in.
@@ -450,6 +454,48 @@ def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
     return (word in _DENIALS or bool(_OPEN_VERB.search(tail))) and not _own_clause(after)
 
 
+# A line cut after a verb the closed lists above do not know (round 4 structure:11, an open class): it ends without
+# closing punctuation on a word the declared plan or cancellation cues read (cues.PLANNED_CLAUSE, cues.CANCELLED_CLAUSE:
+# "Dr. Smith recommended", "the endoscopist deferred", "Dr. Smith ordered"), or on a denial and a bare "to <verb>" ("The
+# family declined to authorize"); its last clause names no service or intervention before that word ("Repeat colonoscopy
+# recommended" speaks of its own); and the next line names one but opens no clause of its own ("EUS with fine-needle
+# aspiration of the pancreatic head mass."). That next line is HELD, never read as performed: it opens an 'other'
+# section of its own, with no default, and the section in force resumes after it (see layout). It is never joined, so
+# no plan or cancellation is read into it either: a layout rule may only hold.
+_SEC_HELD_LABEL = 'line after an unfinished clause'
+_SEC_CLAUSE_EDGE = re.compile(r'[;,]', re.A)
+_SEC_DENIAL_TO_END = re.compile(r'\b(?:declined|declines|refused|refuses|denied|denies)[ \t]+to[ \t]+[a-z][a-z-]*$', re.A)
+_SEC_LAST_WORD = re.compile(r'(?<![A-Za-z-])([A-Za-z][A-Za-z-]*)$', re.A)
+
+
+def _sec_act_named(line: str) -> bool:
+    return _service_named(line) or any(p.search(line) for _, p, _ in cues.INTERVENTIONS)
+
+
+def _sec_held_after(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
+    """Whether the line ``nxt`` is held because the line before it (from ``prev[0]``, after any heading label) is cut
+    after a plan, cancellation or denial verb that its own clause leaves without an object (see above). Read only when
+    _soft_wrap does not join the two lines; only the ends of the lines are read (bounds the work per line)."""
+    before = text[prev[0]:prev[1]].rstrip()
+    if not before or before[-1] in '.!?:;,':
+        return False
+    tail = before[-WRAP_TAIL:]
+    cue = _SEC_DENIAL_TO_END.search(tail)
+    if cue is None:
+        cue = _SEC_LAST_WORD.search(tail)
+        if cue is None or not any(pattern.fullmatch(cue.group(1)) for _, pattern in cues.PLANNED_CLAUSE + cues.CANCELLED_CLAUSE):
+            return False
+    after = text[nxt[0]:nxt[1]].strip()
+    if not after or after[0].islower() or ' | ' in tail or ' | ' in after[:OWN_CLAUSE_REACH] \
+            or _LIST_OR_FIELD.match(after) or _own_clause(after) or not _sec_act_named(after[:OWN_CLAUSE_REACH]) \
+            or _answered(tail) or _OPTION_ROW.search(tail):
+        return False
+    offset = len(before) - len(tail)
+    stops = [b - prev[0] - offset for b in _sentence_breaks(text, prev[0] + offset, prev[1])]
+    clause = max([0] + [x for x in stops if x <= cue.start()] + [m.end() for m in _SEC_CLAUSE_EDGE.finditer(tail, 0, cue.start())])
+    return not _sec_act_named(tail[clause:cue.start()])
+
+
 _STOP = re.compile(r'[.!?](?=\s)')
 _WORD_BEFORE = re.compile(r'([A-Za-z][A-Za-z.]{0,10})$')
 _NEXT_CHAR = re.compile(r'\s*(\S)')
@@ -596,22 +642,32 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
 def layout(text: str) -> Layout:
     lines = _lines(text)
     headings, inside, resumes, field_ends, line_ends = _headings(text, lines)
+    joins, held = [], []  # whether each line runs on into the next; the lines held after an unfinished clause
+    for i, (ls, le) in enumerate(lines):
+        content = headings[i][2].end if headings[i] else ls  # a heading's inline content may run on
+        open_end = i + 1 < len(lines) and not headings[i + 1] and i not in inside \
+            and not (headings[i] and FORM_BLOCK.fullmatch(text[ls:le].strip()))
+        joins.append(open_end and _soft_wrap(text, (content, le), lines[i + 1]))
+        if open_end and not joins[-1] and i + 1 not in inside and _sec_held_after(text, (content, le), lines[i + 1]):
+            held.append(i + 1)  # structure:11: it opens an 'other' section for itself alone
     # The marks of one line, in this order: the section in force before a block resumes (after the blank line
     # that ends it), the block's own section resumes (after a field line that opened its own), the section in
-    # force before a field-label line resumes (after a label that speaks for its own line only), a heading opens.
-    # So a heading wins where a resume falls on its line (the next page opens with "Findings:", an addendum's
-    # header).
-    resume, field_end, line_end, heading = 0, 1, 2, 3
+    # force before a field-label line or a held line resumes (after a label that speaks for its own line only, or
+    # the line after an unfinished clause), a held line opens its own 'other' section, a heading opens. So a heading
+    # wins where a resume falls on its line (the next page opens with "Findings:", an addendum's header).
+    resume, field_end, line_end, held_open, heading = 0, 1, 2, 3, 4
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
+                   + [(i, held_open, ('other', _SEC_HELD_LABEL, None)) for i in held]
+                   + [(i + 1, line_end, i) for i in held if i + 1 < len(lines)]
                    + [(i, resume, header) for i, header in resumes if i < len(lines)]
                    + [(i, field_end, header) for i, header in field_ends if i < len(lines)]
                    + [(i, line_end, label_line) for i, label_line in line_ends if i < len(lines)],
                    key=lambda mark: mark[:2])
-    line_only = {label_line for _, label_line in line_ends}
+    line_only = {label_line for _, label_line in line_ends} | set(held)
     opened, current, before_block, before_line = [], ('other', '', None), {}, {}
     for i, what, value in marks:
-        if what == heading:
-            if FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
+        if what in (heading, held_open):
+            if what == heading and FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
                 before_block[i] = current
             if i in line_only:
                 before_line[i] = current
@@ -636,14 +692,9 @@ def layout(text: str) -> Layout:
     breaks: set[int] = set()
     for i, (ls, le) in enumerate(lines):
         breaks.update(_sentence_breaks(text, ls, le))
-        content = ls
         if headings[i]:
-            content = headings[i][2].end  # a heading's inline content may run on into the next line
-            breaks.update((ls, content))
-        joined = i + 1 < len(lines) and not headings[i + 1] and i not in inside \
-            and not (headings[i] and FORM_BLOCK.fullmatch(text[ls:le].strip())) \
-            and _soft_wrap(text, (content, le), lines[i + 1])
-        if not joined:
+            breaks.update((ls, headings[i][2].end))
+        if not joins[i]:
             breaks.add(le)
     sentences = _segments(text, sorted(breaks | {0, len(text)}))
     clauses = []

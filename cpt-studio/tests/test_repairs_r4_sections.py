@@ -518,5 +518,114 @@ class Structure3SpokenAnswerTests(unittest.TestCase):
         self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
 
 
+# --- structure:11: a line cut after a verb the closed lists do not know ----------------------------------------------
+
+STRUCTURE11_EUS = 'EUS with fine-needle aspiration of the pancreatic head mass.'
+
+
+def structure11_note(cut, after=''):
+    return (HEADER + 'Procedure: EGD.\nIndication: Dysphagia; pancreatic head mass on CT.\nFindings: The gastroscope was advanced to '
+            'the second portion of the duodenum. The esophagus was normal. ' + cut + '\n' + STRUCTURE11_EUS + '\n' + after)
+
+
+def line_pdf(lines):
+    """A real PDF, one drawString per line, through the real extractor."""
+    import io
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen.canvas import Canvas
+
+    from studio.ingest import extract_document
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, pagesize=letter, invariant=1)
+    canvas.setFont('Helvetica', 10)
+    for n, line in enumerate(lines):
+        canvas.drawString(72, 740 - 16 * n, line)
+    canvas.showPage()
+    canvas.save()
+    result = extract_document(buffer.getvalue(), 'report.pdf', 'application/pdf', ocr=None)
+    assert result.status == 'ok', result.messages
+    return result.text
+
+
+class Structure11CutAfterAnUnknownVerbTests(unittest.TestCase):
+    """structure:11 (an under-correction of round 3b's routing:11, an open class) - a line cut after a plan,
+    cancellation or denial verb the closed lists do not know ("Dr. Smith recommended", "the endoscopist deferred",
+    "The family declined to authorize") no longer lets the service line after it read performed: that line is held (an
+    'other' section of its own), so a planned or refused EUS is never a ready 43242. It is never joined, so the hold
+    never becomes an exclusion; the section in force resumes on the line after it."""
+
+    CUTS = ('Dr. Smith recommended', 'The family declined to authorize', 'The surgeon recommended', 'Patient deferred',
+            'Pt deferred', 'The endoscopist deferred', 'Dr. Smith ordered', 'Insurance declined to cover',
+            'Given the mass on CT, Dr. Smith recommended',
+            # a service named in an earlier sentence or an earlier clause of the line is not the verb's object
+            'The EGD was otherwise unremarkable. Dr. Smith recommended', 'After the colonoscopy, Dr. Smith recommended')
+
+    def test_the_claimed_and_listed_cuts(self):
+        for cut in self.CUTS:
+            text = structure11_note(cut)
+            with self.subTest(cut=cut):
+                self.assertTrue(starts_a_sentence(text, STRUCTURE11_EUS))
+                self.assertNotIn(read(text, STRUCTURE11_EUS)[0], POSITIVE + NOT_TODAY)
+                self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+                proposal = run_engine(text, [('43242', STRUCTURE11_EUS)])['43242']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+    def test_the_routing11_note(self):
+        text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: The colonoscope was advanced to the cecum. A '
+                '6 mm sigmoid polyp was removed with a cold snare. The patient asked about the pancreatic cyst; given the time '
+                'constraints, the endoscopist deferred\nEUS of the pancreatic cyst.\n')
+        self.assertFalse(ready(run_engine(text, [('43259', 'EUS of the pancreatic cyst.')])['43259']))
+        self.assertTrue(ready(run_engine(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare.')])['45385']))
+
+    def test_a_real_pdf(self):
+        text = line_pdf(['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'Date of service: 2026-10-21', 'Procedure: EGD.',
+                         'Indication: Dysphagia; pancreatic head mass on CT.',
+                         'Findings: The gastroscope was advanced to the second portion of the duodenum. The esophagus was',
+                         'normal. Dr. Smith recommended', STRUCTURE11_EUS])
+        self.assertIn('Dr. Smith recommended\n' + STRUCTURE11_EUS, text)
+        self.assertFalse(ready(run_engine(text, [('43242', STRUCTURE11_EUS)])['43242']))
+
+    def test_the_section_resumes_after_the_held_line(self):
+        biopsy = 'Biopsies were taken from the gastric antrum.'
+        text = structure11_note('Dr. Smith recommended', biopsy + '\n')
+        self.assertEqual(kind_at(text, biopsy), 'findings')
+        self.assertTrue(ready(run_engine(text, [('43239', biopsy)])['43239']))
+
+    def test_a_planned_intervention_gives_no_fact(self):
+        """The same hold for an intervention line: no EMR fact is read from it. (Its code can still be ready through the
+        colonoscopy performed in the same note: a silent passage takes its family's reading.)"""
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading '
+                'polyp was tattooed. Dr. Smith recommended\nEMR of the ascending colon lesion at a tertiary center.\n')
+        self.assertNotIn(read(text, 'EMR of the ascending')[0], POSITIVE)
+        self.assertNotIn('EMR', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+
+    def test_lines_that_end_their_sentence_still_read_performed(self):
+        base = HEADER + 'Procedure: EGD with biopsy.\nFindings: The gastroscope was advanced to the second part of the duodenum.\n'
+        for prev, nxt in (('The polyp was removed with the snare', 'EGD was performed.'),
+                          ('Retroflexion not performed', 'EGD with biopsy of the antrum.'),
+                          ('Repeat colonoscopy recommended', 'EGD with biopsy of the antrum.'),
+                          ('Patient referred to surgery', 'EGD with biopsy of the antrum.'),
+                          ('Biopsy of the duodenum deferred', 'EGD with biopsy of the antrum.'),
+                          ('Dr. Smith performed', 'EGD with biopsy of the antrum.'),
+                          ('No change compared to prior', 'EGD with biopsy of the antrum.')):
+            text = base + prev + '\n' + nxt + '\n'
+            with self.subTest(prev=prev):
+                self.assertEqual(read(text, nxt)[0], 'performed')
+
+    def test_only_a_line_that_names_a_service_or_an_intervention_is_held(self):
+        for line in ('Mild erythema of the gastric antrum.', 'Small hiatal hernia without esophagitis.'):
+            text = structure11_note('Dr. Smith recommended').replace(STRUCTURE11_EUS, line)
+            with self.subTest(line=line):
+                self.assertEqual(kind_at(text, line), 'findings')
+
+    def test_the_closed_lists_still_join(self):
+        for cut, status in (('We recommend', 'planned'), ('The patient deferred', 'cancelled'), ('Dr. Smith will perform', 'planned')):
+            text = structure11_note(cut)
+            with self.subTest(cut=cut):
+                self.assertFalse(starts_a_sentence(text, STRUCTURE11_EUS))
+                self.assertEqual(family(text, 'gi.eus'), status)
+
+
 if __name__ == '__main__':
     unittest.main()
