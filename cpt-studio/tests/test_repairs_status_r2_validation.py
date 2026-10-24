@@ -496,32 +496,17 @@ class Status19CoverageTests(RealCase):
 
     def test_the_claimed_input_carries_no_false_coverage_pass(self):
         proposals, result = real(BANDING, ('99214', VISIT_SENTENCE))
-        visit = proposals['99214']
         for check in result.encounter_checks:
             self.assertNotIn(check.detail, ('Every performed service has a selected proposal.',
                                             'No performed service falls outside the GI profiles.'))
-        if route(BANDING, DOS).finding('gi.other') is not None:
-            # The integrated routing emits gi.other for the banding (shared contract): the visit is held.
-            self.assertVisitHeld(proposals, 'Other GI service is ')
-            self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
-            self.assertIn('Other GI service', encounter_check(result, 'services.unproposed').detail)
-            return
-        # At this commit routing does not detect the banding: nothing may certify coverage it does not have.
-        coverage = check_of(visit, 'em.same_day_coverage')
-        self.assertEqual(coverage.status, 'not_verified')
-        self.assertIn('not verified', coverage.detail)
-        self.assertIn('hemorrhoid banding', coverage.detail)
-        unproposed = encounter_check(result, 'services.unproposed')
-        self.assertEqual(unproposed.status, 'pass')
-        self.assertNotEqual(unproposed.detail, 'Every performed service has a selected proposal.')
-        self.assertIn('not verified', unproposed.detail)
-        unsupported = encounter_check(result, 'services.unsupported')
-        self.assertEqual(unsupported.status, 'not_verified')
-        self.assertNotIn('No performed service falls outside the GI profiles.', unsupported.detail)
-        for slug in DETECTED_FAMILIES:
-            self.assertIn(PROFILES[slug].label, unsupported.detail)
-            if PROFILES[slug].procedure:
-                self.assertIn(PROFILES[slug].label, coverage.detail)
+        # The integrated routing emits gi.other for the banding (shared contract): the visit is held. Asserted, not
+        # branched on, so a routing change fails here instead of silently retiring the coverage assertions (round 3
+        # evidence:0); those now run unconditionally in Status19CoverageLiveTests.
+        self.assertIsNotNone(route(BANDING, DOS).finding('gi.other'))
+        self.assertVisitHeld(proposals, 'Other GI service is ')
+        self.assertIsNone(check_of(proposals['99214'], 'em.same_day_coverage'))
+        self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
+        self.assertIn('Other GI service', encounter_check(result, 'services.unproposed').detail)
 
     def test_a_held_visit_carries_no_coverage_line(self):
         text = BANDING.replace('Rubber band ligation of an internal hemorrhoid was performed today without '
@@ -535,6 +520,45 @@ class Status19CoverageTests(RealCase):
         text = HEAD + 'Esophageal motility study performed today.\n'
         _, result = real(text, ('91010', 'Esophageal motility study performed today.'))
         self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
+
+
+class Status19CoverageLiveTests(RealCase):
+    """Round 3 evidence:0 — the status:19 (b) coverage lines, pinned unconditionally on inputs whose same-day procedure
+    routing does not detect: a plain office visit with no procedure line (routing growth cannot change it), and an
+    office note whose infrared coagulation routing's gi.other form rule does not name (asserted, so a routing change
+    fails loudly instead of switching branches)."""
+
+    PLAIN = OFFICE.format(cc='Heartburn.', plan='Return in 3 months.')
+    INFRARED = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'Chief complaint: rectal bleeding.\n'
+                'Procedure: Infrared coagulation of two internal hemorrhoids was performed today without '
+                'complication.\n'
+                'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+    def test_the_coverage_lines_where_no_same_day_procedure_is_detected(self):
+        for text in (self.PLAIN, self.INFRARED):
+            with self.subTest(text=text[:200]):
+                self.assertEqual([f.family for f in route(text, DOS).findings], ['gi.office_em'])
+                proposals, result = real(text, ('99214', VISIT_SENTENCE))
+                visit = proposals['99214']
+                self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'))
+                coverage = check_of(visit, 'em.same_day_coverage')
+                self.assertEqual(coverage, checks.SAME_DAY_COVERAGE_CHECK)
+                self.assertEqual(coverage.status, 'not_verified')
+                self.assertIn('not verified', coverage.detail)
+                self.assertIn('hemorrhoid banding', coverage.detail)
+                unproposed = encounter_check(result, 'services.unproposed')
+                self.assertEqual((unproposed.status, unproposed.detail), ('pass', checks.UNPROPOSED_PASS))
+                self.assertIn('not verified', unproposed.detail)
+                unsupported = encounter_check(result, 'services.unsupported')
+                self.assertEqual((unsupported.status, unsupported.detail), ('not_verified', checks.UNSUPPORTED_NONE))
+                for slug in DETECTED_FAMILIES:
+                    self.assertIn(PROFILES[slug].label, unsupported.detail)
+                    if PROFILES[slug].procedure:
+                        self.assertIn(PROFILES[slug].label, coverage.detail)
+                for check in result.encounter_checks:
+                    self.assertNotIn(check.detail, ('Every performed service has a selected proposal.',
+                                                    'No performed service falls outside the GI profiles.'))
 
 
 # --- review:0 at the validation layer: a reinstatable same-day procedure is named on the E/M ------------------

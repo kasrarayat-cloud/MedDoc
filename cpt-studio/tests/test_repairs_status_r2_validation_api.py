@@ -14,6 +14,7 @@ from django.test import TestCase, override_settings
 from studio import review
 from studio.gi.detect import route
 from studio.types import RawExchange
+from studio.validation import checks
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE, ApiHarness, ScriptedProvider
@@ -296,8 +297,26 @@ class Status19ApiTests(ApiCase, TestCase):
         text = self.report_text(encounter_id)
         self.assertNotIn('Every performed service has a selected proposal.', text)
         self.assertNotIn('No performed service falls outside the GI profiles.', text)
-        if route(note).finding('gi.other') is not None:  # the integrated routing detects the banding: held
-            self.assertEqual(self.proposal(encounter_id, '99213')['status'], 'needs_clarification')
-            self.assertIn('[WARN] em.same_day_procedure', text)
-        else:
-            self.assertIn('[NOT_VERIFIED] em.same_day_coverage', text)
+        # Asserted, not branched on (round 3 evidence:0): routing detects the banding, so the visit is held; the
+        # coverage lines are pinned on an undetected input below.
+        self.assertIsNotNone(route(note).finding('gi.other'))
+        self.assertEqual(self.proposal(encounter_id, '99213')['status'], 'needs_clarification')
+        self.assertIn('[WARN] em.same_day_procedure', text)
+
+    def test_a_plain_office_visit_reports_coverage_as_not_verified(self):
+        """Round 3 evidence:0 — the draft and the reviewed report of an office visit with no procedure line carry the
+        not-verified coverage lines and neither old PASS sentence."""
+        note = office_note(['Gastroesophageal reflux disease, controlled.', 'Return in 3 months.'])
+        self.assertEqual([f.family for f in route(note).findings], ['gi.office_em'])
+        encounter_id = self.run_note(note, ('99213', TIME))
+        self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 201)
+        for kind in ('draft', 'reviewed'):
+            with self.subTest(kind=kind):
+                text = self.report_text(encounter_id, kind)
+                self.assertIn('[NOT_VERIFIED] em.same_day_coverage', text)
+                self.assertIn('[NOT_VERIFIED] services.unsupported — Services outside the GI profiles: '
+                              + checks.UNSUPPORTED_NONE, text)
+                self.assertIn('[PASS] services.unproposed — Performed services without a proposal: '
+                              + checks.UNPROPOSED_PASS, text)
+                self.assertNotIn('Every performed service has a selected proposal.', text)
+                self.assertNotIn('No performed service falls outside the GI profiles.', text)
