@@ -153,6 +153,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     own = checks.evidence_readings(text, kept, day)
     if selection.family == OTHER_GI:
         own = _unnamed_other(own, text, routing, day)
+    if selection.family in checks.EM_FAMILIES:
+        own = _undated_visit(own, routing)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
@@ -176,6 +178,20 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
             reading = replace(reading, unnamed=True)
         marked.append(reading)
     return tuple(marked)
+
+
+def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> tuple[checks.Reading, ...]:
+    """An E/M code's linked passages without the negative readings its section default alone gave them. The history
+    and the plan of an office visit are that visit's own documentation: "Intermittent heartburn for 8 weeks despite
+    omeprazole." under History of present illness is not a historical E/M, and "Increase omeprazole to 40 mg twice
+    daily." under Assessment and plan is not a planned one, so such a passage is silent and routing's E/M reading
+    (visit statement, MDM, time) decides. Kept: any cue that dates, plans or denies the visit ("Return office visit is
+    scheduled for 2026-12-01."), and a passage that is itself a visit statement routing reads in that section
+    ("Return office visit in three months." under Plan)."""
+    visits = [m.span for f in routing.findings if f.family == 'gi.office_em' for m in f.mentions]
+    return tuple(reading for reading in own
+                 if not (reading.status in checks.NEGATIVE and checks.by_section_alone(reading)
+                         and not any(span.start < reading.end and reading.start < span.end for span in visits)))
 
 
 # --- phase 2: checks that depend on the other proposals -----------------------------------

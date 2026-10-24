@@ -392,8 +392,12 @@ Status resolution is fail-closed: a code's own linked passage decides first;
 a passage that hedges holds the code — routing never overrides it, and neither
 does another of the code's own passages that reads as performed (`contested`:
 the clarification names both passages); routing decides only when the
-passage is silent (routing's default "no performance evidence" reading). A
-positive passage cannot establish a family that routing documents only as not
+passage is silent (routing's default "no performance evidence" reading). An
+E/M code's own passage that reads planned or historical only by its section
+default (its HPI, its plan, its counseling) is silent too, so routing's E/M
+reading decides; a cue that dates or plans the visit, or a visit statement
+routing reads in that section ("Follow-up office visit." under Plan), keeps
+its reading. A positive passage cannot establish a family that routing documents only as not
 performed, nor a recognisable family the document never names or names only
 as uncertain. A `gi.other` code's passage that reads performed by its section
 alone (no `performed:` cue) counts only where it names a procedure — a
