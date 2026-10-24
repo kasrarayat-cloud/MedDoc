@@ -56,11 +56,18 @@ for module in test_install test_verify_downloads; do
 done
 "$python" -B -m unittest discover -s ops/verification -p 'test_*.py' -v 2>&1 | tee "$log"
 require_ran "$log" 'verification generator tests'
-node --test ops/verification/test_verify_browser.cjs 2>&1 | tee "$log"
-node_tests=$(sed -nE 's/^# tests ([0-9]+)$/\1/p' "$log" | tail -n 1)
+if ! grep -q '(test_generate\.' "$log"; then
+  echo 'The verification generator suite test_generate did not run.' >&2
+  exit 1
+fi
+# node counts a test FILE that registers no tests as one passing test, so a count alone proves nothing:
+# require the TAP summary, a pass floor near the committed count, and a named test that guards truth rule 5.
+node --test --test-reporter=tap ops/verification/test_verify_browser.cjs 2>&1 | tee "$log"
+node_pass=$(sed -nE 's/^# pass ([0-9]+)$/\1/p' "$log" | tail -n 1)
 node_failed=$(sed -nE 's/^# fail ([0-9]+)$/\1/p' "$log" | tail -n 1)
-if [[ -z "$node_tests" || "$node_tests" -eq 0 || "$node_failed" != 0 ]]; then
-  echo "Browser-verifier tests: ran ${node_tests:-none}, failed ${node_failed:-unknown}." >&2
+if [[ -z "$node_pass" || "$node_pass" -lt 20 || "$node_failed" != 0 ]] \
+    || ! grep -qE '^ok [0-9]+ - checkIncomplete refuses a dropped or silently completed incomplete service$' "$log"; then
+  echo "Browser-verifier tests: passed ${node_pass:-none}, failed ${node_failed:-unknown}, or the named test did not run." >&2
   exit 1
 fi
 

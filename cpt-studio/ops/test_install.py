@@ -447,6 +447,19 @@ class DoorTests(TemporaryDirectoryTest):
         self.refuses('docs/missing.md', commit, 'cannot be read')
         self.refuses(self.NAME, 'abc', 'full commit sha')
 
+    def test_a_symbolic_link_to_the_committed_declaration_is_refused(self):
+        commit = self.commit(self.NAME, f'Revision installed: {REVISION}\n')
+        (self.repo / 'docs' / 'alias.md').symlink_to('declaration.md')
+        self.refuses('docs/alias.md', commit, 'symbolic link')
+        (self.repo / 'linked').symlink_to('docs', target_is_directory=True)
+        self.refuses('linked/declaration.md', commit, 'symbolic link')
+        outside = self.tmp / 'outside.md'
+        outside.symlink_to(self.repo / self.NAME)
+        self.refuses(outside, commit, 'inside this repository')
+        # The receipt names the repository path actually checked, whatever form the variable took.
+        for named in (self.NAME, f'./{self.NAME}', str(self.repo / self.NAME)):
+            self.assertEqual(self.door(named, commit)['declaration'], self.NAME, named)
+
     def test_an_uncommitted_or_foreign_declaration_is_refused(self):
         ancestor = self.commit('docs/other.md', 'unrelated\n')
         outside = self.tmp / 'forged.md'
@@ -1166,8 +1179,10 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         return by_revision, live, old
 
     def test_rollback_vhost_removes_a_stage_an_earlier_receipt_recorded_and_restores_its_exact_bytes(self):
-        by_revision, live, old = self.republish_case()
-        operations, captured = [], {}
+        # reproducible=False: re-rendering the OLD revision with this installer's parameters no longer yields the
+        # live bytes (the round-2 case: a changed WEB_PORT or placeholder set). The live bytes are restored.
+        by_revision, live, old = self.republish_case(reproducible=False)
+        operations = []
         states = iter([live, {'file_exists': False, 'link_exists': False, 'file_sha256': None, 'link_target': None}])
 
         def publish(ctx, apply, undo, verify):
@@ -1176,6 +1191,7 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
             return {}
         with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
                 mock.patch.object(install, 'vhost_state', side_effect=lambda: next(states)), \
+                mock.patch.object(install, 'live_vhost_bytes', return_value=old['https'].encode()), \
                 mock.patch.object(install, 'vhost_operation', side_effect=lambda op, **kw: operations.append((op, kw))), \
                 mock.patch.object(install, 'publish_vhost', side_effect=publish):
             install.phase_rollback_vhost(self.ctx('rollback-vhost'))
@@ -1184,14 +1200,15 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         self.assertIn(old_sha, operations[0][1]['allowed_sha256'])
         self.assertEqual(operations[1], ('install', {'content': base64.b64encode(old['https'].encode()).decode()}))
 
-    def test_rollback_vhost_refuses_a_stage_no_receipt_recorded_or_that_cannot_be_reproduced(self):
-        for recorded, reproducible, message in ((False, True, 'did not write'), (True, False, 're-render')):
-            with self.subTest(recorded=recorded, reproducible=reproducible):
+    def test_rollback_vhost_refuses_an_unrecorded_stage_or_one_that_changed_while_read(self):
+        for recorded, live_bytes, message in ((False, None, 'did not write'), (True, b'changed meanwhile', 'changed while')):
+            with self.subTest(recorded=recorded):
                 for path in self.tmp.glob('*.json'):
                     path.unlink()
-                by_revision, live, _ = self.republish_case(recorded=recorded, reproducible=reproducible)
+                by_revision, live, old = self.republish_case(recorded=recorded)
                 with mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: by_revision[revision]), \
                         mock.patch.object(install, 'vhost_state', return_value=live), \
+                        mock.patch.object(install, 'live_vhost_bytes', return_value=live_bytes or old['https'].encode()), \
                         mock.patch.object(install, 'vhost_operation') as operation, \
                         mock.patch.object(install, 'publish_vhost') as publish, \
                         self.assertRaisesRegex(install.InstallError, message):

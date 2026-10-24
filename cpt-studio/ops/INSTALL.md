@@ -126,8 +126,10 @@ refuse rather than repeat. If `deploy/nginx/` changed between the revisions,
 `http-vhost`, `cert` (a no-op for a lineage not yet due for renewal; it records
 the receipt `https-vhost` requires) and `https-vhost` under the new declaration.
 `rollback-vhost` removes a stage an earlier successful vhost receipt recorded
-only when that receipt's revision re-renders it byte-for-byte, so a failed
-removal is restored to exactly what was live. `verify` compares the other
+(its digest), and a failed removal is restored to exactly the bytes that were
+live. A reinstall must therefore use the receipts directory of the install whose
+stage is live (or copy its vhost receipts into the new one): without the receipt,
+the stage is not provably this installer's and `rollback-vhost` refuses. `verify` compares the other
 Let's Encrypt lineages only; this domain's own lineage may already be in the
 reinstall's preflight baseline.
 

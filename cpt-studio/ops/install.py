@@ -215,16 +215,20 @@ def check_door(environ, revision) -> dict:
         raise InstallError('The declaration still carries the <REVISION> placeholder.')
     if revision not in text:
         raise InstallError('The declaration does not name the revision being installed.')
-    committed_declaration(path, commit, data)
-    return {'declaration': declaration, 'declaration_commit': commit, 'declaration_sha256': sha256(data)}
+    rel = committed_declaration(path, commit, data)
+    # The receipt names the repository path that was actually checked, never the raw environment value.
+    return {'declaration': rel, 'declaration_commit': commit, 'declaration_sha256': sha256(data)}
 
 
 def committed_declaration(path: Path, commit: str, data: bytes) -> None:
     """The phase is bound to a COMMITTED declaration, as the door's strict gate requires: inside this repository,
     tracked, unmodified, last touched by ``commit``, and byte-identical to that commit's copy. Two exported
     variables naming an arbitrary file and an arbitrary ancestor are refused."""
+    absolute = Path(os.path.abspath(path))  # the path as named, links NOT followed
     try:
-        rel = path.resolve(strict=True).relative_to(ROOT.resolve()).as_posix()
+        rel = absolute.relative_to(ROOT.resolve()).as_posix()
+        if absolute.resolve(strict=True) != absolute:
+            raise InstallError('The declaration path passes through a symbolic link; name the committed file itself.')
     except (OSError, ValueError):
         raise InstallError('The declaration is not a file inside this repository.') from None
     if run(['git', '-C', str(ROOT), 'ls-files', '--error-unmatch', '--', rel], check=False, quiet=True).returncode:
@@ -235,6 +239,7 @@ def committed_declaration(path: Path, commit: str, data: bytes) -> None:
         raise InstallError('RULED_MUTATION_DECL_COMMIT is not the commit that last touched the declaration.')
     if run(['git', '-C', str(ROOT), 'show', f'{commit}:{rel}'], check=False, quiet=True).stdout != data:
         raise InstallError("The declaration's bytes differ from the copy in RULED_MUTATION_DECL_COMMIT.")
+    return rel
 
 
 def check_tree(revision, declaration_commit) -> dict:
@@ -975,6 +980,14 @@ def nginx_test() -> dict:
 
 def nginx_reload():
     run(NGINX_RELOAD, timeout=30)
+
+
+def live_vhost_bytes():
+    """The bytes of sites-available/quillmd-cpt as they are now (a regular file only), or None."""
+    available = NGINX_AVAILABLE / VHOST_NAME
+    if not available.is_file() or available.is_symlink():
+        return None
+    return available.read_bytes()
 
 
 def vhost_state() -> dict:
@@ -2070,17 +2083,17 @@ def phase_rollback_vhost(ctx) -> dict:
     state = vhost_state()
     if not state['file_exists'] and not state['link_exists']:
         return {'state': state, 'summary': 'quillmd-cpt already absent'}
-    restorable = {sha256(confs['http'].encode()): confs['http'], sha256(confs['https'].encode()): confs['https']}
+    restorable = {sha256(confs['http'].encode()): confs['http'].encode(),
+                  sha256(confs['https'].encode()): confs['https'].encode()}
     if state['file_exists'] and state['file_sha256'] not in restorable:
-        recorded = recorded_vhosts(ctx).get(state['file_sha256'])
-        if recorded is None:
+        if state['file_sha256'] not in recorded_vhosts(ctx):
             raise InstallError('quillmd-cpt holds content this installer did not write; refusing to remove it.')
-        content = rendered_vhosts(recorded[0])[recorded[1]]
-        if sha256(content.encode()) != state['file_sha256']:
-            raise InstallError('quillmd-cpt holds a stage an earlier receipt recorded, but revision '
-                               f'{recorded[0][:12]} does not re-render it exactly; refusing to remove what could '
-                               'not be restored.')
-        restorable[state['file_sha256']] = content
+        # An earlier install's stage, recorded by an ok vhost receipt: restore exactly the bytes that are live now
+        # (re-rendering that revision with this installer's parameters need not reproduce them).
+        live = live_vhost_bytes()
+        if live is None or sha256(live) != state['file_sha256']:
+            raise InstallError('quillmd-cpt changed while it was being read; refusing.')
+        restorable[state['file_sha256']] = live
     allowed = sorted(restorable)
     previous = state['file_sha256']
 
@@ -2090,7 +2103,7 @@ def phase_rollback_vhost(ctx) -> dict:
     def undo():
         now = vhost_state()
         if previous in restorable and state['link_exists'] and not now['file_exists'] and not now['link_exists']:
-            vhost_operation('install', content=base64.b64encode(restorable[previous].encode()).decode())
+            vhost_operation('install', content=base64.b64encode(restorable[previous]).decode())
 
     def verify():
         # Without the vhost the domain must land exactly where an unknown host lands.
