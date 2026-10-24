@@ -592,30 +592,58 @@ def _continuation(an: Analysis, pos: int, limit: int, strict: bool) -> Optional[
     return None
 
 
-def _bare_next_sentence(an: Analysis, s: int, e: int, ts: int, te: int) -> Optional[str]:
-    """For a mention that ends its short, verbless sentence: the next sentence of the same
-    section, when it names no service and either opens with a negation nothing explains
-    ("Colonoscopy" / "Not performed.") or is a short status line that cancels, defers, plans or
-    doubts ("Status: cancelled"). That line speaks of the mention above it."""
+# The subject of a sentence that speaks of the service named just before it.
+_REFERRING_SUBJECT = re.compile(r'(?:it|this|that|the\s+(?:procedure|exam|examination|study|endoscopy|test|case))\b',
+                                re.A | re.I)
+
+
+def _denying_word(an: Analysis, start: int, end: int) -> Optional[re.Match]:
+    """A negation word in [start, end) that nothing but a memberless negation accounts for:
+    no clause cue, no complication, finding, qualifier or other-act exception, no anchored
+    negation of a service or intervention named there. Read for the service named before
+    this text, a memberless "was not performed" denies it."""
+    for token in cues.DOUBT_TOKEN.finditer(an.text, start, end):
+        span = (token.start(), token.end())
+        clause = an.lay.clauses_for(*span)[0]
+        explains, outside_only = _token_explanations(an, clause, span)
+        if not _covered(span, explains + outside_only) and not _anchored_explains(an, *clause, span):
+            return token
+    return None
+
+
+def _next_line_denial(an: Analysis, s: int, e: int, bare: bool) -> Optional[str]:
+    """The next sentence of the same section when it speaks of the service named in the
+    sentence [s, e) and denies it: for a short, verbless service line ("Colonoscopy" / "Not
+    performed.", "Status: cancelled"), any sentence that names no service and opens with an
+    unexplained negation or is a short cancelling, deferring or doubting status line; for any
+    other line, a sentence whose subject refers back to it ("It was not performed.", "This was
+    cancelled.")."""
     index = _sentence_index(an, s)
     if index < 0 or index + 1 >= len(an.lay.sentences):
         return None
     ns, ne = an.lay.sentences[index + 1]
     if an.lay.section_at(ns) is not an.lay.section_at(s) or an.services_in(ns, ne):
         return None
-    first = cues.DOUBT_TOKEN.match(an.text, _SEPARATOR.match(an.text, ns, ne).end(), ne)
-    if first and _unexplained(an, an.lay.clauses_for(first.start(), first.end())[0], ns, ne,
-                              (first.start(), first.end()), ts, te):
-        return an.text[ns:ne]
-    short = len(an.text[ns:ne].split()) <= 5
-    if short and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical') for c in an.cues_in(ns, ne)):
-        return an.text[ns:ne]
-    return None
+    at = _SEPARATOR.match(an.text, ns, ne).end()
+    line = an.text[ns:ne]
+    if bare:
+        first = cues.DOUBT_TOKEN.match(an.text, at, ne)
+        if first and _denying_word(an, first.start(), first.end()):
+            return line
+        if len(line.split()) <= 5 and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical')
+                                          for c in an.cues_in(ns, ne)):
+            return line
+    if not _REFERRING_SUBJECT.match(an.text, at, ne):
+        return None
+    cancelled = any(c.status == 'cancelled' and (c.name != 'aborted' or _abort_status(an, c)[0] != 'incomplete')
+                    for c in an.cues_in(ns, ne))
+    return line if cancelled or _denying_word(an, ns, ne) else None
 
 
 def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
     """A cue when a section default would make a named service performed although the words
-    around the name are not those of a procedure description: the section stays silent."""
+    around the name are not those of a procedure description, or the next line speaks of it
+    and denies it: the section stays silent."""
     key = ('silent-section', ts, te)
     if key not in an.memo:
         an.memo[key] = None
@@ -629,11 +657,11 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
                 an.memo[key] = f"{SILENT_SECTION_PREFIX} '{word}' follows the service name, so its section does not make it performed"
                 break
             before, after = an.text[s:m.start], an.text[end:e]
-            if not after.strip(' \t.;:!?)') and len(before) <= 40 and not _VERB_BEFORE.search(before):
-                line = _bare_next_sentence(an, s, e, ts, te)
-                if line is not None:
-                    an.memo[key] = f"{SILENT_SECTION_PREFIX} the next line ('{line.strip()}') qualifies it"
-                    break
+            bare = not after.strip(' \t.;:!?)') and len(before) <= 40 and not _VERB_BEFORE.search(before)
+            line = _next_line_denial(an, s, e, bare)
+            if line is not None:
+                an.memo[key] = f"{SILENT_SECTION_PREFIX} the next line ('{line.strip()}') qualifies it"
+                break
     return an.memo[key]
 
 

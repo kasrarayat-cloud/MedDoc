@@ -605,6 +605,19 @@ class StructuralFailClosedTests(unittest.TestCase):
             with self.subTest(lines=lines):
                 self.assertEqual(self.status('Procedure:', lines, 'gi.colonoscopy'), 'performed')
 
+    def test_a_next_sentence_that_refers_back_can_deny_the_service(self):
+        for lines in ('Colonoscopy with biopsy.\nThis was later cancelled.', 'Colonoscopy with biopsy.\nIt was not performed.',
+                      'Colonoscopy\nIt was not performed.', 'Colonoscopy with biopsy.\nThe procedure was not done.'):
+            with self.subTest(lines=lines):
+                self.assertIn(self.status('Procedure:', lines, 'gi.colonoscopy'), NOT_PERFORMED)
+        for lines, expected in (('Colonoscopy with biopsy.\nIt was uneventful.', 'performed'),
+                                ('Colonoscopy with biopsy.\nIt will be repeated in 5 years.', 'performed'),
+                                ('Colonoscopy with biopsy.\nIt was performed without complication.', 'performed'),
+                                ('Colonoscopy with biopsy.\nIt was not difficult.', 'performed'),
+                                ('Colonoscopy with biopsy.\nIt was aborted at the splenic flexure.', 'incomplete')):
+            with self.subTest(lines=lines):
+                self.assertEqual(self.status('Procedure:', lines, 'gi.colonoscopy'), expected)
+
     def test_an_unresolved_negation_withholds_performed(self):
         self.assertIn(self.status('Procedure:', 'Colonoscopy, not today.', 'gi.colonoscopy'), NOT_PERFORMED)
         self.assertIn(self.status('Findings:', 'Colonoscopy was performed by the fellow, not today.', 'gi.colonoscopy'),
