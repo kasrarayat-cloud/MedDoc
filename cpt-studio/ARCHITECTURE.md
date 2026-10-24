@@ -103,11 +103,11 @@ row and refuse `delete()`; corrections are new rows.
 | `SourceRevision` | `encounter`, `number`, `kind` ∈ {upload, paste, addendum}, `source_file`, `parent`, `addendum_text`, `answers_clarification`, `synthetic_attested_by/_at`, extraction fields (`extraction_status` ∈ {pending, ok, partial, failed}, `extraction_method`, `text`, `text_sha256`, `pages` JSON, `messages` JSON, `engine` JSON, `extracted_at`) | extraction fields are write-once (pending → final) |
 | `EncounterContext` | `encounter`, `revision`, `facts` JSON (name → {value, origin, evidence, note}), `user_values` JSON, `sha256`, `created_by` | **immutable** snapshot; `current_context` points at the latest |
 | `RoutingRun` | `revision`, `version`, `result` JSON, `sha256` | deterministic, recomputable |
-| `ProviderRun` | `encounter`, `revision`, `provider`, `adapter_version`, `request_sha256`, `request_body` JSON, `contexts` JSON, `state` ∈ {reserved, sending, succeeded, failed, unknown, not_sent, cancelled}, `sent`, `http_status`, `provider_request_id`, `response_sha256`, `response_bytes` (raw bytes as received), `latency_ms`, `usage` JSON, `usage_basis`, `error`, `run_identity`, `authorization_ref`, `reused_from`, `reconciled_by/_at/_note` | one row per send attempt; never resent automatically |
+| `ProviderRun` | `encounter`, `revision`, `provider`, `adapter_version`, `request_sha256`, `request_body` JSON, `contexts` JSON, `state` ∈ {reserved, sending, succeeded, failed, unknown, not_sent, cancelled}, `sent`, `http_status`, `provider_request_id`, `response_sha256`, `response_bytes` (raw bytes as received), `latency_ms`, `usage` JSON, `usage_basis`, `error`, `run_identity`, `authorization_ref`, `reused_from`, `reconciled_by/_at/_note`, `service_date` (the date the request was built with) | one row per send attempt; never resent automatically |
 | `Assessment` | `encounter`, `revision`, `context`, `routing`, `provider_run`, `profiles_version`, `engine_version`, `reference_sources` JSON, `encounter_checks` JSON, `unsupported` JSON, `sha256` | **immutable** |
 | `Proposal` | `assessment`, `key`, `bucket` ∈ {selected, alternative, excluded}, `code`, `code_kind`, `family`, `profile_version`, `status` ∈ {ready, needs_clarification, excluded, informational}, `exclusion_reason`, `reinstatable`, `provider_display`, `evidence` JSON, `rationale`, `checks` JSON, `modifier_considerations` JSON, `units`, `fingerprint` | **immutable** |
 | `Clarification` | `encounter`, `assessment`, `proposal` (nullable), `scope` ∈ {encounter, service, proposal}, `fact`, `question`, `reason`, `state` ∈ {open, answered, withdrawn}, `answered_by_revision` | |
-| `Decision` | `encounter`, `assessment`, `revision`, `proposal`, `action` ∈ {approve, reject, reinstate, revoke}, `note`, `reviewer`, `reviewer_kind`, `acknowledgement`, `profile_version`, `proposal_fingerprint`, `carried_from` | **append-only**; `carried_from` set when a decision is carried to a new assessment of the SAME revision |
+| `Decision` | `encounter`, `assessment`, `revision`, `proposal`, `action` ∈ {approve, reject, reinstate, revoke}, `note`, `reviewer`, `reviewer_kind`, `acknowledgement`, `profile_version`, `proposal_fingerprint`, `carried_from`, `sequence` | **append-only**; `carried_from` set when a decision is carried to a new assessment of the SAME revision; `sequence` (a database sequence, assigned under the encounter lock) orders decisions — never the clock |
 | `DecisionInvalidation` | `decision`, `reason`, `by_revision`, `by_context`, `created_at` | append-only |
 | `Job` | `encounter`, `revision`, `kind` ∈ {extract, analyze, predict, assess}, `idempotency_key` (unique), `state` ∈ {queued, running, succeeded, failed, unknown, cancelled}, `attempts`, `max_attempts`, `deadline_at`, `stop_requested_at/_by`, `error`, `result` JSON | |
 | `ReportArtifact` | `encounter`, `assessment`, `kind` ∈ {draft, reviewed}, `fmt` ∈ {txt, csv}, `content` (bytes), `sha256`, `snapshot_sha256`, `generated_by` | **immutable** |
@@ -209,7 +209,15 @@ lock; no automatic retry; `unknown` (sent, no response) blocks resubmission
 until a member records a reconciliation note. **Reuse**: if a `succeeded`
 run exists for the same provider + adapter version + request sha256, it is
 reused (`reused_from`) and no paid call is made. Context-only changes that do
-not change the request (setting, billing context) never re-predict.
+not change the request (setting, billing context) never re-predict; whether the
+request changed is decided against the run in use, never the previous
+context. Every member action that can queue a stage runs under the encounter
+row lock and is refused while a stage is queued or running. The predict stage
+sends only the current revision's text with that revision's current context;
+each run records the service date it was built with, and assessment refuses
+to pair a run with a context of another date. The worker re-runs its
+stale-stage sweep every minute, so an orphaned send becomes `unknown` without
+a restart.
 
 ### 5.5 `studio/reference` — reference sources
 
@@ -233,16 +241,28 @@ II and HCPCS Level II excluded with reason — CPT-only results), exact
 evidence, family routing, service status vs routing, required facts →
 scoped clarifications, CMS PFS presence for the service date, MUE units,
 endoscopic-family combinations, E/M + same-day procedure (global days) →
-separately identifiable E/M not established, modifier *considerations*
+separately identifiable E/M not established (a same-day procedure is any
+performed non-E/M code with a procedure profile or a global period other than
+XXX — no fee-schedule row counts — and any procedure whose performance is
+uncertain), modifier *considerations*
 (never assigned), CPT membership `not_verified`, descriptor `withheld`, NCCI
 PTP `not_verified`. Encounter checks: extraction status, service date,
 unsupported performed services, performed services with no proposal
 (possible missed code). Each check: `{id, label, status ∈ pass | warn | fail |
 not_verified | not_applicable | info, detail, source}`.
 
+Status resolution is fail-closed: a code's own linked passage decides first;
+a passage that hedges holds the code (routing never overrides it); routing
+decides only when the passage is silent (routing's default "no performance
+evidence" reading). A positive passage cannot establish a family that routing
+documents only as not performed, nor a recognisable family the document never
+names. Routing and span status read dated history against the encounter's
+effective service date (a member value overrides the document's).
+
 Proposal status: `excluded` (scope, no exact evidence, planned / historical /
 cancelled / negated status — reinstatable by a reviewer where the exclusion
-is a documentation judgement), `needs_clarification` (an open clarification
+is a documentation judgement; its `review.reinstatement` check records what
+approval would wait for), `needs_clarification` (an open clarification
 scoped to it), otherwise `ready`. Clarifications are scoped to the affected
 service; an encounter-scoped clarification is used only when the missing fact
 is essential to every service (service date). Fingerprint =

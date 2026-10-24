@@ -4,6 +4,9 @@ Session-authenticated; every POST sends `X-CSRFToken` (read from the
 `cptstudio_csrf` cookie). Errors: `{"error": "<message>", "details": {...}}`
 with 400 (invalid input), 404 (not found or not in your workspace), 409
 (state conflict, e.g. reviewed report not ready), 403 (role cannot review).
+Text the database cannot store exactly (NUL, a lone surrogate) in pasted text,
+an addendum, a note or an acknowledgement answers 400; it is never altered.
+Titles and file names drop those characters.
 Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
 `revision.text`.
 
@@ -14,7 +17,7 @@ Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
   "user": {"id": "uuid", "username": "agent", "label": "CPT Studio review agent (automated agent)",
            "actor_kind": "agent", "initials": "RA"},
   "workspace": {"id": "uuid", "name": "Gastroenterology", "subtitle": "Synthetic demonstration workspace",
-                "category": {"slug": "gastroenterology", "name": "Gastroenterology", "profiles_version": "gi-profiles@1"}},
+                "category": {"slug": "gastroenterology", "name": "Gastroenterology", "profiles_version": "gi-profiles@2"}},
   "role": "reviewer", "can_review": true,
   "counts": {"documents": 7, "queue": 2},
   "synthetic_only": true, "provider_mode": "live", "release": "<git sha>"
@@ -64,7 +67,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
       "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "..."},
       "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": ""}},
     "user_values": {}},
-  "routing": {"version": "gi-routing@1", "document_kind": "procedure_report", "families": [
+  "routing": {"version": "gi-routing@2", "document_kind": "procedure_report", "families": [
       {"family": "gi.colonoscopy", "label": "Colonoscopy", "supported": true, "status": "performed",
        "mentions": [{"status": "performed", "section": "procedure", "cues": ["..."], "span": {"start": 0, "end": 0, "text": ""}}],
        "facts": [{"name": "extent", "value": "cecum", "origin": "document", "evidence": [], "note": ""}],
@@ -76,7 +79,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
                      "request_sha256": "...", "response_sha256": "...", "reused_from": null, "error": "",
                      "reconciled": false, "created_at": "..."}],
   "assessment": {
-    "id": "uuid", "profiles_version": "gi-profiles@1", "engine_version": "...", "created_at": "...",
+    "id": "uuid", "profiles_version": "gi-profiles@2", "engine_version": "...", "created_at": "...",
     "proposals": [{
       "id": "uuid", "key": "sel:0", "bucket": "selected", "code": "45385", "code_kind": "cpt1",
       "family": "gi.colonoscopy", "family_label": "Colonoscopy", "eyebrow": "COLONOSCOPY", "supported": true,
@@ -119,19 +122,28 @@ the server and is the only source of truth for which buttons are enabled.
 
 `{"proposal_id": "uuid", "action": "approve|reject|reinstate|revoke", "note": "", "acknowledgement": "..."}`
 Approve requires a non-empty acknowledgement. → `201 {decision}`; 409 when the
-action is not allowed for that proposal now.
+action is not allowed for that proposal now. A reinstated exclusion offers
+`approve` only while its `review.reinstatement` check passes (the gates a
+selected code meets: required facts, the separately identifiable E/M on a
+procedure day, a known service date); otherwise only `reject` and `revoke`.
+The current decision is the one recorded last (by sequence, never by clock).
 
 ## POST /api/encounters/{id}/addenda
 
 `{"text": "...", "clarification_id": "uuid|null", "synthetic_attestation": "yes"}` → `201 {"revision_id": "uuid"}`.
 Creates a new revision (original text + labelled addendum), invalidates current
-decisions, runs the pipeline.
+decisions, runs the pipeline. 400 when the document plus the addendum would
+exceed the length limit (nothing is created); 409 while a stage is queued or
+running. The addendum revision carries the original's extraction limitations.
 
 ## POST /api/encounters/{id}/context
 
 `{"service_date": "YYYY-MM-DD|''", "setting": "office|hospital_outpatient|asc|inpatient|emergency|telehealth|''",
 "billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Empty string clears a
-user value. Re-assesses; re-predicts only when the provider input changes (service date).
+user value. Re-assesses with the provider run in use only when that run answers
+exactly the request the new context would send; otherwise re-predicts (an
+identical retained result is reused at no cost). 409 while a stage is queued or
+running, or before the text is extracted.
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 
@@ -140,6 +152,9 @@ stage starts and no provider request is sent while it stands. Resume (when
 `pipeline.can_resume`): lifts the Stop and re-runs the stage it cancelled, with
 the current context. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
 (note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
+attempt, for the current revision's current context. Context, resume and
+reconcile each run under the encounter's row lock and answer 409 while any
+stage is queued or running, so one member action yields at most one provider
 attempt.
 
 Notes and acknowledgements are at most 2,000 characters (400 beyond that,
@@ -152,6 +167,10 @@ an addendum). `proposal.decision` has the same shape as a `decisions.history` en
 `{"kind": "draft|reviewed", "fmt": "txt|csv"}` → `201 {"id", "filename", "sha256", "download_url"}`;
 409 with `details.blockers` when a reviewed report is not ready. The download
 streams the stored bytes as an attachment; its sha256 equals the response's.
+Format `cpt-studio-report@2`: the CSV's `decided_at` is the reviewer's own
+decision time; a carried decision also fills `decision_carried_from` and
+`decision_carried_at`. A CSV with no proposals has one placeholder row
+(`item_list` = `none`) carrying the report kind and SYNTHETIC.
 
 ## GET /api/encounters/{id}/original
 
