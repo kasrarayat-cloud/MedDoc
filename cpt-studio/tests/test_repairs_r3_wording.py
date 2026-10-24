@@ -568,3 +568,159 @@ class R25HedgedIntentTests(unittest.TestCase):
                                    ('Screening colonoscopy, average risk; prep adequacy unclear.', 'screening')):
             with self.subTest(indication=indication):
                 self.assertEqual(fact_value(intent_note(indication), 'gi.colonoscopy', 'intent'), intent)
+
+
+# --- validation:2 and routing:18 ------------------------------------------------------------------------------
+
+def colon_lesion(hedge):
+    return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 5 mm cecal lesion was '
+            f'seen. {hedge}\n')
+
+
+CECUM_SENTENCE = 'The colonoscope was advanced to the cecum.'
+
+
+class V2HedgeAfterTheNameTests(unittest.TestCase):
+    """validation:2 - a hedge written after the name of the act ("Biopsies may have been taken", "were possibly
+    obtained", "Biopsy: unsure.", ", if feasible", "was attempted") is read: the passage is held with a non-silent
+    cue, so 45380 citing it (alone or beside the cecum sentence) is never ready. Plain statements stay ready."""
+
+    HEDGES = ('Biopsies may have been taken from the cecum.', 'Biopsies were possibly obtained.',
+              'Biopsies were probably taken.', 'A biopsy was likely taken from the cecal lesion.',
+              'Biopsies might have been obtained.', 'Biopsy: unsure.', 'Biopsy of the cecal lesion, if feasible.',
+              'Biopsy of the lesion was attempted.', 'Biopsies could have been taken.',
+              'Biopsies were apparently obtained.', 'Biopsies were presumably taken.',
+              'Biopsy of the cecal lesion, if possible.', 'Biopsies of the cecum may have been taken.',
+              'Biopsies possibly taken.', 'Biopsies of the cecum may have been taken during the colonoscopy.')
+
+    def test_the_claimed_hedges(self):
+        for hedge in self.HEDGES:
+            text = colon_lesion(hedge)
+            with self.subTest(hedge=hedge):
+                status, cues = read(text, hedge)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                for picks in ([('45380', hedge)], [('45380', CECUM_SENTENCE), ('45380', hedge)]):
+                    proposals, _ = run_engine(text, picks)
+                    self.assertFalse(ready(proposals['45380']), (picks, proposals['45380'].status))
+                self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'interventions'))
+
+    def test_other_codes_and_the_service_name(self):
+        for hedge, code in (('A polyp may have been removed with a cold snare.', '45385'),
+                            ('Polypectomy was possibly performed with a cold snare.', '45385'),
+                            ('Submucosal injection (tattoo) may have been placed.', '45381')):
+            text = colon_lesion(hedge)
+            with self.subTest(hedge=hedge):
+                self.assertFalse(ready(run_engine(text, [(code, hedge)])[0][code]))
+        for line in ('Colonoscopy may have been performed.', 'Colonoscopy might have been done.', 'Colonoscopy: unsure.'):
+            text = HEADER + f'Procedure: {line}\n'
+            with self.subTest(line=line):
+                status, cues = read(text, line)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertNotIn(family(text, 'gi.colonoscopy'), POSITIVE)
+
+    def test_plain_statements_stay_ready(self):
+        for sentence in ('Biopsies were taken from the cecum.', 'A biopsy was taken from the cecal lesion.',
+                         'Biopsies of the cecum were obtained.', 'Biopsy of the lesion was performed.',
+                         'Biopsies were taken; the lesion was possibly an adenoma.',
+                         'Cold snare polypectomy, possibly adenomatous.',
+                         'Biopsies were taken from the cecum, which may have been inflamed.',
+                         'Cold snare polypectomy: possible adenoma, retrieved.',
+                         'Biopsy of the cecal lesion was attempted and obtained.'):
+            text = colon_lesion(sentence)
+            with self.subTest(sentence=sentence):
+                self.assertEqual(read(text, sentence)[0], 'performed')
+
+
+HYPOTHETICAL_EGD = (HEADER + 'Procedure: EGD\nFindings: The gastroscope was advanced to the second part of the duodenum. '
+                    'The mucosa was normal.\nImpression: Normal EGD. {X}\n')
+OFFICE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+          'Established patient office visit for rectal bleeding.\nHistory of present illness: Rectal bleeding for two '
+          'weeks.\nAssessment: Hemorrhoids. {X}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+VISIT = 'Established patient office visit for rectal bleeding.'
+
+
+class R18HypotheticalWordingTests(unittest.TestCase):
+    """routing:18 - counterfactual or conditional wording ("Had there been a stricture, it would have been dilated",
+    "... would be done if ...", "If colonoscopy were done today, ...") is a hedge: never silent and never performed,
+    so 43249 / 43239 citing it are held, and an office note's hypothetical colonoscopy is no same-day procedure."""
+
+    def test_the_claimed_egd_sentences(self):
+        for sentence, code in (('Had there been a stricture, it would have been dilated with a balloon.', '43249'),
+                               ('EGD with biopsy would be done if the dysphagia persists.', '43239')):
+            text = HYPOTHETICAL_EGD.replace('{X}', sentence)
+            with self.subTest(sentence=sentence):
+                status, cues = read(text, sentence)
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                self.assertFalse(ready(run_engine(text, [(code, sentence)])[0][code]))
+                self.assertEqual(family(text, 'gi.egd'), 'performed')  # today's EGD stays performed
+                self.assertTrue(ready(run_engine(text, [('43235', 'The gastroscope was advanced to the second part of '
+                                                                  'the duodenum.')])[0]['43235']))
+
+    def test_the_listed_variants(self):
+        for sentence, code in (('A stricture would have been dilated had one been found.', '43249'),
+                               ('A biopsy would have been taken had the mucosa been abnormal.', '43239'),
+                               ('Biopsies would be obtained at a repeat EGD if the dysphagia recurs.', '43239'),
+                               ('Biopsies could have been taken but were not needed.', '43239'),
+                               ('Dilation would have been performed if a stricture had been present.', '43249')):
+            text = HYPOTHETICAL_EGD.replace('{X}', sentence)
+            with self.subTest(sentence=sentence):
+                status, cues = read(text, sentence)
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                self.assertFalse(ready(run_engine(text, [(code, sentence)])[0][code]))
+
+    def test_the_office_note_hypothetical_colonoscopy(self):
+        for sentence, slug in (('If colonoscopy were done today, the bleeding risk would be high.', 'gi.colonoscopy'),
+                               ('If a colonoscopy were performed today, the risk would be high.', 'gi.colonoscopy'),
+                               ('Were a colonoscopy done today, the risk would be high.', 'gi.colonoscopy'),
+                               ('Had a colonoscopy been done today, the risk would have been high.', 'gi.colonoscopy'),
+                               ('If an EGD were done today, the risk would be high.', 'gi.egd')):
+            text = OFFICE.replace('{X}', sentence)
+            with self.subTest(sentence=sentence):
+                self.assertNotIn(family(text, slug), POSITIVE)
+                proposals, result = run_engine(text, [('99214', VISIT)])
+                missed = next(c for c in result.encounter_checks if c.id == 'services.unproposed')
+                self.assertEqual(missed.status, 'pass', missed.detail)  # no "possible missed service"
+                same_day = check(proposals['99214'], 'em.same_day_procedure')
+                # validation still asks for the separate E/M beside a procedure whose performance is not
+                # established (as for "Possible colonoscopy." at the start commit); it no longer reads it as done
+                self.assertNotIn('documented as performed', same_day.detail if same_day else '')
+        control = OFFICE.replace('{X}', 'The bleeding is hemorrhoidal.')
+        self.assertTrue(ready(run_engine(control, [('99214', VISIT)])[0]['99214']))
+
+    def test_a_counterfactual_never_releases_a_family_its_negation_held(self):
+        """A counterfactual of today's procedure that the start commit already held through an unresolved negation
+        or a stop after the name stays held (the hedge is a doubt, so it still contradicts the heading)."""
+        for sentence in ('Colonoscopy would have been completed had the prep not been poor.',
+                         'The colonoscopy would have been completed had the prep not been poor.',
+                         'Colonoscopy would be done.', 'Colonoscopy with polypectomy may have been performed.',
+                         'Colonoscopy may have been performed.',
+                         'Biopsies would have been taken at colonoscopy had the mucosa not been normal.',
+                         'Were a colonoscopy done today, the patient would not tolerate it.'):
+            text = HEADER + f'Procedure: Colonoscopy\nFindings: {sentence}\n'
+            with self.subTest(sentence=sentence):
+                self.assertNotIn(family(text, 'gi.colonoscopy'), POSITIVE)
+
+    def test_an_attempt_with_its_outcome_and_a_plan_line_are_unchanged(self):
+        text = (HEADER + 'Procedure: ERCP\nFindings: The duodenoscope was advanced to the second part of the duodenum. '
+                'Deep biliary cannulation was achieved with a sphincterotome after it was attempted.\n')
+        self.assertEqual(fact_value(text, 'gi.ercp', 'cannulation'), 'successful')
+        # plan wording keeps its start-commit reading ("might be performed" was already uncertain then)
+        for line, slug, status in (('EGD should be done.', 'gi.egd', 'planned'), ('EGD may be done.', 'gi.egd', 'planned'),
+                                   ('Colonoscopy might be performed.', 'gi.colonoscopy', 'uncertain')):
+            text = OFFICE.replace('Assessment: Hemorrhoids. {X}', 'Assessment: Hemorrhoids.\nPlan: ' + line)
+            with self.subTest(line=line):
+                self.assertEqual(family(text, slug), status)
+                if status == 'planned':
+                    self.assertTrue(ready(run_engine(text, [('99214', VISIT)])[0]['99214']))
+
+    def test_plain_and_past_conditions_stay_performed(self):
+        for sentence in ('Biopsies were taken from the antrum.', 'Biopsies were taken when abnormal mucosa was seen.',
+                         'A Schatzki ring was dilated with an 18 mm balloon, as it would otherwise recur.'):
+            text = HEADER + 'Procedure: EGD\nFindings: ' + sentence + '\n'
+            with self.subTest(sentence=sentence):
+                first = sentence.split(';')[0].split(',')[0]
+                self.assertEqual(read(text, first)[0], 'performed')
+                self.assertEqual(family(text, 'gi.egd'), 'performed')

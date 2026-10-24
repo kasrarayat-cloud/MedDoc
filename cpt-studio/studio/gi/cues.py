@@ -434,6 +434,34 @@ UNCERTAIN_PRE = (
     ('consent for', _pre(r'consent(?:ed)?\s+(?:was\s+obtained\s+)?for|discuss(?:ed|ing)|discussion\s+(?:of|about)'
                          r'|risks?(?:,?\s+benefits?)?(?:,?\s+and\s+alternatives)?\s+of', _NEG_FILLER, 3)),
 )
+# Hedges right after the name of an act (HEDGED_AFTER): a perfect modal or a hedging adverb, which may also follow a
+# short phrase of place or means ("Biopsies may have been taken", "Biopsies of the cecum might have been obtained",
+# "were possibly obtained", "EGD with dilation would have been completed had ..."); a future modal straight after the
+# name ("EGD would be done if ...", "Biopsies would be obtained at a repeat EGD"; only "would": "should", "may" and
+# "might be" are plan wording, and a plan line must keep its planned reading); a hedging adverb before the
+# participle ("Biopsies possibly taken"); an attempt with no outcome after it, also after a phrase of place ("Biopsy
+# of the lesion was attempted."); and a key-value state that closes its value ("Biopsy: unsure.").
+_HEDGE_ACT = (r'(?:performed|done|completed|undertaken|carried\s+out|attempted|obtained|taken|removed|resected|excised|'
+              r'placed|biopsied|sampled|dilated|injected|treated|clipped|tattooed|deployed|inserted|retrieved|ligated|'
+              r'banded|cauterized|coagulated|ablated|extracted|aspirated|cannulated|reached|advanced|examined|'
+              r'visualized|intubated|passed|sent|given|administered|used)')
+_HEDGE_ADVERB = (r'(?:possibly|probably|likely|presumably|apparently|perhaps|maybe|reportedly|supposedly|seemingly|'
+                 r'allegedly)')
+_HEDGE_MODAL = (r'(?:may|might|could|would|should|must)\s+(?:(?:possibly|perhaps|also|well|then)\s+)?(?:have\s+been|have)'
+                r'|(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+' + _HEDGE_ADVERB)
+# A short phrase of place or means: up to four words, none of which opens a new clause or a verb phrase.
+_PLACE_WORD = (r'(?!(?:after|before|when|while|once|until|because|since|as|and|or|but|so|then|if|unless|it|its|this|that|'
+               r'these|those|which|who|whom|whose|where|was|were|is|are|had|has|have|been|being|be)\b)[\w/-]+')
+_PLACE_PHRASE = (r'(?:\s+(?:of|from|in|at|on|to|with|within|along|into|near)\s+(?:' + _PLACE_WORD + r'\s+){0,3}?'
+                 + _PLACE_WORD + r')?')
+_NO_OUTCOME = (r'(?![^.;:!?\n]{0,60}\b(?:success\w*|achieved|accomplished|completed|obtained|taken|removed|'
+               r'performed|done)\b)')
+HEDGED_AFTER = rx(r'^' + _PLACE_PHRASE + r'[\s,]*(?:(?:' + _HEDGE_MODAL + r')\s+' + _HEDGE_ACT + r'\b'
+                  r'|(?:was|were)\s+attempted\b' + _NO_OUTCOME + r')'
+                  r'|^[\s,]*(?:would\s+(?:then\s+|also\s+)?be\s+' + _HEDGE_ACT
+                  + r'|(?:possibly|probably|likely|presumably|perhaps|maybe|reportedly)\s+' + _HEDGE_ACT + r')\b'
+                  r'|^\s*[:=\u2013\u2014|-]+\s*(?:unsure|unknown|uncertain|unclear|undetermined|unconfirmed|not\s+sure|'
+                  r'questionable|possibl[ey]|maybe|\?)(?=\s*(?:[.;,)\]]|$))')
 UNCERTAIN_POST = (
     ('if needed', rx(r'^[\s,]*(?:\?|if\s+(?:needed|necessary|indicated|required|warranted|appropriate|'
                      r'clinically\s+indicated)\b|as\s+needed\b|vs\.?\s|versus\b)')),
@@ -442,9 +470,15 @@ UNCERTAIN_POST = (
     ('was discussed', rx(r'^[\s,]*(?:was|were|has\s+been|have\s+been)\s+(?:discussed|explained|reviewed\s+with)\b')),
     ('may be needed', rx(r'^[\s,]*(?:may|might|could)\s+(?:be|become)\s+(?:needed|necessary|required|indicated|'
                          r'considered|performed|helpful|warranted)\b')),
+    # Named "pending" on purpose: like "pending" it leaves the act open, so the reading is a doubt
+    # (detect._clause_reading_cues) that contradicts section evidence. A plain hedge here could turn a doubt that
+    # holds today's service now (an unresolved negation, or a stop after the name such as "Colonoscopy would be
+    # done.") into a hedge that no longer contradicts its section, and so release the family.
+    ('pending', HEDGED_AFTER),
 )
 # Clause-scope doubt words are few on purpose: "possible" and "may" mostly qualify a
-# diagnosis ("biopsies for possible celiac disease"), so they are anchored above.
+# diagnosis ("biopsies for possible celiac disease"), so they are anchored above. One more entry,
+# HYPOTHETICAL, is added after the service names (it reads only sentences that name none).
 UNCERTAIN_CLAUSE = (
     ('unclear whether', rx(r'\bunclear\s+(?:whether|if)\b|\bundecided\b')),
     ('if needed', rx(r'\bif\s+(?:needed|necessary|indicated|required|warranted|appropriate|clinically\s+indicated|'
@@ -491,6 +525,33 @@ SERVICE_PATTERNS = (
 )
 # "FS" for flexible sigmoidoscopy only as a standalone capitalised token.
 FS_ABBREVIATION = re.compile(r'(?<![\w/.-])FS(?![\w/-])', re.A)
+
+# --- uncertain: a hypothetical or a hedge in a sentence that names no service -----------------------------------
+# "Had there been a stricture, it would have been dilated with a balloon.", "A stricture would have been dilated had
+# one been found.", "Biopsies of the antrum were possibly obtained.", "Biopsy of the cecal lesion, if feasible.". An
+# uncertain clause cue that runs from the start of
+# its sentence, read only where nothing in the sentence names a service: so it never attaches to a service mention
+# and never turns a doubt about today's service into a plain hedge (after a service name, UNCERTAIN_POST's
+# HEDGED_AFTER reads the hedge as a doubt). Added to UNCERTAIN_CLAUSE here because it needs SERVICE_PATTERNS.
+_ANY_SERVICE = '|'.join(f'(?:{p.pattern})' for _, p in SERVICE_PATTERNS) + r'|(?<![\w/.-])FS(?![\w/-])'
+_NO_SERVICE = r'(?:(?!' + _ANY_SERVICE + r')[^.;:!?\n])'
+_SENTENCE_HEDGE = (r'(?:' + _HEDGE_MODAL + r'|(?:would|should|may|might)\s+(?:then\s+|also\s+)?be)\s+' + _HEDGE_ACT + r'\b'
+                   r'|\bif\s+(?:feasible|possible|tolerated)\b')
+HYPOTHETICAL = rx(r'(?:^|(?<=[.;:!?\n])|(?<=[.;:!?\n][ \t])|(?<=[.;:!?\n][ \t][ \t]))(?=\S)'
+                  r'(?=' + _NO_SERVICE + r'{0,240}(?:[.;:!?\n]|$))' + _NO_SERVICE + r'{0,200}?\b'
+                  r'(?:' + _SENTENCE_HEDGE + r')', FLAGS | re.M)
+# A condition on the performance of a named service that opens its sentence: "If colonoscopy were done today, the
+# bleeding risk would be high.", "Were a colonoscopy done today, ...", "Had a colonoscopy been done today, ...",
+# "Should EGD be performed, ...". Only in a sentence with no negation word: there an unresolved negation already holds
+# the service as a doubt, which a plain hedge would pre-empt (and so could release the family). With the performance
+# participle right after the service, no stop after the name can doubt it either.
+_SERVICE_RUN = (r'(?:(?:the|a|an)\s+)?(?:' + _ANY_SERVICE + r')(?:\s*(?:,|and|or)\s*(?:(?:the|a|an)\s+)?(?:' + _ANY_SERVICE
+                + r')){0,2}')
+CONDITIONAL = rx(r'(?:^|(?<=[.;:!?\n])|(?<=[.;:!?\n][ \t])|(?<=[.;:!?\n][ \t][ \t]))(?:if|unless|were|had|should)\s+'
+                 + _SERVICE_RUN + r'\s+(?:(?:were|was|is|are|be|been|had\s+been|has\s+been|have\s+been)\s+)?'
+                 r"(?:done|performed|completed|undertaken|carried\s+out)\b(?![^.;!?\n]{0,300}?(?:\b(?:no|not|never|neither|"
+                 r"nor|none|without|cannot|unable|declined|refused)\b|n't\b))", FLAGS | re.M)
+UNCERTAIN_CLAUSE = UNCERTAIN_CLAUSE + (('hypothetical', HYPOTHETICAL), ('if', CONDITIONAL))
 
 # A title line such as "COLONOSCOPY REPORT" opens a procedure section.
 PROCEDURE_TITLE = rx(r'^[\w /&+,()-]{0,60}?\b(?:procedure\s+)?(?:report|note)$')
