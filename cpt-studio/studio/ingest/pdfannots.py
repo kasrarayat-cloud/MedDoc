@@ -192,6 +192,8 @@ class _Reader:
             self.free_text(annotation, shown)
         else:
             self.other(annotation, subtype, shown)
+        if shown and subtype in ('/Widget', '/FreeText'):  # other() keeps the covers of every other subtype
+            self.found.covers.extend(self.covers(annotation, subtype))
         recognised = False
         if subtype in MARKED and len(self.found.texts) == written + 1 and self.found.texts[-1].strip() in BOX_MARKS:
             rect = rect_of(annotation)
