@@ -1387,6 +1387,9 @@ def _other_times(an: Analysis) -> tuple[list, list[int]]:
     return an.memo[key]
 
 
+_PART_OF_MONTH = re.compile(r'\b(?:early|mid|late|end\s+of|beginning\s+of)\b', re.A | re.I)
+
+
 def _today_compatible(an: Analysis, name: str, m: re.Match) -> bool:
     """Whether a weekday, a month or a month/day may be the date of service itself (never when that is unknown)."""
     day = an.service_date
@@ -1401,6 +1404,8 @@ def _today_compatible(an: Analysis, name: str, m: re.Match) -> bool:
         return False
     month = _MONTH_INDEX[(m.group('month') or m.group('may') or m.group('month2')).lower()]
     mday = m.group('mday') or m.group('mday2')
+    if mday is None and _PART_OF_MONTH.search(said):
+        return False  # "at the end of October", "in early October": maybe not the day of service (round 4 routing:7)
     return month == day.month and (mday is None or int(mday) == day.day)
 
 
@@ -1596,7 +1601,7 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     if status == 'performed' and not em:
         held = _another_time(an, start, end)  # a time no listed cue reads holds it (routing:10)
         if held:
-            return Reading('uncertain', (held,) + deciding, 'cue')
+            return Reading('uncertain', (held,) + deciding, 'cue', doubt=True)  # contradicts (round 4 routing:7)
     return Reading(status, deciding, 'cue', past, doubt)
 
 
@@ -1610,7 +1615,8 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind in POSITIVE_SECTIONS:
         held = _another_time(an, start, end)  # a time no listed cue reads keeps the section silent (routing:8)
         if held:
-            return Reading('uncertain', (held, label), 'cue')
+            # a doubt, so it contradicts the family's other section evidence (round 4 routing:7)
+            return Reading('uncertain', (held, label), 'cue', doubt=True)
         return Reading('performed', (label,), 'section')
     if section.kind == 'plan':
         # a plan's default at most holds a clause that says today (validation:1): it may document today's service.

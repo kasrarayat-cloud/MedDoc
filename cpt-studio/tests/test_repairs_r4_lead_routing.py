@@ -198,3 +198,29 @@ class ExtentLabelTests(unittest.TestCase):
                 'rectum.\nOutside records:\nDepth of insertion: 60 cm.\n')
         facts = {f.name: f.value for f in family_facts(text, 'gi.flex_sig')}
         self.assertIsNone(facts.get('extent'))
+
+
+class Routing7QualifiedMonthTests(unittest.TestCase):
+    """routing:7: a part of the service month ('at the end of October' for an October 21 date of service) was read as
+    the date of service, and a time hold on one line did not contradict the procedure line."""
+
+    def test_a_qualified_month_holds(self):
+        for tail in ('at the end of October.', 'in early October.', 'at the beginning of October.'):
+            text = eus_note('Procedure: EUS with fine-needle biopsy of the pancreatic head mass ' + tail, INDICATION)
+            with self.subTest(tail=tail):
+                self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+                proposals, _ = run_engine(text, [('43242', text.split('\n')[2])])
+                self.assertNotEqual(proposals['43242'].status, 'ready')
+
+    def test_a_time_hold_on_another_line_contradicts_the_procedure_line(self):
+        text = eus_note('Procedure: EUS', INDICATION, 'Technique: EUS with fine-needle biopsy of the pancreatic head '
+                                                    'mass next Tuesday under MAC.')
+        self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+        proposals, _ = run_engine(text, [('43259', 'Procedure: EUS')])
+        self.assertNotEqual(proposals['43259'].status, 'ready')
+
+    def test_the_month_itself_and_its_day_stay_today(self):
+        for tail in ('in October.', 'on October 21.'):
+            text = eus_note('Procedure: EUS with fine-needle biopsy of the pancreatic head mass ' + tail, INDICATION)
+            with self.subTest(tail=tail):
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
