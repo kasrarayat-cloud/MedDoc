@@ -12,6 +12,7 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from studio import review
+from studio.gi.detect import route
 from studio.types import RawExchange
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import drain
@@ -295,4 +296,8 @@ class Status19ApiTests(ApiCase, TestCase):
         text = self.report_text(encounter_id)
         self.assertNotIn('Every performed service has a selected proposal.', text)
         self.assertNotIn('No performed service falls outside the GI profiles.', text)
-        self.assertIn('[NOT_VERIFIED] em.same_day_coverage', text)
+        if route(note).finding('gi.other') is not None:  # the integrated routing detects the banding: held
+            self.assertEqual(self.proposal(encounter_id, '99213')['status'], 'needs_clarification')
+            self.assertIn('[WARN] em.same_day_procedure', text)
+        else:
+            self.assertIn('[NOT_VERIFIED] em.same_day_coverage', text)

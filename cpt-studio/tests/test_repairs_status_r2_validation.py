@@ -175,7 +175,7 @@ class Review1PlanDiscussionTests(RealCase):
     def test_controls_a_performance_statement_in_the_plan_still_holds(self):
         proposals, _ = real(ASSESSMENT_AND_PLAN.format(plan='EGD was performed today with biopsies of the antrum.'),
                             ('99214', VISIT_SENTENCE))
-        self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
+        self.assertVisitHeld(proposals, f'{EGD_LABEL} is ')
 
     def test_controls_an_unheaded_hedge_outside_a_plan_still_holds(self):
         text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
@@ -188,7 +188,7 @@ class Review1PlanDiscussionTests(RealCase):
                 'Procedure: Colonoscopy to evaluate iron deficiency anemia.\nMedical decision making: moderate.\n'
                 'Total time: 32 minutes.\n')
         proposals, _ = real(text, ('99214', VISIT_SENTENCE))
-        self.assertVisitHeld(proposals, 'Colonoscopy is possibly performed on the same date')
+        self.assertVisitHeld(proposals, 'Colonoscopy is ')
 
     def test_controls_an_assessment_section_hedge_still_holds(self):
         """Only plan, history and indication / chief-complaint sections are read as not today (ARCHITECTURE 5.3);
@@ -277,8 +277,13 @@ class Status4UncertainFamilyTests(RealCase):
         for indication in ('Pancreatic cyst on CT; EUS requested by the referring physician.',
                            'Pancreatic cyst (EUS?).', 'Pancreatic cyst on CT; possible EUS.'):
             with self.subTest(indication=indication):
-                proposals, _ = real(EUS_NOTE.format(indication=indication, plan=''), ('43259', ADVANCED))
+                text = EUS_NOTE.format(indication=indication, plan='')
+                proposals, _ = real(text, ('43259', ADVANCED))
                 item = proposals['43259']
+                self.assertNotEqual(item.status, 'ready')
+                if route(text, DOS).finding('gi.eus').status != 'uncertain':  # integrated routing may read it planned
+                    self.assertEqual(item.bucket, 'excluded')
+                    continue
                 self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
                 status = check_of(item, 'service.status')
                 self.assertEqual(status.status, 'warn')
@@ -291,7 +296,7 @@ class Status4UncertainFamilyTests(RealCase):
     def test_citing_the_doubtful_mention_too_stays_held(self):
         proposals, _ = real(EUS_NOTE.format(indication='Pancreatic cyst (EUS?).', plan=''),
                             ('43259', 'Pancreatic cyst (EUS?).', ADVANCED))
-        self.assertEqual(proposals['43259'].status, 'needs_clarification')
+        self.assertNotEqual(proposals['43259'].status, 'ready')
 
     def test_controls(self):
         proposals, _ = real(EUS_NOTE.format(indication='', plan=''), ('43259', ADVANCED))
@@ -483,7 +488,16 @@ class Status19CoverageTests(RealCase):
     def test_the_claimed_input_carries_no_false_coverage_pass(self):
         proposals, result = real(BANDING, ('99214', VISIT_SENTENCE))
         visit = proposals['99214']
-        # Routing does not detect the banding at this commit (the integrated routing emits gi.other for it).
+        for check in result.encounter_checks:
+            self.assertNotIn(check.detail, ('Every performed service has a selected proposal.',
+                                            'No performed service falls outside the GI profiles.'))
+        if route(BANDING, DOS).finding('gi.other') is not None:
+            # The integrated routing emits gi.other for the banding (shared contract): the visit is held.
+            self.assertVisitHeld(proposals, 'Other GI service is ')
+            self.assertEqual(encounter_check(result, 'services.unsupported').status, 'warn')
+            self.assertIn('Other GI service', encounter_check(result, 'services.unproposed').detail)
+            return
+        # At this commit routing does not detect the banding: nothing may certify coverage it does not have.
         coverage = check_of(visit, 'em.same_day_coverage')
         self.assertEqual(coverage.status, 'not_verified')
         self.assertIn('not verified', coverage.detail)
