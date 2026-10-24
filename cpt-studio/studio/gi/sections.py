@@ -12,7 +12,12 @@ under it never inherits the previous section's reading: a plan or history
 section when the label says so ("Next procedures:", "Earlier work-up:"),
 otherwise an ``other`` section with no default. A label with a verb in it is a
 sentence that ends in a colon ("The following were noted:") and opens none,
-unless HEADINGS lists it ("Procedures performed today:"). A label line without
+unless HEADINGS lists it ("Procedures performed today:"); a performed-today
+label that answers nothing ("Procedures performed today: none") opens none.
+"Referral:", "Orders:", "To do:" and the other plan labels round 3b added are
+field labels as often as headings: "Orders: none" is a field, and with an
+answer of their own followed by more fields they speak for their own line
+only. A label line without
 a colon ("Planned procedures", "Further management", a Word heading paragraph)
 opens a plan or history section when its words say so and it ends with the
 section of a note it names (procedures, plan, management, work-up ...), or
@@ -121,6 +126,25 @@ HEADINGS: dict[str, str] = {
             'bowel preparation', 'bowel prep', 'preparation', 'prep', 'quality of preparation'),
 }
 
+# Round 3b's plan labels (75a3cfac7, e7bc88a) are field labels as often as headings ("Referral: Dr. B. Synthetic",
+# "Orders: none"). Round 4 structure:5: with an answer of their own they never open a plan section over later field
+# lines (see _headings), and a no-answer value (_SEC_NO_ANSWER) is a field, as at R3B-BASE.
+_SEC_FIELD_PLAN_LABELS = frozenset(('pending procedures', 'pending procedure', 'pending orders', 'orders', 'referrals',
+                                    'referral', 'to do', 'to-do', 'procedure to be done', 'procedures to be done',
+                                    'procedure to be performed', 'procedures to be performed',
+                                    'procedures that will be performed'))
+# A field's whole value when it answers nothing: "none", "N/A", "not applicable", "no", "nil" (optionally with a
+# period).
+_SEC_NO_ANSWER = re.compile(r'[ \t]*(?:none|n/?a|not[ \t]+applicable|no|nil)[ \t]*\.?[ \t]*', re.A | re.I)
+# Round 3b's performed-today procedure labels (e7bc88a). Round 4 structure:9: answered with no answer ("Procedures
+# performed today: none", or the bare label with "None" on the next line) they open no procedure section, so the
+# plan items after them keep the section in force, as at R3B-BASE.
+_SEC_TODAY_LABELS = frozenset(('procedure performed today', 'procedures performed today', 'procedure done today',
+                               'procedures done today', 'intervention performed', 'interventions performed',
+                               'intervention performed today', 'interventions performed today'))
+# A key-value line ("Extent: cecum"): after a field-label line with an answer, it ends that label's reach.
+_SEC_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][^:\n|]{0,39}:[ \t]*\S', re.A)
+_SEC_FIELD_REACH = 3  # how many lines after a field-label line are read for the next field (bounds the work)
 _PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
 _CLOCK = re.compile(r'[ \t]*\d{1,2}:\d{2}', re.A)
 # An unrecognised bare "Label:" (nothing after the colon) is a heading: a plan or history one
@@ -262,6 +286,8 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     label = normalize_label(raw)
     kind = HEADINGS.get(label)
     content = '' if colon < 0 else line[colon + 1:]
+    if label in _SEC_FIELD_PLAN_LABELS | _SEC_TODAY_LABELS and content.strip() and _SEC_NO_ANSWER.fullmatch(content):
+        return None  # "Orders: none", "Procedures performed today: N/A": a field, as at R3B-BASE (structure:5, :9)
     if kind is None and colon < 0 and cues.PROCEDURE_TITLE.match(line.strip()) and _service_named(line) \
             and not _TITLE_QUALIFIER.search(line):
         kind = 'procedure'
@@ -508,13 +534,16 @@ def _field_heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span
 
 
 def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], list[tuple[int, int]],
-                                                                 list[tuple[int, int]]]:
+                                                                 list[tuple[int, int]], list[tuple[int, int]]]:
     """Each line's heading (or None); the lines inside an extraction block, which never open a
     section beyond themselves; (line, header line) for each block's end: the line after the blank
     line that ends it, where the section in force before the block's header resumes; and (line,
     header line) after each form-field line that opened a section of its own (_field_heading), where
-    the block's own section resumes."""
-    headings, inside, resumes, field_ends = {}, set(), [], []
+    the block's own section resumes; and (line, label line) after a line labelled by one of round 3b's plan
+    labels with an answer of its own (_SEC_FIELD_PLAN_LABELS) when the next line that is not blank is another field,
+    where the section in force before the label line resumes: such a label speaks for its own line only. A
+    performed-today label (_SEC_TODAY_LABELS) answered "None" on the next line is no heading."""
+    headings, inside, resumes, field_ends, line_ends = {}, set(), [], [], []
     header, fields = None, False
     for i, (ls, le) in enumerate(lines):
         block = FORM_BLOCK.fullmatch(text[ls:le].strip())
@@ -532,30 +561,48 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
         else:
             resumes.append((i + 1, header))
             header = None
-    return headings, inside, resumes, field_ends
+    for i, heading in headings.items():
+        if heading and heading[1] in _SEC_TODAY_LABELS and not text[heading[2].end:lines[i][1]].strip():
+            answer = next((text[ls:le] for ls, le in lines[i + 1:i + 3] if text[ls:le].strip()), '')
+            if _SEC_NO_ANSWER.fullmatch(answer):
+                headings[i] = None  # "Procedures performed today:\nNone" (structure:9)
+                continue
+        if heading and heading[1] in _SEC_FIELD_PLAN_LABELS and i not in inside and i + 1 < len(lines) \
+                and lines[i + 1][0] < len(text) and text[heading[2].end:lines[i][1]].strip():
+            nxt = next((text[ls:le] for ls, le in lines[i + 1:i + 1 + _SEC_FIELD_REACH] if text[ls:le].strip()), '')
+            if _SEC_FIELD_LINE.match(nxt):
+                line_ends.append((i + 1, i))  # "Referral: Dr. B. Synthetic\nExtent: cecum" (structure:5)
+    return headings, inside, resumes, field_ends, line_ends
 
 
 @functools.lru_cache(maxsize=16)
 def layout(text: str) -> Layout:
     lines = _lines(text)
-    headings, inside, resumes, field_ends = _headings(text, lines)
+    headings, inside, resumes, field_ends, line_ends = _headings(text, lines)
     # The marks of one line, in this order: the section in force before a block resumes (after the blank line
-    # that ends it), the block's own section resumes (after a field line that opened its own), a heading opens.
+    # that ends it), the block's own section resumes (after a field line that opened its own), the section in
+    # force before a field-label line resumes (after a label that speaks for its own line only), a heading opens.
     # So a heading wins where a resume falls on its line (the next page opens with "Findings:", an addendum's
     # header).
-    resume, field_end, heading = 0, 1, 2
+    resume, field_end, line_end, heading = 0, 1, 2, 3
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
                    + [(i, resume, header) for i, header in resumes if i < len(lines)]
-                   + [(i, field_end, header) for i, header in field_ends if i < len(lines)],
+                   + [(i, field_end, header) for i, header in field_ends if i < len(lines)]
+                   + [(i, line_end, label_line) for i, label_line in line_ends if i < len(lines)],
                    key=lambda mark: mark[:2])
-    opened, current, before_block = [], ('other', '', None), {}
+    line_only = {label_line for _, label_line in line_ends}
+    opened, current, before_block, before_line = [], ('other', '', None), {}, {}
     for i, what, value in marks:
         if what == heading:
             if FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
                 before_block[i] = current
+            if i in line_only:
+                before_line[i] = current
             current = value
         elif what == field_end:
             current = headings[value]
+        elif what == line_end:
+            current = before_line.get(value, current)
         else:
             current = before_block.get(value, current)
         opened.append((i, current))

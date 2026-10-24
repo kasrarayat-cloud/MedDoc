@@ -10,13 +10,31 @@ real validation engine assesses provider-shaped selections against an empty in-m
 """
 import unittest
 
+from studio.gi.context import extract_context
 from studio.gi.sections import layout
-from tests.test_repairs_r3_sections import (EMR_LINE, HEADER, POSITIVE, emr_note, fact_value, read, ready, run_engine,
-                                            word_document)
+from studio.reference.store import InMemoryReferenceLookup
+from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode
+from studio.validation.engine import assess
+from tests.test_repairs_r3_sections import (EMR_LINE, HEADER, NOT_TODAY, POSITIVE, clarified, emr_note, fact_value, family,
+                                            read, ready, routed, run_engine, service_date, span, word_document)
 
 
 def kind_at(text, phrase):
     return layout(text).section_at(text.index(phrase)).kind
+
+
+def encounter_warnings(text, picks):
+    """The ids of the encounter-level checks that warn or fail, for provider-shaped picks (code, phrase)."""
+    codes = []
+    for index, (code, phrase) in enumerate(picks):
+        start, end = span(text, phrase)
+        codes.append(ProviderCode(role='selected', system='cpt', code=code, display='UNVERIFIED',
+                                  evidence=(EvidenceSpan(0, start, end, text[start:end], True),), index=index))
+    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text), routing=routed(text),
+                    normalized=NormalizedResponse('replay', 'test', codes=tuple(codes)),
+                    reference=InMemoryReferenceLookup((), {}), service_date=service_date(text),
+                    provider_status='succeeded', extraction_status='ok')
+    return {check.id for check in result.encounter_checks if check.status in ('warn', 'fail')}
 
 
 # --- structure:17 / release:2: a numbered or bulleted plan label, and a plan label that does not end with its noun ---
@@ -240,6 +258,140 @@ class Structure4PhraseLinesTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'findings')
                 self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+
+# --- structure:5: round 3b's plan labels with an answer of their own -------------------------------------------------
+
+STRUCTURE5_INTERVENTION = 'cold snare polypectomy of a 6 mm sigmoid polyp'
+
+
+def structure5_summary(field, indication=True):
+    return (HEADER + 'Procedure: Colonoscopy\n' + ('Indication: Positive FIT\n' if indication else '') + field + '\nExtent: cecum\n'
+            'Interventions: ' + STRUCTURE5_INTERVENTION + '\nComplications: none\nImpression: Sigmoid polyp.\n')
+
+
+class Structure5FieldPlanLabelTests(unittest.TestCase):
+    """structure:5 (a round-3b new defect, 75a3cfac7) - "Referral:", "Orders:", "To do:" and the other plan labels round 3b
+    added are field labels as often as headings. With an answer of their own they never open a plan section over the field
+    lines after them, and a no-answer value ("Orders: none") is a field: the performed polypectomy in the summary is never
+    excluded as planned, as at R3B-BASE."""
+
+    FIELDS = ('Referral: Dr. B. Synthetic, primary care', 'Referrals: none', 'Referral: none', 'Orders: none', 'Orders: CBC',
+              'To do: none', 'To-do: none', 'Pending orders: none', 'Pending procedures: N/A', 'Procedures to be done: none')
+
+    def test_the_claimed_summary(self):
+        """After the indication line the summary reads as at R3B-BASE: the indication section, held for the extent."""
+        for field in self.FIELDS:
+            text = structure5_summary(field)
+            with self.subTest(field=field):
+                self.assertNotEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'plan')
+                self.assertNotIn(read(text, STRUCTURE5_INTERVENTION)[0], NOT_TODAY)
+                proposal = run_engine(text, [('45385', STRUCTURE5_INTERVENTION)])['45385']
+                self.assertNotEqual(proposal.bucket, 'excluded')
+
+    def test_the_summary_with_the_field_under_the_procedure_line(self):
+        text = structure5_summary('Referral: Dr. B. Synthetic, primary care', indication=False)
+        self.assertEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'procedure')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE5_INTERVENTION)])['45385']))
+        for field in ('Orders: none', 'Referrals: none'):  # held, as at R3B-BASE (the field reads as denying the procedure)
+            text = structure5_summary(field, indication=False)
+            with self.subTest(field=field):
+                proposal = run_engine(text, [('45385', STRUCTURE5_INTERVENTION)])['45385']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+    def test_a_findings_list(self):
+        for field in ('Orders: none', 'Referral: none', 'To do: none'):
+            text = (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings:\nThe colonoscope was advanced '
+                    'to the cecum.\n' + field + '\n' + STRUCTURE4_POLYP + '\n')
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+    def test_the_labels_still_plan(self):
+        """Bare, the labels open a plan section (round 3 routing:12); with an answer they plan their own line, and the lines
+        after them while those are not fields."""
+        for label in ('Orders:', 'Referrals:', 'To do:', 'Pending procedures'):
+            text = emr_note(label)
+            with self.subTest(label=label):
+                self.assertEqual(kind_at(text, EMR_LINE), 'plan')
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        for label in ('Orders:', 'To do:', 'Referral:'):
+            text = emr_note(label).replace(label + '\n', label + ' ')
+            with self.subTest(inline=label):
+                self.assertEqual(kind_at(text, EMR_LINE), 'plan')
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        text = emr_note('Orders: EGD with esophageal dilation')
+        self.assertEqual(kind_at(text, EMR_LINE), 'plan')
+        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        text = emr_note('Referral: GI surgery\n')  # past a blank line, the next line that is not a field
+        self.assertEqual(kind_at(text, EMR_LINE), 'plan')
+        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        text = structure5_summary('Referral: Dr. B. Synthetic, primary care\n')  # past a blank line, a field
+        self.assertNotEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'plan')
+
+    def test_other_field_labels_are_unchanged(self):
+        for field in ('Referring physician: Dr. B. Synthetic', 'Plan: none'):
+            text = structure5_summary(field)
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'indication' if field.startswith('Referring') else 'plan')
+
+
+# --- structure:9: a performed-today procedure label answered "none" ---------------------------------------------------
+
+STRUCTURE9_ITEM = '2. Upper endoscopy to D2 with balloon dilation at the hospital endoscopy unit.'
+STRUCTURE9_VISIT = 'Established patient office visit for dysphagia.'
+
+
+def structure9_note(line, item=STRUCTURE9_ITEM):
+    return (HEADER + 'Place of service: Office (POS 11)\n' + STRUCTURE9_VISIT + '\nChief complaint: Dysphagia.\nAssessment and '
+            'plan:\n1. Dysphagia, likely peptic stricture.\n' + line + '\n' + item + '\n3. Continue omeprazole.\nMedical decision '
+            'making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Structure9TodayLabelAnsweredNoneTests(unittest.TestCase):
+    """structure:9 (a round-3b over-correction, e7bc88a) - a performed-today procedure label that answers nothing
+    ("Procedures performed today: none", or the bare label with "None" on the next line) opens no procedure section: the
+    planned EGD on the next plan line stays planned (43249 excluded, as at R3B-BASE), the office E/M is not held for a
+    same-day procedure, and no missed service is reported."""
+
+    LINES = ('Procedures performed today: none', 'Interventions performed: none', 'Procedures done today: N/A',
+             'Procedures performed today: None.', 'Procedures performed today:\nNone', 'Procedures performed today:\n\nNone')
+
+    def assert_planned_egd(self, text, item):
+        self.assertEqual(kind_at(text, item), 'plan')
+        self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+        proposals = run_engine(text, [('43249', item), ('99214', STRUCTURE9_VISIT)])
+        self.assertFalse(ready(proposals['43249']))
+        self.assertEqual(proposals['43249'].bucket, 'excluded')
+        self.assertTrue(ready(proposals['99214']))
+        self.assertNotIn('services.unproposed', encounter_warnings(text, [('99214', STRUCTURE9_VISIT)]))
+
+    def test_the_claimed_lines(self):
+        for line in self.LINES:
+            with self.subTest(line=line):
+                self.assert_planned_egd(structure9_note(line), STRUCTURE9_ITEM)
+        item = '2. EGD to the duodenum with balloon dilation, at the hospital endoscopy unit.'
+        self.assert_planned_egd(structure9_note('Procedures performed today: none', item), item)
+
+    def test_the_line_at_the_top_of_the_plan(self):
+        item = 'upper endoscopy to the duodenum with balloon dilation at the hospital endoscopy unit.'
+        text = (HEADER + 'Place of service: Office (POS 11)\n' + STRUCTURE9_VISIT + '\nChief complaint: Dysphagia.\nAssessment and '
+                'plan:\nProcedures performed today: None\n1. Dysphagia, likely peptic stricture - ' + item + '\nMedical decision '
+                'making: moderate.\nTotal time: 32 minutes.\n')
+        self.assert_planned_egd(text, item)
+
+    def test_a_label_with_its_procedures_still_opens(self):
+        """contract:8 (round 3): with items of its own the label still opens a procedure section."""
+        for line in ('Procedures performed today: flexible sigmoidoscopy to 30 cm', 'Procedures performed today:\n'
+                     '☒ Flexible sigmoidoscopy to 30 cm',
+                     'Procedures performed today: no sedation; flexible sigmoidoscopy to 30 cm'):  # a value, not "no"
+            text = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: Rectal '
+                    'bleeding.\nMedical decision making: Moderate.\nTotal time on the date of the encounter was 32 minutes.\n'
+                    'Assessment and plan: Grade II internal hemorrhoids.\n' + line + '\n')
+            with self.subTest(line=line):
+                self.assertEqual(kind_at(text, 'lexible sigmoidoscopy to 30 cm'), 'procedure')
+                self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
 
 
 if __name__ == '__main__':
