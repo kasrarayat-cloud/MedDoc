@@ -1133,12 +1133,58 @@ def _section_label(section) -> str:
     return f'section: {section.kind}{heading}'
 
 
+# The one release of round 3b (routing:26, validation:9): in a plan section, an explicit past-tense performance and a
+# today marker in one clause, with nothing in any clause of the passage that makes it a condition, a possibility, a
+# future, a plan or a question ("Rubber band ligation ... was performed today as scheduled"; never "can be performed
+# today if bleeding persists", "performed today if the patient agrees", "was possibly performed today").
+_PAST_TENSE_DONE = ('was performed', 'was advanced', 'underwent', 'we performed')
+_TODAY_MARKER = re.compile(r'\btoday\b|\bthis\s+(?:morning|afternoon)\b', re.A | re.I)
+_NOT_YET = re.compile(r'\b(?:if|unless|whether|provided|assuming|should|would|could|can|may|might|must|will|shall|'
+                      r'going\s+to|once|when|whenever|until|pending|awaiting|possibl[ey]|probabl[ey]|likely|perhaps|'
+                      r'maybe|questionabl[ey]|presumabl[ey]|apparently|reportedly|unclear|uncertain|unknown|undecided|'
+                      r'consider\w*|plan\w*|schedul\w*|arrang\w*|book\w*|tentative\w*|expected|anticipated|hopefully|'
+                      r'tomorrow|next|later|soon|future|upcoming|recommend\w*|offer\w*|discuss\w*|candidate|versus|vs)\b'
+                      r'|\?', re.A | re.I)
+_BOOKING_WORD = re.compile(r'(?:plan|schedul|arrang|book)\w*', re.A | re.I)
+# The plan default at most holds a clause that says today (validation:1): never "planned".
+PLAN_TODAY = 'uncertain: its clause says today, so its plan section does not make it planned'
+
+
+def _not_yet(an: Analysis, cs: int, ce: int) -> bool:
+    """Whether [cs, ce) has a word that makes a performance a condition, a possibility, a future, a plan or a question;
+    a booking a done service kept ("as scheduled", "as planned") is not one."""
+    for m in _NOT_YET.finditer(an.text, cs, ce):
+        if _BOOKING_WORD.fullmatch(m.group(0)) and cues.AS_BOOKED_BEFORE.search(an.text, max(cs, m.start() - 30),
+                                                                                  m.start()):
+            continue
+        return True
+    return False
+
+
+def _done_today(an: Analysis, start: int, end: int) -> bool:
+    """The release (see _PAST_TENSE_DONE): every clause of [start, end) is free of _NOT_YET, and one of them carries
+    both a past-tense performance cue attached to the target and a today marker."""
+    done = False
+    for clause in an.lay.clauses_for(start, end):
+        cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)
+        if _not_yet(an, cs, ce):
+            return False
+        if done or not _TODAY_MARKER.search(an.text, cs, ce):
+            continue
+        spans, index, _ = _groups(an, cs, ce, start, end)
+        done = any(c.status == 'performed' and c.name in _PAST_TENSE_DONE and _attached(spans, index, c.start, c.end)
+                   for c in an.cues_in(cs, ce))
+    return done
+
+
 def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
     """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
-    a history section (uncertain if its clause says today), uncertain in a plan section, and uncertain in an
-    indication section unless its clause says today: an indication tells why today's service is done, or
-    its prior work-up ("An EGD was performed in August"), so a past-tense performance there is held, never
-    performed. ``em``: an E/M documentation mention, which the indication rule does not concern."""
+    a history section (uncertain if its clause says today), uncertain in a plan section (unless the release
+    _done_today reads it: a past-tense performance that says today, with no condition, possibility, future or
+    question), and uncertain in an indication section unless its clause says today: an indication tells why
+    today's service is done, or its prior work-up ("An EGD was performed in August"), so a past-tense
+    performance there is held, never performed. ``em``: an E/M documentation mention, which the indication rule
+    does not concern."""
     found = []
     for clause in an.lay.clauses_for(start, end):
         found.extend(_clause_reading_cues(an, clause, start, end, em))
@@ -1153,6 +1199,8 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain' if today else 'historical', deciding + (_section_label(section),), 'cue')
     if status == 'performed' and section.kind == 'plan':
+        if _done_today(an, start, end):
+            return Reading(status, deciding, 'cue', past, doubt)
         return Reading('uncertain', deciding + (_section_label(section),), 'cue')
     if status == 'performed' and section.kind == 'indication' and not em \
             and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
@@ -1170,6 +1218,10 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind in POSITIVE_SECTIONS:
         return Reading('performed', (label,), 'section')
     if section.kind == 'plan':
+        # a plan's default at most holds a clause that says today (validation:1): it may document today's service
+        if any(cues.TODAY.search(an.text, *an.lay.window(clause, start, end, CLAUSE_REACH))
+               for clause in an.lay.clauses_for(start, end)):
+            return Reading('uncertain', (PLAN_TODAY, label), 'section')
         return Reading('planned', (label,), 'section')
     if section.kind == 'history':
         return Reading('historical', (label,), 'section')

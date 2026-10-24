@@ -144,5 +144,131 @@ class Routing0TimeOfAnotherThingTests(unittest.TestCase):
                 self.assertEqual(family(HEADER + 'Procedure: ' + line + '\n', 'gi.colonoscopy'), 'performed')
 
 
+# --- routing:26, validation:9, validation:1 ----------------------------------------------------------------------
+
+def plan_office(plan, heading='Assessment and plan:'):
+    return (OFFICE_HEAD + 'Established patient office visit.\nChief complaint: rectal bleeding.\n' + heading + ' ' + plan
+            + '\nMedical decision making: moderate.\nTotal time on the date of the encounter was 32 minutes.\n')
+
+
+VISIT = 'Established patient office visit.'
+TIME = 'Total time on the date of the encounter was 32 minutes.'
+PLAN_HEADINGS = ('Assessment and plan:', 'A/P:', 'Impression and plan:', 'Assessment/Plan:')
+
+
+class Routing26PlanSectionTodayTests(unittest.TestCase):
+    """routing:26 and validation:9 (over-holds). An explicit past-tense performance statement whose own clause says
+    today ('was performed today') was held under 'Assessment and plan:' while the identical clause under 'Assessment:'
+    was ready. The one release of round 3b: such a clause, with no modal, conditional, future or hedge in it, is not
+    downgraded by its plan section. Anything short of that stays held (the routing:26 verifier's counterexamples)."""
+
+    def test_the_claimed_banding_is_ready_and_the_visit_held(self):
+        band = 'Rubber band ligation of an internal hemorrhoid was performed today as scheduled.'
+        text = plan_office('Grade 2 internal hemorrhoids. ' + band)
+        status, cues = read(text, band)
+        self.assertEqual(status, 'performed', cues)
+        self.assertIn('performed: was performed', cues)
+        proposals, _ = run_engine(text, [('99214', VISIT), ('46221', band)])
+        self.assertTrue(ready(proposals['46221']), clarified(proposals['46221']))
+        visit = proposals['99214']
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertIn('separate_em', clarified(visit))
+        self.assertIn('documented as performed on the same date', check(visit, 'em.same_day_procedure').detail)
+
+    def test_the_variants_read_performed_under_every_plan_heading(self):
+        for heading in PLAN_HEADINGS:
+            for sentence, code in (
+                    ('Rubber band ligation of an internal hemorrhoid was performed today.', '46221'),
+                    ('Rubber band ligation of an internal hemorrhoid was performed this morning as planned.', '46221'),
+                    ('Two internal hemorrhoids were ligated with rubber bands this afternoon.', '46221')):
+                text = plan_office(sentence, heading)
+                with self.subTest(heading=heading, sentence=sentence):
+                    status, cues = read(text, sentence)
+                    self.assertEqual(status, 'performed', cues)
+                    proposals, _ = run_engine(text, [(code, sentence)])
+                    self.assertTrue(ready(proposals[code]), clarified(proposals[code]))
+
+    def test_a_procedure_reports_impression_and_plan(self):
+        sentence = 'EGD was performed today with biopsies of the antrum.'
+        text = (HEADER + 'Procedure: EGD with biopsy.\nFindings: The gastroscope was advanced to the second part of the '
+                'duodenum. Biopsies were taken from the antrum.\nImpression and plan: ' + sentence + '\n')
+        self.assertEqual(read(text, sentence)[0], 'performed')
+        proposals, _ = run_engine(text, [('43239', sentence)])
+        self.assertTrue(ready(proposals['43239']), clarified(proposals['43239']))
+        sentence = 'Colonoscopy was performed today with cold snare polypectomy of a 5 mm polyp.'
+        self.assertEqual(read(plan_office(sentence), sentence)[0], 'performed')
+
+    def test_short_of_the_release_the_plan_section_still_holds(self):
+        for sentence in ('Rubber band ligation can be performed today if bleeding persists.',
+                         'Rubber band ligation performed today if the patient agrees.',
+                         'Rubber band ligation was performed today if bleeding persisted.',
+                         'Rubber band ligation was possibly performed today.',
+                         'Rubber band ligation was performed today?',
+                         'Rubber band ligation was performed today, pending the pathology.',
+                         'Rubber band ligation was performed, and repeat banding may be done today.',
+                         'Rubber band ligation was performed.',
+                         'Rubber band ligation performed today.',  # the bare participle stays downgraded
+                         'Rubber band ligation was performed; she was seen today.'):  # today in another clause
+            text = plan_office(sentence)
+            with self.subTest(sentence=sentence):
+                status, cues = read(text, sentence)
+                self.assertNotEqual(status, 'performed', cues)
+                proposals, _ = run_engine(text, [('46221', sentence)])
+                self.assertNotEqual(proposals['46221'].status, 'ready')
+
+    def test_another_services_past_tense_does_not_release(self):
+        text = plan_office('Colonoscopy performed today and EGD was performed.')
+        status, cues = read(text, 'Colonoscopy')
+        self.assertEqual(status, 'uncertain', cues)
+
+    def test_a_history_section_is_not_released(self):
+        sentence = 'Rubber band ligation of an internal hemorrhoid was performed today.'
+        text = (OFFICE_HEAD + 'Established patient office visit.\nHistory of present illness: ' + sentence +
+                '\nMedical decision making: moderate.\n')
+        self.assertEqual(read(text, sentence)[0], 'uncertain')
+
+
+class Validation1PlanDefaultTodayTests(unittest.TestCase):
+    """validation:1 (critical). A procedure the Assessment and plan documents as done today with no explicit
+    performance cue ('EGD this morning revealed a Schatzki ring, dilated to 18 mm') was excluded as planned by the
+    plan section's default, and the E/M beside it was approved with no same-day check. A plan section's default may
+    at most hold: a clause that says today is uncertain, never planned."""
+
+    CASES = (('EGD this morning revealed a Schatzki ring, dilated to 18 mm.', '43249', 'gi.egd'),
+             ('EGD today showed esophagitis; biopsies taken.', '43239', 'gi.egd'),
+             ('Colonoscopy today: two polyps removed with cold snare.', '45385', 'gi.colonoscopy'))
+
+    def test_the_claimed_input_and_variants_are_held_with_the_visit(self):
+        for heading in PLAN_HEADINGS[:3]:
+            for sentence, code, slug in self.CASES:
+                text = plan_office(sentence + ' Start omeprazole.', heading)
+                with self.subTest(heading=heading, sentence=sentence):
+                    status, cues = read(text, sentence)
+                    self.assertEqual(status, 'uncertain', cues)
+                    self.assertFalse(any(c.startswith('uncertain: no performance evidence') for c in cues), cues)
+                    self.assertNotIn(family(text, slug), NOT_TODAY)
+                    proposals, _ = run_engine(text, [('99213', TIME), (code, sentence)])
+                    self.assertEqual((proposals[code].bucket, proposals[code].status),
+                                     ('selected', 'needs_clarification'), proposals[code].exclusion_reason)
+                    self.assertEqual(proposals['99213'].status, 'needs_clarification')
+                    self.assertIn('separate_em', clarified(proposals['99213']))
+
+    def test_a_plan_that_does_not_say_today_stays_planned(self):
+        for plan in ('EGD next week.', 'EGD revealed a Schatzki ring.', 'Repeat colonoscopy in 3 years.'):
+            text = plan_office(plan)
+            with self.subTest(plan=plan):
+                self.assertEqual(read(text, plan.split()[0] if plan[0] != 'R' else 'colonoscopy')[0], 'planned')
+                proposals, _ = run_engine(text, [('99213', TIME)])
+                self.assertTrue(ready(proposals['99213']), clarified(proposals['99213']))
+
+    def test_a_hedged_or_discussed_plan_today_does_not_hold_the_visit(self):
+        for plan in ('Possible EGD today if symptoms persist.', 'Discussed colonoscopy today; she will think about it.',
+                     'Colonoscopy? Will decide today after labs.'):
+            text = plan_office(plan)
+            with self.subTest(plan=plan):
+                proposals, _ = run_engine(text, [('99213', TIME)])
+                self.assertTrue(ready(proposals['99213']), clarified(proposals['99213']))
+
+
 if __name__ == '__main__':
     unittest.main()
