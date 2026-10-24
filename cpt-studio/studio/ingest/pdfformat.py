@@ -5,12 +5,17 @@ with AFNumber_Format(1, ...) the stored 14 is shown as "14.0", and with
 AFDate_FormatEx("mm/dd/yyyy") the stored 10/21/26 as "10/21/2026". That is
 display formatting, not a disagreement. Only a script that is exactly one call
 to a standard format function (AFNumber_Format, AFPercent_Format,
-AFDate_FormatEx, AFDate_Format, AFSpecial_Format) with literal arguments is
-applied, and only to a value that parses under it; anything else — custom
-JavaScript, a time format, an unparsable value — is not interpreted, so a
-difference stays flagged. Where Acrobat's own output is ambiguous (rounding
-of a half, the order of a minus sign and a currency symbol, a two-digit
-year's century), every candidate is returned; none changes the quantity.
+AFDate_FormatEx, AFDate_Format, AFTime_FormatEx, AFTime_Format,
+AFSpecial_Format) with literal arguments is applied, and only to a value that
+parses under it; anything else — custom JavaScript, an unparsable value — is
+not interpreted, so a difference stays flagged. Times are rendered as
+util.printd renders them (pdf.js and Acrobat: HH / H 24-hour, hh / h 12-hour,
+MM minutes, ss seconds, tt am / pm) from the value as AFParseTime reads it:
+hours and minutes, seconds optional, after the date; an am / pm marker if one
+is written, else the hour as written. Where Acrobat's own output is ambiguous
+(rounding of a half, the order of a minus sign and a currency symbol, a
+two-digit year's century, the case of am / pm), every candidate is returned;
+none changes the quantity.
 
 Pure functions; importable without Django (the extraction child imports it).
 """
@@ -21,8 +26,8 @@ import datetime
 import re
 from decimal import ROUND_HALF_EVEN, ROUND_HALF_UP, Decimal, InvalidOperation
 
-_CALL = re.compile(r'\s*(AFNumber_Format|AFPercent_Format|AFDate_FormatEx|AFDate_Format|AFSpecial_Format)\s*'
-                   r'\((.*)\)\s*;?\s*\Z', re.S)
+_CALL = re.compile(r'\s*(AFNumber_Format|AFPercent_Format|AFDate_FormatEx|AFDate_Format|AFTime_FormatEx|AFTime_Format|'
+                   r'AFSpecial_Format)\s*\((.*)\)\s*;?\s*\Z', re.S)
 _ARGUMENT = re.compile(r'\s*(?:"((?:[^"\\]|\\.)*)"|\'((?:[^\'\\]|\\.)*)\'|(-?\d+(?:\.\d+)?)|(true|false))\s*'
                        r'(,|\Z)')
 # sepStyle: (group separator, decimal separator)
@@ -33,6 +38,12 @@ DATE_FORMATS = ['m/d', 'm/d/yy', 'mm/dd/yy', 'mm/yy', 'd-mmm', 'd-mmm-yy', 'dd-m
                 'mmmm-yy', 'mmm d, yyyy', 'mmmm d, yyyy', 'm/d/yy h:MM tt', 'm/d/yy HH:MM']
 _DATE_TOKEN = re.compile(r'yyyy|yy|mmmm|mmm|mm|m|dddd|ddd|dd|d|HH|H|hh|h|MM|M|ss|s|tt|t|\\.|.', re.S)
 _TIME_TOKENS = frozenset({'HH', 'H', 'hh', 'h', 'MM', 'M', 'ss', 's', 'tt', 't'})
+# AFTime_Format(index): Acrobat's fixed list (AForm.js; pdf.js has the same).
+TIME_FORMATS = ['HH:MM', 'h:MM tt', 'HH:MM:ss', 'h:MM:ss tt']
+_TIME_FIELDS = {'HH': 'H', 'H': 'H', 'hh': 'H', 'h': 'H', 'MM': 'M', 'M': 'M', 'ss': 's', 's': 's'}
+_DATE_FIELDS = frozenset({'yyyy', 'yy', 'mmmm', 'mmm', 'mm', 'm', 'dd', 'd'})
+_DOTTED_MARKER = re.compile(r'(?<![A-Za-z])([AaPp])\.\s?[Mm]\.')
+_MARKERS = {'am': True, 'a': True, 'pm': False, 'p': False}
 _MONTHS = {name.lower(): number for number, name in enumerate(calendar.month_name) if name}
 _MONTHS.update({name.lower(): number for number, name in enumerate(calendar.month_abbr) if name})
 # AFSpecial_Format(psf): zip code, zip+4, phone number, social security number; 9 stands for a digit.
@@ -60,6 +71,11 @@ def displayed_texts(script: str, value: str) -> set[str]:
         if name == 'AFDate_Format' and len(arguments) == 1 and not isinstance(arguments[0], (str, bool)):
             index = int(arguments[0])
             return date_texts(value, DATE_FORMATS[index]) if 0 <= index < len(DATE_FORMATS) else set()
+        if name == 'AFTime_FormatEx' and len(arguments) == 1 and isinstance(arguments[0], str):
+            return date_texts(value, arguments[0])
+        if name == 'AFTime_Format' and len(arguments) == 1 and not isinstance(arguments[0], (str, bool)):
+            index = int(arguments[0])
+            return date_texts(value, TIME_FORMATS[index]) if 0 <= index < len(TIME_FORMATS) else set()
         if name == 'AFSpecial_Format' and len(arguments) == 1 and not isinstance(arguments[0], (str, bool)):
             return special_texts(value, int(arguments[0]))
     except (TypeError, ValueError, OverflowError, InvalidOperation):
@@ -146,14 +162,56 @@ def grouped(amount: Decimal, decimals: int, separators: int) -> str:
 def date_texts(value: str, form: str) -> set[str]:
     tokens = _DATE_TOKEN.findall(form)
     if any(token in _TIME_TOKENS for token in tokens):
-        return set()  # a time is not compared: the difference stays flagged
+        return time_texts(value, tokens)
     return {render_date(date, tokens) for date in parse_dates(value, tokens)}
+
+
+def time_texts(value: str, tokens: list[str]) -> set[str]:
+    """What a format with a time shows for ``value``: its date part (if the format has one) read as parse_dates
+    reads it, then hours and minutes (seconds optional, else 0) with an optional am / pm marker; nothing when
+    the value has any other word, more than one marker, or a part out of range."""
+    value = _DOTTED_MARKER.sub(lambda match: match.group(1) + 'm', value)
+    words = re.findall(r'[A-Za-z]+', value)
+    markers = [word.lower() for word in words if word.lower() in _MARKERS]
+    if len(markers) > 1 or any(word.lower() not in _MARKERS and word.lower() not in _MONTHS for word in words):
+        return set()
+    numbers = [int(part) for part in re.findall(r'\d+', value)]
+    date_tokens = [token for token in tokens if token in _DATE_FIELDS]
+    fields = list(dict.fromkeys(_TIME_FIELDS[token] for token in tokens if token in _TIME_FIELDS))
+    first_time = next(index for index, token in enumerate(tokens) if token in _TIME_TOKENS)
+    time_first = not any(token in _DATE_FIELDS for token in tokens[:first_time])
+    date_count = len(date_tokens) - sum(1 for word in words if word.lower() in _MONTHS)
+    time_count = len(numbers) - date_count
+    if date_count < 0 or time_count not in (2, 3) or (time_count == 3 and 's' not in fields):
+        return set()
+    clock = numbers[:time_count] if time_first and date_tokens else numbers[date_count:]
+    date_numbers = numbers[time_count:] if time_first and date_tokens else numbers[:date_count]
+    hours, minutes, seconds = clock[0], clock[1], clock[2] if len(clock) == 3 else 0
+    if markers:
+        if not 1 <= hours <= 12:
+            return set()
+        hours = hours % 12 + (0 if _MARKERS[markers[0]] else 12)
+    if hours > 23 or minutes > 59 or seconds > 59:
+        return set()
+    if date_tokens:
+        months = ' '.join(word for word in words if word.lower() in _MONTHS)
+        dates = parse_dates(' '.join([months, *map(str, date_numbers)]), date_tokens)
+        if not dates:
+            return set()
+    else:
+        dates = [datetime.date(2000, 1, 1)]  # no date is shown
+    texts = set()
+    for date in dates:
+        moment = datetime.datetime(date.year, date.month, date.day, hours, minutes, seconds)
+        for upper in (False, True):
+            texts.add(render_date(moment, tokens, upper=upper))
+    return texts
 
 
 def parse_dates(value: str, tokens: list[str]) -> list[datetime.date]:
     """The dates ``value`` may name, read with the field order of the format (a two-digit year in either
     century); none when its parts do not fit that order."""
-    order = [token[0] for token in tokens if token in ('yyyy', 'yy', 'mmmm', 'mmm', 'mm', 'm', 'dd', 'd')]
+    order = [token[0] for token in tokens if token in _DATE_FIELDS]
     named = [_MONTHS[word.lower()] for word in re.findall(r'[A-Za-z]+', value) if word.lower() in _MONTHS]
     numbers = [int(part) for part in re.findall(r'\d+', value)]
     fields: dict[str, int] = {}
@@ -176,9 +234,15 @@ def parse_dates(value: str, tokens: list[str]) -> list[datetime.date]:
     return dates
 
 
-def render_date(date: datetime.date, tokens: list[str]) -> str:
+def render_date(date: datetime.date, tokens: list[str], *, upper: bool = False) -> str:
+    """``date`` (a datetime when the format has a time) as util.printd renders ``tokens``; ``upper`` writes the
+    am / pm marker in capitals."""
     parts = []
+    hours, minutes, seconds = (date.hour, date.minute, date.second) if isinstance(date, datetime.datetime) else (0, 0, 0)
     for token in tokens:
+        if token in _TIME_TOKENS:
+            parts.append(_time_part(token, hours, minutes, seconds, upper))
+            continue
         if token == 'yyyy':
             parts.append(f'{date.year:04d}')
         elif token == 'yy':
@@ -202,6 +266,13 @@ def render_date(date: datetime.date, tokens: list[str]) -> str:
         else:
             parts.append(token[1:] if token.startswith('\\') else token)
     return ''.join(parts)
+
+
+def _time_part(token: str, hours: int, minutes: int, seconds: int, upper: bool) -> str:
+    twelve = 1 + (hours + 11) % 12
+    marker = ('am' if hours < 12 else 'pm')[:2 if token == 'tt' else 1]
+    return {'HH': f'{hours:02d}', 'H': str(hours), 'hh': f'{twelve:02d}', 'h': str(twelve), 'MM': f'{minutes:02d}',
+            'M': str(minutes), 'ss': f'{seconds:02d}', 's': str(seconds)}.get(token, marker.upper() if upper else marker)
 
 
 # --- special formats ------------------------------------------------------------------

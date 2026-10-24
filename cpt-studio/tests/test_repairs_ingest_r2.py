@@ -1336,7 +1336,9 @@ class FieldFormatTests(unittest.TestCase):
                  'a custom format script': ('14', 'Fourteen', 'event.value = "Fourteen";'),
                  'a standard call followed by more script': ('14', '14.0', NUMBER_1 + ' event.value = "41";'),
                  'a date format, a different date': ('10/21/26', '10/22/2026', 'AFDate_FormatEx("mm/dd/yyyy");'),
-                 'a time format': ('10/21/26 14:30', '10/21/2026 14:30', 'AFDate_FormatEx("mm/dd/yyyy HH:MM");')}
+                 # Round 3 ingest:12: a time format explains its own rendering ('10/21/2026 14:30'), not another time.
+                 'a time format, a different time': ('10/21/26 14:30', '10/21/2026 14:45',
+                                                     'AFDate_FormatEx("mm/dd/yyyy HH:MM");')}
         for label, (stored, shown, script) in cases.items():
             with self.subTest(label):
                 result = pdf_extract(formatted_form([('withdrawal', stored, shown, script)]), ocr=None)
