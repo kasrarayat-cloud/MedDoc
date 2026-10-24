@@ -590,3 +590,42 @@ class EmNegativeAboutOtherServicesTests(Case):
             with self.subTest(line=line):
                 proposals, _ = real(V3.format(extra=f'{line}\n'), ('99213', line))
                 self.assertEqual((proposals['99213'].bucket, proposals['99213'].reinstatable), ('excluded', True))
+
+
+# --- validation:8: services.unsupported names an excluded, reinstatable code outside the profiles --------------------
+
+class UnsupportedExcludedTests(Case):
+    """validation:8 (high). services.unsupported skipped a selection outside the GI profiles that its status reading
+    excluded (reinstatable), so it printed "No selected code or detected service falls outside the GI profiles" beside a
+    selected 46221 - and kept printing it after a reviewer reinstated and approved that code. Such a selection is now
+    listed in a third group, never called performed, and the none-line is never printed while one exists."""
+
+    def test_an_excluded_reinstatable_code_outside_the_profiles_is_listed(self):
+        from studio.validation import checks
+        from tests.test_repairs_r3_validation_b import encounter_check
+        for plan, code in (('Plan: Rubber band ligation of the internal hemorrhoids.', '46221'),
+                           ('Plan: Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.', '46221'),
+                           ('Plan: Barium enema next week.', '74270')):
+            with self.subTest(code=code, plan=plan):
+                passage = plan[len('Plan: '):]
+                proposals, result = real(OFFICE.format(line=plan), ('99213', VISIT), (code, passage))
+                self.assertEqual((proposals[code].bucket, proposals[code].reinstatable), ('excluded', True))
+                unsupported = encounter_check(result, 'services.unsupported')
+                self.assertEqual(unsupported.status, 'warn')
+                self.assertNotEqual(unsupported.detail, checks.UNSUPPORTED_NONE)
+                self.assertIn(f'({code})', unsupported.detail)
+                self.assertIn('excluded', unsupported.detail)
+                self.assertNotIn('Performed without a GI profile', unsupported.detail)
+                self.assertIn(code, [c for entry in result.unsupported for c in entry['codes']])
+
+    def test_controls_performed_and_held_wordings_are_unchanged(self):
+        from studio.validation import checks
+        performed = checks.unsupported_check([{'family': 'gi.other', 'label': 'Other GI service', 'status': 'performed',
+                                               'detail': '', 'codes': ['46221']}])
+        self.assertEqual(performed.detail, 'Performed without a GI profile in this release: Other GI service. Review '
+                                           'required.')
+        held = checks.unsupported_check([{'family': 'gi.other', 'label': 'Other GI service', 'status': 'uncertain',
+                                          'detail': '', 'codes': ['46221']}])
+        self.assertEqual(held.detail, 'Selected without a GI profile in this release, not established as performed: '
+                                      'Other GI service (46221). Review required.')
+        self.assertEqual(checks.unsupported_check([]).detail, checks.UNSUPPORTED_NONE)

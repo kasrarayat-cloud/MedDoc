@@ -1028,16 +1028,22 @@ def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Che
 
 
 def unsupported_check(entries: Sequence[dict]) -> Check:
-    """``entries``: services outside the GI profiles, performed (routed or selected) or selected and held ('uncertain':
-    its performance is not established, so it is never called performed and never left unnamed)."""
+    """``entries``: services outside the GI profiles, performed (routed or selected), selected and held ('uncertain':
+    its performance is not established, so it is never called performed and never left unnamed), or selected and
+    excluded by its status reading ('excluded': a reviewer may reinstate it, so it is never left unnamed either; round 4
+    validation:8)."""
     label = 'Services outside the GI profiles'
     if not entries:
         return Check('services.unsupported', label, 'not_verified', UNSUPPORTED_NONE, COVERAGE_SOURCE)
-    performed = [entry['label'] for entry in entries if entry['status'] != 'uncertain']
+    performed = [entry['label'] for entry in entries if entry['status'] not in ('uncertain', 'excluded')]
     held = [f'{entry["label"]} ({_join(entry["codes"])})' for entry in entries if entry['status'] == 'uncertain']
+    excluded = [f'{entry["label"]} ({_join(entry["codes"])})' for entry in entries if entry['status'] == 'excluded']
     parts = [f'Performed without a GI profile in this release: {_join(performed)}.'] if performed else []
     if held:
         parts.append(f'Selected without a GI profile in this release, not established as performed: {_join(held)}.')
+    if excluded:
+        parts.append(f'Selected without a GI profile in this release, excluded by its documented status (a reviewer '
+                     f'may reinstate it): {_join(excluded)}.')
     return Check('services.unsupported', label, 'warn', f'{" ".join(parts)} Review required.', COVERAGE_SOURCE)
 
 

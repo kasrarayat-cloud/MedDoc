@@ -620,9 +620,12 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
 
 def _unsupported(routing: RoutingResult, selections: Sequence[_Selection]) -> tuple[dict, ...]:
     """Services outside the GI profiles: routed or selected ones documented as done, then selected ones held for
-    clarification (status 'uncertain'), so a held code is neither called performed nor reported as absent."""
+    clarification (status 'uncertain'), then selected ones their status reading excluded, which a reviewer may
+    reinstate (status 'excluded', round 4 validation:8), so a held or excluded code is neither called performed nor
+    reported as absent."""
     entries: dict[str, dict] = {}
     held: dict[str, dict] = {}
+    excluded: dict[str, dict] = {}
     for finding in routing.findings:
         profile = PROFILES.get(finding.family)
         done = _done_today(finding)
@@ -636,9 +639,9 @@ def _unsupported(routing: RoutingResult, selections: Sequence[_Selection]) -> tu
         elif s.evaluation.outcome.state == 'uncertain':
             entry = held.setdefault(s.family, _unsupported_entry(s.family, 'uncertain'))
         else:
-            continue
+            entry = excluded.setdefault(s.family, _unsupported_entry(s.family, 'excluded'))
         entry['codes'].append(s.code)
-    return tuple(entries.values()) + tuple(held.values())
+    return tuple(entries.values()) + tuple(held.values()) + tuple(excluded.values())
 
 
 def _unsupported_entry(family: str, status: str) -> dict:
