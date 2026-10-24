@@ -790,6 +790,46 @@ class OffPageTextTests(unittest.TestCase):
                 self.assertEqual((result.status, result.messages), ('ok', ()))
                 self.assertIn('cold snare polypectomy', result.text)
 
+    # Round 3 evidence:1 — every tracked text-state parameter is pinned: ignoring one of them would read text a
+    # viewer does not show, or drop text it does.
+    TRACKED_LEAD = ('Procedure: Colonoscopy with cold snare polypectomy of the 7 mm sigmoid polyp and cold '
+                    'forceps biopsy of the ascending colon')
+    TRACKED_TAIL = ' - cancelled before sedation; the patient will reschedule.'
+
+    def test_condensed_and_tightened_lines_keep_their_visible_tail(self):
+        lead, tail = self.TRACKED_LEAD, self.TRACKED_TAIL
+        natural = stringWidth(lead, 'Helvetica', 11)
+        cases = {'50 Tz': ('50 Tz 60 690 Td', natural / 2),
+                 '-1.5 Tc': ('-1.5 Tc 60 690 Td', natural - 1.5 * len(lead)),
+                 '-6 Tw': ('-6 Tw 60 690 Td', natural - 6 * lead.count(' '))}
+        for label, (state, measured) in cases.items():
+            with self.subTest(label):
+                # Measured as a viewer measures it the tail starts on the page; at the natural width, past its edge.
+                self.assertLess(60 + measured, 612 - 11)
+                self.assertGreater(60 + natural, 612 + 11)
+                result = pdf_extract(placed_pdf(f'BT /F1 11 Tf {state} ({esc(lead)}) Tj ({esc(tail)}) Tj ET'),
+                                     ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertIn('cancelled before sedation', result.text)
+
+    def test_text_moved_below_the_page_by_the_leading_is_excluded(self):
+        cases = {'T*': f'BT /F1 12 Tf 14 TL 72 40 Td T* T* T* T* T* ({esc(UNSHOWN)}) Tj ET',
+                 "'": f"BT /F1 12 Tf 14 TL 72 40 Td T* T* T* T* ({esc(UNSHOWN)}) ' ET",
+                 '"': f'BT /F1 12 Tf 14 TL 72 40 Td T* T* T* T* 0 0 ({esc(UNSHOWN)}) " ET',
+                 'TD sets the leading': f'BT /F1 12 Tf 72 54 Td 0 -14 TD T* T* T* T* T* ({esc(UNSHOWN)}) Tj ET',
+                 'a rise below the page': f'BT /F1 12 Tf -60 Ts 72 30 Td ({esc(UNSHOWN)}) Tj ET'}
+        for label, content in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(placed_pdf(content), ocr=None)
+                self.assertEqual((result.status, result.messages, result.text.strip()), ('ok', (OFF_PAGE,), SHOWN_LINE))
+        # The controls: the same leading and rise leave the sentence on the page.
+        for content in (f'BT /F1 12 Tf 14 TL 72 140 Td T* T* T* T* T* ({esc(UNSHOWN)}) Tj ET',
+                        f'BT /F1 12 Tf 60 Ts 72 -30 Td ({esc(UNSHOWN)}) Tj ET'):
+            with self.subTest(content[:40]):
+                result = pdf_extract(placed_pdf(content), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertIn('cold snare polypectomy', result.text)
+
     def test_text_in_a_form_is_judged_where_the_form_is_placed(self):
         # In the form's own space the sentence lies far left of x=0; the form is placed so that it shows.
         form = stream(f'BT /F1 12 Tf -1000 10 Td ({esc(UNSHOWN)}) Tj ET',
@@ -960,6 +1000,26 @@ class AnnotationImageTests(unittest.TestCase):
         result = pdf_extract(serialise_again(data), ocr=None)
         self.assertEqual((result.status, result.messages), ('ok', (LARGE_IMAGE, DRAWN)))
 
+    def test_cut_scan_painted_by_an_annotation_is_damaged_on_an_ocr_page(self):
+        # Round 3 evidence:2 — an annotation's images are integrity-checked like the page's own on an OCR page.
+        full = image_object()
+        data = zlib.compress(b'\xff' * (1200 * 1500))
+        cut = data[:len(data) * 6 // 10]
+        short = full.replace(b'/Length %d >>' % len(data), b'/Length %d >>' % len(cut)).replace(data, cut)
+        self.assertNotEqual(short, full)
+        for label, annotation in (('push-button image field', IMAGE_FIELD), ('square', '/Subtype /Square'),
+                                  ('stamp', '/Subtype /Stamp')):
+            with self.subTest(label):
+                intact = annotated_image_pdf(annotation)
+                damaged = patched(intact, [(full, short)])
+                with FakeOcr() as fake:
+                    whole = pdf_extract(intact, ocr=fake.tools)
+                    read = pdf_extract(damaged, ocr=fake.tools)
+                self.assertEqual((whole.status, whole.method, whole.ocr_pages), ('ok', 'pdf-ocr', (1,)))
+                self.assertNotIn(DAMAGED_PAGE.format(n=1), whole.messages)
+                self.assertEqual((read.status, read.method, read.ocr_pages), ('partial', 'pdf-ocr', (1,)))
+                self.assertIn(DAMAGED_PAGE.format(n=1), read.messages)
+
     def test_hidden_annotation_image_is_not_counted(self):
         result = pdf_extract(annotated_image_pdf('/Subtype /Square').replace(b'/F 4 /P 3 0 R', b'/F 2 /P 3 0 R'),
                              ocr=None)
@@ -991,6 +1051,16 @@ class PartialPageInsertTests(unittest.TestCase):
             with self.subTest(label):
                 result = pdf_extract(insert_pdf(pixels, placed), ocr=None)
                 self.assertEqual((result.status, result.messages), ('ok', (LARGE_IMAGE,)))
+                self.assertEqual(result.text.strip(), '\n'.join(INSERT_HEADER))
+
+    def test_the_note_starts_at_a_fifth_of_the_page(self):
+        # Round 3 evidence:5 — dense 150 dpi inserts under one megapixel just either side of 20%, and one at 30%.
+        for label, pixels, placed, expected in (('20.12% of the page', (1275, 332), (0, 300, 612, 159.36), (LARGE_IMAGE,)),
+                                                ('19.88% of the page', (1275, 328), (0, 300, 612, 157.44), ()),
+                                                ('30.12% of the page', (1275, 497), (0, 300, 612, 238.56), (LARGE_IMAGE,))):
+            with self.subTest(label):
+                result = pdf_extract(insert_pdf(pixels, placed), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', expected))
                 self.assertEqual(result.text.strip(), '\n'.join(INSERT_HEADER))
 
 
