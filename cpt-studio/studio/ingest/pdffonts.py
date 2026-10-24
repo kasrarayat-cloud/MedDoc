@@ -113,7 +113,9 @@ def glyph_for(code: int, shown: str | None, table: dict[int, str]) -> str:
 
 def mapped_simple_font(font: DictionaryObject) -> DictionaryObject | None:
     """A copy of a simple symbol font whose ToUnicode maps every code to the character its glyph shows, with
-    the original's width model; None when ``font`` is not one, or cannot be read."""
+    the original's width model; None when ``font`` is not one, or cannot be read. A symbol font whose copy cannot
+    be built is replaced by one that names no character for any glyph, so its glyphs are counted, never read as
+    the letters that encode them."""
     table = symbol_glyphs(font)
     if table is None or resolved(font.get('/Subtype')) not in SIMPLE_FONTS:
         return None
@@ -121,20 +123,36 @@ def mapped_simple_font(font: DictionaryObject) -> DictionaryObject | None:
         original = Font.from_font_resource(font)
     except Exception:  # a font pypdf cannot read: its text is extracted (or not) as before
         return None
-    encoding = original.encoding if isinstance(original.encoding, dict) else {}
-    own_map = original.character_map if '/ToUnicode' in font else {}
-    glyphs = {code: glyph_for(code, own_map.get(encoding.get(code, chr(code))), table) for code in range(256)}
-    copy = DictionaryObject({NameObject(key): font.raw_get(key) for key in font
-                             if key not in ('/ToUnicode', '/FirstChar', '/LastChar', '/Widths', '/FontDescriptor')})
+    try:
+        encoding = original.encoding if isinstance(original.encoding, dict) else {}
+        own_map = original.character_map if '/ToUnicode' in font else {}
+        glyphs = {code: glyph_for(code, own_map.get(encoding.get(code, chr(code))), table) for code in range(256)}
+        copy = _with_to_unicode(font, glyphs, ('/ToUnicode', '/FirstChar', '/LastChar', '/Widths', '/FontDescriptor'))
+        _copy_widths(original, font, copy)
+        return copy
+    except (MemoryError, RecursionError):
+        raise
+    except Exception:  # a malformed font: none of its glyphs is read
+        try:
+            return _with_to_unicode(font, {code: ' ' if code == 0x20 else UNMAPPED for code in range(256)},
+                                    ('/ToUnicode',))
+        except Exception:
+            return None
+
+
+def _with_to_unicode(font: DictionaryObject, glyphs: dict[int, str], dropped: tuple) -> DictionaryObject:
+    copy = DictionaryObject({NameObject(key): font.raw_get(key) for key in font if key not in dropped})
     stream = DecodedStreamObject()
     stream.set_data(_to_unicode(glyphs).encode('ascii'))
     copy[NameObject('/ToUnicode')] = stream
-    _copy_widths(original, font, copy)
     return copy
 
 
 def _to_unicode(glyphs: dict[int, str]) -> str:
-    entries = [f'<{code:02X}> <{text.encode("utf-16-be").hex().upper()}>' for code, text in sorted(glyphs.items())]
+    # 'surrogatepass': a lone surrogate the font's own ToUnicode gives is carried as it is; pypdf decodes it the
+    # same way, and the page reader replaces it and names the page, as for any text font.
+    entries = [f'<{code:02X}> <{text.encode("utf-16-be", "surrogatepass").hex().upper()}>'
+               for code, text in sorted(glyphs.items())]
     blocks = [entries[start:start + 100] for start in range(0, len(entries), 100)]
     return CMAP_HEADER + ''.join(f'{len(block)} beginbfchar\n' + '\n'.join(block) + '\nendbfchar\n'
                                  for block in blocks) + CMAP_FOOTER

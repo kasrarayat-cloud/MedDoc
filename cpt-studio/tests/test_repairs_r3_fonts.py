@@ -165,5 +165,75 @@ class CompositeLatinEchoTests(unittest.TestCase):
         self.assertIsNone(composite_glyph('¨', frozenset(), symbols.SYMBOL_FONTS['wingdings']))  # not its map's
 
 
+# --- ingest:15 — one malformed ToUnicode entry never fails the document ----------------------------------
+
+INVALID_TEXT = 'Page 1 contains characters the PDF does not encode as valid text; they are shown as �.'
+
+
+def raw_cmap(entries) -> bytes:
+    """A ToUnicode CMap from (code hex, destination hex) pairs written as given (a lone surrogate included)."""
+    body = '\n'.join(f'<{code}> <{dest}>' for code, dest in entries)
+    return stream('/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry '
+                  '(Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /Synthetic-UCS def\n/CMapType 2 def\n'
+                  f'1 begincodespacerange\n<00> <FF>\nendcodespacerange\n{len(entries)} beginbfchar\n{body}\n'
+                  'endbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n')
+
+
+def surrogate_font(dest: str = 'D83D') -> tuple[str, dict]:
+    """Word's Wingdings shape, whose ToUnicode also maps the unused code 0x4A to a lone surrogate."""
+    return (f'<< /Type /Font /Subtype /TrueType /BaseFont /AAAAAA+Wingdings-Regular {WIDTHS} /FontDescriptor 8 0 R '
+            '/ToUnicode 7 0 R >>', {8: SYMBOL_DESCRIPTOR, 7: raw_cmap([('A8', 'F0A8'), ('4A', dest)])})
+
+
+class MalformedSymbolCmapTests(unittest.TestCase):
+    """ingest:15 — a lone surrogate in a symbol font's ToUnicode is read as a text font's would be."""
+
+    def test_lone_surrogate_for_an_unused_code(self):
+        for dest in ('D83D', 'DE00'):
+            with self.subTest(dest):
+                font, extra = surrogate_font(dest)
+                result = pdf_extract(font_pdf(font, box_line('A8'), extra=extra), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy'), result.text)
+                self.assertEqual(reading(result.text, 'Biopsy'), 'negated')
+
+    def test_a_font_only_listed_or_drawn_on_a_later_page_does_not_fail_the_others(self):
+        font, extra = surrogate_font()
+        listed = pdf_extract(font_pdf(font, [], extra=extra), ocr=None)
+        self.assertEqual((listed.status, listed.messages), ('ok', ()))
+        self.assertTrue(listed.text.endswith('Interventions:'), listed.text)
+        objects = {1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R 11 0 R] /Count 2 >>'}
+        objects.update({3: (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R '
+                            b'>> >> /Contents 5 0 R >>'), 4: b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+                        5: stream('BT /F1 11 Tf 72 700 Td (Procedure: Colonoscopy to the cecum.) Tj ET'),
+                        6: font.encode(), 7: extra[7], 8: extra[8],
+                        11: (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R '
+                             b'/F2 6 0 R >> >> /Contents 12 0 R >>'),
+                        12: stream('BT /F1 11 Tf 72 700 Td (Interventions:) Tj ET\n'
+                                   'BT /F2 11 Tf 72 680 Td <A8> Tj /F1 11 Tf ( Biopsy) Tj ET')})
+        result = pdf_extract(serialise(objects), ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertIn('Procedure: Colonoscopy to the cecum.', result.text)
+        self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy'), result.text)
+
+    def test_a_drawn_lone_surrogate_is_replaced_and_named(self):
+        font, extra = surrogate_font()
+        result = pdf_extract(font_pdf(font, box_line('A8') + [(600, '4A', ' Mood')], extra=extra), ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', (INVALID_TEXT,)))
+        self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy\n� Mood'), result.text)
+
+    def test_a_symbol_font_that_cannot_be_copied_is_counted_never_read_as_letters(self):
+        from unittest import mock
+
+        from studio.ingest import pdffonts
+        from tests.test_repairs_ingest_r2 import in_process
+        font, extra = wingdings_font(None)  # read as its own encoding, code 0xA8 would show '¤'
+        with mock.patch.object(pdffonts, '_copy_widths', side_effect=ValueError('synthetic failure')):
+            result = in_process(font_pdf(font, box_line('A8'), extra=extra))
+        self.assertNotIn('¤', result.text)
+        self.assertEqual((result.status, result.messages), ('ok', (undecodable_note(1),)))
+        self.assertTrue(result.text.endswith('Interventions:\n Biopsy'), result.text)
+
+
 if __name__ == '__main__':
     unittest.main()
