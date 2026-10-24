@@ -163,3 +163,58 @@ class R3IntendedExtentLabelTests(unittest.TestCase):
                                       ['45385']))
         text = HEADER + 'Procedure: Flexible sigmoidoscopy\nFindings: Depth of insertion: 30 cm.\n'
         self.assertEqual(fact_value(text, 'gi.flex_sig', 'extent'), '30 cm')
+
+
+# --- routing:14 -----------------------------------------------------------------------------------------------
+
+def colon_findings(sentence):
+    return HEADER + f'Procedure: Colonoscopy\nFindings: {sentence}\n'
+
+
+class R14ActNeededAfterADeniedFindingTests(unittest.TestCase):
+    """routing:14 - a passage that states the act but denies the finding a further act would have needed ("...
+    and no polyps were found to remove") is held, as it was at 57b4b3747: the denial is incidental to the stated
+    act only when no such act follows it (status:12's readings stay performed)."""
+
+    HELD = ('The colonoscope was advanced to the cecum and no polyps were found to remove.',
+            'The colonoscope was advanced to the cecum; there were no polyps to remove.',
+            'The colonoscope was advanced to the cecum and no polyps were identified for removal.',
+            'The colonoscope was advanced to the cecum and no polyps were seen that required removal.',
+            'The colonoscope was advanced to the cecum and no lesions were found to sample.',
+            'The colonoscope was advanced to the cecum and no lesions were seen for endoscopic resection.')
+
+    def test_the_claimed_input(self):
+        sentence = self.HELD[0]
+        text = colon_findings(sentence)
+        status, cues = read(text, sentence)
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+        proposals, _ = run_engine(text, [('45385', sentence)])
+        self.assertTrue(held(proposals['45385']), proposals['45385'].status)
+        self.assertIn('performed_status', [c.fact for c in proposals['45385'].clarifications])
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')  # the stated act still reaches it
+
+    def test_the_variants(self):
+        for sentence in self.HELD[1:]:
+            text = colon_findings(sentence)
+            with self.subTest(sentence=sentence):
+                self.assertEqual(read(text, sentence)[0], 'uncertain')
+                self.assertTrue(held(run_engine(text, [('45385', sentence)])[0]['45385']))
+
+    def test_a_denied_finding_beside_the_stated_act_still_reads_performed(self):
+        for sentence in ('The colonoscope was advanced to the cecum and no polyps were seen.',
+                         'The colonoscope was advanced to the cecum and no polyps were seen on retroflexion in the rectum.',
+                         'The colonoscope was advanced to the cecum and no polyps were seen despite an adequate preparation.',
+                         'The colonoscope was advanced to the cecum and no polyps were seen throughout the colon.',
+                         'The colonoscope was advanced to the terminal ileum without looping.',
+                         'The colonoscope was advanced to the cecum without difficulty and no polyps were seen.',
+                         'The colonoscope was advanced to the cecum and no polyps were seen, and the scope was withdrawn.'):
+            text = colon_findings(sentence)
+            with self.subTest(sentence=sentence):
+                status, cues = read(text, sentence)
+                self.assertEqual(status, 'performed', cues)
+                self.assertTrue(ready(run_engine(text, [('45378', sentence)])[0]['45378']))
+        sentence = 'The endoscope was advanced to the second part of the duodenum and no ulcers were seen.'
+        text = HEADER + f'Procedure: EGD\nFindings: {sentence}\n'
+        self.assertEqual(read(text, sentence)[0], 'performed')
+        self.assertTrue(ready(run_engine(text, [('43235', sentence)])[0]['43235']))

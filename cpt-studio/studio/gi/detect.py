@@ -473,13 +473,27 @@ def _unexplained(an: Analysis, clause: tuple[int, int], cs: int, ce: int, token:
     # Inside a passage that names a service or an intervention, or states an act ("The colonoscope was
     # advanced to the cecum and no polyps were seen"), a denied finding or other act is incidental to it
     # ("Biopsies were taken where no ulcers were seen"); inside a passage that does neither, it is what
-    # the passage says ("No polyps were seen."). The act's cue must lie outside the denial itself.
-    named = bool(an.services_in(*target) or an.interventions_in(*target)
-                 or any(c.status == 'performed' and not any(_overlaps(c.start, c.end, *w) for w in outside_only)
-                        for c in an.cues_in(*target)))
-    outside = [w for w in outside_only if named or not _overlaps(*w, *target)]
+    # the passage says ("No polyps were seen."). The act's cue must lie outside the denial itself. A passage
+    # that only states an act keeps a denial that an act it would have needed follows ("... and no polyps were
+    # found to remove"): it says that act was not needed, so the negation stays unresolved (_NEEDED_ACT_AFTER).
+    named = bool(an.services_in(*target) or an.interventions_in(*target))
+    stated = not named and any(c.status == 'performed' and not any(_overlaps(c.start, c.end, *w) for w in outside_only)
+                               for c in an.cues_in(*target))
+    outside = [w for w in outside_only
+               if named or (stated and not _NEEDED_ACT_AFTER.match(an.text, w[1], ce)) or not _overlaps(*w, *target)]
     outside += [w for _, w in _memberless_negations(an, cs, ce) if not _overlaps(*w, *target)]
     return not _covered(token, outside) and not _anchored_explains(an, cs, ce, token)
+
+
+# An act a denied finding would have needed, within five words after the denial: "no polyps were found to remove",
+# "there were no polyps to remove", "no polyps were identified for removal", "no polyps were seen that required
+# removal", "no lesions were seen for endoscopic resection". Only acts a code is billed for (removal, sampling,
+# treatment ...), never the procedure's own steps ("on retroflexion", "despite an adequate preparation").
+_NEEDED_ACT_AFTER = re.compile(r"\s+(?:[\w/'-]+\s+){0,4}?(?:polypectom\w*|biops\w*|snar\w*|forceps|remov\w*|resect\w*|"
+                               r'excis\w*|sampl\w*|dilat\w*|inject\w*|clip\w*|tattoo\w*|cauter\w*|coagulat\w*|ablat\w*|'
+                               r'ligat\w*|band(?:s|ed|ing)?|treat\w*|therap\w*|retriev\w*|extract\w*|aspirat\w*|stent\w*|'
+                               r'brush\w*|EMR|APC|FNA|FNB|hemostasis|interventions?|sphincterotom\w*|papillotom\w*)\b',
+                               re.A | re.I)
 
 
 DOUBT_PREFIX = 'uncertain: unresolved negation'
