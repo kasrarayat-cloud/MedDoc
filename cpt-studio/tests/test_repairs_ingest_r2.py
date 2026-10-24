@@ -507,12 +507,13 @@ class PdfFormCheckboxPlacementTests(unittest.TestCase):
                 self.assertTrue(result.text.endswith('[PDF form fields on page 1]\nCheck Box1: not checked'),
                                 result.text)
 
-    def test_no_glyph_on_a_row_holding_another_button(self):
+    def test_boxes_sharing_a_row(self):
+        """Round 3 ingest:1 widened this: boxes on one row each write their glyph before their own label; a row
+        holding a button that cannot be tied (here a radio button with no option word beside it) gets none."""
         rows = [('Check Box1', 'Biopsy', False, (72, 618, 84, 630), (90, 620, 'Biopsy')),
                 ('Check Box2', 'Cold snare', True, (200, 618, 212, 630), (218, 620, 'Cold snare'))]
         result = pdf_extract(box_form(rows), ocr=None)
-        self.assertNotIn('☐', result.text)
-        self.assertNotIn('☒', result.text)
+        self.assertIn('Interventions:\n☐ Biopsy ☒ Cold snare\n', result.text)
         self.assertTrue(result.text.endswith('Check Box1: not checked\nCheck Box2: checked'), result.text)
         radio = pdf_extract(box_form(rows[:1], radio=[('Extent', (200, 618, 212, 630), True)]), ocr=None)
         self.assertNotIn('☐', radio.text)

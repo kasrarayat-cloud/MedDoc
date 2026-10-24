@@ -9,10 +9,18 @@ where that can be done exactly, and accounts for the rest:
   through ``/Parent``): a text field as its text, a choice field as the option
   shown, a check box as checked or not checked, a radio group as the option
   selected: with /Opt, the entry of the selected widget, by its place in the
-  field's /Kids (PDF 32000-1 Table 227), else the state's name. Each
-  displayed check box's rectangle and state is kept, so that its glyph can be
-  written beside its label in the page text (pdf.py). Push buttons and fields without a value contribute the text their
+  field's /Kids (PDF 32000-1 Table 227), else the state's name ('no option
+  selected' when none is). A check-box field with /Opt, or whose widgets carry
+  more than one distinct on-state (a yes/no pair of boxes), is a set of options
+  and is read like a radio group. Each displayed button's rectangle, state and
+  option word is kept, so that its glyph can be written beside its label or
+  option word in the page text (pdf.py), as is the rectangle of a FreeText or
+  stamp annotation that shows only a mark (X, ✓, ✔), which checks a printed box
+  it covers. Push buttons and fields without a value contribute the text their
   appearance draws. Password fields are not read.
+- The labelled block keeps one line per entry: blank lines inside an entry (a
+  multi-line field value, FreeText text) are dropped, so the only blank line
+  after a page's block is the page separator.
 - A text or combo-box field whose appearance draws text that differs from its
   stored value is named, because viewers differ in which one they show. An
   appearance that draws no text, or whose own /OC group is off, differs from
@@ -54,7 +62,7 @@ from lxml import etree
 from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
 
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
-                         page_box, raw_entry, resolved, visible_form)
+                         object_key, page_box, raw_entry, resolved, visible_form)
 from .pdfformat import displayed_texts
 from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
@@ -69,6 +77,18 @@ NOT_DRAWN = frozenset({'/Popup', '/Link'})  # a popup shows its parent's note; a
 DRAWINGS = frozenset({'/Ink', '/Stamp'})
 _WHITESPACE = re.compile(r'\s+')
 _TAGS = re.compile(r'<[^>]*>')
+MARKS = frozenset({'X', 'x', '\u2713', '\u2714'})  # what a typed or stamped mark over a printed box says
+MARKED = frozenset({'/FreeText', '/Stamp'})
+
+
+@dataclass(frozen=True)
+class Button:
+    """A displayed check box or radio button, as pdf.py places its glyph."""
+    rect: tuple  # (x0, y0, x1, y1)
+    on: bool
+    radio: bool  # a radio button: its glyph is written only before its own option word
+    option: str  # its option word (a radio group or a set of options); '' for a single check box
+    group: int  # its field: the buttons of one group are placed together or not at all
 
 
 @dataclass
@@ -84,6 +104,8 @@ class PageAnnotations:
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
     boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
+    widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
+    marks: list = field(default_factory=list)  # rect of each displayed FreeText or stamp that shows only a mark
     placements: list = field(default_factory=list)  # (CTM, pixels) of images displayed appearances paint, page space
     images: list = field(default_factory=list)  # the image XObjects displayed appearances paint
 
@@ -91,10 +113,16 @@ class PageAnnotations:
         """The labelled text added after the page's own text ('' when there is none)."""
         parts = []
         if self.fields:
-            parts.append(f'[PDF form fields on page {page}]\n' + '\n'.join(self.fields))
+            parts.append(f'[PDF form fields on page {page}]\n' + _entries(self.fields))
         if self.texts:
-            parts.append(f'[PDF annotation text on page {page}]\n' + '\n'.join(self.texts))
+            parts.append(f'[PDF annotation text on page {page}]\n' + _entries(self.texts))
         return canonicalize('\n'.join(parts))
+
+
+def _entries(entries: list[str]) -> str:
+    """The entries one after another, each without its blank lines: a blank line would end the block early."""
+    lines = (line for entry in entries for line in canonicalize(entry).split('\n'))
+    return '\n'.join(line for line in lines if line.strip())
 
 
 def read_annotations(page, optional: OptionalContent, acroform) -> PageAnnotations:
@@ -133,6 +161,7 @@ class _Reader:
         self.found = found
         self.lines: dict[int, int] = {}  # id(terminal field) -> index in found.fields
         self.painted = None  # the appearance read for the current annotation: (stream, VisibleForm)
+        self.groups: dict = {}  # id(terminal field) -> (options set, {kid key: place in /Kids}), read once per field
 
     def read(self, annotation) -> None:
         subtype = resolved(annotation.get('/Subtype'))
@@ -140,12 +169,17 @@ class _Reader:
             return
         shown = self.displayed(annotation)
         self.painted = None
+        written = len(self.found.texts)
         if subtype == '/Widget':
             self.widget(annotation, shown)
         elif subtype == '/FreeText':
             self.free_text(annotation, shown)
         else:
             self.other(annotation, subtype, shown)
+        if subtype in MARKED and len(self.found.texts) == written + 1 and self.found.texts[-1].strip() in MARKS:
+            rect = rect_of(annotation)
+            if rect is not None:
+                self.found.marks.append(rect)
         if shown and self.painted is not None and self.painted[1].placements:
             self.add_images(annotation, *self.painted)
 
@@ -172,15 +206,18 @@ class _Reader:
         if info.kind == '/Tx' and info.flags & FIELD_PASSWORD:
             return
         if info.kind == '/Btn' and not info.flags & FIELD_PUSH_BUTTON:
-            line, on = button_line(widget, info)
+            options, places = self.group(info)
+            line, on, option = button_line(widget, info, options, places)
             if not shown:
                 self.found.hidden += on
                 return
             rect = rect_of(widget)
             if rect is not None:
+                radio = bool(info.flags & FIELD_RADIO)
                 self.found.buttons.append(rect)
-                if not info.flags & FIELD_RADIO:
+                if not radio:
                     self.found.boxes.append((rect, on))
+                self.found.widgets.append(Button(rect, on, radio, option, id(info.node)))
             self.add_line(info, line, replace=on)
             return
         value = choice_text(info) if info.kind == '/Ch' else value_text(info.value) if info.kind == '/Tx' else ''
@@ -210,6 +247,19 @@ class _Reader:
             self.found.hidden += 1
             return
         self.add_line(info, line, replace=False)
+
+    def group(self, info: _Field) -> tuple[bool, dict]:
+        """(whether the field is a set of options, {kid key: its first place in /Kids}), read once per field: a
+        radio group, a check-box field with /Opt, or one whose widgets carry more than one distinct on-state."""
+        key = id(info.node)
+        if key not in self.groups:
+            places, states = {}, set()
+            for place, kid in enumerate(as_list(info.node.get('/Kids'))):
+                places.setdefault(object_key(kid), place)
+                states.update(on_states(resolved(kid)))
+            options = bool(info.flags & FIELD_RADIO) or bool(info.options) or len(states) > 1
+            self.groups[key] = (options, places)
+        return self.groups[key]
 
     def add_line(self, info: _Field, line: str, *, replace: bool) -> None:
         """One line per field on a page; a later widget of the field that is on replaces the line."""
@@ -328,8 +378,10 @@ def field_of(widget) -> _Field:
     terminal = next((item for item in chain if '/T' in item), widget)
     names = [text_of(item.get('/T')) for item in reversed(chain) if '/T' in item]
     label = text_of(terminal.get('/TU')) or '.'.join(name for name in names if name) or 'form field'
+    options = inherited('/Opt')  # an array is used as it is: never copied per widget
     return _Field(node=terminal, kind=inherited('/FT'), value=inherited('/V'), flags=int(number(inherited('/Ff'))),
-                  options=as_list(inherited('/Opt')), label=one_line(label), script=format_script(chain))
+                  options=options if isinstance(options, (list, ArrayObject)) else as_list(options),
+                  label=one_line(label), script=format_script(chain))
 
 
 def format_script(chain) -> str:
@@ -348,28 +400,35 @@ def format_script(chain) -> str:
     return ''
 
 
-def button_line(widget, info: _Field) -> tuple[str, bool]:
-    """('label: checked' | 'label: not checked', on) for a check box; the selected option for a radio group."""
-    normal = resolved(resolved(widget.get('/AP')).get('/N')) \
-        if isinstance(resolved(widget.get('/AP')), DictionaryObject) else None
-    states = [key for key in normal if key != '/Off'] if isinstance(normal, DictionaryObject) else []
+def on_states(widget) -> list:
+    """The on-state names of a widget's normal appearance (every state but /Off)."""
+    appearances = resolved(widget.get('/AP')) if isinstance(widget, DictionaryObject) else None
+    normal = resolved(appearances.get('/N')) if isinstance(appearances, DictionaryObject) else None
+    return [key for key in normal if key != '/Off'] if isinstance(normal, DictionaryObject) else []
+
+
+def button_line(widget, info: _Field, options: bool, places: dict) -> tuple[str, bool, str]:
+    """('label: checked' | 'label: not checked', on, '') for a check box; for a radio group or a set of options
+    ('label: <option>' | 'label: no option selected', on, the widget's own option word)."""
+    states = on_states(widget)
     state = resolved(widget.get('/AS'))
     if state is None and isinstance(info.value, str) and (info.value in states or not states):
         state = info.value  # no appearance state: viewers draw the box from the field's value
     on = state is not None and state != '/Off' and (not states or state in states)
-    if info.flags & FIELD_RADIO:
-        option = text_of(state).removeprefix('/') if on else ''
-        if on and info.options:
-            option = listed_option(widget, info) or option
-        return (f'{info.label}: {option}' if option else f'{info.label}: no option selected'), on
-    return (f'{info.label}: checked' if on else f'{info.label}: not checked'), on
+    if options:
+        own = text_of(state if on else (states[0] if states else '')).removeprefix('/')
+        if info.options:
+            own = listed_option(widget, info, places) or own
+        option = own if on else ''
+        return (f'{info.label}: {option}' if option else f'{info.label}: no option selected'), on, own
+    return (f'{info.label}: checked' if on else f'{info.label}: not checked'), on, ''
 
 
-def listed_option(widget, info: _Field) -> str:
-    """The /Opt entry of ``widget``: one per widget, in the order of the field's /Kids (PDF 32000-1 Table 227).
-    Read by position, never from a decimal state name, whose digits may be the option itself."""
-    kids = as_list(info.node.get('/Kids'))
-    index = next((place for place, kid in enumerate(kids) if resolved(kid) is widget), None)
+def listed_option(widget, info: _Field, places: dict) -> str:
+    """The /Opt entry of ``widget``: one per widget, in the order of the field's /Kids (PDF 32000-1 Table 227),
+    found through the field's place map (read once per field). Read by position, never from a decimal state name,
+    whose digits may be the option itself."""
+    index = places.get(object_key(widget))
     if index is None or index >= len(info.options):
         return ''
     entry = resolved(info.options[index])

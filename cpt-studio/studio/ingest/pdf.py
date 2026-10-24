@@ -25,10 +25,16 @@ What a page shows is read, or the result says what was not read:
   count like images in the page's content.
 - **Forms and annotations.** Displayed form-field values and annotation text
   are read and added after the page's text under a labelled heading. A
-  displayed check box is also written as ☐ / ☒ at the start of the page-text
-  line it sits beside, when it can be tied to exactly one: that line's
-  baseline lies within the box's height and its text starts just right of
-  the box, with no other button on the row (the shared box contract). Notes,
+  displayed check box over a printed box (☐ / ☒, '[ ]', '[x]': a checklist
+  made fillable) replaces that box with its own state; a FreeText or stamp
+  that shows only a mark (X, ✓, ✔) over a printed box checks it; a check box
+  over a printed box whose position cannot be read makes the result
+  'partial'. Otherwise a displayed check box is written as ☐ / ☒ before the
+  piece of page text it sits beside, when it can be tied to exactly one: its
+  baseline lies within the box's height and it starts just right of the box,
+  and every other button on that row is tied too (the shared box contract). A
+  radio button is written the same way before its own option word ("Biopsy
+  taken: ☐ Yes ☒ No") when every button of its group can be. Notes,
   drawings and hidden annotations are counted; a field whose appearance
   disagrees with its value, or an annotation that cannot be read, makes the
   result 'partial'. XFA form content is not read: 'partial'.
@@ -50,7 +56,9 @@ import contextlib
 import io
 import logging
 import os
+import re
 import time
+from bisect import bisect_right
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -94,6 +102,10 @@ MAX_PAGE_TREE_NODES = 100_000
 # many points) and whose text starts no further right of the box than BOX_GAP box sizes (within the bounds).
 BOX_SLACK = 1.0
 BOX_GAP, BOX_GAP_MIN, BOX_GAP_MAX = 3.0, 18.0, 48.0
+# A box printed in the page text (a checklist made fillable): a box glyph after symbol mapping, or typed brackets.
+PRINTED_BOX = re.compile(r'[' + UNCHECKED_BOX + CHECKED_BOX + r']|\[ ?\]|\[[xX]\]')
+OVERLAP = ('{pages} {has} a form check box over a printed box whose position could not be read, so the box may show '
+           'a different state than the text; check the original.')
 
 # PDF Reference, implementation notes: readers require the header within the
 # first 1024 bytes and %%EOF within the last 1024. A file without them is
@@ -142,6 +154,7 @@ class _Page:
     limited: bool = False  # pypdf stopped reading form XObjects at its invocation limit
     undecodable: int = 0  # glyphs of the text layer that name no character, dropped
     placed: int = 0  # check-box glyphs written into the layer (not read from it)
+    overlap: bool = False  # a check box lies over a printed box whose position could not be read
     unverified: bool = False  # read with OCR, and an image's encoding could not be checked to its end
 
     @property
@@ -367,44 +380,157 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
         content.images.extend(image for image in annotations.images
                               if all(image is not known for known in content.images))
         content.__dict__.pop('image_coverage', None)
-    text, placed = _placed_boxes(layer, annotations)
+    text, placed, overlap = _placed_boxes(layer, annotations)
     text, replaced = replace_surrogates(text)
     block, block_replaced = replace_surrogates(annotations.block(number))
     return _Page(layer=canonicalize(text), replaced=replaced or block_replaced, content=content,
                  annotations=annotations, block=block, damaged=content.damaged or warnings.seen,
-                 limited=warnings.limited, undecodable=layer.undecodable, placed=placed)
+                 limited=warnings.limited, undecodable=layer.undecodable, placed=placed, overlap=overlap)
 
 
-def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int]:
-    """The layer text with each displayed check box's glyph and a space at the start of the one line it sits
-    beside, and how many were written. A box is tied to a line only when exactly one upright line drawn by the
-    page itself has its baseline within the box's height (BOX_SLACK) and starts just right of the box
-    (BOX_GAP), no other button sits further along that row, and no other box claims the line."""
-    lines = [(offset, origin) for offset, origin in layer.lines
-             if origin is not None and origin[2] and _line_at(layer.text, offset).strip()]
-    claims: dict[int, str | None] = {}
-    for (x0, y0, x1, y1), checked in annotations.boxes:
+def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int, bool]:
+    """The layer text with the page's displayed check boxes written in, how many glyphs were inserted, and
+    whether a check box lies over a printed box whose position could not be read (the page is then partial):
+    - a check box over a printed box (its baseline within the box's height, its start within the box's width,
+      give or take BOX_SLACK) replaces it with its own state; a FreeText or stamp mark over one checks it;
+    - any other check box writes its glyph and a space before the piece of page text that starts nearest to its
+      right on its baseline (within BOX_GAP; pieces on two lines compete, and then nothing is written), replacing a
+      printed box that starts that piece; a radio button before the piece that starts with its own option word,
+      when every button of its group can be. Nothing is written on a row holding a button that is not tied, and a
+      piece two buttons claim gets neither: ambiguity is never resolved by guessing.
+    Pieces, printed boxes and rows are looked up by baseline, so each button reads only its own row."""
+    text, widgets = layer.text, annotations.widgets
+    pieces = _ByBaseline((origin[1], offset, origin) for offset, origin in layer.pieces
+                         if origin is not None and origin[2])
+    starts = {offset: origin for _, offset, origin in pieces.items}
+    line_offsets = [offset for offset, _ in layer.lines]
+    printed, unplaced, unplaced_anywhere = [], [], False
+    for match in PRINTED_BOX.finditer(text):
+        origin = starts.get(match.start())
+        if origin is not None:
+            printed.append((origin[1], match.start(), (match.end(), origin)))
+            continue
+        index = bisect_right(line_offsets, match.start()) - 1
+        line = layer.lines[index][1] if index >= 0 else None
+        if line is not None and line[2]:
+            unplaced.append((line[1], match.start(), line))
+        else:
+            unplaced_anywhere = True  # its line's place is not known either
+    printed, unplaced = _ByBaseline(printed), _ByBaseline(unplaced)
+
+    def boxes_under(rect, exclude=()):
+        return [(start, end) for start, (end, origin) in printed.on(rect[1], rect[3])
+                if _covers(rect, origin) and start not in exclude]
+
+    def may_hide(rect):
+        return unplaced_anywhere or any(line[0] <= rect[2] for _, line in unplaced.on(rect[1], rect[3]))
+
+    edits: dict[int, tuple[int, str]] = {}  # start -> (end, replacement)
+    overlap, over_a_box, claims = False, set(), {}
+    for i, w in enumerate(widgets):
+        if w.radio:
+            continue
+        under, hidden = boxes_under(w.rect), may_hide(w.rect)
+        if under or hidden:
+            over_a_box.add(i)
+            if len(under) == 1 and not hidden:
+                claims.setdefault(under[0][0], []).append((i, under[0][1]))
+            else:
+                overlap = True
+    replaced = set()
+    for start, owners in claims.items():
+        if len(owners) == 1:
+            i, end = owners[0]
+            edits[start] = (end, CHECKED_BOX if widgets[i].on else UNCHECKED_BOX)
+            replaced.add(i)
+        else:
+            overlap = True  # two check boxes over one printed box
+    for rect in annotations.marks:
+        under = boxes_under(rect, claims)
+        if len(under) == 1:
+            edits[under[0][0]] = (under[0][1], CHECKED_BOX)
+        elif under or may_hide(rect):
+            overlap = True
+    ties: dict[int, int] = {}  # widget index -> offset of the piece its glyph goes before
+    groups: dict[int, list] = {}
+    for i, w in enumerate(widgets):
+        if i in over_a_box:
+            continue
+        x0, y0, x1, y1 = w.rect
         gap = min(BOX_GAP_MAX, max(BOX_GAP_MIN, BOX_GAP * max(x1 - x0, y1 - y0)))
-        beside = [(offset, origin) for offset, origin in lines
-                  if y0 - BOX_SLACK <= origin[1] <= y1 + BOX_SLACK and x1 - (x1 - x0) / 2 <= origin[0] <= x1 + gap]
-        if len(beside) != 1:
-            continue
-        offset, (x, y, _) = beside[0]
-        crowded = any(other[0] > x and other[1] - BOX_SLACK <= y <= other[3] + BOX_SLACK
-                      for other in annotations.buttons if other != (x0, y0, x1, y1))
-        if crowded:
-            continue
-        claims[offset] = None if offset in claims else (CHECKED_BOX if checked else UNCHECKED_BOX)
-    text, placed = layer.text, 0
-    for offset in sorted((offset for offset, glyph in claims.items() if glyph), reverse=True):
-        text = text[:offset] + claims[offset] + ' ' + text[offset:]
-        placed += 1
-    return text, placed
+        beside = [(x, y, offset) for offset, (x, y, _) in pieces.on(y0, y1)
+                  if x1 - (x1 - x0) / 2 <= x <= x1 + gap and (not w.radio or _starts_with_word(text, offset, w.option))]
+        if beside and max(y for _, y, _ in beside) - min(y for _, y, _ in beside) <= 2 * BOX_SLACK:
+            ties[i] = min(beside)[2]  # one line: the piece nearest to the box's right; two lines compete: none
+        if w.radio:
+            groups.setdefault(w.group, []).append(i)
+    for members in groups.values():  # a radio group is placed whole or not at all
+        if not all(i in ties for i in members):
+            for i in members:
+                ties.pop(i, None)
+    owners: dict[int, list] = {}
+    for i, offset in ties.items():
+        owners.setdefault(offset, []).append(i)
+    ties = {i: offset for i, offset in ties.items() if len(owners[offset]) == 1}
+    settled = set(ties) | replaced
+    unsettled = _Rows(w.rect for j, w in enumerate(widgets) if j not in settled)
+    inserted = 0
+    for i, offset in ties.items():
+        if unsettled.holds(starts[offset][1]):
+            continue  # a row holding a button that is not tied gets no glyph
+        glyph = CHECKED_BOX if widgets[i].on else UNCHECKED_BOX
+        box = PRINTED_BOX.match(text, offset)
+        if box is None:
+            edits[offset] = (offset, glyph + ' ')
+            inserted += 1
+        elif offset not in edits:  # a printed box starts the piece: never write two glyphs
+            edits[offset] = (box.end(), glyph)
+    for offset, (end, replacement) in sorted(edits.items(), reverse=True):
+        text = text[:offset] + replacement + text[end:]
+    return text, inserted, overlap
 
 
-def _line_at(text: str, offset: int) -> str:
-    end = text.find('\n', offset)
-    return text[offset:] if end < 0 else text[offset:end]
+class _ByBaseline:
+    """(baseline, key, value) items, looked up by the baselines a box's height (give or take BOX_SLACK) holds."""
+
+    def __init__(self, items):
+        self.items = sorted(items, key=lambda item: item[0])
+        self.baselines = [item[0] for item in self.items]
+
+    def on(self, y0: float, y1: float) -> list:
+        low = bisect_right(self.baselines, y0 - BOX_SLACK - 1e-9)
+        high = bisect_right(self.baselines, y1 + BOX_SLACK)
+        return [(key, value) for _, key, value in self.items[low:high]]
+
+
+class _Rows:
+    """The union of the rows (heights, give or take BOX_SLACK) of some buttons."""
+
+    def __init__(self, rects):
+        merged: list = []
+        for y0, y1 in sorted((r[1] - BOX_SLACK, r[3] + BOX_SLACK) for r in rects):
+            if merged and y0 <= merged[-1][1]:
+                merged[-1][1] = max(merged[-1][1], y1)
+            else:
+                merged.append([y0, y1])
+        self.starts = [m[0] for m in merged]
+        self.ranges = merged
+
+    def holds(self, baseline: float) -> bool:
+        index = bisect_right(self.starts, baseline) - 1
+        return index >= 0 and baseline <= self.ranges[index][1]
+
+
+def _covers(rect, origin) -> bool:
+    """Whether a box printed at ``origin`` lies under ``rect``."""
+    x0, y0, x1, y1 = rect
+    return y0 - BOX_SLACK <= origin[1] <= y1 + BOX_SLACK and x0 - BOX_SLACK <= origin[0] <= x1
+
+
+def _starts_with_word(text: str, offset: int, word: str) -> bool:
+    """Whether the text at ``offset`` starts with ``word`` (any case), followed by no further letter."""
+    return bool(word) and text[offset:offset + len(word)].lower() == word.lower() and not \
+        text[offset + len(word):offset + len(word) + 1].isalnum()
 
 
 @dataclass(frozen=True)
@@ -412,6 +538,7 @@ class _Layer:
     text: str = ''  # decoded text-layer text, before canonicalisation
     undecodable: int = 0  # glyphs that name no character, dropped
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
+    pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
 
 
 def _layer_text(page, content: PageContent) -> _Layer:
@@ -468,12 +595,13 @@ def _origin(cm, tm) -> tuple[float, float, bool] | None:
 
 def _decoded(pieces) -> _Layer:
     out: list[str] = []
-    size, dropped, lines, starting = 0, 0, [], True
+    size, dropped, lines, starting, firsts = 0, 0, [], True, []
     decoders: dict[int, object] = {}
     for text, origin, font in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
+        first = True  # the piece's first character drawn (not a space) is drawn at its origin
         for index, char in enumerate(text):
             mapped = decode(char, index == len(text) - 1)
             if mapped is None:
@@ -482,14 +610,17 @@ def _decoded(pieces) -> _Layer:
             if mapped == '\n':
                 out.append(mapped)
                 size += 1
-                starting = True
+                starting, first = True, False
                 continue
             if starting:
                 lines.append((size, origin))
                 starting = False
+            if first and not mapped.isspace():
+                firsts.append((size, origin))
+                first = False
             out.append(mapped)
             size += len(mapped)
-    return _Layer(''.join(out), dropped, tuple(lines))
+    return _Layer(''.join(out), dropped, tuple(lines), tuple(firsts))
 
 
 def _decoder(font):
@@ -612,6 +743,9 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(unchecked)} {agree(unchecked, "was", "were")} read with OCR, but '
                         f'{agree(unchecked, "its image", "their images")} could not be checked for completeness, so '
                         f'{agree(unchecked, "its", "their")} text may be incomplete.')
+    overlapped = [n for n, page in enumerate(read, 1) if page.overlap and n not in ocr.texts]
+    if overlapped:
+        messages.append(OVERLAP.format(pages=page_phrase(overlapped), has=agree(overlapped, 'has', 'have')))
     limited = [n for n, page in enumerate(read, 1) if page.limited]
     if limited:
         messages.append(f'{page_phrase(limited)} {agree(limited, "draws", "draw")} more form objects than the '
@@ -625,7 +759,7 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(outside)} {agree(outside, "has", "have")} text placed outside the visible page '
                         'area; that text was not extracted.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
-    return messages, bool(damaged or unchecked or limited) or annotation_partial
+    return messages, bool(damaged or unchecked or limited or overlapped) or annotation_partial
 
 
 def _scanned_phrase(pages) -> str:
