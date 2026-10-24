@@ -1,0 +1,214 @@
+"""Regressions for refutation round 4 over the pipeline and API (pipeline:2, pipeline:6).
+
+Synthetic data only; the provider is an in-process fake and nothing leaves the process.
+"""
+from unittest import mock
+
+from django.test import TestCase, override_settings
+from django.utils import timezone
+
+from studio import jobs, models, review
+from studio.providers.base import ProviderUnavailable
+from tests.test_pipeline_api import drain
+from tests.test_repairs_pipeline import LIVE, NO_DATE_NOTE, ApiHarness
+
+
+class _WorkerDied(BaseException):
+    """Stands in for a SIGKILL: run_job records an Exception, never a BaseException."""
+
+
+@override_settings(**LIVE)
+class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
+    """Round 4, pipeline:2 — a predict whose worker died with its run only reserved is settled by the stale sweep as
+    not sent, and stays resumable (round 3, evidence:3). That run never reached the send, so it is no provider
+    outcome: a setting or billing change makes the one attempt it never made, exactly as a Resume does, instead of
+    re-assessing with it as a failed request (cc78bc4c4)."""
+
+    def die_after_reserving(self, how='is_stopped'):
+        """Claim the queued predict and kill its worker once its run is reserved; age it and run the sweep."""
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.PREDICT)
+        if how == 'is_stopped':  # the claimant's kill: right after the reservation, at the Stop check
+            killer = mock.patch('studio.jobs.is_stopped', side_effect=_WorkerDied())
+        else:  # the verifier's kill: inside the save that moves the run from reserved to sending
+            real_save = models.ProviderRun.save
+
+            def killing_save(run, *args, **kwargs):
+                if run.state == models.ProviderRun.SENDING:
+                    raise _WorkerDied()
+                return real_save(run, *args, **kwargs)
+            killer = mock.patch.object(models.ProviderRun, 'save', killing_save)
+        with killer:
+            with self.assertRaises(_WorkerDied):
+                jobs.run_job(job)
+        run = models.ProviderRun.objects.order_by('-created_at').first()
+        self.assertEqual(run.state, models.ProviderRun.RESERVED)
+        # The job is past the stale cutoff. The cutoff is moved rather than the job's start, so the runs an earlier
+        # stage recorded keep their real order before this job's start, as they would on a real worker.
+        with override_settings(STALE_RUNNING_SECONDS=0):
+            jobs.mark_stale()
+        run.refresh_from_db()
+        self.assertEqual((run.state, run.started_at, run.sent), (models.ProviderRun.NOT_SENT, None, False))
+        self.assertTrue(run.request_sha256)
+        self.assertEqual(models.Job.objects.get(pk=job.pk).state, models.Job.CANCELLED)
+        return run
+
+    def swept(self, how='is_stopped'):
+        encounter_id = self.create()
+        jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # analyze
+        sends = len(self.provider.requests)
+        self.die_after_reserving(how)
+        self.assertEqual(len(self.provider.requests), sends)  # nothing was sent
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
+        return encounter_id
+
+    def change(self, encounter_id, body):
+        response = self.post(f'/api/encounters/{encounter_id}/context', body)
+        self.assertEqual(response.status_code, 201, response.content)
+        drain()
+
+    def assert_attempt_made(self, encounter_id, sends=1):
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(len(self.provider.requests), sends)
+        self.assertEqual(encounter.state, 'ready_for_review')
+        self.assertEqual(encounter.current_assessment.provider_run.state, models.ProviderRun.SUCCEEDED)
+        self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
+        self.assertNotIn('The provider request failed', review.readiness(encounter)['blockers'])
+
+    def test_a_setting_change_after_the_sweep_makes_the_attempt(self):
+        encounter_id = self.swept()
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_attempt_made(encounter_id)
+
+    def test_a_billing_change_after_the_sweep_makes_the_attempt(self):
+        encounter_id = self.swept()
+        self.change(encounter_id, {'billing_context': 'professional'})
+        self.assert_attempt_made(encounter_id)
+
+    def test_the_interfaces_whole_body_after_the_sweep(self):
+        encounter_id = self.swept()
+        self.change(encounter_id, {'service_date': '', 'setting': 'office', 'billing_context': ''})
+        self.assert_attempt_made(encounter_id)
+
+    def test_killed_inside_the_save_that_would_start_the_send(self):
+        encounter_id = self.swept(how='save')
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_attempt_made(encounter_id)
+
+    def test_a_second_setting_change_then_re_checks_without_sending(self):
+        encounter_id = self.swept()
+        self.change(encounter_id, {'setting': 'office'})
+        self.change(encounter_id, {'setting': 'asc'})
+        self.assert_attempt_made(encounter_id, sends=1)
+
+    def test_after_a_failed_request_for_another_date(self):
+        # The run in use falls back past the swept run to the failed request for the document's date; the request
+        # for the new date differs from it, so the attempt for the new date is made, once.
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'provider_failed')
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context',
+                                   {'service_date': '2026-10-19'}).status_code, 201)
+        self.die_after_reserving()
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_attempt_made(encounter_id, sends=2)
+        self.assertIn('Date of service: 2026-10-19', self.provider.requests[-1].contexts)
+
+    def test_the_attempt_a_reconciliation_released_is_still_made(self):
+        self.provider.outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': self.unknown_run_id(encounter_id),
+                              'note': 'Checked the synthetic provider console: no result exists.'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.die_after_reserving()  # the released attempt's worker dies before it sends
+        self.assertEqual(len(self.provider.requests), 1)
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_attempt_made(encounter_id, sends=2)
+
+    def test_control_a_resume_after_the_sweep(self):
+        encounter_id = self.swept()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume', {}).status_code, 201)
+        drain()
+        self.assert_attempt_made(encounter_id)
+
+    def test_control_a_provider_answer_of_not_sent_still_stands(self):
+        # The exchange went through the send (started_at is set): its outcome stands, and a setting change re-checks
+        # with it rather than sending the identical request again (round 3, orchestrator:0).
+        self.provider.outcomes = ['not_sent']
+        encounter_id = self.create()
+        drain()
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        self.assertEqual(run.state, models.ProviderRun.NOT_SENT)
+        self.assertIsNotNone(run.started_at)
+        self.change(encounter_id, {'setting': 'office'})
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(len(self.provider.requests), 1)
+        self.assertEqual(encounter.state, 'provider_failed')
+        self.assertEqual(encounter.current_assessment.provider_run_id, run.pk)
+        self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
+
+    def test_control_a_provider_that_could_not_build_the_request_is_asked_again(self):
+        # A run recorded when no request could be built carries no request hash; as before, a setting change
+        # re-predicts, and the provider, available again, is sent the request once.
+        build = self.provider.build_request
+        calls = []
+
+        def unavailable_once(text, service_date):
+            calls.append(service_date)
+            if len(calls) == 1:
+                raise ProviderUnavailable('No credentials are configured (synthetic).')
+            return build(text, service_date)
+        self.provider.build_request = unavailable_once
+        encounter_id = self.create()
+        drain()
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        self.assertEqual((run.state, run.request_sha256, run.started_at), (models.ProviderRun.NOT_SENT, '', None))
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'provider_failed')
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_attempt_made(encounter_id)
+
+
+@override_settings(**LIVE)
+class RunInUseTests(ApiHarness, TestCase):
+    """Round 4, pipeline:2 — exactly the runs the sweep settled from reserved stop standing; every other finished
+    run stands as before (cc78bc4c4), whatever it is newer than."""
+
+    def setUp(self):
+        super().setUp()
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create()
+        drain()
+        self.encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.revision = self.encounter.current_revision
+        self.failed = models.ProviderRun.objects.get(encounter=self.encounter)
+        self.assertEqual(self.failed.state, models.ProviderRun.FAILED)
+
+    def make_run(self, **fields):
+        base = dict(encounter=self.encounter, revision=self.revision, provider=self.failed.provider,
+                    adapter_version=self.failed.adapter_version, request_sha256=self.failed.request_sha256,
+                    request_body=self.failed.request_body, contexts=self.failed.contexts,
+                    state=models.ProviderRun.NOT_SENT)
+        return models.ProviderRun.objects.create(**{**base, **fields})
+
+    def test_a_reserved_run_the_sweep_settled_does_not_stand(self):
+        self.make_run(error='The worker stopped before sending.', finished_at=timezone.now())
+        self.assertEqual(jobs._run_in_use(self.revision), self.failed)
+
+    def test_a_provider_answer_of_not_sent_stands(self):
+        answered = self.make_run(started_at=timezone.now(), finished_at=timezone.now(), error='Authentication failed.')
+        self.assertEqual(jobs._run_in_use(self.revision), answered)
+
+    def test_a_run_recorded_without_a_request_stands(self):
+        unbuilt = self.make_run(request_sha256='', request_body={}, contexts=[], error='No credentials are configured.',
+                           finished_at=timezone.now())
+        self.assertEqual(jobs._run_in_use(self.revision), unbuilt)
+
+    def test_other_finished_states_without_a_start_still_stand(self):
+        for state in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED, models.ProviderRun.UNKNOWN):
+            with self.subTest(state=state):
+                run = self.make_run(state=state, finished_at=timezone.now())
+                self.assertEqual(jobs._run_in_use(self.revision), run)

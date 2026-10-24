@@ -630,10 +630,20 @@ def _run_in_use(revision):
     expired one cancels the assess that would have used it, and a Resume would re-assess with it, so a context change
     does the same (round 3, orchestrator:0). A reconciled unknown outcome no longer stands: the member released it for
     one new attempt, which a context change must not consume by re-assessing with it.
+
+    A run the stale-stage sweep settled as not sent because its worker stopped after reserving it is no outcome at
+    all: it carries its request but never reached the send (no started_at), so the attempt it reserved still has to
+    be made, as a Resume of that predict makes it (round 4, pipeline:2). Every other not-sent run stands: one the
+    provider exchange answered went through the send, and one recorded when no request could be built carries no
+    request to compare.
     """
+    from django.db.models import Q
+
     finished = (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.NOT_SENT,
                 models.ProviderRun.UNKNOWN)
-    run = revision.provider_runs.filter(state__in=finished).order_by('-created_at').first()
+    reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
+                           & ~Q(request_sha256=''))
+    run = revision.provider_runs.filter(state__in=finished).exclude(reserved_then_swept).order_by('-created_at').first()
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run
