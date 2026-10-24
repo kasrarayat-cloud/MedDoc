@@ -943,8 +943,72 @@ def _unchecked_option(an: Analysis, start: int, end: int) -> bool:
     """Whether the line [start, end) is an option its own unchecked box leaves unselected ("Procedure cancelled | ☐",
     "☐ Procedure aborted", "Procedure cancelled: not checked", "Procedure cancelled: [ ] Yes [x] No"). It states
     nothing, so it never denies or holds the service above it: routing:7's later denials must not read what
-    contract:3 reads as no statement. Boxes that disagree or cannot be read still hold, through those denials."""
-    return _box_state(an, start, end) == 'off' or _unchecked_state(an, start, end)
+    contract:3 reads as no statement. Boxes that disagree or cannot be read still hold, through those denials.
+    Only a line every denying option of which has its own unchecked box is one (routing:0): a checked, disagreeing or
+    unread box on any denying option ("☐ Completed ☒ Cancelled") makes it a statement, whatever box comes first. A
+    form-field line answered with a denial is one only when its label carries the denial ("Procedure cancelled: No",
+    not "Procedure status: Not performed")."""
+    if _box_state(an, start, end) == 'off':
+        options = _box_denying_options(an, start, end)
+        words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, start, end)]
+        return all(_box_option_state(an, start, end, option, words) == 'off' for option in options)
+    if not _unchecked_state(an, start, end):
+        return False
+    fields = _form_fields(an)
+    line = _within(fields.denying, fields.denying_starts, start, end)
+    if line is None or not _BOX_DENIAL_ANSWER.search(line.line):
+        return True  # a box state ("<label>: not checked"), or a printed line such a field names
+    colon = an.text.find(':', line.start, line.end)
+    return bool(_box_denying_options(an, line.start, colon if colon >= 0 else line.end))
+
+
+# A form-field line's value that denies (not a box state): "<label>: No", "None", "Not done", "Not performed".
+_BOX_DENIAL_ANSWER = re.compile(r':[ \t]*(?:no|none|not[ \t]+done|not[ \t]+performed)[ \t.]*$', re.A | re.I)
+
+
+def _box_denying_options(an: Analysis, start: int, end: int) -> list[tuple[int, int]]:
+    """The spans of [start, end) that would deny or hold the service if their option were selected: a cancelling,
+    deferring, doubting, historical or incomplete cue, an act denial ("Not performed", "Declined") or a rescheduling."""
+    found = [(c.start, c.end) for c in an.cues_in(start, end)
+             if c.status in ('cancelled', 'planned', 'uncertain', 'historical', 'incomplete')]
+    found += [m.span() for m in _ACT_DENIAL.finditer(an.text, start, end)]
+    return found + [m.span() for m in _RESCHEDULED.finditer(an.text, start, end)]
+
+
+# The words of a status option that says the service was done ("☐ Completed ☒ Cancelled", "Completed ☐ | Cancelled
+# ☒"): with the denying options they are a status line's option words, which its boxes lead or trail.
+_BOX_DONE_OPTION = re.compile(r'\b(?:complete[ds]?|performed|done|finished|accomplished|successful(?:ly)?)\b',
+                              re.A | re.I)
+
+
+def _box_option_state(an: Analysis, lo: int, hi: int, option: tuple[int, int], words: list) -> Optional[str]:
+    """The state of the box(es) governing the status option at ``option``, one of the option words ``words`` of the
+    status line [lo, hi) (its denying and its completion options): the boxes lead when the line's first box comes before
+    its first option word ("☐ Completed ☒ Cancelled"), and trail when its last box comes after its last option word
+    ("Completed ☐ | Cancelled ☒"; "Procedure cancelled: [ ] Yes [x] No" is a yes/no pair after its one option word).
+    A line that can be read both ways is 'unknown'; None when the line has no box. The option words are what the
+    boxes mark, so a status line is never read by where an item would be."""
+    text = an.text
+    _, boxes = _box_tokens(an, lo, hi)
+    if not boxes:
+        return None
+    words = _merged(list(words) + [option])
+    if boxes[0][0] < words[0][0]:
+        before = [b for b in boxes if b[0] < option[1]]
+        if not before:
+            return None
+        run = [before[-1]]
+        for b in reversed(before[:-1]):
+            if not _BOX_RUN_GAP.fullmatch(text, b[1], run[0][0]):
+                break
+            run.insert(0, b)
+        return _run_state(run)
+    if boxes[-1][0] > words[-1][0]:
+        index = next(i for i, (s, e) in enumerate(words) if s <= option[0] < e)
+        after = words[index + 1][0] if index + 1 < len(words) else hi
+        group = [b for b in boxes if option[0] <= b[0] < after]
+        return _group_state(text, group) if group else None
+    return 'unknown'
 
 
 def _cancels(an: Analysis, start: int, end: int) -> bool:
@@ -1679,6 +1743,11 @@ _BOX_PAREN_ANSWER = re.compile(_BOX_SYMBOLS.BOX_PAREN_ANSWER_PATTERN)
 UNCHECKED = 'negated: an unchecked box'
 BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
 BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
+# A status reference that a box or an answer keeps from being read as its status (_references): the checked or unread
+# box of another denying option on its line ("[ ] Completed [x] Cancelled [ ] Aborted"), and a status question answered
+# with a denial ("Procedure cancelled: No"). Each is held, never read as cancelled or incomplete.
+BOX_STATUS_OPTION = "uncertain: a status option on the line '{}' is checked or cannot be read"
+BOX_STATUS_ANSWER = "uncertain: the status question '{}' is answered no, which is held and never read as that status"
 BOX_REACH = 200  # a box governs only an item within this many characters of it, on its line (bounds the work per span)
 # The option a box marks in a yes/no pair ("Biopsy taken: [x] Yes [ ] No", "Biopsy taken: Yes [ ] No [x]").
 _OPTION_WORDS = r'(?:(?P<yes>yes|done|performed)|(?P<no>no|not[ \t]+done|not[ \t]+performed|none))'
@@ -1914,7 +1983,8 @@ def _other_names_in(an: Analysis, start: int, end: int) -> tuple:
 
 def _group_state(text: str, group: list) -> Optional[str]:
     """The boxes after an item, up to the next item: the first one (with the boxes written next to it) governs,
-    unless they mark yes/no options. Then the item is denied when "No" is checked or "Yes" is not."""
+    unless they mark yes/no options. Then the item is denied when "No" is checked or "Yes" is not, and held ('mixed')
+    when both are checked."""
     first = group[0]
     if _OPTION_BEFORE.search(text, max(0, first[0] - 20), first[0]):
         marks = [(b, _OPTION_BEFORE.search(text, max(0, b[0] - 20), b[0])) for b in group]
@@ -1931,6 +2001,8 @@ def _group_state(text: str, group: list) -> Optional[str]:
         return 'unknown'
     yes = next((b for b, word in marks if word and word.group('yes')), None)
     no = next((b for b, word in marks if word and word.group('no')), None)
+    if no is not None and no[2] == 'on' and yes is not None and yes[2] == 'on':
+        return 'mixed'  # both options marked: the boxes for the item disagree (structure:15)
     if no is not None and no[2] == 'on':
         return 'off'
     if yes is not None:
@@ -2166,6 +2238,53 @@ def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[
 
 _DEFERRAL_CUE = re.compile(r"'(?:defer|defers|deferring|deferral|postpone|postpones|postponing)' in its clause$",
                            re.A | re.I)
+
+
+def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """A hold for the status option at [start, end) that its own box reading left unchecked ("[ ] Aborted") when its
+    line selects a denying option, itself or another ("[ ] Completed [x] Cancelled [ ] Aborted", "Completed ☐ |
+    Aborted ☒"): a checked, disagreeing or unread box on a denying option makes the line a statement (routing:0), held
+    and never read as that status (_box_option_state). None when every denying option of the line is unchecked. The
+    line is read within BOX_REACH of the option."""
+    text = an.text
+    lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
+    newline = text.find('\n', end, end + BOX_REACH)
+    hi = min(len(text), end + BOX_REACH) if newline < 0 else newline
+    options = _box_denying_options(an, lo, hi)
+    words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
+    for option in options:
+        if _box_option_state(an, lo, hi, option, words) not in (None, 'off'):
+            return Reading('uncertain', (BOX_STATUS_OPTION.format(' '.join(text[lo:hi].split())),), 'cue', doubt=True)
+    return None
+
+
+# A status question answered with a denial, on its own line: the reference, after an optional list marker, "was the"
+# and the word for the procedure; then ':', '?', '=', '|', a dash, a tab or two spaces; then "No", "None", "N", "Not
+# done" or "Not performed" and nothing else ("Procedure cancelled: No", "Was the procedure cancelled? No", "Procedure
+# aborted  No", a table row "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.").
+_BOX_ANSWER_LEAD = re.compile(r'[ \t]*(?:[-*•][ \t]*|\d{1,2}[.)][ \t]*)?(?:(?:was|is|has|had)[ \t]+)?(?:(?:the|this)[ \t]+)?'
+                              r'(?:(?:procedure|exam|examination|study|endoscopy|case)[ \t]+)?', re.I)
+_BOX_ANSWER_TAIL = re.compile(r'[ \t]*(?:[:?=|–—-]|\t| {2,})[ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)[ \t.]*',
+                              re.I)
+BOX_ANSWER_REACH = 80  # how far a status question's lead or answer is read from its reference (bounds the work)
+
+
+def _box_status_answer(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """A hold for the status reference at [start, end) when its own line is a status question answered with a denial
+    (structure:13): "Procedure cancelled: No" says the procedure was not cancelled, so it is never read as a
+    cancellation; whatever else it means is left for review."""
+    text = an.text
+    newline = text.rfind('\n', max(0, start - BOX_ANSWER_REACH), start)
+    if newline < 0 and start > BOX_ANSWER_REACH:
+        return None
+    line_end = text.find('\n', end, end + BOX_ANSWER_REACH + 1)
+    if line_end < 0:
+        if end + BOX_ANSWER_REACH < len(text):
+            return None
+        line_end = len(text)
+    if not (_BOX_ANSWER_LEAD.fullmatch(text, newline + 1, start) and _BOX_ANSWER_TAIL.fullmatch(text, end, line_end)):
+        return None
+    return Reading('uncertain', (BOX_STATUS_ANSWER.format(text[newline + 1:line_end].strip()),), 'cue', doubt=True)
 
 
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
@@ -2537,11 +2656,20 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
                     context = _generic_reading(an, m.start(), m.end())
-                    if context.status in ('historical', 'planned') or context.cues == (UNCHECKED,):
-                        continue  # an unchecked status option ("Procedure cancelled | [ ]") is not a statement
+                    if context.status in ('historical', 'planned'):
+                        continue
+                    if context.cues == (UNCHECKED,):  # an unchecked status option ("Procedure cancelled | [ ]") ...
+                        selected = _box_checked_option(an, m.start(), m.end())
+                        if selected is not None:  # ... on a line that selects another denying option: held (routing:0)
+                            found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = selected
+                        continue  # ... is otherwise not a statement
                     if context.cues and context.cues[0].startswith(BOX_HOLDS):
                         found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = context
                         continue  # its box or form field cannot be read: held, never cancelled
+                    answered = _box_status_answer(an, m.start(), m.end())
+                    if answered is not None:  # "Procedure cancelled: No": held, never cancelled (structure:13)
+                        found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = answered
+                        continue
                     if family == 'gi.ercp' and 'cannulat' in m.group(0).lower() and _pancreatic_avoidance(an, m.start()):
                         continue
                     if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):

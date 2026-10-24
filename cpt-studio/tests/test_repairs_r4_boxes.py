@@ -119,6 +119,142 @@ S0_NOTE = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advan
 # --- structure:16 -- a trailing box after a label joined by 'with', ';' or 'plus' --------------------------------------
 
 
+class Routing0CheckedCancelOptionTests(BoxCase):
+    """routing:0 and release:0 (critical, new in 82e9692c9). _unchecked_option judged a status line by its first box,
+    so a line whose 'Cancelled' option is checked read as an option nobody selected, and the cancelled EUS was a ready
+    43242. A line is an unselected option only when every denying option on it has its own unchecked box."""
+    ROWS = ('Procedure status: ☐ Completed ☒ Cancelled', 'Completed ☐ | Cancelled ☒', 'Completed: ☐ Cancelled: ☒',
+            'Procedure status: [ ] Completed [x] Cancelled [ ] Aborted', 'Procedure status: [ ] Completed [x] Cancelled',
+            'Status: ☐ Completed ☒ Cancelled', 'Status: [ ] Done [x] Cancelled', '[ ] Completed [x] Cancelled [ ] Aborted')
+
+    def test_the_claimed_rows_never_ready_the_eus(self):
+        for row in self.ROWS:
+            with self.subTest(row=row):
+                text = EUS_NOTE.format(row=row)
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_outcome(text, '43242', EUS_LINE, ('held', 'excluded'))
+
+    def test_release0_surroundings(self):
+        for row in ('Procedure status: ☐ Completed ☒ Cancelled', 'Procedure status: [ ] Completed [x] Cancelled'):
+            for tail in ('Plan: Follow pathology.\n', '', 'Plan: Rebook the EUS after NPO instructions.\n',
+                         'Reason: Patient had eaten breakfast.\n'):
+                with self.subTest(row=row, tail=tail):
+                    text = RELEASE0_NOTE.format(row=row, tail=tail)
+                    self.assert_outcome(text, '43242', RELEASE0_LINE, ('held', 'excluded'))
+        fna = (HEADER + 'Procedure: EUS of the pancreatic head mass with fine-needle aspiration\nProcedure status: ☐ '
+               'Completed ☒ Cancelled\nIndication: 3 cm pancreatic head mass on CT.\n')
+        self.assert_outcome(fna, '43242', 'EUS of the pancreatic head mass with fine-needle aspiration', ('held', 'excluded'))
+        below = (HEADER + 'Procedure: EUS of the pancreatic head mass with fine-needle biopsy\nIndication: 3 cm pancreatic '
+                 'head mass on CT.\nProcedure status: ☐ Completed ☒ Cancelled\n')
+        self.assert_outcome(below, '43242', RELEASE0_LINE, ('held', 'excluded'))
+
+    def test_a_status_line_read_both_ways_is_a_statement(self):
+        """Its first option comes before its first box and its last after its last: which box is whose cannot be told."""
+        self.assert_outcome(EUS_NOTE.format(row='Cancelled ☐ Completed ☒ Postponed'), '43242', EUS_LINE, 'held')
+
+    def test_a_status_field_answered_with_a_denial_is_a_statement(self):
+        """release:0's form-field line: a neutral label answered 'Not performed' was skipped as an unselected option."""
+        text = (HEADER + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nProcedure status:\n\n'
+                '[PDF form fields on page 1]\nProcedure status: Not performed')
+        self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+        self.assert_outcome(text, '43242', EUS_LINE, 'held')
+
+    def test_a_trailing_status_row_beyond_the_further_denials_is_held(self):
+        """Only the reference reader sees a status row more than six sentences down; its trailing boxes are read
+        against its option words, so the checked 'Procedure cancelled ☒' is never taken for the unchecked one before."""
+        text = (HEADER + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nIndication: Pancreatic head mass '
+                'on CT.\nHistory reviewed.\nConsent obtained.\nASA class II.\nAirway assessed.\nAllergies: none known.\n'
+                'Anticoagulants: none.\nNPO since midnight.\nProcedure completed ☐ | Procedure cancelled ☒\n')
+        self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+        self.assert_outcome(text, '43242', EUS_LINE, 'held')
+
+    def test_the_three_option_row_is_held_through_its_unchecked_abort(self):
+        """'[ ] Aborted' is an unchecked reference, skipped as no statement; its line's checked 'Cancelled' holds."""
+        text = EUS_NOTE.format(row='Procedure status: [ ] Completed [x] Cancelled [ ] Aborted')
+        reference = next(m for m in routed(text).finding('gi.eus').mentions if m.span.text == 'Aborted')
+        self.assertEqual(reference.status, 'uncertain', reference.cues)
+        self.assertTrue(not_silent(reference.cues), reference.cues)
+
+    def test_controls(self):
+        # a checked cancel option first, as before
+        self.assert_outcome(EUS_NOTE.format(row='Procedure status: ☒ Cancelled ☐ Completed'), '43242', EUS_LINE, 'held')
+        # the mirror row stays at most held (a medium over-hold the hold-only repair leaves in place), never excluded
+        for row in ('Procedure status: ☒ Completed ☐ Cancelled', '☒ Procedure completed ☐ Procedure cancelled'):
+            with self.subTest(row=row):
+                self.assert_outcome(EUS_NOTE.format(row=row), '43242', EUS_LINE, ('ready', 'held'))
+        # unchecked cancel options on lines of their own still state nothing
+        for row in ('Procedure completed | ☒\nProcedure cancelled | ☐', '☒ Procedure completed\n☐ Procedure cancelled',
+                    'Procedure completed: ☒\nProcedure cancelled: not checked', 'Procedure cancelled: [ ] Yes [x] No'):
+            with self.subTest(row=row):
+                text = EUS_NOTE.format(row=row)
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_outcome(text, '43242', EUS_LINE, 'ready')
+
+
+class Structure13StatusAnswerTests(BoxCase):
+    """structure:13 (critical). A typed status answer 'Procedure cancelled: No' cancelled a completed colonoscopy (45385
+    excluded) and 'Procedure aborted: No' marked it incomplete. A status option answered with a denial holds the family;
+    it never cancels or aborts it."""
+    ANSWERED = ('Procedure completed: Yes\nProcedure cancelled: No', 'Procedure cancelled: No', 'Procedure cancelled? No',
+                'Procedure cancelled - no', 'Procedure cancelled  No', 'Procedure cancelled: N', 'Procedure cancelled: No.',
+                'Procedure cancelled: None', 'Procedure cancelled | No', 'Was the procedure cancelled? No',
+                'Procedure aborted: No', 'Procedure completed: Yes\nProcedure aborted: No', '- Procedure cancelled: No')
+
+    def test_the_claimed_answers_hold(self):
+        for rows in self.ANSWERED:
+            with self.subTest(rows=rows):
+                text = COLON_NOTE.format(rows=rows)
+                self.assertNotIn(family(text, 'gi.colonoscopy'), ('cancelled', 'negated', 'incomplete'))
+                self.assert_outcome(text, '45385', POLYP, ('held', 'ready'))
+
+    def test_an_abort_answered_no_after_the_scope_went_in(self):
+        """'Case aborted' is a bare abort with its subject before it: answered No it holds, never reads incomplete."""
+        text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: A 6 mm polyp was removed with a cold '
+                'snare. The colonoscope was advanced to the cecum.\nCase aborted: No\n')
+        self.assertNotIn(family(text, 'gi.colonoscopy'), ('cancelled', 'negated', 'incomplete'))
+        self.assert_outcome(text, '45385', POLYP, ('held', 'ready'))
+
+    def test_a_form_block_answer_holds_never_cancels(self):
+        text = COLON_NOTE.format(rows='') + '\n[PDF form fields on page 1]\nProcedure cancelled: No'
+        self.assertNotIn(family(text, 'gi.colonoscopy'), ('cancelled', 'negated'))
+        self.assert_outcome(text, '45385', POLYP, ('held', 'ready'))
+
+    def test_real_cancellations_still_cancel(self):
+        for rows in ('Procedure cancelled: Yes', 'Procedure cancelled.', 'Procedure cancelled, no sedation given.',
+                     'Procedure cancelled - no IV access.', 'Procedure cancelled: no driver available.'):
+            with self.subTest(rows=rows):
+                self.assertEqual(family(COLON_NOTE.format(rows=rows), 'gi.colonoscopy'), 'cancelled')
+
+    def test_the_boxed_and_block_forms_are_unchanged(self):
+        for rows in ('Procedure cancelled: [ ] Yes [x] No', 'Procedure cancelled: [ ]', 'Procedure cancelled: not checked'):
+            with self.subTest(rows=rows):
+                text = COLON_NOTE.format(rows=rows)
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assert_outcome(text, '45385', POLYP, 'ready')
+
+
+class Structure15BothOptionsCheckedTests(BoxCase):
+    """structure:15 (high). A yes/no pair with both options checked was negated with the false cue 'negated: an unchecked
+    box'. Both options marked are boxes that disagree: the item is held (BOXES_DISAGREE)."""
+
+    def test_the_claimed_rows_hold(self):
+        for row in ('Biopsy taken: ☒ Yes ☒ No', 'Biopsy taken: Yes ☒ No ☒', 'Biopsy taken: [x] Yes [x] No',
+                    'Biopsy: ☒ Done ☒ Not done', 'Biopsy taken: ☒ No ☒ Yes'):
+            with self.subTest(row=row):
+                text = BOXED + row + '\nCold snare polypectomy ☒\n'
+                self.assertEqual(self.assert_held_reading(text, 'Biopsy'), (detect.BOXES_DISAGREE,))
+                self.assert_outcome(text, '45380', 'Biopsy', 'held')
+
+    def test_a_cancel_option_with_both_answers_checked_holds_the_procedure(self):
+        text = COLON_NOTE.format(rows='Procedure cancelled: ☒ Yes ☒ No')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'uncertain')
+        self.assert_outcome(text, '45385', POLYP, 'held')
+
+    def test_single_marked_pairs_are_unchanged(self):
+        self.assert_outcome(BOXED + 'Biopsy taken: ☒ Yes ☐ No\nCold snare polypectomy ☒\n', '45380', 'Biopsy', 'ready')
+        self.assert_outcome(BOXED + 'Biopsy taken: ☐ Yes ☒ No\nCold snare polypectomy ☒\n', '45380', 'Biopsy', 'excluded')
+
+
 # --- structure:10 / contract:6 -- a mark outside both lists is unread, never passed over --------------------------------
 
 class Structure10UnreadMarkTests(BoxCase):
