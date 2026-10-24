@@ -204,8 +204,10 @@ def structure4_note(line, polyp=STRUCTURE4_POLYP):
 class Structure4PhraseLinesTests(unittest.TestCase):
     """structure:4 (a round-2b regression that round 3b fixed for one word order) - a findings line or a statement that
     ends with a section noun but reads as a phrase (a comma, a preposition, an -ing word after its first word) opens an
-    'other' section, never a history or a plan one: the performed polypectomy after it is never excluded, and 45385 is
-    ready as at 57b4b3747."""
+'other' section, never a history or a plan one: the performed polypectomy after it is never excluded. Integration (the
+    lead, round 4): what is listed under such a line is HELD, not silent, because a silent line took the family's
+    reading and released a planned EMR under "Surgical opinion for further management" (HEAD and R3B-BASE excluded
+    it). So 45385 here is held for the reviewer, never excluded, rather than ready as at 57b4b3747."""
 
     CLAIMED = ('Changes of prior radiation therapy', 'Evidence of past radiation therapy', 'Scarring from prior treatment',
                'Healed scar from previous procedures', 'Specimens sent for further testing', 'Specimen sent for further evaluation',
@@ -221,7 +223,8 @@ class Structure4PhraseLinesTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'other')
                 self.assertNotIn(read(text, STRUCTURE4_POLYP)[0], ('planned', 'historical', 'cancelled', 'negated'))
-                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+                held = run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
 
     def test_the_cued_polyp_line(self):
         polyp = 'A 6 mm sigmoid polyp was removed with a cold snare.'
@@ -240,7 +243,8 @@ class Structure4PhraseLinesTests(unittest.TestCase):
                                   (STRUCTURE4_POLYP, 'List Bullet')])
             with self.subTest(line=line):
                 self.assertIn('\n' + line + '\n', text)
-                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+                held = run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
 
     def test_a_numbered_phrase_item_stays_content(self):
         for line in ('2. Specimens sent for further testing', '* Changes of prior radiation therapy',

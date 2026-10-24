@@ -233,11 +233,19 @@ class Routing11WrapAfterAVerbTests(unittest.TestCase):
 
     def test_a_wrapped_line_reads_as_the_same_text_on_one_line(self):
         """The join adds no wording of its own: whatever the cue words make of the one-line text ("we decided to
-        defer EUS" has none), the wrapped text reads the same."""
+        defer EUS" has none), the wrapped text reads the same. One exception since round 4 (structure:3): a line that
+        ends in a bare refusal ("the patient declined") may refuse something of its own line ("general anesthesia
+        was offered and the patient declined" before "Colonoscopy with cold snare polypectomy under moderate
+        sedation."), and no layout tells which, so the wrapped service holds where the one-line text negates."""
         for cut in self.NOT_DONE_CUTS + ('we decided to defer', 'the patient asked about'):
             text = self.note(cut)
             one_line = text.replace(cut + '\nEUS', cut + ' EUS')
             with self.subTest(cut=cut):
+                if cut == 'the patient declined':
+                    self.assertEqual(read(one_line, 'EUS of the pancreatic cyst.')[0], 'negated')
+                    self.assertEqual(read(text, 'EUS of the pancreatic cyst.')[0], 'uncertain')
+                    self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+                    continue
                 self.assertEqual(read(text, 'EUS of the pancreatic cyst.')[0],
                                  read(one_line, 'EUS of the pancreatic cyst.')[0])
                 self.assertEqual(family(text, 'gi.eus'), family(one_line, 'gi.eus'))

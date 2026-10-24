@@ -44,6 +44,7 @@ from typing import Optional
 from studio.gi import context as ctx
 from studio.gi import cues
 from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
+from studio.gi import sections as gi_sections
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
@@ -1615,6 +1616,7 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     return Reading(status, deciding, 'cue', past, doubt)
 
 
+HELD_AFTER_A_CUT = 'uncertain: the line before it is cut after a plan, cancellation or denial verb'
 EM_DOCUMENTATION = ': E/M documentation of this encounter'
 SILENT = 'uncertain: no performance evidence in its sentence or section'  # validation reads this prefix as silence
 
@@ -1642,6 +1644,15 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind in EM_SECTIONS and not an.touches_service(start, end):
         return Reading('performed', (label + EM_DOCUMENTATION,), 'section')
     heading = section.heading
+    if section.kind == 'other' and section.label == gi_sections._SEC_HELD_LABEL:
+        # a service line after a line cut on a plan, cancellation or denial verb (sections, round 4 structure:11)
+        return Reading('uncertain', (HELD_AFTER_A_CUT,), 'cue', doubt=True)
+    if (section.kind == 'other' and heading is not None
+            and gi_sections._sec_phrase_heading(an.text, (section.kind, section.label, heading))):
+        # under a colon-less phrase line inside findings (sections, round 4 structure:4): it may tell another time or
+        # a plan ("Surgical opinion for further management"), so what is listed under it is held, never silent
+        return Reading('uncertain', (f"uncertain: listed under '{heading.text.strip()[:80]}', a line that may tell "
+                                     'another time or a plan',), 'cue')
     if (section.kind == 'other' and heading is not None and heading.end - heading.start <= 80
             and _DENYING_LABEL.fullmatch(an.text, heading.start, heading.end)):
         # "Cancelled procedures:" opens a section of its own: what is listed under it is not silent (round 4 release:9)
@@ -2093,6 +2104,35 @@ def _names_an_item(an: Analysis, start: int, end: int) -> bool:
 BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0])  # the cues of the holds above
 
 
+# The line above ends in a complete answer or refusal of its own: a field answered by a bare denial ("Schatzki ring
+# present: no", "Tattoo placed today: no") or a refusal verb with nothing after it ("the patient declined").
+_ANSWER_AT_LINE_END = re.compile(r'(?:[:?=|][ \t]*(?:no|none|n|not[ \t]+(?:done|performed))'
+                                 r'|\b(?:declined|declines|refused|refuses))[ \t.]*$', re.A | re.I)
+
+
+def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[str]:
+    """A cue when a negation reaches [start, end) only because its sentence was joined across a line break after a
+    complete answer or refusal (_ANSWER_AT_LINE_END) on the line above, and the span's own line has no denial
+    ("Schatzki ring present: no" then "biopsies were taken ...", "the patient declined" then "Colonoscopy with cold
+    snare polypectomy ..."; round 4 structure:2 and structure:3). Whose answer it is cannot be read, so it holds rather
+    than negates. Cut prose ("Comment: because of time constraints, no" then "EUS ... was performed today.") is a
+    wrapped sentence and stays negated. Bounded by CLAUSE_REACH."""
+    text = an.text
+    ss, _ = an.lay.sentence_for(start, end)
+    ls = text.rfind('\n', 0, start) + 1
+    if ls <= ss:
+        return None
+    le = text.find('\n', end)
+    le = len(text) if le < 0 else le
+    if cues.DOUBT_TOKEN.search(text, max(ls, start - CLAUSE_REACH), min(le, end + CLAUSE_REACH)):
+        return None
+    above = text[max(ss, ls - 1 - CLAUSE_REACH):ls - 1]
+    answer = _ANSWER_AT_LINE_END.search(above)
+    if answer is None:
+        return None
+    return f"uncertain: the line above it ends in an answer of its own ('{answer.group(0).strip(' :?=|.')}')"
+
+
 _DEFERRAL_CUE = re.compile(r"'(?:defer|defers|deferring|deferral|postpone|postpones|postponing)' in its clause$",
                            re.A | re.I)
 
@@ -2109,6 +2149,11 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
             an.memo[key] = boxed
     if key not in an.memo:
         reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
+        if reading.status == 'negated':
+            joined = _denied_from_the_line_above(an, start, end)
+            if joined:
+                # a doubt, so the family's section evidence elsewhere cannot turn the lost negation into performed
+                reading = Reading('uncertain', (joined,) + reading.cues, 'cue', doubt=True)
         if reading.cues == (SILENT,):
             # A silent mention whose clause puts the service off ("we decided to defer EUS"): a doubt, not silence,
             # so it contradicts the section evidence of the procedure line (round 4 release:10).

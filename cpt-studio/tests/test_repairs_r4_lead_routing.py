@@ -260,3 +260,54 @@ class Routing4And5AnotherServicesTimeTests(unittest.TestCase):
                            (HEADER + 'Indication: She underwent EGD last year.\n', 'gi.egd')):
             with self.subTest(text=text):
                 self.assertEqual(family(text, slug), 'historical')
+
+
+class JoinedAnswerAndSilentSectionTests(unittest.TestCase):
+    """Integration of SECTIONS' round-4b repairs (structure:2, structure:3 (c), structure:4, structure:11): detect's
+    side of the holds that sections could not make alone."""
+
+    def test_a_bare_answer_on_the_line_above_holds_instead_of_negating(self):
+        for text, line, code in (
+                (HEADER + 'Procedure: EGD with biopsy.\nIndication: Dysphagia.\nFindings:\nSchatzki ring present: no\n'
+                 'biopsies were taken from the mid esophagus to evaluate for eosinophilic esophagitis.\n',
+                 'biopsies were taken from the mid esophagus to evaluate for eosinophilic esophagitis.', '43239'),
+                (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy and tattoo.\nFindings: The colonoscope was '
+                 'advanced to the cecum.\nTattoo placed today: no\na 6 mm sigmoid polyp was removed with a cold snare.\n',
+                 'a 6 mm sigmoid polyp was removed with a cold snare.', '45385')):
+            with self.subTest(code=code):
+                self.assertEqual(read(text, line)[0], 'uncertain')
+                proposal = run_engine(text, [(code, line)])[0][code]
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+    def test_a_bare_refusal_on_the_line_above_holds_the_procedure_line(self):
+        text = (HEADER + 'Anesthesia: general anesthesia was offered and the patient declined\nColonoscopy with cold '
+                'snare polypectomy under moderate sedation.\nFindings: The colonoscope was advanced to the cecum. A 6 mm '
+                'polyp was removed with a cold snare.\n')
+        self.assertNotEqual(family(text, 'gi.colonoscopy'), 'negated')
+        proposal = run_engine(text, [('45385', 'Colonoscopy with cold snare polypectomy under moderate sedation.')])[0]['45385']
+        self.assertNotEqual(proposal.bucket, 'excluded')
+
+    def test_controls_cut_prose_and_a_denial_on_the_line_itself_still_negate(self):
+        cut = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nComment: because of '
+               'time constraints, no\nEUS of the pancreatic cyst was performed today.\n')
+        self.assertEqual(family(cut, 'gi.eus'), 'negated')
+        own = HEADER + 'Findings: The patient did not\nundergo colonoscopy; colonoscopy was not performed.\n'
+        self.assertEqual(family(own, 'gi.colonoscopy'), 'negated')
+
+    def test_a_planned_item_under_a_phrase_line_is_held_never_ready(self):
+        text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings:\nThe colonoscope was advanced to '
+                'the cecum.\nSurgical opinion for further management\nEMR of the ascending colon lesion at a tertiary '
+                'center.\n')
+        status, cues = read(text, 'EMR of the ascending colon lesion at a tertiary center.')
+        self.assertEqual(status, 'uncertain', cues)
+        proposal = run_engine(text, [('45390', 'EMR of the ascending colon lesion at a tertiary center.')])[0]['45390']
+        self.assertNotEqual(proposal.status, 'ready')
+
+    def test_a_line_after_a_cut_verb_is_held(self):
+        text = (HEADER + 'Procedure: EGD.\nIndication: Dysphagia; pancreatic head mass on CT.\nFindings: The gastroscope '
+                'was advanced to the second portion of the duodenum. The esophagus was normal. Dr. Smith recommended\n'
+                'EUS with fine-needle aspiration of the pancreatic head mass.\n')
+        status, cues = read(text, 'EUS with fine-needle aspiration of the pancreatic head mass.')
+        self.assertEqual((status, cues[0]), ('uncertain', detect.HELD_AFTER_A_CUT))
+        proposal = run_engine(text, [('43242', 'EUS with fine-needle aspiration of the pancreatic head mass.')])[0]['43242']
+        self.assertNotEqual(proposal.status, 'ready')
