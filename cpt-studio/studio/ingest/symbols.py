@@ -65,6 +65,9 @@ BOX_UNREAD_PATTERN = (r'[\[(]' + BOX_PAD + '*' + _BOX_UNREAD_CHARS + BOX_PAD + r
 # as a box, so read as unread marks only where their line holds another one (routing), or before an option word (the
 # option-row guard).
 BOX_RADIO_PATTERN = r'[\u25cb\u25cf\u25c9\u25ef\u25ce\u29bf]'
+# Crosses written bare (U+2717, U+2718, U+2715, U+2716): a mark that says yes as often as no, read as unread where a
+# mark must be checked to count (routing's separately identifiable E/M statement).
+BOX_CROSS_PATTERN = r'[\u2717\u2718\u2715\u2716]'
 # An answer in parentheses ("(N)", "(Y)", "(-)", "(+)"), read as an unread mark only on a line that marks options in
 # boxes or unread marks ("( ) Biopsy (Y) Cold snare polypectomy"; never "Biopsy for H. pylori (-)").
 BOX_PAREN_ANSWER_PATTERN = r'\(' + BOX_PAD + '*[-+NYny]' + BOX_PAD + r'*\)'

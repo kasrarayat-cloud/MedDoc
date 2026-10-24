@@ -9,7 +9,9 @@ extract_document, then routing for the document's own date and the real validati
 - structure:6, evidence:4, contract:2 and contract:4: fillable PDFs whose fields answer 'No' or 'None' to a question
   that names no item, to one that names an item among other words, or give the procedure a status: an ordinary field
   holds nothing, a qualified one holds only itself, and a status field that says the procedure was not done holds it;
-- release:0: a fillable EUS form whose 'Procedure status' radio group has Cancelled selected never readies 43242.
+- release:0: a fillable EUS form whose 'Procedure status' radio group has Cancelled selected never readies 43242;
+- contract:0, release:5, routing:11: an unchecked attestation box right of the separately identifiable E/M sentence
+  (its glyph not placed, only its field line written), or a Word yes/no pair under it answered No, attests nothing.
 
 Synthetic documents only, built here from raw PDF syntax or WordprocessingML.
 """
@@ -17,11 +19,11 @@ import unittest
 
 from tests.support import docgen
 from tests.test_repairs_ingest_pdf import stream
-from tests.test_repairs_r3_forms_docx import DOCX, docx_result, note_paragraphs, paragraph
+from tests.test_repairs_r3_forms_docx import DOCX, control, docx_result, note_paragraphs, paragraph
 from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FONT_OBJECTS, FONTS, NOTE, SNARE_ROW, Form, codes, extracted,
                                              text_line, to_unicode, widget_rect)
 from tests.test_repairs_r3_forms_routing import outcome
-from tests.test_repairs_status_r2_routing import clarified, family, read, run_engine
+from tests.test_repairs_status_r2_routing import clarified, family, read, routed, run_engine
 
 SNARE = 'Cold snare polypectomy'
 
@@ -260,6 +262,86 @@ class Contract2CancelledNoRadioTests(unittest.TestCase):
         self.assertNotEqual(codes(result.text, ('45385', POLYP))[0], 'excluded')
         for cue in read(result.text, 'Colonoscopy')[1]:
             self.assertNotIn('no printed line on its page names it', cue)
+
+
+ATTEST_OFFICE = ['Place of service: Office (POS 11)', 'Established patient office visit for rectal bleeding.',
+                 'Medical decision making: Moderate.', 'Total time on the date of the encounter was 32 minutes.',
+                 'Procedure: Flexible sigmoidoscopy with biopsy was performed. The sigmoidoscope was advanced to 40 cm.']
+ATTESTATION = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
+ATTEST_PICKS = [('99214', 'Total time on the date of the encounter was 32 minutes.'),
+                ('45331', 'Flexible sigmoidoscopy with biopsy was performed.')]
+
+
+def separate_em(text):
+    return next((f for f in routed(text).finding('gi.office_em').facts if f.name == 'separate_em'), None)
+
+
+def attestation_pdf(name, checked, *, tu=None, left=False, two_lines=False):
+    """ATTEST_OFFICE, then the attestation in 8-point Helvetica with a check box right of it (or, ``left``, before it)."""
+    form = page_form(ATTEST_OFFICE)
+    y = row_y(ATTEST_OFFICE, len(ATTEST_OFFICE))
+    if two_lines:
+        form.line(text_line(72, y, 'I performed a significant, separately identifiable E/M service', size=8))
+        form.line(text_line(72, y - 12, 'on the same day as the procedure.', size=8))
+        rect = (220, y - 15, 232, y - 3)
+    else:
+        form.line(text_line(72, y, ATTESTATION, size=8))
+        rect = (56, y - 3, 68, y + 9) if left else (470, y - 3, 482, y + 9)
+    form.checkbox(name, rect, checked, tu=tu)
+    return extracted(form.build())
+
+
+class Contract0AttestationBoxInAPdfTests(unittest.TestCase):
+    """contract:0 and release:5 (critical): an unchecked check box right of the attestation sentence writes no glyph,
+    only its form-field line, and the statement was accepted: 99214 was ready and approved beside a same-day flexible
+    sigmoidoscopy with biopsy. An untied denying field on the statement's page refuses it."""
+
+    def assert_attested(self, result, attested):
+        self.assertEqual(result.status, 'ok', result.messages)
+        fact = separate_em(result.text)
+        proposals, _ = run_engine(result.text, ATTEST_PICKS)
+        if attested:
+            self.assertIsNotNone(fact, result.text[-300:])
+            self.assertNotIn('separate_em', clarified(proposals['99214']))
+        else:
+            self.assertIsNone(fact, result.text[-300:])
+            self.assertEqual(outcome(proposals['99214']), 'held')
+            self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_an_unchecked_box_right_of_the_sentence_refuses_it(self):
+        for name, tu in (('Check Box1', 'Separate E/M attestation'), ('Check Box1', 'Modifier 25 attestation'),
+                         ('Check Box1', None), ('Check Box3', None)):
+            with self.subTest(name=name, tu=tu):
+                result = attestation_pdf(name, False, tu=tu)
+                self.assertIn(f'{tu or name}: not checked', result.text)
+                self.assert_attested(result, False)
+        self.assert_attested(attestation_pdf('Check Box1', False, two_lines=True), False)
+
+    def test_checked_and_left_boxes(self):
+        self.assert_attested(attestation_pdf('Check Box1', True, tu='Separate E/M attestation'), True)
+        left = attestation_pdf('Check Box1', False, left=True)
+        self.assertIn('\u2610 I performed', left.text)
+        self.assert_attested(left, False)
+
+
+def attestation_docx(yes, no, statement='A significant, separately identifiable E/M service was provided:'):
+    lines = ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'Date of service: 2026-10-21'] + ATTEST_OFFICE + [statement]
+    pair = (f'<w:p>{control(yes)}<w:r><w:t xml:space="preserve"> Yes   </w:t></w:r>{control(no)}'
+            '<w:r><w:t xml:space="preserve"> No</w:t></w:r></w:p>')
+    return docgen.make_docx_from_body(''.join(paragraph(line) for line in lines) + pair)
+
+
+class Routing11AttestationAnswerInWordTests(unittest.TestCase):
+    """routing:11 and contract:0 (d) (high/critical): the statement followed by a line of two Word check-box controls
+    answered No was accepted. The line under it is its answer."""
+
+    def test_the_answer_on_the_next_line_decides(self):
+        for yes, no, attested in ((False, True, False), (False, False, False), (True, True, False), (True, False, True)):
+            with self.subTest(yes=yes, no=no):
+                result = docx_result(attestation_docx(yes, no))
+                self.assertEqual(result.status, 'ok', result.messages)
+                fact = separate_em(result.text)
+                self.assertEqual(fact is not None, attested, result.text[-160:])
 
 
 if __name__ == '__main__':

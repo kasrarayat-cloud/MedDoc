@@ -661,6 +661,120 @@ class Contract4StatusFieldTests(BoxCase):
                 self.assert_outcome(text, '43242', C4_LINE, 'ready')
 
 
+class AttestationCase(BoxCase):
+    def assert_refused(self, tail):
+        text = ATTEST_NOTE.format(tail=tail)
+        self.assertIsNone(separate_em(text), tail)
+        proposals, _ = run_engine(text, ATTEST_PICKS)
+        self.assertEqual(outcome(proposals['99214']), 'held', tail)
+        self.assertIn('separate_em', clarified(proposals['99214']), tail)
+
+    def assert_documented(self, tail):
+        text = ATTEST_NOTE.format(tail=tail)
+        fact = separate_em(text)
+        self.assertIsNotNone(fact, tail)
+        self.assertEqual(fact.value, 'documented')
+        proposals, _ = run_engine(text, ATTEST_PICKS)
+        self.assertNotIn('separate_em', clarified(proposals['99214']), tail)
+
+
+class Contract0AttestationFieldTests(AttestationCase):
+    """contract:0 and release:5 (critical). An unchecked attestation box that only the form-field block reports (its
+    widget right of the sentence, beside line 2, on page 2) was accepted as the separately identifiable E/M statement,
+    releasing the same-day E/M. The statement is refused when its page's form block has a denying field line that names
+    nothing printed, or a field line naming it that is not checked."""
+
+    def test_an_untied_denying_field_on_its_page_refuses_it(self):
+        for field in ('Separate E/M attestation: not checked', 'Modifier 25 attestation: not checked',
+                      'Check Box1: not checked', 'Check Box 7: not checked', 'Check Box3: not checked',
+                      'Separate E/M attestation: No', 'Separate E/M attestation: no option selected'):
+            with self.subTest(field=field):
+                self.assert_refused(ATTESTATION + '\n\n[PDF form fields on page 1]\n' + field)
+        self.assert_refused('I performed a significant, separately identifiable E/M service\non the same day as the '
+                            'procedure.\n\n[PDF form fields on page 1]\nCheck Box1: not checked')
+        self.assert_refused('A significant, separately identifiable E/M service was provided.\n\n[PDF form fields on page '
+                            '1]\nCheck Box 7: not checked')
+
+    def test_a_named_field_on_a_page_that_cannot_be_bounded_refuses_it(self):
+        self.assert_refused('\n\nOther text.\n' + ATTESTATION + '\n\n[PDF form fields on page 2]\n' + ATTESTATION + ': not '
+                            'checked')
+
+    def test_checked_fields_and_other_pages_still_attest(self):
+        for field in ('Separate E/M attestation: checked', 'Check Box1: checked', 'Separate E/M attestation: Yes'):
+            with self.subTest(field=field):
+                self.assert_documented(ATTESTATION + '\n\n[PDF form fields on page 1]\n' + field)
+        self.assert_documented(ATTESTATION + '\n')
+        # an addendum after the form page attests: the hold can be cleared
+        self.assert_documented('\n[PDF form fields on page 1]\nCheck Box1: not checked\n\nADDENDUM (revision 2, added '
+                               '2026-10-22 09:00 UTC)\n' + ATTESTATION + '\n')
+
+
+class Routing11AttestationAnswerTests(AttestationCase):
+    """routing:11 (high) and contract:0 (d). The statement was accepted although its box said No on the next line, or a
+    lone unchecked box sat above or below it. A line under the statement that answers it is read as its answer: only a
+    checked 'Yes' (or a checked box alone, or 'Yes') attests."""
+
+    def test_an_answer_that_is_not_yes_refuses_it(self):
+        for tail in (ATTESTATION + '\n☐ Yes ☒ No', ATTESTATION + '\n[ ] Yes [x] No', STATEMENT + ':\n☐ Yes ☒ No',
+                     STATEMENT + ':\n[ ] Yes [x] No', STATEMENT + ':\nNo', STATEMENT + ':\n☒ No',
+                     STATEMENT + ':\nAnswer: No', STATEMENT + ':\n☐ Yes ☐ No', STATEMENT + ':\n☒ Yes ☒ No',
+                     STATEMENT + ':\n(•) Yes ( ) No', ATTESTATION + '\n☐', '☐\n' + ATTESTATION, ATTESTATION + '\n[ ]',
+                     STATEMENT + ':\n\n☐ Yes ☒ No', STATEMENT + ':', STATEMENT + ':\nPlan: Follow up in 2 weeks.',
+                     ATTESTATION + '\nAttested: ☐'):
+            with self.subTest(tail=tail):
+                self.assert_refused(tail + '\n')
+
+    def test_a_yes_attests(self):
+        for tail in (STATEMENT + ':\n☒ Yes ☐ No', STATEMENT + ':\n[x] Yes [ ] No', STATEMENT + ':\nYes',
+                     STATEMENT + ':\n☒ Yes', ATTESTATION + '\n☒', ATTESTATION + '\nPlan: Follow up in 2 weeks.',
+                     ATTESTATION + '\n☐ Follow-up colonoscopy in 3 years'):
+            with self.subTest(tail=tail):
+                self.assert_documented(tail + '\n')
+
+
+class Routing11AnotherEncounterTests(AttestationCase):
+    """routing:11 (c). A statement naming another encounter in words the list did not hold ('at the preoperative visit',
+    'during the hospital admission', 'in the emergency department') was accepted. The test fails closed: an encounter or
+    a setting named after the statement must be this encounter."""
+
+    def test_another_encounter_refuses_it(self):
+        for said in ('at the preoperative visit', 'during the hospital admission', 'in the emergency department',
+                     'at her preop visit', 'at the pre-procedure consultation', 'at the referral consultation',
+                     'at the pre-op evaluation', 'during the inpatient stay', 'in the ED', 'at the telehealth visit',
+                     'at the visit', 'during the hospitalization'):
+            with self.subTest(said=said):
+                self.assert_refused(f'{STATEMENT} {said}.\n')
+
+    def test_this_encounter_attests(self):
+        for said in ('today', 'at this visit', "at today's visit", 'on the date of service', 'in the office today',
+                     'in clinic today', 'during this encounter', 'during the same visit as the procedure',
+                     'in addition to the procedure', 'at the same encounter', 'during today\'s office visit'):
+            with self.subTest(said=said):
+                self.assert_documented(f'{STATEMENT} {said}.\n')
+        self.assert_documented('Separate E/M visit attestation: ' + ATTESTATION + '\n')
+        self.assert_documented('A significant, separately identifiable E/M visit was provided.\n')
+        self.assert_documented(STATEMENT + ' during the visit today.\n')
+
+
+class Structure10AttestationMarkTests(AttestationCase):
+    """structure:10 (b) (critical). A mark outside both lists in front of the statement ('[-]', '○', '{ }', '[N]', '< >')
+    attested it. Any mark on the statement's line that is not a checked box refuses it."""
+
+    def test_unread_marks_refuse_it(self):
+        for mark in ('[-]', '○', '{ }', '[N]', '< >', '[Y] [N]', '●', '◉', '(N)', '[n]', '✗', '<x>', '{x}'):
+            with self.subTest(mark=mark):
+                self.assert_refused('Attestation:\n' + mark + ' A significant, separately identifiable E/M service was '
+                                    'performed.\n')
+        self.assert_refused(ATTESTATION + ' [N]\n')
+        self.assert_refused('Separate E/M attestation: [N] ' + ATTESTATION + '\n')
+
+    def test_a_checked_box_or_a_bullet_attests(self):
+        for mark in ('☒', '[x]', '•', '-', '1.', '*'):
+            with self.subTest(mark=mark):
+                self.assert_documented('Attestation:\n' + mark + ' A significant, separately identifiable E/M service was '
+                                       'performed.\n')
+
+
 # --- bounded cost --------------------------------------------------------------------------------------------------
 
 class ScaleTests(unittest.TestCase):

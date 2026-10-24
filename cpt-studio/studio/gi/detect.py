@@ -3500,6 +3500,141 @@ def _another_encounters_time(an: Analysis, start: int, end: int) -> bool:
                for m in _BARE_MONTH_DAY.finditer(an.text, start, end) if 1 <= int(m.group('m')) <= 12)
 
 
+# The marks that keep a separately identifiable E/M statement from attesting unless each is a checked box: any box, an
+# unread mark, a bare radio glyph or cross, an answer in parentheses (the shared vocabulary).
+_BOX_CROSS = re.compile(_BOX_SYMBOLS.BOX_CROSS_PATTERN)
+_BOX_ANY_MARK = ('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern + '|' + _BOX_PAREN_ANSWER.pattern
+                 + '|' + _BOX_CROSS.pattern)
+# A line that answers a statement: an optional short label, then only marks and answer words ("☐ Yes ☒ No", "No",
+# "Answer: No", "☒", "Attested: ☐"; never "☐ Follow-up colonoscopy in 3 years" or "Plan: Follow up in 2 weeks.").
+_BOX_ANSWER_LINE = re.compile(r"[ \t]*(?:[A-Za-z][\w /'-]{0,30}:[ \t]*)?(?:(?:" + _BOX_ANY_MARK
+                              + r"|(?:yes|no|y|n|none|n/a|done|not[ \t]+done)\b)[ \t]*)+\.?[ \t]*", re.I)
+_BOX_BARE_YES = re.compile(r"[ \t]*(?:[A-Za-z][\w /'-]{0,30}:[ \t]*)?(?:yes|y)\.?[ \t]*", re.I)
+_BOX_OPTION_WORD = re.compile(r'\b' + _OPTION_WORDS + r'\b', re.A | re.I)
+_BOX_LONE_MARKS = re.compile(r'[ \t]*(?:(?:' + _BOX_ANY_MARK + r')[ \t]*)+')
+BOX_ANSWER_LINE_CHARS = 120  # a line longer than this answers no statement (bounds the work)
+
+
+def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) -> bool:
+    """Whether a box, a mark, an answer or a form field keeps the separately identifiable E/M statement at [start, end)
+    (the rest of its line runs to ``rest_end``) from attesting. Fail-closed, so only ever a refusal (a hold):
+    - a box that governs it is not checked (off, disagreeing, unread, or one a later box may govern), or its line is a
+      form line whose value is off (contract:5);
+    - any mark on its line, before or after it, is not a checked box: an unchecked box, an unread mark, a bare radio
+      glyph or cross, an answer in parentheses ("☐ ...", "... [ ]", "[N] ...", "○ ...", "(N) ...": structure:10);
+    - the line under it answers it with anything but yes (a checked "Yes", a lone checked box, a bare "Yes"), or it
+      asks (it ends with a colon) and no such answer follows; a lone box line right above it is not checked
+      (routing:11, contract:0's next-line layout);
+    - its page's form block has a field line naming it that is not checked, or a denying or answering line that names
+      nothing printed: an attestation box whose glyph extraction could not place ("Separate E/M attestation: not
+      checked", "Check Box 7: not checked": contract:0, release:5, routing:11)."""
+    text = an.text
+    if _box_state(an, start, end) not in (None, 'on') or _unchecked_state(an, start, end):
+        return True
+    newline = text.rfind('\n', max(0, start - BOX_REACH), start)
+    line_start = newline + 1 if newline >= 0 or start <= BOX_REACH else None
+    if _box_marks_refuse(an, max(line_start or 0, start - BOX_REACH), min(rest_end, end + BOX_REACH)):
+        return True
+    answer = _box_line_after(text, rest_end)
+    if answer is not None and _BOX_ANSWER_LINE.fullmatch(text, *answer):
+        if not _box_answer_affirms(an, *answer):
+            return True
+    elif not text[end:rest_end].strip() and text[start:end].rstrip().endswith(':'):
+        return True  # it asks, and nothing under it answers yes
+    above = _box_line_before(text, line_start) if line_start else None
+    if above is not None and _BOX_LONE_MARKS.fullmatch(text, *above) and not _box_answer_affirms(an, *above):
+        return True
+    fields = _form_fields(an)
+    named = _within(fields.named, fields.named_starts, start, end) if text.find('\n', start, end) < 0 else None
+    if named is not None and named.state != 'on':
+        return True
+    index = bisect.bisect_right(fields.untied_starts, start) - 1
+    return index >= 0 and start < fields.untied[index].end
+
+
+def _box_marks_refuse(an: Analysis, lo: int, hi: int) -> bool:
+    """Whether [lo, hi) holds a mark that is not a checked box (see _box_attestation_refused)."""
+    text = an.text
+    if any(b.group('off') is not None for b in _BOX.finditer(text, lo, hi)):
+        return True
+    if any(not _BOX.fullmatch(text, *u.span()) for u in _BOX_UNREAD.finditer(text, lo, hi)):
+        return True
+    return bool(_BOX_RADIO.search(text, lo, hi) or _BOX_PAREN_ANSWER.search(text, lo, hi) or _BOX_CROSS.search(text, lo, hi))
+
+
+def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
+    """Whether the answer line [start, end) says yes: a bare "Yes" ("Answer: Yes", "Y"), checked boxes alone, or a
+    yes/no pair whose "Yes" is checked and whose "No" is not. An unread mark, a radio glyph, a cross or an answer in
+    parentheses says nothing this reader can read: no."""
+    text = an.text
+    if (any(not _BOX.fullmatch(text, *u.span()) for u in _BOX_UNREAD.finditer(text, start, end))
+            or _BOX_RADIO.search(text, start, end) or _BOX_PAREN_ANSWER.search(text, start, end)
+            or _BOX_CROSS.search(text, start, end)):
+        return False
+    boxes = [(b.start(), b.end(), 'off' if b.group('off') is not None else 'on') for b in _BOX.finditer(text, start, end)]
+    if not boxes:
+        return bool(_BOX_BARE_YES.fullmatch(text, start, end))
+    if not _BOX_OPTION_WORD.search(text, start, end):
+        return all(state == 'on' for _, _, state in boxes)
+    return _group_state(text, boxes) == 'on'
+
+
+def _box_line_after(text: str, pos: int) -> Optional[tuple[int, int]]:
+    """The next non-blank line after the line break at ``pos`` (one blank line may stand between), if it is short."""
+    for _ in range(2):
+        if pos >= len(text):
+            return None
+        start = pos + 1
+        stop = text.find('\n', start, start + BOX_ANSWER_LINE_CHARS + 1)
+        if stop < 0:
+            stop = len(text) if len(text) - start <= BOX_ANSWER_LINE_CHARS else -1
+        if stop < 0:
+            return None
+        if text[start:stop].strip():
+            return start, stop
+        pos = stop
+    return None
+
+
+def _box_line_before(text: str, line_start: int) -> Optional[tuple[int, int]]:
+    """The line right above the one starting at ``line_start``, if it is short."""
+    if line_start <= 0:
+        return None
+    start = text.rfind('\n', max(0, line_start - 1 - BOX_ANSWER_LINE_CHARS), line_start - 1) + 1
+    if start == 0 and line_start - 1 > BOX_ANSWER_LINE_CHARS:
+        return None
+    return (start, line_start - 1) if text[start:line_start - 1].strip() else None
+
+
+# Encounters and settings a statement may name after its "separately identifiable" words (routing:11). Fail-closed:
+# one that its own words do not make this encounter is another one.
+_BOX_ENCOUNTER = re.compile(r"\b(?:visits?|encounters?|consult(?:ation)?s?|appointments?|admissions?|hospitali[sz]ations?|"
+                            r"stays?|emergency\s+(?:department|room)|(?-i:ED|ER)|urgent\s+care|inpatient|hospital|"
+                            r"pre-?op(?:erative)?|pre-?procedur(?:e|al)|referrals?|tele-?health|televisits?)\b", re.I)
+_BOX_THIS_ENCOUNTER = re.compile(r"\b(?:this|today'?s?|current|same|present)\b", re.I)
+_BOX_EM_NOUN = re.compile(r'\b(?:E/?M|E&M|evaluation\s+and\s+management)\s+$', re.I)
+_BOX_TODAY_AFTER = re.compile(r'\s+today\b', re.I)
+
+
+def _box_names_another_encounter(an: Analysis, pos: int, rest_end: int) -> bool:
+    """Whether the statement, after its "separately identifiable" words ending at ``pos`` (to the end of its line,
+    within SEPARATE_EM_REACH), names an encounter or a setting that is not this encounter: "at the preoperative
+    visit", "during the hospital admission", "in the emergency department", "at the referral consultation", "at the
+    visit" (routing:11). One is this encounter only when "this", "today's", "current", "same" or "present" stands
+    within the three words before it, or "today" right after it ("at today's visit", "during this encounter", "during
+    the same visit as the procedure", "the visit today"); the E/M service itself ("E/M visit") is no encounter."""
+    text = an.text
+    hi = min(rest_end, pos + SEPARATE_EM_REACH)
+    for m in _BOX_ENCOUNTER.finditer(text, pos, hi):
+        if _BOX_EM_NOUN.search(text, max(pos, m.start() - 40), m.start()):
+            continue
+        words = text[max(pos, m.start() - 60):m.start()].split()[-3:]
+        if _BOX_THIS_ENCOUNTER.search(' '.join(words)) or _BOX_TODAY_AFTER.match(text, m.end(), hi):
+            continue
+        return True
+    return False
+
+
 def _separate_em_fact(an: Analysis) -> Optional[Fact]:
     """The clinician's explicit statement that a same-day E/M was significant and separately
     identifiable. Fail-closed over the whole sentence and the rest of its line: a denial, a
@@ -3517,12 +3652,10 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
         start, end = an.lay.sentence_for(match.start(), match.end())
         line_end = text.find('\n', end)
         rest_end = len(text) if line_end < 0 else line_end
-        # An unchecked attestation is no statement (contract:5): a box that governs the sentence, or the first box
-        # written after it on its line. Fail-closed on the box STATE: boxes that disagree, or a mark this reader
-        # cannot read before or after the sentence, attest nothing either (_unchecked_box answers False for both).
-        after = _BOX.search(text, end, min(rest_end, end + BOX_REACH))
-        if _box_state(an, start, end) in ('off', 'mixed', 'unknown') or _unchecked_state(an, start, end) \
-                or (after is not None and after.group('off') is not None):
+        # An unchecked attestation is no statement: fail-closed on any box, mark, answer or form field that does not
+        # check it (contract:5, contract:0, release:5, routing:11: _box_attestation_refused), and on another encounter
+        # it names (routing:11: _box_names_another_encounter). Both only refuse: the E/M stays held.
+        if _box_attestation_refused(an, start, end, rest_end) or _box_names_another_encounter(an, match.end(), rest_end):
             continue
         if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(text, end, rest_end):
             continue
