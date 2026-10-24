@@ -116,8 +116,8 @@ OVERLAP = ('{pages} {has} a form check box over a printed box whose position cou
 # mark of the box contract, which routing holds (studio.gi.detect._BOX_UNREAD): a state is never guessed.
 _ING_UNREAD_BOX = '[?]'
 _ING_UNREAD_NOTE = ('{pages} {has} a printed box whose state a form check box or a mark placed on or beside it '
-                    'contradicts, or that could not be read as checked or not; it was written as unread ([?]), so check '
-                    'the original.')
+                    'contradicts, or that could not be read as checked or not; it was written as unread ([?]), so '
+                    'check the original.')
 # A widget over a printed box may start right of the box glyph's origin by up to a quarter of its own size (and at
 # most this many points): a box glyph's left side bearing puts its visible square there.
 _ING_MAX_REACH = 4.0
@@ -531,7 +531,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         elif boxes or hides or anywhere:
             overlap = True
             unsettled_boxes(boxes, hides, anywhere)
-    for rect in annotations.unread_marks:  # a pen tick, a drawn stamp, typed text other than a mark: not read as a check
+    for rect in annotations.unread_marks:  # a pen tick, a drawn stamp, other typed text: not read as a check
         found = lying_under(rect)
         if found is None:
             everything = True
@@ -933,7 +933,8 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(OVERLAP.format(pages=page_phrase(overlapped), has=agree(overlapped, 'has', 'have')))
     unread_boxes = [n for n, page in enumerate(read, 1) if page.unread_box and n not in ocr.texts]
     if unread_boxes:
-        messages.append(_ING_UNREAD_NOTE.format(pages=page_phrase(unread_boxes), has=agree(unread_boxes, 'has', 'have')))
+        messages.append(_ING_UNREAD_NOTE.format(pages=page_phrase(unread_boxes),
+                                                has=agree(unread_boxes, 'has', 'have')))
     limited = [n for n, page in enumerate(read, 1) if page.limited]
     if limited:
         messages.append(f'{page_phrase(limited)} {agree(limited, "draws", "draw")} more form objects than the '
