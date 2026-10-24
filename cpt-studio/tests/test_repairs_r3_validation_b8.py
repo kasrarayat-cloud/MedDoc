@@ -1,7 +1,9 @@
 """Regressions for refutation round 3, validation:8: a hedge outside a section that documents performance does not
 hold the E/M. Real routing, the real span reader and the engine; synthetic text only.
 """
+import re
 from datetime import date
+from unittest import mock
 
 from django.test import SimpleTestCase
 
@@ -89,7 +91,7 @@ class Validation8HedgeCueTests(SimpleTestCase):
         self.assertTrue(checks.hedges_only(('uncertain: if symptoms persist', 'uncertain: Possible')))
 
     def test_anything_else_is_not_a_hedge(self):
-        for cues in (('uncertain: pending',), ('uncertain: Pending',),
+        for cues in (('uncertain: pending',), ('uncertain: Pending',), ('uncertain: pending the',),
                      ('uncertain: aborted, with no statement whether the procedure had started',),
                      ("uncertain: unresolved negation 'not' in its clause",),
                      ("uncertain: part of the passage is denied ('no EGD?')",),
@@ -99,6 +101,27 @@ class Validation8HedgeCueTests(SimpleTestCase):
                      ('uncertain: versus EGD today',), ('performed: was performed',), (), (SILENT,)):
             with self.subTest(cues=cues):
                 self.assertFalse(checks.hedges_only(cues))
+
+
+class Validation8DoubtEntriesTests(SimpleTestCase):
+    """Routing names a doubt pattern 'pending' (detect: its reading contradicts section evidence), whatever its words:
+    the integrated routing adds one for hedges after the act ("Biopsies may have been taken"). Such a cue is never a
+    hedge to validation, so it still holds the E/M under Assessment."""
+
+    def tearDown(self):
+        checks._hedge_patterns.cache_clear()
+
+    def test_an_entry_named_pending_is_a_doubt_whatever_its_words(self):
+        # Marker words no real routing pattern reads, so the test means the same on any routing tree: a doubt
+        # pattern named 'pending', and a hypothetical hedge pattern that also matches the doubt's words.
+        from studio.gi import cues
+        doubt = re.compile(r'^[\s,]*zz\s+doubted\s+act\b', re.I)
+        hypothetical = re.compile(r'zz\s+(?:doubted|hedged)\s+act\b', re.I)
+        checks._hedge_patterns.cache_clear()
+        with mock.patch.object(cues, 'UNCERTAIN_POST', cues.UNCERTAIN_POST + (('pending', doubt),)), \
+                mock.patch.object(cues, 'UNCERTAIN_CLAUSE', cues.UNCERTAIN_CLAUSE + (('hypothetical', hypothetical),)):
+            self.assertFalse(checks.hedges_only(('uncertain: zz doubted act',)))
+            self.assertTrue(checks.hedges_only(('uncertain: zz hedged act',)))
 
 
 class Validation8TodayReachTests(EngineCase):

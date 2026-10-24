@@ -1068,9 +1068,19 @@ HEDGE_CUE_PREFIX = 'uncertain: '
 
 
 @functools.lru_cache(maxsize=1)
-def _hedge_patterns() -> tuple:
+def _hedge_patterns() -> tuple[tuple, tuple]:
+    """(routing's hedge patterns, routing's doubt patterns). An entry named 'pending' is routing's doubt about today
+    (detect._clause_reading_cues flags it so), whatever its words ("may have been taken" after an act is one in the
+    integrated routing), so a cue its words match is a doubt even where a hedge pattern matches the same words."""
     from studio.gi import cues as words
-    return tuple(pattern for _, pattern in words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST)
+    entries = words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST
+    return tuple(pattern for _, pattern in entries), tuple(pattern for name, pattern in entries if name == 'pending')
+
+
+def _quotes(pattern, said: str) -> bool:
+    """Whether the pattern matches the words a cue quotes, from their start to their end."""
+    found = pattern.match(said + ' ')
+    return found is not None and found.end() >= len(said)
 
 
 def hedges_only(cues: Sequence[str]) -> bool:
@@ -1080,14 +1090,14 @@ def hedges_only(cues: Sequence[str]) -> bool:
     counts as a doubt about today's service. Any other cue (an unresolved negation, an abort, an unread section, a
     form field's state, a date, an adjustment) is not a hedge: inverted on purpose, so wording validation does not
     recognise is never read as a hedge. Resolved at call time: the routing module owns the hedge words."""
-    patterns = _hedge_patterns()
+    hedges, doubts = _hedge_patterns()
     hedged = False
     for cue in cues:
         if cue.startswith(SILENT_CUE_PREFIX):
             continue
         said = cue[len(HEDGE_CUE_PREFIX):] if cue.startswith(HEDGE_CUE_PREFIX) else ''
-        if not said or 'pending' in said.lower() or not any(
-                (found := pattern.match(said + ' ')) is not None and found.end() >= len(said) for pattern in patterns):
+        if (not said or 'pending' in said.lower() or any(_quotes(pattern, said) for pattern in doubts)
+                or not any(_quotes(pattern, said) for pattern in hedges)):
             return False
         hedged = True
     return hedged
