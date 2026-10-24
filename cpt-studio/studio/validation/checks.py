@@ -1020,6 +1020,36 @@ _ACT_STATED = re.compile(r'\b(?:was|were|been|we|i)\s+(?:(?!not\b|never\b)[a-z]+
 _LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # "2)", "(2)", "2.", "*", a bullet
 
 
+HEDGE_CUE_PREFIX = 'uncertain: '
+
+
+def hedges_only(cues: Sequence[str]) -> bool:
+    """Whether every cue of an uncertain reading, apart from silence, is one of routing's hedges - a condition, a
+    question, an alternative, a possibility, a candidacy, a discussion or consent (studio.gi.cues UNCERTAIN_CLAUSE,
+    UNCERTAIN_PRE and UNCERTAIN_POST, matched against the words the cue quotes) - and none is 'pending', which routing
+    counts as a doubt about today's service. Any other cue (an unresolved negation, an abort, an unread section, a
+    form field's state, a date, an adjustment) is not a hedge: inverted on purpose, so wording validation does not
+    recognise is never read as a hedge. Resolved at call time: the routing module owns the hedge words."""
+    from studio.gi import cues as words
+    patterns = [pattern for _, pattern in words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST]
+    hedged = False
+    for cue in cues:
+        if cue.startswith(SILENT_CUE_PREFIX):
+            continue
+        said = cue[len(HEDGE_CUE_PREFIX):] if cue.startswith(HEDGE_CUE_PREFIX) else ''
+        if not said or 'pending' in said.lower() or not any(
+                (found := pattern.match(said + ' ')) is not None and found.end() >= len(said) for pattern in patterns):
+            return False
+        hedged = True
+    return hedged
+
+
+def says_today(text: str) -> bool:
+    """Whether the text says today by routing's own words for it (studio.gi.cues.TODAY), resolved at call time."""
+    from studio.gi import cues as words
+    return bool(words.TODAY.search(text))
+
+
 def procedure_words(name: str) -> int:
     """How many procedure words a routed gi.other name holds by routing's form rule (studio.gi.detect._PROCEDURE_WORD),
     resolved at call time like ``span_status``."""

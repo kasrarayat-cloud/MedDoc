@@ -216,17 +216,26 @@ def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> t
 # Sections that do not document today's service by default (ARCHITECTURE 5.3): a plan or recommendation reads as
 # planned, history as historical, and an indication or chief complaint says why the patient came.
 NOT_TODAY_SECTIONS = ('plan', 'history', 'indication')
+# Sections that weigh, discuss or record a service rather than document doing it: an assessment, impression,
+# examination, MDM or time section (validation:8). Every other section - procedure, findings, technique, unheaded or
+# other text, and any kind not named here - can document performance, so a hedge there counts (fail-closed).
+DISCUSSION_SECTIONS = ('assessment', 'impression', 'exam', 'mdm', 'time')
 
 
 def _speaks_for_today(mention: ServiceMention) -> bool:
     """Whether a routed mention can document its procedure as done on the date of service, read only from routing's
     status, section and cues.
 
-    Outside plan, history and indication / chief-complaint sections, an 'uncertain' mention counts when routing saw
-    something in it (a hedge or a doubt), never when it is silent. Inside them a hedge is not a doubt about today's
-    service - a plan that discusses, weighs or conditions a procedure is planning it - so only an explicit performance
-    statement that routing downgraded for its section (a 'performed:' cue: "EGD was performed today" under Assessment
-    and plan) counts there.
+    In a procedure, findings, technique, unheaded or other section, an 'uncertain' mention counts when routing saw
+    something in it (a hedge or a doubt), never when it is silent. In plan, history and indication / chief-complaint
+    sections a hedge is not a doubt about today's service - a plan that discusses, weighs or conditions a procedure is
+    planning it - so only an explicit performance statement that routing downgraded for its section (a 'performed:'
+    cue: "EGD was performed today" under Assessment and plan) counts there. In an assessment, impression,
+    examination, MDM or time section a hedge weighs the procedure the same way ("Possible EGD if symptoms persist.",
+    "EGD versus empiric PPI trial"), so a mention there does not count when every cue it carries is one of routing's
+    hedges (checks.hedges_only) and its sentence does not say today; anything else it carries (pending, an abort that
+    does not say whether the procedure started, a form field's state, any wording validation does not recognise as a
+    hedge) still counts, fail-closed.
     """
     if mention.status in checks.POSITIVE:
         return True
@@ -234,7 +243,11 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
         return False
     if any(cue.startswith(checks.PERFORMED_CUE_PREFIX) for cue in mention.cues):
         return True
-    return mention.section not in NOT_TODAY_SECTIONS and not checks.silent(mention.status, mention.cues)
+    if mention.section in NOT_TODAY_SECTIONS or checks.silent(mention.status, mention.cues):
+        return False
+    if mention.section in DISCUSSION_SECTIONS:
+        return not checks.hedges_only(mention.cues) or checks.says_today(mention.sentence.text)
+    return True
 
 
 NOT_TODAY_SECTION_CUES = tuple(f'section: {kind}' for kind in NOT_TODAY_SECTIONS)

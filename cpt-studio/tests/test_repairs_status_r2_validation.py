@@ -190,13 +190,14 @@ class Review1PlanDiscussionTests(RealCase):
         proposals, _ = real(text, ('99214', VISIT_SENTENCE))
         self.assertVisitHeld(proposals, 'Colonoscopy is ')
 
-    def test_controls_an_assessment_section_hedge_still_holds(self):
-        """Only plan, history and indication / chief-complaint sections are read as not today (ARCHITECTURE 5.3);
-        an assessment section has no such default, so a hedge there stays a doubt about the service."""
+    def test_an_assessment_section_hedge_is_ready_as_in_a_plan(self):
+        """Round 3 validation:8 reversed this control (it pinned the over-hold): an assessment section weighs a
+        procedure as a plan does, so a hedge there no longer holds the E/M. A doubt about today's service there still
+        does (tests/test_repairs_r3_validation_b8.py)."""
         text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
                 'Assessment: GERD; possible EGD if refractory.\nPlan: PPI.\nMedical decision making: moderate.\n')
         proposals, _ = real(text, ('99214', VISIT_SENTENCE))
-        self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
+        self.assertVisitReady(proposals)
 
 
 class SameDayMentionRuleTests(EngineCase):
@@ -236,8 +237,16 @@ class SameDayMentionRuleTests(EngineCase):
             ('procedure', ("uncertain: section silent: 'to evaluate' follows the service name",
                            'section: procedure (Procedure)'), 'needs_clarification'),
             ('findings', ("uncertain: unresolved negation 'not' in its clause",), 'needs_clarification'),
-            ('assessment', ('uncertain: possible',), 'needs_clarification'),
-            ('impression', ('uncertain: possible',), 'needs_clarification'),
+            # round 3 validation:8: a hedge in an assessment, impression, exam or MDM section weighs the procedure;
+            # a doubt about today's service, or wording validation does not read as a hedge, still holds there
+            ('assessment', ('uncertain: possible',), 'ready'),
+            ('impression', ('uncertain: possible',), 'ready'),
+            ('exam', ('uncertain: Possible',), 'ready'),
+            ('mdm', ('uncertain: versus',), 'ready'),
+            ('assessment', ('uncertain: pending',), 'needs_clarification'),
+            ('assessment', ('uncertain: aborted, with no statement whether the procedure had started',),
+             'needs_clarification'),
+            ('impression', ('uncertain: a cue validation does not read as a hedge',), 'needs_clarification'),
         )
         for section, cues, expected in cases:
             with self.subTest(section=section, cues=cues):

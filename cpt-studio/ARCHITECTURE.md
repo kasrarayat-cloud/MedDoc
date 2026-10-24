@@ -377,10 +377,14 @@ unknown, so it counts), read as performed — unless a selected, non-excluded
 `gi.other` code whose fee-schedule row gives the global period XXX covers that
 mention's name with its exact evidence and the name holds one procedure (a coded
 test such as 91010 manometry); one read as uncertain through a
-mention that can speak for the date of service — outside plan, history and
-indication / chief-complaint sections a mention that hedges or doubts (never a
-silent one), inside them only an explicit performance statement that routing
-downgraded for its section; and an excluded procedural code whose own passage
+mention that can speak for the date of service — in procedure, findings,
+technique, unheaded and other sections a mention that hedges or doubts (never a
+silent one); in assessment, impression, examination, MDM and time sections,
+which weigh a procedure as a plan does, one whose cues are not all routing's own
+hedge words (pending, an abort, anything validation does not read as a hedge),
+whose sentence says today, or that is a downgraded performance statement;
+inside plan, history and indication / chief-complaint sections only an explicit
+performance statement that routing downgraded for its section; and an excluded procedural code whose own passage
 states the act although only the family's document-level reading makes it
 negative. A routed `gi.other` finding gathers different procedures, so it is
 read mention by mention (one mention read as done is a same-day procedure,
