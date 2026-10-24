@@ -214,10 +214,21 @@ class BrowserLogicTests(SimpleTestCase):
             self.skipTest('node is not installed; the browser logic tests need it')
 
     def test_browser_logic_unit_tests_pass(self):
-        result = subprocess.run([self.node, '--test', str(ROOT / 'tests' / 'frontend' / 'app.test.cjs')],
+        # node counts a test FILE that registers no tests (an early return, an emptied file) as one passing test,
+        # so exit 0 and '# fail 0' prove nothing alone (round 3, evidence:7): every test the file declares must
+        # pass, and a named test that guards an agent-review label must be among them.
+        path = ROOT / 'tests' / 'frontend' / 'app.test.cjs'
+        declared = len(re.findall(r'(?m)^test\(', path.read_text(encoding='utf-8')))
+        result = subprocess.run([self.node, '--test', '--test-reporter=tap', str(path)],
                                 cwd=ROOT, capture_output=True, text=True, timeout=120, check=False)
         self.assertEqual(result.returncode, 0, result.stdout[-4000:] + result.stderr[-2000:])
-        self.assertRegex(result.stdout, r'# fail 0')
+        passed = [int(n) for n in re.findall(r'(?m)^# pass (\d+)$', result.stdout)]
+        failed = [int(n) for n in re.findall(r'(?m)^# fail (\d+)$', result.stdout)]
+        self.assertGreater(declared, 20)
+        self.assertEqual(failed[-1:], [0], result.stdout[-2000:])
+        self.assertTrue(passed and passed[-1] >= declared, (passed, declared))
+        self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent reinstatement behind a human decision labels the '
+                                        r'reviewed export as agent review$')
 
     def test_scripts_parse(self):
         for path in (STATIC / 'app.js', ROOT / 'ops' / 'dev_preview_server.cjs'):

@@ -1214,6 +1214,61 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         self.assertIn(old_sha, operations[0][1]['allowed_sha256'])
         self.assertEqual(operations[1], ('install', {'content': base64.b64encode(old['https'].encode()).decode()}))
 
+    def test_live_vhost_bytes_reads_only_a_regular_file(self):
+        # Round 3, evidence:2: the repair's central reader was mocked in every test.
+        available = self.tmp / 'sites-available'
+        available.mkdir()
+        with mock.patch.object(install, 'NGINX_AVAILABLE', available):
+            self.assertIsNone(install.live_vhost_bytes())  # absent
+            (available / install.VHOST_NAME).write_bytes(b'server { listen 80; }\n')
+            self.assertEqual(install.live_vhost_bytes(), b'server { listen 80; }\n')
+            (available / install.VHOST_NAME).unlink()
+            (available / 'elsewhere').write_bytes(b'server { listen 80; }\n')
+            (available / install.VHOST_NAME).symlink_to(available / 'elsewhere')
+            self.assertIsNone(install.live_vhost_bytes())  # a link is never read as the stage
+
+    def test_rollback_vhost_restores_the_live_bytes_from_real_files(self):
+        """The round-2 republish case end to end on real files: only the root helper (emulated on the temp dirs),
+        publish_vhost and rendering are replaced; live_vhost_bytes and vhost_state run for real."""
+        available, enabled = self.tmp / 'sites-available', self.tmp / 'sites-enabled'
+        available.mkdir()
+        enabled.mkdir()
+        old = rendered()
+        new = {'http': old['http'], 'https': old['https'].replace('client_max_body_size 20m;', 'client_max_body_size 25m;')}
+        self.assertNotEqual(old['https'], new['https'])
+        live_file = available / install.VHOST_NAME
+        live_file.write_bytes(old['https'].encode())
+        (enabled / install.VHOST_NAME).symlink_to(live_file)
+        self.receipt('preflight', {'routing': {}, 'app_health': {'status': 200}})
+        install.write_receipt(self.tmp, 'https-vhost', {'phase': 'https-vhost', 'ok': True, 'revision': OTHER,
+                                                        'details': {'vhost_sha256': hashlib.sha256(
+                                                            old['https'].encode()).hexdigest()}})
+        operations = []
+
+        def helper(op, **params):
+            operations.append(op)
+            if op == 'remove':
+                (enabled / install.VHOST_NAME).unlink()
+                live_file.unlink()
+            elif op == 'install':
+                live_file.write_bytes(base64.b64decode(params['content']))
+                (enabled / install.VHOST_NAME).symlink_to(live_file)
+            return {}
+
+        def publish(ctx, apply, undo, verify):
+            apply()
+            undo()  # as on a failed verification: the removal is put back exactly
+            return {}
+        with mock.patch.object(install, 'NGINX_AVAILABLE', available), \
+                mock.patch.object(install, 'NGINX_ENABLED', enabled), \
+                mock.patch.object(install, 'rendered_vhosts', side_effect=lambda revision: new), \
+                mock.patch.object(install, 'vhost_operation', side_effect=helper), \
+                mock.patch.object(install, 'publish_vhost', side_effect=publish):
+            install.phase_rollback_vhost(self.ctx('rollback-vhost'))
+        self.assertEqual(operations, ['remove', 'install'])
+        self.assertEqual(live_file.read_bytes(), old['https'].encode())
+        self.assertTrue((enabled / install.VHOST_NAME).is_symlink())
+
     def test_rollback_vhost_refuses_an_unrecorded_stage_or_one_that_changed_while_read(self):
         for recorded, live_bytes, message in ((False, None, 'did not write'), (True, b'changed meanwhile', 'changed while')):
             with self.subTest(recorded=recorded):

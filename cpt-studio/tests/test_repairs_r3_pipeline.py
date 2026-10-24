@@ -4,10 +4,12 @@ pipeline3:0 (a metadata change must not re-send) is pinned in test_repairs_pipel
 beside the round-2 tests it replaced. Synthetic data only; the provider is an in-process fake.
 """
 import json
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from studio import audit, jobs, models
@@ -184,6 +186,32 @@ class NonTextFieldsTests(ApiHarness, TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         revision = models.Encounter.objects.get(pk=encounter_id).current_revision
         self.assertEqual(revision.addendum_text, 'Setting confirmed as office.')
+
+
+@override_settings(**LIVE)
+class MigrationBackfillRoundTripTests(ApiHarness, TransactionTestCase):
+    """Round 3, evidence:3 — migration 0003 itself backfills ProviderRun.service_date on a database at 0002 (the
+    round-2 test called the helper directly, so dropping the RunPython step from 0003 left it green)."""
+
+    PRE = ('studio', '0002_integration_fields')
+    LEAF = ('studio', '0003_decision_sequence_run_service_date')
+
+    def stored_date(self, pk):
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT service_date FROM studio_providerrun WHERE id = %s', [pk])
+            return cursor.fetchone()[0]
+
+    def test_upgrading_from_0002_backfills_the_date_the_request_carried(self):
+        encounter_id = self.create()
+        drain()
+        run = models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run
+        self.assertEqual(run.contexts[1:], ['Date of service: 2026-10-20'])
+        try:
+            MigrationExecutor(connection).migrate([self.PRE])  # the column is dropped with 0003's reversal
+            MigrationExecutor(connection).migrate([self.LEAF])
+        finally:
+            MigrationExecutor(connection).migrate([self.LEAF])
+        self.assertEqual(self.stored_date(run.pk), date(2026, 10, 20))
 
 
 @override_settings(**LIVE)
