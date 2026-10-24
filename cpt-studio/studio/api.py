@@ -216,9 +216,10 @@ def addenda(request, encounter_id):
             raise ApiError(400, f'With this addendum the document would have {combined:,} characters; '
                                 f'the limit is {settings.MAX_PASTE_CHARS:,}.')
         clarification = None
-        if data.get('clarification_id'):
+        answered = data.get('clarification_id')
+        if answered is not None and answered != '':  # only no value means no clarification: 0, false, [] are refused
             try:
-                clarification = encounter.clarifications.get(pk=_identifier(data['clarification_id']),
+                clarification = encounter.clarifications.get(pk=_identifier(answered),
                                                             state=models.Clarification.OPEN)
             except (models.Clarification.DoesNotExist, ValueError, ValidationError):
                 raise ApiError(404, 'That clarification is not open on this document.')

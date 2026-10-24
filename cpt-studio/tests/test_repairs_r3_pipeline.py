@@ -128,6 +128,34 @@ class NonStringIdentifiersTests(ApiHarness, TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(json.loads(response.content)['error'], 'The request is nested too deeply.')
 
+    def test_a_falsy_non_string_clarification_id_answers_404(self):
+        # Round 3, orchestrator:5: a truthiness test ran before the identifier check, so 0, false, [], {} and 0.0
+        # recorded and sent the addendum with no clarification link instead of refusing it.
+        encounter_id = self.create()
+        drain()
+        sends, revisions = len(self.provider.requests), models.SourceRevision.objects.count()
+        for value in (0, False, [], {}, 0.0):
+            with self.subTest(value=repr(value)):
+                response = self.post(f'/api/encounters/{encounter_id}/addenda',
+                                     {'text': 'Setting confirmed as office.', 'clarification_id': value,
+                                      'synthetic_attestation': 'yes'})
+                self.assertEqual(response.status_code, 404, response.content)
+                self.assertIn('error', response.json())
+        drain()
+        self.assertEqual(models.SourceRevision.objects.count(), revisions)
+        self.assertEqual(len(self.provider.requests), sends)
+
+    def test_no_clarification_is_null_missing_or_empty(self):
+        for extra in ({'clarification_id': None}, {}, {'clarification_id': ''}):
+            with self.subTest(extra=extra):
+                encounter_id = self.create()
+                drain()
+                response = self.post(f'/api/encounters/{encounter_id}/addenda',
+                                     {'text': 'Setting confirmed as office.', 'synthetic_attestation': 'yes', **extra})
+                self.assertEqual(response.status_code, 201, response.content)
+                revision = models.Encounter.objects.get(pk=encounter_id).current_revision
+                self.assertIsNone(revision.answers_clarification)
+
     def test_a_string_identifier_still_works(self):
         encounter_id = self.create()
         drain()

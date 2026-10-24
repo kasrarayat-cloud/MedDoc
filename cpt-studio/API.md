@@ -174,7 +174,9 @@ Notes and acknowledgements are at most 2,000 characters (400 beyond that,
 never truncated). An addendum is at most 20,000 characters. A note,
 acknowledgement or addendum sent as anything but a JSON string (a list, an
 object, a number, a boolean) answers 400 and is never stored as a rendering of
-that value; an identifier sent as anything but a string answers the endpoint's 404. `revision.addendum_offset`
+that value; an identifier sent as anything but a string answers the endpoint's 404 (an addendum's
+`clarification_id` means "no clarification" only when it is missing, null or empty; `0`, `false`, `[]`
+and the like answer 404). `revision.addendum_offset`
 is the offset where the latest addendum begins (null when the revision is not
 an addendum). `proposal.decision` has the same shape as a `decisions.history` entry.
 A decision's `created_at` is when its row was recorded; `decided_at` is when the
