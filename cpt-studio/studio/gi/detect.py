@@ -290,6 +290,89 @@ def _masked_map(an: Analysis, start: int, end: int) -> tuple[str, list[int]]:
     return an.memo[key]
 
 
+# A cues._pre pattern ends where its mention starts and spans a trigger of at most six words and at most five filler
+# words; PRE_WORDS is twice that. Only that many masked words before a mention can hold its match, so searching from
+# there finds exactly the matches a search from the window's start finds, and every target whose window reaches back
+# that far shares one reading of the member. A coordinated list made each of its N targets re-read all N members over
+# its whole window ('EUS, ' x 400 took 21 s).
+PRE_WORDS = 24
+_WORD = re.compile(r'[^\s,]+', re.A)
+
+
+def _pre_start(an: Analysis, cs: int, ms: int) -> int:
+    """Where a cues._pre search before the member at ``ms`` begins: its PRE_WORDS-th word back (a service name is
+    one word, as _masked writes it), or ``cs`` when the window starts after that."""
+    key = ('pre-start', ms)
+    if key not in an.memo:
+        starts = an.memo.get(('word-starts',))
+        if starts is None:
+            starts = an.memo[('word-starts',)] = [m.start() for m in _WORD.finditer(an.text)]
+        pos = ms
+        for _ in range(PRE_WORDS):
+            index = bisect.bisect_left(starts, pos) - 1
+            if index < 0:
+                pos = 0
+                break
+            pos = _outside_a_service(an, starts[index])
+        an.memo[key] = pos
+    return max(cs, an.memo[key])
+
+
+def _outside_a_service(an: Analysis, pos: int) -> int:
+    """``pos``, or the start of the service name it lies inside: a cut there would split a name _masked replaces."""
+    while True:
+        index = bisect.bisect_right(an._service_starts, pos) - 1
+        while index >= 0 and an.services[index].start >= pos - an._longest:
+            mention = an.services[index]
+            if mention.start < pos < mention.end:
+                pos = mention.start
+                break
+            index -= 1
+        else:
+            return pos
+
+
+def _masked_post(an: Analysis, me: int, ce: int) -> str:
+    """``_masked(an, me, ce)``, once per (member end, window end): the text after a member is read whole, since a
+    post pattern may end at the window's end ('was not' followed by nothing)."""
+    key = ('masked-post', me, ce)
+    if key not in an.memo:
+        an.memo[key] = _masked(an, me, ce)
+    return an.memo[key]
+
+
+def _pre_negations(an: Analysis, start: int, ms: int) -> list[tuple[str, str, int]]:
+    """(label, matched words, text offset) of each NEGATED_PRE trigger before the member at ``ms``, read from
+    ``start`` (_pre_start)."""
+    key = ('pre-negations', start, ms)
+    if key not in an.memo:
+        pre, found = _masked(an, start, ms), []
+        for name, pattern in cues.NEGATED_PRE:
+            m = pattern.search(pre)
+            if m:
+                found.append((name, m.group(0), _masked_map(an, start, ms)[1][m.start()]))
+        an.memo[key] = found
+    return an.memo[key]
+
+
+def _pre_cues(an: Analysis, start: int, ms: int) -> tuple[list, Optional[tuple]]:
+    """The historical, planned, incomplete and uncertain pre-triggers of the member at ``ms``, read from ``start``
+    (_pre_start), and its 'had' history trigger (which a clause saying today overrides)."""
+    key = ('pre-cues', start, ms)
+    if key not in an.memo:
+        pre, found = _masked(an, start, ms), []
+        for status, entries in (('historical', cues.HISTORICAL_PRE), ('planned', cues.PLANNED_PRE),
+                                ('incomplete', cues.INCOMPLETE_PRE), ('uncertain', cues.UNCERTAIN_PRE)):
+            for name, pattern in entries:
+                m = pattern.search(pre)
+                if m:
+                    found.append((status, f'{status}: {m.group(0).strip()}', False,
+                                  'pending' in m.group(0).lower()))
+        m = cues.HAD_PRE.search(pre)
+        an.memo[key] = (found, ('historical', f'historical: {m.group(0).strip()}', False, False) if m else None)
+    return an.memo[key]
+
+
 def _merge_groups(text: str, items: list[tuple[int, int]]) -> list[list[tuple[int, int]]]:
     groups: list[list[tuple[int, int]]] = []
     for item in sorted(items):
@@ -345,26 +428,22 @@ def _said(m: re.Match) -> str:
     return m.group(0).strip().lstrip(',:;=-\u2013\u2014( ').strip()
 
 
-def _member_negations(an: Analysis, cs: int, ce: int, ms: int, me: int,
-                      pre: Optional[str] = None, post: Optional[str] = None):
+def _member_negations(an: Analysis, cs: int, ce: int, ms: int, me: int, post: Optional[str] = None):
     """Anchored negations of the mention at [ms, me) in the window [cs, ce): a list of
     (label, about_past, text span), and the spans of pre-triggers that govern the word
-    after the mention instead ("No flexible sigmoidoscopy complications")."""
+    after the mention instead ("No flexible sigmoidoscopy complications"). The pre-triggers are
+    read from _pre_start, which finds exactly what the whole window would."""
     key = ('negations', cs, ce, ms, me)
     if key not in an.memo:
-        pre = _masked(an, cs, ms) if pre is None else pre
         post = _masked(an, me, ce) if post is None else post
         found, governs_next = [], []
-        for name, pattern in cues.NEGATED_PRE:
-            m = pattern.search(pre)
-            if not m:
-                continue
-            where = (_masked_map(an, cs, ms)[1][m.start()], ms)
+        for name, said, at in _pre_negations(an, _pre_start(an, cs, ms), ms):
+            where = (at, ms)
             if cues.NEGATION_HEAD_AFTER.match(post):
                 governs_next.append(where)
             else:
-                past = name != cues.REFUSAL and bool(cues.NEGATION_ABOUT_PAST.search(m.group(0)))
-                found.append((f'negated: {m.group(0).strip()}', past, where))
+                past = name != cues.REFUSAL and bool(cues.NEGATION_ABOUT_PAST.search(said))
+                found.append((f'negated: {said.strip()}', past, where))
         for _, pattern in cues.NEGATED_POST:
             m = pattern.search(post)
             if m:
@@ -1435,19 +1514,13 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 found.append(('uncertain', f"uncertain: part of the passage is denied ('{denied}')", False, True))
     today = bool(cues.TODAY.search(words))
     for ms, me in members:
-        pre, post = _masked(an, cs, ms), _masked(an, me, ce)
-        negations, _ = _member_negations(an, cs, ce, ms, me, pre, post)
+        post = _masked_post(an, me, ce)
+        negations, _ = _member_negations(an, cs, ce, ms, me, post)
         found += [('negated', label, past, False) for label, past, _ in negations]
-        for status, entries in (('historical', cues.HISTORICAL_PRE), ('planned', cues.PLANNED_PRE),
-                                ('incomplete', cues.INCOMPLETE_PRE), ('uncertain', cues.UNCERTAIN_PRE)):
-            for name, pattern in entries:
-                m = pattern.search(pre)
-                if m:
-                    found.append((status, f'{status}: {m.group(0).strip()}', False,
-                                  'pending' in m.group(0).lower()))
-        m = cues.HAD_PRE.search(pre)
-        if m and not today:
-            found.append(('historical', f'historical: {m.group(0).strip()}', False, False))
+        pre_cues, had = _pre_cues(an, _pre_start(an, cs, ms), ms)
+        found += pre_cues
+        if had is not None and not today:
+            found.append(had)
         for status, entries in (('incomplete', cues.INCOMPLETE_POST), ('uncertain', cues.UNCERTAIN_POST)):
             for name, pattern in entries:
                 m = pattern.search(post)
