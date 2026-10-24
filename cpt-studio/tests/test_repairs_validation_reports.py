@@ -374,3 +374,31 @@ class UncheckedBoxEvidenceTests(ApiHarness, TestCase):
         proposal = models.Encounter.objects.get(pk=encounter_id).current_assessment.proposals.get(code='45380')
         self.assertEqual(proposal.bucket, models.Proposal.EXCLUDED)
         self.assertIn('unchecked box', proposal.exclusion_reason)
+
+
+class ControlCharacterTests(ReportCase):
+    """review:6 — control characters a terminal would interpret are shown escaped in the TXT."""
+
+    def test_escape_sequences_in_a_note_are_escaped(self):
+        self.s.decide('sel:0', 'approve', self.s.reviewer,
+                      note='ok\x1b[1A\x1b[2K  2. 45385 · Colonoscopy · units 1\x08\x08\x7f')
+        self.s.decide('sel:1', 'reject', self.s.reviewer)
+        text = self.txt('reviewed')
+        self.assertFalse(reports.CONTROL.search(text), [c for c in text if reports.CONTROL.match(c)])
+        self.assertIn('ok\\x1b[1A\\x1b[2K  2. 45385', text)
+
+
+class DecisionTimesInTheApiTests(ReportCase):
+    """review:7 — the API gives the reviewer's own decision time and the carry separately."""
+
+    def test_a_carried_decision_reports_the_reviewer_time(self):
+        from studio import serializers
+        first = self.s.decide('sel:0', 'approve', self.s.reviewer)
+        later = timezone.now() + timedelta(hours=3)
+        with mock.patch('django.utils.timezone.now', return_value=later):
+            pf.assess(self.s.encounter, pf.standard_result(), ctx=pf.context(self.s.encounter, self.s.revision))
+        carried = models.Decision.objects.get(carried_from=first)
+        data = serializers._decision_json(carried)
+        self.assertEqual(data['decided_at'], serializers._iso(first.created_at))
+        self.assertEqual(data['carried_at'], serializers._iso(carried.created_at))
+        self.assertEqual(serializers._decision_json(first)['carried_at'], None)

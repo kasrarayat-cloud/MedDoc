@@ -340,3 +340,22 @@ test('export status never claims a review that the server did not report', () =>
   assert.equal(app.exportOptions({ draft: true, reviewed: 'true' }).includes('data-export-kind="reviewed"'), false);
   assert.equal(app.exportStatusText({}), 'No report can be generated yet.');
 });
+
+test('a carried decision shows the reviewer time and the carry separately', () => {
+  const proposal = {decision_state: 'approved', decision: {action: 'approve', reviewer: 'Reviewer One', reviewer_kind: 'human',
+    created_at: '2026-10-24T03:13:07Z', decided_at: '2026-10-24T00:13:07Z', carried_at: '2026-10-24T03:13:07Z',
+    carried_from: UUID, revision_number: 1}};
+  const html = app.decisionLine(proposal);
+  assert.ok(html.includes(app.formatTimestamp('2026-10-24T00:13:07Z')), html);
+  assert.ok(html.includes(`carried to this assessment ${app.formatTimestamp('2026-10-24T03:13:07Z')}`), html);
+});
+
+test('an agent reinstatement behind a human decision labels the reviewed export as agent review', () => {
+  const doc = {readiness: {reviewed: true}, assessment: {proposals: [
+    {bucket: 'excluded', decision_state: 'approved', decision: {action: 'approve', reviewer_kind: 'human'},
+     reinstated_by: {reviewer: 'Reviewbot (automated agent)', reviewer_kind: 'agent'}}]}};
+  assert.equal(app.hasAgentDecision(doc), true);
+  assert.ok(app.exportStatusText(doc).includes('agent-executed synthetic review'));
+  doc.assessment.proposals[0].reinstated_by.reviewer_kind = 'human';
+  assert.equal(app.hasAgentDecision(doc), false);
+});

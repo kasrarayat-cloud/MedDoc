@@ -161,6 +161,10 @@ Notes and acknowledgements are at most 2,000 characters (400 beyond that,
 never truncated). An addendum is at most 20,000 characters. `revision.addendum_offset`
 is the offset where the latest addendum begins (null when the revision is not
 an addendum). `proposal.decision` has the same shape as a `decisions.history` entry.
+A decision's `created_at` is when its row was recorded; `decided_at` is when the
+reviewer decided (the root of any carry) and `carried_at` is set only on a carried
+decision. `proposal.reinstated_by` (`{reviewer, reviewer_kind, decided_at}` or null)
+names who reinstated an excluded proposal that now carries a decision.
 
 ## POST /api/encounters/{id}/reports → GET /api/reports/{id}/download
 

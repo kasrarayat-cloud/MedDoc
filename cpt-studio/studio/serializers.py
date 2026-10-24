@@ -133,6 +133,9 @@ def _decision_json(decision):
         'id': str(decision.pk), 'proposal_id': str(decision.proposal_id), 'code': decision.proposal.code,
         'action': decision.action, 'note': decision.note, 'reviewer': decision.reviewer.label(),
         'reviewer_kind': decision.reviewer_kind, 'created_at': _iso(decision.created_at),
+        # When the reviewer decided; a carried row's own created_at is when it was carried (carried_at).
+        'decided_at': _iso(review.decision_root(decision).created_at),
+        'carried_at': _iso(decision.created_at) if decision.carried_from_id else None,
         'acknowledgement': decision.acknowledgement,
         'carried_from': str(decision.carried_from_id) if decision.carried_from_id else None,
         'invalidated': {'reason': invalidation.reason, 'created_at': _iso(invalidation.created_at)}
@@ -143,6 +146,17 @@ def _decision_json(decision):
 
 DECISION_STATES = {models.Decision.APPROVE: 'approved', models.Decision.REJECT: 'rejected',
                    models.Decision.REINSTATE: 'reinstated'}
+
+
+def _reinstated_by(proposal, decision):
+    """Who reinstated an excluded proposal that now carries a decision, and when (the report names them too)."""
+    if proposal.bucket != models.Proposal.EXCLUDED or decision is None:
+        return None
+    reinstate = review.reinstatement_for(decision)
+    if reinstate is None:
+        return None
+    return {'reviewer': reinstate.reviewer.label(), 'reviewer_kind': reinstate.reviewer_kind,
+            'decided_at': _iso(review.decision_root(reinstate).created_at)}
 
 
 def _proposal_json(proposal, current, assessment, membership, clarification_ids):
@@ -163,6 +177,7 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'clarification_ids': clarification_ids.get(proposal.pk, []),
         'decision': _decision_json(decision) if decision else None,
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
+        'reinstated_by': _reinstated_by(proposal, decision),
         'allowed_actions': review.allowed_actions(proposal, assessment, membership),
     }
 

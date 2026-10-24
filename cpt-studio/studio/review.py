@@ -550,6 +550,29 @@ def _review_state(encounter, assessment):
     return 'ready_for_review'
 
 
+def decision_root(decision):
+    """The decision a carried decision was copied from, followed back to the reviewer's own act."""
+    root = decision
+    while root.carried_from_id:
+        root = root.carried_from
+    return root
+
+
+def reinstatement_for(decision):
+    """The reinstate decision that a current decision on an excluded proposal rests on, following carries."""
+    node = decision
+    while node is not None:
+        if node.action == Decision.REINSTATE:
+            return node
+        prior = (Decision.objects.filter(proposal_id=node.proposal_id, action=Decision.REINSTATE,
+                                         sequence__lt=node.sequence, invalidation__isnull=True)
+                 .select_related('reviewer').order_by('-sequence').first())
+        if prior is not None:
+            return prior
+        node = node.carried_from
+    return None
+
+
 def latest_job(encounter):
     """The most recently created job of the encounter's current revision, or None."""
     if encounter.current_revision_id is None:

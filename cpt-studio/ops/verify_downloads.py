@@ -58,7 +58,9 @@ AGENT_LABEL = re.compile(r'agent-executed synthetic review', re.I)
 CODE = r'(?:\d{5}|\d{4}[FTU]|[A-V]\d{4})'
 # A code may carry a trailing '-modifier'; a leading '-' (an identifier or a range end) is not a code.
 CODE_TOKEN = re.compile(rf'(?<![\w.@/-]){CODE}(?![\w/])')
-ITEM_LINE = re.compile(rf'^\s*(?:\d+\.|[-*•])\s+(?P<code>{CODE})\b(?P<rest>.*)$')
+# Structural item lines only: the renderer puts them at exactly two spaces; stored text always continues at
+# seven or more (reports.CONTINUATION), so a note quoting "  2. 45385 ..." is never read as an item.
+ITEM_LINE = re.compile(rf'^ {{2}}(?:\d+\.|[-*•])\s+(?P<code>{CODE})\b(?P<rest>.*)$')
 UNITS = re.compile(r'\bunits?\s+(\d+)\b', re.I)
 TXT_OFFSETS = re.compile(r'\[chars (\d+)[–-](\d+)\b')
 CSV_OFFSETS = re.compile(r'\[(\d+)-(\d+)(?:, p\d+)?\]')
@@ -109,6 +111,8 @@ class Item:
     reviewer_kind: str
     evidence: list
     labels: tuple
+    reinstated_by: str = ''
+    reinstated_by_kind: str = ''
 
 
 # --- helpers ------------------------------------------------------------------
@@ -166,7 +170,9 @@ def items_from_api(api: dict, kind: str) -> dict[str, Item]:
             proposal_id=str(p['id']), code=str(p.get('code', '')), item_list=expected_list(p, kind),
             bucket=p.get('bucket', ''), status=p.get('status', ''), units=str(p.get('units', '')),
             action=decision.get('action', ''), reviewer=decision.get('reviewer', ''),
-            reviewer_kind=decision.get('reviewer_kind', ''), evidence=list(p.get('evidence') or []), labels=labels)
+            reviewer_kind=decision.get('reviewer_kind', ''), evidence=list(p.get('evidence') or []), labels=labels,
+            reinstated_by=(p.get('reinstated_by') or {}).get('reviewer', ''),
+            reinstated_by_kind=(p.get('reinstated_by') or {}).get('reviewer_kind', ''))
     return items
 
 
@@ -353,10 +359,16 @@ def _reviewer_labels(doc, name, text, items) -> list[Result]:
     missing = [r for r in reviewers if r not in text]
     out = [Result(doc, name, 'reviewer.identity', 'fail' if missing else 'pass',
                   f'reviewer not named: {missing}' if missing else ', '.join(reviewers) or 'no decisions')]
-    if any(i.reviewer_kind == 'agent' for i in decided):
+    if any(i.reviewer_kind == 'agent' or i.reinstated_by_kind == 'agent' for i in decided):
         ok = bool(AGENT_LABEL.search(text))
         out.append(Result(doc, name, 'reviewer.agent_label', 'pass' if ok else 'fail',
                           'agent-executed synthetic review labelled' if ok else 'agent review not labelled'))
+    for item in decided:
+        if item.reinstated_by_kind == 'agent':
+            named = f'Reinstated from exclusion by {item.reinstated_by}' in text and '(automated agent)' in text
+            out.append(Result(doc, name, f'reviewer.reinstated_by.{item.code}', 'pass' if named else 'fail',
+                              f'{item.code}: reinstated by {item.reinstated_by} (automated agent)'
+                              + ('' if named else ' is not named in the report')))
     return out
 
 
@@ -436,10 +448,16 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     placeholder = [row for row in rows if 'item_list' in columns and norm_list(row[columns['item_list']]) == 'none']
     items_rows = [row for row in rows if not ('item_list' in columns and norm_list(row[columns['item_list']]) == 'none')]
     if placeholder:
-        ok = len(placeholder) == 1 and not items_rows
+        identity = {'report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
+                    'item_list', 'not_verified', 'synthetic'}
+        filled = sorted(norm_header(h) for i, h in enumerate(header) for row in placeholder
+                        if norm_header(h) not in identity and undo_neutralisation(row[i]).strip())
+        proposals = ((api or {}).get('assessment') or {}).get('proposals')
+        ok = len(placeholder) == 1 and not items_rows and not filled and not proposals
         out.append(Result(doc, name, 'csv.placeholder', 'pass' if ok else 'fail',
                           'no proposals: one placeholder row names the report kind' if ok else
-                          f'{len(placeholder)} placeholder row(s) beside {len(items_rows)} item row(s)'))
+                          f'{len(placeholder)} placeholder row(s) beside {len(items_rows)} item row(s); '
+                          f'item cells filled: {sorted(set(filled))}; persisted proposals: {len(proposals or [])}'))
     if api is None:
         out.append(Result(doc, name, 'content.vs.api', 'incomplete', 'no encounter JSON; content checks skipped'))
         return out

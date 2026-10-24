@@ -502,3 +502,53 @@ class UnitTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+HUMAN = 'Reviewer One'
+
+
+def human(p, action):
+    p['decision'] = {'id': f'd-{p["id"]}', 'proposal_id': p['id'], 'code': p['code'], 'action': action,
+                     'reviewer': HUMAN, 'reviewer_kind': 'human', 'created_at': '2026-10-23T21:00:00+00:00'}
+    p['decision_state'] = {'approve': 'approved', 'reject': 'rejected'}[action]
+    return p
+
+
+class Round2VerifierTests(unittest.TestCase):
+    """Refutation round 2 over the verifier (review:2, review:4, review:5)."""
+
+    def test_a_numbered_line_inside_a_note_is_not_an_item(self):
+        def note_with_numbered_line(lines):
+            at = lines.index('APPROVED SELECTIONS') + 2
+            return lines[:at] + ['     Note: as discussed', '         2. 45380 · Colonoscopy · units 1'] + lines[at:]
+        _, results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=note_with_numbered_line))]).run()
+        self.assertEqual(statuses(results, 'approved.codes'), ['pass'])
+
+    def test_a_placeholder_row_carries_nothing_but_the_files_identity(self):
+        identity = {'report_kind': 'draft', 'encounter_id': 'enc-1', 'revision_number': '1', 'text_sha256': TEXT_SHA,
+                    'assessment_id': 'asm-1', 'item_list': 'none', 'synthetic': 'SYNTHETIC — NOT FOR BILLING'}
+        clean = Workspace([('draft', 'csv', csv_report([identity]))], snapshot=api([]), decisions=[]).run()[1]
+        self.assertEqual(statuses(clean, 'csv.placeholder'), ['pass'])
+        forged = {**identity, 'code': '45385', 'decision': 'approve', 'reviewer': AGENT, 'evidence': '"x" [0-1]'}
+        results = Workspace([('draft', 'csv', csv_report([forged]))], snapshot=api([]), decisions=[]).run()[1]
+        self.assertEqual(statuses(results, 'csv.placeholder'), ['fail'])
+
+    def test_an_agent_reinstatement_needs_the_agent_label_and_the_named_reinstater(self):
+        proposals = base_proposals()
+        human(proposals[0], 'approve'); human(proposals[1], 'reject'); human(proposals[3], 'approve')
+        proposals[3]['reinstated_by'] = {'reviewer': 'Reviewbot (automated agent)', 'reviewer_kind': 'agent'}
+        decisions = [{'proposal_id': p['id'], 'code': p['code'], 'action': p['decision']['action'], 'http_status': 201}
+                     for p in proposals if p['decision']]
+        bare = txt_report('reviewed', proposals, agent_line=False, reviewer=HUMAN)
+        results = Workspace([('reviewed', 'txt', bare)], snapshot=api(proposals), decisions=decisions).run()[1]
+        self.assertIn('reviewer.agent_label', failed(results))
+        self.assertIn('reviewer.reinstated_by.43239', failed(results))
+
+        def named(lines):
+            at = next(i for i, line in enumerate(lines) if line.startswith('  2. 43239')) + 1
+            return lines[:at] + ['     Reinstated from exclusion by Reviewbot (automated agent) at 2026-10-23T21:00:00Z: '
+                                 'planned'] + lines[at:]
+        labelled = txt_report('reviewed', proposals, agent_line=True, reviewer=HUMAN, mutate_lines=named)
+        results = Workspace([('reviewed', 'txt', labelled)], snapshot=api(proposals), decisions=decisions).run()[1]
+        self.assertEqual(statuses(results, 'reviewer.agent_label'), ['pass'])
+        self.assertEqual(statuses(results, 'reviewer.reinstated_by.43239'), ['pass'])

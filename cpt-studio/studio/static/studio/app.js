@@ -270,8 +270,10 @@ function familyLabel(doc, family) {
   return known?.family_label || known?.label || family;
 }
 
+// The same rule as the reviewed report: an agent's decision or an agent's reinstatement, in any bucket.
 function hasAgentDecision(doc) {
-  return proposalsIn(doc.assessment, 'selected').some(p => p.decision && p.decision_state !== 'undecided' && p.decision.reviewer_kind === 'agent');
+  return (doc.assessment?.proposals || []).some(p => (p.decision && p.decision_state !== 'undecided' && p.decision.reviewer_kind === 'agent')
+    || p.reinstated_by?.reviewer_kind === 'agent');
 }
 
 // Context and addenda are refused by the API while a stage runs (409), so they are offered only when idle.
@@ -466,7 +468,9 @@ function decisionLine(proposal) {
   const decision = proposal.decision;
   if (!decision || proposal.decision_state === 'undecided') return '';
   const title = `${lookup(DECISION_TITLES, decision.action, 'Decision recorded')} by ${decision.reviewer || 'a reviewer whose name was not recorded'}`;
-  const detail = [formatTimestamp(decision.created_at), decision.revision_number ? `revision ${decision.revision_number}` : '', decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'synthetic review — not clinical approval'].filter(Boolean).join(' · ');
+  // decided_at is when the reviewer decided; a carried decision also shows when it was carried.
+  const carried = decision.carried_from && decision.carried_at ? `carried to this assessment ${formatTimestamp(decision.carried_at)}` : '';
+  const detail = [formatTimestamp(decision.decided_at || decision.created_at), carried, decision.revision_number ? `revision ${decision.revision_number}` : '', decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'synthetic review — not clinical approval'].filter(Boolean).join(' · ');
   return `<div class="review-insight">${icon('shield')}<div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(detail)}</p>${decision.note ? `<p>${escapeHtml(`Note: ${decision.note}`)}</p>` : ''}</div></div>`;
 }
 
@@ -1538,7 +1542,8 @@ if (typeof module === 'object' && module.exports) {
     escapeHtml, lookup, parseIsoDate, formatDate, formatTimestamp, readCookie, safeDownloadUrl, pollDelay, parseRoute,
     passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
-    inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES,
+    inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
+    hasAgentDecision,
   };
 }
 if (typeof document !== 'undefined') boot();

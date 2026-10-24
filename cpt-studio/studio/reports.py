@@ -12,6 +12,7 @@ import csv
 import hashlib
 import io
 import json
+import re
 from datetime import timezone as dt_timezone
 
 from django.core.exceptions import PermissionDenied
@@ -131,39 +132,16 @@ def _context(context, text):
             'user_values': dict(context.user_values or {})}
 
 
-def _decision_root(decision):
-    """The decision a carried decision was copied from, followed back to the reviewer's own act."""
-    root = decision
-    while root.carried_from_id:
-        root = root.carried_from
-    return root
-
-
 def _decision(decision):
     """decided_at is when the reviewer decided; a carry is reported separately, never as the decision time."""
     if decision is None:
         return None
     carried = bool(decision.carried_from_id)
     return {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
-            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(_decision_root(decision).created_at),
+            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(review.decision_root(decision).created_at),
             'note': decision.note, 'acknowledgement': decision.acknowledgement,
             'carried_from': str(decision.carried_from_id) if carried else None,
             'carried_at': _ts(decision.created_at) if carried else None}
-
-
-def _reinstatement(decision):
-    """The reinstate decision that a current decision on an excluded proposal rests on, following carries."""
-    node = decision
-    while node is not None:
-        if node.action == Decision.REINSTATE:
-            return node
-        prior = (Decision.objects.filter(proposal_id=node.proposal_id, action=Decision.REINSTATE,
-                                         sequence__lt=node.sequence, invalidation__isnull=True)
-                 .select_related('reviewer').order_by('-sequence').first())
-        if prior is not None:
-            return prior
-        node = node.carried_from
-    return None
 
 
 def _list_for(proposal, decision, kind):
@@ -192,7 +170,7 @@ def _item(proposal, decision, kind, text):
         'status': proposal.status, 'status_label': review.status_label(proposal.status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
         'reinstated': proposal.bucket == Proposal.EXCLUDED and decision is not None,
-        'reinstated_by': (_decision(_reinstatement(decision))
+        'reinstated_by': (_decision(review.reinstatement_for(decision))
                           if proposal.bucket == Proposal.EXCLUDED and decision is not None else None),
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
@@ -578,10 +556,19 @@ def _join(lines):
     blank line: stored text (a note, a title) cannot forge a section heading or a section boundary."""
     out = []
     for line in lines:
-        first, *rest = str(line).splitlines() or ['']
+        first, *rest = (_visible(part) for part in (str(line).splitlines() or ['']))
         out.append(first)
         out += [part if part.startswith(CONTINUATION) else CONTINUATION + part for part in rest]
     return '\n'.join(out)
+
+
+# Control characters a terminal or printer would interpret (ESC sequences can move the cursor and redraw a line,
+# backspace and DEL erase): shown escaped, so no rendering of the file shows a line the report does not contain.
+CONTROL = re.compile('[\x00-\x08\x0e-\x1f\x7f-\x9f]')
+
+
+def _visible(part):
+    return CONTROL.sub(lambda m: f'\\x{ord(m.group()):02x}', part)
 
 
 def render_txt(snap) -> bytes:
