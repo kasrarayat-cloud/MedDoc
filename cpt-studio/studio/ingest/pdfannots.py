@@ -16,8 +16,10 @@ where that can be done exactly, and accounts for the rest:
   option word is kept, so that its glyph can be written beside its label or
   option word in the page text (pdf.py), as is the rectangle of a FreeText or
   stamp annotation that shows only a mark (X, ✓, ✔), which checks a printed box
-  it covers. Push buttons and fields without a value contribute the text their
-  appearance draws. Password fields are not read.
+  it covers, and the rectangle of every other displayed annotation but a widget
+  (a pen tick, a stamp drawn as paths, other typed text, a shape), which leaves
+  a printed box it covers unread. Push buttons and fields without a value
+  contribute the text their appearance draws. Password fields are not read.
 - The labelled block keeps one line per entry: blank lines inside an entry (a
   multi-line field value, FreeText text) are dropped, so the only blank line
   after a page's block is the page separator.
@@ -115,6 +117,9 @@ class PageAnnotations:
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
     widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
     marks: list = field(default_factory=list)  # rect of each displayed FreeText or stamp that shows only a mark
+    # rect of every other displayed annotation but a widget (an ink tick, a stamp drawn as paths, typed text other
+    # than a mark, a shape): over a printed box it is not read as a check, so the box is not read either (pdf.py)
+    unread_marks: list = field(default_factory=list)
     placements: list = field(default_factory=list)  # (CTM, pixels) of images displayed appearances paint, page space
     images: list = field(default_factory=list)  # the image XObjects displayed appearances paint
     marked: int = 0  # displayed strike-out and redaction marks
@@ -187,10 +192,16 @@ class _Reader:
             self.free_text(annotation, shown)
         else:
             self.other(annotation, subtype, shown)
+        recognised = False
         if subtype in MARKED and len(self.found.texts) == written + 1 and self.found.texts[-1].strip() in BOX_MARKS:
             rect = rect_of(annotation)
             if rect is not None:
                 self.found.marks.append(rect)
+                recognised = True
+        if shown and subtype != '/Widget' and not recognised:
+            rect = rect_of(annotation)
+            if rect is not None:
+                self.found.unread_marks.append(rect)
         if shown and self.painted is not None and self.painted[1].placements:
             self.add_images(annotation, *self.painted)
 

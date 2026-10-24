@@ -273,7 +273,8 @@ class Ingest0PrintedBoxUnderAWidgetTests(unittest.TestCase):
         form.checkbox('Check Box2', widget_rect(BIOPSY_ROW, 72), False, tu='Biopsy sampling')
         result = extracted(form.build())
         self.assertEqual(result.status, 'partial', result.messages)
-        self.assertIn('Interventions:\n☐ Biopsy\n', result.text)  # the printed box, unreplaced
+        # Two candidates for one printed box: unread, never the stale printed glyph (round 4 contract:1).
+        self.assertIn('Interventions:\n[?] Biopsy\n', result.text)
 
     def test_a_box_under_a_widget_whose_position_cannot_be_read_is_reported(self):
         form = Form()
@@ -291,7 +292,7 @@ class Ingest0PrintedBoxUnderAWidgetTests(unittest.TestCase):
         form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), True, tu='Biopsy')
         result = extracted(form.build())
         self.assertEqual(result.status, 'partial', result.messages)
-        self.assertIn('☐ Biopsy [ ]', result.text)
+        self.assertIn('[?] Biopsy [?]', result.text)  # both candidates unread (round 4 contract:1, extraction:7)
 
 
 # --- ingest:1 / contract:0 ----------------------------------------------------------------------------------------
