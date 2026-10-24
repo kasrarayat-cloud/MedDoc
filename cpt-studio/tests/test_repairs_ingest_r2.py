@@ -1245,5 +1245,93 @@ class TrailingBytesTests(unittest.TestCase):
                 self.assertEqual((result.status, result.messages), ('failed', (message,)))
 
 
+# --- ingest:8 — Acrobat's own display formatting is not a disagreement --------------------------------
+
+FIELD_ROWS = {'withdrawal': (200, 640), 'bbps': (200, 610), 'dos': (200, 580), 'amount': (200, 550),
+              'share': (200, 520), 'phone': (200, 490)}
+
+
+def formatted_form(fields, *, broken: tuple = ()) -> bytes:
+    """Text widgets: (name, stored /V, appearance text, format script or None), as Acrobat or pdf.js save them.
+    The appearances of the fields named in ``broken`` are Flate streams cut short."""
+    lines = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'),
+             (72, 700, 'Colonoscopy quality measures')] + [(72, FIELD_ROWS[name][1] + 4, name + ':')
+                                                            for name, *_ in fields]
+    content = '\n'.join(f'BT /F1 11 Tf {x} {y} Td ({esc(text)}) Tj ET' for x, y, text in lines)
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R /AcroForm 10 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: HELVETICA, 5: stream(content)}
+    widgets, number = [], 11
+    for name, stored, shown, script in fields:
+        x, y = FIELD_ROWS[name]
+        action = f'/AA << /F << /S /JavaScript /JS ({esc(script)}) >> >>' if script else ''
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Tx /T ({name}) /V ({esc(stored)}) {action} '
+                           f'/Rect [{x} {y} {x + 200} {y + 18}] /F 4 /P 3 0 R /DA (/Helv 11 Tf 0 g) '
+                           f'/AP << /N {number + 1} 0 R >> >>').encode()
+        drawing = f'/Tx BMC q BT /Helv 11 Tf 0 g 2 4 Td ({esc(shown)}) Tj ET Q EMC'
+        form = '/Type /XObject /Subtype /Form /BBox [0 0 200 18] /Resources << /Font << /Helv 4 0 R >> >>'
+        if name in broken:
+            cut = zlib.compress(drawing.encode('latin-1'))[:-6]
+            objects[number + 1] = (f'<< {form} /Filter /FlateDecode /Length {len(cut)} >>\nstream\n'.encode()
+                                   + cut + b'\nendstream')
+        else:
+            objects[number + 1] = stream(drawing, form)
+        widgets.append(number)
+        number += 2
+    refs = ' '.join(f'{n} 0 R' for n in widgets)
+    objects[3] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  f'/Contents 5 0 R /Annots [{refs}] >>').encode()
+    objects[10] = (f'<< /Fields [{refs}] /NeedAppearances false /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 4 0 R '
+                   '>> >> >>').encode()
+    return serialise(objects)
+
+
+def mismatch(label: str) -> str:
+    return (f'Page 1: form field "{label}" shows text that differs from its stored value; the stored value was '
+            'read, so check it against the original.')
+
+
+NUMBER_1 = 'AFNumber_Format(1, 0, 0, 0, "", true);'
+
+
+class FieldFormatTests(unittest.TestCase):
+    """ingest:8 — compare after applying the field's standard format; anything else stays flagged."""
+
+    def test_standard_formats_are_display_formatting(self):
+        fields = [('withdrawal', '14', '14.0', NUMBER_1), ('bbps', '8', '8', None),
+                  ('dos', '10/21/26', '10/21/2026', 'AFDate_FormatEx("mm/dd/yyyy");'),
+                  ('amount', '-1234.5', '($1,234.50)', 'AFNumber_Format(2, 0, 2, 0, "$", true);'),
+                  ('share', '0.25', '25.0%', 'AFPercent_Format(1, 0);'),
+                  ('phone', '5551234567', '(555) 123-4567', 'AFSpecial_Format(2);')]
+        result = pdf_extract(formatted_form(fields), ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', (FIELDS_NOTE,)))
+        for line in ('withdrawal: 14', 'bbps: 8', 'dos: 10/21/26', 'amount: -1234.5', 'share: 0.25',
+                     'phone: 5551234567'):
+            self.assertIn(line, result.text)
+        indexed = pdf_extract(formatted_form([('dos', '10/21/2026', '10/21/26', 'AFDate_Format(2);')]), ocr=None)
+        self.assertEqual(indexed.status, 'ok')
+
+    def test_an_appearance_that_cannot_be_read_is_named_as_unread(self):
+        result = pdf_extract(formatted_form([('withdrawal', '14', '14.0', NUMBER_1)], broken=('withdrawal',)),
+                             ocr=None)
+        self.assertEqual(result.status, 'partial')
+        self.assertIn('Page 1 has a form field or annotation whose text could not be read.', result.messages)
+        self.assertNotIn(mismatch('withdrawal'), result.messages)
+        self.assertIn('withdrawal: 14', result.text)
+
+    def test_differences_a_format_does_not_explain_stay_flagged(self):
+        cases = {'no format action': ('14', '41', None),
+                 'a standard format, a different number': ('14', '41.0', NUMBER_1),
+                 'a value the format cannot parse': ('fourteen', '14.0', NUMBER_1),
+                 'a custom format script': ('14', 'Fourteen', 'event.value = "Fourteen";'),
+                 'a standard call followed by more script': ('14', '14.0', NUMBER_1 + ' event.value = "41";'),
+                 'a date format, a different date': ('10/21/26', '10/22/2026', 'AFDate_FormatEx("mm/dd/yyyy");'),
+                 'a time format': ('10/21/26 14:30', '10/21/2026 14:30', 'AFDate_FormatEx("mm/dd/yyyy HH:MM");')}
+        for label, (stored, shown, script) in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(formatted_form([('withdrawal', stored, shown, script)]), ocr=None)
+                self.assertEqual(result.status, 'partial')
+                self.assertIn(mismatch('withdrawal'), result.messages)
+
+
 if __name__ == '__main__':
     unittest.main()

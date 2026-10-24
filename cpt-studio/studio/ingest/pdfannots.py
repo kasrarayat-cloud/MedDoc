@@ -16,7 +16,11 @@ where that can be done exactly, and accounts for the rest:
 - A text or combo-box field whose appearance draws text that differs from its
   stored value is named, because viewers differ in which one they show. An
   appearance that draws no text, or whose own /OC group is off, differs from
-  a non-empty value; a field with no appearance is drawn from its value.
+  a non-empty value; a field with no appearance is drawn from its value. A
+  difference that the field's own standard format action explains (Acrobat's
+  AFNumber_Format, AFPercent_Format, AFDate_FormatEx / AFDate_Format,
+  AFSpecial_Format: studio.ingest.pdfformat) is display formatting, not a
+  disagreement; any other format script leaves it named.
 - A FreeText annotation is read from ``/Contents`` (else its appearance), and
   named when its appearance shows different text. One whose appearance's own
   /OC group is off shows nothing: it is not read and is counted as hidden.
@@ -51,6 +55,7 @@ from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, Na
 
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
                          page_box, raw_entry, resolved, visible_form)
+from .pdfformat import displayed_texts
 from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
 
@@ -115,6 +120,7 @@ class _Field:
     flags: int
     options: list
     label: str
+    script: str = ''  # the JavaScript of its format action (/AA /F), '' for none
 
 
 class _Reader:
@@ -185,8 +191,12 @@ class _Reader:
             drawn = squeezed(appearance or '')
             # An appearance that exists is what viewers draw, even when it draws nothing or is in a hidden layer.
             drawing = normal_appearance(widget) is not None
-            if shown and comparable and not self.regenerated and drawing and drawn != squeezed(value):
-                self.found.mismatched.append(info.label)
+            if shown and comparable and not self.regenerated and drawing:
+                if appearance is None:  # what it shows cannot be read: not a known disagreement, but unread
+                    self.found.unreadable += 1
+                elif drawn != squeezed(value) and drawn not in {squeezed(text)
+                                                                 for text in displayed_texts(info.script, value)}:
+                    self.found.mismatched.append(info.label)
         elif appearance is None:
             self.found.unreadable += shown
             return
@@ -319,7 +329,23 @@ def field_of(widget) -> _Field:
     names = [text_of(item.get('/T')) for item in reversed(chain) if '/T' in item]
     label = text_of(terminal.get('/TU')) or '.'.join(name for name in names if name) or 'form field'
     return _Field(node=terminal, kind=inherited('/FT'), value=inherited('/V'), flags=int(number(inherited('/Ff'))),
-                  options=as_list(inherited('/Opt')), label=one_line(label))
+                  options=as_list(inherited('/Opt')), label=one_line(label), script=format_script(chain))
+
+
+def format_script(chain) -> str:
+    """The JavaScript of the format action (/AA /F) of the widget or of the field it belongs to."""
+    for item in chain:
+        actions = resolved(item.get('/AA'))
+        action = resolved(actions.get('/F')) if isinstance(actions, DictionaryObject) else None
+        script = resolved(action.get('/JS')) if isinstance(action, DictionaryObject) else None
+        if isinstance(script, StreamObject):
+            try:
+                return script.get_data().decode('latin-1')
+            except Exception:
+                return ''
+        if script is not None:
+            return text_of(script)
+    return ''
 
 
 def button_line(widget, info: _Field) -> tuple[str, bool]:
