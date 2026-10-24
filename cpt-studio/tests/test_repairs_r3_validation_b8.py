@@ -6,7 +6,10 @@ from datetime import date
 from django.test import SimpleTestCase
 
 from studio.gi.detect import SILENT, route
+from studio.types import FamilyFinding, ServiceMention, Span
 from studio.validation import checks
+from tests.test_repairs_status_r2_validation import placed
+from tests.test_validation import EGD, EM, EngineCase, Note, finding, selected, visit_context
 from tests.test_repairs_r3_validation_b import HEAD, VISIT, Case, encounter_check, real
 
 
@@ -96,3 +99,30 @@ class Validation8HedgeCueTests(SimpleTestCase):
                      ('uncertain: versus EGD today',), ('performed: was performed',), (), (SILENT,)):
             with self.subTest(cues=cues):
                 self.assertFalse(checks.hedges_only(cues))
+
+
+class Validation8TodayReachTests(EngineCase):
+    """"Today" is read near the mention (checks.TODAY_REACH, as routing reads a clause), so a long sentence with many
+    mentions is never scanned in full once per mention."""
+
+    def visit_for(self, line):
+        note = Note('Date of service: 2026-10-21', 'Office visit: established patient seen for dysphagia.',
+                    'Total time 32 minutes.', line)
+        self.statuses = {'Total time 32 minutes.': None}
+        visit = finding(EM, 'performed', placed(note, EM, 'performed', 'Office visit: established patient seen for '
+                                                                       'dysphagia.', 'other', 'seen'),
+                        facts={'em_basis': 'total time 32 minutes'})
+        start = note.offset(line)
+        egd = ServiceMention(family=EGD, status='uncertain', span=Span(start + 9, start + 12, 'EGD'),
+                             sentence=Span(start, start + len(line), line), section='assessment',
+                             cues=('uncertain: Possible',))
+        result = self.run_engine(note, selected('99213', note.span('Total time 32 minutes.')),
+                                 findings=[visit, FamilyFinding(EGD, 'uncertain', (egd,))], ctx=visit_context())
+        return self.proposal(result, '99213')
+
+    def test_today_near_the_mention_holds_and_far_from_it_does_not(self):
+        near = 'Possible EGD later today.'
+        far = 'Possible EGD; ' + 'the family discussed diet and weight at length; ' * 8 + 'labs today.'
+        self.assertGreater(far.index('today'), 12 + checks.TODAY_REACH)
+        self.assertEqual(self.visit_for(near).status, 'needs_clarification')
+        self.assertEqual(self.visit_for(far).status, 'ready')

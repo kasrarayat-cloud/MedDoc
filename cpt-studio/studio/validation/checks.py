@@ -7,6 +7,7 @@ sources agree, never states a rule the system does not hold, and reports
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -1066,6 +1067,12 @@ _LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # 
 HEDGE_CUE_PREFIX = 'uncertain: '
 
 
+@functools.lru_cache(maxsize=1)
+def _hedge_patterns() -> tuple:
+    from studio.gi import cues as words
+    return tuple(pattern for _, pattern in words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST)
+
+
 def hedges_only(cues: Sequence[str]) -> bool:
     """Whether every cue of an uncertain reading, apart from silence, is one of routing's hedges - a condition, a
     question, an alternative, a possibility, a candidacy, a discussion or consent (studio.gi.cues UNCERTAIN_CLAUSE,
@@ -1073,8 +1080,7 @@ def hedges_only(cues: Sequence[str]) -> bool:
     counts as a doubt about today's service. Any other cue (an unresolved negation, an abort, an unread section, a
     form field's state, a date, an adjustment) is not a hedge: inverted on purpose, so wording validation does not
     recognise is never read as a hedge. Resolved at call time: the routing module owns the hedge words."""
-    from studio.gi import cues as words
-    patterns = [pattern for _, pattern in words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST]
+    patterns = _hedge_patterns()
     hedged = False
     for cue in cues:
         if cue.startswith(SILENT_CUE_PREFIX):
@@ -1087,10 +1093,18 @@ def hedges_only(cues: Sequence[str]) -> bool:
     return hedged
 
 
-def says_today(text: str) -> bool:
-    """Whether the text says today by routing's own words for it (studio.gi.cues.TODAY), resolved at call time."""
+TODAY_REACH = 300  # how far from a mention its sentence is read for "today" (bounds the work per mention)
+
+
+def says_today_near(mention) -> bool:
+    """Whether a routed mention's sentence says today within TODAY_REACH of the mention's name, by routing's own words
+    for it (studio.gi.cues.TODAY), resolved at call time. Bounded per mention: a long sentence with many mentions is
+    never read once per mention in full."""
     from studio.gi import cues as words
-    return bool(words.TODAY.search(text))
+    sentence, span = mention.sentence, mention.span
+    lo = max(sentence.start, span.start - TODAY_REACH) - sentence.start
+    hi = min(sentence.end, span.end + TODAY_REACH) - sentence.start
+    return bool(words.TODAY.search(sentence.text, max(lo, 0), max(hi, 0)))
 
 
 def names_intervention(text: str, start: int, end: int, family: str) -> bool:

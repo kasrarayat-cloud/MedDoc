@@ -255,7 +255,7 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
     if checks.silent(mention.status, mention.cues):
         return False
     if mention.section in DISCUSSION_SECTIONS:
-        return not checks.hedges_only(mention.cues) or checks.says_today(mention.sentence.text)
+        return not checks.hedges_only(mention.cues) or checks.says_today_near(mention)
     return True
 
 
