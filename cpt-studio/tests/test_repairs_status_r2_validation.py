@@ -267,6 +267,82 @@ EUS_NOTE = (HEAD + 'Indication: Dysphagia. {indication}\nProcedure: EGD\n'
 ADVANCED = 'The endoscope was advanced to the second part of the duodenum.'
 
 
+class Status4UncertainFamilyTests(RealCase):
+    """status:4 — EUS named only as requested, questioned or possible: an EGD passage cannot make 43259 ready."""
+
+    def test_the_claimed_input_and_its_variants_are_held(self):
+        for indication in ('Pancreatic cyst on CT; EUS requested by the referring physician.',
+                           'Pancreatic cyst (EUS?).', 'Pancreatic cyst on CT; possible EUS.'):
+            with self.subTest(indication=indication):
+                proposals, _ = real(EUS_NOTE.format(indication=indication, plan=''), ('43259', ADVANCED))
+                item = proposals['43259']
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                status = check_of(item, 'service.status')
+                self.assertEqual(status.status, 'warn')
+                self.assertIn('the document names Endoscopic ultrasound only as uncertain', status.detail)
+                self.assertNotIn('documented as performed', status.detail)
+                (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
+                self.assertIn(ADVANCED, asked.reason)
+                self.assertIn('EUS', asked.reason.split('only as uncertain', 1)[1])
+
+    def test_citing_the_doubtful_mention_too_stays_held(self):
+        proposals, _ = real(EUS_NOTE.format(indication='Pancreatic cyst (EUS?).', plan=''),
+                            ('43259', 'Pancreatic cyst (EUS?).', ADVANCED))
+        self.assertEqual(proposals['43259'].status, 'needs_clarification')
+
+    def test_controls(self):
+        proposals, _ = real(EUS_NOTE.format(indication='', plan=''), ('43259', ADVANCED))
+        never = [c for c in proposals['43259'].clarifications if c.fact == 'performed_status']
+        self.assertIn('never names', never[0].reason)
+        proposals, _ = real(EUS_NOTE.format(indication='', plan='Plan: Will schedule EUS for the pancreatic cyst.\n'),
+                            ('43259', ADVANCED), ('43235', ADVANCED))
+        planned = proposals['43259']
+        self.assertEqual((planned.bucket, planned.reinstatable), ('excluded', True))
+        # The code's own EGD passage is not "Endoscopic ultrasound documented as performed elsewhere".
+        self.assertNotIn('documented as performed elsewhere', planned.exclusion_reason)
+        self.assertIn(ADVANCED, planned.exclusion_reason)
+        self.assertEqual(proposals['43235'].status, 'ready')
+
+
+class Status4ResolveStatusTests(EngineCase):
+    """status:4 at the validation layer, with both a silent and a hedged routing cue."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Indication: pancreatic cyst; EUS requested.',
+                'The endoscope was advanced to the second part of the duodenum.')
+    EUS_LINE, DONE = 'Indication: pancreatic cyst; EUS requested.', 'The endoscope was advanced to the second part of the duodenum.'
+
+    def run_case(self, eus_status, *cues):
+        self.statuses = {self.DONE: ('performed', ('performed: was advanced',))}
+        egd = finding(EGD, 'performed', placed(self.NOTE, EGD, 'performed', self.DONE, 'findings', 'performed'),
+                      facts={'extent': 'second part of the duodenum'})
+        eus = finding('gi.eus', eus_status, placed(self.NOTE, 'gi.eus', eus_status, self.EUS_LINE, 'indication', *cues),
+                      facts={'target': 'pancreatic cyst'})
+        result = self.run_engine(self.NOTE, selected('43259', self.NOTE.span(self.DONE)), findings=[egd, eus])
+        return self.proposal(result, '43259')
+
+    def test_silent_and_hedged_uncertain_families_hold(self):
+        for cues in ((SILENT_CUE,), ('uncertain: ?',)):
+            with self.subTest(cues=cues):
+                item = self.run_case('uncertain', *cues)
+                self.assertEqual(item.status, 'needs_clarification')
+                self.assertIn('only as uncertain', self.check(item, 'service.status').detail)
+                self.assertIn(self.EUS_LINE, self.check(item, 'service.status').detail)
+                self.assertEqual(item.rationale.count('Service status: not established as performed.'), 1)
+
+    def test_a_performed_family_still_reads_performed(self):
+        item = self.run_case('performed', 'performed')
+        self.assertEqual((item.status, self.check(item, 'service.status').status), ('ready', 'pass'))
+
+    def test_resolve_status_directly(self):
+        own = checks.Reading('performed', ('performed: was advanced',), 'evidence', self.DONE)
+        silent = checks.Reading('uncertain', (SILENT_CUE,), 'routing', self.EUS_LINE)
+        outcome = checks.resolve_status([own, silent], detectable=True)
+        self.assertEqual((outcome.state, outcome.reason, outcome.decisive, outcome.contrary),
+                         ('uncertain', 'unestablished', own, silent))
+        self.assertEqual(checks.resolve_status([own], detectable=True).reason, 'unnamed')
+        self.assertEqual(checks.resolve_status([own, silent], detectable=False).state, 'performed')
+
+
 # --- status:13: a code's own hedged passage is never dropped by another of its passages ----------------------
 
 S13 = (HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. {findings}\n'

@@ -178,8 +178,9 @@ class StatusOutcome:
     # performed/incomplete: a linked passage that reads otherwise; not_performed: routing reads the family as performed
     contrary: Optional[Reading] = None
     incomplete: Optional[Reading] = None
-    # uncertain only: 'hedged' (the code's own passage hedges) or 'unnamed' (its passage reads as performed
-    # but the document never names the code's service family).
+    # uncertain only: 'hedged' (the code's own passage hedges), 'unnamed' (its passage reads as performed but the
+    # document never names the code's service family) or 'unestablished' (its passage reads as performed but routing
+    # names the family only as uncertain; ``contrary`` is that routing reading).
     reason: str = ''
 
 
@@ -256,7 +257,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
       the exclusion stays reinstatable and names the performed mention.
     - A linked passage that hedges holds the code for clarification; routing never overrides it.
     - A positive passage cannot establish a family that routing documents only as not performed, nor
-      (``detectable``: routing can recognise the family in text) a family the document never names.
+      (``detectable``: routing can recognise the family in text) a family the document never names or names only
+      as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
     """
     own = [r for r in readings if r.origin == 'evidence']
     routed = [r for r in readings if r.origin == 'routing']
@@ -272,8 +274,10 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     if own_positive:
         if routed_negative and not routed_positive:
             return StatusOutcome('not_performed', routed_negative, contrary=own_positive)
-        if detectable and not routed:
-            return StatusOutcome('uncertain', own_positive, reason='unnamed')
+        if detectable and not routed_positive:
+            named = next((r for r in routed if not _silent(r)), None) or _first(routed, ('uncertain',))
+            return StatusOutcome('uncertain', own_positive, contrary=named,
+                                 reason='unestablished' if routed else 'unnamed')
         return positive(own_positive, contrary=own_negative)
     if own_negative:
         return StatusOutcome('not_performed', own_negative, contrary=routed_positive)
@@ -317,9 +321,15 @@ def status_check(outcome: StatusOutcome, name: str) -> Check:
 def exclusion_reason(outcome: StatusOutcome, name: str) -> str:
     reason = (f'Documented as {outcome.decisive.status}, not as performed on the date of service: '
               f'{cite(outcome.decisive)}.')
-    if outcome.contrary:
-        reason += (f' {name[0].upper()}{name[1:]} is documented as {outcome.contrary.status} elsewhere: '
-                   f'{cite(outcome.contrary)}. Reinstate if this code is supported.')
+    contrary = outcome.contrary
+    if contrary and contrary.origin == 'evidence':
+        # The code's own passage reads as performed, but it is not about this service: routing documents the
+        # family only as not performed. It is never presented as this service "documented as performed".
+        reason += (f' The linked passage reads as {contrary.status} ({cite(contrary)}), but the document does not '
+                   f'establish {name} as performed on the date of service. Reinstate if this code is supported.')
+    elif contrary:
+        reason += (f' {name[0].upper()}{name[1:]} is documented as {contrary.status} elsewhere: '
+                   f'{cite(contrary)}. Reinstate if this code is supported.')
     return reason
 
 
@@ -328,6 +338,10 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
                    f'document never names {name}.')
+    elif outcome.reason == 'unestablished' and outcome.decisive:
+        named = f': {cite(outcome.contrary)}' if outcome.contrary else ''
+        return (f'{reason} The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
+                f'document names {name} only as uncertain{named}.')
     elif outcome.decisive:
         reason += f' Read as uncertain: {cite(outcome.decisive)}.'
     if outcome.contrary:

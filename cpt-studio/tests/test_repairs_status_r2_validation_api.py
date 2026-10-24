@@ -11,7 +11,7 @@ from unittest import mock
 
 from django.test import TestCase, override_settings
 
-from studio import models, review
+from studio import review
 from studio.types import RawExchange
 from tests.support import pipeline_factories as pf
 from tests.test_pipeline_api import drain
@@ -115,5 +115,28 @@ class Review1PlanDiscussionApiTests(ApiCase, TestCase):
                 self.assertEqual((visit['status'], visit['allowed_actions']), ('ready', ['approve', 'reject']))
                 self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 201)
                 self.assertEqual(self.report(encounter_id, 'reviewed').status_code, 201)
+
+
+class MultiEvidenceApiCase(ApiCase):
+    def setUp(self):
+        super().setUp()
+        self.provider = MultiEvidenceProvider()
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+@override_settings(**LIVE)
+class Status4ApiTests(MultiEvidenceApiCase, TestCase):
+    """status:4 — EUS named only as requested: the EGD passage does not make 43259 approvable."""
+
+    def test_status4_an_uncertain_family_is_not_approvable(self):
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+                'Indication: Dysphagia. Pancreatic cyst on CT; EUS requested by the referring physician.\n'
+                'Procedure: EGD\nFindings: The endoscope was advanced to the second part of the duodenum. Normal EGD.\n')
+        encounter_id = self.run_note(note, ('43259', 'The endoscope was advanced to the second part of the duodenum.'))
+        eus = self.proposal(encounter_id, '43259')
+        self.assertEqual((eus['status'], eus['allowed_actions']), ('needs_clarification', ['reject']))
+        self.assertEqual(self.decide(encounter_id, '43259', 'approve').status_code, 409)
 
 
