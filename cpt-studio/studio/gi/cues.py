@@ -337,7 +337,15 @@ ADVANCED = rx(r'\b(?:advanced|passed|inserted|introduced|examined|reached)\b')
 
 _LUMINAL = ('gi.egd', 'gi.colonoscopy', 'gi.flex_sig')
 # "a dilated bile duct" is a finding; only the act of dilating is an intervention.
-_DILATION = r'\bdilat(?:ion|ation)s?\b|\b(?:was|were)\s+(?:\w+\s+)?dilated\b|\bdilated\s+(?:with|to|using|up\s+to)\b'
+# A bare "dilated to 11 mm" describes a size (a finding), so it does not count;
+# "was dilated (to ...)" and "dilated with/using <device>" do.
+_DILATION = r'\bdilat(?:ion|ation)s?\b|\b(?:was|were)\s+(?:\w+\s+)?dilated\b|\bdilated\s+(?:with|using)\b'
+# ERCP: "dilation of the duct" is anatomy; only dilating a stricture, the papilla,
+# the sphincter or an anastomosis (or a sphincteroplasty) is an intervention.
+_ERCP_DILATION = (r'\bsphincteroplasty\b'
+                  r'|\bdilat(?:ion|ation)\s+of\s+(?:the\s+)?(?:[\w-]+\s+){0,2}?'
+                  r'(?:strictures?|papilla|sphincter|ampulla|anastomosis)\b'
+                  r'|\b(?:strictures?|papilla|sphincter|ampulla|anastomosis)\s+(?:was|were)\s+(?:\w+\s+)?dilated\b')
 _LOWER = ('gi.colonoscopy', 'gi.flex_sig')
 INTERVENTIONS = (
     ('biopsy', rx(r'\bbiops(?:y|ies|ied)\b'), _LUMINAL),
@@ -379,7 +387,7 @@ INTERVENTIONS = (
     ('stent exchange', rx(r'\bstent\s+exchange\b|\bstents?\s+(?:\w+\s+){0,3}?(?:was|were)\s+exchanged\b'
                           r'|\bexchanged\s+(?:\w+\s+){0,3}?stents?\b'), ('gi.ercp',)),
     ('brushings', rx(r'\bbrush(?:ings?|ed)\b|\bcytology\s+brush\b'), ('gi.ercp',)),
-    ('dilation', rx(_DILATION), ('gi.ercp',)),
+    ('dilation', rx(_ERCP_DILATION), ('gi.ercp',)),
     ('pancreatic duct', rx(r'\bpancreatic\s+(?:duct\s+)?(?:stent|sphincterotomy)\b'
                            r'|\bpancreatic\s+duct\s+(?:was\s+)?stented\b'), ('gi.ercp',)),
 )
@@ -472,3 +480,8 @@ UPPER_LOCATIONS = (
     ('duodenal bulb', rx(r'\bduodenal\s+bulb\b')),
     ('duodenum', rx(r'\bduoden(?:um|al)\b|\bD2\b')),
 )
+
+# "The pancreatic duct was not cannulated" beside a successful biliary cannulation is
+# a deliberate choice (pancreatitis precaution), not a failed ERCP.
+PANCREATIC_SUBJECT = rx(r'\b(?:pancreatic\s+duct|main\s+pancreatic|PD|pancreatic)\b')
+BILIARY_SUBJECT = rx(r'\b(?:common\s+bile\s+duct|bile\s+duct|biliary|CBD|choledoch\w*)\b')

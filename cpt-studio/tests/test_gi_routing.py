@@ -447,6 +447,45 @@ class ProcedureReferenceTests(unittest.TestCase):
         self.assertEqual(status_for_span(text, start, len(text))[0], 'negated')
 
 
+class ErcpCannulationScopeTests(unittest.TestCase):
+    """The pancreatic duct left alone during a biliary ERCP is not a failed ERCP; a dilated duct is not a dilation."""
+
+    def route_technique(self, technique, finding='A biliary sphincterotomy was performed.'):
+        return route(DOS + 'Procedure: Endoscopic retrograde cholangiopancreatography (ERCP)\nTechnique\n'
+                     + technique + '\nFindings\n' + finding + '\n')
+
+    def test_pancreatic_duct_avoidance_beside_biliary_success_is_a_performed_ercp(self):
+        result = self.route_technique('Deep cannulation of the common bile duct was achieved with a sphincterotome; '
+                                      'the pancreatic duct was not cannulated or injected.')
+        self.assertEqual(result.finding('gi.ercp').status, 'performed')
+        self.assertEqual(value(result, 'gi.ercp', 'cannulation'), 'successful')
+        self.assertNotIn('cannulation', result.finding('gi.ercp').missing)
+
+    def test_pancreatic_duct_not_cannulated_without_biliary_success_stays_fail_closed(self):
+        result = self.route_technique('The pancreatic duct was not cannulated.', finding='No stones were seen.')
+        self.assertNotEqual(result.finding('gi.ercp').status, 'performed')
+
+    def test_failed_biliary_cannulation_is_never_read_as_a_completed_ercp(self):
+        # Biliary failure beside a pancreatic-duct success is a conflict for the reviewer, never a pick.
+        result = self.route_technique('Multiple attempts at biliary cannulation were unsuccessful; '
+                                      'the pancreatic duct was cannulated once.', finding='No sphincterotomy.')
+        self.assertNotEqual(result.finding('gi.ercp').status, 'performed')
+        self.assertNotEqual(value(result, 'gi.ercp', 'cannulation'), 'successful')
+        self.assertIn('cannulation', result.finding('gi.ercp').missing)
+
+    def test_a_dilated_duct_is_a_finding_not_a_dilation(self):
+        result = self.route_technique('Deep biliary cannulation was achieved.',
+                                      finding='A common bile duct dilated to 11 mm contained two stones. '
+                                              'A biliary sphincterotomy was performed and the stones were removed '
+                                              'with an extraction balloon.')
+        self.assertNotIn('dilation', value(result, 'gi.ercp', 'interventions') or '')
+
+    def test_dilating_a_stricture_is_a_dilation(self):
+        result = self.route_technique('Deep biliary cannulation was achieved.',
+                                      finding='A distal biliary stricture was dilated to 8 mm with a balloon.')
+        self.assertIn('dilation', value(result, 'gi.ercp', 'interventions') or '')
+
+
 class ServiceNameTests(unittest.TestCase):
     def families(self, body):
         return {m.family for f in route(DOS + body).findings for m in f.mentions}

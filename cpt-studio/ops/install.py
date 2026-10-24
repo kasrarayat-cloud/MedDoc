@@ -95,14 +95,15 @@ LE_DIRS = ('/etc/letsencrypt', '/var/lib/letsencrypt', '/var/log/letsencrypt', '
 # The two CMS public files the reference importer loads (it drops descriptors).
 # Identity is pinned by size and sha256. Release and window are read from the
 # archives (PPRRVU2026_Oct_* tables; MCR_MUE_PractitionerServices_Eff_10-01-2026).
-# URLs: the RVU26D publication page recorded by the 2026-10-16 reassessment
-# (rebuild/ops/fixtures/corti_office_time_output_reference.json) and the MUE file
-# link on the CMS MUE page. Retrieval times are the operator's to state.
+# URLs are the files' own download links: RVU26D as recorded by the 2026-10-16
+# reassessment's download receipt (rvu26d-download.json: url == final_url, same
+# sha256), and the MUE file link on the CMS MUE page. Retrieval times are the
+# operator's to state from those receipts.
 REFERENCE_FILES = {
     'cms-pfs': {'name': 'rvu26d-updated-08-26-2026.zip', 'size': 6181360,
                 'sha256': '521ff0f4ecbf13b5d99dc1dc04d9f82e5361e55c6b4b6b3033043598bf8406e6',
                 'release': 'RVU26D', 'effective_start': '2026-10-01', 'effective_end': '2026-12-31',
-                'url': 'https://www.cms.gov/medicare/payment/fee-schedules/physician/pfs-relative-value-files/rvu26d'},
+                'url': 'https://www.cms.gov/files/zip/rvu26d-updated-08-26-2026.zip'},
     'cms-mue-practitioner': {'name': 'medicare-ncci-2026-q4-practitioner-services-mue-table.zip', 'size': 407831,
                              'sha256': '4574336755ba4e49b7c8ec07de5b74d3f0b8593e3e6192013631724981180d00',
                              'release': '2026-Q4', 'effective_start': '2026-10-01', 'effective_end': '2026-12-31',

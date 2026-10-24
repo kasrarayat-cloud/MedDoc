@@ -541,6 +541,8 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                     context = _generic_reading(an, m.start(), m.end()).status
                     if context in ('historical', 'planned'):
                         continue
+                    if family == 'gi.ercp' and 'cannulat' in m.group(0).lower() and _pancreatic_avoidance(an, m.start()):
+                        continue
                     status_here = status or context  # "aborted": cancelled before insertion, incomplete after
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
                     found[mention] = Reading(status_here, (f'{status_here}: {m.group(0)}',), 'cue')
@@ -707,6 +709,33 @@ def _eus_facts(an: Analysis, sentences) -> list[Fact]:
     return [f for f in (target, sampled) if f]
 
 
+def _clause_at(an: Analysis, pos: int) -> tuple[int, int]:
+    for cs, ce in an.lay.clauses_for(pos, pos + 1):
+        if cs <= pos < ce:
+            return cs, ce
+    return an.lay.sentence_for(pos, pos + 1)
+
+
+def _biliary_cannulation_succeeded(an: Analysis) -> bool:
+    text = an.text
+    for m in cues.CANNULATION_SUCCESS.finditer(text):
+        cs, ce = _clause_at(an, m.start())
+        if cues.BILIARY_SUBJECT.search(text, cs, ce) and _generic_reading(an, m.start(), m.end()).status in (
+                'performed', 'incomplete'):
+            return True
+    return False
+
+
+def _pancreatic_avoidance(an: Analysis, start: int) -> bool:
+    """A "not cannulated" phrase whose subject is the pancreatic duct, in a document that
+    documents a successful biliary cannulation: a deliberate choice, not a failed ERCP.
+    Without documented biliary success the phrase keeps its fail-closed reading."""
+    cs, _ = _clause_at(an, start)
+    subject = an.text[cs:start]
+    return (bool(cues.PANCREATIC_SUBJECT.search(subject)) and not cues.BILIARY_SUBJECT.search(subject)
+            and _biliary_cannulation_succeeded(an))
+
+
 def _cannulation(an: Analysis, sentences) -> Optional[Fact]:
     """Successful or failed; both documented is a conflict for a reviewer, never a pick."""
     text = an.text
@@ -715,6 +744,8 @@ def _cannulation(an: Analysis, sentences) -> Optional[Fact]:
         for value, pattern, readable in (('successful', cues.CANNULATION_SUCCESS, ('performed', 'incomplete')),
                                          ('failed', cues.CANNULATION_FAILED, ('performed', 'incomplete', 'negated'))):
             for m in pattern.finditer(text, s, e):
+                if value == 'failed' and _pancreatic_avoidance(an, m.start()):
+                    continue
                 if _generic_reading(an, m.start(), m.end()).status in readable:
                     found.append((value, _span(text, m.start(), m.end())))
     failed_spans = {sp for v, sp in found if v == 'failed'}
