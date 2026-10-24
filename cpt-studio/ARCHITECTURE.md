@@ -360,8 +360,10 @@ separately identifiable E/M not established, modifier *considerations*
 (never assigned), CPT membership `not_verified`, descriptor `withheld`, NCCI
 PTP `not_verified`. Encounter checks: extraction status, service date,
 services outside the GI profiles (`services.unsupported`: warn when any is
-selected or detected, otherwise `not_verified`, since routing recognises only
-the profiled families), performed services with no proposal
+selected or detected — a selected one held for clarification is listed as not
+established, never as performed and never left out — otherwise `not_verified`,
+since routing recognises only the profiled families), performed services with
+no proposal
 (`services.unproposed`, a possible missed code; a performed `gi.other` finding
 counts). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
@@ -393,7 +395,12 @@ the clarification names both passages); routing decides only when the
 passage is silent (routing's default "no performance evidence" reading). A
 positive passage cannot establish a family that routing documents only as not
 performed, nor a recognisable family the document never names or names only
-as uncertain. An exclusion never presents the code's own passage as the
+as uncertain. A `gi.other` code's passage that reads performed by its section
+alone (no `performed:` cue) counts only where it names a procedure — a
+sentence of it opens with a procedure name by routing's `gi.other` form rule,
+it states a procedure's act by its participle ("were banded"), or a routed
+`gi.other` mention read as done lies in it; otherwise (`section_only`) the code
+is held, never excluded. An exclusion never presents the code's own passage as the
 service "documented as performed elsewhere". Routing and span status read
 dated history against the encounter's effective service date (a member value
 overrides the document's).

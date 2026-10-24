@@ -6,6 +6,7 @@ sources agree, never states a rule the system does not hold, and reports
 """
 from __future__ import annotations
 
+import bisect
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -169,6 +170,11 @@ class Reading:
     cues: tuple[str, ...]
     origin: str  # evidence | routing
     passage: str
+    start: Optional[int] = None  # a linked passage's offsets in the text
+    end: Optional[int] = None
+    # Set by the engine on a linked passage of a gi.other code: a positive reading that rests on its section alone, in a
+    # passage that names no procedure (see engine._unnamed_other). It is not evidence that the code's service was done.
+    unnamed: bool = False
 
 
 @dataclass(frozen=True)
@@ -180,8 +186,10 @@ class StatusOutcome:
     incomplete: Optional[Reading] = None
     # uncertain only: 'hedged' (the code's own passage hedges), 'unnamed' (its passage reads as performed but the
     # document never names the code's service family), 'unestablished' (its passage reads as performed but routing
-    # names the family only as uncertain; ``contrary`` is that routing reading) or 'contested' (one of its own
-    # passages reads as performed and another hedges; ``decisive`` is the hedge, ``contrary`` the performed one).
+    # names the family only as uncertain; ``contrary`` is that routing reading), 'contested' (one of its own
+    # passages reads as performed and another hedges; ``decisive`` is the hedge, ``contrary`` the performed one) or
+    # 'section_only' (every positive passage of a gi.other code reads performed by its section alone and names no
+    # procedure; ``decisive`` is that passage).
     reason: str = ''
 
 
@@ -239,6 +247,9 @@ SILENT_CUE_PREFIX = 'uncertain: no performance evidence'
 # 'performed' it survives only where something else downgraded the statement: its plan or history section, or the
 # family's document-level judgement.
 PERFORMED_CUE_PREFIX = 'performed:'
+# Routing's cue for a reading that its section decided ("section: findings (Findings)"): the section default, or the
+# section that downgraded an explicit performance statement.
+SECTION_CUE_PREFIX = 'section: '
 
 
 def silent(status: str, cues: Sequence[str]) -> bool:
@@ -248,6 +259,12 @@ def silent(status: str, cues: Sequence[str]) -> bool:
 
 def _silent(reading: Reading) -> bool:
     return silent(reading.status, reading.cues)
+
+
+def by_section_alone(reading: Reading) -> bool:
+    """A reading that only its section decided: every cue is a 'section: <kind>' cue (routing's section default), so
+    no wording in the passage says anything of a service."""
+    return bool(reading.cues) and all(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
 
 
 def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> StatusOutcome:
@@ -261,10 +278,13 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     - A positive passage cannot establish a family that routing documents only as not performed, nor
       (``detectable``: routing can recognise the family in text) a family the document never names or names only
       as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
+    - Nor can a passage marked ``unnamed`` (a gi.other code's passage read performed by its section alone, naming
+      no procedure): when it is the only positive passage the code is held, never excluded.
     """
     own = [r for r in readings if r.origin == 'evidence']
     routed = [r for r in readings if r.origin == 'routing']
-    own_positive, own_negative = _first(own, POSITIVE), _first(own, NEGATIVE)
+    own_positive = _first([r for r in own if not r.unnamed], POSITIVE) or _first(own, POSITIVE)
+    own_negative = _first(own, NEGATIVE)
     own_hedged = next((r for r in own if r.status == 'uncertain' and not _silent(r)), None)
     routed_positive, routed_negative = _first(routed, POSITIVE), _first(routed, NEGATIVE)
     incomplete = _first(readings, ('incomplete',))
@@ -280,6 +300,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
             named = next((r for r in routed if not _silent(r)), None) or _first(routed, ('uncertain',))
             return StatusOutcome('uncertain', own_positive, contrary=named,
                                  reason='unestablished' if routed else 'unnamed')
+        if own_positive.unnamed:
+            return StatusOutcome('uncertain', own_positive, contrary=own_hedged or own_negative, reason='section_only')
         if own_hedged:
             return StatusOutcome('uncertain', own_hedged, contrary=own_positive, reason='contested')
         return positive(own_positive, contrary=own_negative)
@@ -343,6 +365,14 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         return (f'A linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}, but another linked '
                 f'passage reads as uncertain: {cite(outcome.decisive)}. A passage that hedges holds the code, so '
                 f'{name} is not established as performed as coded on the date of service.')
+    if outcome.reason == 'section_only' and outcome.decisive:
+        # Only the linked passages are judged: the document may document the service in a passage not linked to it.
+        reason = (f'No linked passage establishes that {name} was performed on the date of service: the linked passage '
+                  f'reads as {outcome.decisive.status} only by its section ({cite(outcome.decisive)}) and names no '
+                  'procedure.')
+        if outcome.contrary:
+            reason += f' Another linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}.'
+        return reason
     reason = f'No documentation establishes that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
@@ -893,12 +923,17 @@ def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Che
 
 
 def unsupported_check(entries: Sequence[dict]) -> Check:
+    """``entries``: services outside the GI profiles, performed (routed or selected) or selected and held ('uncertain':
+    its performance is not established, so it is never called performed and never left unnamed)."""
     label = 'Services outside the GI profiles'
     if not entries:
         return Check('services.unsupported', label, 'not_verified', UNSUPPORTED_NONE, COVERAGE_SOURCE)
-    names = [entry['label'] for entry in entries]
-    return Check('services.unsupported', label, 'warn',
-                 f'Performed without a GI profile in this release: {_join(names)}. Review required.', COVERAGE_SOURCE)
+    performed = [entry['label'] for entry in entries if entry['status'] != 'uncertain']
+    held = [f'{entry["label"]} ({_join(entry["codes"])})' for entry in entries if entry['status'] == 'uncertain']
+    parts = [f'Performed without a GI profile in this release: {_join(performed)}.'] if performed else []
+    if held:
+        parts.append(f'Selected without a GI profile in this release, not established as performed: {_join(held)}.')
+    return Check('services.unsupported', label, 'warn', f'{" ".join(parts)} Review required.', COVERAGE_SOURCE)
 
 
 # --- reference sources ------------------------------------------------------------
@@ -950,5 +985,48 @@ def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
     for span in spans:
         parsed = normalise_span_status(span_status(text, span.start, span.end, service_date))
         if parsed is not None:
-            readings.append(Reading(parsed[0], parsed[1], 'evidence', span.text))
+            readings.append(Reading(parsed[0], parsed[1], 'evidence', span.text, span.start, span.end))
     return tuple(readings)
+
+
+# A procedure's act stated by its participle after an auxiliary, or after "we" / "I" ("Internal hemorrhoids were banded
+# x3 today", "we banded two columns"): the participles of routing's gi.other procedure words that routing's performance
+# cues do not read (they read "was ligated", "was dilated", "was injected" and "was resected" themselves).
+_ACT_STATED = re.compile(r'\b(?:was|were|been|we|i)\s+(?:(?!not\b|never\b)[a-z]+\s+)?(?:banded|drained|excised|ablated|'
+                         r'cauteri[sz]ed)\b', re.A | re.I)
+_LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # "2)", "(2)", "2.", "*", a bullet
+
+
+def names_procedure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """Whether the passage [start, end) names a procedure by routing's gi.other form rule (ARCHITECTURE 5.3): one of its
+    sentences opens with a procedure's name (as the first sentence of a procedure section does: "Rubber band ligation of
+    a grade 2 internal hemorrhoid x1", "Anoscopy revealed ...", "On anoscopy, ..."), or states a procedure's act by its
+    participle. Never a name that is an examination, test, sedation, consent or person, one led by a negation,
+    condition or plan word, or one in a passage about a detected family's procedure. Resolved at call time, like
+    ``span_status``: the routing module owns the form rule. Bounded: one name per sentence of the passage."""
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    detected = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
+
+    def free(s: int, e: int, sentence: tuple[int, int]) -> bool:  # not about a detected family's procedure
+        scope = (max(sentence[0], s - detect.CLAUSE_REACH), min(sentence[1], e + detect.CLAUSE_REACH))
+        return not detect._about_a_detected_family(an, *scope, detected)
+
+    sentences = an.lay.sentences
+    for index in range(max(bisect.bisect_right(sentences, (start, 1 << 62)) - 1, 0), len(sentences)):
+        sentence = sentences[index]  # indexed, never sliced: a slice copies every later sentence
+        if sentence[0] >= end:
+            break
+        if sentence[1] <= start:
+            continue
+        pos, limit = max(sentence[0], start), min(sentence[1], end)
+        marker = _LIST_MARKER.match(text, pos, limit)
+        span = detect._procedure_name(an, marker.end() if marker else pos, limit)
+        if span is None:
+            continue
+        name = text[span[0]:span[1]]
+        if (detect._PROCEDURE_WORD.search(name) and not detect._NOT_A_PROCEDURE.search(name)
+                and not detect._NOT_DONE_LED.match(name) and free(*span, sentence)):
+            return True
+    return any(free(m.start(), m.end(), an.lay.sentence_for(m.start(), m.end()))
+               for m in _ACT_STATED.finditer(text, start, end))

@@ -151,9 +151,31 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     # check and rationale come from its own passages, as for every family routing does not detect.
     finding = routing.finding(selection.family) if selection.family in DETECTED_FAMILIES else None
     own = checks.evidence_readings(text, kept, day)
+    if selection.family == OTHER_GI:
+        own = _unnamed_other(own, text, routing, day)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
+
+
+def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingResult,
+                   day: Optional[date]) -> tuple[checks.Reading, ...]:
+    """A gi.other code's linked passages, each positive one that rests on its section alone marked ``unnamed`` unless
+    it names a procedure: a routed gi.other mention read as done lies in it, or it names one by routing's form rule
+    (checks.names_procedure). "Grade 2 internal hemorrhoids were seen on retroflexion." under Findings reads performed
+    only because of its section; it documents a finding, not a banding or an anoscopy, so it is no evidence that the
+    code's procedure was done. Routing's gi.other finding still never decides the code's status (it may be another
+    procedure): only a mention inside the code's own passage counts, and only as the name of a procedure."""
+    other = routing.finding(OTHER_GI)
+    done = [m.span for m in (other.mentions if other else ()) if m.status in checks.POSITIVE]
+    marked = []
+    for reading in own:
+        if (reading.status in checks.POSITIVE and checks.by_section_alone(reading)
+                and not any(span.start < reading.end and reading.start < span.end for span in done)
+                and not checks.names_procedure(text, reading.start, reading.end, day)):
+            reading = replace(reading, unnamed=True)
+        marked.append(reading)
+    return tuple(marked)
 
 
 # --- phase 2: checks that depend on the other proposals -----------------------------------
@@ -456,17 +478,26 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
 
 
 def _unsupported(routing: RoutingResult, selections: Sequence[_Selection]) -> tuple[dict, ...]:
+    """Services outside the GI profiles: routed or selected ones documented as done, then selected ones held for
+    clarification (status 'uncertain'), so a held code is neither called performed nor reported as absent."""
     entries: dict[str, dict] = {}
+    held: dict[str, dict] = {}
     for finding in routing.findings:
         profile = PROFILES.get(finding.family)
         done = _done_today(finding)
         if (profile is None or not profile.supported) and done:
             entries.setdefault(finding.family, _unsupported_entry(finding.family, done))
     for s in selections:
-        if s.performed and not s.profile.supported:
+        if s.profile.supported or s.evaluation is None:
+            continue
+        if s.performed:
             entry = entries.setdefault(s.family, _unsupported_entry(s.family, s.evaluation.outcome.state))
-            entry['codes'].append(s.code)
-    return tuple(entries.values())
+        elif s.evaluation.outcome.state == 'uncertain':
+            entry = held.setdefault(s.family, _unsupported_entry(s.family, 'uncertain'))
+        else:
+            continue
+        entry['codes'].append(s.code)
+    return tuple(entries.values()) + tuple(held.values())
 
 
 def _unsupported_entry(family: str, status: str) -> dict:
