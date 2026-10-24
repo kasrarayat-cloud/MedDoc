@@ -170,3 +170,30 @@ class RealRoutingCasesTests(SimpleTestCase):
         band = self.run_case('Procedure: Anoscopy - patient declined.\nGrade 2 internal hemorrhoids.',
                              'Grade 2 internal hemorrhoids.')
         self.assertEqual(band.bucket, 'selected')
+
+
+class AssessmentHedgeIntegrationTests(SimpleTestCase):
+    """Integration of WORDING (a hedge after the act is a doubt: 'may have been performed') with VALIDATION's
+    validation:8 (a hedge in an assessment no longer holds the visit, a doubt still does): pinned only here, where both
+    are present. Real routing, the real span reader and the engine."""
+
+    NOTE = ('SYNTHETIC\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+            'visit.\nChief complaint: dysphagia.\nAssessment: Dysphagia. {line}\nMedical decision making: moderate.\n'
+            'Total time: 32 minutes.\n')
+
+    def visit(self, line):
+        proposals, _ = real(self.NOTE.format(line=line), ('99214', 'Established patient office visit.'))
+        return proposals['99214']
+
+    def test_an_act_that_may_have_been_done_today_holds_the_visit(self):
+        for line in ('EGD may have been performed.', 'An EGD was possibly performed.'):
+            with self.subTest(line=line):
+                visit = self.visit(line)
+                self.assertEqual(visit.status, 'needs_clarification')
+                self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+
+    def test_a_possible_future_procedure_does_not(self):
+        for line in ('Possible EGD if symptoms persist.', 'Discussed EGD; the patient will think about it.'):
+            with self.subTest(line=line):
+                visit = self.visit(line)
+                self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'), [c.detail for c in visit.checks])

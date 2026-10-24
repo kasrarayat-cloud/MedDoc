@@ -278,6 +278,27 @@ class Validation1PlanDefaultTodayTests(unittest.TestCase):
                 proposals, _ = run_engine(text, [('99213', TIME)])
                 self.assertTrue(ready(proposals['99213']), clarified(proposals['99213']))
 
+    def test_a_conditional_or_future_plan_today_stays_planned(self):
+        # Integration (found by VALIDATION): the plan default held every clause that says today, so a plan line that
+        # makes today's service a condition or a future ("Repeat colonoscopy today if bleeding recurs.") held the visit,
+        # and contested a performed colonoscopy that cited it beside its cecum sentence. It plans, as before round 3b.
+        for plan in ('Repeat colonoscopy today if bleeding recurs.', 'EGD today if the dysphagia persists.',
+                     'Colonoscopy today, pending clearance from cardiology.'):
+            text = plan_office(plan)
+            with self.subTest(plan=plan):
+                service = next(w for w in ('colonoscopy', 'Colonoscopy', 'EGD') if w in plan)
+                self.assertEqual(read(text, service)[0], 'planned')
+                proposals, _ = run_engine(text, [('99213', TIME)])
+                self.assertTrue(ready(proposals['99213']), clarified(proposals['99213']))
+
+    def test_a_performed_colonoscopy_citing_a_conditional_plan_line_is_not_contested(self):
+        cecum = 'The colonoscope was advanced to the cecum.'
+        plan = 'Repeat colonoscopy today if bleeding recurs.'
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: ' + cecum + ' The colon was normal.\nPlan: ' + plan + '\n')
+        proposals, _ = run_engine(text, [('45378', cecum), ('45378', plan)])
+        self.assertEqual((proposals['45378'].bucket, proposals['45378'].status), ('selected', 'ready'),
+                         [c.detail for c in proposals['45378'].checks])
+
     def test_a_hedged_or_discussed_plan_today_does_not_hold_the_visit(self):
         for plan in ('Possible EGD today if symptoms persist.', 'Discussed colonoscopy today; she will think about it.',
                      'Colonoscopy? Will decide today after labs.'):

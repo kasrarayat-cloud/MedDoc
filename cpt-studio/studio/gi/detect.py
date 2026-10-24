@@ -1626,9 +1626,12 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
             return Reading('uncertain', (held, label), 'cue')
         return Reading('performed', (label,), 'section')
     if section.kind == 'plan':
-        # a plan's default at most holds a clause that says today (validation:1): it may document today's service
-        if any(cues.TODAY.search(an.text, *an.lay.window(clause, start, end, CLAUSE_REACH))
-               for clause in an.lay.clauses_for(start, end)):
+        # a plan's default at most holds a clause that says today (validation:1): it may document today's service.
+        # Not one that makes it a condition, a possibility or a future ("Repeat colonoscopy today if bleeding
+        # recurs.", "EGD today if the dysphagia persists."): that plans it, as before round 3b (_not_yet, the test
+        # the plan-today release also reads).
+        windows = [an.lay.window(clause, start, end, CLAUSE_REACH) for clause in an.lay.clauses_for(start, end)]
+        if any(cues.TODAY.search(an.text, *w) for w in windows) and not any(_not_yet(an, *w) for w in windows):
             return Reading('uncertain', (PLAN_TODAY, label), 'section')
         return Reading('planned', (label,), 'section')
     if section.kind == 'history':
