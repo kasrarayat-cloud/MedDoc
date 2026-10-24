@@ -47,3 +47,27 @@ class ShortDenyingLineTests(SimpleTestCase):
         for line in ('Patient declined sedation.', 'No complications.', 'No polyps were seen.'):
             with self.subTest(line=line):
                 self.assertEqual(status(DOS + 'Procedure: Colonoscopy.\n' + line + '\n'), 'performed')
+
+
+class CheckboxTests(SimpleTestCase):
+    """Extraction now writes checkboxes as glyphs (☐ unchecked, ☒/☑/✓ checked). An unchecked box denies its
+    item; the box nearest before an item on its line governs it."""
+
+    def test_an_unchecked_box_negates_its_item(self):
+        for text in (DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ Biopsy\n',
+                     DOS + 'Procedure: Colonoscopy to the cecum.\nInterventions:\n☐ Biopsy\n☒ Cold snare polypectomy\n',
+                     DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n[ ] Biopsy\n'):
+            with self.subTest(text=text):
+                self.assertEqual(status(text, 'Biopsy'), 'negated')
+
+    def test_the_nearest_box_governs_and_a_checked_box_does_not_negate(self):
+        line = DOS + 'Procedure: Colonoscopy to the cecum.\nInterventions:\n☐ Biopsy ☒ Cold snare polypectomy\n'
+        self.assertEqual(status(line, 'Biopsy'), 'negated')
+        self.assertNotEqual(status(line, 'Cold snare polypectomy'), 'negated')
+        self.assertEqual(status(DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n[x] Biopsy\n', 'Biopsy'),
+                         'performed')
+
+    def test_an_unchecked_service_is_negated_in_routing(self):
+        from studio.gi.detect import route
+        families = {f.family: f.status for f in route(DOS + 'Procedures performed today:\n☐ EGD\n☒ Colonoscopy\n').findings}
+        self.assertEqual(families['gi.egd'], 'negated')

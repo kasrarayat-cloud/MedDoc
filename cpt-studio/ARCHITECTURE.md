@@ -141,6 +141,26 @@ lines) in document order; headers/footers are listed in `messages` as not
 extracted. TXT: UTF-8 (BOM stripped) or explicit decode failure.
 Encrypted/corrupt/oversized/too-many-pages files fail with a specific message.
 
+Never silently partial (`cpt-studio-ingest@2`): content a viewer would show is
+read or reported, and content it would not show is excluded with a message.
+- PDF: filled form values (text, choice, checked / not checked, radio) and
+  FreeText / stamp text are read into a labelled block after the page text; a
+  field whose stored value differs from its appearance, or any XFA form, makes
+  the result partial. A page at least half covered by images with under 200
+  characters of text is OCRed (or named and left unread). Every compressed
+  stream the text depends on must decode completely; a page count that
+  disagrees with the page tree, or a file truncated inside an incremental
+  update, fails. Optional content that is OFF by default is excluded and named.
+- DOCX: text hidden through direct formatting or a character, paragraph or
+  table style is excluded and counted; a content control is a placeholder only
+  when its flag is on; comments or processing instructions inside a run never
+  cut it; `mc:AlternateContent` reads the first Choice this reader understands,
+  else the Fallback (partial when neither); symbol-font check boxes become
+  ☐ / ☑ / ☒ / ✓, other symbol glyphs are counted and dropped. A DOCX can be
+  partial.
+- Routing reads an item governed by an unchecked box on its line (☐, □, `[ ]`)
+  as negated; the nearest box before an item governs it.
+
 ### 5.2 `studio/gi/context` — encounter context
 
 `extract_context(text) -> dict[name, Fact]` for `service_date`, `setting`,

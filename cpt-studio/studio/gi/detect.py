@@ -822,12 +822,29 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     return Reading('uncertain', (SILENT,), 'default')
 
 
+# Checkbox glyphs as extraction writes them (Wingdings and form fields map to these) and their ASCII forms.
+# The box nearest before an item on its line governs it: "☐ Biopsy ☒ Cold snare polypectomy".
+_BOX = re.compile(r'(?P<off>\u2610|\u25a1|\[[ _]?\])|(?P<on>\u2611|\u2612|\u2713|\u2714|\u25a0|\[[xX\u2713\u2714]\])')
+UNCHECKED = 'negated: an unchecked box'
+
+
+def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
+    """Whether the item at [start, end) is governed by an unchecked box on its own line."""
+    line_start = an.text.rfind('\n', 0, start) + 1
+    last = None
+    for m in _BOX.finditer(an.text, line_start, max(end, start + 1)):
+        last = m
+    return last is not None and last.group('off') is not None
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
     negation sits in its clause, or when only its section speaks for a named service whose
     words are not those of a procedure description ("Colonoscopy declined by patient")."""
     key = ('reading', start, end)
+    if key not in an.memo and _unchecked_box(an, start, end):
+        an.memo[key] = Reading('negated', (UNCHECKED,), 'cue')
     if key not in an.memo:
         reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
         if reading.status == 'performed' and not reading.cues[0].endswith(EM_DOCUMENTATION):

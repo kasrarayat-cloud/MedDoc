@@ -359,3 +359,18 @@ class UncertainSameDayProcedureTests(EngineCase):
         visit = self.run_case('planned')
         self.assertEqual(visit.status, 'ready')
         self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])
+
+
+@override_settings(**LIVE)
+class UncheckedBoxEvidenceTests(ApiHarness, TestCase):
+    """A provider code citing an unchecked box ("☐ Biopsy") is excluded, never ready."""
+
+    def test_code_citing_an_unchecked_box_is_excluded(self):
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+                'Procedure: Colonoscopy to the cecum. A 6 mm polyp was seen.\n\u2610 Biopsy\n')
+        self.provider.selections = [('45380', '\u2610 Biopsy')]
+        encounter_id = self.create(note)
+        drain()
+        proposal = models.Encounter.objects.get(pk=encounter_id).current_assessment.proposals.get(code='45380')
+        self.assertEqual(proposal.bucket, models.Proposal.EXCLUDED)
+        self.assertIn('unchecked box', proposal.exclusion_reason)
