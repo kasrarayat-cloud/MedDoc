@@ -216,23 +216,105 @@ def _lines(text: str) -> list[tuple[int, int]]:
         start = nl + 1
 
 
-# Words a sentence cannot end on: a line cut after one goes on in the next line whatever its case, so a
-# layout break never splits "no" or "declined the" from the service named on the next line ("... because
-# of time constraints, no\nEUS of the pancreatic cyst was performed today").
+# Function words a sentence cannot end on (a closed class: articles and determiners, prepositions,
+# conjunctions, auxiliaries, negations): a prose line cut after one goes on in the next line whatever its
+# case, so a layout break never splits "no" or "declined the" from the service named on the next line
+# ("... because of time constraints, no\nEUS of the pancreatic cyst was performed today").
 _WRAP_WORDS = frozenset((
-    'no', 'not', 'nor', 'neither', 'never', 'without', 'w/o', 'declined', 'refused', 'denies', 'denied', 'the', 'a',
-    'an', 'any', 'of', 'to', 'and', 'or', 'with', 'for', 'by', 'from', 'in', 'on', 'at', 'into', 'than', 'that',
-    'which', 'her', 'his', 'their', 'its', 'this', 'further', 'additional', 'repeat', 'was', 'were', 'is', 'are',
-    'be', 'been', 'had', 'has', 'have', 'after', 'before', 'during', 'under', 'via', 'per', 'but'))
+    'no', 'not', 'nor', 'neither', 'never', 'without', 'w/o', 'the', 'a', 'an', 'any', 'of', 'to', 'and', 'or', 'with',
+    'for', 'by', 'from', 'in', 'on', 'at', 'into', 'than', 'that', 'which', 'her', 'his', 'their', 'its', 'this',
+    'further', 'additional', 'repeat', 'was', 'were', 'is', 'are', 'be', 'been', 'had', 'has', 'have', 'after', 'before',
+    'during', 'under', 'via', 'per', 'but'))
+# The rest of that closed class, read only as written in lower case: in capitals they are as often a month, a
+# name or an abbreviation ("May", "AS", "IF", "VS", "WHO") as a word cut from the next line.
+_WRAP_WORDS_LOWER = frozenset((
+    'these', 'those', 'our', 'my', 'your', 'each', 'every', 'another', 'whose', 'who', 'whom', 'about', 'against',
+    'among', 'as', 'between', 'despite', 'except', 'including', 'excluding', 'regarding', 'toward', 'towards', 'unlike',
+    'upon', 'onto', 'versus', 'vs', 'w/', 'if', 'unless', 'because', 'although', 'whether', 'whereas', 'being', 'do',
+    'does', 'did', 'will', 'would', 'shall', 'should', 'can', 'could', 'may', 'might', 'must', 'cannot'))
 _LAST_TOKEN = re.compile(r'(?:^|[\s(])([A-Za-z][A-Za-z/]*)$', re.A)
 # A next line that starts a list item, a field ("Date of service: ...") or a table row never continues one.
 _LIST_OR_FIELD = re.compile(r'[ \t]*(?:[-*]\s|\d{1,2}[.)]\s|[A-Za-z][.)]\s|[^:\n|]{1,40}:[ \t]*\S)', re.A)
+# Nor does a line that answers a field or marks an option, whatever word it ends on: its "no" is the answer, not
+# a word cut from the next line ("Schatzki ring present: no", "Hiatal hernia - no", "Hiatal hernia? no",
+# "Sedation: patient declined", "Biopsy taken [ ] Yes [x] No", "Biopsy taken   Yes   No").
+WRAP_TAIL = 200  # only the end of a line is read for its shape (bounds the work per line)
+_FIELD_ANSWER = re.compile(r'(?:^|[.;][ \t]+)(?P<label>[^:.;?=|\n]{1,60}?)[ \t]*'
+                           r'(?P<sep>:|\?|=|[ \t][-\u2013\u2014][ \t])[ \t]*'
+                           r'(?P<value>[^\s:?=|]+(?:[ \t]+[^\s:?=|]+){0,2})[ \t]*$', re.A)
+# Before a dash a field's label names a thing; a clause ("Colonoscopy was performed - no EGD was done") is prose.
+_LABEL_CLAUSE = re.compile(r'\b(?:was|were|is|are|has|have|had|did|does|do|will|would|shall|should|can|could|may|'
+                           r'might|must)\b', re.A | re.I)
+_ALONE_ANSWERS = frozenset(('no', 'not', 'never', 'none'))  # a whole answer when it is the whole value
+_DENIALS = frozenset(('declined', 'declines', 'refused', 'refuses', 'denied', 'denies'))
+_OPTION_ROW = re.compile(r'(?:[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752\u2611\u2612\u2713\u2714\u25a0\u2327]'
+                         r'|\[[ \t]*[xXvV*_\u2713\u2714]?[ \t]*\]|\([ \t]*[xX]?[ \t]*\)|\byes\b)[ \t/|,-]*\bno[ \t]*$',
+                         re.A | re.I)
+# A content word ends a line that goes on only where its verb still lacks what it takes, and the next line does
+# not open a clause of its own: an auxiliary or a subject before the last word ("we did not perform\nEUS of the
+# pancreatic cyst", "will schedule\nEUS", "she underwent\nEGD", "we recommend\nEUS") or a denial ("the patient
+# declined\nEUS."); never "the patient refused\nColonoscopy was then performed".
+_OPEN_VERB = re.compile(r"(?:\b(?:do|does|did|will|would|shall|should|can|could|may|might|must|cannot|has|have|had|we|"
+                        r"you|they|he|she|(?:the|our|this)[ \t]+(?:patient|pt))|(?:^|[.;,][ \t]+|\b(?:and|but|then|so)"
+                        r"[ \t]+)I|n't|\bnot[ \t]+to)(?:[ \t]+(?:not|never|also|then|still|again|ever|yet|already|"
+                        r"[A-Za-z]+ly))*[ \t]+(?-i:[a-z][a-z'-]*)$"
+                        # after a bare "to" only a verb that takes a procedure ("unable to perform\nEUS"), never a
+                        # place ("referred to surgery\nColonoscopy ...")
+                        r"|\bto[ \t]+(?-i:perform|undergo|schedule|reschedule|defer|forgo|forego|postpone|cancel|repeat|"
+                        r"have|pursue|obtain|complete|do|attempt|consider|arrange|book|order|request|recommend|plan|"
+                        r"offer|discuss|delay|hold|need|require|receive|get|avoid|skip|omit|decline|refuse)$",
+                        re.A | re.I)
+# Where a line's own clause ends, and the words that make it one ("Colonoscopy was then performed", "EGD
+# performed"); a participle after a determiner or a preposition describes ("EUS of the dilated duct").
+OWN_CLAUSE_REACH, OWN_CLAUSE_WORDS = 200, 10  # how much of the next line is read (bounds the work per line)
+_CLAUSE_STOP = re.compile(r'[,;:.()!?]|\b(?:which|that|who|whom|whose|where|when|while|because|since|as|if|unless|'
+                          r'although|though|whereas|until|once|but|so)\b'
+                          r'|\b(?:and|or)[ \t]+(?=(?:the|she|he|they|we|i|it|this|there|patient)\b)', re.A | re.I)
+_CLAUSE_WORD_TOKEN = re.compile(r"[A-Za-z][A-Za-z'/-]*", re.A)
+_FINITE = frozenset(('was', 'were', 'is', 'are', 'am', 'has', 'have', 'had', 'will', 'would', 'shall', 'should', 'can',
+                     'could', 'may', 'might', 'must', 'did', 'does', 'do', 'cannot', 'shows', 'reveals',
+                     'demonstrates', 'appears', 'remains', 'measures', 'notes', 'confirms', 'suggests', 'contains',
+                     'requires'))
+_IRREGULAR_PARTICIPLES = frozenset(('done', 'taken', 'seen', 'given', 'shown', 'made', 'sent', 'held', 'kept', 'left',
+                                    'found', 'begun', 'undergone', 'drawn', 'brought', 'gone'))
+_DESCRIBING_BEFORE = frozenset(('the', 'a', 'an', 'this', 'that', 'these', 'those', 'its', 'her', 'his', 'their',
+                                'our', 'any', 'no', 'each', 'every', 'of', 'for', 'with', 'in', 'on', 'at', 'to', 'by',
+                                'from', 'into', 'under', 'over', 'after', 'before', 'during', 'without', 'via', 'per'))
+
+
+def _answered(tail: str) -> bool:
+    """Whether a line ends answering a field: "<label>: no", "<label> - no", "<label>? never", "<label>: patient
+    declined" (a lone negation, or a short value ending in a denial)."""
+    field = _FIELD_ANSWER.search(tail)
+    if not field or (field.group('sep') not in ':?=' and _LABEL_CLAUSE.search(field.group('label'))):
+        return False
+    words = field.group('value').lower().split()
+    return (len(words) == 1 and words[0] in _ALONE_ANSWERS) or words[-1] in _DENIALS
+
+
+def _own_clause(line: str) -> bool:
+    """Whether ``line`` opens a clause of its own: a finite verb or a participle predicate after its first word,
+    before its first comma, stop or clause word."""
+    stop = _CLAUSE_STOP.search(line, 0, OWN_CLAUSE_REACH)
+    words = _CLAUSE_WORD_TOKEN.findall(line, 0, stop.start() if stop else OWN_CLAUSE_REACH)[:OWN_CLAUSE_WORDS]
+    previous = ''
+    for index, word in enumerate(words):
+        lowered = word.lower()
+        if index and (lowered in _FINITE or lowered in _IRREGULAR_PARTICIPLES
+                      or (lowered.endswith('ed') and len(lowered) > 3 and '-' not in lowered
+                          and previous not in _DESCRIBING_BEFORE)):
+            return True
+        if not lowered.endswith('ly'):
+            previous = lowered
+    return False
 
 
 def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
     """A line break inside a sentence: the line (from ``prev[0]``, after any heading label) has no
-    closing punctuation, and the next line continues in lower case, or the line is prose cut on a word
-    a sentence cannot end on (_WRAP_WORDS) and the next line is no list item, field or table row."""
+    closing punctuation, and the next line continues in lower case; or the next line is no list item,
+    field or table row, the line is prose that answers no field and marks no option, and it is cut on a
+    word a sentence cannot end on (_WRAP_WORDS) or on a verb that still lacks what it takes while the next
+    line opens no clause of its own (_OPEN_VERB, _DENIALS)."""
     before = text[prev[0]:prev[1]].rstrip()
     after = text[nxt[0]:nxt[1]].lstrip()
     if not before or before[-1] in '.!?:;' or not after:
@@ -241,8 +323,16 @@ def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
         return True
     if ' | ' in before or ' | ' in after or _LIST_OR_FIELD.match(after) or len(before.split()) < 3:
         return False
-    last = _LAST_TOKEN.search(before)
-    return bool(last) and last.group(1).lower() in _WRAP_WORDS
+    tail = before[-WRAP_TAIL:]
+    if _answered(tail) or _OPTION_ROW.search(tail):
+        return False
+    last = _LAST_TOKEN.search(tail)
+    if last is None:
+        return False
+    word = last.group(1).lower()
+    if word in _WRAP_WORDS or last.group(1) in _WRAP_WORDS_LOWER:
+        return True
+    return (word in _DENIALS or bool(_OPEN_VERB.search(tail))) and not _own_clause(after)
 
 
 _STOP = re.compile(r'[.!?](?=\s)')
