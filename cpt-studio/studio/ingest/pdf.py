@@ -478,9 +478,10 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         boxes = []
         for row in rows:
             if y0 - BOX_SLACK <= known.baselines[row] <= y1 + BOX_SLACK:
-                boxes.extend(known.rows[row][position][2] for position in known.span(row, x0 - reach, x1))
-                if len(boxes) > _ING_MAX_SCAN:
+                span = known.span(row, x0 - reach, x1)
+                if len(boxes) + len(span) > _ING_MAX_SCAN:  # counted before collecting: a wide window costs nothing
                     return None
+                boxes.extend(known.rows[row][position][2] for position in span)
         hides = [(row, count) for row in maybe if (count := bisect_right(inside.xs[row], x1))]
         return boxes, hides, bool(lost)
 

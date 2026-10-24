@@ -566,11 +566,46 @@ def placement_inputs(data):
     return pdf_module._layer_text(page, content), read_annotations(page, optional, resolved(root.get('/AcroForm')))
 
 
+def marked_row(count, *, wide):
+    """``count`` typed '[ ]' boxes on one row, and ``count`` ink marks: each over its own box, or each across the
+    whole row."""
+    width = 40 + count * 20
+    ops = [f'BT /F1 8 Tf {20 + n * 20} 700 Td ([ ] A) Tj ET' for n in range(count)]
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+               5: stream('\n'.join(ops))}
+    annots = []
+    for n in range(count):
+        x0, x1 = (10, width - 10) if wide else (18 + n * 20, 30 + n * 20)
+        objects[100 + n] = (f'<< /Type /Annot /Subtype /Ink /Rect [{x0} 690 {x1} 712] /F 4 '
+                            f'/InkList [[{x0} 700 {x1} 701]] >>').encode()
+        annots.append(f'{100 + n} 0 R')
+    objects[3] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  f'/Contents 5 0 R /Annots [{" ".join(annots)}] >>').encode()
+    from tests.test_repairs_ingest_pdf import serialise
+    return serialise(objects)
+
+
 class Extraction8CrowdedRowCostTests(unittest.TestCase):
     def timed(self, data):
         started = time.monotonic()
         result = in_process(data)
         return time.monotonic() - started, result
+
+    def test_marks_across_a_crowded_row_cost_what_marks_over_one_box_cost(self):
+        """Every mark over every box: past the candidates one mark may examine, the page's boxes are all unread
+        without examining each mark's whole window."""
+        import gc
+        timings = []
+        for wide in (True, False):
+            layer, annotations = placement_inputs(marked_row(4000, wide=wide))
+            gc.collect()
+            started = time.monotonic()
+            text, _, overlap, named = pdf_module._placed_boxes(layer, annotations)
+            timings.append(time.monotonic() - started)
+            self.assertEqual(text.count(UNREAD), 4000)
+            self.assertEqual((overlap, named), (True, False) if wide else (False, True))
+        self.assertLess(timings[0], 3 * timings[1] + 0.1, timings)
 
     def test_placement_on_a_crowded_row_is_near_linear(self):
         """Placement alone, without the parsing around it: one crowded row against the same boxes on 100 rows."""
