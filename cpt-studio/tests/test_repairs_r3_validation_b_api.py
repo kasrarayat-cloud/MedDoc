@@ -82,16 +82,14 @@ class RoundThreeValidationApiTests(MultiEvidenceApiCase, TestCase):
         self.assertIn(missed, reviewed)
         self.assertNotIn('[PASS] services.unproposed', reviewed)
 
-    def test_validation7_a_manometry_coded_xxx_does_not_hold_the_visit(self):
+    def test_validation7_a_manometry_coded_xxx_holds_the_visit_again(self):
+        # Round 4 removed the XXX test-code discount (it also dropped an uncoded same-day procedure in the passage).
         note = OFFICE.format(cc='dysphagia.', body='Esophageal manometry was performed today.')
         encounter_id = self.run_note(note, ('99213', VISIT), ('91010', 'Esophageal manometry was performed today.'))
         visit = self.proposal(encounter_id, '99213')
-        self.assertEqual(visit['allowed_actions'], ['approve', 'reject'])
-        self.assertNotIn('em.same_day_procedure', [c['id'] for c in visit['checks']])
-        self.approve_ready(encounter_id)
-        approved = section(self.report_text(encounter_id, 'reviewed'), 'APPROVED SELECTIONS')
-        self.assertIn('99213', approved)
-        self.assertIn('91010', approved)
+        self.assertEqual(visit['allowed_actions'], ['reject'])
+        self.assertIn('em.same_day_procedure', [c['id'] for c in visit['checks']])
+        self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
 
     def test_validation8_an_assessment_discussion_holds_the_visit_again(self):
         # Round 4 validation:0 reverted round 3b's assessment-section release (the accepted over-hold returns).

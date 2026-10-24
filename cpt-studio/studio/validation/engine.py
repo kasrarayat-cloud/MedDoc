@@ -265,39 +265,25 @@ def _stated_as_done(s: _Selection) -> bool:
                for r in s.evaluation.own)
 
 
-def _done_today(finding: FamilyFinding, selections: Sequence[_Selection] = ()) -> Optional[str]:
+def _done_today(finding: FamilyFinding) -> Optional[str]:
     """The status in which a routed family documents a service as done on the date of service (performed or
     incomplete), or None. A gi.other finding gathers different procedures, and its family status may rank another
-    procedure's denial first ("Anoscopy: patient declined." beside a banding performed today), so it is read mention
-    by mention: one of its mentions read as done is enough. With ``selections``, a mention a selected test code
-    describes (_coded_test) is not counted."""
-    if finding.family == OTHER_GI and finding.mentions:
-        done = {m.status for m in finding.mentions if m.status in checks.POSITIVE and not _coded_test(m, selections)}
-        return next((status for status in checks.POSITIVE if status in done), None)
-    return finding.status if finding.status in checks.POSITIVE else None
+    procedure's denial first ("Anoscopy: patient declined." beside a banding performed today), so one of its
+    mentions read as done is enough. No selected code discounts a routed procedure: a test code's passage may state a
+    second procedure, or name it after a comma (round 4 validation:1, contract:3, evidence:1, release:1)."""
+    if finding.status in checks.POSITIVE:
+        return finding.status
+    if finding.family == OTHER_GI:
+        return next((m.status for m in finding.mentions if m.status in checks.POSITIVE), None)
+    return None
 
 
-def _possibly_today(finding: FamilyFinding, selections: Sequence[_Selection] = ()) -> bool:
+def _possibly_today(finding: FamilyFinding) -> bool:
     """A routed family whose performance on the date of service is not established, through a mention that can speak
     for that date. A gi.other finding is read mention by mention: each of its mentions may be another procedure."""
     if finding.family == OTHER_GI:
-        return any(m.status == 'uncertain' and _speaks_for_today(m) and not _coded_test(m, selections)
-                   for m in finding.mentions)
+        return any(m.status == 'uncertain' and _speaks_for_today(m) for m in finding.mentions)
     return finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions)
-
-
-def _coded_test(mention: ServiceMention, selections: Sequence[_Selection]) -> bool:
-    """A routed gi.other mention that a selected test code describes, so it is no uncoded same-day procedure
-    (validation:7): a selected, non-excluded gi.other code that is not procedural (its fee-schedule row for the date
-    gives the global period XXX: "Esophageal manometry was performed today." with 91010) has an exact evidence span
-    over the mention's name, and the name holds one procedure word. A name with a second procedure ("Esophageal
-    manometry and esophageal dilation"), a code with another global period or none, and evidence beside the name
-    keep the mention counted, fail-closed."""
-    if not selections or checks.procedure_words(mention.span.text) != 1:
-        return False
-    return any(s.family == OTHER_GI and not s.excluded and not _procedural(s)
-               and any(e.start <= mention.span.start and mention.span.end <= e.end for e in s.evidence)
-               for s in selections)
 
 
 def _cited(mention: ServiceMention, selections: Sequence[_Selection]) -> bool:
@@ -332,11 +318,11 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
     possible += [s for s in selections if _procedural(s) and _stated_as_done(s)]
     same_day = [f for f in routing.findings if _same_day_family(f)]
-    labels = [PROFILES[f.family].label for f in same_day if _done_today(f, selections)]
+    labels = [PROFILES[f.family].label for f in same_day if _done_today(f)]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]
     # A routed family whose performance is not established holds the E/M only through a mention that can speak for
     # the date of service; a selected procedural code whose own status is uncertain always does.
-    possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f, selections)]
+    possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}

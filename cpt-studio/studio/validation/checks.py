@@ -1070,13 +1070,6 @@ def names_intervention(text: str, start: int, end: int, family: str) -> bool:
     return any(family in families and pattern.search(text, start, end) for _, pattern, families in words.INTERVENTIONS)
 
 
-def procedure_words(name: str) -> int:
-    """How many procedure words a routed gi.other name holds by routing's form rule (studio.gi.detect._PROCEDURE_WORD),
-    resolved at call time like ``span_status``."""
-    from studio.gi import detect
-    return len(detect._PROCEDURE_WORD.findall(name))
-
-
 def names_procedure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
     """Whether the passage [start, end) names a procedure by routing's gi.other form rule (ARCHITECTURE 5.3): a sentence
     it lies in opens with a procedure's name (as the first sentence of a procedure section does: "Rubber band ligation

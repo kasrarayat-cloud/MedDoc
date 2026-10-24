@@ -64,3 +64,65 @@ class Validation0DiscussionReleaseRevertedTests(Case):
                 self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
         proposals, _ = real(OFFICE.format(line='Plan: Possible EGD if symptoms persist.'), ('99214', VISIT))
         self.assertVisitReady(proposals)
+
+
+# --- validation:1, contract:3, evidence:1, release:1: no XXX test-code discount (round 3b's discount removed) --------
+
+V7 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: {cc}\n{body}\n'
+      'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+MANOMETRY = 'Esophageal manometry was performed today.'
+BANDING = 'Rubber band ligation x3 completed today.'
+
+
+class NoCodedTestDiscountTests(Case):
+    """validation:1, contract:3, evidence:1 and release:1 (critical, new defects from 8b4a17862). A selected XXX test
+    code (91010, 91122) discounted every one-procedure-word gi.other mention its evidence covered, so a same-day banding,
+    dilation or anoscopy in the test code's passage, or named after a comma in its sentence, no longer held the office
+    E/M. The discount is removed and the R3B-BASE hold restored: a routed gi.other procedure holds the E/M whatever code
+    cites it."""
+
+    CASES = (
+        # validation:1: the test code cites a sentence that also states a banding or an anoscopy
+        ('91122', 'Anorectal manometry was performed today, followed by rubber band ligation of two columns.', None),
+        ('91122', 'Anorectal manometry was performed today, and rubber band ligation x3 was completed.', None),
+        ('91122', 'Anorectal manometry was performed today; anoscopy was also performed.', None),
+        ('91010', 'Esophageal manometry was performed today, and rubber band ligation x3 was completed.', None),
+        ('91010', f'{MANOMETRY} {BANDING}', None),
+        ('91010', f'{MANOMETRY} {BANDING}', BANDING),  # the test code citing the banding sentence alone
+        # contract:3 and evidence:1: the test code's passage spans a second procedure's sentence or line
+        ('91010', f'{MANOMETRY}\nHemorrhoid banding was performed today.', None),
+        ('91010', f'{MANOMETRY} Esophageal dilation was performed today with a 54 Fr bougie.', None),
+        ('91010', f'{MANOMETRY}\nEsophageal dilation was performed today with a 54 Fr bougie.', None),
+        ('91010', 'Esophageal manometry was performed today, followed by esophageal dilation with a 54 Fr bougie.',
+         None),
+        ('91122', 'Anorectal manometry was performed today.\nRubber band ligation of an internal hemorrhoid was '
+                  'performed today.', None),
+        # release:1: the second procedure named after a comma, so routing's name stops before it
+        ('91122', 'Procedure: Anorectal manometry, followed by rubber band ligation of two internal hemorrhoids.',
+         None),
+        ('91122', 'Procedure note: Anorectal manometry was performed, followed by rubber band ligation of two internal '
+                  'hemorrhoids.', None),
+        ('91122', 'Procedure: Anorectal manometry; rubber band ligation of two internal hemorrhoids.', None),
+        ('91122', 'Procedure: Anorectal manometry, then rubber band ligation x2.', None),
+        ('91122', 'Procedure: Anorectal manometry, followed by anoscopy with banding of two internal hemorrhoids.',
+         None),
+        ('91010', 'Procedure: Esophageal manometry, followed by esophageal dilation with a 54 Fr Maloney bougie.', None),
+        ('91010', 'Procedure: Esophageal manometry. Anoscopy.', 'Esophageal manometry'),
+    )
+
+    def test_a_same_day_procedure_in_the_test_code_s_passage_holds_the_visit(self):
+        for code, body, cited in self.CASES:
+            with self.subTest(code=code, body=body, cited=cited):
+                text = V7.format(cc='dysphagia and rectal bleeding.', body=body)
+                passage = cited or (body[len('Procedure: '):] if body.startswith('Procedure: ') else body)
+                proposals, _ = real(text, ('99213', VISIT), (code, passage))
+                self.assertVisitHeld(proposals, f'{OTHER_LABEL} is ', '99213')
+                self.assertIsNone(check_of(proposals['99213'], 'em.same_day_coverage'))
+
+    def test_the_round_3_over_hold_returns_with_the_removal(self):
+        """Accepted (medium): a diagnostic test coded XXX held the E/M before round 3b, and holds it again."""
+        for code, line in (('91010', MANOMETRY), ('91122', 'Anorectal manometry was performed today.')):
+            with self.subTest(code=code):
+                proposals, _ = real(V7.format(cc='dysphagia.', body=line), ('99213', VISIT), (code, line))
+                self.assertVisitHeld(proposals, f'{OTHER_LABEL} is documented as performed', '99213')
+                self.assertReady(proposals[code])

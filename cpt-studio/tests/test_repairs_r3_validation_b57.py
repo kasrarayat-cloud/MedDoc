@@ -60,7 +60,7 @@ class Validation5OtherMentionCoverageTests(Case):
 
 
 
-# --- validation:7: a same-day test whose selected code is XXX does not hold the E/M ------------------------------
+# --- validation:7: a same-day test whose selected code is XXX holds the E/M again (round 4 removed the discount) ------
 
 V7 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{line}\n'
       'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
@@ -68,18 +68,19 @@ MANOMETRY = 'Esophageal manometry was performed today.'
 
 
 class Validation7XxxTestTests(Case):
-    """validation:7 — a routed gi.other mention is discounted for the same-day E/M hold only when a selected,
-    non-excluded gi.other code with a CMS global period of XXX has exact evidence over the mention's name, and the
-    name holds one procedure. Everything else stays fail-closed."""
+    """validation:7 after round 4: round 3b discounted a routed gi.other mention that a selected XXX test code's
+    evidence covered, and round 4 (validation:1, contract:3, evidence:1, release:1) showed the discount also dropped a
+    second, uncoded same-day procedure in that passage. The discount is removed: the round-3 over-hold (medium) returns,
+    and every routed gi.other procedure holds the E/M, fail-closed."""
 
-    def test_a_diagnostic_test_coded_xxx_does_not_hold_the_visit(self):
+    def test_a_diagnostic_test_coded_xxx_holds_the_visit_again(self):
         for line, code in ((MANOMETRY, '91010'), ('Capsule endoscopy was performed today.', '91110'),
                            ('Anorectal manometry was performed today.', '91122')):
             with self.subTest(code=code):
                 proposals, result = real(V7.format(line=line), ('99213', VISIT), (code, line))
-                self.assertVisitReady(proposals, '99213')
+                self.assertVisitHeld(proposals, 'Other GI service is documented as performed', '99213')
                 self.assertReady(proposals[code])
-                self.assertIsNotNone(check_of(proposals['99213'], 'em.same_day_coverage'))
+                self.assertIsNone(check_of(proposals['99213'], 'em.same_day_coverage'))
 
     def test_controls_the_visit_stays_held(self):
         two = 'Esophageal manometry and esophageal dilation were performed today.'
@@ -132,24 +133,33 @@ class Validation57EngineTests(EngineCase):
     def mention(self, phrase, status='performed', section='other', *cues):
         return placed(self.NOTE, 'gi.other', status, phrase, section, *(cues or ('performed: was performed',)))
 
-    def test_only_a_selected_non_excluded_xxx_code_discounts_its_test(self):
+    def test_no_xxx_code_discounts_its_test(self):
+        # round 4: whatever state the test code is in, the routed test still holds the E/M (the discount is removed)
         done = ('performed', ('performed: was performed',))
-        cases = (('selected', done, 'ready'), ('excluded', ('negated', ('negated: declined',)), 'needs_clarification'),
-                 ('held', ('uncertain', ('uncertain: Possible',)), 'ready'))
+        cases = (('selected', done, 'needs_clarification'),
+                 ('excluded', ('negated', ('negated: declined',)), 'needs_clarification'),
+                 ('held', ('uncertain', ('uncertain: Possible',)), 'needs_clarification'))
         for name, reading, expected in cases:
             with self.subTest(name):
                 result = self.run_case(selected('91010', self.NOTE.span(self.MANOMETRY)),
                                        mentions=(self.mention(self.MANOMETRY),), statuses={self.MANOMETRY: reading})
                 self.assertEqual(self.proposal(result, '99213').status, expected)
 
-    def test_an_uncertain_test_that_its_code_describes_is_not_possibly_a_procedure(self):
+    def test_an_uncertain_test_that_its_code_describes_is_still_possibly_a_procedure(self):
+        # routing's family status is uncertain when its only mention is (as _other_finding aggregates it)
         hedged = self.mention(self.MANOMETRY, 'uncertain', 'other', 'uncertain: Possible')
-        statuses = {self.MANOMETRY: ('performed', ('performed: was performed',))}
-        result = self.run_case(selected('91010', self.NOTE.span(self.MANOMETRY)), mentions=(hedged,),
-                               statuses=statuses)
-        self.assertEqual(self.proposal(result, '99213').status, 'ready')
-        visit = self.proposal(self.run_case(mentions=(hedged,)), '99213')
-        self.assertIn('Other GI service is possibly performed', self.check(visit, 'em.same_day_procedure').detail)
+        visit_finding = finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                                facts={'em_basis': 'total time 32 minutes'})
+        for codes in ((selected('91010', self.NOTE.span(self.MANOMETRY)),), ()):
+            with self.subTest(coded=bool(codes)):
+                self.statuses = {self.TIME: None, self.MANOMETRY: ('performed', ('performed: was performed',))}
+                result = self.run_engine(self.NOTE, selected('99213', self.NOTE.span(self.TIME)), *codes,
+                                         findings=[visit_finding, finding('gi.other', 'uncertain', hedged)],
+                                         ctx=visit_context(), reference=REFERENCE)
+                visit = self.proposal(result, '99213')
+                self.assertEqual(visit.status, 'needs_clarification')
+                self.assertIn('Other GI service is possibly performed',
+                              self.check(visit, 'em.same_day_procedure').detail)
 
     def test_only_a_selected_gi_other_code_covers_a_procedure(self):
         """The banding sentence cited by an excluded gi.other code, or by the E/M, is not covered."""
