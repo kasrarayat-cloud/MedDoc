@@ -150,6 +150,18 @@ class Release2PlanLabelsTests(PlannedEmrAssertions, unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, RELEASE2_EMR), 'findings')
 
+    def test_a_label_that_says_today_is_no_plan(self):
+        """Self-review of the plan-first rule: a label about today's procedures ("Procedures scheduled for today") is no
+        plan label, so the checked procedure under it is never excluded as planned (it reads as at 4347acd24)."""
+        item = '\u2612 Cold snare polypectomy of a 6 mm sigmoid polyp'
+        for label in ('Procedures scheduled for today', 'Procedures planned for today', 'Plan for today',
+                      'Procedures planned today'):
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n' + label + '\n'
+                    + item + '\n')
+            with self.subTest(label=label):
+                self.assertEqual(kind_at(text, item), 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', item)])['45385']))
+
     def test_round3_routing2_statements_stay_content(self):
         """routing:2 (round 3): a numbered findings item that is a statement is never a label, so the polypectomy after it
         stays a ready 45385; the noun-last rule keeps these content without the list-item guard."""
@@ -252,6 +264,18 @@ class Structure4PhraseLinesTests(unittest.TestCase):
             with self.subTest(label=label):
                 self.assertEqual(kind_at(text, EMR_LINE), kind)
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+
+    def test_a_phrase_line_in_a_plan_or_history_section_keeps_it(self):
+        """Self-review: the 'other' section stands in for a findings reading only. Inside a plan or a history the section in
+        force goes on, so the planned EMR after the line is still excluded (an 'other' section would release it)."""
+        base = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading '
+                'polyp was tattooed.\n')
+        for section, line, kind in (('Plan:', 'Specimens sent for further evaluation', 'plan'),
+                                    ('Past history:', 'Changes of prior radiation therapy', 'history')):
+            text = base + section + '\n' + line + '\n' + RELEASE2_EMR + '\n'
+            with self.subTest(section=section):
+                self.assertEqual(kind_at(text, RELEASE2_EMR), kind)
+                self.assertEqual(run_engine(text, [('45390', RELEASE2_EMR)])['45390'].bucket, 'excluded')
 
     def test_findings_lines_without_a_phrase_are_unchanged(self):
         for line in ('Prior radiation therapy changes', 'Small internal hemorrhoids', 'Diverticulosis in the sigmoid colon'):
@@ -618,6 +642,23 @@ class Structure11CutAfterAnUnknownVerbTests(unittest.TestCase):
             text = structure11_note('Dr. Smith recommended').replace(STRUCTURE11_EUS, line)
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, line), 'findings')
+
+    def test_a_cut_in_a_plan_history_or_indication_section_keeps_it(self):
+        """Self-review: only a line a positive section would read performed is held; elsewhere the section in force goes on
+        (a plan still plans the EUS, a history still makes it historical, an indication still holds it)."""
+        base = HEADER + 'Procedure: EGD.\nFindings: The gastroscope was advanced to the second portion of the duodenum.\n'
+        for tail, kind, bucket in (('Plan: Dr. Smith recommended\n', 'plan', 'excluded'),
+                                   ('Plan:\nThe surgeon recommended\n', 'plan', 'excluded'),
+                                   ('Past history:\nHer previous gastroenterologist recommended\n', 'history', 'excluded'),
+                                   ('Indication: Pancreatic head mass; Dr. Smith recommended\n', 'indication', 'selected')):
+            text = base + tail + STRUCTURE11_EUS + '\nIt will be arranged at the regional center.\n'
+            with self.subTest(tail=tail):
+                self.assertEqual(kind_at(text, STRUCTURE11_EUS), kind)
+                lay = layout(text)  # one section goes on: it is not split around the line
+                self.assertIs(lay.section_at(text.index(STRUCTURE11_EUS)), lay.section_at(text.index('It will be arranged')))
+                proposal = run_engine(text, [('43242', STRUCTURE11_EUS)])['43242']
+                self.assertEqual(proposal.bucket, bucket)
+                self.assertFalse(ready(proposal))
 
     def test_the_closed_lists_still_join(self):
         for cut, status in (('We recommend', 'planned'), ('The patient deferred', 'cancelled'), ('Dr. Smith will perform', 'planned')):

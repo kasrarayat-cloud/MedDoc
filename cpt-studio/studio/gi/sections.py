@@ -210,8 +210,8 @@ def _colonless_label(line: str, listed: bool = False) -> Optional[str]:
     named = _TRAILING_ASIDE.sub('', line.strip().rstrip('*#').rstrip())  # "**Upcoming procedures**" names its noun
     if _TITLE_WORDS.search(line) or _service_named(line) or _act_or_place_named(line):
         return None
-    if _SEC_PLAN_FIRST.match(named) and _PLAN_LABEL.search(named):
-        return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE)
+    if _SEC_PLAN_FIRST.match(named) and _PLAN_LABEL.search(named) and not cues.TODAY.search(named):
+        return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE); never today's
     if not _SECTION_NOUN_LAST.search(named):
         return None
     kind = 'plan' if _PLAN_LABEL.search(line) else 'history' if _COLONLESS_HISTORY.search(line) else None
@@ -237,6 +237,14 @@ def _sec_phrase(named: str) -> bool:
                 and not _SECTION_NOUN.fullmatch(lowered):
             return True
     return False
+
+
+def _sec_phrase_heading(text: str, heading: tuple[str, str, Span]) -> bool:
+    """Whether a heading is a colon-less line that reads as a phrase (_colonless_label's 'other'): no known label, no
+    colon, no extraction block or addendum header."""
+    kind, label, span = heading
+    return kind == 'other' and label not in HEADINGS and not span.text.endswith(':') \
+        and not FORM_BLOCK.fullmatch(span.text) and not ADDENDUM_HEADER.fullmatch(span.text)
 
 
 def _act_or_place_named(line: str) -> bool:
@@ -664,8 +672,16 @@ def layout(text: str) -> Layout:
                    + [(i, line_end, label_line) for i, label_line in line_ends if i < len(lines)],
                    key=lambda mark: mark[:2])
     line_only = {label_line for _, label_line in line_ends} | set(held)
-    opened, current, before_block, before_line = [], ('other', '', None), {}, {}
+    # A phrase line (structure:4) and a held line (structure:11) only ever stand in for a procedure, findings or
+    # technique section: in any other section the section in force goes on, so a plan or a history keeps its reading.
+    gated = {i for i, h in headings.items() if h and _sec_phrase_heading(text, h)} | set(held)
+    opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
     for i, what, value in marks:
+        if what in (heading, held_open) and i in gated and current[0] not in POSITIVE_KINDS:
+            skipped.add(i)
+            continue
+        if what == line_end and value in skipped:
+            continue
         if what in (heading, held_open):
             if what == heading and FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
                 before_block[i] = current
