@@ -8,6 +8,7 @@ check says exactly why.
 """
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
@@ -286,20 +287,49 @@ def _possibly_today(finding: FamilyFinding) -> bool:
     return finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions)
 
 
-def _cited(mention: ServiceMention, selections: Sequence[_Selection]) -> bool:
-    """Whether a selected, non-excluded gi.other code has an exact evidence span lying in the mention's sentence
-    (validation:5): only then does a code speak for that procedure. A passage across two procedures' sentences speaks
-    for neither."""
-    lo, hi = mention.sentence.start, mention.sentence.end
+def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection]) -> set[int]:
+    """The positions in ``mentions`` of the routed gi.other mentions read as done that a selected, non-excluded
+    gi.other code speaks for (validation:5; round 4 validation:7, validation:13). An exact evidence span of such a code
+    (whitespace at its ends ignored) speaks for a done mention when it overlaps
+    - that mention's sentence and no other done mention's sentence ("Rubber band ligation was performed today. Three
+      bands were placed ..." cited whole: one procedure, its passage running past its sentence), or
+    - that mention's name and no other done mention's name ("Rubber band ligation x3 was completed today" cited out of
+      "..., and incision and drainage of a perianal abscess was performed.").
+    A passage across two procedures, by their sentences and by their names, speaks for neither, so neither is certified
+    as proposed. Indexed once per assessment: each span costs four bisections, never a pass over every mention."""
+    done = [index for index, m in enumerate(mentions) if m.status in checks.POSITIVE]
+    spans = []
     for s in selections:
         if s.family != OTHER_GI or s.excluded:
             continue
         for span in s.evidence:
             start = span.start + len(span.text) - len(span.text.lstrip())
             end = span.end - (len(span.text) - len(span.text.rstrip()))
-            if lo <= start and end <= hi:
-                return True
-    return False
+            if start < end:
+                spans.append((start, end))
+    if not done or not spans:
+        return set()
+
+    def index(of):
+        """(starts in order, ends sorted, furthest) over the done mentions' intervals ``of(mention)``; furthest[k] is,
+        of the first k + 1 intervals by start, the one that ends last."""
+        order = sorted(done, key=lambda i: of(mentions[i])[0])
+        furthest, last = [], None
+        for i in order:
+            last = i if last is None or of(mentions[i])[1] > of(mentions[last])[1] else last
+            furthest.append(last)
+        return [of(mentions[i])[0] for i in order], sorted(of(mentions[i])[1] for i in order), furthest
+
+    def only(found, start, end) -> Optional[int]:
+        """The one done mention whose interval overlaps [start, end), or None: the intervals that start before ``end``,
+        less those that end by ``start``; when one is left, it is the one of them that ends last."""
+        starts, ends, furthest = found
+        before = bisect.bisect_left(starts, end)
+        return furthest[before - 1] if before - bisect.bisect_right(ends, start) == 1 else None
+
+    sentences = index(lambda m: (m.sentence.start, m.sentence.end))
+    names = index(lambda m: (m.span.start, m.span.end))
+    return {i for start, end in spans for i in (only(sentences, start, end), only(names, start, end)) if i is not None}
 
 
 def _same_day_family(finding: FamilyFinding) -> bool:
@@ -528,8 +558,8 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
 
     On a procedure day an unproposed E/M is never reported as missed: that would push toward adding an office
     visit because a procedure report contains history or examination text. Other GI services are read mention by
-    mention (validation:5): a procedure done today is covered only by a selected gi.other code citing its sentence
-    (_cited), and when another gi.other code is selected the uncovered procedures are named.
+    mention (validation:5): a procedure done today is covered only by a selected gi.other code whose passage speaks for
+    it (_cited), and when another gi.other code is selected the uncovered procedures are named.
     """
     proposed = {s.family for s in selections if not s.excluded}
     unproposed, named = [], {}
@@ -537,7 +567,9 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
         if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
             continue
         if f.family == OTHER_GI and f.mentions:
-            uncited = [m.span.text for m in f.mentions if m.status in checks.POSITIVE and not _cited(m, selections)]
+            cited = _cited(f.mentions, selections)
+            uncited = [m.span.text for index, m in enumerate(f.mentions)
+                       if m.status in checks.POSITIVE and index not in cited]
             if uncited and OTHER_GI in proposed:
                 named[OTHER_GI] = checks.uncited_label(PROFILES[OTHER_GI].label, uncited)
             if uncited:

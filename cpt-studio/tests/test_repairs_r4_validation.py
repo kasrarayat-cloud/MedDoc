@@ -126,3 +126,118 @@ class NoCodedTestDiscountTests(Case):
                 proposals, _ = real(V7.format(cc='dysphagia.', body=line), ('99213', VISIT), (code, line))
                 self.assertVisitHeld(proposals, f'{OTHER_LABEL} is documented as performed', '99213')
                 self.assertReady(proposals[code])
+
+
+# --- validation:7 and validation:13: which gi.other procedure a selected code's passage speaks for ------------------
+
+TIME = 'Total time: 32 minutes.'
+TWO = 'Rubber band ligation x3 was completed today, and incision and drainage of a perianal abscess was performed.'
+TWO_TESTS = 'Esophageal manometry was performed today, and rubber band ligation x3 was completed.'
+ONE_RUN_ON = ('Rubber band ligation was performed today. Three bands were placed on the right anterior, right posterior '
+              'and left lateral columns.')
+
+
+class OtherProcedureCoverageTests(Case):
+    """validation:7 (high) and validation:13 (medium). A gi.other code covered every procedure of a sentence it cited
+    (services.unproposed passed although an incision and drainage, or a banding beside a manometry, had no proposal),
+    and covered nothing once its passage ran past its one procedure's sentence (the selected banding was called a
+    possible missed service). A passage speaks for a procedure when it overlaps that procedure's sentence and no other
+    done procedure's sentence, or holds that procedure's name and no other done procedure's name."""
+
+    def unproposed(self, line, *picks):
+        from tests.test_repairs_r3_validation_b import encounter_check
+        _, result = real(OFFICE.format(line=line), ('99213', TIME), *picks)
+        return encounter_check(result, 'services.unproposed')
+
+    def test_one_clause_of_a_two_procedure_sentence_covers_only_its_procedure(self):
+        check = self.unproposed(TWO, ('46221', 'Rubber band ligation x3 was completed today'))
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Possible missed service: Other GI service (“and incision and drainage of a perianal abscess”)',
+                      check.detail)
+        self.assertNotIn('Rubber band ligation', check.detail)
+        check = self.unproposed(TWO_TESTS, ('91010', 'Esophageal manometry was performed today'))
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Other GI service (“and rubber band ligation x3”)', check.detail)
+        self.assertNotIn('manometry', check.detail)
+
+    def test_a_whole_two_procedure_sentence_covers_neither(self):
+        for line, code, names in (
+                (TWO, '46221', '“Rubber band ligation x3” and “and incision and drainage of a perianal abscess”'),
+                (TWO_TESTS, '91010', '“Esophageal manometry” and “and rubber band ligation x3”'),
+                ('Anorectal manometry was performed today, and rubber band ligation x3 was completed.', '91122',
+                 '“Anorectal manometry” and “and rubber band ligation x3”')):
+            with self.subTest(code=code):
+                check = self.unproposed(line, (code, line))
+                self.assertEqual(check.status, 'warn')
+                self.assertIn(f'Possible missed service: Other GI service ({names})', check.detail)
+
+    def test_a_passage_past_its_one_procedure_s_sentence_covers_it(self):
+        labelled = 'Procedure: Rubber band ligation of internal hemorrhoids x3 was performed today.'
+        broken = ONE_RUN_ON.replace('today. Three', 'today.\nThree')
+        after_the_name = ONE_RUN_ON[len('Rubber band ligation '):]  # past the sentence, without the name
+        for line, picks in ((ONE_RUN_ON, (('46221', ONE_RUN_ON),)), (broken, (('46221', broken),)),
+                            (labelled, (('46221', labelled),)), (ONE_RUN_ON, (('46221', after_the_name),)),
+                            (f'Anoscopy was performed today.\n{ONE_RUN_ON}',
+                             (('46600', 'Anoscopy was performed today.'), ('46221', ONE_RUN_ON)))):
+            with self.subTest(line=line):
+                self.assertEqual(self.unproposed(line, *picks).status, 'pass')
+
+    def test_controls(self):
+        # each procedure of one sentence cited by its own code's clause
+        both = 'Anoscopy was performed today, and rubber band ligation x3 was completed.'
+        self.assertEqual(self.unproposed(both, ('46600', 'Anoscopy was performed today'),
+                                         ('46221', 'rubber band ligation x3 was completed')).status, 'pass')
+        # one procedure's sentence cited by one of its clauses, with or without the name
+        for clause in ('Anoscopy was performed today', 'was performed today with a disposable anoscope'):
+            with self.subTest(clause=clause):
+                self.assertEqual(self.unproposed('Anoscopy was performed today with a disposable anoscope.',
+                                                 ('46600', clause)).status, 'pass')
+        # a passage across two procedures' lines still covers neither
+        check = self.unproposed('Anoscopy was performed today.\nRubber band ligation x3 completed today.',
+                                ('46600', 'Anoscopy was performed today.\nRubber band ligation x3 completed today.'))
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('“Anoscopy” and “Rubber band ligation x3”', check.detail)
+
+
+# --- validation:9: services.unproposed's coverage is indexed once per assessment --------------------------------------
+
+def assess_timed(text, *picks):
+    """Real routing outside the clock; (seconds assess() took, result). picks: (code, [(start, end)])."""
+    import json
+    import time
+    from datetime import date
+    from studio.gi.context import extract_context
+    from studio.gi.detect import route
+    from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode, RoutingResult, from_jsonable,
+                              to_jsonable)
+    from studio.validation.engine import assess
+    from tests.test_repairs_r3_validation_b import REFERENCE
+    day = date(2026, 10, 21)
+    routing = from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(route(text, day)))))
+    codes = tuple(ProviderCode('selected', 'cpt', code, 'UNVERIFIED',
+                               tuple(EvidenceSpan(0, s, e, text[s:e], True) for s, e in spans), index=index)
+                  for index, (code, spans) in enumerate(picks))
+    started = time.perf_counter()
+    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text), routing=routing,
+                    normalized=NormalizedResponse('corti', 'corti-coding@1', codes=codes), reference=REFERENCE,
+                    service_date=day, provider_status='succeeded', extraction_status='ok')
+    return time.perf_counter() - started, result
+
+
+class CoverageCostTests(Case):
+    """validation:9 (high, new defect from 8b4a17862). Coverage scanned every evidence span of every gi.other selection
+    for every routed mention: 6,000 done mentions and 26,000 one-word spans took 61 s in assess() (9 s at R3B-BASE).
+    It is indexed once per assessment now."""
+
+    def test_many_mentions_and_many_spans_assess_in_bounded_time(self):
+        lines, words = 8000, 4000
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                + 'Anoscopy was performed today.\n' * lines + 'Assessment: ' + ' '.join(['stable'] * words)
+                + '.\nTotal time: 32 minutes.\n')
+        first = text.index('Assessment: ') + len('Assessment: ')
+        visit = text.index(VISIT)
+        elapsed, result = assess_timed(text, ('99213', [(visit, visit + len(VISIT))]),
+                                       ('91010', [(first + 7 * n, first + 7 * n + 6) for n in range(words)]))
+        self.assertLess(elapsed, 6.0)  # 11.5 s with the per-mention scan, about 1.6 s indexed
+        unproposed = next(c for c in result.encounter_checks if c.id == 'services.unproposed')
+        self.assertIn('Possible missed service: Other GI service (“Anoscopy”)', unproposed.detail)
