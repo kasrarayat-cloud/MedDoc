@@ -2290,9 +2290,11 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
                         blocked.append(hit)
                     elif status in ('performed', 'incomplete') and (
                             cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
-                            or _reached_label(an, ws, m.start()) or _straight_after_service(an, ws, m.start())):
+                            or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we))
+                            or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
-                    elif _answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start()):
+                    elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
+                          and _plain_tail(an, m.end(), we)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
     return reached, blocked
 
@@ -2305,8 +2307,28 @@ def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> b
     "Extent: cecum not reached."). An addendum answering "confirm the furthest extent reached" is read so; the label
     itself still has to pass _reached_label (an aim never does). An indication, an assessment or an impression can
     tell prior work-up, so a label there is still read only when its own wording states performance."""
-    return (reading.basis == 'default' and reading.cues == (SILENT,)
-            and an.lay.section_at(start).kind == 'other' and not _doubt(an, start, end))
+    section = an.lay.section_at(start)
+    return (reading.basis == 'default' and reading.cues == (SILENT,) and section.kind == 'other'
+            and section.label in _ANSWERING_SECTIONS and not _doubt(an, start, end))
+
+
+# The 'other' sections that speak for this report's own procedure (round 4 routing:2): the product's addendum block,
+# the PDF form-field and annotation blocks, and the report's own preparation and complications. Any other unrecognised
+# label ("Outside records:", "Referral information:") may tell another facility's procedure, so a label answered there
+# is never read as today's extent.
+_ANSWERING_SECTIONS = frozenset(('addendum', 'pdf form fields', 'pdf annotation text', 'bowel preparation',
+                                 'bowel prep', 'preparation', 'prep', 'quality of preparation', 'complications'))
+_EXTENT_TAIL_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*|\d+", re.A)
+_VALUE_END = re.compile(r'[.;\n]')
+
+
+def _plain_tail(an: Analysis, end: int, we: int) -> bool:
+    """Whether the value after an extent label's landmark adds nothing but punctuation and cues.EXTENT_TAIL words,
+    read to the value's sentence or line end (round 4 routing:9, release:3: "Extent: cecum (intended)." and "cecum
+    (intended; not reached)" name no extent reached). A closed list: any other word leaves the extent unread."""
+    stop = _VALUE_END.search(an.text, end, we)
+    tail = an.text[end:stop.start() if stop else we]
+    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(tail))
 
 
 # Where the words that lead an extent label start: after the last separator before it in its clause.

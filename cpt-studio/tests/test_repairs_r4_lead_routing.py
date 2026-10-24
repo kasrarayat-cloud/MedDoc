@@ -134,3 +134,67 @@ class BoundedClauseLookupTests(unittest.TestCase):
             start = time.perf_counter()
             detect.route(text, None)
             self.assertLess(time.perf_counter() - start, 20)  # 3.9 s and 14.9 s before (quadratic growth)
+
+
+ADDENDUM = '\n\nADDENDUM (revision 2, added 2026-10-22 10:00 UTC)\n'
+NO_EXTENT = (HEADER + 'Procedure: Colonoscopy\nIndication: Positive FIT.\nFindings: A 6 mm sigmoid polyp was removed with '
+             'a cold snare.\nPlan: Repeat colonoscopy in 5 years.\n')
+POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+def extent(text):
+    return next((f.value for f in family_facts(text, 'gi.colonoscopy') if f.name == 'extent'), None)
+
+
+def family_facts(text, slug):
+    return detect.route(text, None).finding(slug).facts
+
+
+class ExtentLabelTests(unittest.TestCase):
+    """routing:2, release:3 and routing:9: an extent label's value was read as the extent reached in any 'other'
+    section, with an aim or a denial after the landmark."""
+
+    def test_an_addendum_answer_still_clears_the_extent(self):
+        for answer in ('Furthest extent reached: cecum.', 'Extent: cecum', 'Extent reached: cecum.',
+                       'Extent reached: cecum, with photodocumentation of the appendiceal orifice.'):
+            with self.subTest(answer=answer):
+                self.assertEqual(extent(NO_EXTENT + ADDENDUM + answer + '\n'), 'cecum')
+
+    def test_an_answer_with_an_aim_or_a_denial_is_not_the_extent_reached(self):
+        for answer in ('Extent: cecum (intended; not reached).', 'Extent: cecum (intended), splenic flexure (reached).',
+                       'Extent: cecum was the goal.'):
+            with self.subTest(answer=answer):
+                self.assertNotEqual(extent(NO_EXTENT + ADDENDUM + answer + '\n'), 'cecum')
+
+    def test_another_facilitys_record_never_supplies_todays_extent(self):
+        for heading, line in (('Outside records:', 'Colonoscopy at another facility in 2021. Extent: cecum.'),
+                              ('Outside colonoscopy report:', 'Extent reached: cecum.'),
+                              ('Referral information:', 'Furthest extent reached: cecum.'),
+                              ('Records reviewed:', 'Extent: cecum.'), ('Last colonoscopy:', 'Extent: cecum.'),
+                              ('Comparison:', 'Extent reached: cecum.')):
+            text = (HEADER + 'Procedure: Colonoscopy\nIndication: Surveillance of adenomatous polyps.\nFindings: The '
+                    'colonoscope was advanced to the splenic flexure. A 6 mm polyp in the sigmoid colon was removed '
+                    'with a cold snare.\n' + heading + '\n' + line + '\nImpression: Sigmoid polyp, removed.\nPlan: CT '
+                    'colonography to complete the evaluation.\n')
+            with self.subTest(heading=heading):
+                self.assertNotEqual(extent(text), 'cecum')
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+
+    def test_an_aim_after_the_landmark_in_a_findings_label(self):
+        for line in ('Extent: cecum (intended).', 'Extent: cecum (goal), hepatic flexure (reached).',
+                     'Extent: cecum was the goal.'):
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the hepatic flexure. A '
+                    '5 mm sigmoid polyp was removed with a cold snare.\n' + line + '\nImpression: Sigmoid polyp '
+                    'removed.\n')
+            with self.subTest(line=line):
+                self.assertEqual(extent(text), 'incomplete: hepatic flexure')
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+                proposals, _ = run_engine(text, [('45385', POLYP.replace('6 mm', '5 mm'))])
+                checks = {c.id: c.status for c in proposals['45385'].checks}
+                self.assertEqual(checks.get('service.incomplete'), 'warn')  # routed to review, never completed
+
+    def test_another_facilitys_depth_never_supplies_a_flexible_sigmoidoscopys(self):
+        text = (HEADER + 'Procedure: Flexible sigmoidoscopy with biopsy.\nFindings: A biopsy was taken from the '
+                'rectum.\nOutside records:\nDepth of insertion: 60 cm.\n')
+        facts = {f.name: f.value for f in family_facts(text, 'gi.flex_sig')}
+        self.assertIsNone(facts.get('extent'))
