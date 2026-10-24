@@ -175,6 +175,9 @@ class Reading:
     # Set by the engine on a linked passage of a gi.other code: a positive reading that rests on its section alone, in a
     # passage that names no procedure (see engine._unnamed_other). It is not evidence that the code's service was done.
     unnamed: bool = False
+    # Set by the engine on a linked passage that hedges another service than the code's (see engine._other_service):
+    # "Possible EGD if symptoms persist." cited for an E/M. It holds the code alone, but never contests it.
+    other_service: bool = False
 
 
 @dataclass(frozen=True)
@@ -267,6 +270,15 @@ def by_section_alone(reading: Reading) -> bool:
     return bool(reading.cues) and all(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
 
 
+def restated(reading: Reading) -> bool:
+    """An explicit performance statement that only its section downgraded ("Colonoscopy with cold snare polypectomy
+    was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else. It
+    restates the act; it is not a hedge."""
+    return (reading.status == 'uncertain' and any(cue.startswith(PERFORMED_CUE_PREFIX) for cue in reading.cues)
+            and any(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
+            and all(cue.startswith((PERFORMED_CUE_PREFIX, SECTION_CUE_PREFIX)) for cue in reading.cues))
+
+
 def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> StatusOutcome:
     """A code's own evidence decides first; routing decides only when that evidence is silent. Fail-closed.
 
@@ -274,7 +286,9 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
       the family is performed elsewhere (another passage may support a different code of the same family);
       the exclusion stays reinstatable and names the performed mention.
     - A linked passage that hedges holds the code for clarification; neither routing nor another of the code's own
-      passages reading as performed overrides it, and the hold names both passages.
+      passages reading as performed overrides it, and the hold names both passages. Beside a performed passage only a
+      hedge about the code's own service holds it: a hedge marked ``other_service`` is named in a warn, and a
+      performance statement that only its section downgraded (``restated``) supports the code.
     - A positive passage cannot establish a family that routing documents only as not performed, nor
       (``detectable``: routing can recognise the family in text) a family the document never names or names only
       as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
@@ -286,6 +300,9 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     own_positive = _first([r for r in own if not r.unnamed], POSITIVE) or _first(own, POSITIVE)
     own_negative = _first(own, NEGATIVE)
     own_hedged = next((r for r in own if r.status == 'uncertain' and not _silent(r)), None)
+    hedges = [r for r in own if r.status == 'uncertain' and not _silent(r) and not restated(r)]
+    own_contesting = next((r for r in hedges if not r.other_service), None)
+    own_other = next((r for r in hedges if r.other_service), None)
     routed_positive, routed_negative = _first(routed, POSITIVE), _first(routed, NEGATIVE)
     incomplete = _first(readings, ('incomplete',))
 
@@ -302,9 +319,9 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
                                  reason='unestablished' if routed else 'unnamed')
         if own_positive.unnamed:
             return StatusOutcome('uncertain', own_positive, contrary=own_hedged or own_negative, reason='section_only')
-        if own_hedged:
-            return StatusOutcome('uncertain', own_hedged, contrary=own_positive, reason='contested')
-        return positive(own_positive, contrary=own_negative)
+        if own_contesting:
+            return StatusOutcome('uncertain', own_contesting, contrary=own_positive, reason='contested')
+        return positive(own_positive, contrary=own_negative or own_other)
     if own_negative:
         return StatusOutcome('not_performed', own_negative, contrary=routed_positive)
     if own_hedged:

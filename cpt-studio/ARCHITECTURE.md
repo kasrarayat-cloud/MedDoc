@@ -391,7 +391,13 @@ code `review.same_day_em` (both warn), which review enforces (5.7).
 Status resolution is fail-closed: a code's own linked passage decides first;
 a passage that hedges holds the code — routing never overrides it, and neither
 does another of the code's own passages that reads as performed (`contested`:
-the clarification names both passages); routing decides only when the
+the clarification names both passages) when the hedge is about the code's own
+service. Beside a performed passage, a hedge about another service (for an E/M
+code one that touches no E/M documentation routing reads; for another code one
+that names only another family's service) leaves the code ready with a warn
+naming it, and a performance statement that only its section downgraded
+supports the code; a hedge that names no service is the code's own for a
+procedure code (fail-closed). Routing decides only when the
 passage is silent (routing's default "no performance evidence" reading). An
 E/M code's own passage that reads planned or historical only by its section
 default (its HPI, its plan, its counseling) is silent too, so routing's E/M

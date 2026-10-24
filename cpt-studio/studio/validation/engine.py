@@ -155,6 +155,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         own = _unnamed_other(own, text, routing, day)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing)
+    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing) else r for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
@@ -178,6 +179,22 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
             reading = replace(reading, unnamed=True)
         marked.append(reading)
     return tuple(marked)
+
+
+def _other_service(reading: checks.Reading, family: str, routing: RoutingResult) -> bool:
+    """Whether a hedging linked passage is about another service than the code's (validation:4). For an E/M code: it
+    touches no E/M documentation routing reads (visit statement, chief complaint, MDM, time), as "Possible EGD if
+    symptoms persist." or "Epigastric pain; rule out celiac disease?" do not. For any other code: it names a routed
+    service of another family and none of the code's own ("Possible EGD ..." cited for a colonoscopy code). A hedge
+    that names no service is the code's own for a procedure code (fail-closed: "It is unclear whether biopsies were
+    taken.")."""
+    if reading.status != 'uncertain' or checks.silent(reading.status, reading.cues):
+        return False
+    named = {f.family for f in routing.findings for m in f.mentions
+             if m.span.start < reading.end and reading.start < m.span.end}
+    if family in checks.EM_FAMILIES:
+        return 'gi.office_em' not in named
+    return bool(named) and family not in named
 
 
 def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> tuple[checks.Reading, ...]:
