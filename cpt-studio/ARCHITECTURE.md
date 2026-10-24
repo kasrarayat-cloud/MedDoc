@@ -319,7 +319,11 @@ indication / chief-complaint sections a mention that hedges or doubts (never a
 silent one), inside them only an explicit performance statement that routing
 downgraded for its section; and an excluded procedural code whose own passage
 states the act although only the family's document-level reading makes it
-negative. On an E/M with no same-day procedure detected, `em.same_day_coverage`
+negative. A routed `gi.other` finding gathers different procedures, so it is
+read mention by mention (one mention read as done is a same-day procedure,
+whatever the family status ranks first) and never for a code's own status: a
+code of a family routing does not detect is judged by its own passages alone.
+On an E/M with no same-day procedure detected, `em.same_day_coverage`
 (`not_verified`) says a procedure of another kind is not detected; if an
 excluded, reinstatable procedural code exists and no separately identifiable
 E/M is documented, the E/M carries `em.same_day_if_reinstated` and each such

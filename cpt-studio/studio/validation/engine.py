@@ -146,7 +146,10 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
                            scope_reason=scope_reason, evidence=kept, dropped=dropped, family=family_for_code(code))
     if scope_reason or not kept:
         return selection
-    finding = routing.finding(selection.family)
+    # Only a family routing detects is read through its routed finding. A gi.other finding gathers different
+    # procedures (the shared routing contract), so it never speaks for one code: a gi.other code's status, family
+    # check and rationale come from its own passages, as for every family routing does not detect.
+    finding = routing.finding(selection.family) if selection.family in DETECTED_FAMILIES else None
     own = checks.evidence_readings(text, kept, day)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
@@ -195,6 +198,26 @@ def _stated_as_done(s: _Selection) -> bool:
                for r in s.evaluation.own)
 
 
+def _done_today(finding: FamilyFinding) -> Optional[str]:
+    """The status in which a routed family documents a service as done on the date of service (performed or
+    incomplete), or None. A gi.other finding gathers different procedures, and its family status may rank another
+    procedure's denial first ("Anoscopy: patient declined." beside a banding performed today), so one of its
+    mentions read as done is enough."""
+    if finding.status in checks.POSITIVE:
+        return finding.status
+    if finding.family == OTHER_GI:
+        return next((m.status for m in finding.mentions if m.status in checks.POSITIVE), None)
+    return None
+
+
+def _possibly_today(finding: FamilyFinding) -> bool:
+    """A routed family whose performance on the date of service is not established, through a mention that can speak
+    for that date. A gi.other finding is read mention by mention: each of its mentions may be another procedure."""
+    if finding.family == OTHER_GI:
+        return any(m.status == 'uncertain' and _speaks_for_today(m) for m in finding.mentions)
+    return finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions)
+
+
 def _same_day_family(finding: FamilyFinding) -> bool:
     """A routed family that is a procedure for the same-day E/M rule: a procedure profile, or another GI service.
     Routing emits a gi.other finding only for a procedure documented at this encounter that names none of the
@@ -211,12 +234,11 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
     possible += [s for s in selections if _procedural(s) and _stated_as_done(s)]
     same_day = [f for f in routing.findings if _same_day_family(f)]
-    labels = [PROFILES[f.family].label for f in same_day if f.status in checks.POSITIVE]
+    labels = [PROFILES[f.family].label for f in same_day if _done_today(f)]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]
     # A routed family whose performance is not established holds the E/M only through a mention that can speak for
     # the date of service; a selected procedural code whose own status is uncertain always does.
-    possible_labels = [PROFILES[f.family].label for f in same_day
-                       if f.status == 'uncertain' and any(_speaks_for_today(m) for m in f.mentions)]
+    possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
@@ -426,7 +448,7 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
     proposed = {s.family for s in selections if not s.excluded}
     unproposed = [f.family for f in routing.findings
                   if f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI)
-                  and f.status in checks.POSITIVE and f.family not in proposed]
+                  and _done_today(f) and f.family not in proposed]
     visit_skipped = procedure_day and any(family in checks.EM_FAMILIES for family in unproposed)
     labels = [PROFILES[family].label for family in unproposed
               if not (procedure_day and family in checks.EM_FAMILIES)]
@@ -437,8 +459,9 @@ def _unsupported(routing: RoutingResult, selections: Sequence[_Selection]) -> tu
     entries: dict[str, dict] = {}
     for finding in routing.findings:
         profile = PROFILES.get(finding.family)
-        if (profile is None or not profile.supported) and finding.status in checks.POSITIVE:
-            entries.setdefault(finding.family, _unsupported_entry(finding.family, finding.status))
+        done = _done_today(finding)
+        if (profile is None or not profile.supported) and done:
+            entries.setdefault(finding.family, _unsupported_entry(finding.family, done))
     for s in selections:
         if s.performed and not s.profile.supported:
             entry = entries.setdefault(s.family, _unsupported_entry(s.family, s.evaluation.outcome.state))
