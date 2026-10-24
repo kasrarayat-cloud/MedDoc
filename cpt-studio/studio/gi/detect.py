@@ -861,6 +861,14 @@ def _bare_denial(an: Analysis, start: int, end: int) -> bool:
                               for c in an.cues_in(start, end))
 
 
+def _unchecked_option(an: Analysis, start: int, end: int) -> bool:
+    """Whether the line [start, end) is an option its own unchecked box leaves unselected ("Procedure cancelled | ☐",
+    "☐ Procedure aborted", "Procedure cancelled: not checked", "Procedure cancelled: [ ] Yes [x] No"). It states
+    nothing, so it never denies or holds the service above it: routing:7's later denials must not read what
+    contract:3 reads as no statement. Boxes that disagree or cannot be read still hold, through those denials."""
+    return _box_state(an, start, end) == 'off' or _unchecked_state(an, start, end)
+
+
 def _cancels(an: Analysis, start: int, end: int) -> bool:
     """A cancellation cue in [start, end); an abort after the scope went in is not one."""
     return any(c.status == 'cancelled' and (c.name != 'aborted' or _abort_status(an, c)[0] != 'incomplete')
@@ -880,6 +888,8 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     - a sentence whose subject refers back to the service and cancels or denies it ("It was not
       performed.", "However, this was cancelled.")."""
     text = an.text
+    if _unchecked_option(an, ns, ne):
+        return False  # "Procedure cancelled | ☐": an option nobody selected states nothing (contract:3)
     at = _SEPARATOR.match(text, ns, ne).end()
     opener = _OPENER.match(text, at, ne)
     body = opener.end() if opener else at
@@ -962,7 +972,7 @@ def _called_off_further(an: Analysis, index: int) -> Optional[str]:
             read += 1
             if read > DENIAL_SENTENCES or an.services_in(ks, ke):
                 break
-            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS:
+            if an.lay.section_at(ks).kind in ELSEWHERE_SECTIONS or _unchecked_option(an, ks, ke):
                 continue
             if (_status_line(an, ks, ke) and _denies(an, ks, ke, bare=False)) or _procedure_called_off(an, ks, ke):
                 an.memo[key] = an.text[ks:ke]
@@ -2905,9 +2915,10 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
         line_end = text.find('\n', end)
         rest_end = len(text) if line_end < 0 else line_end
         # An unchecked attestation is no statement (contract:5): a box that governs the sentence, or the first box
-        # written after it on its line.
+        # written after it on its line. Fail-closed on the box STATE: boxes that disagree, or a mark this reader
+        # cannot read before or after the sentence, attest nothing either (_unchecked_box answers False for both).
         after = _BOX.search(text, end, min(rest_end, end + BOX_REACH))
-        if _unchecked_box(an, start, end) or _unchecked_state(an, start, end) \
+        if _box_state(an, start, end) in ('off', 'mixed', 'unknown') or _unchecked_state(an, start, end) \
                 or (after is not None and after.group('off') is not None):
             continue
         if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(text, end, rest_end):

@@ -294,6 +294,20 @@ class Contract3UncheckedStatusOptionTests(BoxCase):
                 proposals, _ = run_engine(text, [('45385', POLYP)])
                 self.assertEqual(outcome(proposals['45385']), 'ready', proposals['45385'].exclusion_reason)
 
+    def test_an_unchecked_option_right_under_the_procedure_states_nothing(self):
+        # Integration of FORMS with WORDING: routing:7 reads the next sentence of the section, and a cancellation up
+        # to six sentences further down, as a denial of the service above it. An option its own unchecked box leaves
+        # unselected is no statement there either, whichever line it stands on.
+        for options in ('Procedure cancelled | ☐\nProcedure completed | ☒', '☐ Procedure cancelled\n☒ Procedure completed',
+                        '[ ] Procedure cancelled\n[x] Procedure completed',
+                        'Procedure cancelled: not checked\nProcedure completed: ☒',
+                        'Procedure cancelled: [ ] Yes [x] No\nProcedure completed: ☒'):
+            with self.subTest(options=options):
+                text = STATUS_NOTE.format(options=options)
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                proposals, _ = run_engine(text, [('45385', POLYP)])
+                self.assertEqual(outcome(proposals['45385']), 'ready', proposals['45385'].exclusion_reason)
+
     def test_options_on_the_line_under_the_procedure_are_held_never_cancelled(self):
         """The next-line denial reader (WORDING's _denies) still reads the option's words; the box keeps it a hold."""
         text = STATUS_NOTE.format(options='☒ Procedure completed ☐ Procedure cancelled')

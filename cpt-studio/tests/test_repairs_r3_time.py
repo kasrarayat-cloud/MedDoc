@@ -564,6 +564,17 @@ class Contract5UncheckedAttestationTests(unittest.TestCase):
                 self.assertEqual(proposals['99214'].status, 'needs_clarification')
                 self.assertIn('separate_em', clarified(proposals['99214']))
 
+    def test_a_disagreeing_or_unreadable_box_is_not_a_statement(self):
+        # Integration of TIME with FORMS: _unchecked_box answers False for boxes that disagree ('☒ ☐') or that the
+        # reader cannot read ('(•)'), so the attestation must be refused on the box STATE, not on 'unchecked' alone.
+        for line in ('☒ ☐ ' + ATTESTATION, '[x] [ ] ' + ATTESTATION, '(•) ' + ATTESTATION,
+                     '[?] ' + ATTESTATION, '(o) ' + ATTESTATION, ATTESTATION + ' (•)', ATTESTATION + ' [?]'):
+            text = ATTESTATION_NOTE + line + '\n'
+            with self.subTest(line=line):
+                self.assertIsNone(separate_em(text))
+                proposals, _ = run_engine(text, ATTESTATION_PICKS)
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
     def test_a_checked_box_or_no_box_is_a_statement(self):
         for line in ('\u2612 ' + ATTESTATION, '[x] ' + ATTESTATION, ATTESTATION, ATTESTATION + ' [x]',
                      'Modifier 25 attestation: \u2612 A significant, separately identifiable E/M service was '
