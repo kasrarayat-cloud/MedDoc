@@ -34,7 +34,9 @@ What a page shows is read, or the result says what was not read:
   result 'partial'. XFA form content is not read: 'partial'.
 - **Integrity.** A page count that disagrees with the page tree, a file that
   ends inside an unfinished incremental update, or no end-of-file marker
-  fails the document. A page whose compressed content does not decode
+  fails the document. Bytes after the last end-of-file marker that carry no
+  PDF data (whitespace, NUL, a DOS end-of-file byte, comment lines, repeated
+  end-of-file markers) are padding, not an unfinished update. A page whose compressed content does not decode
   completely is named and the result is 'partial', as is a page read with
   OCR whose image's encoding cannot be checked to its end
   (studio.ingest.pdfcontent).
@@ -230,15 +232,19 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     if b'%%EOF' not in tail:
         return None, INCOMPLETE
     last = len(data) - len(tail) + tail.rindex(b'%%EOF')
-    if data[last + len(b'%%EOF'):].strip(PDF_WHITESPACE):
+    if not _padding(data[last + len(b'%%EOF'):]):
         # An incremental update cut short leaves an earlier revision's %%EOF last in
         # the file, followed by the start of the update: a parser reads the old revision.
         return None, UNFINISHED
-    if b'startxref' in data[:last] and b'startxref' not in data[data.rfind(b'%%EOF', 0, last) + 1:last]:
+    end = last  # a run of end markers with only padding between them closes one revision (pypdf #4008)
+    while (previous := data.rfind(b'%%EOF', 0, end)) >= 0 and _padding(data[previous + len(b'%%EOF'):end]):
+        end = previous
+    if b'startxref' in data[:end] and b'startxref' not in data[data.rfind(b'%%EOF', 0, end) + 1:end]:
         # The last revision has no startxref of its own: a parser would fall back to an earlier one.
         return None, UNANCHORED
     try:
-        reader = pypdf.PdfReader(io.BytesIO(data))
+        # pypdf reads the file as it ends at that revision's marker: the padding carries no PDF data.
+        reader = pypdf.PdfReader(io.BytesIO(data[:end + len(b'%%EOF')]))
         if reader.is_encrypted and reader.decrypt('') == PasswordType.NOT_DECRYPTED:
             return None, PASSWORD
         with contextlib.suppress(IndexError):  # no pages at all: reported by _page_list
@@ -248,6 +254,17 @@ def _open(data: bytes) -> tuple[pypdf.PdfReader | None, str]:
     except Exception:  # any parser error on untrusted bytes means the file is unreadable
         return None, DAMAGED
     return reader, ''
+
+
+def _padding(data: bytes) -> bool:
+    """Whether ``data`` (bytes after an end-of-file marker) carries no PDF data: whitespace, NUL, DOS
+    end-of-file bytes (0x1A) and whole comment lines, as producers append. An unfinished update starts with
+    an object, an xref table or a trailer, never with these."""
+    for line in data.replace(b'\r', b'\n').split(b'\n'):
+        line = line.strip(PDF_WHITESPACE + b'\x1a')
+        if line and not line.startswith(b'%'):
+            return False
+    return True
 
 
 def _page_list(reader, limits) -> tuple[list, str]:

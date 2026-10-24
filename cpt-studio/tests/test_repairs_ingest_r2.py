@@ -1204,5 +1204,46 @@ class LargeLosslessScanTests(unittest.TestCase):
         self.assertEqual((result.status, result.messages), ('partial', (OCR_READ, UNCHECKED_IMAGE)))
 
 
+# --- ingest:5 — harmless bytes after %%EOF are padding, not an unfinished update -----------------------
+
+UNFINISHED = ('The PDF is incomplete: it ends with data after its last end-of-file marker, such as an unfinished '
+              'update. Upload the complete file.')
+UNANCHORED = ('The PDF is incomplete: its last revision has no cross-reference pointer (startxref), so only an '
+              'earlier revision could be read. Upload the complete file.')
+
+
+class TrailingBytesTests(unittest.TestCase):
+    """ingest:5 — a complete PDF with a repeated %%EOF, a DOS Ctrl-Z or a trailing comment reads as before."""
+
+    def test_harmless_tails_are_accepted(self):
+        whole = docgen.make_pdf(['Colonoscopy report. Date of service: 2026-10-21. Cecum reached.',
+                                 'Findings: 5 mm sigmoid polyp removed with cold snare.'])
+        self.assertTrue(whole.endswith(b'%%EOF\n'))
+        tails = {'a repeated end marker': b'%%EOF\n', 'a repeated end marker, CRLF': b'%%EOF\r\n',
+                 'a DOS end-of-file byte': b'\x1a', 'Ctrl-Z padding to 128 bytes': b'\x1a' * 97,
+                 'a trailing comment': b'% end of document\n', 'a comment and a marker': b'% end\r\n%%EOF\r\n',
+                 'markers and NUL padding': b'%%EOF\n\x00\x00%%EOF\n'}
+        for label, tail in tails.items():
+            with self.subTest(label):
+                result = pdf_extract(whole + tail, ocr=None)
+                self.assertEqual((result.status, len(result.pages), result.messages), ('ok', 2, ()))
+                self.assertIn('cold snare', result.text)
+
+    def test_cut_updates_are_still_refused(self):
+        from tests.test_repairs_ingest_pdf import PROCEDURE, VISIT, add_page_update, revision1
+        rev1, xref1 = revision1(VISIT)
+        full = add_page_update(rev1, xref1, PROCEDURE)
+        cut = full[:full.rindex(b'startxref')]
+        cases = {'inside the update': (full[:-40], UNFINISHED),
+                 'inside the update, then a comment': (full[:-40] + b'\n% end\n', UNFINISHED),
+                 'inside the update, then Ctrl-Z': (full[:-40] + b'\x1a', UNFINISHED),
+                 'before its startxref, then repeated markers': (cut + b'%%EOF\n%%EOF\n', UNANCHORED),
+                 'before its startxref, a marker and a comment': (cut + b'%%EOF\n% end\n', UNANCHORED)}
+        for label, (data, message) in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(data, ocr=None)
+                self.assertEqual((result.status, result.messages), ('failed', (message,)))
+
+
 if __name__ == '__main__':
     unittest.main()
