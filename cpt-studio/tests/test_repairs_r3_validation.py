@@ -3,10 +3,12 @@
 A routed gi.other finding gathers different procedures (the shared routing contract): "Anoscopy" and "Rubber band
 ligation" are mentions of one finding, and its family status ranks one procedure's denial first. Validation must
 never let one of those procedures decide another's code, and must never miss a procedure done today because another
-one was declined. Routing readings are stated explicitly here; the real-routing inputs are in the r2 routing tests.
-Synthetic text only; pure functions.
+one was declined. Most routing readings are stated explicitly; RealRoutingCasesTests runs the routing engineer's
+measured inputs through real routing. Synthetic text only; pure functions.
 """
-from tests.test_repairs_status_r2_validation import SILENT_CUE, placed
+from django.test import SimpleTestCase
+
+from tests.test_repairs_status_r2_validation import SILENT_CUE, placed, real
 from tests.test_validation import EM, EngineCase, Note, finding, selected, visit_context
 
 VISIT = 'Office visit: established patient seen for rectal bleeding.'
@@ -128,3 +130,43 @@ class OtherFindingIsReadMentionByMentionTests(EngineCase):
                                               findings=[office(note), colonoscopy], ctx=visit_context()), '99214')
         self.assertEqual(visit.status, 'ready')
         self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])
+
+
+class RealRoutingCasesTests(SimpleTestCase):
+    """The routing engineer's measured inputs (office note, 99214 + 46221 selected), through real routing, the real
+    span reader and the engine: the routed anoscopy never decides the banding code, and the E/M stays held."""
+
+    TEMPLATE = ('SYNTHETIC\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
+                'visit.\nChief complaint: rectal bleeding.\n{body}\nMedical decision making: moderate.\nTotal time: 32 '
+                'minutes.\n')
+
+    def run_case(self, body, evidence):
+        proposals, _ = real(self.TEMPLATE.format(body=body), ('99214', 'Established patient office visit.'),
+                            ('46221', evidence))
+        band, visit = proposals['46221'], proposals['99214']
+        self.assertEqual([c.fact for c in visit.clarifications], ['separate_em'])
+        self.assertNotIn('Anoscopy', next(c for c in band.checks if c.id == 'service.status').detail)
+        return band
+
+    def test_a_declined_anoscopy_never_excludes_a_banding_done_today(self):
+        for body, evidence in (
+                ('Procedure: Anoscopy - patient declined.\nRubber band ligation x3 completed today.',
+                 'Rubber band ligation x3 completed today.'),
+                ('Procedure: Anoscopy - patient declined.\nInternal hemorrhoids were banded x3 today.',
+                 'Internal hemorrhoids were banded x3 today.')):
+            with self.subTest(evidence=evidence):
+                band = self.run_case(body, evidence)
+                self.assertEqual((band.bucket, band.status), ('selected', 'ready'))
+
+    def test_a_performed_anoscopy_never_makes_a_banding_candidate_ready(self):
+        band = self.run_case('Anoscopy was performed today.\nGrade 2 internal hemorrhoids, banding candidate.',
+                             'Grade 2 internal hemorrhoids, banding candidate.')
+        self.assertEqual(band.status, 'needs_clarification')
+        self.assertEqual([c.fact for c in band.clarifications], ['performed_status'])
+
+    def test_a_declined_anoscopy_never_decides_a_code_citing_a_finding(self):
+        # Only the grab-bag effect is pinned here: whether a finding sentence under a Procedure heading establishes
+        # the code is the span reader's question, not routing's gi.other finding.
+        band = self.run_case('Procedure: Anoscopy - patient declined.\nGrade 2 internal hemorrhoids.',
+                             'Grade 2 internal hemorrhoids.')
+        self.assertEqual(band.bucket, 'selected')
