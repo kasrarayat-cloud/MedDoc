@@ -555,5 +555,91 @@ class Contract5UncheckedAttestationTests(unittest.TestCase):
                 self.assertNotIn('separate_em', clarified(proposals['99214']))
 
 
+
+# --- routing:21 --------------------------------------------------------------------------------------------------
+
+BLEEDING_VISIT = 'Established patient office visit for rectal bleeding.'
+
+
+def history_office(assessment):
+    return (OFFICE_HEAD + BLEEDING_VISIT + '\nAssessment: ' + assessment + '\nMedical decision making: moderate.\n'
+            'Total time: 32 minutes.\n')
+
+
+def other_finding(text):
+    return routed(text).finding('gi.other')
+
+
+def encounter_detail(result, check_id):
+    return next(c for c in result.encounter_checks if c.id == check_id)
+
+
+class Routing21OtherHistoryTests(unittest.TestCase):
+    """routing:21 (medium, a regression from round 2b status:19). gi.other read history sentences in an office note
+    as same-day procedures: the E/M was held, and false 'Possible missed service' and 'unsupported' warnings appeared.
+    The 57b4b3747 reading (no gi.other) is restored for a performed clause that tells another time, a name led by a
+    history word reads historical, and a colonoscopy report's own banding is that colonoscopy's."""
+
+    def assert_no_same_day_other(self, text, visit='99214'):
+        other = other_finding(text)
+        self.assertTrue(other is None or other.status not in POSITIVE + ('uncertain',),
+                        other and [(m.span.text, m.status, m.cues) for m in other.mentions])
+        proposals, result = run_engine(text, [(visit, BLEEDING_VISIT)])
+        self.assertNotIn('separate_em', clarified(proposals[visit]))
+        self.assertNotIn('Other GI service', encounter_detail(result, 'services.unproposed').detail)
+        self.assertNotIn('Other GI service', encounter_detail(result, 'services.unsupported').detail)
+
+    def test_the_claimed_history_sentences(self):
+        for sentence in ('Hemorrhoid banding was performed at her last visit with good relief.',
+                         'Appendectomy was done as a child.', 'Liver biopsy was done in June and showed steatosis.',
+                         'She underwent hemorrhoid banding two years prior with good relief.'):
+            with self.subTest(sentence=sentence):
+                self.assert_no_same_day_other(history_office(sentence))
+
+    def test_a_name_led_by_a_history_word_reads_historical(self):
+        for sentence in ('Prior hemorrhoid banding was performed with good relief.',
+                         'Previous hemorrhoid banding was done with good relief.',
+                         'Recent liver biopsy was performed and showed steatosis.', 'Remote appendectomy was done.',
+                         'Status post hemorrhoidectomy was performed.'):
+            text = history_office(sentence)
+            with self.subTest(sentence=sentence):
+                self.assertEqual(other_finding(text).status, 'historical')
+                self.assert_no_same_day_other(text)
+
+    def test_an_office_note_without_a_basis_stays_an_office_note(self):
+        text = (OFFICE_HEAD + 'Established patient office visit for abdominal pain.\nChief complaint: abdominal pain.\n'
+                'Assessment: Abdominal pain. Appendectomy was done as a child.\nPlan: Return in 3 months.\n')
+        self.assertEqual(routed(text).document_kind, 'office_note')
+        proposals, _ = run_engine(text, [('99213', 'Established patient office visit for abdominal pain.')])
+        self.assertEqual(clarified(proposals['99213']), ['em_basis'])
+
+    def test_a_colonoscopy_reports_banding_is_the_colonoscopys(self):
+        for findings in ('The colonoscope was advanced to the cecum. Internal hemorrhoids were seen on retroflexion. '
+                         'Banding of internal hemorrhoids was performed with three bands.',
+                         'The colonoscope was advanced to the cecum. Rubber band ligation of an internal hemorrhoid was '
+                         'performed.',
+                         'Internal hemorrhoids were seen on retroflexion. Banding of internal hemorrhoids was performed.',
+                         'Colonoscopy to the cecum. Banding of internal hemorrhoids was performed.'):
+            text = HEADER + 'Procedure: Colonoscopy\nFindings: ' + findings + '\n'
+            with self.subTest(findings=findings):
+                self.assertIsNone(other_finding(text))
+                proposals, result = run_engine(text, [('45398', findings.split('. ')[-1])])
+                self.assertNotIn('Other GI service', encounter_detail(result, 'services.unproposed').detail)
+                unsupported = encounter_detail(result, 'services.unsupported')
+                self.assertNotEqual(unsupported.status, 'warn', unsupported.detail)
+                self.assertNotIn('Other GI service', unsupported.detail)
+
+    def test_controls_a_same_day_or_ambiguous_banding_still_holds_the_visit(self):
+        for text in (history_office('Rubber band ligation of an internal hemorrhoid was performed today.'),
+                     history_office('Hemorrhoid banding was performed with good relief.'),
+                     OFFICE_HEAD + BLEEDING_VISIT + '\nHistory: Colonoscopy in 2023 was normal.\nProcedure: Rubber band '
+                     'ligation of an internal hemorrhoid was performed today.\nMedical decision making: moderate.\n'
+                     'Total time: 32 minutes.\n'):
+            with self.subTest(text=text.splitlines()[-4]):
+                self.assertIn(other_finding(text).status, POSITIVE)
+                proposals, _ = run_engine(text, [('99214', BLEEDING_VISIT)])
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+
 if __name__ == '__main__':
     unittest.main()

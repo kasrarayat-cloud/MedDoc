@@ -2364,6 +2364,16 @@ _NAME_LEAD = re.compile(r'(?:(?:after|before|once|when|while|following|then|also
                         re.A | re.I)
 OTHER_BOX_ITEMS = 12  # the items of one check-box line that are read as names (bounds the work per line)
 OTHER_NAME_REACH = 120  # a procedure's name is short (bounds the work per candidate)
+# A history word that leads a name stays outside it, so the history pre-cue (cues.HISTORICAL_PRE) reads the name as
+# history (routing:21): "Prior hemorrhoid banding was performed", "Status post hemorrhoidectomy".
+_HISTORY_LEAD = re.compile(r'(?:(?:prior|previous|previously|recent|recently|remote|past|earlier|last|most\s+recent|index|'
+                           r'outside|s/p|status\s+post|(?:personal\s+)?history\s+of|hx\s+of|h/o)\s+)+', re.A | re.I)
+# A band ligation written in a colonoscopy's or a flexible sigmoidoscopy's own findings is that procedure's
+# (45398 / 45350), not another one (routing:21).
+_BANDING = re.compile(r'\bband(?:s|ed|ing)?\b|\bligat\w*|\bRBL\b', re.A | re.I)
+_LOWER_FAMILIES = ('gi.colonoscopy', 'gi.flex_sig')
+_RETROFLEXION = re.compile(r'\bretroflex\w*', re.A | re.I)
+OTHER_CONTEXT_SENTENCES = 6  # how many earlier sentences of its section speak for a banding (bounds the work)
 
 
 def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[str]) -> bool:
@@ -2386,6 +2396,7 @@ def _procedure_name(an: Analysis, start: int, limit: int) -> Optional[tuple[int,
     if lead:
         start = _SEPARATOR.match(text, lead.end(), limit).end()
     start = _NAME_LEAD.match(text, start, limit).end()
+    start = _HISTORY_LEAD.match(text, start, limit).end() if _HISTORY_LEAD.match(text, start, limit) else start
     stop = _NP_END.search(text, start, limit)
     end = stop.start() if stop else limit
     box = _BOX.search(text, start, end)
@@ -2422,8 +2433,15 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
         if not _PROCEDURE_WORD.search(name) or _NOT_A_PROCEDURE.search(name) or _NOT_DONE_LED.match(name):
             return
         scope = (max(clause[0], s - CLAUSE_REACH), min(clause[1], e + CLAUSE_REACH))
-        if not _about_a_detected_family(an, *scope, detected):
+        if not _about_a_detected_family(an, *scope, detected) and not _lower_tract_banding(an, s, e, detected):
             found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name)
+
+    def told_done(span, clause):
+        """An explicit performed clause names a same-day procedure only when it tells no other time: one that does
+        ("was performed at her last visit", "was done as a child", "in June") is history, as it read at 57b4b3747,
+        before gi.other existed (routing:21)."""
+        if span is not None and not _another_time(an, *span):
+            consider(span, clause)
 
     def names(pos, sentence):  # the name written at pos and, along a check-box line, each item's name
         for _ in range(OTHER_BOX_ITEMS):
@@ -2455,11 +2473,29 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
         word = _WORD.search(text, breaks[-1] if breaks else cs, m.start())
         name = word and _procedure_name(an, word.start(), m.start())
         if name and _DONE_GAP.fullmatch(text, name[1], m.start()):
-            consider(name, clause)
+            told_done(name, clause)
     for m in _OTHER_OBJECT_CUE.finditer(text):
         clause = _clause_at(an, m.start())
-        consider(_procedure_name(an, m.end(), clause[1]), clause)
+        told_done(_procedure_name(an, m.end(), clause[1]), clause)
     return sorted(found.values(), key=lambda mention: mention.start)
+
+
+def _lower_tract_banding(an: Analysis, s: int, e: int, detected: list[str]) -> bool:
+    """Whether the procedure named at [s, e) is a band ligation written in a detected colonoscopy's or flexible
+    sigmoidoscopy's own text: a procedure, findings or technique section whose heading, or one of the
+    OTHER_CONTEXT_SENTENCES sentences before it, names that service, its instrument or a retroflexion. An office
+    note's banding beside a colonoscopy named only in its history is not."""
+    if not set(_LOWER_FAMILIES) & set(detected) or not _BANDING.search(an.text, s, e):
+        return False
+    section = an.lay.section_at(s)
+    index = _sentence_index(an, s)
+    if section.kind not in POSITIVE_SECTIONS or index < 0:
+        return False
+    lo = max(section.start, an.lay.sentences[max(0, index - OTHER_CONTEXT_SENTENCES)][0])
+    if any(m.family in _LOWER_FAMILIES for m in an.services_in(lo, e)):
+        return True
+    return any(p.search(an.text, lo, e) for family, p in cues.INSTRUMENTS if family in _LOWER_FAMILIES) \
+        or bool(_RETROFLEXION.search(an.text, lo, e))
 
 
 def _other_finding(an: Analysis, others: list[Mention], has_basis: bool) -> FamilyFinding:
