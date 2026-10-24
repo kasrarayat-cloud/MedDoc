@@ -642,8 +642,10 @@ FORM = '\n\n[PDF form fields on page 1]\nCold snare polypectomy: checked\nBiopsy
 
 
 def form_note(last):
+    # The printed labels the form's fields name (round 3 contract:0): a field line that names no printed line holds
+    # its page instead (tests/test_repairs_r3_forms_routing.py).
     return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm polyp was '
-            'seen.\n' + last + FORM)
+            'seen.\nInterventions:\nBiopsy\nCold snare polypectomy\n' + last + FORM)
 
 
 class Status10FormBlockTests(unittest.TestCase):

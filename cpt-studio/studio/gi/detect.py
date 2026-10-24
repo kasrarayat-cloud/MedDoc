@@ -1556,12 +1556,20 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
 
 
 # Check boxes, as extraction writes them (U+2610 unchecked, U+2612 checked) and as pasted text carries them
-# (the shared contract): unchecked U+2610 U+25A1 U+25FB U+25FD U+274F U+2750 U+2751 U+2752, "[ ]", "[_]",
-# "( )"; checked U+2611 U+2612 U+2713 U+2714 U+25A0 U+2327, "[x]", "(x)". PDF form fields are also written
-# as "<label>: not checked" (see _unchecked_state).
-_BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\[[ _]?\]|\( \))'
-                  r'|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[[xX\u2713\u2714]\]|\([xX]\))')
+# (the shared contract): unchecked U+2610 U+25A1 U+25FB U+25FD U+274F U+2750 U+2751 U+2752, "[ ]" and "( )" with
+# any inner whitespace, "[_]"; checked U+2611 U+2612 U+2713 U+2714 U+25A0 U+2327, "[x]" and "(x)" with optional
+# inner whitespace, "[*]", "[v]". PDF form fields are also written as "<label>: not checked" (see _unchecked_state).
+_BOX_PAD = r'[ \t\u00a0\u2000-\u200a\u202f\u205f\u3000]'  # a box's padding: any whitespace but a line break
+_BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\[' + _BOX_PAD + r'*\]|\[_\]|\('
+                  + _BOX_PAD + r'+\))|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[' + _BOX_PAD
+                  + r'*[xX\u2713\u2714]' + _BOX_PAD + r'*\]|\(' + _BOX_PAD + r'*[xX]' + _BOX_PAD + r'*\)|\[[*v]\])')
+# A mark in brackets that looks like a box but is none of the contract's ("(•)", "(●)", "[√]", "(✓)", "[?]"): the
+# item it marks is held, and it is never passed over to hand the item a neighbour's box.
+_BOX_UNREAD = re.compile(r'[\[(]' + _BOX_PAD + r'*[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717'
+                         r'\u2718\u2715\u2716?]' + _BOX_PAD + r'*[\])]')
 UNCHECKED = 'negated: an unchecked box'
+BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
+BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
 BOX_REACH = 200  # a box governs only an item within this many characters of it, on its line (bounds the work per span)
 # The option a box marks in a yes/no pair ("Biopsy taken: [x] Yes [ ] No", "Biopsy taken: Yes [ ] No [x]").
 _OPTION_WORDS = r'(?:(?P<yes>yes|done|performed)|(?P<no>no|not[ \t]+done|not[ \t]+performed|none))'
@@ -1572,46 +1580,180 @@ _BOX_TEXT = _BOX.pattern.replace('?P<off>', '?:').replace('?P<on>', '?:')
 _NO_OPTION = r'(?:no|none|not[ \t]+done|not[ \t]+performed)'
 _OPTION_LABEL = re.compile(r'(?:' + _BOX_TEXT + r')[ \t]*' + _NO_OPTION + r'\b|\b' + _NO_OPTION + r'[ \t]*(?:' + _BOX_TEXT
                            + r')', re.A | re.I)
+# What joins the items of one label ("Biopsy/polypectomy", "biopsy or polypectomy", "Biopsy, polypectomy"): a box
+# after the label governs every item it names.
+_LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
+# Boxes written next to each other with only spaces between them ("☒ ☐ Biopsy") are one item's; boxes in cells of
+# their own ("Anoscopy | ☒ | ☐", a flattened "Done | Not done" table) are its options, and the first governs.
+_BOX_RUN_GAP = re.compile(r'[ \t\u00a0]*')
+_CELL_GAP = re.compile(r'[ \t\u00a0|:]*')  # what may open a sentence before its first box ("| ☐")
 
 
-def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
-    """Whether the item at [start, end) is governed by an unchecked box in its own sentence and line,
-    within BOX_REACH of it. Whether the boxes there lead or trail their items is told by what comes last:
-    - an item ("[ ] Biopsy [x] Cold snare polypectomy", "( ) Biopsy", "Checklist: [ ] Biopsy.",
-      "Colonoscopy: [ ] biopsy [x] cold snare"): boxes lead, so the box nearest before the item (or inside
-      the passage) governs it;
-    - a box ("Biopsy | [ ]", "Biopsy: [ ]", "Biopsy [ ]", "Biopsy | [ ] | Cold snare polypectomy | [x]",
-      "Biopsy taken: [ ] Yes [x] No"): boxes trail, so the first box after the item, with no other item
-      between them, governs it; a yes/no pair there is read by the option it marks."""
+def _box_tokens(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
+    """The items and the boxes wholly inside [lo, hi). Items: (start, end) of service names, interventions and
+    other procedures' names, overlapping ones merged. Boxes: (start, end, state), state 'off', 'on' or 'unread'."""
+    items = _merged(list({(m.start, m.end) for m in an.services_in(lo, hi)}
+                         | {(iv.start, iv.end) for iv in an.interventions_in(lo, hi)} | set(_other_names_in(an, lo, hi))))
+    unread = [(u.start(), u.end(), 'unread') for u in _BOX_UNREAD.finditer(an.text, lo, hi)
+              if not _BOX.fullmatch(an.text, u.start(), u.end())]
+    boxes = [(b.start(), b.end(), 'off' if b.group('off') is not None else 'on') for b in _BOX.finditer(an.text, lo, hi)]
+    if unread:  # "(✓)" is one unread mark, not a box inside brackets
+        starts = [u[0] for u in unread]
+        boxes = [b for b in boxes if not (bisect.bisect_right(starts, b[0]) and
+                                          b[1] <= unread[bisect.bisect_right(starts, b[0]) - 1][1])]
+    return items, sorted(boxes + unread)
+
+
+def _box_segment(an: Analysis, start: int, end: int) -> tuple[int, int, int, int]:
+    """(lo, hi) of the text whose boxes may govern [start, end), and the part of it on the item's line within
+    BOX_REACH. The text is the item's sentence, joined to the sentences next to it on the same line that open with a
+    box when that run of sentences ends with a box: a cell or a label ending in a period keeps the box after it
+    ("Biopsy. | ☐", "Biopsy. ☐ Cold snare polypectomy. ☒")."""
+    text, span_end = an.text, max(end, start + 1)
+    sentence_start, sentence_end = an.lay.sentence_for(start, end)
+    reach_lo, reach_hi = max(0, start - BOX_REACH), min(len(text), span_end + BOX_REACH)
+    newline = text.rfind('\n', reach_lo, start)
+    line_lo = newline + 1 if newline >= 0 else reach_lo
+    newline = text.find('\n', end, reach_hi)
+    line_hi = reach_hi if newline < 0 else newline
+    lo, hi = min(sentence_start, start), max(sentence_end, span_end)
+    index = _sentence_index(an, start)
+    if index >= 0:
+        sentences = an.lay.sentences
+        first = last = index
+        while first > 0 and sentences[first - 1][0] >= reach_lo and _opens_with_a_box(an, sentences[first]) \
+                and '\n' not in text[sentences[first - 1][1]:sentences[first][0]]:
+            first -= 1
+        while last + 1 < len(sentences) and sentences[last + 1][1] <= reach_hi \
+                and _opens_with_a_box(an, sentences[last + 1]) and '\n' not in text[sentences[last][1]:sentences[last + 1][0]]:
+            last += 1
+        if first != last:
+            merged_lo, merged_hi = sentences[first][0], sentences[last][1]
+            items, boxes = _box_tokens(an, max(merged_lo, line_lo), min(merged_hi, line_hi))
+            if boxes and (not items or boxes[-1][0] > items[-1][0]):  # the run ends with a box: its boxes trail
+                lo, hi = min(lo, merged_lo), max(hi, merged_hi)
+    return lo, hi, max(lo, line_lo), min(hi, line_hi)
+
+
+def _opens_with_a_box(an: Analysis, sentence: tuple[int, int]) -> bool:
+    at = _CELL_GAP.match(an.text, sentence[0], sentence[1]).end()
+    return bool(_BOX.match(an.text, at, sentence[1]) or _BOX_UNREAD.match(an.text, at, sentence[1]))
+
+
+def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, int]] = None) -> str:
+    """'lead' or 'trail': whether the boxes of [lo, hi) mark the items after them or before them (``extra``: the
+    passage being read when it is not an item itself, read as one). Boxes lead when the text opens with a box
+    ("☐ Biopsy ☒ Cold snare polypectomy"), or when a service name or a label with a colon opens it and every box is
+    followed straight by an item ("Colonoscopy: [ ] biopsy [x] cold snare"). Otherwise they trail ("Biopsy | ☐ |
+    Cold snare polypectomy | ☒"), and items written after the last box are remarks that no box governs
+    ("... | ☒ | clip placed after polypectomy")."""
+    key = ('box-orientation', lo, hi, extra)
+    if key not in an.memo:
+        text = an.text
+        items, boxes = _box_tokens(an, lo, hi)
+        if extra is not None:
+            items = _merged(items + [extra])
+        if not boxes or not items or boxes[0][0] < items[0][0]:
+            an.memo[key] = 'lead'
+        elif boxes[-1][0] > items[-1][0]:
+            an.memo[key] = 'trail'
+        else:
+            first = items[0]
+            label_end = _label_end(text, items, 0)
+            headed = any(m.start == first[0] for m in an.services_in(first[0], first[1])) \
+                or text.startswith(':', _BOX_RUN_GAP.match(text, label_end, hi).end(), hi)
+            starts = {s for s, _ in items}
+            followed = True
+            for i, (s, e, _) in enumerate(boxes):
+                if i + 1 < len(boxes) and _BOX_RUN_GAP.fullmatch(text, e, boxes[i + 1][0]):
+                    continue  # boxes of one item: the run is followed by what follows its last box
+                if _BOX_RUN_GAP.match(text, e, hi).end() not in starts:
+                    followed = False
+                    break
+            an.memo[key] = 'lead' if headed and followed else 'trail'
+    return an.memo[key]
+
+
+def _merged(spans: list) -> list:
+    """(start, end) spans sorted, overlapping ones merged."""
+    merged: list = []
+    for s, e in sorted(spans):
+        if merged and s < merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    return merged
+
+
+def _label_end(text: str, items: list, index: int) -> int:
+    """The end of the label that starts with items[index]: the items written on to it, joined by spaces, hyphens,
+    '/', ',', '&', '+', brackets, 'and' or 'or'."""
+    end = items[index][1]
+    for s, e in items[index + 1:]:
+        if s < end or not _LABEL_JOINER.fullmatch(text, end, s):
+            break
+        end = e
+    return end
+
+
+def _run_state(run: list) -> str:
+    """The state of boxes written next to each other for one item: 'unknown' when one cannot be read, 'mixed'
+    when they disagree."""
+    states = {state for _, _, state in run}
+    if 'unread' in states:
+        return 'unknown'
+    return states.pop() if len(states) == 1 else 'mixed'
+
+
+def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
+    """The state of the box(es) that govern the item at [start, end): 'off', 'on', 'mixed' (boxes for the item that
+    disagree), 'unknown' (a box this reader cannot read), or None when no box governs it. A box governs items on its
+    own line or cell (_box_segment), within BOX_REACH of it, before or after them (_box_orientation):
+    - boxes lead ("[ ] Biopsy [x] Cold snare polypectomy", "( ) Biopsy", "Checklist: [ ] Biopsy.",
+      "Colonoscopy: [ ] biopsy [x] cold snare"): the boxes nearest before the item (or inside the passage) govern it;
+    - boxes trail ("Biopsy | [ ]", "Biopsy: [ ]", "Biopsy [ ]", "Biopsy/polypectomy | [ ]", "Biopsy taken: [ ] Yes
+      [x] No"): the boxes after the item's label, before the next item, govern every item the label names; a
+      yes/no pair there is read by the option it marks.
+    Boxes written next to each other with nothing but spaces between them are one item's: when they disagree, the
+    item is 'mixed'."""
     key = ('box', start, end)
     if key not in an.memo:
         text, span_end = an.text, max(end, start + 1)
-        sentence_start, sentence_end = an.lay.sentence_for(start, end)
-        lo = max(0, start - BOX_REACH, min(sentence_start, start))
-        newline = text.rfind('\n', lo, start)
-        line_start = newline + 1 if newline >= 0 else lo
-        hi = min(len(text), span_end + BOX_REACH, max(sentence_end, span_end))
-        newline = text.find('\n', end, hi)
-        line_end = hi if newline < 0 else newline
-        boxes = list(_BOX.finditer(text, line_start, line_end))
-        result = False
-        if boxes:
-            items = sorted({(m.start, m.end) for m in an.services_in(line_start, line_end)}
-                           | {(iv.start, iv.end) for iv in an.interventions_in(line_start, line_end)}
-                           | set(_other_names_in(an, line_start, line_end)) | {(start, end)})
-            if items[-1][1] > boxes[-1].start():
-                before = [b for b in boxes if b.start() < span_end]
-                result = bool(before) and before[-1].group('off') is not None
+        reach_lo, reach_hi = max(0, start - BOX_REACH), min(len(text), span_end + BOX_REACH)
+        line_lo, line_hi = text.rfind('\n', reach_lo, start) + 1 or reach_lo, text.find('\n', end, reach_hi)
+        line_hi = reach_hi if line_hi < 0 else line_hi
+        result = None
+        if _BOX.search(text, line_lo, line_hi) or _BOX_UNREAD.search(text, line_lo, line_hi):  # else no box is near
+            seg_lo, seg_hi, lo, hi = _box_segment(an, start, end)
+            items, boxes = _box_tokens(an, lo, hi)
+            # an item's orientation is its whole segment's; any other passage's is read where it stands
+            is_item = any(s <= start and span_end <= e for s, e in items)
+            orientation = (_box_orientation(an, seg_lo, seg_hi) if is_item
+                           else _box_orientation(an, lo, hi, (start, span_end)))
+            if orientation == 'lead':
+                before = [b for b in boxes if b[0] < span_end]
+                if before:
+                    run = [before[-1]]
+                    for b in reversed(before[:-1]):
+                        if not _BOX_RUN_GAP.fullmatch(text, b[1], run[0][0]):
+                            break
+                        run.insert(0, b)
+                    result = _run_state(run)
             else:
-                label_end = span_end  # items written on to the passage are one label ("Cold snare polypectomy")
-                for item_start, item_end in items:
-                    if item_start >= label_end and not text[label_end:item_start].strip(' \t-'):
-                        label_end = item_end
-                after = next((s for s, _ in items if s >= label_end), line_end)
-                group = [b for b in boxes if start <= b.start() < after]
-                result = bool(group) and _group_unchecked(text, group)
+                items = sorted(set(items) | {(start, end)})
+                index = items.index((start, end))
+                label_end = max(span_end, _label_end(text, items, index))
+                after = next((s for s, _ in items if s >= label_end), hi)
+                group = [b for b in boxes if start <= b[0] < after]
+                if group:
+                    result = _group_state(text, group)
         an.memo[key] = result
     return an.memo[key]
+
+
+def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
+    """Whether the item at [start, end) is governed by an unchecked box in its own line or cell (_box_state)."""
+    return _box_state(an, start, end) == 'off'
 
 
 def _other_names_in(an: Analysis, start: int, end: int) -> tuple:
@@ -1620,23 +1762,30 @@ def _other_names_in(an: Analysis, start: int, end: int) -> tuple:
     return tuple(name for name in names[low:high] if name[1] <= end)
 
 
-def _group_unchecked(text: str, group: list[re.Match]) -> bool:
-    """The boxes after an item, up to the next item: the first one governs, unless they mark yes/no options.
-    Then the item is denied when "No" is checked or "Yes" is not."""
+def _group_state(text: str, group: list) -> Optional[str]:
+    """The boxes after an item, up to the next item: the first one (with the boxes written next to it) governs,
+    unless they mark yes/no options. Then the item is denied when "No" is checked or "Yes" is not."""
     first = group[0]
-    if _OPTION_BEFORE.search(text, max(0, first.start() - 20), first.start()):
-        marks = [(b, _OPTION_BEFORE.search(text, max(0, b.start() - 20), b.start())) for b in group]
-    elif _OPTION_AFTER.match(text, first.end()):
-        marks = [(b, _OPTION_AFTER.match(text, b.end())) for b in group]
+    if _OPTION_BEFORE.search(text, max(0, first[0] - 20), first[0]):
+        marks = [(b, _OPTION_BEFORE.search(text, max(0, b[0] - 20), b[0])) for b in group]
+    elif _OPTION_AFTER.match(text, first[1]):
+        marks = [(b, _OPTION_AFTER.match(text, b[1])) for b in group]
     else:
-        return first.group('off') is not None
+        run = [first]
+        for b in group[1:]:
+            if not _BOX_RUN_GAP.fullmatch(text, run[-1][1], b[0]):
+                break
+            run.append(b)
+        return _run_state(run)
+    if any(b[2] == 'unread' for b, _ in marks):
+        return 'unknown'
     yes = next((b for b, word in marks if word and word.group('yes')), None)
     no = next((b for b, word in marks if word and word.group('no')), None)
-    if no is not None and no.group('on'):
-        return True
+    if no is not None and no[2] == 'on':
+        return 'off'
     if yes is not None:
-        return yes.group('off') is not None
-    return False
+        return yes[2]
+    return None
 
 
 # A form line whose whole value says its box is off ("Biopsy: not checked", "Extent reached: no option
@@ -1645,14 +1794,195 @@ _STATE_OFF = re.compile(r'[^:\n]{1,120}:[ \t]*(?:not[ \t]+checked|unchecked|no[ 
 
 
 def _unchecked_state(an: Analysis, start: int, end: int) -> bool:
-    """Whether [start, end) lies on one line that is a form line whose value is off. The line is looked
-    for within BOX_REACH of the span; a longer line never matches (its label is at most 120 characters)."""
+    """Whether [start, end) lies on one line that is a form line whose value is off (looked for within BOX_REACH
+    of the span; a longer line never matches: its label is at most 120 characters), on a line of a '[PDF form fields
+    on page N]' block that denies its item, or in the printed line or cell such a line names on its page
+    (_form_fields)."""
     text = an.text
-    if '\n' in text[start:end]:
+    if text.find('\n', start, end) >= 0:
         return False
     before = text.rfind('\n', max(0, start - BOX_REACH), start)
     after = text.find('\n', end, end + BOX_REACH)
-    return bool(_STATE_OFF.fullmatch(text, before + 1, len(text) if after < 0 else after))
+    if _STATE_OFF.fullmatch(text, before + 1, len(text) if after < 0 else after):
+        return True
+    fields = _form_fields(an)
+    if _within(fields.denying, fields.denying_starts, start, end):
+        return True
+    named = _within(fields.named, fields.named_starts, start, end)
+    return named is not None and named.state == 'off' and named.exact
+
+
+# --- form-field blocks: a field line reaches the printed label it names ----------------------------------------
+# Extraction writes a PDF page's form fields after its text (studio/ingest/pdfannots.py). A line of that block whose
+# value denies its item - an unchecked box, no option selected, a selected "No", "None", "Not done" or "Not
+# performed" - negates the printed line or table cell on the same page whose words equal its label (ignoring case,
+# whitespace, a colon and list markers or boxes around it); when it names none, the page's items are held.
+FORM_HEADER = re.compile(r'^[ \t]*\[PDF (form fields|annotation text) on page (\d+)\][ \t]*$', re.A | re.M)
+_FIELD_DENIED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected'
+                           r'|no|none|not[ \t]+done|not[ \t]+performed)[ \t.]*', re.A | re.I)
+_FIELD_CHECKED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:checked|yes)[ \t.]*', re.A | re.I)
+_BLANK_LINE = re.compile(r'\n[ \t]*\n')
+_LEADING_MARK = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?\d{1,3}[.)]|\(?[a-z][.)]'
+                           r'(?=\s)|' + _BOX_TEXT + '|' + _BOX_UNREAD.pattern + r')\s*', re.I)
+_TRAILING_BOX = re.compile(r'(?:' + _BOX_TEXT + '|' + _BOX_UNREAD.pattern + r')$')
+FIELD_LABEL_CHARS = 200  # a printed line or cell longer than this never equals a field's label (bounds the work)
+FIELD_UNTIED = "uncertain: the form field '{}' says its item was not done, and no printed line on its page names it"
+FIELD_PAGE = ("uncertain: the form field '{}' says this item was not done, but the page it is on cannot be told from "
+              "the pages before it")
+
+
+@dataclass(frozen=True)
+class _Named:
+    start: int
+    end: int
+    state: str  # 'off' (a denying field line names it) | 'on' (a checked one) | 'mixed'
+    exact: bool  # its page's printed text is known exactly
+    line: str  # the field line, as written
+
+
+@dataclass(frozen=True)
+class _FieldPage:
+    start: int  # the page's printed text, as far as it can be told: from the end of the previous block
+    end: int  # the end of the page's form-field block
+    unmatched: str  # the first denying field line whose label names nothing printed on the page ('' for none)
+
+
+@dataclass(frozen=True)
+class _Fields:
+    denying: tuple  # _Named spans of the denying field lines themselves, sorted
+    named: tuple  # _Named printed lines and cells, sorted
+    pages: tuple  # _FieldPage of each form-field block with an unmatched denying line, sorted
+    denying_starts: tuple = ()
+    named_starts: tuple = ()
+    page_starts: tuple = ()
+
+
+def _label_key(raw: str) -> str:
+    """A label or a printed line as compared: lower case, single spaces, without a colon or the list markers and
+    boxes around it."""
+    text = raw.strip().lower()
+    while True:
+        mark = _LEADING_MARK.match(text)
+        if not mark or not mark.end():
+            break
+        text = text[mark.end():]
+    while True:
+        text = text.rstrip()
+        if text.endswith(':'):
+            text = text[:-1]
+            continue
+        tail = _TRAILING_BOX.search(text, max(0, len(text) - 12))
+        if not tail or tail.start() == 0:
+            break
+        text = text[:tail.start()]
+    return ' '.join(text.split())
+
+
+def _form_fields(an: Analysis) -> _Fields:
+    """The '[PDF form fields on page N]' blocks of the text, read once: their denying lines, the printed lines and
+    cells their labels name on their page, and the pages with a denying line that names none. A page's printed text
+    runs from the end of the previous page's block to its own block; it is known exactly when that previous block is
+    the previous page's (or there is none before page 1), else it may hold earlier pages too, and a line it names is
+    held instead of negated."""
+    key = ('form-fields',)
+    if key not in an.memo:
+        text = an.text
+        headers = list(FORM_HEADER.finditer(text))
+        denying, named, pages = [], [], []
+        previous_end, previous_page = 0, 0
+        for i, header in enumerate(headers):
+            limit = headers[i + 1].start() if i + 1 < len(headers) else len(text)
+            blank = _BLANK_LINE.search(text, header.end(), limit)
+            block_end = blank.start() if blank else limit
+            page = int(header.group(2))
+            if header.group(1) == 'form fields':
+                exact = page == previous_page + 1
+                labels: dict = {}
+                for line in re.finditer(r'[^\n]+', text[header.end():block_end]):
+                    words = line.group(0)
+                    at = header.end() + line.start()
+                    denied = _FIELD_DENIED.fullmatch(words)
+                    checked = None if denied else _FIELD_CHECKED.fullmatch(words)
+                    if denied:
+                        denying.append(_Named(at, at + len(words), 'off', exact, words.strip()))
+                    if denied or checked:
+                        label = _label_key((denied or checked).group('label'))
+                        state = 'off' if denied else 'on'
+                        previous = labels.get(label)
+                        labels[label] = (state if previous is None or previous[0] == state else 'mixed',
+                                         previous[1] if previous else words.strip())
+                found = set()
+                if labels:
+                    for line in re.finditer(r'[^\n]+', text[previous_end:header.start()]):
+                        at = previous_end + line.start()
+                        cells = line.group(0).split(' | ')
+                        offset = 0
+                        for cell in cells:
+                            stripped = cell.strip()
+                            if stripped and len(stripped) <= FIELD_LABEL_CHARS:
+                                label = _label_key(stripped)
+                                if label in labels:
+                                    begin = at + offset + (len(cell) - len(cell.lstrip()))
+                                    named.append(_Named(begin, begin + len(stripped), labels[label][0], exact,
+                                                        labels[label][1]))
+                                    found.add(label)
+                            offset += len(cell) + 3
+                unmatched = next((line for label, (state, line) in labels.items() if state != 'on' and label not in found),
+                                 '')
+                if unmatched:
+                    pages.append(_FieldPage(previous_end, block_end, unmatched))
+            previous_end, previous_page = block_end, page
+        denying.sort(key=lambda n: n.start)
+        named.sort(key=lambda n: n.start)
+        an.memo[key] = _Fields(tuple(denying), tuple(named), tuple(pages), tuple(n.start for n in denying),
+                               tuple(n.start for n in named), tuple(p.start for p in pages))
+    return an.memo[key]
+
+
+def _within(spans: tuple, starts: tuple, start: int, end: int):
+    """The span of ``spans`` (sorted by ``starts``, not overlapping) that holds [start, end), or None."""
+    index = bisect.bisect_right(starts, start) - 1
+    if index >= 0 and max(end, start + 1) <= spans[index].end:
+        return spans[index]
+    return None
+
+
+def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """What the check boxes and form-field lines say of [start, end), or None when they say nothing: negated by an
+    unchecked box or a denying field line (UNCHECKED); held when its boxes disagree, when a box cannot be read, when
+    a field line names it on a page that cannot be bounded, or when its page has a denying field line that names no
+    printed item (and its own reading has no explicit performance cue and no checked box of its own)."""
+    state = _box_state(an, start, end)
+    fields = _form_fields(an)
+    named = _within(fields.named, fields.named_starts, start, end) if an.text.find('\n', start, end) < 0 else None
+    if state == 'unknown':
+        return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
+    if state == 'mixed' or (named is not None and (named.state == 'mixed' or state not in (None, named.state))):
+        return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
+    if state == 'off' or _unchecked_state(an, start, end):
+        return Reading('negated', (UNCHECKED,), 'cue')
+    if named is not None and named.state == 'off':
+        return Reading('uncertain', (FIELD_PAGE.format(named.line),), 'cue', doubt=True)
+    if state == 'on':
+        return None
+    pages = fields.pages
+    index = bisect.bisect_right(fields.page_starts, start) - 1
+    if index < 0 or start >= pages[index].end or not _names_an_item(an, start, end):
+        return None
+    cue = _cue_reading(an, start, end)
+    if cue is not None or _default_reading(an, start, end).status not in ('performed', 'uncertain'):
+        return None
+    return Reading('uncertain', (FIELD_UNTIED.format(pages[index].unmatched),), 'cue', doubt=True)
+
+
+def _names_an_item(an: Analysis, start: int, end: int) -> bool:
+    end = max(end, start + 1)
+    return an.touches_service(start, end) or any(_overlaps(s, e, start, end)
+                                                  for s, e in _other_names_in(an, start - OTHER_NAME_REACH,
+                                                                              end + OTHER_NAME_REACH))
+
+
+BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0])  # the cues of the holds above
 
 
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
@@ -1661,8 +1991,10 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     negation sits in its clause, or when only its section speaks for a named service whose
     words are not those of a procedure description ("Colonoscopy declined by patient")."""
     key = ('reading', start, end)
-    if key not in an.memo and (_unchecked_box(an, start, end) or _unchecked_state(an, start, end)):
-        an.memo[key] = Reading('negated', (UNCHECKED,), 'cue')
+    if key not in an.memo:
+        boxed = _box_reading(an, start, end)  # check boxes and form-field lines (see _box_reading)
+        if boxed is not None:
+            an.memo[key] = boxed
     if key not in an.memo:
         reading = _cue_reading(an, start, end) or _default_reading(an, start, end)
         if reading.status == 'performed' and not reading.cues[0].endswith(EM_DOCUMENTATION):
@@ -1953,8 +2285,11 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
             for status, pattern in _REFERENCE_PATTERNS:
                 for m in pattern.finditer(text, cs, ce):
                     context = _generic_reading(an, m.start(), m.end())
-                    if context.status in ('historical', 'planned'):
-                        continue
+                    if context.status in ('historical', 'planned') or context.cues == (UNCHECKED,):
+                        continue  # an unchecked status option ("Procedure cancelled | [ ]") is not a statement
+                    if context.cues and context.cues[0].startswith(BOX_HOLDS):
+                        found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = context
+                        continue  # its box or form field cannot be read: held, never cancelled
                     if family == 'gi.ercp' and 'cannulat' in m.group(0).lower() and _pancreatic_avoidance(an, m.start()):
                         continue
                     if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):
