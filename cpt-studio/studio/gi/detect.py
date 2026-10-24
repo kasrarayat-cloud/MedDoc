@@ -855,11 +855,25 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
         return bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
     if bare and _bare_denial(an, body, ne):
         return True
-    if len(text[body:ne].split()) <= 6 and (_denying_word(an, body, ne, only=_ACT_DENIAL) or _cancels(an, body, ne)):
+    if len(text[body:ne].split()) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)):
         return True
     if not _REFERRING_SUBJECT.match(text, body, ne):
         return False
     return _cancels(an, ns, ne) or bool(_denying_word(an, ns, ne))
+
+
+def _denies_an_act(an: Analysis, start: int, end: int) -> bool:
+    """Whether the short line [start, end) carries an act denial that nothing explains ("Not performed.", "Patient
+    declined.") and that is not the denial of another act or care step written right after its name
+    (cues.OTHER_ACT_DENIED: "Sedation was not needed.", "Retroflexion: not performed", "The patient did not
+    require sedation."). Every other unexplained act denial still denies the service named before the line."""
+    other = [(m.start(), m.end()) for m in cues.OTHER_ACT_DENIED.finditer(an.text, start, end)]
+    for token in cues.DOUBT_TOKEN.finditer(an.text, start, end):
+        if not _ACT_DENIAL.fullmatch(token.group(0)) or _covered((token.start(), token.end()), other):
+            continue
+        if _denying_word(an, token.start(), token.end(), only=_ACT_DENIAL):
+            return True
+    return False
 
 
 def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optional[str]:

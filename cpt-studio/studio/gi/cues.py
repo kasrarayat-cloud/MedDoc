@@ -202,6 +202,20 @@ OTHER_ACT_NEGATION = rx(r'\b(?:no|without|w/o|not|nor|declined|declines|refused|
                         r'retroflexion|photo(?:graph)?s?|'
                         r'photodocumentation|irrigation|lavage|chromoendoscopy|narrow[- ]band\s+imaging|NBI|'
                         r'contrast|fluoroscopy|intubation\s+of\s+the\s+(?:terminal\s+)?ileum)\b')
+# 5. The same acts and care steps denied after their name, as a line of their own ("Sedation was not needed.",
+#    "Retroflexion: not performed", "Images were not saved.", "The patient did not require sedation."). Read only
+#    where a short line after a described service line is asked whether it denies the service (detect._denies):
+#    the act must stand right before its denial, and only these participles deny it ("was not tolerated" or "was
+#    not available" may be why the procedure stopped, so they still hold).
+_OTHER_ACT = (r'(?:(?:conscious|moderate|deep|general|IV|intravenous|procedural)\s+)?(?:sedation|anesthesia|anaesthesia|'
+              r'propofol|MAC|analgesia|retroflexion|photo(?:graph)?s?|photodocumentation|images?|irrigation|lavage|'
+              r'chromoendoscopy|narrow[- ]band\s+imaging|NBI|contrast|fluoroscopy|intubation\s+of\s+the\s+(?:terminal\s+)?'
+              r'ileum)')
+OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=–-]\s*)?(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|"
+                      r"could|can|did|does|will)\s*)?(?:not|never|n't)\s+(?:be\s+|been\s+)?(?:needed|required|used|given|"
+                      r'administered|performed|done|taken|saved|obtained|indicated|necessary|attempted)\b'
+                      r'|\b(?:did|does|do|will)\s*(?:not|n\'t)\s+(?:require|need|receive|undergo|get)\s+(?:any\s+)?'
+                      + _OTHER_ACT + r'\b')
 
 # --- history: the service happened before this encounter ------------------------
 

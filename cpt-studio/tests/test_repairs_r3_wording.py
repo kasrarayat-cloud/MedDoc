@@ -218,3 +218,90 @@ class R14ActNeededAfterADeniedFindingTests(unittest.TestCase):
         text = HEADER + f'Procedure: EGD\nFindings: {sentence}\n'
         self.assertEqual(read(text, sentence)[0], 'performed')
         self.assertTrue(ready(run_engine(text, [('43235', sentence)])[0]['43235']))
+
+
+# --- routing:20 -----------------------------------------------------------------------------------------------
+
+EGD_BIOPSY = 'Two biopsies were taken from the antrum.'
+
+
+def egd_after(nxt, line='EGD with biopsy.'):
+    return (HEADER + f'Procedure: {line}\n{nxt}\nFindings: The gastroscope was advanced to the second part of the '
+            f'duodenum. {EGD_BIOPSY}\n')
+
+
+COLON_SNARE = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+def colon_after(nxt):
+    return (HEADER + f'Procedure: Colonoscopy with cold snare polypectomy\n{nxt}\nFindings: The colonoscope was advanced '
+            f'to the cecum. {COLON_SNARE}\n')
+
+
+class R20ShortLineDenyingAnotherActTests(unittest.TestCase):
+    """routing:20 - a short line after a described service line that denies another act or care step after naming
+    it ("Sedation was not needed.", "Retroflexion: not performed") is no denial of the service: it reads performed
+    and its codes are ready, as at 57b4b3747. Every other short denial still holds the service."""
+
+    OTHER_ACTS = ('Sedation was not needed.', 'The patient did not require sedation.', 'Fluoroscopy was not used.',
+                  'Images were not saved.', 'Anesthesia was not required.', 'Photographs were not taken.',
+                  'IV sedation not required.', 'Propofol was not used.', 'Moderate sedation was not used.',
+                  'Retroflexion could not be performed.', "Sedation wasn't needed.")
+
+    def test_the_claimed_input_and_variants(self):
+        for nxt in self.OTHER_ACTS:
+            text = egd_after(nxt)
+            with self.subTest(nxt=nxt):
+                self.assertEqual(family(text, 'gi.egd'), 'performed')
+                status, cues = read(text, 'EGD with biopsy.')
+                self.assertEqual(status, 'performed', cues)
+                self.assertTrue(ready(run_engine(text, [('43239', EGD_BIOPSY)])[0]['43239']))
+
+    def test_the_colonoscopy_retroflexion_lines(self):
+        for nxt in ('Retroflexion: not performed', 'Retroflexion was not performed.', 'Retroflexion not performed.'):
+            text = colon_after(nxt)
+            with self.subTest(nxt=nxt):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assertTrue(ready(run_engine(text, [('45385', COLON_SNARE)])[0]['45385']))
+
+    def test_the_verification_documents_with_another_act_denied(self):
+        for name, title, nxt, slug, picks in (
+                ('gi-02', 'Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.', 'Fluoroscopy was not used.',
+                 'gi.egd', [('43239', 'Two cold forceps biopsies were taken from the gastric antrum for histology and '
+                                      'Helicobacter pylori assessment.')]),
+                ('gi-02', 'Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.', 'Photographs were not taken.',
+                 'gi.egd', [('43239', 'Two cold forceps biopsies were taken from the gastric antrum for histology and '
+                                      'Helicobacter pylori assessment.')]),
+                ('gi-03', 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.',
+                 'Chromoendoscopy was not used.', 'gi.colonoscopy',
+                 [('45385', 'were each removed completely with a cold snare and retrieved (jar A)'),
+                  ('45380', 'was sampled with cold forceps biopsy for histology (jar B)')])):
+            original = doc(name)
+            text = original.replace(title, title + '\n' + nxt)
+            self.assertNotEqual(text, original)
+            with self.subTest(name=name, nxt=nxt):
+                self.assertEqual(family(text, slug), 'performed')
+                proposals, _ = run_engine(text, picks)
+                for code, _evidence in picks:
+                    self.assertTrue(ready(proposals[code]), (code, proposals[code].clarifications))
+
+    def test_the_same_denial_as_a_later_clause(self):
+        text = HEADER + 'Procedure: EGD with biopsy; sedation was not needed.\nFindings: Biopsies were taken.\n'
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+
+    def test_a_denial_of_the_service_still_holds(self):
+        for nxt in ('Not performed.', 'Patient declined.', 'It was not performed.', 'Cancelled.',
+                    'Not performed - no sedation available.', 'Sedation was not needed; not performed.',
+                    'The patient did not tolerate sedation.', 'Anesthesia was not available.',
+                    'Sedation and procedure not performed.'):
+            text = egd_after(nxt)
+            with self.subTest(nxt=nxt):
+                self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+                status, cues = read(text, 'EGD with biopsy.')
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+                self.assertFalse(ready(run_engine(text, [('43239', EGD_BIOPSY)])[0]['43239']))
+
+    def test_after_a_bare_service_line_the_57b_hold_is_kept(self):
+        text = egd_after('Sedation was not needed.', line='EGD')
+        self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
