@@ -12,12 +12,12 @@ under it never inherits the previous section's reading: a plan or history
 section when the label says so ("Next procedures:", "Earlier work-up:"),
 otherwise an ``other`` section with no default. A label with a verb in it is a
 sentence that ends in a colon ("The following were noted:") and opens none,
-unless HEADINGS lists it ("Procedures performed today:"). A label line without a colon
-("Planned procedures", "Further management", a Word heading paragraph) opens a
-plan or history section when its words say so and it ends with the section of
-a note it names (procedures, plan, management, work-up ...), never a service,
-an intervention or a landmark; a list item ("3. Further workup recommended")
-is never such a label.
+unless HEADINGS lists it ("Procedures performed today:"). A label line without
+a colon ("Planned procedures", "Further management", a Word heading paragraph)
+opens a plan or history section when its words say so and it ends with the
+section of a note it names (procedures, plan, management, work-up ...), never
+a service, an intervention or a landmark; a list item ("3. Further workup
+recommended") is never such a label.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
