@@ -510,6 +510,33 @@ class CompetingReadingsTests(unittest.TestCase):
                 self.assertEqual(printed_on(vocabulary.fullmatch(found)), want)
 
 
+# --- the seam with sections: an option row written with the unread mark ends at its line -------------------------------
+
+def option_row_then_item():
+    """'Biopsy taken: [ ] Yes [ ] No' in one piece with a radio group over the brackets (Yes selected), then a line
+    naming a performed service with no clause of its own."""
+    form = Form()
+    form.line(text_line(90, BIOPSY_ROW, 'Biopsy taken: [ ] Yes [ ] No'))
+    form.line(text_line(90, SNARE_ROW, 'Cold snare polypectomy of the sigmoid polyp'))
+    yes_x, no_x = 90 + 69.09, 90 + 69.09 + 34.24  # Helvetica 11: 'Biopsy taken: ' and '[ ] Yes '
+    form.group('Biopsy taken', [((yes_x - 1, BIOPSY_ROW - 3, yes_x + 11, BIOPSY_ROW + 9), '/Yes'),
+                                ((no_x - 1, BIOPSY_ROW - 3, no_x + 11, BIOPSY_ROW + 9), '/No')], '/Yes')
+    return form.build()
+
+
+@unittest.skipUnless(__import__('studio.gi.sections', fromlist=['_OPTION_ROW'])._OPTION_ROW.search(
+    'Biopsy taken: [?] Yes [?] No'), 'needs sections._OPTION_ROW to read the unread mark (BOXES, round 4 structure:14)')
+class UnreadOptionRowSeamTests(unittest.TestCase):
+    """Runs once the shared box vocabulary reaches sections' option-row guard: until then a row extraction writes
+    '[?] Yes [?] No' is read as a sentence cut at its line break, and its 'No' negates the next line's service."""
+
+    def test_an_unread_option_row_never_negates_the_next_line(self):
+        text = text_of(option_row_then_item())
+        self.assertIn('Biopsy taken: [?] Yes [?] No\nCold snare polypectomy of the sigmoid polyp', text)
+        held_unread(self, text, 'Biopsy taken')
+        self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+
 # --- the unread mark is the one routing holds ------------------------------------------------------------------------
 
 class UnreadMarkContractTests(unittest.TestCase):
