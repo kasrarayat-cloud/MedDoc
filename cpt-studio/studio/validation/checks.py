@@ -1064,6 +1064,13 @@ def says_today(text: str) -> bool:
     return bool(words.TODAY.search(text))
 
 
+def names_intervention(text: str, start: int, end: int, family: str) -> bool:
+    """Whether [start, end) names one of the family's interventions by routing's own words (studio.gi.cues
+    INTERVENTIONS: a biopsy, a snare, a dilation ...), resolved at call time."""
+    from studio.gi import cues as words
+    return any(family in families and pattern.search(text, start, end) for _, pattern, families in words.INTERVENTIONS)
+
+
 def procedure_words(name: str) -> int:
     """How many procedure words a routed gi.other name holds by routing's form rule (studio.gi.detect._PROCEDURE_WORD),
     resolved at call time like ``span_status``."""

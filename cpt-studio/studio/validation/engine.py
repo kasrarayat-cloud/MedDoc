@@ -155,7 +155,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         own = _unnamed_other(own, text, routing, day)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing)
-    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing) else r for r in own)
+    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing, text) else r
+                for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
@@ -183,12 +184,13 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     return tuple(marked)
 
 
-def _other_service(reading: checks.Reading, family: str, routing: RoutingResult) -> bool:
+def _other_service(reading: checks.Reading, family: str, routing: RoutingResult, text: str) -> bool:
     """Whether a hedging linked passage is about another service than the code's (validation:4). For an E/M code: it
     touches no E/M documentation routing reads (visit statement, chief complaint, MDM, time), as "Possible EGD if
     symptoms persist." or "Epigastric pain; rule out celiac disease?" do not. For any other code: it names a routed
-    service of another family and none of the code's own ("Possible EGD ..." cited for a colonoscopy code). A hedge
-    that names no service is the code's own for a procedure code (fail-closed: "It is unclear whether biopsies were
+    service of another family, none of the code's own, and none of the code family's interventions ("Possible EGD
+    ..." cited for a colonoscopy code; never "Possible EGD and biopsy of the sigmoid colon?" for 45380). A hedge that
+    names no service is the code's own for a procedure code (fail-closed: "It is unclear whether biopsies were
     taken.")."""
     if reading.status != 'uncertain' or checks.silent(reading.status, reading.cues):
         return False
@@ -196,7 +198,8 @@ def _other_service(reading: checks.Reading, family: str, routing: RoutingResult)
              if m.span.start < reading.end and reading.start < m.span.end}
     if family in checks.EM_FAMILIES:
         return 'gi.office_em' not in named
-    return bool(named) and family not in named
+    return bool(named) and family not in named and not checks.names_intervention(text, reading.start, reading.end,
+                                                                                  family)
 
 
 def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> tuple[checks.Reading, ...]:

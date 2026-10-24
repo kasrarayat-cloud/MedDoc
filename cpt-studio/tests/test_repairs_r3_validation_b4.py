@@ -54,6 +54,16 @@ class Validation4ContestedOwnServiceTests(Case):
                 self.assertReady(item)
                 self.assertEqual(check_of(item, 'service.status').status, 'pass')
 
+    def test_a_procedure_code_citing_another_family_s_hedge(self):
+        # Another family named, and none of the colonoscopy's own acts: the hedge is named in a warn, never a hold.
+        for hedge in ('Possible EGD if symptoms persist.',
+                      'Possible EGD with PEG placement if intake does not improve.'):
+            with self.subTest(hedge=hedge):
+                proposals, _ = real(COLONOSCOPY_AP.format(tail=f'Plan: {hedge}'), ('45385', POLYP, hedge))
+                self.assertReady(proposals['45385'])
+                self.assertIn(f'Another linked passage reads as uncertain: “{hedge}”',
+                              check_of(proposals['45385'], 'service.status').detail)
+
     def test_controls_a_hedge_about_the_code_s_own_service_still_contests(self):
         text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
                 'Medical decision making: moderate.\nTotal time: approximately 30 minutes?\n')
@@ -67,6 +77,15 @@ class Validation4ContestedOwnServiceTests(Case):
                 item = proposals['45385']
                 self.assertEqual(item.status, 'needs_clarification')
                 self.assertIn('A passage that hedges holds the code', check_of(item, 'service.status').detail)
+
+    def test_controls_a_hedge_naming_another_service_and_this_code_s_act_still_contests(self):
+        # The EGD is named, but so is the colonoscopy's own act (a biopsy): fail-closed, the hedge contests 45380.
+        tail = 'Plan: Possible EGD and biopsy of the sigmoid colon?'
+        hedge = 'Possible EGD and biopsy of the sigmoid colon?'
+        proposals, _ = real(COLONOSCOPY_AP.format(tail=tail),
+                            ('45380', 'The colonoscope was advanced to the cecum.', hedge))
+        self.assertEqual(proposals['45380'].status, 'needs_clarification')
+        self.assertIn('A passage that hedges holds the code', check_of(proposals['45380'], 'service.status').detail)
 
     def test_controls_a_hedge_alone_still_holds(self):
         text = OFFICE_PLAN.format(assessment='GERD.', plan='Possible EGD if symptoms persist.')
