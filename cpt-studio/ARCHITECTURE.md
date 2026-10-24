@@ -79,6 +79,7 @@ cpt-studio/
     access.py           workspace scoping, membership checks
     storage.py          immutable original-file store
     jobs.py             queue, pipeline stages, worker loop, Stop, reconcile
+    bounded.py          pure stage work in a forked child under a wall clock and memory limit
     audit.py            append-only audit events
     ingest/             extraction (section 5.1)  — pure + subprocess sandbox
     gi/                 GI category: context.py detect.py profiles.py (5.2/5.3)
@@ -153,22 +154,43 @@ Never silently partial (`cpt-studio-ingest@3`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
 - Check boxes (a contract with routing, 5.3): every box extraction recognises
   is written as ☐ (U+2610, unchecked) or ☒ (U+2612, checked), never another
-  box glyph. DOCX: symbol-font boxes (Wingdings, Wingdings 2, Webdings, Zapf
+  box glyph, or as the unread mark `[?]` where its state is not plainly what
+  the page or the document shows (routing holds it; never a guessed state). The
+  box spellings themselves are defined once, in `studio/ingest/symbols.py`, and
+  every reader (extraction's printed boxes, routing, sections' option rows)
+  derives its pattern from them. DOCX: symbol-font boxes (Wingdings, Wingdings 2, Webdings, Zapf
   Dingbats; the tables in `studio/ingest/symbols.py` are shared with PDF and
   include every box shape Unicode maps those fonts to), a `w14:checkbox`
   content control by its structure whatever symbols it is set to (from
-  `w14:checked`), a list paragraph whose numbering bullet is a box, and a legacy
+  `w14:checked`), a list paragraph whose numbering bullet is a box, written ☐ /
+  ☒ when the document's list bullets include a checked box (a checklist) and
+  otherwise as the unread mark `[?]` (a box-shaped bullet on its own may be a
+  bullet), counted in a note, and a legacy
   FORMCHECKBOX, written in place of the field from `w:checked`, else
   `w:default`. A filled square ■ is kept as written (it is a bullet as often as
-  a box). PDF: a displayed check-box widget over a printed box replaces that
-  glyph with its own state, and a FreeText or stamp mark (X, ✓) over a printed
-  box makes it ☒; otherwise a widget writes its glyph beside the line it can be
-  tied to (at the start of the upright line to its right, or after the line
-  that ends just left of it, also inside form XObjects), and writes nothing when
-  two lines or boxes compete. A yes/no set (a check-box field with /Opt or
-  several on-states) and a radio group write their chosen option in the form
-  block (`<label>: <option>` or `<label>: no option selected`), with ☐/☒
-  before each option word they can be tied to. Either way the form block keeps
+  a box). PDF: a displayed check-box or radio widget over a printed box (☐ / ☒,
+  `[ ]`, `[x]`; the glyph's origin within the widget's width, or up to a
+  quarter of its size, at most 4 pt, left of it) replaces that glyph with its
+  own state, and a FreeText or stamp that shows only a mark (X, ✓) over one
+  printed box makes it ☒. Where a printed box's state is not plainly what the
+  page shows (a printed mark under a widget whose state is off; any other
+  displayed annotation over it: an ink tick, a stamp drawn as paths, other
+  typed text, a shape; a printed box whose position cannot be read, inside a
+  piece of text or on a page drawn through a form XObject, under a widget or
+  mark; two candidates for one printed box; a widget or mark over several)
+  extraction writes `[?]`, and the page is named and partial. Otherwise a
+  widget writes its glyph and a space before the one upright piece of
+  page-level text that starts just right of it on its baseline, replacing a
+  printed box that starts that piece (`[?]` when the printed box shows a mark
+  the widget's state denies), and writes nothing when two lines or boxes
+  compete or another button on its row cannot be tied; an unchecked widget with
+  page text to its left on its row that may be its label (not a list marker, a
+  printed box or the text another box is tied to) writes `[?]` instead of ☐. A
+  label left of its box with no text after it, and a page drawn through a form
+  XObject, get no glyph: routing's field-line rule reads them (5.3). A yes/no
+  set (a check-box field with /Opt or several on-states) and a radio group write
+  their chosen option in the form block (`<label>: <option>` or `<label>: no
+  option selected`), with ☐/☒ before each option word they can be tied to. Either way the form block keeps
   `<label>: checked` / `<label>: not checked`, one blank-free line per entry.
 - PDF symbol fonts read as the glyphs they draw: a simple symbol font through a
   copy whose ToUnicode maps every code (widths, and so the layout, unchanged),
@@ -192,8 +214,10 @@ read or reported, and content it would not show is excluded with a message.
   unparsable value keeps the difference. An appearance that exists but draws
   no text differs from a non-empty value; one that cannot be read is counted as
   unreadable; a FreeText whose own appearance layer is off is hidden. StrikeOut
-  and Redact marks and opaque annotations laid over text are named and make the
-  result partial: the text under them was read as written.
+  and Redact marks, and the opaque fills of any displayed annotation's
+  appearance laid over text (a Square or Circle, a FreeText white-out, a form
+  field's background), are named and make the result partial: the text under
+  them was read as written.
 - PDF pages: a page at least half covered by images with under 200 characters
   of text is OCRed; without OCR it is named and the result is partial, keeping
   its text layer (a page with no text at all fails). Images a displayed
@@ -224,7 +248,12 @@ read or reported, and content it would not show is excluded with a message.
   when its flag is on; comments or processing instructions inside a run never
   cut it; `mc:AlternateContent` reads the first Choice this reader understands,
   else the Fallback (partial when neither); symbol-font glyphs other than boxes
-  and Word's library bullets are counted and dropped. A DOCX can be partial.
+  and Word's library bullets are counted and dropped. Text formatted as struck
+  through (w:strike or w:dstrike, on the run or through its character,
+  paragraph or table style or the document defaults) and white text with
+  nothing that may be painted behind it (no shading or highlight on the run,
+  its styles, paragraph, table cell or table, no text box, no page colour) are
+  read as written, named and make the result partial. A DOCX can be partial.
 
 ### 5.2 `studio/gi/context` — encounter context
 
@@ -292,32 +321,52 @@ where a rule restores what an ordinary note read before round 3b.
   service's only when it dates the service's own act: never the time of a
   test, result or diagnosis named between them ("for a positive FIT last
   month", "to review a CT scan done last week"), never in a clause that says
-  today, and never on an E/M visit statement. History told by relative time
-  or by another provider reads historical; an explicit performance cue under
-  Indication reads uncertain unless its clause says today.
+  today, and never on an E/M visit statement; a time whose nearest service is
+  another family's than the passage's first ("Colonoscopy ... after a normal
+  EGD performed last week") is unclear and holds, never dates it, and a visit
+  statement that names another service never takes that service's status (it
+  holds). A month of the service month qualified by early, mid, late, end of or
+  beginning of, with no day, may not be the date of service and holds; a time
+  hold is a doubt, so it contradicts the family's other section evidence. History
+  told by relative time or by another provider reads historical; an explicit
+  performance cue under Indication reads uncertain unless its clause says
+  today.
 - In a plan section an explicit performance is held, and the plan default
-  reads planned, except: a past-tense performance with a same-clause today
-  marker ("today", "this morning") and no condition, possibility, future,
-  plan word or question in the passage reads performed; and a clause that
-  says today with none of those holds (`PLAN_TODAY`), so a conditional plan
-  line ("Repeat colonoscopy today if bleeding recurs.") still plans. "As
+  reads planned, except that any clause that says today holds (`PLAN_TODAY`),
+  whatever hedge, condition or future word is in it ("EGD this morning revealed
+  a Schatzki ring, likely the cause"; also "Repeat colonoscopy today if
+  bleeding recurs.", an accepted over-hold). Round 3b's release of a past-tense
+  performance that says today as performed was withdrawn in round 4: it fired
+  on another thing's past tense ("the MRI that was done this morning"). A held
+  plan passage that says today is a doubt about today's service, so another
+  plan, history or negated mention of the family cannot outrank it. "As
   scheduled", "as planned" and "as arranged" keep a done service done; a
   request ("requested by the referring physician") reads uncertain, never
   historical.
 - A status line or a later denial denies or holds the line above it: the next
   sentence ("Status: Cancelled.", "Not performed.", "Patient declined.",
   "Rescheduled."), a next line that names the same service and reschedules
-  it, and a denying status line or a cancellation of the procedure up to six
-  sentences further down (headings not counted) hold it; a service listed
-  under a label that denies performance ("Procedures not performed:") is held.
-  A short line denying another act or care step ("Sedation was not needed.",
-  "Fluoroscopy was not used.") never denies the service, and an option its own
-  unchecked box leaves unselected ("Procedure cancelled | ☐") states nothing.
+  it, and a denying status line, a typed or boxed answer that the procedure
+  was not done ("Procedure performed: No", "Procedure completed: ☐ Yes ☒ No")
+  or a cancellation of the procedure up to six sentences further down or above
+  (headings not counted; a sentence naming only the line's own family is read
+  on, another family's service ends the reading) hold it. A status value with
+  boxes is read option by option, never by its first word: any denying option
+  whose own box is checked, disagrees, is unread or has no box holds. A service
+  listed under a label that denies performance ("Procedures not performed:"),
+  or under a verbless denying heading ("Cancelled procedures:"), is held; a
+  status question answered with a denial ("Procedure cancelled: No") holds and
+  is never read as a cancellation. A short line denying another act or care
+  step ("Sedation was not needed.", "Fluoroscopy was not used.") never denies
+  the service, and an option every denying option of which has its own
+  unchecked box ("Procedure cancelled | ☐") states nothing; a line with no
+  denying option is no such option.
 - Hedges and hypotheticals hold: a hedge after the name ("Biopsies may have
   been taken", "were possibly obtained"), counterfactual and conditional
   wording ("Had there been a stricture, it would have been dilated", "If
-  colonoscopy were done today, ..."), and bare "defer" / "postpone" under a
-  positive section.
+  colonoscopy were done today, ..."), and bare "defer" / "postpone" in any
+  section ("we decided to defer EUS" under Impression is a doubt, not
+  silence).
 - No fact is read from a clause about another procedure (a dated, planned,
   denied or doubtful one, or a prior exam named without a service name: "On a
   prior exam the cecum was reached"); a failed sub-act (terminal ileum,
@@ -325,34 +374,64 @@ where a rule restores what an ordinary note read before round 3b.
   incomplete; shorthand extents ("to cecum", "to TI", "to 30 cm", "to D2")
   and an extent label ("Extent: cecum", also an addendum's "Furthest extent
   reached: cecum.") are read, never one led by "Intended", "Expected" or
-  "Target"; a denied finding followed by the act it needed ("no polyps were
+  "Target", and only when what follows the landmark is punctuation or a word of
+  the closed list `cues.EXTENT_TAIL` ("Extent: cecum (intended)." is unread). A
+  label in an unrecognised section counts only in the sections that speak for
+  this report: the addendum block, the PDF form and annotation blocks, the
+  preparation and complications (never "Outside records:"); a denied finding followed by the act it needed ("no polyps were
   found to remove") stays unresolved; a purpose clause may use "to further
   evaluate", "to eval", "to r/o"; intent is never read from a question or a
   presumed or unconfirmed statement.
 - Sections open on a heading with or without a colon; discussion,
   counseling, education and "risks and benefits" headings are plan sections,
-  as are "Pending procedures", "Orders", "Referrals" and "To do";
-  "Procedures performed today:" and its variants open a procedure section. A
-  numbered or bulleted list item is never a colon-less heading, and a
-  colon-less label must end with its section noun. The product's addendum
+  as are "Pending procedures", "Orders", "Referrals" and "To do" when bare (with
+  an answer of their own, "Orders: none", they govern only their line);
+  "Procedures performed today:" and its variants open a procedure section,
+  except when answered none or N/A. A numbered or bulleted plan label ("2.
+  Upcoming procedures") opens a plan again, as before round 3b. Inside a
+  procedure, findings or technique section a colon-less line that reads as a
+  phrase ("Changes of prior radiation therapy", "Surgical opinion for further
+  management") opens an `other` section whose lines are held (it may tell
+  another time or a plan), never a history or plan one; elsewhere a phrase line
+  reads as before round 4. A service line after a line cut on a plan,
+  cancellation or denial verb ("Dr. Smith recommended") is held
+  (`HELD_AFTER_A_CUT`). The product's addendum
   header is a section boundary of kind `other` that inherits nothing, and a
   heading on the line where a form block's section resumes wins. A prose line
   runs on into the next line after a word a sentence cannot end on, or after
   an auxiliary or subject with its verb (or "not to" / "to" with a listed
   verb) when the next line has no verb of its own; a line that answers a field
-  ("Schatzki ring present: no") or marks an option ("☐ Yes ☒ No") never runs
-  on. A joined line reads exactly as the same text on one line.
+  ("Schatzki ring present: no"; also the last field of a line, or a column
+  answer "Hiatal hernia      no"), marks an option ("☐ Yes ☒ No") or gives a
+  spoken answer ("the patient said no") before a line with a clause of its own
+  never runs on. A joined line reads exactly as the same text on one line,
+  except that a negation reaching a service only across a line break after a
+  line ending in an answer of its own (a field answered by a bare denial, a
+  bare refusal "the patient declined") holds instead of negating: whose answer
+  it is cannot be read. Cut prose ("Comment: because of time constraints, no")
+  stays a wrapped sentence.
 - The separately identifiable E/M statement counts only when it is about this
-  encounter: no conditional or normative wording, no other encounter, no date
-  or time expression for another encounter ("yesterday", "two days ago", "on
-  10/14"), and no box governing it that is unchecked, disagrees or cannot be
-  read.
-- Check boxes (the contract with 5.1; pasted text is read the same way):
-  unchecked ☐ □ ◻ ◽ ❏ ❐ ❑ ❒, `[ ]` and `( )` with any inner whitespace,
-  `[_]`; checked ☑ ☒ ✓ ✔ ■ ⌧, `[x]` and `(x)` with optional inner
-  whitespace, `[*]`, `[v]`. Another bracketed mark (`(•)`, `[?]`, `(o)`,
-  `[/]`) is unreadable and holds its item, as do boxes for one item that
-  disagree. A box governs the item(s) on its own line or cell within
+  encounter and nothing says it is not attested: no conditional or normative
+  wording, no other encounter or setting unless it is this one ("this",
+  "today's", "current", "same", "present", or "today" after it), no date or
+  time expression for another encounter ("yesterday", "two days ago", "on
+  10/14"), no box or mark on its line other than a checked box, no answer on
+  the next line but a checked Yes, a lone checked box or a bare Yes (a
+  statement ending with a colon needs one), no unchecked field line naming it,
+  and no untied denying or answering field line on its page.
+- Check boxes (the contract with 5.1; pasted text is read the same way; the
+  spellings are defined once in `studio/ingest/symbols.py`): unchecked ☐ □ ◻ ◽
+  ❏ ❐ ❑ ❒, `[ ]` and `( )` with any inner whitespace, `[_]`; checked ☑ ☒ ✓ ✔
+  ■ ⌧, `[x]` and `(x)` with optional inner whitespace, `[*]`, `[v]`. Other
+  marks are unread and hold their item, never pass silently: another bracketed
+  mark (`(•)`, `[?]`, `(o)`, `[/]`, `[-]`, `[+]`, `[N]`, `[Y]`), `{ }` and
+  `< >` forms, the other white squares (U+25A2, U+2B1C, U+1F78E-U+1F793:
+  typed, they are a bullet as often as a box), and on a line that marks
+  options bare radio glyphs and answers in parentheses; boxes for one item that
+  disagree, a yes/no pair with both options checked, and a row whose boxes can
+  be read as leading or trailing (the items the readings disagree on) hold too,
+  as does an intervention joined by "with", "plus" or ";" to a later item
+  whose own box is not checked (`BOX_LATER`). A box governs the item(s) on its own line or cell within
   `BOX_REACH`, before it (`☐ Biopsy`) or after it (`Biopsy | ☐`,
   `Biopsy: ☐`); remarks after the last box do not change that, a label that
   names several items (`Biopsy/polypectomy | ☐`) is governed as a whole, a
@@ -362,15 +441,33 @@ where a rule restores what an ordinary note read before round 3b.
   (a field labelled with a procedure, findings or technique heading reads its
   value as that printed line would). `<label>: not checked`, `unchecked`, `no
   option selected` or a chosen denial option (`No`, `None`, `Not done`, `Not
-  performed`) negates the printed item its label names on that page; when the
-  label matches no printed line, the page's service and intervention mentions
-  without an explicit performance cue are held. `<label>: checked` and
-  `<label>: Yes` are silent, so the rest of the document decides.
+  performed`) negates the printed item its label names on that page when the
+  label is the item alone ("Biopsy", "Biopsy taken") or a widget's default name;
+  a label naming the item among other words ("Flexible sigmoidoscopy in the last
+  10 years: No") holds only its own passages, and a label naming no item
+  ("Complications: None") holds nothing. A short answer the reader cannot read
+  ("N", "0", "N/A") holds a label naming an item. When the label matches no
+  printed line, the page's service and intervention mentions without an
+  explicit performance cue are held. A status field whose value is no
+  completion, or a done-question answered no, holds its page's cue-less service
+  mentions (`BOX_FIELD_STATUS`). `<label>: checked` and `<label>: Yes` are
+  silent, so the rest of the document decides.
 - Validation reads routing's cues by prefix (5.6): `uncertain: no performance
-  evidence` (silent), `performed:`, `section: <kind>`, and `PLAN_TODAY`.
+  evidence` (silent), `performed:`, `section: <kind>`, `PLAN_TODAY`,
+  `OTHER_STATED` and the another-time prefix (`ANOTHER_TIME_PREFIX`). The box and
+  field holds (`BOXES_DISAGREE`, `BOX_UNREAD`, `BOX_LATER`, `BOX_STATUS_OPTION`,
+  `BOX_STATUS_ANSWER`, `BOX_FIELD_HELD`, `BOX_FIELD_HELD_UNTIED`,
+  `BOX_FIELD_ANSWER_UNTIED`, `BOX_FIELD_STATUS`) are uncertain cues like any
+  other hold.
 - Cost: each mention stores a bounded window of its sentence, not the whole
   sentence, and a member's pre-triggers are read once from its own bounded
-  start, so a long coordinated list stays linear.
+  start, so a long coordinated list stays linear. Clause lookups take only the
+  first or last few clauses they need (by bisection). Routing and context
+  extraction run in a forked child under the stage's wall clock
+  (`JOB_DEADLINE_SECONDS`; `CONTEXT_REQUEST_SECONDS` when a member's context
+  change runs it inside a web request) and a memory allowance
+  (`BOUNDED_MEMORY_BYTES`, `studio/bounded.py`): an overrun fails the stage, or
+  refuses the change, with a plain message instead of holding the worker.
 
 ### 5.4 `studio/providers` — proposal adapters
 
