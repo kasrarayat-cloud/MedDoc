@@ -1791,7 +1791,21 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
                             cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
                             or _reached_label(an, ws, m.start()) or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
+                    elif _answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start()):
+                        reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
     return reached, blocked
+
+
+def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> bool:
+    """Whether the value of an extent label at [start, end) states the extent reached although its section does not
+    speak for it: its section is an 'other' one (the product's addendum block, an unrecognised label, a form block,
+    the preparation or complications), its reading is the silent default (no cue at all: nothing hedged, planned,
+    historical or denied), and no unresolved negation is in its clause (the doubt a positive section would find:
+    "Extent: cecum not reached."). An addendum answering "confirm the furthest extent reached" is read so; the label
+    itself still has to pass _reached_label (an aim never does). An indication, an assessment or an impression can
+    tell prior work-up, so a label there is still read only when its own wording states performance."""
+    return (reading.basis == 'default' and reading.cues == (SILENT,)
+            and an.lay.section_at(start).kind == 'other' and not _doubt(an, start, end))
 
 
 # Where the words that lead an extent label start: after the last separator before it in its clause.
@@ -1984,11 +1998,14 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
             advanced = bool(cues.ADVANCED.search(text, cs, ce))
             hits = [m for m in cues.CENTIMETERS.finditer(text, cs, ce)
                     if advanced or _cm_after_flex_sig(an, cs, m.start())]
-            # "Depth of insertion: 30 cm", never an aim ("Intended depth of insertion: 60 cm")
-            hits += [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
-                     if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())]
-            for m in hits:
-                if _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete') \
+            # "Depth of insertion: 30 cm", never an aim ("Intended depth of insertion: 60 cm"); a label is also read
+            # where it answers silently (_answers_silently: "Depth of insertion: 40 cm." in an addendum)
+            labels = [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
+                      if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())]
+            for m in hits + labels:
+                reading = _generic_reading(an, m.start(), m.end())
+                if (reading.status in ('performed', 'incomplete')
+                        or (m in labels and _answers_silently(an, reading, m.start(), m.end()))) \
                         and not _about_another_procedure(an, m.start(), m.end()):
                     found.append((f"{int(m.group('cm'))} cm", _span(text, cs, ce)))
     if found:

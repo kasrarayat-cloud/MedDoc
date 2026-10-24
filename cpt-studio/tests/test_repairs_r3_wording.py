@@ -727,3 +727,77 @@ class R18HypotheticalWordingTests(unittest.TestCase):
                 first = sentence.split(';')[0].split(',')[0]
                 self.assertEqual(read(text, first)[0], 'performed')
                 self.assertEqual(family(text, 'gi.egd'), 'performed')
+
+
+# --- extra item 1 (routing:24's extent-label half) ------------------------------------------------------------
+
+def addendum_text(parent, answer):
+    """The text routing reads after an addendum, built exactly as studio/jobs.py stage_extract builds it."""
+    from datetime import datetime, timezone
+
+    from studio.ingest.extract import extract_paste
+    from studio.jobs import addendum_block_text
+    stamp = datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)
+    return extract_paste(parent + addendum_block_text(2, stamp, answer), method='addendum').text
+
+
+SNARED = 'A 6 mm polyp was removed with a cold snare.'
+SNARE_PARENT = HEADER + f'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: {SNARED}\n'
+
+
+class X1AddendumExtentLabelAnswerTests(unittest.TestCase):
+    """Extra item 1 (routing:24, the extent-label half): an addendum answering "confirm the furthest extent reached"
+    with a label ("Furthest extent reached: cecum.") clears the extent hold like a verb answer does, where the answer
+    reads the silent default in an 'other' section (the addendum's own, an unrecognised label, the preparation). A
+    label that is hedged, denied, questioned or aim-led (routing:3), or written where prior work-up is told (an
+    indication, an assessment, an impression), is still never read so."""
+
+    PARENT = SNARE_PARENT + 'Notes:\nThe patient tolerated the procedure.\n'  # the answer lands in an 'other' section
+
+    def test_a_label_answer_clears_the_extent_hold(self):
+        for answer, extent in (('Furthest extent reached: cecum.', 'cecum'), ('Extent: cecum', 'cecum'),
+                               ('Extent reached: terminal ileum.', 'terminal ileum'),
+                               ('Extent reached: splenic flexure.', 'incomplete: splenic flexure')):
+            text = addendum_text(self.PARENT, answer)
+            with self.subTest(answer=answer):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), extent)
+                if extent == 'cecum':
+                    proposals, _ = run_engine(text, [('45385', SNARED)])
+                    self.assertTrue(ready(proposals['45385']), proposals['45385'].clarifications)
+        # an 'other' section of the report itself, such as its preparation, reads the same
+        text = SNARE_PARENT + 'Bowel preparation: adequate. Furthest extent reached: cecum.\n'
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_a_depth_label_answer_for_a_flexible_sigmoidoscopy(self):
+        parent = (HEADER + 'Procedure: Flexible sigmoidoscopy with biopsy.\nFindings: A biopsy was taken from the rectum.\n'
+                  'Notes:\nWell tolerated.\n')
+        self.assertEqual(fact_value(addendum_text(parent, 'Depth of insertion: 40 cm.'), 'gi.flex_sig', 'extent'), '40 cm')
+        self.assertIsNone(fact_value(addendum_text(parent, 'Intended depth of insertion: 60 cm.'), 'gi.flex_sig', 'extent'))
+
+    def test_answers_that_do_not_state_the_extent_reached_stay_unread(self):
+        for answer in ('Extent: cecum not reached.', 'Intended extent: cecum', 'Furthest extent reached: cecum?',
+                       'Repeat colonoscopy to the cecum in 3 years.', 'A colonoscopy to the cecum is planned next year.',
+                       'Prior colonoscopy reached the cecum in 2019.', 'Extent: unknown.',
+                       'A diagram of the cecum was shown to the patient.'):
+            text = addendum_text(self.PARENT, answer)
+            with self.subTest(answer=answer):
+                self.assertNotEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+                self.assertFalse(ready(run_engine(text, [('45385', SNARED)])[0]['45385']))
+
+    def test_a_label_where_prior_work_up_is_told_stays_unread(self):
+        for heading in ('Indication', 'Assessment', 'Impression'):
+            text = (HEADER + f'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: {SNARED}\n{heading}: Prior '
+                    'incomplete examination; extent reached: splenic flexure.\n')
+            with self.subTest(heading=heading):
+                self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))
+
+    def test_the_product_addendum_after_a_plan(self):
+        """Once the addendum header is a section boundary (SECTIONS, routing:24), an answer after a parent that ends
+        in Plan is read too. Skipped while the header still continues the parent's Plan."""
+        from studio.gi.sections import layout
+        answer = 'Furthest extent reached: cecum.'
+        text = addendum_text(SNARE_PARENT + 'Plan: Await pathology.\n', answer)
+        if layout(text).section_at(text.index(answer)).kind == 'plan':
+            self.skipTest('the addendum header is not yet a section boundary in this tree (SECTIONS routing:24)')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(text, [('45385', SNARED)])[0]['45385']))
