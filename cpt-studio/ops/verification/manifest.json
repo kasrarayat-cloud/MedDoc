@@ -6,7 +6,8 @@
   "author_expectations": "author_expected_cpt is the document author's expectation, written while authoring these documents. It is NOT independent adjudication, it is never asserted by the verifiers, and it must not be used as accuracy evidence. Accuracy needs independently adjudicated cases withheld from development (ARCHITECTURE.md section 9).",
   "review_notes": {
     "approve": "Agent-executed synthetic verification review",
-    "reject": "Agent-executed synthetic verification review - designated rejection exercising the reject path; not a clinical judgement"
+    "reject": "Agent-executed synthetic verification review - designated rejection exercising the reject path; not a clinical judgement",
+    "confirm": "Agent-executed synthetic verification review - confirms an exclusion the document author marked as not coded; not a clinical judgement"
   },
   "semantics": {
     "upload.service_date": "null: the verifier clears the service-date field so the date documented in the note is used.",

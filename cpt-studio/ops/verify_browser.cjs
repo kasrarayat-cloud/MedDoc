@@ -38,6 +38,7 @@ const EVIDENCE_SCHEMA = 'cpt-studio-browser-evidence@1';
 const DONE_STATES = new Set(['ready_for_review', 'needs_clarification', 'no_codes', 'reviewed']);
 const PERFORMED = new Set(['performed', 'incomplete']);
 const DECIDED = new Set(['approved', 'rejected']);
+const DECISION_STATES = { approve: 'approved', reject: 'rejected', confirm: 'exclusion_confirmed' };
 const VIEWPORTS = { desktop: { width: 1440, height: 1000 }, mobile: { width: 390, height: 844 } };
 const UI_TIMEOUT_MS = 30000;
 const POLL_MS = 2000;
@@ -327,6 +328,17 @@ function checkIncomplete(list, enc) {
   });
 }
 
+// Round 4: a documentation check's exclusion (reinstatable) needs a reviewer decision. The walk confirms one only
+// where the document's independent author expectations say the family must not be coded; any other is left
+// undecided, so the reviewed report stays blocked and the run records it.
+function planConfirmations(enc, mustNotCode, notes) {
+  const families = new Set((mustNotCode || []).map(item => item.family));
+  return proposalsOf(enc).filter(p => p.bucket === 'excluded' && p.reinstatable && p.decision_state === 'undecided'
+    && (p.allowed_actions || []).includes('confirm') && families.has(p.family))
+    .map(p => ({ proposal_id: p.id, code: p.code, family: p.family, action: 'confirm', designated: false,
+                 note: notes.confirm || 'Agent-executed synthetic verification review - confirms an exclusion the document author marked as not coded; not a clinical judgement' }));
+}
+
 function planDecisions(enc, reviewPlan, notes) {
   const ready = proposalsOf(enc).filter(p => p.bucket === 'selected' && p.status === 'ready' && p.decision_state === 'undecided'
     && (p.allowed_actions || []).includes('approve'));
@@ -344,8 +356,9 @@ function planDecisions(enc, reviewPlan, notes) {
 }
 
 function checkReadiness(enc) {
-  const active = proposalsOf(enc).filter(p => p.bucket === 'selected' && !isExcluded(p));
-  const decided = active.every(p => DECIDED.has(p.decision_state));
+  // Selected proposals need approve/reject; a reinstatable exclusion needs a confirmation or a reinstated decision.
+  const active = proposalsOf(enc).filter(p => (p.bucket === 'selected' && !isExcluded(p)) || (p.bucket === 'excluded' && p.reinstatable));
+  const decided = active.every(p => DECIDED.has(p.decision_state) || p.decision_state === 'exclusion_confirmed');
   const readiness = enc.readiness || {};
   const out = [check('readiness.draft', 'soft', readiness.draft === true, `draft ${readiness.draft}`)];
   if (!decided) {
@@ -366,7 +379,7 @@ function checkPersistence(decisions, before, after, reloaded) {
   const history = reloaded.decisions?.history || [];
   for (const d of decisions.filter(item => item.http_status === 201)) {
     const p = proposalsOf(reloaded).find(item => item.id === d.proposal_id);
-    const want = d.action === 'approve' ? 'approved' : 'rejected';
+    const want = DECISION_STATES[d.action];
     const entry = history.find(h => h.proposal_id === d.proposal_id && h.action === d.action && !h.invalidated);
     const ok = p?.decision_state === want && p.decision?.reviewer_kind === 'agent' && p.decision?.note === d.note && Boolean(entry);
     out.push(check(`persist.decision.${d.code}`, 'hard', ok,
@@ -624,6 +637,9 @@ async function decide(page, encounterId, decision) {
   if (record.http_status !== 201) return { ...record, error: body.error || `HTTP ${record.http_status}` };
   await page.locator('#reviewDialog').waitFor({ state: 'hidden', timeout: UI_TIMEOUT_MS });
   const shown = await page.waitForFunction(([id, action]) => {
+    if (action === 'confirm') {  // an excluded candidate has no card: its undo button appears once confirmed
+      return Boolean(document.querySelector(`button[data-decision="revoke"][data-proposal="${id}"]`));
+    }
     const badge = document.querySelector(`[id="card-${id}"] .code-card-top .status`);
     const text = badge ? badge.textContent.trim() : '';
     return action === 'approve' ? /^Approved/.test(text) : text === 'Rejected';
@@ -727,7 +743,8 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     const plan = planDecisions(enc, doc.review_plan, manifest.review_notes);
     record.designated_rejection = plan.decisions.find(d => d.designated)?.code || null;
     if (plan.designated_missing) add([check('decisions.designated_rejection', 'soft', false, `no ready selected proposal in ${doc.review_plan.reject.family} to reject`)]);
-    for (const decision of plan.decisions) record.decisions.push(await decide(page, id, decision));
+    const confirmations = planConfirmations(enc, doc.must_not_code, manifest.review_notes);
+    for (const decision of [...plan.decisions, ...confirmations]) record.decisions.push(await decide(page, id, decision));
     record.timings.decisions_done_at = isoNow();
     add(record.decisions.map(d => check(`decision.${d.action}.${d.code}`, 'hard', d.http_status === 201 && !d.error, d.error || `HTTP ${d.http_status}${d.ui_updated === false ? '; the card did not update within 30 s' : ''}`)));
     const afterDecisions = await fetchEncounter(page, opts.baseUrl, id);
