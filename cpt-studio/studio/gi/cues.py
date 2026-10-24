@@ -14,7 +14,10 @@ Status cues come in three scopes:
 
 A miss is meant to fail closed: a mention with no decisive cue falls back to
 its section, and only procedure/findings/technique sections (or explicit
-past-tense performance) can make it "performed".
+past-tense performance) can make it "performed". Explicit negation patterns
+read "negated"; any other negation word in the clause that no anchored
+pattern and no narrow exception (a complication, a finding, an intent)
+accounts for withholds "performed" (DOUBT_TOKEN, detect._doubt).
 """
 from __future__ import annotations
 
@@ -41,7 +44,14 @@ _NEG_FILLER = _words(
     'interval', 'screening', 'diagnostic', 'surveillance', 'upper', 'lower', 'gi', 'endoscopic', 'outside',
     'urgent', 'emergent', 'elective', 'therapeutic', 'planned', 'scheduled', 'need', 'needs', 'indication',
     'indications', 'plan', 'plans', 'role', 'evidence', 'for', 'of', 'or', 'and', 'nor', 'procedure',
-    'procedures', 'complete', 'full', 'follow-up', SERVICE_TOKEN)
+    'procedures', 'complete', 'full', 'follow-up', SERVICE_TOKEN,
+    # what an intervention is usually qualified by ("no gastric biopsies", "no plastic stent")
+    'gastric', 'duodenal', 'esophageal', 'colonic', 'rectal', 'random', 'mucosal', 'cold', 'hot', 'forceps',
+    'snare', 'jumbo', 'biliary', 'pancreatic', 'plastic', 'metal', 'metallic', 'covered', 'uncovered',
+    'balloon', 'separate', 'more', 'specimens', 'tissue', 'formal', 'duct', 'bile', 'common', 'contrast')
+# After "not" only a determiner may stand before the mention: "but not the colonoscopy",
+# never "not a screening colonoscopy" (which denies the intent, not the service).
+_NOT_FILLER = _words('a', 'an', 'the', 'any', 'or', 'and', 'nor', SERVICE_TOKEN)
 _HIST_FILLER = _words(
     'a', 'an', 'the', 'her', 'his', 'their', 'normal', 'abnormal', 'incomplete', 'complete', 'screening',
     'surveillance', 'diagnostic', 'therapeutic', 'outside', 'upper', 'lower', 'gi', 'unremarkable', 'routine',
@@ -64,22 +74,121 @@ NEGATED_PRE = (
     ('denies', _pre(r'denie[sd](?:\s+(?:any|having|ever\s+having))?', _NEG_FILLER, 4)),
     ('declined', _pre(r'declined|declines|refused|refuses', _NEG_FILLER, 4)),
     ('no history of', _pre(r'no\s+(?:personal\s+)?history\s+of|no\s+hx\s+of|no\s+h/o', _NEG_FILLER, 3)),
+    # "Neither EUS nor ERCP", "EUS was not performed, nor was ERCP"
+    ('neither / nor', _pre(r'neither|nor(?:\s+(?:was|were|is|are|did|does|had|has|have|could|can))?', _NEG_FILLER)),
+    # "but not the colonoscopy", "EGD, not colonoscopy, was performed"
+    ('not', _pre(r'not', _NOT_FILLER, 3)),
+    # a replacement: "flexible sigmoidoscopy instead of colonoscopy", "EGD rather than EUS"
+    ('instead of', _pre(r'instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to|in\s+place\s+of', _NEG_FILLER, 4)),
 )
+# What a "no <service> ..." phrase governs when the service name only qualifies the next
+# word: "No flexible sigmoidoscopy complications", "no EGD-related bleeding", "no EUS-guided
+# sampling". Matched against the masked text right after the mention.
+NEGATION_HEAD_AFTER = rx(r'^[\s-]*(?:procedure[\s-]+|procedural\s+)?(?:related|associated|induced|guided|assisted|'
+                         r'specific|based)\b'
+                         r'|^\s+(?:procedure\s+|procedural\s+|post-?procedure\s+)?(?:complications?|adverse|findings?|'
+                         r'reports?|records?|results?|images?|abnormalit(?:y|ies)|bleeding|hemorrhage|perforation|'
+                         r'issues?|problems?|difficult(?:y|ies)|events?|injur(?:y|ies)|pathology|specimens?|'
+                         r'sequelae)\b')
+# Participles a "not" denies when they describe a service or an intervention.
+_NOT_DONE = (r'performed|completed|undertaken|carried\s+out|attempted|obtained|taken|done|removed|resected|placed|'
+             r'biopsied|sampled|dilated|injected|treated|indicated|needed|required|necessary|recommended|warranted|'
+             r'pursued|clipped|tattooed|deployed|inserted|retrieved|used|applied|ligated|banded|cauterized|'
+             r'scheduled|ordered')
 NEGATED_POST = (
-    ('was not performed', rx(r'^[\s,]*(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+not\s+'
-                             r'(?:performed|completed|undertaken|carried\s+out|attempted|obtained|taken|done|'
-                             r'removed|resected|placed|biopsied|sampled|dilated|injected|treated|indicated|needed|'
-                             r'required|necessary|recommended)\b')),
-    ('was declined', rx(r'^[\s,]*(?:was|were|is|are|has\s+been|have\s+been)\s+(?:declined|refused)\b')),
+    # "Colonoscopy was not performed", "ERCP not indicated", "EUS has never been performed"
+    ('was not performed', rx(r'^[\s,]*(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|will\s+be|would\s+be|'
+                             r'could\s+be|can\s+be|to\s+be)\s+)?(?:not|never)\s+(?:(?:been|be|yet|further|ever|'
+                             r'successfully)\s+){0,2}(?!completed\b)(?:' + _NOT_DONE + r')\b')),
+    ('was declined', rx(r'^[\s,]*(?:(?:was|were|is|are|has\s+been|have\s+been)\s+)?(?:declined|refused)\b')),
+    # elliptical: "EGD was performed; EUS was not." / "colonoscopy wasn't"
+    ('was not', rx(r"^[\s,]*(?:was|were|is|are|has\s+been|have\s+been|had\s+been|did|does|do|could|can|will)"
+                   r"\s*(?:not|n't)\s*(?=[.;,!?)\]]|$)")),
+    # listed or key-value: "EUS: not performed", "Colonoscopy - not performed", "(not performed)",
+    # "Stent: none", "Colonoscopy: N/A", "Colonoscopy: no", "Colonoscopy: patient declined"
+    ('listed as not done', rx(r'^\s*(?:[:=\u2013\u2014-]+|\(|,)\s*(?:(?:was|were|is|are)\s+)?(?:not\s+(?:yet\s+)?(?:'
+                              + _NOT_DONE + r')\b(?<!completed)|none\b|nil\b|no\s*(?=[.;,)\]]|$)|n/?a(?![\w/])|not\s+applicable\b'
+                              r'|(?:the\s+)?(?:patient|pt)\s+(?:declined|refused)\b|declined\b|refused\b|omitted\b'
+                              r'|not\s+done\b)')),
 )
 # "No X was performed": X must sit between "no" and the verb, with no other
 # finite verb or relative clause in between.
 NEGATED_SPAN = rx(r'\bno\b(?P<body>(?:(?!\b(?:was|were|is|are|has|have|had|which|that|but|and\s+the)\b)[^;.!?]){0,80}?)'
-                  r'\b(?:was|were|has\s+been|had\s+been|is|are|will\s+be)\s+(?:performed|done|undertaken|'
-                  r'carried\s+out|completed|attempted|required|needed|indicated|planned|scheduled|recommended)\b')
+                  r'\b(?:was|were|has\s+been|had\s+been|have\s+been|is|are|will\s+be|could\s+be)\s+'
+                  r'(?:successfully\s+|then\s+|further\s+)?(?:' + _NOT_DONE + r'|planned)\b')
+# "<something> was not <done>" with no service or intervention named in it ("The stricture was
+# not dilated", "Polypectomy was not performed"): it denies the act its own clause describes.
+# Only acts: "was not completed" is an incomplete examination and "was not needed" speaks of
+# further work, so neither is here.
+NOT_DONE_CLAUSE = rx(r'\b(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+(?:not|never)\s+(?:(?:been|yet|further|'
+                     r'successfully)\s+){0,2}(?:performed|undertaken|carried\s+out|attempted|obtained|taken|done|'
+                     r'removed|resected|placed|biopsied|sampled|dilated|injected|clipped|tattooed|deployed|retrieved|'
+                     r'ligated|banded|cauterized|inserted)\b')
 # Negations that speak about the past ("no prior", "never had", "no history of")
 # rather than about today's service.
 NEGATION_ABOUT_PAST = rx(r'\b(?:prior|previous|previously|never|ever|history|before|had|recent)\b')
+
+# --- unresolved negation -----------------------------------------------------------
+# Any of these words in a clause withholds "performed" from what it attaches to, unless an
+# anchored pattern above, a clause cue, or one of the narrow exceptions below accounts for
+# it. An exception list that misses a wording fails safe: the reading becomes uncertain.
+DOUBT_TOKEN = rx(r"\b(?:no|not|never|neither|nor|none|without|cannot|unable|declined|declines|refused|refuses|refusal"
+                 r")\b|n't\b|(?<![\w/])(?:w/o|n/a)(?![\w/])"
+                 r'|\b(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to|in\s+place\s+of|substituted\s+for)\b')
+# The exceptions are matched against the masked clause (service names read "svc").
+# 1. A complication, difficulty or adverse event is what is denied: "without difficulty",
+#    "no immediate bleeding after the sphincterotomy", "No EGD-related complications".
+_QUALIFIER = (r'(?:immediate|immediately|apparent|evident|obvious|significant|clinically\s+significant|major|minor|'
+              r'further|active|ongoing|post-?procedur(?:e|al)|post-?polypectomy|delayed|procedur(?:e|al)|'
+              r'intra-?procedur(?:e|al)|peri-?procedur(?:e|al)|other|any|known|visible|unexpected|serious|untoward|'
+              r'acute|additional|residual|recurrent|related|associated|induced|' + SERVICE_TOKEN
+              + r'|evidence\s+of|signs?\s+of)')
+COMPLICATION_NEGATION = rx(r'\b(?:no|without|w/o|none|not\s+any|free\s+of|nor)\s+(?:' + _QUALIFIER + r'[\s,-]+)*'
+                           r'(?:complications?|adverse\s+(?:events?|reactions?|effects?|outcomes?)|difficult(?:y|ies)|'
+                           r'incidents?|events?|bleeding|hemorrhage|oozing|perforation|resistance|trauma|'
+                           r'injur(?:y|ies)|problems?|issues?|desaturation|hypoxi(?:a|c)|hypotension|aspiration|'
+                           r'distress|discomfort|pain|sequelae)\b')
+# 2. A finding is what is denied: "No polyps were seen", "No esophagitis, Barrett-appearing
+#    mucosa or stricture.", "showed no residual filling defects". The denied words name no
+#    service, intervention or act; an act word ("No polyps were removed") is never a finding.
+_ACT_WORD = (SERVICE_TOKEN + r'|polypectom\w*|biops\w*|snar\w*|forceps|dilat\w*|inject\w*|clip\w*|tattoo\w*|cauter\w*'
+             r'|resect\w*|retriev\w*|remov\w*|procedures?|exams?|examinations?|endoscop\w*|\w*scope|sampl\w*|FNA|FNB'
+             r'|aspirat\w*|stent\w*|sphincterotom\w*|papillotom\w*|cannulat\w*|ligat\w*|band\w*|ablat\w*|APC'
+             r'|hemostasis|interventions?|specimens?|retroflex\w*|intubat\w*|insert\w*|advanc\w*|EMR|PEG|bougie\w*'
+             r'|balloon\w*|basket\w*|brush\w*|extract\w*|treat\w*|therap\w*|ultrasound|sonograph\w*|cholangiogra\w*'
+             r'|pancreatogra\w*|sweep\w*|swept|marking|performed|done|taken|obtained|placed|attempted|completed'
+             r'|required|needed|indicated|planned|scheduled')
+_AUX_WORD = r'was|were|is|are|be|been|being|has|have|had|did|does|do|will|would|could|can|should|may|might|must'
+_NP_WORD = r'(?!(?:' + _ACT_WORD + r'|' + _AUX_WORD + r')\b)[\w/-]+'
+_NP = r'(?:' + _NP_WORD + r'(?:\s*,\s*|\s+)){0,7}?' + _NP_WORD
+_OBSERVED = (r'(?:seen|noted|found|identified|present|visualized|observed|detected|appreciated|evident|demonstrated|'
+             r'encountered|visible|apparent|discovered|shown)')
+# Where a denied finding ends: a comma, semicolon, colon or bracket, or a full stop that ends a
+# sentence - not the stop of an abbreviation ("no H. pylori biopsies needed").
+_FINDING_END = r'(?=\s*(?:[;:,)\]]|\.(?![\w.])(?!\s+[a-z])|$))'
+FINDING_NEGATION = (
+    rx(r'\b(?:no|without|not\s+any|nor)\s+' + _NP + r'\s*(?:(?:was|were|is|are|has\s+been|have\s+been)\s+)?'
+       + _OBSERVED + r'\b'),
+    rx(r'\b(?:no|without|not\s+any)\s+' + _NP + _FINDING_END),
+    rx(r'\b(?:showed|shows|revealed|reveals|demonstrated|demonstrates|with|there\s+(?:was|were|is|are))\s+'
+       r'(?:no|not\s+any)\s+' + _NP + r'(?:' + _FINDING_END + r'|(?=\s(?:and|or|but|in|on|at|to|from|of)\b))'),
+    rx(r'\b(?:was|were|is|are)\s+not\s+' + _OBSERVED + r'\b'),
+    rx(r'\bcannot\s+(?:be\s+)?(?:exclude[ds]?|ruled?\s+out)\b'),
+)
+# 3. An intent or a manner is what is denied: "not a screening colonoscopy", "not only",
+#    "was not difficult".
+QUALIFIER_NEGATION = rx(r'\bnot\s+(?:a\s+|an\s+|the\s+)?(?:screening|surveillance|diagnostic|therapeutic|routine|'
+                        r'average-risk|high-risk)\b|\bnot\s+only\b'
+                        r'|\bnot\s+(?:(?:technically|particularly|especially|very)\s+)?(?:difficult|traumatic|painful|'
+                        r'complicated|prolonged|challenging)\b')
+# 4. A different act or care step is what is denied, outside the passage being read: "no
+#    sedation was given", "without retroflexion", "declined sedation". Never the procedure
+#    itself (no "procedure", "exam" or service name here).
+OTHER_ACT_NEGATION = rx(r'\b(?:no|without|w/o|not|nor|declined|declines|refused|refuses)\s+(?:(?:a|an|the|any|further|'
+                        r'additional|other|routine|repeat|formal|separate|conscious|moderate|deep|general|IV)\s+){0,2}'
+                        r'(?:sedation|anesthesia|anaesthesia|propofol|MAC|analgesia|retroflexion|photo(?:graph)?s?|'
+                        r'photodocumentation|irrigation|lavage|chromoendoscopy|narrow[- ]band\s+imaging|NBI|'
+                        r'contrast|fluoroscopy|intubation\s+of\s+the\s+(?:terminal\s+)?ileum)\b')
 
 # --- history: the service happened before this encounter ------------------------
 
@@ -113,9 +222,14 @@ CANCELLED_CLAUSE = (
     ('no-show', rx(r'\bno[- ]show(?:ed)?\b|\bdid\s+not\s+(?:show|arrive|present\s+for)\b')),
 )
 # "aborted" after the scope went in is an incomplete procedure, not a cancellation;
-# "before sedation" keeps it a cancellation.
+# "before sedation" keeps it a cancellation. An abort that says neither is held as
+# uncertain (detect._abort_status), never excluded as cancelled.
 STARTED = rx(r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|passed|intubated|reached)\b'
-             r'|\binsertion\b|\bintubation\s+of\b')
+             r'|\binsertion\b|\bintubation\s+of\b'
+             r'|\b(?:scope|colonoscope|endoscope|gastroscope|sigmoidoscope|duodenoscope|echoendoscope|enteroscope|'
+             r'instrument)\s+(?:had\s+|was\s+|then\s+)?(?:reached|advanced|passed|entered|traversed|inserted|introduced)\b'
+             r'|\bafter\s+(?:reaching|advancing|passing|entering|traversing|intubating|insertion|intubation)\b'
+             r'|\b(?:at|to|of)\s+(?:approximately\s+|about\s+|~\s*)?\d{1,3}\s*cm\b')
 BEFORE_START = rx(r'\b(?:before|prior\s+to)\s+(?:the\s+)?(?:sedation|insertion|scope\s+insertion|intubation|'
                   r'start(?:ing)?|the\s+procedure\s+(?:began|started)|procedure\s+start|endoscope\s+insertion)\b')
 
@@ -129,6 +243,16 @@ INCOMPLETE_CLAUSE = (
     ('could not', rx(r'\bcould\s+not\s+(?:be\s+)?(?:advance|advanced|reach|reached|intubate|intubated|cannulate|'
                      r'cannulated|pass|passed|traverse|traversed)\b')),
     ('not reached', rx(r'\b(?:was|were)\s+not\s+(?:reached|intubated|cannulated|traversed|examined|visualized)\b')),
+    # "it was not advanced to the cecum", "was never advanced beyond", "did not reach the duodenum"
+    ('not advanced', rx(r'\b(?:was|were|is|are|been)\s+(?:not|never)\s+(?:able\s+to\s+be\s+|successfully\s+|further\s+|'
+                        r'safely\s+)?(?:advanced|passed|inserted|introduced)\s+(?:\w+\s+){0,3}?(?:to|into|beyond|past|'
+                        r'through|as\s+far\s+as)\b'
+                        r"|\b(?:did|does|could|can)\s*(?:not|n't)\s+(?:be\s+)?(?:reach|advance|pass|intubate|enter|"
+                        r'traverse)\b'
+                        r'|\bnever\s+(?:reached|advanced|passed|intubated|entered|traversed)\b'
+                        r'|\bfailed\s+to\s+(?:reach|advance|pass|intubate|enter|traverse)\b|\bwithout\s+reaching\b')),
+    ('prevented', rx(r'\bprevent(?:ed|s|ing)\s+(?:\w+\s+){0,2}?(?:passage|advancement|intubation|entry|traversal|'
+                     r'examination|evaluation|insertion)\b|\bimpassable\b|\bnon-?traversable\b')),
     ('terminated', rx(r'\b(?:terminated|discontinued|halted)\b')),
     ('stopped', rx(r'\bstopped\s+(?:at|short|due|because|before)\b')),
     ('precluded', rx(r'\bprecluded\b')),
@@ -157,7 +281,8 @@ PLANNED_CLAUSE = (
     ('consider', rx(r'\bconsider(?:s|ed|ing|ation)?\b')),
     ('next', rx(r'\bnext\s+(?:week|month|year|visit|appointment|available|step|steps)\b|\btomorrow\b')),
     ('upcoming', rx(r'\bupcoming\b|\bfuture\b|\bawaiting\b')),
-    ('to be done', rx(r'\bto\s+be\s+(?:performed|scheduled|done|arranged|booked|repeated|completed)\b')),
+    ('to be done', rx(r'\bto\s+be\s+(?:performed|scheduled|done|arranged|booked|repeated|completed|taken|obtained|'
+                      r'placed|removed|resected|sent|considered|discussed)\b')),
     ('referred for', rx(r'\breferr(?:ed|al|ing)\s+(?:for|to)\b')),
     ('ordered', rx(r'(?<!in )\border(?:ed|s)?\b')),
     ('due', rx(r'\bdue\s+(?:for|in|now|at)\b')),
@@ -175,6 +300,9 @@ INCOMPLETE_PRE = (
 INCOMPLETE_POST = (
     ('was incomplete', rx(r'^[\s,]*(?:was|is|remained|were)\s+(?:incomplete|terminated|discontinued|halted|'
                           r'unsuccessful|not\s+completed)\b')),
+    # "Colonoscopy, attempted", "ERCP (attempted)", "Colonoscopy was attempted", "EGD - partial"
+    ('attempted', rx(r'^[\s,]*(?:[-\u2013:]\s*|\(\s*)?(?:was\s+|were\s+|is\s+)?(?:attempted|incomplete|partial|'
+                     r'abandoned|unsuccessful|not\s+completed|not\s+finished)\b')),
 )
 # "The procedure was cancelled" / "No procedure was performed": the service is referred to,
 # not named; read for the family the sentence describes.
@@ -200,7 +328,7 @@ PROCEDURE_INCOMPLETE = rx(
 # --- uncertain: documentation does not commit either way ------------------------
 
 UNCERTAIN_PRE = (
-    ('possible', _pre(r'possible|possibly|potential|probable|questionable|\?'
+    ('possible', _pre(r'possible|possibly|potential|probable|questionable|\?|pending'
                       r'|(?:may|might|could)\s+(?:need|require|undergo|benefit\s+from|warrant|consider|have)', _HIST_FILLER, 2)),
     # Consent and discussion describe a service; they do not report it done. Anchored to
     # the service, so "after consent was obtained, the scope was advanced to the cecum"
@@ -211,6 +339,8 @@ UNCERTAIN_PRE = (
 UNCERTAIN_POST = (
     ('if needed', rx(r'^[\s,]*(?:\?|if\s+(?:needed|necessary|indicated|required|warranted|appropriate|'
                      r'clinically\s+indicated)\b|as\s+needed\b|vs\.?\s|versus\b)')),
+    # "ERCP pending insurance approval", "Colonoscopy: pending"
+    ('pending', rx(r'^[\s,]*(?:[:=\u2013-]\s*|\(\s*)?(?:is\s+|are\s+|was\s+|remains\s+|still\s+)*pending\b')),
     ('was discussed', rx(r'^[\s,]*(?:was|were|has\s+been|have\s+been)\s+(?:discussed|explained|reviewed\s+with)\b')),
     ('may be needed', rx(r'^[\s,]*(?:may|might|could)\s+(?:be|become)\s+(?:needed|necessary|required|indicated|'
                          r'considered|performed|helpful|warranted)\b')),
@@ -321,10 +451,18 @@ REACHED_BEFORE = rx(r'\b(?:advanced|passed|inserted|introduced|intubated|examine
 REACHED_AFTER = rx(r'^[\s,]*(?:was|were)\s+(?:then\s+|successfully\s+|easily\s+)?(?:reached|intubated|entered|'
                    r'examined|visualized|inspected|identified|seen|normal|unremarkable|photographed)\b'
                    r'|^[\s,]*(?:appeared|appears|looked)\s+normal\b|^\s*intubation\b|^[\s,]*(?:was|were)\s+'
-                   r'(?:identified|visualized)\b')
+                   r'(?:identified|visualized)\b'
+                   # a findings line about the landmark: "Duodenum: normal", "Stomach - unremarkable"
+                   r'|^\s*[:\u2013-]\s*(?:normal|unremarkable|examined|visualized|reached|intubated)\b')
 NOT_REACHED_BEFORE = rx(r'\b(?:unable\s+to|could\s+not|cannot|failed\s+to|did\s+not)\s+(?:be\s+)?(?:reach|advance|'
                         r'intubate|enter|visualize|examine|pass)\w*\s+(?:\w+\s+){0,3}?(?:to\s+|into\s+)?(?:the\s+)?$'
-                        r'|\bshort\s+of\s+(?:the\s+)?$|\bnot\s+(?:reach|reached|examine|examined)\s+(?:the\s+)?$')
+                        r'|\bshort\s+of\s+(?:the\s+)?$|\bnot\s+(?:reach|reached|examine|examined)\s+(?:the\s+)?$'
+                        # "it was not advanced to the", "was never advanced into the", "was not able to be advanced to the"
+                        r'|\b(?:was|were|is|are|been)\s+(?:not|never)\s+(?:able\s+to\s+be\s+|successfully\s+|further\s+|'
+                        r'safely\s+)?(?:advanced|passed|inserted|introduced|intubated|reached|entered)\s+'
+                        r'(?:\w+\s+){0,3}?(?:to\s+|into\s+|as\s+far\s+as\s+)?(?:the\s+)?$'
+                        r'|\bnever\s+(?:reached|advanced|passed|entered|intubated)\s+(?:\w+\s+){0,3}?(?:to\s+|into\s+)?'
+                        r'(?:the\s+)?$|\bwithout\s+(?:reaching|entering|intubating)\s+(?:the\s+)?$')
 NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|intubated|entered|examined|visualized|'
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
@@ -338,17 +476,21 @@ ADVANCED = rx(r'\b(?:advanced|passed|inserted|introduced|examined|reached)\b')
 _LUMINAL = ('gi.egd', 'gi.colonoscopy', 'gi.flex_sig')
 # "a dilated bile duct" is a finding; only the act of dilating is an intervention.
 # A bare "dilated to 11 mm" describes a size (a finding), so it does not count;
-# "was dilated (to ...)" and "dilated with/using <device>" do.
-_DILATION = r'\bdilat(?:ion|ation)s?\b|\b(?:was|were)\s+(?:\w+\s+)?dilated\b|\bdilated\s+(?:with|using)\b'
+# "was dilated (to ...)" and "dilated with/using <device>" do; "was not dilated" denies it.
+_DILATION = (r'\bdilat(?:ion|ation)s?\b|\b(?:was|were)\s+(?:(?!not\b|never\b)\w+\s+)?dilated\b'
+             r'|(?<!not\s)(?<!never\s)\bdilated\s+(?:with|using)\b')
 # ERCP: "dilation of the duct" is anatomy; only dilating a stricture, the papilla,
 # the sphincter or an anastomosis (or a sphincteroplasty) is an intervention.
 _ERCP_DILATION = (r'\bsphincteroplasty\b'
                   r'|\bdilat(?:ion|ation)\s+of\s+(?:the\s+)?(?:[\w-]+\s+){0,2}?'
                   r'(?:strictures?|papilla|sphincter|ampulla|anastomosis)\b'
-                  r'|\b(?:strictures?|papilla|sphincter|ampulla|anastomosis)\s+(?:was|were)\s+(?:\w+\s+)?dilated\b')
+                  r'|\b(?:strictures?|papilla|sphincter|ampulla|anastomosis)\s+(?:was|were)\s+'
+                  r'(?:(?!not\b|never\b)\w+\s+)?dilated\b')
 _LOWER = ('gi.colonoscopy', 'gi.flex_sig')
 INTERVENTIONS = (
     ('biopsy', rx(r'\bbiops(?:y|ies|ied)\b'), _LUMINAL),
+    # named without its technique; the technique, when named, supersedes it
+    ('polypectomy', rx(r'\bpolypectom(?:y|ies)\b'), _LOWER),
     ('cold snare', rx(r'\bcold[- ]snare\b'), _LUMINAL),
     ('hot snare', rx(r'\bhot[- ]snare\b|\bsnare\s+(?:electro)?cautery\b|\belectrocautery\s+snare\b'), _LUMINAL),
     ('cold forceps', rx(r'\bcold\s+forceps\s+polypectomy\b|\b(?:removed|resected|excised)\s+(?:\w+\s+){0,3}?with\s+'
@@ -393,6 +535,7 @@ INTERVENTIONS = (
 )
 # Labels that a more specific label of the same family makes redundant.
 SUPERSEDED_BY = {
+    'polypectomy': ('cold snare', 'hot snare', 'cold forceps', 'EMR'),
     'dilation': ('dilation (balloon)', 'dilation (bougie)'),
     'stone extraction': ('stone extraction (balloon)', 'stone extraction (basket)'),
 }

@@ -5,8 +5,12 @@ A section starts at a heading line ("Findings", "Procedure: Colonoscopy",
 first heading is an ``other`` section with no heading. Every span is a
 half-open range over the canonical text, so ``text[start:end]`` is exact.
 
-Only labels in ``HEADINGS`` open a section. A key-value line such as
+Labels in ``HEADINGS`` open a section. A key-value line such as
 "Date of service: 2026-10-21" or "Extent: cecum" is content, not a heading.
+A line that is only an unrecognised "Label:" also opens a section, so the text
+under it never inherits the previous section's reading: a plan or history
+section when the label says so ("Next procedures:", "Earlier work-up:"),
+otherwise an ``other`` section with no default.
 """
 from __future__ import annotations
 
@@ -50,14 +54,26 @@ HEADINGS: dict[str, str] = {
             'past surgical history', 'past medical/surgical history', 'past medical and surgical history', 'pmh',
             'psh', 'medical history', 'surgical history', 'family history', 'social history', 'past history',
             'prior procedures', 'prior endoscopy', 'previous endoscopy', 'endoscopic history', 'procedure history',
-            'gi history', 'history and physical', 'pre-procedure history and physical'),
+            'gi history', 'history and physical', 'pre-procedure history and physical',
+            'previous procedures', 'past procedures', 'procedural history', 'prior colonoscopies',
+            'previous colonoscopies', 'prior endoscopies', 'previous endoscopies', 'past endoscopy',
+            'past endoscopies', 'prior studies', 'previous studies', 'endoscopy history', 'colonoscopy history',
+            'prior gi procedures', 'previous gi procedures', 'prior endoscopic procedures',
+            'previous endoscopic procedures'),
     **_kind('exam', 'examination', 'physical examination', 'physical exam', 'exam', 'pe', 'vital signs', 'vitals',
             'pre-procedure examination', 'pre-procedure physical examination'),
     **_kind('assessment', 'assessment', 'diagnosis', 'diagnoses', 'clinical impression', 'pre-procedure assessment'),
     **_kind('plan', 'plan', 'plans', 'recommendations', 'recommendation', 'plan of care', 'treatment plan',
             'follow-up', 'follow up', 'followup', 'assessment and plan', 'assessment/plan', 'a/p', 'a and p',
             'impression and plan', 'impression/plan', 'recommendations and plan', 'next steps', 'instructions',
-            'discharge instructions', 'post-procedure instructions'),
+            'discharge instructions', 'post-procedure instructions',
+            'impression and recommendations', 'impressions and recommendations', 'impression and recommendation',
+            'impression/recommendations', 'impression/recommendation', 'impressions/recommendations',
+            'assessment and recommendations', 'assessment and recommendation', 'assessment/recommendations',
+            'recommendations/plan', 'plan/recommendations', 'plan and recommendations', 'recommendations and follow-up',
+            'follow-up plan', 'follow-up recommendations', 'post-procedure plan', 'postprocedure plan',
+            'post procedure plan', 'post-procedure recommendations', 'postprocedure recommendations',
+            'post-procedure care', 'disposition and plan', 'plan and disposition'),
     **_kind('mdm', 'medical decision making', 'medical decision-making', 'mdm', 'decision making'),
     **_kind('time', 'time', 'total time', 'time statement', 'time spent', 'visit time', 'time documentation'),
     **_kind('other', 'medications', 'current medications', 'medication', 'allergies', 'review of systems', 'ros',
@@ -68,6 +84,22 @@ HEADINGS: dict[str, str] = {
 
 _PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
 _CLOCK = re.compile(r'[ \t]*\d{1,2}:\d{2}', re.A)
+# An unrecognised bare "Label:" (nothing after the colon) is a heading: a plan or history one
+# when its words say so, otherwise "other". A sentence that ends in a colon is not a label.
+_PLAN_LABEL = re.compile(r'\b(?:plans?|planned|recommend\w*|follow[- ]?up|next|future|upcoming|scheduled|'
+                         r'instructions?|disposition|to\s+do)\b', re.A | re.I)
+_HISTORY_LABEL = re.compile(r'\b(?:history|historical|hx|prior|previous|past|earlier|old)\b', re.A | re.I)
+_LABEL_VERB = re.compile(r'\b(?:was|were|is|are|be|been|being|has|have|had|will|shall|should|would|could|can|may|'
+                         r'might|did|does|do|follows|following|include[sd]?|including|noted|showed|revealed|'
+                         r'performed|done)\b', re.A | re.I)
+
+
+def _bare_label(raw: str) -> bool:
+    words = raw.split()
+    return (0 < len(words) <= 6 and words[0][0].isalpha() and not _LABEL_VERB.search(raw)
+            and raw.rstrip()[-1] not in '.!?;')
+
+
 _TITLE_QUALIFIER = re.compile(r'\b(?:prior|previous|last|planned|scheduled|next|outside|old)\b', re.A | re.I)
 _ABBREVIATIONS = frozenset({'dr', 'mr', 'mrs', 'ms', 'st', 'vs', 'approx', 'e.g', 'i.e', 'eg', 'ie', 'fig', 'etc',
                             'pt', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
@@ -112,6 +144,8 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     if kind is None and colon < 0 and cues.PROCEDURE_TITLE.match(line.strip()) and _service_named(line) \
             and not _TITLE_QUALIFIER.search(line):
         kind = 'procedure'
+    if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
+        kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
     if kind is None or (kind == 'time' and _CLOCK.match(content)):
         return None
     lead = len(raw) - len(raw.lstrip())
