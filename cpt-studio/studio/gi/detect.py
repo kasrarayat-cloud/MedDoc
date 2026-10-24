@@ -210,6 +210,8 @@ class Analysis:
     attributed: list = field(default_factory=list)  # family per sentence
     # family -> (status, cue) that a "performed" reading of that family's service takes in this document
     adjustments: dict = field(default_factory=dict)
+    # (start, end) of each OTHER_FAMILY procedure name, sorted: items of a check-box line (_unchecked_box)
+    other_names: tuple = ()
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
@@ -1091,7 +1093,8 @@ def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
         result = False
         if boxes:
             items = sorted({(m.start, m.end) for m in an.services_in(line_start, line_end)}
-                           | {(iv.start, iv.end) for iv in an.interventions_in(line_start, line_end)} | {(start, end)})
+                           | {(iv.start, iv.end) for iv in an.interventions_in(line_start, line_end)}
+                           | set(_other_names_in(an, line_start, line_end)) | {(start, end)})
             if items[-1][1] > boxes[-1].start():
                 before = [b for b in boxes if b.start() < span_end]
                 result = bool(before) and before[-1].group('off') is not None
@@ -1105,6 +1108,12 @@ def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
                 result = bool(group) and _group_unchecked(text, group)
         an.memo[key] = result
     return an.memo[key]
+
+
+def _other_names_in(an: Analysis, start: int, end: int) -> tuple:
+    names = an.other_names
+    low, high = bisect.bisect_left(names, (start, -1)), bisect.bisect_left(names, (end, -1))
+    return tuple(name for name in names[low:high] if name[1] <= end)
 
 
 def _group_unchecked(text: str, group: list[re.Match]) -> bool:
@@ -1962,9 +1971,170 @@ def _with_fact(facts: list[Fact], name: str, fact: Optional[Fact], after: tuple[
     return kept[:at] + [fact] + kept[at:]
 
 
+# --- gi.other: a procedure of this encounter outside the detected families ---------------------------------
+OTHER_FAMILY = 'gi.other'  # outside DETECTED_FAMILIES: a gi.other code's status still comes from its own passage
+# What makes a phrase a procedure, by its form rather than a list of names: "Anoscopy", "Hemorrhoidectomy",
+# "Rubber band ligation", "Paracentesis" are; "Labs", "CT", "A rectal examination" are not.
+_PROCEDURE_WORD = re.compile(r'\b(?:\w+(?:scop(?:y|ies)|ectom(?:y|ies)|otom(?:y|ies)|ostom(?:y|ies)|plast(?:y|ies)|'
+                             r'centesis|pex(?:y|ies)|rrhaph(?:y|ies))|ligations?|banding|biops(?:y|ies)|injections?|'
+                             r'dilat(?:ion|ation)s?|drainage|excisions?|incisions?|resections?|ablations?|sclerotherapy|'
+                             r'cauterization|cautery|manometry|debridement)\b', re.A | re.I)
+# Never such a procedure: an E/M service, an examination, sedation, consent, a test, or a person.
+_NOT_A_PROCEDURE = re.compile(r'\b(?:visits?|evaluations?|management|E/M|consult\w*|counsel\w*|exam(?:ination)?s?|'
+                              r'histor(?:y|ies)|reviews?|assessments?|discussions?|education|sedation|anesthesia|'
+                              r'anaesthesia|consent|labs?|laboratory|imaging|tests?|testing|time|MDM|separately|'
+                              r'patient|pt|she|he|they|we|i)\b', re.A | re.I)
+# A name led by a negation, a condition or a plan documents no procedure done ("No endoscopy or other
+# procedure was performed", "None performed today", "If banding were done", "Discussed hemorrhoid banding").
+_NOT_DONE_LED = re.compile(r'(?:no|none|not|neither|nor|without|w/o|if|unless|whether|should|would|could|may|might|'
+                           r'can|will|discuss\w*|consider\w*|offer\w*|recommend\w*|plan\w*|schedul\w*|request\w*|'
+                           r'possible|possibly|potential|probable|pending|candidate)\b', re.A | re.I)
+# An explicit statement that a procedure was done. The procedure is the subject written before the
+# participle with only auxiliaries between them (_DONE_GAP: "Anoscopy was performed", "Rubber band ligation
+# x3 completed today", never "Anoscopy was not performed"), or the object of "underwent" / "we performed".
+_DONE = re.compile(r'\b(?:performed|done|completed|carried\s+out|undertaken)\b', re.A | re.I)
+_DONE_GAP = re.compile(r'(?:[ \t]+(?:was|were|has|have|had|been|then|also|subsequently|successfully|uneventfully|'
+                       r'safely|today))*[ \t]*', re.A | re.I)
+_OTHER_OBJECT_CUE = re.compile(r'(?<!\bnever\s)\b(?:underwent|(?:we|I)\s+(?:performed|completed|did))\s+', re.A | re.I)
+# A subject starts after the last break before its participle ("After verbal consent, anoscopy was performed").
+_SUBJECT_BREAK = re.compile(r'[,;:(]|\s[-\u2013\u2014]\s|\.(?=\s)', re.A)
+# Where the name of a procedure ends: a verb, a status word, a clause break or punctuation.
+_NP_END = re.compile(r'\s+(?:was|were|is|are|has|have|had|will|would|could|should|may|might|can|to\s+be|because|'
+                     r'due|without|today|performed|done|completed|'
+                     r'scheduled|planned|declined|deferred|cancell?ed|postponed|recommended|requested|ordered|'
+                     r'attempted|aborted|refused|revealed|showed|demonstrated|not|if|when|once|'
+                     r'and\s+(?:the|a|an)\s+patient)\b|[,;:.(]|\s[-\u2013\u2014]\s', re.A | re.I)
+_WORD = re.compile(r'(?<!\S)\S+')  # a whole word: never the cut-off tail of one
+# Words before a name that are not part of it: "After banding was performed", "We performed an anoscopy".
+_NAME_LEAD = re.compile(r'(?:(?:after|before|once|when|while|following|then|also|subsequently)\s+)?(?:(?:an?|the)\s+)?',
+                        re.A | re.I)
+OTHER_BOX_ITEMS = 12  # the items of one check-box line that are read as names (bounds the work per line)
+OTHER_NAME_REACH = 120  # a procedure's name is short (bounds the work per candidate)
+
+
+def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[str]) -> bool:
+    """Whether [start, end) speaks of a detected family's procedure: it names one of those services, an
+    instrument of one ("the colonoscope", "fine-needle"), or one of their interventions ("polypectomy")."""
+    if an.services_in(start, end):
+        return True
+    if any(p.search(an.text, start, end) for family, p in cues.INSTRUMENTS if family in detected):
+        return True
+    return any(set(iv.families) & set(detected) for iv in an.interventions_in(start, end))
+
+
+def _procedure_name(an: Analysis, start: int, limit: int) -> Optional[tuple[int, int]]:
+    """The name of a procedure written from ``start`` (after a check box and _NAME_LEAD): up to the first
+    verb, status word, clause break, punctuation or check box, within OTHER_NAME_REACH. None when empty."""
+    text = an.text
+    limit = min(limit, start + OTHER_NAME_REACH)
+    start = _SEPARATOR.match(text, start, limit).end()
+    lead = _BOX.match(text, start, limit)
+    if lead:
+        start = _SEPARATOR.match(text, lead.end(), limit).end()
+    start = _NAME_LEAD.match(text, start, limit).end()
+    stop = _NP_END.search(text, start, limit)
+    end = stop.start() if stop else limit
+    box = _BOX.search(text, start, end)
+    return _trimmed_span(text, start, box.start() if box else end)
+
+
+def _trimmed_span(text: str, start: int, end: int) -> Optional[tuple[int, int]]:
+    while start < end and not text[start].isalnum():
+        start += 1
+    while end > start and not text[end - 1].isalnum():
+        end -= 1
+    return (start, end) if start < end else None
+
+
+def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
+    """Procedures documented in the text that name none of the detected families (OTHER_FAMILY): a
+    procedure's name (_PROCEDURE_WORD: "Anoscopy", "Rubber band ligation", "Hemorrhoidectomy") written
+    - as the first sentence of a procedure section ("Procedure: Anoscopy with banding of two internal
+      hemorrhoids.");
+    - as the subject of an explicit performed clause ("Rubber band ligation of an internal hemorrhoid was
+      performed today", "After verbal consent, anoscopy was performed");
+    - as the object of "underwent" / "we performed".
+    Never a phrase that speaks of a detected family within CLAUSE_REACH (_about_a_detected_family), an
+    E/M service, an examination, sedation, consent, a test or a person (_NOT_A_PROCEDURE), nor a name led
+    by a negation, a condition or a plan (_NOT_DONE_LED). Each one's status comes from the ordinary
+    readings, so a planned or denied procedure reads planned or negated."""
+    text, found = an.text, {}
+
+    def consider(span, clause):
+        if span is None:
+            return
+        s, e = span
+        name = text[s:e]
+        if not _PROCEDURE_WORD.search(name) or _NOT_A_PROCEDURE.search(name) or _NOT_DONE_LED.match(name):
+            return
+        scope = (max(clause[0], s - CLAUSE_REACH), min(clause[1], e + CLAUSE_REACH))
+        if not _about_a_detected_family(an, *scope, detected):
+            found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name)
+
+    def names(pos, sentence):  # the name written at pos and, along a check-box line, each item's name
+        for _ in range(OTHER_BOX_ITEMS):
+            span = _procedure_name(an, pos, sentence[1])
+            consider(span, sentence)
+            after = span[1] if span else pos + 1
+            box = _BOX.search(text, after, min(sentence[1], after + OTHER_NAME_REACH))
+            if box is None:
+                return
+            pos = box.start()
+
+    for section in an.lay.sections:
+        if section.kind != 'procedure':
+            continue
+        first = _SEPARATOR.match(text, section.heading.end if section.heading else section.start, section.end).end()
+        index = _sentence_index(an, first)
+        if index < 0 or an.lay.section_at(first) is not section:
+            continue
+        names(max(an.lay.sentences[index][0], first), an.lay.sentences[index])
+        for sentence in an.lay.sentences[index + 1:bisect.bisect_left(an.lay.sentences, (section.end, -1))]:
+            if _BOX.search(text, *sentence):
+                names(sentence[0], sentence)  # a later check-box line names its own procedures
+    for m in _DONE.finditer(text):
+        clause = _clause_at(an, m.start())
+        heading = an.lay.section_at(m.start()).heading
+        cs = heading.end if heading is not None and clause[0] < heading.end <= m.start() else clause[0]
+        cs = max(cs, m.start() - OTHER_NAME_REACH)
+        breaks = [b.end() for b in _SUBJECT_BREAK.finditer(text, cs, m.start())]
+        word = _WORD.search(text, breaks[-1] if breaks else cs, m.start())
+        name = word and _procedure_name(an, word.start(), m.start())
+        if name and _DONE_GAP.fullmatch(text, name[1], m.start()):
+            consider(name, clause)
+    for m in _OTHER_OBJECT_CUE.finditer(text):
+        clause = _clause_at(an, m.start())
+        consider(_procedure_name(an, m.end(), clause[1]), clause)
+    return sorted(found.values(), key=lambda mention: mention.start)
+
+
+def _other_finding(an: Analysis, others: list[Mention], has_basis: bool) -> FamilyFinding:
+    """The OTHER_FAMILY finding. Its mentions are different procedures ("Anoscopy", "Rubber band
+    ligation"), so each is judged alone, by the rules every family follows (with E/M documentation, an
+    office note's procedure heading alone does not establish it: HEADING_ONLY), and one procedure's denial
+    never adjusts another's passage. The family is performed, incomplete or uncertain when any of its
+    procedures is (in that order: one procedure's denial does not make the family read "negated" while
+    another may have been done); else the usual aggregate of all of them."""
+    raw = [_generic_reading(an, m.start, m.end) for m in others]
+    kinds = tuple(an.lay.section_at(m.start).kind for m in others)
+    away = tuple(_elsewhere(an, m) for m in others)
+    statuses, readings = [], []
+    for reading, kind, elsewhere in zip(raw, kinds, away):
+        one = _aggregate([reading], section_suffices=not has_basis, kinds=(kind,), away=(elsewhere,))
+        plain = _aggregate([reading], kinds=(kind,), away=(elsewhere,))
+        statuses.append(one)
+        readings.append(_adjusted(reading, _adjustment(one, [reading], [], plain, (kind,), (elsewhere,))))
+    status = next((s for s in ('performed', 'incomplete', 'uncertain') if s in statuses), None) or _aggregate(
+        raw, section_suffices=not has_basis, kinds=kinds, away=away)
+    return FamilyFinding(OTHER_FAMILY, status, tuple(_mention(an, m, r) for m, r in zip(others, readings)), (),
+                         _missing(OTHER_FAMILY, []))
+
+
 def _route(an: Analysis) -> RoutingResult:
-    readings = {m: _generic_reading(an, m.start, m.end) for m in an.services}
     detected = [f for f in PROCEDURE_FAMILIES if any(m.family == f for m in an.services)]
+    others = _other_mentions(an, detected)
+    an.other_names = tuple((m.start, m.end) for m in others)
+    readings = {m: _generic_reading(an, m.start, m.end) for m in an.services}
     attributed = an.attributed = _attribute_sentences(an, detected)
     an.references = _references(an, attributed)
     readings.update(an.references)
@@ -1997,6 +2167,8 @@ def _route(an: Analysis) -> RoutingResult:
         findings[family] = FamilyFinding(
             family, status, tuple(_mention(an, m, _adjusted(readings[m], an.adjustments[family])) for m in mentions),
             tuple(facts), _missing(family, facts))
+    if others:
+        findings[OTHER_FAMILY] = _other_finding(an, others, has_basis)
     procedure_done = any(f.status in ('performed', 'incomplete') for f in findings.values())
     an.em_readings = {m: (Reading('uncertain', r.cues + (EM_WITHOUT_BASIS,), 'cue')
                           if r.status == 'performed' and procedure_done and not has_basis else r)

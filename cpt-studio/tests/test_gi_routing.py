@@ -506,11 +506,21 @@ class ServiceNameTests(unittest.TestCase):
         self.assertEqual(self.families('Flex sig to 40 cm.'), {'gi.flex_sig'})
 
     def test_lookalikes_are_not_services(self):
+        # A lookalike is never a DETECTED family: rigid sigmoidoscopy is not gi.flex_sig, capsule endoscopy is not
+        # gi.egd. Two of them are procedures outside the detected families (rigid proctosigmoidoscopy 45300-45327,
+        # capsule endoscopy 91110: the gi.other profile), which routing reports as gi.other since round 2b status:19.
+        other_procedures = ('Rigid proctosigmoidoscopy and rigid sigmoidoscopy were performed.',
+                            'Capsule endoscopy was performed.')
         for body in ('MRCP showed choledocholithiasis.', 'Magnetic resonance cholangiopancreatography was done.',
                      'Rigid proctosigmoidoscopy and rigid sigmoidoscopy were performed.',
                      'The colonoscope and gastroscope were cleaned.', 'Fs and fs.', 'The FS-2 form was signed.',
                      'Capsule endoscopy was performed.'):
-            self.assertEqual(self.families(body), set(), body)
+            self.assertEqual(self.families(body) & set(DETECTED_FAMILIES), set(), body)
+            if body in other_procedures:
+                self.assertEqual([(f.family, f.status) for f in route(DOS + body).findings],
+                                 [('gi.other', 'performed')], body)
+            else:
+                self.assertEqual(self.families(body), set(), body)
 
     def test_duodenoscope_in_an_ercp_is_not_an_egd(self):
         body = 'ERCP\nThe duodenoscope was advanced to the second part of the duodenum. Cannulation was achieved.'

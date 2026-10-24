@@ -20,6 +20,7 @@ from pathlib import Path
 from studio.gi import detect
 from studio.gi.context import extract_context
 from studio.gi.detect import route, status_for_span
+from studio.gi.profiles import DETECTED_FAMILIES
 from studio.gi.sections import layout
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import (EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode, RoutingResult, from_jsonable,
@@ -1223,6 +1224,205 @@ class Status9FactsFromAnotherProcedureTests(unittest.TestCase):
         text = self.colon('The colonoscope was advanced to the cecum. Two polyps were removed with a cold snare.')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'interventions'), 'cold snare')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'polyp_count'), '2')
+
+
+OFFICE_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+               'Established patient office visit.\n{body}\nChief complaint: rectal bleeding.\n'
+               'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+BOX_OFF, BOX_ON = '\N{BALLOT BOX}', '\N{BALLOT BOX WITH X}'
+
+
+class Status19OtherProcedureTests(unittest.TestCase):
+    """status:19 (medium, under-correction), routing part. An office note documenting a same-day procedure
+    outside the detected families (hemorrhoid banding, anoscopy) routed only gi.office_em: nothing could hold
+    the E/M, and the coverage checks reported every performed service as profiled. Routing now emits a
+    gi.other finding (shared contract). A procedure's name, told by its form (_PROCEDURE_WORD), is read as the
+    first sentence of a procedure section (and each item of its check-box lines), as the subject of an
+    explicit performed clause, or as the object of "underwent" / "we performed"; never a detected family's
+    own procedure, an examination, a test, "none", or a name led by a negation, a condition or a plan.
+    Each mention is a procedure of its own, read alone by the ordinary status machinery."""
+
+    CLAIM = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+             'Established patient office visit.\nChief complaint: rectal bleeding.\n'
+             'Procedure: Rubber band ligation of an internal hemorrhoid was performed today without complication.\n'
+             'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+    def office(self, body):
+        return OFFICE_NOTE.format(body=body)
+
+    def other(self, text):
+        return routed(text).finding('gi.other')
+
+    def test_the_claimed_banding_is_a_same_day_other_procedure(self):
+        result = routed(self.CLAIM)
+        other = result.finding('gi.other')
+        self.assertEqual(other.status, 'performed')
+        self.assertEqual([(m.family, m.span.text, m.status, m.section) for m in other.mentions],
+                         [('gi.other', 'Rubber band ligation of an internal hemorrhoid', 'performed', 'procedure')])
+        self.assertIn('performed: was performed', other.mentions[0].cues)
+        self.assertEqual(other.mentions[0].sentence.text,
+                         'Rubber band ligation of an internal hemorrhoid was performed today without complication.')
+        self.assertEqual((other.facts, other.missing), ((), ()))
+        self.assertEqual(result.finding('gi.office_em').status, 'performed')  # its MDM and time are documented
+        self.assertEqual(result.document_kind, 'mixed')
+
+    def test_the_coverage_check_no_longer_calls_every_performed_service_profiled(self):
+        _, result = run_engine(self.CLAIM, [('99214', 'Established patient office visit.')])
+        unsupported = next(c for c in result.encounter_checks if c.id == 'services.unsupported')
+        self.assertNotEqual(unsupported.status, 'pass', unsupported.detail)
+
+    def test_other_procedures_documented_as_done(self):
+        for body, name in (('Anoscopy was performed today.', 'Anoscopy'),
+                           ('After verbal consent, anoscopy was performed.', 'anoscopy'),
+                           ('Anoscopy for rectal bleeding was performed.', 'Anoscopy for rectal bleeding'),
+                           ('Rubber band ligation x3 completed today.', 'Rubber band ligation x3'),
+                           ('The patient underwent rubber band ligation of two internal hemorrhoids.',
+                            'rubber band ligation of two internal hemorrhoids'),
+                           ('We performed an anoscopy.', 'anoscopy'),
+                           ('After banding was performed, the patient was observed.', 'banding'),
+                           ('Paracentesis was performed today; 3 L removed.', 'Paracentesis'),
+                           ('Procedure: Anoscopy was performed.', 'Anoscopy'),
+                           ('Anoscopy with banding of two internal hemorrhoids at the right anterior and right posterior '
+                            'positions was performed without difficulty.', 'Anoscopy with banding of two internal '
+                            'hemorrhoids at the right anterior and right posterior positions')):
+            other = self.other(self.office(body))
+            self.assertIsNotNone(other, body)
+            self.assertEqual((other.status, [m.span.text for m in other.mentions]), ('performed', [name]), body)
+
+    def test_its_status_comes_from_the_ordinary_readings(self):
+        for body, status, mentions in (
+                ('Procedure: Rubber band ligation scheduled for next week.', 'planned', [('Rubber band ligation', 'planned')]),
+                ('Procedure: Anoscopy - patient declined.', 'negated', [('Anoscopy', 'negated')]),
+                ('History: Hemorrhoidectomy was performed in 2015.', 'historical', [('Hemorrhoidectomy', 'historical')]),
+                ('Anoscopy was performed at an outside facility.', 'historical', [('Anoscopy', 'historical')]),
+                ('Anoscopy was performed last month.', 'historical', [('Anoscopy', 'historical')])):
+            other = self.other(self.office(body))
+            self.assertIsNotNone(other, body)
+            self.assertEqual((other.status, [(m.span.text, m.status) for m in other.mentions]), (status, mentions), body)
+
+    def test_an_office_procedure_heading_alone_is_held_as_for_every_family(self):
+        body = 'Procedure: Anoscopy with banding of two internal hemorrhoids.'
+        other = self.other(self.office(body))  # MDM and time documented: the heading alone does not establish it
+        self.assertEqual(other.status, 'uncertain')
+        self.assertEqual([m.span.text for m in other.mentions], ['Anoscopy with banding of two internal hemorrhoids'])
+        self.assertIn(detect.HEADING_ONLY, other.mentions[0].cues)
+        self.assertEqual(self.other(HEADER + 'Place of service: Office (POS 11)\n' + body + '\n').status, 'performed')
+
+    def test_each_procedure_is_judged_alone(self):
+        other = self.other(self.office('Procedure: Anoscopy - patient declined.\n'
+                                       'Rubber band ligation x3 was performed today.'))
+        self.assertEqual(other.status, 'performed')
+        self.assertEqual([(m.span.text, m.status) for m in other.mentions],
+                         [('Anoscopy', 'negated'), ('Rubber band ligation x3', 'performed')])
+        # A denied anoscopy never makes the family read "negated" while a checked hemorrhoidectomy may be done.
+        other = self.other(self.office(f'Procedure: {BOX_OFF} Anoscopy {BOX_ON} Hemorrhoidectomy'))
+        self.assertEqual(other.status, 'uncertain')
+        self.assertEqual([(m.span.text, m.status) for m in other.mentions],
+                         [('Anoscopy', 'negated'), ('Hemorrhoidectomy', 'uncertain')])
+
+    def test_each_item_of_a_check_box_line_names_its_procedure(self):
+        for body, expected in (
+                (f'Procedure: {BOX_ON} Anoscopy {BOX_OFF} Hemorrhoidectomy',
+                 [('Anoscopy', 'uncertain'), ('Hemorrhoidectomy', 'negated')]),
+                ('Procedure: Anoscopy [ ] Hemorrhoidectomy [x]', [('Anoscopy', 'negated'), ('Hemorrhoidectomy', 'uncertain')]),
+                ('Procedure: Anoscopy [x] Hemorrhoidectomy [ ]', [('Anoscopy', 'uncertain'), ('Hemorrhoidectomy', 'negated')]),
+                (f'Procedures:\n{BOX_OFF} Anoscopy\n{BOX_ON} Rubber band ligation\n{BOX_OFF} Hemorrhoidectomy',
+                 [('Anoscopy', 'negated'), ('Rubber band ligation', 'uncertain'), ('Hemorrhoidectomy', 'negated')])):
+            other = self.other(self.office(body))
+            self.assertIsNotNone(other, body)
+            self.assertEqual([(m.span.text, m.status) for m in other.mentions], expected, body)
+        self.assertEqual(self.other(self.office(f'Procedures:\n{BOX_OFF} Anoscopy\n{BOX_OFF} Rubber band ligation')).status,
+                         'negated')
+        other = self.other(self.office(f'Procedure: {BOX_OFF} None {BOX_ON} Anoscopy'))  # "None" is no name
+        self.assertEqual([(m.span.text, m.status) for m in other.mentions], [('Anoscopy', 'uncertain')])
+        # A flattened two-column table ("Done | Not done"): the first box after an item governs it; an empty cell is
+        # no name, and the items after it are still read.
+        for body in (f'Procedure: Anoscopy | {BOX_ON} | {BOX_OFF} | Hemorrhoidectomy | {BOX_OFF} | {BOX_ON}',
+                     f'Procedures:\nAnoscopy | {BOX_ON} | {BOX_OFF}\nHemorrhoidectomy | {BOX_OFF} | {BOX_ON}'):
+            other = self.other(self.office(body))
+            self.assertEqual([(m.span.text, m.status) for m in other.mentions],
+                             [('Anoscopy', 'uncertain'), ('Hemorrhoidectomy', 'negated')], body)
+
+    def test_a_long_subject_is_named_from_a_whole_word_within_reach(self):
+        for body, name in (
+                ('Because of persistent intermittent painless bright red blood per rectum over the past several months '
+                 'despite fiber and sitz baths an anoscopy was performed.',
+                 'painless bright red blood per rectum over the past several months despite fiber and sitz baths an '
+                 'anoscopy'),  # the last OTHER_NAME_REACH characters before the participle, from a whole word
+                ('Intermittent symptomatic uncomplicated nonthrombosed internal hemorrhoidal disease necessitating '
+                 'outpatient rubber band ligation was performed.',
+                 'symptomatic uncomplicated nonthrombosed internal hemorrhoidal disease necessitating outpatient rubber '
+                 'band ligation')):
+            text = self.office(body)
+            other = self.other(text)
+            self.assertIsNotNone(other, body)
+            self.assertEqual([(m.span.text, m.status) for m in other.mentions], [(name, 'performed')], body)
+            self.assertTrue(text[other.mentions[0].span.start - 1].isspace(), body)  # never the tail of a cut word
+
+    def test_no_other_procedure_is_documented(self):
+        for body in ('Anoscopy was not performed.', 'Anoscopy has not been performed.',
+                     'No hemorrhoid banding was performed today.', 'She never underwent hemorrhoid banding.',
+                     'Procedures: None performed today.', 'Procedure: None.', 'Labs were done today.',
+                     'A rectal examination was performed.', 'Counseling was provided.',
+                     'Procedure: The patient was placed in the left lateral position.',
+                     'Procedure: Discussed risks and benefits.',
+                     'Procedure: The risks and benefits of the procedure were explained.',
+                     'Biopsy results were reviewed and treatment completed.',
+                     'If banding were done today, she would need a follow-up visit.',
+                     'Banding would be done if bleeding persists.', 'Banding to be done next week.',
+                     'Banding can be done in the office.', 'Discussed hemorrhoid banding.',
+                     'Procedure: Discussed hemorrhoid banding.', 'Procedure: Planned anoscopy.',
+                     'Plan: Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.',
+                     'Consultation for hemorrhoid banding was completed.', 'Evaluation for anoscopy was performed.'):
+            self.assertIsNone(self.other(self.office(body)), body)
+
+    def test_a_detected_familys_own_procedures_are_never_other(self):
+        for text, slug in (
+                (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Cold snare '
+                 'polypectomy was performed. Biopsies were done. Tattoo injection was performed.\n', 'gi.colonoscopy'),
+                (HEADER + 'Procedure: EUS\nFindings: The echoendoscope was advanced to the duodenum. Fine-needle biopsy '
+                 'was performed.\n', 'gi.eus'),
+                (HEADER + 'Procedure: EGD\nFindings: Esophageal dilation was performed with a balloon. The duodenum was '
+                 'normal.\n', 'gi.egd'),
+                (HEADER + 'Procedure: Colonoscopy\nTechnique: The procedure was performed under MAC. The risks and '
+                 'benefits of the procedure were explained. The colonoscope was advanced to the cecum.\n',
+                 'gi.colonoscopy'),
+                (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Through the '
+                 'colonoscope, rubber band ligation of internal hemorrhoids was performed.\n', 'gi.colonoscopy')):
+            result = routed(text)
+            self.assertEqual(result.finding(slug).status, 'performed', text)
+            self.assertIsNone(result.finding('gi.other'), text)
+
+    def test_the_verification_documents_name_no_other_procedure(self):
+        for path in sorted(DOCS.glob('*.txt')):
+            self.assertIsNone(routed(path.read_text(encoding='utf-8')).finding('gi.other'), path.name)
+
+    def test_an_em_without_its_own_basis_is_held_beside_an_other_procedure_as_beside_any(self):
+        result = routed(HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                                 'Anoscopy was performed today.\n')
+        self.assertEqual(result.finding('gi.other').status, 'performed')
+        em = result.finding('gi.office_em')
+        self.assertEqual(em.status, 'uncertain')
+        self.assertIn(detect.EM_WITHOUT_BASIS, em.mentions[0].cues)
+        control = routed(HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n')
+        self.assertEqual((control.finding('gi.office_em').status, control.finding('gi.other')), ('performed', None))
+
+    def test_the_contract_shape(self):
+        self.assertEqual(DETECTED_FAMILIES, ('gi.office_em', 'gi.egd', 'gi.colonoscopy', 'gi.flex_sig', 'gi.eus',
+                                             'gi.ercp'))  # gi.other stays outside: its codes keep their own passage
+        result = route(self.CLAIM, service_date(self.CLAIM))
+        self.assertEqual(from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(result)))), result)
+        text = self.office('Anoscopy was performed today.\nGrade 2 internal hemorrhoids, banding candidate.')
+        self.assertEqual(self.other(text).status, 'performed')
+        self.assertEqual(read(text, 'Grade 2 internal hemorrhoids, banding candidate.')[0], 'uncertain')
+
+    def test_many_other_procedures_route_in_bounded_time(self):
+        import time
+        for body in ('Anoscopy was performed, ' * 2000, 'word ' * 30000 + 'performed.',
+                     'Procedures:\n' + f'{BOX_OFF} Anoscopy\n' * 3000, f'Procedure: {BOX_OFF} anoscopy ' * 3000):
+            started = time.monotonic()
+            route(HEADER + body)
+            self.assertLess(time.monotonic() - started, 20, body[:40])
 
 
 class ScaleTests(unittest.TestCase):
