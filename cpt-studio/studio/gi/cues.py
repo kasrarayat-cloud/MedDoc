@@ -324,6 +324,57 @@ PLANNED_CLAUSE = (
     ('in N weeks', rx(r'\b(?:in|within|after)\s+' + _NUMBER + r'(?:\s*(?:-|to)\s*\d+)?\s+(?:days?|weeks?|months?|years?)\b')),
 )
 
+# --- another time: a time the listed cues do not read --------------------------------------------------------------
+# Read only to HOLD (detect._another_time): an unlisted time attached to a service keeps it from reading performed, and
+# never makes it historical or planned (round 3b's hold-only rule: routing:8, routing:10). A weekday, a month or a
+# month/day is compared with the date of service (detect._today_compatible). The class is open; this is its common
+# vocabulary, and a miss leaves the reading where it was.
+_UNIT_ABBR = r'(?:d|days?|wks?|weeks?|mos?|months?|yrs?|years?)'
+_FEW = (r'(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|a\s+few|few|several|'
+        r'(?:a\s+)?couple\s+of)')
+_WEEKDAY = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)'
+_MONTH_NAME = (r'(?:january|february|march|april|june|july|august|september|october|november|december'
+               r'|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)')
+_MONTH_LEAD = r'(?:in|on|during|by|until|early|mid|late|end\s+of|beginning\s+of|this|last|next|past)'
+OTHER_TIME = (
+    # "next Tuesday", "on Tuesday" (a weekday other than the date of service's)
+    ('weekday', rx(r'\b(?:(?P<rel>next|last|this|coming|past|previous)\s+)?' + _WEEKDAY + r's?\b')),
+    # "in November", "on November 3", "in early November", "November 3", "in May": a month with no year
+    ('month', rx(r'(?:\b' + _MONTH_LEAD + r'[\s-]+(?:(?:early|mid|late)[\s-]+)?(?P<month>' + _MONTH_NAME + r')\.?'
+                 r'(?:\s+(?P<mday>\d{1,2})(?:st|nd|rd|th)?)?'
+                 r'|\b(?:in|on|during|by|until|early|mid|late)\s+(?P<may>may)'
+                 r'|\b(?P<month2>' + _MONTH_NAME + r'|may)\.?\s+(?P<mday2>\d{1,2})(?:st|nd|rd|th)?)\b(?![\s,]*\d{4})')),
+    # "on 10/14": a month and a day with no year
+    ('month/day', rx(r'\b(?:on|dated|by|until)\s+(?P<m>\d{1,2})/(?P<d>\d{1,2})\b(?!/\d)')),
+    ('yesterday', rx(r'\byesterday\b|\bthe\s+(?:day|night|evening)\s+(?:before|prior)\b'
+                     r'|\bthe\s+previous\s+(?:day|night|evening|morning|afternoon)\b|\blast\s+(?:night|evening)\b')),
+    # "two weeks prior", "3 days earlier", "6 mos later"
+    ('interval', rx(r'\b' + _FEW + r'[\s-]*' + _UNIT_ABBR + r'\s+(?:prior|earlier|before|previously|later|afterwards?|'
+                    r'after|from\s+now|hence|out)\b')),
+    # "in 2 wks", "in the coming weeks", "within the next few months"
+    ('in N', rx(r'\b(?:in|within|over|during)\s+(?:the\s+)?(?:next|coming|following|upcoming)\s+(?:' + _FEW + r'\s+)?'
+                + _UNIT_ABBR + r'\b|\b(?:in|within|after)\s+' + _FEW + r'\s*(?:d|wks?|mos?|yrs?)\b')),
+    # "next Thursday", "at the next session": never "next to", "the next polyp", "Next, the scope ..."
+    ('next', rx(r'(?<!\bthe\s)(?<!\ba\s)\bnext\s+(?!(?:to|the|a|an|we|i|she|he|it|this|that|step|steps|one|ones|'
+                r'portion|part|segment)\b)[a-z]+')),
+    ('convenience', rx(r"\bat\s+(?:her|his|their|the\s+patient'?s|your|our|a|the)\s+(?:earliest\s+)?"
+                       r'convenien(?:ce|t\s+time)\b|\bwhen\s+convenient\b')),
+    ('holidays', rx(r'\b(?:after|over|before)\s+the\s+holidays?\b')),
+    # "at her last visit", "during her recent hospitalization", "on a prior exam", "at her last procedure"
+    ('another encounter', rx(r'\b(?:at|during|on)\s+(?:her|his|their|the|a|an)\s+(?:(?:last|previous|prior|recent|most\s+'
+                             r'recent|earlier|index)\s+)+(?:office\s+|clinic\s+|hospital\s+)?(?:visits?|appointments?|'
+                             r'encounters?|admissions?|hospitali[sz]ations?|stays?|procedures?|exams?|examinations?|'
+                             r'stud(?:y|ies)|endoscop(?:y|ies)|scopes?|consult(?:ation)?s?|evaluations?)\b'
+                             r'|\bduring\s+(?:her|his|their|a|an)\s+(?:hospitali[sz]ation|admission|(?:hospital\s+)?stay)\b')),
+    ('childhood', rx(r'\bas\s+an?\s+(?:child|teen(?:ager)?|adolescent|infant|baby|toddler|young\s+(?:adult|man|woman|girl|'
+                     r'boy))\b|\bin\s+(?:her|his|their|early)\s+(?:childhood|youth|teens)\b|\bin\s+childhood\b')),
+    # "recently underwent", "previously had", "was performed recently"; never a kept booking ("as previously
+    # scheduled") or a participle's own time ("performed on the previously tattooed polyp")
+    ('recently', rx(r'\b(?:recently|previously|formerly)\s+(?:underwent|undergone|had|received|completed|performed|done)\b'
+                    r'|\b(?:underwent|undergone|performed|done|completed)\s+(?:(?!today\b)\w+\s+){0,3}?'
+                    r'(?:recently|previously)\b(?!\s+\w+(?:ed|en)\b)')),
+)
+
 # --- incomplete, anchored to a named service or to "the procedure" ----------------
 
 INCOMPLETE_PRE = (

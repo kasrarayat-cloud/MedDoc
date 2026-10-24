@@ -270,5 +270,142 @@ class Validation1PlanDefaultTodayTests(unittest.TestCase):
                 self.assertTrue(ready(proposals['99213']), clarified(proposals['99213']))
 
 
+# --- routing:8, routing:10 ---------------------------------------------------------------------------------------
+
+EUS_INDICATION = 'Indication: A 2.4 cm pancreatic head mass on CT.\n'
+EUS_LINE = 'EUS with fine-needle biopsy of the pancreatic head mass'
+FUTURE_TAILS = ('next Tuesday.', 'in 2 wks.', 'in 6 mos.', 'in the coming weeks.', 'at her convenience.',
+                'in November.', 'on November 3.', 'in early November.', 'after the holidays.', 'in two wks.',
+                'on Tuesday.')  # the date of service, 2026-10-21, is a Wednesday
+
+
+class Routing8UnlistedFutureTimeTests(unittest.TestCase):
+    """routing:8 (critical, under). A future time after the service name that no listed cue reads left the procedure
+    heading speaking: 'EUS with fine-needle biopsy ... next Tuesday' was a ready 43242 with an FNB fact. An unlisted
+    time attached to the service holds it (never planned: the hold-only rule)."""
+
+    def test_the_claimed_eus_lines_are_held(self):
+        for tail in FUTURE_TAILS:
+            line = f'{EUS_LINE} {tail}'
+            text = HEADER + EUS_INDICATION + 'Procedure: ' + line + '\n'
+            with self.subTest(tail=tail):
+                self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+                self.assertNotEqual(fact_value(text, 'gi.eus', 'tissue_sampling'), 'FNB')
+                status, cues = read(text, line)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertFalse(any(c.startswith('uncertain: no performance evidence') for c in cues), cues)
+                proposals, _ = run_engine(text, [('43242', line)])
+                self.assertNotEqual(proposals['43242'].status, 'ready')
+                self.assertNotEqual(proposals['43242'].bucket, 'excluded')
+
+    def test_every_heading_and_the_colonoscopy(self):
+        for heading in ('Procedure:', 'Findings:', 'Technique:', 'Procedures performed:'):
+            for tail in ('next Tuesday.', 'in 2 wks.', 'in 6 mos.', 'in November.', 'in the coming weeks.'):
+                for line, slug, fact in ((f'EUS with fine-needle biopsy {tail}', 'gi.eus', 'tissue_sampling'),
+                                         (f'Colonoscopy with cold snare polypectomy of the sigmoid polyp {tail}',
+                                          'gi.colonoscopy', 'interventions')):
+                    text = HEADER + heading + ' ' + line + '\n'
+                    with self.subTest(heading=heading, line=line):
+                        self.assertNotIn(family(text, slug), POSITIVE)
+                        self.assertNotIn(family(text, slug), NOT_TODAY)
+                        self.assertNotIn(fact_value(text, slug, fact) or '', ('FNB', 'cold snare'))
+
+    def test_controls_stay_performed(self):
+        for line in (f'{EUS_LINE} next to the pancreatic duct.', 'EUS with fine-needle biopsy on 2026-10-21.',
+                     'Colonoscopy with polypectomy of the next polyp in the sigmoid colon.',
+                     'Colonoscopy with polypectomy on Wednesday.', 'Colonoscopy with polypectomy in October.',
+                     'Colonoscopy with polypectomy on 10/21.', 'Colonoscopy with polypectomy on October 21.',
+                     'Colonoscopy with polypectomy today, two weeks after a positive FIT.',
+                     'Colonoscopy for bleeding since November.', f'{EUS_LINE}.',
+                     'Colonoscopy was performed as previously scheduled.',
+                     'Colonoscopy with polypectomy performed on the previously tattooed polyp.',
+                     'Bowel preparation was started the day before the colonoscopy.',
+                     'Clear liquids were taken the day before the colonoscopy.',
+                     'Aspirin was held for two weeks before the colonoscopy.',
+                     'Colonoscopy with polypectomy for a positive FIT in November.',
+                     'Colonoscopy was performed today, two weeks after her last visit.'):
+            slug = 'gi.eus' if line.startswith('EUS') else 'gi.colonoscopy'
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(family(text, slug), 'performed')
+
+    def test_a_full_date_beyond_the_names_reach_still_holds_it(self):
+        """A dated passage reads by its date; the name, beyond DATE_REACH of it, is held by the month."""
+        line = f'{EUS_LINE} on November 3, 2026, once the inflammation settles.'
+        text = HEADER + EUS_INDICATION + 'Procedure: ' + line + '\n'
+        self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+        status, cues = read(text, 'EUS')
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertEqual(read(text, line)[0], 'planned')
+
+    def test_no_unlisted_time_holds_an_office_visit_statement(self):
+        for visit in ('Established patient office visit two weeks after her hospital discharge.',
+                      'Established patient office visit was completed two weeks after her hospital discharge.'):
+            with self.subTest(visit=visit):
+                status, cues = read(routing0_office(visit), visit)
+                self.assertEqual(status, 'performed', cues)
+
+    def test_a_listed_cue_still_decides(self):
+        for line, status in (('EUS with fine-needle biopsy next week.', 'planned'),
+                             ('EUS with fine-needle biopsy in 2 weeks.', 'planned'),
+                             ('EUS with fine-needle biopsy tomorrow.', 'planned')):
+            with self.subTest(line=line):
+                self.assertEqual(read(HEADER + 'Procedure: ' + line + '\n', 'EUS')[0], status)
+
+
+ASSESSMENT_HISTORY = (
+    'She recently underwent EGD; the endoscope was advanced to the second part of the duodenum and the mucosa was normal.',
+    'An EGD was performed two weeks prior; the endoscope was advanced to the second part of the duodenum and the mucosa '
+    'was normal.',
+    'An EGD was performed at her last visit; the endoscope was advanced to the second part of the duodenum and the mucosa '
+    'was normal.',
+    'An EGD was performed during her recent hospitalization; the endoscope was advanced to the second part of the duodenum '
+    'and the mucosa was normal.')
+REFLUX_VISIT = 'Established patient office visit for reflux.'
+
+
+def reflux_office(line, lead='Assessment: '):
+    return (OFFICE_HEAD + REFLUX_VISIT + '\n' + lead + line + '\nMedical decision making: moderate.\n'
+            'Total time: 32 minutes.\n')
+
+
+class Routing10UnlistedHistoryTests(unittest.TestCase):
+    """routing:10 (critical, under). Undated history in words no listed cue reads ('recently underwent', 'two weeks
+    prior', 'at her last visit', 'during her recent hospitalization') read performed in an office note: 43235 ready
+    with the history sentence's extent and a false missed-service prompt. It is held, never excluded (no new
+    exclusion is allowed): the code is not ready, no extent is read, and the visit stays held as possibly beside a
+    same-day EGD."""
+
+    def test_the_wordings_are_held_with_no_extent(self):
+        for lead in ('Assessment: ', '', 'S: ', 'Impression: '):
+            for line in ASSESSMENT_HISTORY:
+                text = reflux_office(line, lead)
+                act = line.split(';')[0]
+                with self.subTest(lead=lead, line=act):
+                    self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+                    self.assertIsNone(fact_value(text, 'gi.egd', 'extent'))
+                    status, cues = read(text, act)
+                    self.assertEqual(status, 'uncertain', cues)
+                    proposals, result = run_engine(text, [('99214', REFLUX_VISIT), ('43235', act)])
+                    self.assertNotEqual(proposals['43235'].status, 'ready')
+                    self.assertNotEqual(proposals['43235'].bucket, 'excluded')
+                    self.assertIn('separate_em', clarified(proposals['99214']))
+                    _, alone = run_engine(text, [('99214', REFLUX_VISIT)])
+                    self.assertNotIn('Upper GI endoscopy (EGD, esophagoscopy, enteroscopy) is documented as performed',
+                                     unproposed(alone).detail)
+
+    def test_controls(self):
+        for line in ('An EGD was performed last month; the mucosa was normal.',
+                     'An EGD was performed two weeks ago; the mucosa was normal.'):
+            text = reflux_office(line)
+            with self.subTest(line=line):
+                self.assertEqual(family(text, 'gi.egd'), 'historical')
+                proposals, _ = run_engine(text, [('99214', REFLUX_VISIT)])
+                self.assertTrue(ready(proposals['99214']), clarified(proposals['99214']))
+        text = reflux_office('She underwent EGD today; the endoscope was advanced to the second part of the duodenum.')
+        self.assertEqual(read(text, 'She underwent EGD today')[0], 'performed')
+        self.assertEqual(read(reflux_office('Recent EGD was normal.'), 'EGD')[0], 'historical')
+
+
 if __name__ == '__main__':
     unittest.main()

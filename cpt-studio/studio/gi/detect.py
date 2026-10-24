@@ -1042,8 +1042,89 @@ def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], wind
     if owner == 'service' and not today:
         return 'historical', f'historical: {cue.text}'
     if owner == 'service':
-        return 'uncertain', f"uncertain: '{cue.text}' and today in one clause"
-    return 'uncertain', f"uncertain: '{cue.text}' may date another thing in its clause"
+        return 'uncertain', f"{ANOTHER_TIME_PREFIX}: '{cue.text}' beside today in one clause"
+    return 'uncertain', f"{ANOTHER_TIME_PREFIX}: '{cue.text}' may date it or another thing in its clause"
+
+
+# --- another time (routing:8, routing:10): a time no listed cue reads holds a reading that would be performed --------
+# The prefix of every time hold (here and in _owned_time_cue): no fact is read from a clause about a service so held
+# (_about_another_procedure).
+ANOTHER_TIME_PREFIX = 'uncertain: another time'
+# A relational time written straight before the service names it as the point of reference ("the day before the
+# colonoscopy", "two weeks after the EGD"): it is another event's time, not the service's.
+_RELATIONAL_END = re.compile(r'(?:before|after|prior|later|earlier|afterwards?)$', re.A | re.I)
+_TO_THE_SERVICE = re.compile(r'[ \t]+(?:to[ \t]+)?(?:(?:the|her|his|their|a|an|this|that)[ \t]+)?', re.A | re.I)
+_WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+_MONTH_INDEX = {name: n for n, names in enumerate((('jan', 'january'), ('feb', 'february'), ('mar', 'march'),
+                                                   ('apr', 'april'), ('may',), ('jun', 'june'), ('jul', 'july'),
+                                                   ('aug', 'august'), ('sep', 'sept', 'september'), ('oct', 'october'),
+                                                   ('nov', 'november'), ('dec', 'december')), 1) for name in names}
+
+
+def _other_times(an: Analysis) -> tuple[list, list[int]]:
+    """Every cues.OTHER_TIME match in the text, matched once over the whole text: (start, end, name, match), sorted."""
+    key = ('other-times',)
+    if key not in an.memo:
+        found = sorted(((m.start(), m.end(), name, m) for name, pattern in cues.OTHER_TIME
+                        for m in pattern.finditer(an.text)), key=lambda item: (item[0], item[1]))
+        an.memo[key] = (found, [item[0] for item in found])
+    return an.memo[key]
+
+
+def _today_compatible(an: Analysis, name: str, m: re.Match) -> bool:
+    """Whether a weekday, a month or a month/day may be the date of service itself (never when that is unknown)."""
+    day = an.service_date
+    if day is None or name not in ('weekday', 'month', 'month/day'):
+        return False
+    said = m.group(0).lower()
+    if name == 'weekday':
+        return (m.group('rel') or 'this').lower() == 'this' and _WEEKDAYS[day.weekday()] in said
+    if name == 'month/day':
+        return (int(m.group('m')), int(m.group('d'))) == (day.month, day.day)
+    if said.startswith(('last', 'next', 'past')):
+        return False
+    month = _MONTH_INDEX[(m.group('month') or m.group('may') or m.group('month2')).lower()]
+    mday = m.group('mday') or m.group('mday2')
+    return month == day.month and (mday is None or int(mday) == day.day)
+
+
+def _another_time(an: Analysis, start: int, end: int) -> Optional[str]:
+    """A cue holding the passage [start, end), which would read performed, when a time no listed cue reads
+    (cues.OTHER_TIME) attaches to it in one of its clauses: not a symptom's, a test's or a relational time's (see
+    _time_owner, _RELATIONAL_END), not in a clause whose today marker attaches to it, and not a weekday, month or
+    month/day that may be the date of service. (A listed history or planned cue or a date that attaches already
+    outranks a hold.) It never excludes: the hold-only rule."""
+    key = ('another-time', start, end)
+    if key not in an.memo:
+        an.memo[key] = None
+        found, starts = _other_times(an)
+        text = an.text
+        for clause in an.lay.clauses_for(start, end):
+            cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)
+            times = [item for item in found[bisect.bisect_left(starts, cs):bisect.bisect_left(starts, ce)] if item[1] <= ce]
+            if not times:
+                continue
+            spans, index, members = _groups(an, cs, ce, start, end)
+            if any(_attached(spans, index, m.start(), m.end()) for m in cues.TODAY.finditer(text, cs, ce)):
+                continue
+            history = [(c.start, c.end) for c in an.cues_in(cs, ce) if c.status == 'historical']
+            names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end)
+                                                                           for iv in an.interventions_in(cs, ce)}
+            named = [m for m in members if m in names] or [(max(start, cs), min(max(end, start + 1), ce))]
+            for ts_, te_, name, m in times:
+                if not _attached(spans, index, ts_, te_):
+                    continue
+                if _today_compatible(an, name, m):
+                    continue
+                if _RELATIONAL_END.search(m.group(0)):
+                    lead = _TO_THE_SERVICE.match(text, te_, ce)
+                    if lead and any(s == lead.end() for s, _ in named):
+                        continue  # "the day before the colonoscopy": the service is the reference point
+                if _time_owner(an, ts_, te_, named, (cs, ce), history) == 'other':
+                    continue
+                an.memo[key] = f"{ANOTHER_TIME_PREFIX}: '{m.group(0)}' may place it on another date"
+                return an.memo[key]
+    return an.memo[key]
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
@@ -1199,12 +1280,16 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain' if today else 'historical', deciding + (_section_label(section),), 'cue')
     if status == 'performed' and section.kind == 'plan':
-        if _done_today(an, start, end):
+        if _done_today(an, start, end) and not _another_time(an, start, end):
             return Reading(status, deciding, 'cue', past, doubt)
         return Reading('uncertain', deciding + (_section_label(section),), 'cue')
     if status == 'performed' and section.kind == 'indication' and not em \
             and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
         return Reading('uncertain', deciding + (_section_label(section),), 'cue')
+    if status == 'performed' and not em:
+        held = _another_time(an, start, end)  # a time no listed cue reads holds it (routing:10)
+        if held:
+            return Reading('uncertain', (held,) + deciding, 'cue')
     return Reading(status, deciding, 'cue', past, doubt)
 
 
@@ -1216,6 +1301,9 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     section = an.lay.section_at(start)
     label = _section_label(section)
     if section.kind in POSITIVE_SECTIONS:
+        held = _another_time(an, start, end)  # a time no listed cue reads keeps the section silent (routing:8)
+        if held:
+            return Reading('uncertain', (held, label), 'cue')
         return Reading('performed', (label,), 'section')
     if section.kind == 'plan':
         # a plan's default at most holds a clause that says today (validation:1): it may document today's service
@@ -1721,17 +1809,44 @@ def _about_another_procedure(an: Analysis, start: int, end: int) -> bool:
             cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)  # bounded, like every clause reading
             if cues.TODAY.search(an.text, cs, ce):
                 continue
-            for svc in an.services_in(cs, ce):
-                reading = _generic_reading(an, svc.start, svc.end)
-                if not (_not_today(reading) and not reading.past_negation):
-                    continue
-                if _COMPARED_WITH.search(an.text, max(cs, svc.start - 60), svc.start):
-                    continue
+            if _names_another_procedure(an, cs, ce) or (not an.services_in(cs, ce)
+                                                        and _continues_another_procedure(an, clause)):
                 an.memo[key] = True
                 break
-            if an.memo[key]:
-                break
     return an.memo[key]
+
+
+def _held_for_another_time(reading: Reading) -> bool:
+    """A reading held because a time places it on another date (ANOTHER_TIME_PREFIX)."""
+    return reading.status == 'uncertain' and any(c.startswith(ANOTHER_TIME_PREFIX) for c in reading.cues)
+
+
+def _names_another_procedure(an: Analysis, cs: int, ce: int) -> bool:
+    """Whether the clause window [cs, ce) names a service read as not done at this encounter - planned, historical,
+    cancelled, denied today, in doubt, or held for another time - other than one named only to compare with."""
+    for svc in an.services_in(cs, ce):
+        reading = _generic_reading(an, svc.start, svc.end)
+        if not ((_not_today(reading) or _held_for_another_time(reading)) and not reading.past_negation):
+            continue
+        if _COMPARED_WITH.search(an.text, max(cs, svc.start - 60), svc.start):
+            continue
+        return True
+    return False
+
+
+def _continues_another_procedure(an: Analysis, clause: tuple[int, int]) -> bool:
+    """Whether a clause that names no service goes on about the procedure of an earlier clause of its sentence: the
+    nearest earlier clause (of at most DENIAL_CLAUSES) that names a service names one not done at this encounter, and
+    none between says today ("She recently underwent EGD; the endoscope was advanced to the second part of the
+    duodenum"). A later clause never speaks for an earlier one ("The cecum was reached; her prior colonoscopy ...")."""
+    s, _ = an.lay.sentence_for(*clause)
+    for pc in reversed(_clauses_in(an, s, clause[0])[-DENIAL_CLAUSES:]):
+        ps, pe = an.lay.window(pc, max(pc[0], pc[1] - 1), pc[1], CLAUSE_REACH)
+        if cues.TODAY.search(an.text, ps, pe):
+            return False
+        if an.services_in(ps, pe):
+            return _names_another_procedure(an, ps, pe)
+    return False
 
 
 def _polyp_count(an: Analysis, attributed: list[Optional[str]]) -> Optional[Fact]:
