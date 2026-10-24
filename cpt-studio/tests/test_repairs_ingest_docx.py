@@ -399,12 +399,12 @@ class DocxSymbolFontTests(unittest.TestCase):
             'w:sym': [('SYM', 'Wingdings', 'F0FE'), (' cold snare  ', None), ('SYM', 'Wingdings', 'F0A8'),
                       (' hot snare', None)],
         }
-        expected = {'Wingdings 2 w:t': f'{TECHNIQUE}☑ cold snare  ☐ hot snare'}
+        # Round 2 (ingest:0): every recognised box is written as ☐ (unchecked) or ☒ (checked).
         for label, segments in cases.items():
             with self.subTest(label):
                 result = extract(symbol_document([(TECHNIQUE, None)] + segments))
                 self.assertEqual((result.status, result.messages), ('ok', ()))
-                self.assertEqual(result.text, expected.get(label, f'{TECHNIQUE}☑ cold snare  ◻ hot snare'))
+                self.assertEqual(result.text, f'{TECHNIQUE}☒ cold snare  ☐ hot snare')
 
     def test_unmapped_symbol_glyphs_are_counted_not_shown_as_letters(self):
         result = extract(symbol_document([('Mood: ', None), ('J', 'Wingdings'), (' and ', None),
@@ -424,7 +424,7 @@ class DocxSymbolFontTests(unittest.TestCase):
         paragraph.add_run('þ', style='Boxes')
         paragraph.add_run(' cold snare')
         result = extract(saved(document))
-        self.assertEqual((result.text, result.messages), (f'{TECHNIQUE}☑ cold snare', ()))
+        self.assertEqual((result.text, result.messages), (f'{TECHNIQUE}☒ cold snare', ()))
 
     def test_ordinary_fonts_and_symbols_are_unchanged(self):
         result = extract(symbol_document([('Prep ', None), ('þ ¨ ☑ ☐ ≥ µ', 'Calibri'), (' fine.', 'Arial')]))

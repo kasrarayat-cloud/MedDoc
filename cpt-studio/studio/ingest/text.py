@@ -16,7 +16,7 @@ from studio.types import ExtractionResult, PageSpan
 if TYPE_CHECKING:
     from .extract import Limits
 
-INGEST_VERSION = 'cpt-studio-ingest@2'
+INGEST_VERSION = 'cpt-studio-ingest@3'
 PAGE_SEPARATOR = '\n\n'
 # The method a failure is reported under before any page was read.
 METHOD_FOR_KIND = {'pdf': 'pdf-text', 'docx': 'docx', 'txt': 'txt'}

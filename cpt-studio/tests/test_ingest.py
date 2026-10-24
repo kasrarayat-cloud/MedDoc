@@ -326,10 +326,10 @@ class DocxTests(unittest.TestCase):
                '</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r><w:r>'
                '<w:t xml:space="preserve"> Biopsy taken</w:t></w:r></w:p>')
         result = self.body(xml)
-        # The Wingdings check box (F0FE) is read as the character it shows (ingest:11).
-        self.assertEqual(result.text, 'Consent signed ☑\n Biopsy taken')
-        self.assertEqual(result.messages, ('Not extracted from the document body: 1 image, 1 legacy form-field '
-                                           'value.',))
+        # The Wingdings check box (F0FE) is read as the checked box it shows (ingest:11), and the legacy
+        # FORMCHECKBOX, checked by default, is written as its state in place of the field (round 2, ingest:1).
+        self.assertEqual(result.text, 'Consent signed ☒\n☒ Biopsy taken')
+        self.assertEqual(result.messages, ('Not extracted from the document body: 1 image.',))
 
     def test_empty_document_fails_and_keeps_its_notes(self):
         self.assertEqual(self.extract(docgen.make_docx([])).messages, ('The Word document is empty.',))
@@ -400,7 +400,7 @@ class PdfTests(unittest.TestCase):
         self.assertEqual((result.status, result.method, result.messages, result.ocr_pages),
                          ('ok', 'pdf-text', (), ()))
         self.assertEqual([text.strip() for text in page_texts(result)], self.PAGES)
-        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@2', 'pypdf': '6.21.2'})
+        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@3', 'pypdf': '6.21.2'})
 
     def test_each_page_marker_lands_in_its_own_span(self):
         pages = [f'Marker page {n}: synthetic findings text for this page only.' for n in range(1, 7)]

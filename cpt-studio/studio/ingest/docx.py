@@ -25,14 +25,18 @@ and text boxes. Rules:
   'partial'.
 - Text in a symbol font (Symbol, Wingdings, Zapf Dingbats, ...), typed or
   inserted as w:sym, is mapped to the Unicode characters its glyphs show
-  where that is known (Symbol and Zapf Dingbats by their Adobe encodings;
-  check-box and check-mark glyphs of Wingdings and Wingdings 2); other
-  symbol-font glyphs, and private-use characters, are counted, never shown as
-  the letters that encode them.
+  where that is known (studio.ingest.symbols: Symbol and Zapf Dingbats by
+  their Adobe encodings; the check boxes, check marks and bullets of
+  Wingdings and Wingdings 2). Every check box is written as ☐ (unchecked) or
+  ☒ (checked), whatever box shape the font draws. Other symbol-font glyphs,
+  and private-use characters, are counted, never shown as the letters that
+  encode them.
+- A legacy check-box field (FORMCHECKBOX, w:ffData/w:checkBox) is written as
+  ☐ or ☒ in place of the field: w:checked when present, else w:default.
 - Text boxes are read after the paragraph that anchors them.
 - Header, footer, footnote, endnote and comment text is not extracted; when
   present its size is reported. Content that has no text here (images,
-  embedded objects, unmapped symbol glyphs, legacy form-field values, ...) is
+  embedded objects, unmapped symbol glyphs, legacy drop-down values, ...) is
   counted in a message instead of disappearing silently.
 """
 from __future__ import annotations
@@ -40,7 +44,6 @@ from __future__ import annotations
 import collections
 import dataclasses
 import io
-import re
 import zipfile
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -54,6 +57,7 @@ from docx.package import Package
 
 from studio.types import ExtractionResult
 
+from .symbols import SYMBOL_FONTS, CHECKED_BOX, UNCHECKED_BOX, symbol_table  # noqa: F401 (SYMBOL_FONTS re-exported)
 from .text import INGEST_VERSION, canonicalize, failed, non_space_count, single_page
 
 if TYPE_CHECKING:
@@ -81,8 +85,8 @@ TAB, PTAB, BR, CR, NO_BREAK_HYPHEN = (f'{_W}{name}' for name in ('tab', 'ptab', 
 INS, DEL, MOVE_TO, MOVE_FROM = (f'{_W}{name}' for name in ('ins', 'del', 'moveTo', 'moveFrom'))
 SDT, SDT_PR, SDT_CONTENT, SHOWING_PLACEHOLDER, CUSTOM_XML = (
     f'{_W}{name}' for name in ('sdt', 'sdtPr', 'sdtContent', 'showingPlcHdr', 'customXml'))
-TXBX_CONTENT, ALT_CHUNK, TR_PR, FF_DATA, CHECK_BOX, DROP_DOWN = (
-    f'{_W}{name}' for name in ('txbxContent', 'altChunk', 'trPr', 'ffData', 'checkBox', 'ddList'))
+TXBX_CONTENT, ALT_CHUNK, TR_PR, FF_DATA, CHECK_BOX, CHECKED_STATE, DROP_DOWN = (
+    f'{_W}{name}' for name in ('txbxContent', 'altChunk', 'trPr', 'ffData', 'checkBox', 'checked', 'ddList'))
 STYLE, STYLE_ID, STYLE_TYPE, DEFAULT, BASED_ON, VAL = (
     f'{_W}{name}' for name in ('style', 'styleId', 'type', 'default', 'basedOn', 'val'))
 DOC_DEFAULTS_RPR = f'{_W}docDefaults/{_W}rPrDefault/{_W}rPr'
@@ -224,6 +228,14 @@ def is_on(element) -> bool | None:
     return (element.get(VAL) or 'true').strip().lower() not in _OFF
 
 
+def legacy_box_checked(box) -> bool:
+    """A legacy FORMCHECKBOX's state (w:ffData/w:checkBox): w:checked when present, else w:default, else off."""
+    checked = is_on(box.find(CHECKED_STATE))
+    if checked is None:
+        checked = is_on(box.find(DEFAULT))
+    return bool(checked)
+
+
 # --- styles -------------------------------------------------------------------------
 
 class _Styles:
@@ -305,38 +317,6 @@ def font_choice(fonts, attribute: str) -> str | None:
     if fonts.get(f'{_W}{attribute}Theme') is not None:
         return ''
     return fonts.get(f'{_W}{attribute}')
-
-
-# --- symbol fonts -------------------------------------------------------------------
-
-def _adobe_table(module: str, name: str) -> dict[int, str]:
-    """pypdf's Adobe Symbol / Zapf Dingbats encodings, keeping only real characters."""
-    try:
-        table = getattr(__import__(f'pypdf._codecs.{module}', fromlist=[name]), name)
-    except (ImportError, AttributeError):  # count the glyphs instead of mapping them
-        return {}
-    return {code: char for code, char in enumerate(table)
-            if char.strip() and char.isprintable() and not 0xE000 <= ord(char) <= 0xF8FF}
-
-
-_WINGDINGS = {0x6E: '■', 0x6F: '□', 0x71: '❑', 0x72: '❒', 0x78: '⌧', 0xA8: '◻', 0xFB: '✗', 0xFC: '✓', 0xFD: '☒',
-              0xFE: '☑'}
-_WINGDINGS_2 = {0x52: '☑', 0x53: '☒', 0x54: '☒', 0xA3: '☐'}
-SYMBOL_FONTS = {
-    'symbol': _adobe_table('symbol', '_symbol_encoding'),
-    'zapfdingbats': _adobe_table('zapfding', '_zapfding_encoding'),
-    'itczapfdingbats': _adobe_table('zapfding', '_zapfding_encoding'),
-    'wingdings': _WINGDINGS,
-    'wingdings2': _WINGDINGS_2,
-    'wingdings3': {}, 'webdings': {}, 'marlett': {}, 'mtextra': {}, 'msoutlook': {}, 'bookshelfsymbol7': {},
-    'msreferencespecialty': {}, 'mtsymbol': {},
-}
-_FONT_NAME = re.compile(r'[\s_-]+')
-
-
-def symbol_table(font: str | None) -> dict[int, str] | None:
-    """The glyph table of a symbol font (possibly empty: count every glyph), or None for a text font."""
-    return SYMBOL_FONTS.get(_FONT_NAME.sub('', font).lower()) if font else None
 
 
 # --- walking the body ---------------------------------------------------------------
@@ -459,7 +439,10 @@ class _Walker:
                 else:
                     self._inline(child, parts, boxes, self._run_context(child, context))
             elif tag == FF_DATA:
-                if child.find(CHECK_BOX) is not None or child.find(DROP_DOWN) is not None:
+                box = child.find(CHECK_BOX)
+                if box is not None:  # a legacy FORMCHECKBOX: Word draws its state in place of the field
+                    parts.append(CHECKED_BOX if legacy_box_checked(box) else UNCHECKED_BOX)
+                elif child.find(DROP_DOWN) is not None:
                     self.skipped['form_field'] += 1
             elif tag == TXBX_CONTENT:
                 boxes.extend(self.blocks(child))
