@@ -32,6 +32,48 @@ def as_box(glyph: str) -> str:
     return _BOX_SHAPES.get(glyph, glyph)
 
 
+# --- The check-box vocabulary, defined once (ARCHITECTURE 5.1 and 5.3) -------------------------------------------
+# Every reader of typed or extracted boxes builds its patterns from these strings: routing's box and unread-mark
+# readers (studio.gi.detect _BOX, _BOX_UNREAD, _BOX_TEXT), the section reader's option-row guard
+# (studio.gi.sections _OPTION_ROW) and the PDF reader's printed boxes (studio.ingest.pdf PRINTED_BOX). They are
+# regular-expression sources, compiled by each reader.
+BOX_UNREAD_MARK = '[?]'  # the unread mark: extraction writes it where a box's state or place cannot be read
+BOX_PAD = r'[ \t\u00a0\u2000-\u200a\u202f\u205f\u3000]'  # a box's padding: any whitespace but a line break
+# The bare glyphs read as an unchecked and as a checked box: every box shape above and, checked, the check marks and
+# the filled square typed as boxes (as_box keeps U+25A0 as it is: a symbol font draws it as a bullet as often as a
+# box).
+BOX_OFF_GLYPHS = ''.join(glyph for glyph, box in _BOX_SHAPES.items() if box == UNCHECKED_BOX)
+BOX_ON_GLYPHS = ''.join(glyph for glyph, box in _BOX_SHAPES.items() if box == CHECKED_BOX) + '\u2713\u2714\u25a0'
+# Unchecked: a box glyph, "[ ]" with any inner whitespace (or none), "[_]", "( )" with some inner whitespace.
+BOX_OFF_PATTERN = '[' + BOX_OFF_GLYPHS + r']|\[' + BOX_PAD + r'*\]|\[_\]|\(' + BOX_PAD + r'+\)'
+# Checked: a box glyph, "[x]" and "(x)" with optional inner whitespace, "[\u2713]", "[*]", "[v]".
+BOX_ON_PATTERN = ('[' + BOX_ON_GLYPHS + r']|\[' + BOX_PAD + r'*[xX\u2713\u2714]' + BOX_PAD + r'*\]|\(' + BOX_PAD
+                  + r'*[xX]' + BOX_PAD + r'*\)|\[[*v]\]')
+# A mark in brackets that looks like a box but is none of the contract's: the item it marks is held, never passed
+# over. Square brackets or parentheses round one radio, check, cross or query mark ("(\u2022)", "(\u25cf)",
+# "[\u221a]", "(\u2713)", "[?]", "(*)", "(o)", "[/]"); square brackets round one dash, plus, underscore or answer
+# letter ("[-]", "[+]", "[N]", "[Y]", "[V]"; "[_]" and "[v]" alone are boxes); braces or angle brackets round only
+# spaces or one such mark ("{ }", "{x}", "< >", "<x>"). An answer in parentheses ("(N)", "(-)") is ordinary text
+# ("H. pylori (-)") unless its line marks options in boxes (BOX_PAREN_ANSWER_PATTERN, read by routing).
+_BOX_UNREAD_CHARS = r'[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717\u2718\u2715\u2716?*o/\\]'
+_BOX_ANSWER_CHARS = r'[-+_NYnyVv]'
+_BOX_ANY_CHAR = r'(?:' + _BOX_UNREAD_CHARS + '|' + _BOX_ANSWER_CHARS + r'|[xX])'
+BOX_UNREAD_PATTERN = (r'[\[(]' + BOX_PAD + '*' + _BOX_UNREAD_CHARS + BOX_PAD + r'*[\])]|\[' + BOX_PAD + '*'
+                      + _BOX_ANSWER_CHARS + BOX_PAD + r'*\]|\{' + BOX_PAD + '*' + _BOX_ANY_CHAR + '?' + BOX_PAD
+                      + r'*\}|<' + BOX_PAD + '*' + _BOX_ANY_CHAR + '?' + BOX_PAD + '*>')
+# Radio glyphs written bare ("\u25cb Biopsy \u25cf Cold snare polypectomy", "\u25cb Yes \u25cf No"): a bullet as often
+# as a box, so read as unread marks only where their line holds another one (routing), or before an option word (the
+# option-row guard).
+BOX_RADIO_PATTERN = r'[\u25cb\u25cf\u25c9\u25ef\u25ce\u29bf]'
+# An answer in parentheses ("(N)", "(Y)", "(-)", "(+)"), read as an unread mark only on a line that marks options in
+# boxes or unread marks ("( ) Biopsy (Y) Cold snare polypectomy"; never "Biopsy for H. pylori (-)").
+BOX_PAREN_ANSWER_PATTERN = r'\(' + BOX_PAD + '*[-+NYny]' + BOX_PAD + r'*\)'
+# A printed box in a PDF page's text that a check-box widget over it replaces with its own state (pdf._placed_boxes):
+# every unchecked spelling, and the contract's two checked ones (U+2612, "[x]"). A printed checked mark of another
+# spelling stays as printed, so a widget never newly writes an unchecked box over a mark a viewer may show checked.
+BOX_PRINTED_PATTERN = '(?P<off>' + BOX_OFF_PATTERN + ')|(?P<on>' + CHECKED_BOX + r'|\[[xX]\])'
+
+
 # The built-in encodings of the two Adobe symbol fonts: glyph names in code order from each run's first code
 # (Adobe's ZapfDingbats.afm and Symbol.afm). A PDF font's /Differences re-encodes codes by glyph name, so
 # a code re-encoded to one of these names shows the glyph that name has in the built-in encoding.

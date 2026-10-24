@@ -1661,18 +1661,21 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     return Reading('uncertain', (SILENT,), 'default')
 
 
-# Check boxes, as extraction writes them (U+2610 unchecked, U+2612 checked) and as pasted text carries them
-# (the shared contract): unchecked U+2610 U+25A1 U+25FB U+25FD U+274F U+2750 U+2751 U+2752, "[ ]" and "( )" with
-# any inner whitespace, "[_]"; checked U+2611 U+2612 U+2713 U+2714 U+25A0 U+2327, "[x]" and "(x)" with optional
-# inner whitespace, "[*]", "[v]". PDF form fields are also written as "<label>: not checked" (see _unchecked_state).
-_BOX_PAD = r'[ \t\u00a0\u2000-\u200a\u202f\u205f\u3000]'  # a box's padding: any whitespace but a line break
-_BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\[' + _BOX_PAD + r'*\]|\[_\]|\('
-                  + _BOX_PAD + r'+\))|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[' + _BOX_PAD
-                  + r'*[xX\u2713\u2714]' + _BOX_PAD + r'*\]|\(' + _BOX_PAD + r'*[xX]' + _BOX_PAD + r'*\)|\[[*v]\])')
-# A mark in brackets that looks like a box but is none of the contract's ("(•)", "(●)", "[√]", "(✓)", "[?]", "(*)",
-# "(o)", "[/]"): the item it marks is held, and it is never passed over to hand the item a neighbour's box.
-_BOX_UNREAD = re.compile(r'[\[(]' + _BOX_PAD + r'*[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717'
-                         r'\u2718\u2715\u2716?*o/\\]' + _BOX_PAD + r'*[\])]')
+# Check boxes, as extraction writes them (U+2610 unchecked, U+2612 checked) and as pasted text carries them: the one
+# box vocabulary of the shared contract, defined in studio.ingest.symbols and read the same way by extraction, the
+# section reader and routing (unchecked: every box shape symbols lists, "[ ]" and "( )" with any inner whitespace,
+# "[_]"; checked: every checked box shape, U+2713, U+2714, U+25A0, "[x]" and "(x)" with optional inner whitespace,
+# "[*]", "[v]"). PDF form fields are also written as "<label>: not checked" (see _unchecked_state).
+from studio.ingest import symbols as _BOX_SYMBOLS  # noqa: E402 (Django-free: the extraction child imports it too)
+_BOX_PAD = _BOX_SYMBOLS.BOX_PAD  # a box's padding: any whitespace but a line break
+_BOX = re.compile('(?P<off>' + _BOX_SYMBOLS.BOX_OFF_PATTERN + ')|(?P<on>' + _BOX_SYMBOLS.BOX_ON_PATTERN + ')')
+# A mark in brackets that looks like a box but is none of the contract's ("(•)", "[?]", "[N]", "[-]", "{ }",
+# "<x>"; the unread mark extraction writes is "[?]"): the item it marks is held, and it is never passed over to hand
+# the item a neighbour's box. Bare radio glyphs and answers in parentheses count only where their line marks options
+# (_box_tokens).
+_BOX_UNREAD = re.compile(_BOX_SYMBOLS.BOX_UNREAD_PATTERN)
+_BOX_RADIO = re.compile(_BOX_SYMBOLS.BOX_RADIO_PATTERN)
+_BOX_PAREN_ANSWER = re.compile(_BOX_SYMBOLS.BOX_PAREN_ANSWER_PATTERN)
 UNCHECKED = 'negated: an unchecked box'
 BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
 BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
@@ -1698,17 +1701,44 @@ _LABEL_COLON = re.compile(r'[ \t\u00a0]*:[ \t\u00a0]*')  # between a label and t
 
 def _box_tokens(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
     """The items and the boxes wholly inside [lo, hi). Items: (start, end) of service names, interventions and
-    other procedures' names, overlapping ones merged. Boxes: (start, end, state), state 'off', 'on' or 'unread'."""
+    other procedures' names, overlapping ones merged. Boxes: (start, end, state), state 'off', 'on' or 'unread'. A bare
+    radio glyph or an answer in parentheses is an unread mark only where [lo, hi) marks options (_box_option_marks)."""
     items = _merged(list({(m.start, m.end) for m in an.services_in(lo, hi)}
                          | {(iv.start, iv.end) for iv in an.interventions_in(lo, hi)} | set(_other_names_in(an, lo, hi))))
     unread = [(u.start(), u.end(), 'unread') for u in _BOX_UNREAD.finditer(an.text, lo, hi)
               if not _BOX.fullmatch(an.text, u.start(), u.end())]
     boxes = [(b.start(), b.end(), 'off' if b.group('off') is not None else 'on') for b in _BOX.finditer(an.text, lo, hi)]
-    if unread:  # "(✓)" is one unread mark, not a box inside brackets
+    if unread:  # "(\u2713)" is one unread mark, not a box inside brackets
         starts = [u[0] for u in unread]
         boxes = [b for b in boxes if not (bisect.bisect_right(starts, b[0]) and
                                           b[1] <= unread[bisect.bisect_right(starts, b[0]) - 1][1])]
-    return items, sorted(boxes + unread)
+    marks = sorted(boxes + unread)
+    return items, sorted(marks + _box_option_marks(an, lo, hi, marks))
+
+
+def _box_option_marks(an: Analysis, lo: int, hi: int, marks: list) -> list:
+    """The bare radio glyphs and answers in parentheses of [lo, hi) that mark options, as unread marks: a radio glyph
+    when another one is in [lo, hi), or when a box or bracketed mark is and the glyph does not open its line (a bullet
+    does); an answer in parentheses when any of those is ("\u25cb Biopsy \u25cf Cold snare polypectomy", "( ) Biopsy (Y)
+    Cold snare polypectomy"; never "\u25cf Biopsy", "\u25cf Biopsy \u2610" or "H. pylori (-)"). Marks inside brackets
+    are the bracketed mark's."""
+    text = an.text
+
+    def bracketed(pos):
+        return any(s <= pos < e for s, e, _ in marks)
+
+    def opens_its_line(pos):  # read back at most BOX_REACH characters: a line start further back is no opening
+        newline = text.rfind('\n', max(0, pos - BOX_REACH), pos)
+        return (newline >= 0 or pos <= BOX_REACH) and not text[newline + 1:pos].strip()
+
+    radios = [m for m in _BOX_RADIO.finditer(text, lo, hi) if not bracketed(m.start())]
+    if len(radios) < 2:
+        radios = [m for m in radios if marks and not opens_its_line(m.start())]
+    found = [(m.start(), m.end(), 'unread') for m in radios]
+    if marks or found:
+        found += [(m.start(), m.end(), 'unread') for m in _BOX_PAREN_ANSWER.finditer(text, lo, hi)
+                  if not bracketed(m.start())]
+    return found
 
 
 def _box_segment(an: Analysis, start: int, end: int) -> tuple[int, int, int, int]:
@@ -1842,7 +1872,8 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
         line_lo, line_hi = text.rfind('\n', reach_lo, start) + 1 or reach_lo, text.find('\n', end, reach_hi)
         line_hi = reach_hi if line_hi < 0 else line_hi
         result = None
-        if _BOX.search(text, line_lo, line_hi) or _BOX_UNREAD.search(text, line_lo, line_hi):  # else no box is near
+        if (_BOX.search(text, line_lo, line_hi) or _BOX_UNREAD.search(text, line_lo, line_hi)
+                or _BOX_RADIO.search(text, line_lo, line_hi)):  # else no box is near
             seg_lo, seg_hi, lo, hi = _box_segment(an, start, end)
             items, boxes = _box_tokens(an, lo, hi)
             # an item's orientation is its whole segment's; any other passage's is read where it stands

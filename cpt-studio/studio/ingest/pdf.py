@@ -77,7 +77,7 @@ from studio.types import ExtractionResult
 from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
 from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
-from .symbols import CHECKED_BOX, UNCHECKED_BOX
+from .symbols import BOX_PRINTED_PATTERN, CHECKED_BOX, UNCHECKED_BOX
 from . import pdfcontent
 from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
                          object_key, resolved, stream_damaged)
@@ -107,8 +107,10 @@ MAX_PAGE_TREE_NODES = 100_000
 # many points) and whose text starts no further right of the box than BOX_GAP box sizes (within the bounds).
 BOX_SLACK = 1.0
 BOX_GAP, BOX_GAP_MIN, BOX_GAP_MAX = 3.0, 18.0, 48.0
-# A box printed in the page text (a checklist made fillable): a box glyph after symbol mapping, or typed brackets.
-PRINTED_BOX = re.compile(r'[' + UNCHECKED_BOX + CHECKED_BOX + r']|\[ ?\]|\[[xX]\]')
+# A box printed in the page text (a checklist made fillable): every unchecked spelling of the shared box vocabulary
+# (a box glyph after symbol mapping, typed brackets with any padding), and the checked U+2612 and "[x]"
+# (symbols.BOX_PRINTED_PATTERN; its groups 'off' and 'on' tell the printed state).
+PRINTED_BOX = re.compile(BOX_PRINTED_PATTERN)
 OVERLAP = ('{pages} {has} a form check box over a printed box whose position could not be read, so the box may show '
            'a different state than the text; check the original.')
 # Where a printed box's state is not plainly what the page shows (a widget or a mark on it that disagrees with it or

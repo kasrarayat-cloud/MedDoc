@@ -379,9 +379,13 @@ _DENIALS = frozenset(('declined', 'declines', 'refused', 'refuses', 'denied', 'd
 # constraints, no\nEUS of the pancreatic cyst was performed today").
 _SEC_SPOKEN_ANSWER = re.compile(r'\b(?:said|says|answered|answers|replied|replies|responded|responds|chose|chooses)'
                                 r'[ \t]+(?:no|neither|never|not)$', re.A | re.I)
-_OPTION_ROW = re.compile(r'(?:[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752\u2611\u2612\u2713\u2714\u25a0\u2327]'
-                         r'|\[[ \t]*[xXvV*_\u2713\u2714]?[ \t]*\]|\([ \t]*[xX]?[ \t]*\)|\byes\b)[ \t/|,-]*\bno[ \t]*$',
-                         re.A | re.I)
+# The option-row guard reads every box spelling of the shared vocabulary (studio.ingest.symbols), its unread marks,
+# bare radio glyphs and an empty pair of parentheses: a line that ends on 'No' after any of them marks an option.
+from studio.ingest import symbols as _BOX_SYMBOLS  # noqa: E402 (Django-free; read for _OPTION_ROW only)
+_BOX_OPTION_MARK = '|'.join((_BOX_SYMBOLS.BOX_OFF_PATTERN, _BOX_SYMBOLS.BOX_ON_PATTERN, _BOX_SYMBOLS.BOX_UNREAD_PATTERN,
+                             _BOX_SYMBOLS.BOX_RADIO_PATTERN, r'\(' + _BOX_SYMBOLS.BOX_PAD + r'*\)'))
+_OPTION_ROW = re.compile(r'(?:' + _BOX_OPTION_MARK + r'|\byes\b)(?:[/|,-]|' + _BOX_SYMBOLS.BOX_PAD + r')*\bno(?:'
+                         + _BOX_SYMBOLS.BOX_PAD + r')*$', re.A | re.I)
 # A content word ends a line that goes on only where its verb still lacks what it takes, and the next line does
 # not open a clause of its own: an auxiliary or a subject before the last word ("we did not perform\nEUS of the
 # pancreatic cyst", "will schedule\nEUS", "she underwent\nEGD", "we recommend\nEUS") or a denial ("the patient
