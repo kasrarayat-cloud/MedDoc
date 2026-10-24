@@ -78,8 +78,20 @@ class CheckboxReachTests(SimpleTestCase):
     single-line document quadratic (28 s against 4.9 s without the rule, measured)."""
 
     def test_a_box_governs_only_an_item_within_reach(self):
-        from studio.gi.detect import BOX_REACH
-        near = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * 20 + 'Biopsy\n'
-        far = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * (BOX_REACH // 2 + 10) + 'Biopsy\n'
+        """Distances are literal (round-2 evidence:8): an input computed from BOX_REACH could not pin it.
+        A box 152 characters before its item governs it; one 252 characters before does not."""
+        near = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * 75 + 'Biopsy\n'
+        far = DOS + 'Procedure: Colonoscopy to the cecum. Findings: polyp.\n☐ ' + 'x ' * 125 + 'Biopsy\n'
+        self.assertEqual(near.index('Biopsy') - near.index('☐'), 152)
+        self.assertEqual(far.index('Biopsy') - far.index('☐'), 252)
         self.assertEqual(status(near, 'Biopsy'), 'negated')
         self.assertNotEqual(status(far, 'Biopsy'), 'negated')
+
+    def test_a_box_far_back_on_a_long_line_does_not_govern(self):
+        """A checklist box 992 characters back on the same line says nothing of a later polypectomy."""
+        text = (DOS + 'Procedure: Colonoscopy. Checklist: ☐ Biopsy. Findings: '
+                + 12 * 'The colonoscope was advanced to the cecum and the mucosa was examined carefully. '
+                + 'Cold snare polypectomy of a 7 mm sigmoid polyp was performed.\n')
+        self.assertEqual(text.index('Cold snare polypectomy') - text.index('☐'), 992)
+        self.assertEqual(status(text, 'Cold snare polypectomy'), 'performed')
+        self.assertEqual(status(text, 'Biopsy'), 'negated')
