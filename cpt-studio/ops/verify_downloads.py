@@ -59,9 +59,10 @@ CODE = r'(?:\d{5}|\d{4}[FTU]|[A-V]\d{4})'
 # A code may carry a trailing '-modifier'; a leading '-' (an identifier or a range end) is not a code.
 CODE_TOKEN = re.compile(rf'(?<![\w.@/-]){CODE}(?![\w/])')
 # Item lines: the renderer prints them at two spaces and stored text always continues at seven or more
-# (reports.CONTINUATION), so a note quoting "2. 45385 ..." is never an item, while any shallower numbered or
-# bulleted code line still counts (a forged item at column 0-6 must not pass as "not itemised").
-ITEM_LINE = re.compile(rf'^ {{0,6}}(?:\d+\.|[-*•])\s+(?P<code>{CODE})\b(?P<rest>.*)$')
+# (reports.CONTINUATION), so a note quoting "2. 45385 ..." is never an item, while any shallower code line still
+# counts, whatever its marker ('2.', '2)', '(2)', '#2', '+', '‣', '–' or none): a forged item at column 0-6 must
+# not pass as "not itemised" (round 3, orchestrator:3).
+ITEM_LINE = re.compile(rf'^ {{0,6}}(?:(?:\(?\w{{1,4}}[.)]+|#\d+|[^\w\s])\s*)?(?P<code>{CODE})\b(?P<rest>.*)$')
 CONTINUATION = '       '  # reports.CONTINUATION
 UNITS = re.compile(r'\bunits?\s+(\d+)\b', re.I)
 TXT_OFFSETS = re.compile(r'\[chars (\d+)[–-](\d+)\b')
@@ -470,19 +471,24 @@ def _evidence_entries(sections, kind) -> list[tuple[str, int, int]]:
     entries: list[tuple[str, int, int]] = []
 
     def scan(lines, opener, prefix):
-        current = None
+        # An entry is its opener and every continuation line up to the next opener. Its offsets are its LAST
+        # line that ends like a citation: a passage line that happens to end in '" [chars 1-2]' is text, and the
+        # renderer's closing bracket comes after it (round 3, orchestrator:1).
+        runs, current = [], None
         for line in lines:
             if line.startswith(opener):
-                current = [line[len(prefix):]]
+                current = [line]
+                runs.append(current)
             elif current is not None and line.startswith(CONTINUATION):
-                current.append(line.strip())
+                current.append(line)
             else:
                 current = None
-                continue
-            match = TXT_EVIDENCE_END.search(line)
-            if match:
-                entries.append(('\n'.join(current), int(match.group(1)), int(match.group(2))))
-                current = None
+        for run in runs:
+            ends = [i for i, line in enumerate(run) if TXT_EVIDENCE_END.search(line)]
+            if ends:
+                match = TXT_EVIDENCE_END.search(run[ends[-1]])
+                text = [run[0][len(prefix):]] + [line.strip() for line in run[1:ends[-1] + 1]]
+                entries.append(('\n'.join(text), int(match.group(1)), int(match.group(2))))
 
     for heading, body in sections:
         if heading.startswith(_numbered_prefix(kind)):
@@ -670,6 +676,12 @@ def _csv_constants(doc, name, rows, columns, api) -> list[Result]:
     return out
 
 
+def csv_evidence_cell(item: Item, revision_text: str) -> str:
+    """The evidence cell reports._csv_row writes for ``item``: its exact passages only, as the CSV shows them."""
+    return escaped(' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}' + (f', p{s["page"]}]' if s.get('page') else ']')
+                              for s in exact_spans(item, revision_text)))
+
+
 def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result]:
     if 'evidence' not in columns:
         return [Result(doc, name, 'csv.evidence', 'fail', 'no evidence column')]
@@ -687,6 +699,11 @@ def _csv_evidence(doc, name, rows, columns, items, revision_text) -> list[Result
     wrong = []
     for row in rows:
         cell = _cell(row, columns, 'evidence')
+        item = items.get(_cell(row, columns, 'proposal_id').strip()) if 'proposal_id' in columns else None
+        if item is not None and cell == csv_evidence_cell(item, revision_text):
+            # Exactly the renderer's layout of this proposal's exact passages: every bracket in it is structural
+            # and quotes the revision text, whatever the passages themselves contain (round 3, orchestrator:1).
+            continue
         for match in CSV_EVIDENCE_OFFSETS.finditer(cell):
             start, end = int(match.group(1)), int(match.group(2))
             passage = cp_slice(revision_text, start, end)

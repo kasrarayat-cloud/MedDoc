@@ -624,6 +624,17 @@ class Round3VerifierTests(unittest.TestCase):
                 results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=forge))]).run()[1]
                 self.assertEqual(statuses(results, 'approved.codes'), ['fail'])
 
+    def test_a_forged_item_with_any_marker_is_counted(self):
+        # orchestrator:3 — only '2.' and '-', '*', '•' counted, so a rejected code itemised in APPROVED SELECTIONS
+        # as '2)', '(2)', '#2', '+', '‣', '–' (or with no marker) passed with only a warning.
+        for marker in ('2) ', '(2) ', '#2 ', '+ ', '‣ ', '– ', '2.) ', 'ii. ', 'b) ', ''):
+            def forge(lines, marker=marker):
+                at = lines.index('APPROVED SELECTIONS') + 1
+                return lines[:at] + ['  ' + marker + '45380 · Colonoscopy · units 1'] + lines[at:]
+            with self.subTest(marker=marker):
+                results = Workspace([('reviewed', 'txt', txt_report('reviewed', mutate_lines=forge))]).run()[1]
+                self.assertEqual(statuses(results, 'approved.codes'), ['fail'])
+
     def test_a_note_at_the_renderers_continuation_depth_is_not_an_item(self):
         # evidence:9 — the renderer continues a note at column 7 (reports.CONTINUATION), not 9.
         def note(lines):

@@ -202,3 +202,49 @@ class OffsetShapedTextTests(RealOutputCase):
         failed = {r.check for r in vd.check_txt('real', 'reviewed.txt', shifted, 'reviewed', self.detail())
                   if r.status == 'fail'}
         self.assertIn('evidence.offsets', failed)
+
+
+class CitationShapedPassagesTests(RealOutputCase):
+    """Round 3, orchestrator:1 — a cited passage whose inner line ends like a TXT citation, or which holds a CSV item
+    separator and a bracket, never fails a genuine file; a shifted structural offset still fails."""
+
+    PASSAGES = ('Biopsy taken" [chars 1–2]\nfrom the antrum.',
+                'Scope "B" [chars 7–9, page 2]\nadvanced to the cecum.',
+                'Jar "A" [chars 4–5]\nheld the polyp\n"C" [chars 1–2]\nretrieved.',
+                'Labs reviewed: "Hgb" [12-14] | "Plt" within range; polyp removed.')
+    TEXT = pf.GI_NOTE + '\n'.join(PASSAGES) + '\n'
+
+    def result(self):
+        return pf.result(pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE], text=self.TEXT),
+                         pf.proposal('sel:1', '45385', list(self.PASSAGES), text=self.TEXT))
+
+    def approve_both(self):
+        self.s.decide('sel:0', 'approve', self.s.reviewer)
+        self.s.decide('sel:1', 'approve', self.s.reviewer)
+
+    def test_the_genuine_files_verify(self):
+        self.approve_both()
+        for kind in ('draft', 'reviewed'):
+            for fmt in ('txt', 'csv'):
+                with self.subTest(kind=kind, fmt=fmt):
+                    self.assert_clean(self.verify(kind, fmt))
+
+    def test_a_shifted_structural_offset_still_fails(self):
+        self.approve_both()
+        detail = self.detail()
+        for passage in self.PASSAGES:
+            start, end = self.TEXT.index(passage), self.TEXT.index(passage) + len(passage)
+            with self.subTest(passage=passage[:20], fmt='txt'):
+                body = self.txt('reviewed')
+                shifted = body.replace(f'[chars {start}–{end}', f'[chars {start + 1}–{end}')
+                self.assertNotEqual(shifted, body)
+                failed = {r.check for r in vd.check_txt('real', 'reviewed.txt', shifted, 'reviewed', detail)
+                          if r.status == 'fail'}
+                self.assertIn('evidence.offsets', failed)
+            with self.subTest(passage=passage[:20], fmt='csv'):
+                body = self.csv('reviewed')
+                shifted = body.replace(f'[{start}-{end}', f'[{start + 1}-{end}')
+                self.assertNotEqual(shifted, body)
+                failed = {r.check for r in vd.check_csv('real', 'reviewed.csv', shifted, 'reviewed', detail)
+                          if r.status == 'fail'}
+                self.assertIn('csv.evidence.offsets', failed)
