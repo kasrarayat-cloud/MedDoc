@@ -793,16 +793,18 @@ def reference_source_entries(sources: Sequence[ReferenceSourceInfo], service_dat
 
 # --- status_for_span seam ---------------------------------------------------------
 
-def span_status(text: str, start: int, end: int):
-    """``studio.gi.detect.status_for_span``, resolved at call time: the routing module owns status language."""
+def span_status(text: str, start: int, end: int, service_date: Optional[date] = None):
+    """``studio.gi.detect.status_for_span``, resolved at call time: the routing module owns status language.
+    ``service_date`` is the encounter's effective date, so dated history reads the same here as in routing."""
     from studio.gi.detect import status_for_span
-    return status_for_span(text, start, end)
+    return status_for_span(text, start, end, service_date)
 
 
-def evidence_readings(text: str, spans: Sequence[EvidenceSpan]) -> tuple[Reading, ...]:
+def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
+                      service_date: Optional[date] = None) -> tuple[Reading, ...]:
     readings = []
     for span in spans:
-        parsed = normalise_span_status(span_status(text, span.start, span.end))
+        parsed = normalise_span_status(span_status(text, span.start, span.end, service_date))
         if parsed is not None:
             readings.append(Reading(parsed[0], parsed[1], 'evidence', span.text))
     return tuple(readings)

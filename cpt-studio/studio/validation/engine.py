@@ -135,7 +135,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     if scope_reason or not kept:
         return selection
     finding = routing.finding(selection.family)
-    outcome = checks.resolve_status(checks.evidence_readings(text, kept) + checks.routing_readings(finding))
+    outcome = checks.resolve_status(checks.evidence_readings(text, kept, day) + checks.routing_readings(finding))
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day)))
 
 

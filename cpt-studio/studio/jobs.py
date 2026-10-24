@@ -113,15 +113,15 @@ def make_context(encounter, revision, *, created_by=None):
         created_by=created_by)
 
 
-def routing_for(revision):
-    """The deterministic routing of a revision, computed once per routing version."""
-    result = gi_detect.route(revision.text)
-    existing = models.RoutingRun.objects.filter(revision=revision, version=result.version).first()
+def routing_for(revision, service_date=None):
+    """The deterministic routing of a revision for an effective service date, stored once per distinct result."""
+    result = gi_detect.route(revision.text, service_date)
+    data = to_jsonable(result)
+    digest = sha256_json(data)
+    existing = models.RoutingRun.objects.filter(revision=revision, version=result.version, sha256=digest).first()
     if existing:
         return existing
-    data = to_jsonable(result)
-    return models.RoutingRun.objects.create(revision=revision, version=result.version, result=data,
-                                            sha256=sha256_json(data))
+    return models.RoutingRun.objects.create(revision=revision, version=result.version, result=data, sha256=digest)
 
 
 def addendum_block_text(number, created_at, text):
@@ -187,7 +187,7 @@ def stage_analyze(job):
     revision, encounter = job.revision, job.encounter
     revision.refresh_from_db()
     context = make_context(encounter, revision)
-    routing = routing_for(revision)
+    routing = routing_for(revision, context_service_date(context))
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
         if locked.current_revision_id == revision.pk:
@@ -338,7 +338,7 @@ def stage_assess(job):
     if run is not None and run.service_date != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
-    routing_run = routing_for(revision)
+    routing_run = routing_for(revision, context_service_date(context))
     provider_status, normalized = _provider_inputs(run)
     result = run_assessment(
         text=revision.text, pages=tuple(PageSpan(**p) for p in revision.pages), context=context_facts(context),

@@ -34,7 +34,7 @@ from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@1'
+ROUTING_VERSION = 'gi-routing@2'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
@@ -929,28 +929,41 @@ def _route(an: Analysis) -> RoutingResult:
 
 
 @functools.lru_cache(maxsize=16)
-def _analysis(text: str) -> tuple[Analysis, RoutingResult]:
+def _analysis(text: str, service_date: Optional[date] = None) -> tuple[Analysis, RoutingResult]:
     lay = layout(text)
     interventions = tuple(Intervention(label, families, m.start(), m.end())
                           for label, pattern, families in cues.INTERVENTIONS for m in pattern.finditer(text))
+    effective = service_date if service_date is not None else ctx.service_date_of(text)
     an = Analysis(text, lay, _service_mentions(text), _em_mentions(text, lay), _clause_cues(text),
-                  ctx.find_dates(text), ctx.service_date_of(text), interventions)
+                  ctx.find_dates(text), effective, interventions)
     return an, _route(an)
 
 
-def route(text: str) -> RoutingResult:
-    """The GI services the document describes, with status, facts and missing facts."""
+def _checked_date(service_date, caller):
+    if service_date is not None and not isinstance(service_date, date):
+        raise TypeError(f'{caller} needs service_date as a date or None.')
+    return service_date
+
+
+def route(text: str, service_date: Optional[date] = None) -> RoutingResult:
+    """The GI services the document describes, with status, facts and missing facts.
+
+    ``service_date`` is the encounter's effective date of service (a member-supplied
+    value overrides the document's). None uses the date the document itself states.
+    """
     if not isinstance(text, str):
         raise TypeError('route() needs the canonical text as str.')
-    return _analysis(text)[1]
+    return _analysis(text, _checked_date(service_date, 'route()'))[1]
 
 
-def status_for_span(text: str, start: int, end: int) -> tuple[str, tuple[str, ...]]:
+def status_for_span(text: str, start: int, end: int,
+                    service_date: Optional[date] = None) -> tuple[str, tuple[str, ...]]:
     """Status of the service mentioned at [start, end), judged from its clause,
-    sentence and section, with the cues that decided it. Fail-closed."""
+    sentence and section, with the cues that decided it. Fail-closed.
+    ``service_date`` as for route()."""
     if not isinstance(text, str):
         raise TypeError('status_for_span() needs the canonical text as str.')
     if not (0 <= start < end <= len(text)):
         raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
-    reading = _read_span(_analysis(text)[0], start, end)
+    reading = _read_span(_analysis(text, _checked_date(service_date, 'status_for_span()'))[0], start, end)
     return reading.status, reading.cues

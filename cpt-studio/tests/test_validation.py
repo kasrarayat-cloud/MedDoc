@@ -165,7 +165,8 @@ class EngineCase(SimpleTestCase):
     def setUp(self):
         self.statuses = {}
         patcher = mock.patch.object(checks, 'span_status',
-                                    side_effect=lambda text, start, end: self.statuses.get(text[start:end]))
+                                    side_effect=lambda text, start, end, service_date=None: self.statuses.get(
+                                        text[start:end]))
         self.reader = patcher.start()
         self.addCleanup(patcher.stop)
 

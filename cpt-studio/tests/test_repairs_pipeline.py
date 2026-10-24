@@ -375,3 +375,34 @@ class ConcurrentContextTests(TransactionTestCase):
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.user_values, {'service_date': '2026-10-22'})
         self.assertEqual(self.encounter.current_context.user_values, self.encounter.user_values)
+
+
+HISTORY_NOTE = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nProcedure: Colonoscopy\n'
+                'Findings: The colonoscope was advanced to the cecum. The colon was normal. No polyps.\n'
+                'Colonoscopy 03/14/2021: hot snare polypectomy of a 12 mm sigmoid polyp; tubular adenoma.\n')
+HISTORY_QUOTE = 'Colonoscopy 03/14/2021: hot snare polypectomy of a 12 mm sigmoid polyp'
+
+
+@override_settings(**LIVE)
+class MemberServiceDateRoutingTests(ApiHarness, TestCase):
+    """status:6 — a member-supplied service date reaches routing and span status, not only assessment."""
+
+    def test_dated_history_is_historical_against_a_member_supplied_date(self):
+        from studio.gi.detect import status_for_span
+        start = HISTORY_NOTE.index(HISTORY_QUOTE)
+        self.assertEqual(status_for_span(HISTORY_NOTE, start, start + len(HISTORY_QUOTE), date(2026, 10, 21))[0],
+                         'historical')
+        self.provider.selections = [('45385', HISTORY_QUOTE)]
+        encounter_id = self.create(HISTORY_NOTE, service_date='2026-10-21')
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(encounter.current_context.facts['service_date']['origin'], 'user')
+        proposal = encounter.current_assessment.proposals.get(code='45385')
+        self.assertEqual(proposal.bucket, models.Proposal.EXCLUDED)
+        self.assertNotEqual(proposal.status, models.Proposal.READY)
+        # The stored routing itself was computed with the member's date.
+        routing = encounter.current_assessment.routing.result
+        mentions = [m for f in routing['findings'] if f['family'] == 'gi.colonoscopy' for m in f['mentions']
+                    if m['span']['start'] <= start < m['span']['end'] or start <= m['span']['start'] < start + len(HISTORY_QUOTE)]
+        self.assertTrue(mentions)
+        self.assertEqual({m['status'] for m in mentions}, {'historical'})
