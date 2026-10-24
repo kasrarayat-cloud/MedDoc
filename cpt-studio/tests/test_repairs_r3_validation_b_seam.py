@@ -22,8 +22,9 @@ EGD_LABEL = PROFILES[EGD].label
 class PlanTodayCueContractTests(SimpleTestCase):
     def test_the_cue_validation_reads_is_routing_s(self):
         self.assertEqual(checks.PLAN_TODAY_CUE, PLAN_TODAY)
-        # Active once TIME's routing is integrated: the constant there must be the contract's string.
-        self.assertEqual(getattr(detect, 'PLAN_TODAY', PLAN_TODAY), PLAN_TODAY)
+        # TIME's routing is integrated: its constant must be the contract's string (round 4 evidence:5 dropped the
+        # getattr default, which compared this test's own literal with itself once the name was renamed).
+        self.assertEqual(detect.PLAN_TODAY, PLAN_TODAY)
 
 
 class Validation1PlanTodayHoldsTheVisitTests(EngineCase):

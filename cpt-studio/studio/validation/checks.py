@@ -279,6 +279,21 @@ def says_today_in_plan(cues: Sequence[str]) -> bool:
     return any(cue.startswith(PLAN_TODAY_CUE) for cue in cues)
 
 
+# Routing's own holds of a procedure, never hedges (studio.gi.detect.OTHER_STATED, ANOTHER_TIME_PREFIX; part of the cue
+# contract): a procedure stated by its act or its findings with no performance cue ("Two internal hemorrhoids were
+# banded today without complication."), and a time that may place it on another date ("... was performed an hour
+# ago.").
+_VAL_OTHER_STATED_CUE = 'uncertain: a procedure is stated by its act or its findings'
+_VAL_ANOTHER_TIME_CUE = 'uncertain: another time'
+
+
+def _VAL_routing_holds(cues: Sequence[str]) -> bool:
+    """Whether routing held a passage for a procedure stated with no performance cue, or for a time that may place it on
+    another date (round 4 release:7): in a plan, history or indication section these may be today's procedure, as a
+    plan clause that says today may (says_today_in_plan)."""
+    return any(cue.startswith((_VAL_OTHER_STATED_CUE, _VAL_ANOTHER_TIME_CUE)) for cue in cues)
+
+
 def by_section_alone(reading: Reading) -> bool:
     """A reading that only its section decided: every cue is a 'section: <kind>' cue (routing's section default), so
     no wording in the passage says anything of a service."""

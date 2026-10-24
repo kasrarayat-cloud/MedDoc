@@ -411,3 +411,92 @@ class OwnProcedureNamedTests(Case):
                 proposals, _ = real(text, (code, passage))
                 self.assertReady(proposals[code])
                 self.assertEqual(check_of(proposals[code], 'service.status').status, 'pass')
+
+
+# --- release:7 and evidence:5: routing's own holds in plan, history and indication sections hold the E/M ------------
+
+NOT_TODAY_NOTE = (HEAD + 'Place of service: Office (POS 11)\n{visit}\n{body}\n'
+                  'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+STATED = 'Two internal hemorrhoids were banded today without complication.'
+AN_HOUR_AGO = 'Rubber band ligation of two internal hemorrhoids was performed an hour ago.'
+
+
+class NotTodayRoutingHoldsTests(Case):
+    """release:7 (critical, under-correction of routing:22). Routing holds a procedure stated by its act or its findings
+    with no performance cue (OTHER_STATED), or by a time that may place it on another date (ANOTHER_TIME), but in a
+    plan, history or indication section validation counted only routing's PLAN_TODAY hold. Free text after a "Chief
+    complaint:" line is that line's indication section, so the office E/M selected alone was ready beside a banding
+    done today. Those two holds now count there too, as PLAN_TODAY does; hedges and plain section defaults do not."""
+
+    def assertHeldBeside(self, visit, body):
+        proposals, _ = real(NOT_TODAY_NOTE.format(visit=visit, body=body), ('99214', visit))
+        self.assertVisitHeld(proposals, f'{OTHER_LABEL} is possibly performed on the same date')
+
+    def test_a_stated_act_after_the_chief_complaint_holds_the_visit(self):
+        for body in (f'Chief complaint: Rectal bleeding.\n{STATED}', f'Chief complaint: Rectal bleeding.\n\n{STATED}',
+                     f'Chief complaint: Rectal bleeding. {STATED}', f'Chief complaint\nRectal bleeding.\n{STATED}',
+                     f'Reason for visit: Rectal bleeding.\n{STATED}',
+                     'Chief complaint: Rectal bleeding.\nToday we banded two internal hemorrhoids.',
+                     'Chief complaint: Rectal bleeding.\nTwo internal hemorrhoids were banded x3 today.'):
+            with self.subTest(body=body):
+                self.assertHeldBeside(VISIT, body)
+
+    def test_the_round_3_claimant_s_own_layout_holds_the_visit(self):
+        visit = 'Established patient office visit for rectal bleeding.'
+        for line in ('Two internal hemorrhoids were banded today.', 'Anoscopy: grade 2 internal hemorrhoids, no fissure.',
+                     'Today we banded two internal hemorrhoids.', 'Internal hemorrhoids were banded x3 today.',
+                     'A perianal abscess was incised and drained today.'):
+            with self.subTest(line=line):
+                self.assertHeldBeside(visit, f'Chief complaint: rectal bleeding.\n{line}')
+
+    def test_another_time_in_an_indication_history_or_plan_section_holds_the_visit(self):
+        for heading in ('Chief complaint: Rectal bleeding.\n', 'History of present illness: ', 'Plan: '):
+            with self.subTest(heading=heading):
+                self.assertHeldBeside(VISIT, heading + AN_HOUR_AGO)
+
+    def test_controls_hedges_and_section_defaults_stay_released(self):
+        for body in ('Chief complaint: Rectal bleeding.\nPlan: Possible banding if bleeding persists.',
+                     'Chief complaint: Rectal bleeding.\nPlan: Rubber band ligation next week.',
+                     'History of present illness: Colonoscopy in 2019 was normal.',
+                     'Plan: Possible EGD if symptoms persist.'):
+            with self.subTest(body=body):
+                proposals, _ = real(NOT_TODAY_NOTE.format(visit=VISIT, body=body), ('99214', VISIT))
+                self.assertVisitReady(proposals)
+
+
+class PlanTodayRealRoutingTests(Case):
+    """evidence:5 (medium, false green). round 3b's E/M-alone hold through routing's PLAN_TODAY cue was pinned only by
+    constructed readings and by a contract test with a getattr default: rewording the cue routing emits kept every test
+    green while the E/M selected alone became ready. These route for real and read the cue routing emits."""
+
+    CASES = (('EGD this morning revealed a Schatzki ring, dilated to 18 mm.', 'gi.egd'),
+             ('EGD today showed esophagitis; biopsies taken.', 'gi.egd'),
+             ('Colonoscopy today: two polyps removed with cold snare.', 'gi.colonoscopy'))
+
+    def test_the_e_m_selected_alone_is_held_by_routing_s_plan_today_cue(self):
+        from datetime import date
+        from studio.gi.detect import route
+        from studio.validation import checks
+        from tests.test_repairs_r3_time import PLAN_HEADINGS, TIME, plan_office
+        for heading in PLAN_HEADINGS[:3]:
+            for sentence, family in self.CASES:
+                with self.subTest(heading=heading, sentence=sentence):
+                    text = plan_office(sentence + ' Start omeprazole.', heading)
+                    mention = next(m for m in route(text, date(2026, 10, 21)).finding(family).mentions
+                                   if m.section == 'plan')
+                    self.assertIn(checks.PLAN_TODAY_CUE, mention.cues)
+                    proposals, _ = real(text, ('99213', TIME))
+                    self.assertVisitHeld(proposals, f'{PROFILES[family].label} is possibly performed', '99213')
+
+    def test_the_e_m_citing_its_own_plan_today_is_ready(self):
+        from tests.test_repairs_r3_time import plan_office
+        text = plan_office('Start omeprazole 40 mg today.')
+        proposals, _ = real(text, ('99213', 'Start omeprazole 40 mg today.'))
+        self.assertVisitReady(proposals, '99213')
+
+    def test_the_cues_validation_reads_are_routing_s(self):
+        from studio.gi import detect
+        from studio.validation import checks
+        self.assertEqual(detect.PLAN_TODAY, checks.PLAN_TODAY_CUE)
+        self.assertTrue(detect.OTHER_STATED.startswith(checks._VAL_OTHER_STATED_CUE))
+        self.assertEqual(detect.ANOTHER_TIME_PREFIX, checks._VAL_ANOTHER_TIME_CUE)

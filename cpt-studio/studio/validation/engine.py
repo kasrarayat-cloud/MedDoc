@@ -251,8 +251,10 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
     performed with biopsies, proctitis versus infection.", round 4 validation:0). Inside plan, history and indication
     sections a hedge is not a doubt about today's service - a plan that discusses, weighs or conditions a procedure is
     planning it - so only an explicit performance statement that routing downgraded for its section (a 'performed:'
-    cue: "EGD was performed today" under Assessment and plan) or a plan passage routing holds because its clause says
-    today (PLAN_TODAY) counts there.
+    cue: "EGD was performed today" under Assessment and plan), a plan passage routing holds because its clause says
+    today (PLAN_TODAY), and routing's own holds of a procedure stated with no performance cue or at a time that may be
+    another date (OTHER_STATED, ANOTHER_TIME: "Two internal hemorrhoids were banded today without complication." on the
+    line after "Chief complaint:", round 4 release:7) count there.
     """
     if mention.status in checks.POSITIVE:
         return True
@@ -262,7 +264,7 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
         return True
     if mention.section in NOT_TODAY_SECTIONS:
         # routing holds a plan passage whose clause says today (PLAN_TODAY): it may be today's procedure (validation:1)
-        return checks.says_today_in_plan(mention.cues)
+        return checks.says_today_in_plan(mention.cues) or checks._VAL_routing_holds(mention.cues)
     return not checks.silent(mention.status, mention.cues)
 
 
