@@ -33,6 +33,7 @@ class _Evaluation:
     finding: Optional[FamilyFinding]
     outcome: checks.StatusOutcome
     reference: CodeReference
+    own: tuple[checks.Reading, ...] = ()  # the status readings of its own linked passages
 
 
 @dataclass(frozen=True)
@@ -146,9 +147,10 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     if scope_reason or not kept:
         return selection
     finding = routing.finding(selection.family)
-    outcome = checks.resolve_status(checks.evidence_readings(text, kept, day) + checks.routing_readings(finding),
+    own = checks.evidence_readings(text, kept, day)
+    outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day)))
+    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
 
 
 # --- phase 2: checks that depend on the other proposals -----------------------------------
@@ -177,6 +179,22 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
     return mention.section not in NOT_TODAY_SECTIONS and not checks.silent(mention.status, mention.cues)
 
 
+NOT_TODAY_SECTION_CUES = tuple(f'section: {kind}' for kind in NOT_TODAY_SECTIONS)
+
+
+def _stated_as_done(s: _Selection) -> bool:
+    """An excluded code whose own linked passage states the act explicitly (a 'performed:' cue) although its reading
+    is not performed: the negative status came from elsewhere - the family's document-level judgement - and not from
+    the passage's own date, wording or section (a plan or history downgrade names its section). Fail-closed for the
+    E/M hold: such a code is possibly performed on the date of service (status:1)."""
+    if not s.excluded or s.evaluation is None:
+        return False
+    return any(r.status in checks.NEGATIVE
+               and any(cue.startswith(checks.PERFORMED_CUE_PREFIX) for cue in r.cues)
+               and not any(cue.startswith(NOT_TODAY_SECTION_CUES) for cue in r.cues)
+               for r in s.evaluation.own)
+
+
 def _same_day_family(finding: FamilyFinding) -> bool:
     """A routed family that is a procedure for the same-day E/M rule: a procedure profile, or another GI service.
     Routing emits a gi.other finding only for a procedure documented at this encounter that names none of the
@@ -191,6 +209,7 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     pfs_source = applied_sources(sources, date_state.value).get(PFS)
     procedures = [s for s in active if _same_day_procedure(s)]
     possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
+    possible += [s for s in selections if _procedural(s) and _stated_as_done(s)]
     same_day = [f for f in routing.findings if _same_day_family(f)]
     labels = [PROFILES[f.family].label for f in same_day if f.status in checks.POSITIVE]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]

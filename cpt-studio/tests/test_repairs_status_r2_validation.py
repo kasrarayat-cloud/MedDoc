@@ -601,6 +601,81 @@ class Review0EngineTests(EngineCase):
         self.assertFalse([c for c in self.proposal(result, '46221').checks if c.id == 'review.same_day_em'])
 
 
+# --- status:1, the validation-side guard: an excluded procedure stated as done still holds the E/M ------------
+
+S1 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit for rectal bleeding.\n'
+      'History of present illness: Two weeks of intermittent bright red blood per rectum. Prior flexible '
+      'sigmoidoscopy in 2022 was normal.\nProcedure: Flexible sigmoidoscopy to evaluate rectal bleeding.\n'
+      'Findings: The sigmoidoscope was advanced to 40 cm. A biopsy was taken from the rectum.\n'
+      'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Status1GuardRealTests(RealCase):
+    """status:1's exact input. The main fix is routing's aggregation (another agent); at this commit routing still
+    reads the family historical and excludes 45331, and the guard alone keeps the same-day E/M held."""
+
+    def test_the_claimed_input_holds_the_visit(self):
+        proposals, _ = real(S1, ('99214', 'Established patient office visit for rectal bleeding.'),
+                            ('45331', 'A biopsy was taken from the rectum.'))
+        self.assertVisitHeld(proposals, 'Flexible sigmoidoscopy is ')
+
+
+class Status1GuardTests(EngineCase):
+    """The guard at the validation layer, with constructed routing: an excluded procedural selection whose own
+    passage states the act explicitly ('performed:' cue) while its reading was made negative elsewhere (by the
+    family's document-level status) counts as possibly performed for the E/M hold. A passage routing read as not
+    today because of its own section, date or wording does not."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Established patient office visit for rectal bleeding.',
+                'Total time 32 minutes.', 'Prior flexible sigmoidoscopy in 2022 was normal.',
+                'Flexible sigmoidoscopy to evaluate rectal bleeding.', 'A biopsy was taken from the rectum.')
+    VISIT, TIME = 'Established patient office visit for rectal bleeding.', 'Total time 32 minutes.'
+    PRIOR = 'Prior flexible sigmoidoscopy in 2022 was normal.'
+    LINE = 'Flexible sigmoidoscopy to evaluate rectal bleeding.'
+    BIOPSY = 'A biopsy was taken from the rectum.'
+
+    def visit_for(self, biopsy_reading, code='45331', reference=REFERENCE):
+        self.statuses = {self.TIME: None, self.BIOPSY: biopsy_reading}
+        visit = finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                        facts={'em_basis': 'total time 32 minutes'})
+        flex = finding('gi.flex_sig', 'historical',
+                       placed(self.NOTE, 'gi.flex_sig', 'historical', self.PRIOR, 'history',
+                              'historical: 2022 is before the service date', 'historical: Prior'),
+                       placed(self.NOTE, 'gi.flex_sig', 'uncertain', self.LINE, 'procedure',
+                              "uncertain: section silent: 'to evaluate' follows the service name",
+                              'section: procedure (Procedure)'),
+                       facts={'extent': '40 cm'})
+        result = self.run_engine(self.NOTE, selected('99214', self.NOTE.span(self.TIME)),
+                                 selected(code, self.NOTE.span(self.BIOPSY)), findings=[visit, flex],
+                                 ctx=visit_context(), reference=reference)
+        self.assertEqual(self.proposal(result, code).bucket, 'excluded')
+        return self.proposal(result, '99214')
+
+    def test_a_passage_stated_as_done_holds_the_visit(self):
+        for status in ('historical', 'planned', 'negated', 'cancelled'):
+            with self.subTest(status=status):
+                visit = self.visit_for((status, ('performed: was taken', f'{status}: from the family')))
+                self.assertEqual(visit.status, 'needs_clarification')
+                self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+                self.assertIn('Flexible sigmoidoscopy is possibly performed on the same date',
+                              self.check(visit, 'em.same_day_procedure').detail)
+
+    def test_controls_a_passage_read_as_not_today_on_its_own_does_not(self):
+        for reading in (('historical', ('performed: underwent', 'section: history (History of present illness)')),
+                        ('historical', ('historical: 2019 is before the service date',)),
+                        ('planned', ('planned: scheduled',)),
+                        ('negated', ('negated: an unchecked box',)),
+                        ('cancelled', ('section: procedure (Procedure)', 'cancelled: the procedure was cancelled'))):
+            with self.subTest(reading=reading):
+                visit = self.visit_for(reading)
+                self.assertEqual(visit.status, 'ready', [c.detail for c in visit.checks])
+                self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_procedure'])
+
+    def test_controls_a_code_that_is_not_procedural_does_not(self):
+        visit = self.visit_for(('historical', ('performed: was taken', 'historical: from the family')), code='91200')
+        self.assertEqual(visit.status, 'ready', [c.detail for c in visit.checks])
+
+
 class EngineVersionTests(SimpleTestCase):
     def test_the_engine_version_is_bumped_once(self):
         self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@3')
