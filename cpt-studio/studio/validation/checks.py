@@ -172,8 +172,9 @@ class Reading:
     passage: str
     start: Optional[int] = None  # a linked passage's offsets in the text
     end: Optional[int] = None
-    # Set by the engine on a linked passage of a gi.other code: a positive reading that rests on its section alone, in a
-    # passage that names no procedure (see engine._unnamed_other). It is not evidence that the code's service was done.
+    # Set by the engine on a linked passage of a gi.other code: a positive reading that rests on its section or on E/M
+    # documentation alone, in a passage that names no procedure (see engine._unnamed_other). It is not evidence that
+    # the code's service was done.
     unnamed: bool = False
     # Set by the engine on a linked passage that hedges another service than the code's (see engine._other_service):
     # "Possible EGD if symptoms persist." cited for an E/M. It holds the code alone, but never contests it.
@@ -191,8 +192,8 @@ class StatusOutcome:
     # document never names the code's service family), 'unestablished' (its passage reads as performed but routing
     # names the family only as uncertain; ``contrary`` is that routing reading), 'contested' (one of its own
     # passages reads as performed and another hedges; ``decisive`` is the hedge, ``contrary`` the performed one) or
-    # 'section_only' (every positive passage of a gi.other code reads performed by its section alone and names no
-    # procedure; ``decisive`` is that passage).
+    # 'section_only' (every positive passage of a gi.other code reads performed only by its section or as the office
+    # visit's own documentation, and names no procedure; ``decisive`` is that passage).
     reason: str = ''
 
 
@@ -304,8 +305,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     - A positive passage cannot establish a family that routing documents only as not performed, nor
       (``detectable``: routing can recognise the family in text) a family the document never names or names only
       as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
-    - Nor can a passage marked ``unnamed`` (a gi.other code's passage read performed by its section alone, naming
-      no procedure): when it is the only positive passage the code is held, never excluded.
+    - Nor can a passage marked ``unnamed`` (a gi.other code's passage read performed only by its section or as E/M
+      documentation, naming no procedure): when it is the only positive passage the code is held, never excluded.
     """
     own = [r for r in readings if r.origin == 'evidence']
     routed = [r for r in readings if r.origin == 'routing']
