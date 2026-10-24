@@ -7,7 +7,6 @@ sources agree, never states a rule the system does not hold, and reports
 from __future__ import annotations
 
 import bisect
-import functools
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -1062,59 +1061,6 @@ def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
 _ACT_STATED = re.compile(r'\b(?:was|were|been|we|i)\s+(?:(?!not\b|never\b)[a-z]+\s+)?(?:banded|drained|excised|ablated|'
                          r'cauteri[sz]ed)\b', re.A | re.I)
 _LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # "2)", "(2)", "2.", "*", a bullet
-
-
-HEDGE_CUE_PREFIX = 'uncertain: '
-
-
-@functools.lru_cache(maxsize=1)
-def _hedge_patterns() -> tuple[tuple, tuple]:
-    """(routing's hedge patterns, routing's doubt patterns). An entry named 'pending' is routing's doubt about today
-    (detect._clause_reading_cues flags it so), whatever its words ("may have been taken" after an act is one in the
-    integrated routing), so a cue its words match is a doubt even where a hedge pattern matches the same words."""
-    from studio.gi import cues as words
-    entries = words.UNCERTAIN_CLAUSE + words.UNCERTAIN_PRE + words.UNCERTAIN_POST
-    return tuple(pattern for _, pattern in entries), tuple(pattern for name, pattern in entries if name == 'pending')
-
-
-def _quotes(pattern, said: str) -> bool:
-    """Whether the pattern matches the words a cue quotes, from their start to their end."""
-    found = pattern.match(said + ' ')
-    return found is not None and found.end() >= len(said)
-
-
-def hedges_only(cues: Sequence[str]) -> bool:
-    """Whether every cue of an uncertain reading, apart from silence, is one of routing's hedges - a condition, a
-    question, an alternative, a possibility, a candidacy, a discussion or consent (studio.gi.cues UNCERTAIN_CLAUSE,
-    UNCERTAIN_PRE and UNCERTAIN_POST, matched against the words the cue quotes) - and none is 'pending', which routing
-    counts as a doubt about today's service. Any other cue (an unresolved negation, an abort, an unread section, a
-    form field's state, a date, an adjustment) is not a hedge: inverted on purpose, so wording validation does not
-    recognise is never read as a hedge. Resolved at call time: the routing module owns the hedge words."""
-    hedges, doubts = _hedge_patterns()
-    hedged = False
-    for cue in cues:
-        if cue.startswith(SILENT_CUE_PREFIX):
-            continue
-        said = cue[len(HEDGE_CUE_PREFIX):] if cue.startswith(HEDGE_CUE_PREFIX) else ''
-        if (not said or 'pending' in said.lower() or any(_quotes(pattern, said) for pattern in doubts)
-                or not any(_quotes(pattern, said) for pattern in hedges)):
-            return False
-        hedged = True
-    return hedged
-
-
-TODAY_REACH = 300  # how far from a mention its sentence is read for "today" (bounds the work per mention)
-
-
-def says_today_near(mention) -> bool:
-    """Whether a routed mention's sentence says today within TODAY_REACH of the mention's name, by routing's own words
-    for it (studio.gi.cues.TODAY), resolved at call time. Bounded per mention: a long sentence with many mentions is
-    never read once per mention in full."""
-    from studio.gi import cues as words
-    sentence, span = mention.sentence, mention.span
-    lo = max(sentence.start, span.start - TODAY_REACH) - sentence.start
-    hi = min(sentence.end, span.end + TODAY_REACH) - sentence.start
-    return bool(words.TODAY.search(sentence.text, max(lo, 0), max(hi, 0)))
 
 
 def names_intervention(text: str, start: int, end: int, family: str) -> bool:

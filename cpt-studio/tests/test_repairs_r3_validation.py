@@ -174,8 +174,9 @@ class RealRoutingCasesTests(SimpleTestCase):
 
 class AssessmentHedgeIntegrationTests(SimpleTestCase):
     """Integration of WORDING (a hedge after the act is a doubt: 'may have been performed') with VALIDATION's
-    validation:8 (a hedge in an assessment no longer holds the visit, a doubt still does): pinned only here, where both
-    are present. Real routing, the real span reader and the engine."""
+    validation:8: pinned only here, where both are present. Round 4 validation:0 reverted validation:8's release, so a
+    hedge in an assessment holds the visit again, as a doubt does. Real routing, the real span reader and the
+    engine."""
 
     NOTE = ('SYNTHETIC\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\nEstablished patient office '
             'visit.\nChief complaint: dysphagia.\nAssessment: Dysphagia. {line}\nMedical decision making: moderate.\n'
@@ -192,8 +193,10 @@ class AssessmentHedgeIntegrationTests(SimpleTestCase):
                 self.assertEqual(visit.status, 'needs_clarification')
                 self.assertIn('separate_em', [c.fact for c in visit.clarifications])
 
-    def test_a_possible_future_procedure_does_not(self):
+    def test_a_possible_future_procedure_holds_the_visit_again(self):
+        # the round-3 over-hold, accepted with the round-4 revert (medium)
         for line in ('Possible EGD if symptoms persist.', 'Discussed EGD; the patient will think about it.'):
             with self.subTest(line=line):
                 visit = self.visit(line)
-                self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'), [c.detail for c in visit.checks])
+                self.assertEqual(visit.status, 'needs_clarification', [c.detail for c in visit.checks])
+                self.assertIn('separate_em', [c.fact for c in visit.clarifications])

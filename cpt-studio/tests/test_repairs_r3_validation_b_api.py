@@ -93,10 +93,10 @@ class RoundThreeValidationApiTests(MultiEvidenceApiCase, TestCase):
         self.assertIn('99213', approved)
         self.assertIn('91010', approved)
 
-    def test_validation8_an_assessment_discussion_does_not_hold_the_visit(self):
+    def test_validation8_an_assessment_discussion_holds_the_visit_again(self):
+        # Round 4 validation:0 reverted round 3b's assessment-section release (the accepted over-hold returns).
         note = OFFICE.format(cc='Heartburn.', body='Assessment: Gastroesophageal reflux disease, not controlled. '
                                                    'Discussed EGD; the patient will think about it.')
         encounter_id = self.run_note(note, ('99214', VISIT))
-        self.assertEqual(self.proposal(encounter_id, '99214')['allowed_actions'], ['approve', 'reject'])
-        self.assertEqual(self.decide(encounter_id, '99214', 'approve').status_code, 201)
-        self.assertEqual(self.report(encounter_id, 'reviewed').status_code, 201)
+        self.assertEqual(self.proposal(encounter_id, '99214')['allowed_actions'], ['reject'])
+        self.assertEqual(self.decide(encounter_id, '99214', 'approve').status_code, 409)
