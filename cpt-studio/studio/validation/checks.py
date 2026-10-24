@@ -548,6 +548,30 @@ def reinstatement_check(holds: Sequence[ClarificationSpec], *, date_unknown: boo
                  '(add it as an addendum): ' + ' '.join(waits), REINSTATEMENT_SOURCE)
 
 
+def same_day_if_reinstated_check(procedures: Sequence[tuple[str, str]]) -> Check:
+    """On an E/M with no same-day procedure detected and no separately identifiable E/M documented: the excluded,
+    reinstatable procedural codes ((code, profile label or '')) that a reviewer's reinstatement would make same-day
+    procedures. Review withholds approve from this E/M while one of them has a current reinstate or approve decision,
+    and blocks the reviewed report if this E/M was approved first; rejecting or revoking it releases the E/M."""
+    listed = _join([f'{code} ({label})' if label else code for code, label in procedures])
+    one = len(procedures) == 1
+    return Check('em.same_day_if_reinstated', 'Separately identifiable E/M if a procedure is reinstated', 'warn',
+                 f'{listed} {"is" if one else "are"} excluded but reinstatable. If a reviewer reinstates '
+                 f'{"it" if one else "one of them"}, it is a same-day procedure: this E/M then cannot be approved '
+                 'until a significant, separately identifiable E/M service is documented (add it as an addendum), and '
+                 'an approval already recorded keeps the reviewed report blocked. Rejecting or revoking that '
+                 'reinstatement releases this E/M.', EM_SOURCE)
+
+
+def same_day_em_check(visits: Sequence[str]) -> Check:
+    """On an excluded, reinstatable procedural code beside an E/M that has no same-day procedure detected."""
+    one = len(visits) == 1
+    return Check('review.same_day_em', 'Same-day E/M after reinstatement', 'warn',
+                 f'If a reviewer reinstates this code, it is a same-day procedure beside the E/M {_join(visits)}: '
+                 f'{"that E/M" if one else "those E/Ms"} then cannot be approved until a significant, separately '
+                 'identifiable E/M service is documented.', REINSTATEMENT_SOURCE)
+
+
 def separate_em_clarification(labels: Sequence[str], family: str, key: str,
                               possible: Sequence[str] = ()) -> ClarificationSpec:
     return ClarificationSpec(scope='proposal', fact='separate_em', question=SEPARATE_EM_QUESTION,

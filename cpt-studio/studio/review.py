@@ -120,17 +120,18 @@ def _current_decision(proposal):
     return latest
 
 
-def _actions(proposal, current, text):
+def _actions(proposal, current, text, same_day_held=False):
+    """``same_day_held``: an E/M that a reviewer's reinstatement of a same-day procedure now holds (no approve)."""
     if current is not None and current.action in (APPROVE, REJECT):
         return [REVOKE]
     exact = bool(exact_evidence(proposal.evidence, text))
     if proposal.bucket == SELECTED and proposal.status in BUCKET_STATUSES[SELECTED]:
-        actions = [APPROVE] if proposal.status == Proposal.READY and exact else []
+        actions = [APPROVE] if proposal.status == Proposal.READY and exact and not same_day_held else []
         return actions + [REJECT] + ([REVOKE] if current else [])
     if proposal.bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
         if current is None:
             return [REINSTATE] if proposal.reinstatable and exact else []
-        return ([APPROVE] if exact and _reinstatement_clear(proposal) else []) + [REJECT, REVOKE]
+        return ([APPROVE] if exact and _reinstatement_clear(proposal) and not same_day_held else []) + [REJECT, REVOKE]
     return [REVOKE] if current else []
 
 
@@ -140,13 +141,46 @@ def _reinstatement_clear(proposal):
     return any(c.get('id') == 'review.reinstatement' and c.get('status') == 'pass' for c in proposal.checks or [])
 
 
+# The same-day E/M gate on procedures a reviewer brings back (review:0), as the validation layer recorded it: an E/M
+# with no same-day procedure detected carries SAME_DAY_EM_GATE, and each excluded, reinstatable procedure that would
+# make the date a procedure day carries SAME_DAY_PROCEDURE.
+SAME_DAY_EM_GATE = 'em.same_day_if_reinstated'
+SAME_DAY_PROCEDURE = 'review.same_day_em'
+
+
+def _has_check(proposal, check_id):
+    return any(c.get('id') == check_id for c in proposal.checks or [])
+
+
+def _reinstated_procedures(assessment, current):
+    """The marked same-day procedures with a current reinstate or approve decision: brought back by a reviewer."""
+    return [p for p in assessment.proposals.all()
+            if p.bucket == EXCLUDED and _has_check(p, SAME_DAY_PROCEDURE)
+            and p.pk in current and current[p.pk].action in (REINSTATE, APPROVE)]
+
+
+def _same_day_held(proposal, assessment):
+    """A gated E/M while a reviewer's reinstatement of a same-day procedure stands: it is then held exactly as
+    beside a selected procedure until a separately identifiable E/M is documented."""
+    return _has_check(proposal, SAME_DAY_EM_GATE) and bool(
+        _reinstated_procedures(assessment, current_decisions(assessment)))
+
+
+def _same_day_blocker(visit, procedures):
+    codes = [p.code for p in procedures]
+    listed = codes[0] if len(codes) == 1 else ', '.join(codes[:-1]) + ' and ' + codes[-1]
+    done = 'was reinstated as a same-day procedure' if len(codes) == 1 else 'were reinstated as same-day procedures'
+    return f'{visit.code} needs a separately identifiable E/M: {listed} {done}'
+
+
 def _allowed(proposal, assessment, membership, encounter):
     if not _is_reviewer(membership, encounter) or proposal.assessment_id != assessment.pk:
         return []
     if (encounter.current_assessment_id != assessment.pk
             or assessment.revision_id != encounter.current_revision_id):
         return []
-    return _actions(proposal, _current_decision(proposal), assessment.revision.text)
+    return _actions(proposal, _current_decision(proposal), assessment.revision.text,
+                    _same_day_held(proposal, assessment))
 
 
 def allowed_actions(proposal, assessment, membership):
@@ -477,12 +511,16 @@ def _assessment_blockers(encounter, assessment):
             blockers.append(f'Open clarification: {_human(clarification.fact)}')
     asked = {item.proposal_id for item in open_clarifications if item.proposal_id}
     current = current_decisions(assessment)
+    reinstated = _reinstated_procedures(assessment, current)
     reviewable = 0
     for proposal in assessment.proposals.all():
         decision = current.get(proposal.pk)
         if not _reviewable(proposal, decision):
             continue
         reviewable += 1
+        if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and not (decision and decision.action == REJECT):
+            # Also when this E/M was approved before the procedure was brought back.
+            blockers.append(_same_day_blocker(proposal, reinstated))
         if decision is not None and decision.action in (APPROVE, REJECT):
             continue
         if decision is not None:

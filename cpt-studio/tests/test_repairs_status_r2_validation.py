@@ -85,7 +85,8 @@ OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office 
           'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 VISIT_SENTENCE = 'Established patient office visit.'
 ASSESSMENT_AND_PLAN = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
-                       'Chief complaint: Abdominal pain.\nAssessment and plan: {plan}\nMedical decision making: moderate.\n'
+                       'Chief complaint: Abdominal pain.\nAssessment and plan: {plan}\n'
+                       'Medical decision making: moderate.\n'
                        'Time: Total time on the date of the encounter was 32 minutes.\n')
 DISCUSSED = (
     # review:1, the claimant's five
@@ -95,7 +96,8 @@ DISCUSSED = (
     'Possible Crohn disease. Colonoscopy vs. CT enterography; decision at follow-up.',
     'Risks and benefits of colonoscopy were discussed.',
     # review:1, the verifier's own
-    'Colonoscopy if needed.', 'Possible EGD.', 'Flexible sigmoidoscopy versus colonoscopy; the patient will call to decide.',
+    'Colonoscopy if needed.', 'Possible EGD.',
+    'Flexible sigmoidoscopy versus colonoscopy; the patient will call to decide.',
     'Discussion of EGD; the patient prefers to wait.',
     'Trial of fiber supplementation. Discussed colonoscopy for persistent symptoms.',
     'Colonoscopy may be needed if cramping persists.', 'Upper endoscopy? Will reassess after the PPI trial.',
@@ -155,7 +157,8 @@ class Review1PlanDiscussionTests(RealCase):
 
     def test_a_history_discussion_is_ready(self):
         text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
-                'History of present illness: A colonoscopy was discussed at the prior visit and she preferred to wait.\n'
+                'History of present illness: A colonoscopy was discussed at the prior visit and she preferred to '
+                'wait.\n'
                 'Assessment and plan: Fiber supplementation.\nMedical decision making: moderate.\n'
                 'Time: Total time on the date of the encounter was 32 minutes.\n')
         proposals, _ = real(text, ('99214', VISIT_SENTENCE))
@@ -309,7 +312,8 @@ class Status4ResolveStatusTests(EngineCase):
 
     NOTE = Note('Date of service: 2026-10-21', 'Indication: pancreatic cyst; EUS requested.',
                 'The endoscope was advanced to the second part of the duodenum.')
-    EUS_LINE, DONE = 'Indication: pancreatic cyst; EUS requested.', 'The endoscope was advanced to the second part of the duodenum.'
+    EUS_LINE = 'Indication: pancreatic cyst; EUS requested.'
+    DONE = 'The endoscope was advanced to the second part of the duodenum.'
 
     def run_case(self, eus_status, *cues):
         self.statuses = {self.DONE: ('performed', ('performed: was advanced',))}
@@ -415,7 +419,8 @@ class Status13ResolveStatusTests(SimpleTestCase):
 
 # --- status:19: other GI services hold the E/M; coverage never claims more than routing covers ----------------
 
-BANDING = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal bleeding.\n'
+BANDING = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+           'Chief complaint: rectal bleeding.\n'
            'Procedure: Rubber band ligation of an internal hemorrhoid was performed today without complication.\n'
            'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
 
@@ -510,6 +515,90 @@ class Status19CoverageTests(RealCase):
 
 
 # --- review:0 at the validation layer: a reinstatable same-day procedure is named on the E/M ------------------
+
+class Review0EngineTests(EngineCase):
+    """review:0 — every selected (or reinstatable) E/M lists the excluded, reinstatable procedural selections that
+    would make it a procedure day, and each such procedure says so; review gates approval on them."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Office visit: established patient seen for rectal bleeding.',
+                'Total time 32 minutes.', 'Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.',
+                'Return office visit is scheduled for 2026-12-01.')
+    VISIT, TIME = 'Office visit: established patient seen for rectal bleeding.', 'Total time 32 minutes.'
+    BAND = 'Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.'
+    RETURN = 'Return office visit is scheduled for 2026-12-01.'
+
+    def run_case(self, *codes, visit_facts=None, extra=()):
+        self.statuses = {self.TIME: None, self.BAND: ('planned', ('planned: scheduled',)),
+                         self.RETURN: ('planned', ('planned: scheduled',))}
+        visit = FamilyFinding(EM, 'performed', (placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),),
+                              facts=(Fact('em_basis', 'total time 32 minutes', 'document'),) + tuple(visit_facts or ()))
+        return self.run_engine(self.NOTE, *codes, findings=[visit, *extra], ctx=visit_context())
+
+    def test_the_visit_and_the_procedure_name_each_other(self):
+        result = self.run_case(selected('99213', self.NOTE.span(self.TIME)),
+                               selected('46221', self.NOTE.span(self.BAND)))
+        visit, band = self.proposal(result, '99213'), self.proposal(result, '46221')
+        self.assertEqual((visit.status, band.bucket, band.reinstatable), ('ready', 'excluded', True))
+        gate = self.check(visit, 'em.same_day_if_reinstated')
+        self.assertEqual(gate.status, 'warn')
+        self.assertIn('46221', gate.detail)
+        self.assertIn('separately identifiable E/M', gate.detail)
+        marker = self.check(band, 'review.same_day_em')
+        self.assertEqual(marker.status, 'warn')
+        self.assertIn('99213', marker.detail)
+        self.assertEqual(self.check(band, 'review.reinstatement').status, 'pass')
+
+    def test_both_directions_an_excluded_visit_is_gated_too(self):
+        result = self.run_case(selected('99213', self.NOTE.span(self.RETURN)),
+                               selected('46221', self.NOTE.span(self.BAND)))
+        visit = self.proposal(result, '99213')
+        self.assertEqual(visit.bucket, 'excluded')
+        self.assertEqual(self.check(visit, 'em.same_day_if_reinstated').status, 'warn')
+        self.assertEqual(self.check(self.proposal(result, '46221'), 'review.same_day_em').status, 'warn')
+
+    def test_nothing_is_listed_when_nothing_would_gate(self):
+        no_global = InMemoryReferenceLookup([PFS_INFO, MUE_INFO], {
+            PFS_INFO.key: {**PFS_ROWS, ('91200', ''): pfs(days='XXX', mult='0')}, MUE_INFO.key: MUE_ROWS})
+        statement = Span(self.NOTE.offset(self.VISIT), self.NOTE.offset(self.VISIT) + len(self.VISIT), self.VISIT)
+        documented = Fact('separate_em', 'documented', 'document', (statement,))
+        cases = {
+            'not procedural': (dict(codes=(selected('99213', self.NOTE.span(self.TIME)),
+                                           selected('91200', self.NOTE.span(self.BAND)))), no_global),
+            'separate E/M documented': (dict(codes=(selected('99213', self.NOTE.span(self.TIME)),
+                                                    selected('46221', self.NOTE.span(self.BAND))),
+                                             visit_facts=(documented,)), None),
+            'not reinstatable': (dict(codes=(selected('99213', self.NOTE.span(self.TIME)),
+                                             selected('46221', self.NOTE.span(self.BAND, exact=False)))), None),
+        }
+        for name, (kwargs, reference) in cases.items():
+            with self.subTest(name):
+                codes = kwargs.pop('codes')
+                self.statuses = {}
+                if reference is not None:
+                    self.statuses = {self.TIME: None, self.BAND: ('planned', ('planned: scheduled',))}
+                    visit = FamilyFinding(EM, 'performed',
+                                          (placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),),
+                                          facts=(Fact('em_basis', 'total time 32 minutes', 'document'),))
+                    result = self.run_engine(self.NOTE, *codes, findings=[visit], ctx=visit_context(),
+                                             reference=reference)
+                else:
+                    result = self.run_case(*codes, **kwargs)
+                visit = self.proposal(result, '99213')
+                self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_if_reinstated'])
+                for item in result.proposals:
+                    self.assertFalse([c for c in item.checks if c.id == 'review.same_day_em'], item.code)
+
+    def test_an_already_held_visit_lists_nothing(self):
+        done = finding('gi.colonoscopy', 'performed',
+                       placed(self.NOTE, 'gi.colonoscopy', 'performed', self.VISIT, 'procedure', 'performed: x'),
+                       facts={'extent': 'cecum'})
+        result = self.run_case(selected('99213', self.NOTE.span(self.TIME)),
+                               selected('46221', self.NOTE.span(self.BAND)), extra=(done,))
+        visit = self.proposal(result, '99213')
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertFalse([c for c in visit.checks if c.id == 'em.same_day_if_reinstated'])
+        # Nor is the procedure marked: on a procedure day reinstating it changes nothing for the E/M.
+        self.assertFalse([c for c in self.proposal(result, '46221').checks if c.id == 'review.same_day_em'])
 
 
 class EngineVersionTests(SimpleTestCase):

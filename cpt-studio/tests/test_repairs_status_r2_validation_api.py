@@ -37,6 +37,71 @@ def gated_result():
 BLOCKER = '99213 needs a separately identifiable E/M: 46221 was reinstated as a same-day procedure'
 
 
+class Review0GateTests(TestCase):
+    def setUp(self):
+        self.s = pf.scenario()
+        self.assessment = pf.assess(self.s.encounter, gated_result())
+
+    def actions(self, key):
+        return review.allowed_actions(self.s.proposal(key), self.assessment, self.s.membership(self.s.reviewer))
+
+    def ready(self):
+        return review.readiness(self.s.encounter)
+
+    def test_a_reinstated_procedure_withholds_approve_until_it_is_rejected_or_revoked(self):
+        self.assertEqual(self.actions('sel:0'), ['approve', 'reject'])
+        self.s.decide('exc:0', 'reinstate', note='Banding was done today.')
+        self.assertEqual(self.actions('sel:0'), ['reject'])
+        self.assertIn(BLOCKER, self.ready()['blockers'])
+        self.s.decide('exc:0', 'approve')
+        self.assertEqual(self.actions('sel:0'), ['reject'])
+        with self.assertRaisesRegex(Exception, 'not available'):
+            self.s.decide('sel:0', 'approve')
+        self.s.decide('exc:0', 'revoke')
+        self.assertEqual(self.actions('sel:0'), ['approve', 'reject'])
+        self.s.decide('exc:0', 'reinstate')
+        self.s.decide('exc:0', 'reject')
+        self.assertEqual(self.actions('sel:0'), ['approve', 'reject'])
+        self.s.decide('sel:0', 'approve')
+        self.assertTrue(self.ready()['reviewed'], self.ready())
+
+    def test_approving_the_e_m_first_blocks_the_reviewed_report(self):
+        self.s.decide('sel:0', 'approve')
+        self.assertTrue(self.ready()['reviewed'])
+        self.s.decide('exc:0', 'reinstate')
+        self.s.decide('exc:0', 'approve')
+        readiness = self.ready()
+        self.assertFalse(readiness['reviewed'])
+        self.assertEqual(readiness['blockers'], [BLOCKER])
+        self.assertEqual(self.s.encounter.state, 'ready_for_review')
+        self.s.decide('sel:0', 'revoke')
+        self.s.decide('sel:0', 'reject')
+        self.assertTrue(self.ready()['reviewed'])
+
+    def test_an_unmarked_reinstatement_gates_nothing(self):
+        self.s.decide('exc:1', 'reinstate')
+        self.assertEqual(self.actions('sel:0'), ['approve', 'reject'])
+        self.assertNotIn(BLOCKER, self.ready()['blockers'])
+
+    def test_a_reinstated_e_m_is_gated_too(self):
+        em_gate = pf.check(EM_GATE, 'warn')
+        marker = pf.check(MARKER, 'warn')
+        reinstatement = pf.check('review.reinstatement', 'pass')
+        result = pf.result(
+            pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE]),
+            pf.proposal('exc:0', '99213', [pf.DATE_PASSAGE], bucket='excluded', reinstatable=True,
+                        checks=pf.standard_checks() + (reinstatement, em_gate)),
+            pf.proposal('exc:1', '46221', [pf.PLAN_PASSAGE], bucket='excluded', reinstatable=True,
+                        checks=pf.standard_checks() + (reinstatement, marker)))
+        self.assessment = pf.assess(self.s.encounter, result, ctx=pf.context(self.s.encounter, self.s.revision))
+        self.s.decide('exc:0', 'reinstate')
+        self.assertEqual(self.actions('exc:0'), ['approve', 'reject', 'revoke'])
+        self.s.decide('exc:1', 'reinstate')
+        self.assertEqual(self.actions('exc:0'), ['reject', 'revoke'])
+        self.s.decide('exc:1', 'reject')
+        self.assertEqual(self.actions('exc:0'), ['approve', 'reject', 'revoke'])
+
+
 # --- end to end through the API --------------------------------------------------------------------------------
 
 def office_note(plan_lines, *, procedure_lines=(), time_line='Total time on the date of the encounter was 24 minutes.'):
@@ -104,6 +169,66 @@ class ApiCase(ApiHarness):
 
 
 @override_settings(**LIVE)
+class Review0ReinstatedProcedureApiTests(ApiCase, TestCase):
+    """review:0 — a reinstated same-day procedure gates the selected E/M, whichever is decided first."""
+
+    def test_a_reinstate_then_approve_both(self):
+        encounter_id = self.run_note(BAND_NOTE, ('99213', TIME), ('46221', SCHEDULED))
+        visit, band = self.proposal(encounter_id, '99213'), self.proposal(encounter_id, '46221')
+        self.assertEqual((visit['status'], band['bucket']), ('ready', 'excluded'))
+        self.assertEqual(visit['allowed_actions'], ['approve', 'reject'])
+        self.assertIn(EM_GATE, [c['id'] for c in visit['checks']])
+        self.assertIn(MARKER, [c['id'] for c in band['checks']])
+        self.assertEqual(self.decide(encounter_id, '46221', 'reinstate').status_code, 201)
+        self.assertEqual(self.proposal(encounter_id, '99213')['allowed_actions'], ['reject'])
+        self.assertEqual(self.decide(encounter_id, '46221', 'approve').status_code, 201)
+        self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
+        blocked = self.report(encounter_id, 'reviewed')
+        self.assertEqual(blocked.status_code, 409)
+        self.assertIn('99213 needs a separately identifiable E/M: 46221 was reinstated as a same-day procedure',
+                      blocked.json()['details']['blockers'])
+
+    def test_b_approving_the_e_m_first_keeps_it_out_of_the_reviewed_report(self):
+        encounter_id = self.run_note(BAND_NOTE, ('99213', TIME), ('46221', SCHEDULED))
+        self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 201)
+        self.assertEqual(self.decide(encounter_id, '46221', 'reinstate').status_code, 201)
+        self.assertEqual(self.decide(encounter_id, '46221', 'approve').status_code, 201)
+        detail = self.detail(encounter_id)
+        self.assertFalse(detail['readiness']['reviewed'])
+        self.assertEqual(self.report(encounter_id, 'reviewed').status_code, 409)
+        # Revoking the procedure's approval returns it to the exclusion (nothing earlier is resurrected), which
+        # releases the E/M.
+        self.assertEqual(self.decide(encounter_id, '46221', 'revoke').status_code, 201)
+        self.assertTrue(self.detail(encounter_id)['readiness']['reviewed'])
+        self.assertEqual(self.report(encounter_id, 'reviewed').status_code, 201)
+
+    def test_f_a_correcting_reinstatement_of_a_procedure_done_as_scheduled(self):
+        done = 'Rubber band ligation of an internal hemorrhoid was performed today as scheduled.'
+        encounter_id = self.run_note(office_note(['Grade II internal hemorrhoids.', done]), ('99213', TIME),
+                                     ('46221', done))
+        band = self.proposal(encounter_id, '46221')
+        if band['bucket'] == 'excluded':  # read as planned today; integrated routing may read it performed
+            self.assertEqual(self.decide(encounter_id, '46221', 'reinstate').status_code, 201)
+            self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
+        else:
+            self.assertEqual(self.proposal(encounter_id, '99213')['status'], 'needs_clarification')
+
+    def test_d_the_reverse_pair_stays_refused(self):
+        note = office_note(['Return office visit is scheduled for 2026-12-01.'],
+                           procedure_lines=['Rubber band ligation of an internal hemorrhoid was performed today '
+                                            'without complication.'])
+        encounter_id = self.run_note(note, ('99213', 'Return office visit is scheduled for 2026-12-01.'),
+                                     ('46221', 'Rubber band ligation of an internal hemorrhoid was performed today '
+                                               'without complication.'))
+        visit = self.proposal(encounter_id, '99213')
+        self.assertEqual(visit['bucket'], 'excluded')
+        gate = next(c for c in visit['checks'] if c['id'] == 'review.reinstatement')
+        self.assertEqual(gate['status'], 'warn')
+        self.assertEqual(self.decide(encounter_id, '99213', 'reinstate').status_code, 201)
+        self.assertEqual(self.decide(encounter_id, '99213', 'approve').status_code, 409)
+
+
+@override_settings(**LIVE)
 class Review1PlanDiscussionApiTests(ApiCase, TestCase):
     """review:1 — an office visit whose plan only discusses a procedure can be approved and reported."""
 
@@ -133,7 +258,8 @@ class Status4ApiTests(MultiEvidenceApiCase, TestCase):
     def test_status4_an_uncertain_family_is_not_approvable(self):
         note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
                 'Indication: Dysphagia. Pancreatic cyst on CT; EUS requested by the referring physician.\n'
-                'Procedure: EGD\nFindings: The endoscope was advanced to the second part of the duodenum. Normal EGD.\n')
+                'Procedure: EGD\nFindings: The endoscope was advanced to the second part of the duodenum. '
+                'Normal EGD.\n')
         encounter_id = self.run_note(note, ('43259', 'The endoscope was advanced to the second part of the duodenum.'))
         eus = self.proposal(encounter_id, '43259')
         self.assertEqual((eus['status'], eus['allowed_actions']), ('needs_clarification', ['reject']))

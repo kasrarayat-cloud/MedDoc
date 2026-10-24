@@ -73,6 +73,11 @@ class _Encounter:
     procedure_labels: tuple[str, ...]  # procedure families performed on this date
     possible_labels: tuple[str, ...]  # procedure families whose performance on this date is not established
     global_days: str
+    # Off a procedure day: the excluded, reinstatable procedural selections ((code, profile label or '')) that a
+    # reviewer's reinstatement would make same-day procedures, and the E/M codes (no separately identifiable E/M
+    # documented) that such a reinstatement would hold. Review gates approval on them; empty when nothing would.
+    if_reinstated: tuple[tuple[str, str], ...] = ()
+    gated_visits: tuple[str, ...] = ()
 
     @property
     def procedure_day(self) -> bool:
@@ -196,25 +201,38 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
+    # A reinstated procedure holds an E/M as a selected one does (review:0). On a procedure day the E/M is held
+    # already; otherwise record which reinstatements would hold which E/Ms, for review to gate approval on.
+    reinstatable = [s for s in selections if s.excluded and s.evaluation is not None and _procedural(s)]
+    visits = [s for s in selections if s.family in checks.EM_FAMILIES and s.evaluation is not None
+              and checks.separate_em_statement(s.evaluation.finding) is None]
+    gate = bool(reinstatable and visits and not (labels or possible_labels))
     return _Encounter(provider=provider, context=context, sources=sources, date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       possible_labels=tuple(possible_labels),
-                      global_days=_global_days(procedures + possible, pfs_source, sources, date_state.value))
+                      global_days=_global_days(procedures + possible, pfs_source, sources, date_state.value),
+                      if_reinstated=tuple((s.code, s.profile.label if s.profile.supported else '')
+                                          for s in reinstatable) if gate else (),
+                      gated_visits=tuple(s.code for s in visits) if gate else ())
 
 
-def _same_day_procedure(s: _Selection, state: str = 'performed') -> bool:
+def _procedural(s: _Selection) -> bool:
     """A non-E/M code that is procedural: a procedure profile, or a CMS global period other than XXX. A code
-    with no fee-schedule row for the date counts (fail-closed): the E/M is then held. ``state`` 'performed'
-    asks for a performed or incomplete code, 'uncertain' for one whose performance is not established."""
+    with no fee-schedule row for the date counts (fail-closed): the E/M is then held."""
     if s.family in checks.EM_FAMILIES or s.evaluation is None:
-        return False
-    matches = s.performed if state == 'performed' else s.evaluation.outcome.state == 'uncertain'
-    if not matches:
         return False
     if s.profile.procedure:
         return True
-    pfs = s.evaluation.reference.pfs if s.evaluation else None
+    pfs = s.evaluation.reference.pfs
     return not pfs or pfs.get('global_days') != 'XXX'
+
+
+def _same_day_procedure(s: _Selection, state: str = 'performed') -> bool:
+    """A procedural code (``_procedural``) in the given state: 'performed' asks for a performed or incomplete code,
+    'uncertain' for one whose performance is not established."""
+    if not _procedural(s):
+        return False
+    return s.performed if state == 'performed' else s.evaluation.outcome.state == 'uncertain'
 
 
 def _global_days(procedures: Sequence[_Selection], pfs_source, sources, day) -> str:
@@ -256,6 +274,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         found.append(facts_check)
     if s.family in checks.EM_FAMILIES and not enc.procedure_day:
         found.append(checks.SAME_DAY_COVERAGE_CHECK)
+        if s.code in enc.gated_visits:
+            found.append(checks.same_day_if_reinstated_check(enc.if_reinstated))
     if not s.excluded:
         if outcome.state == 'uncertain':
             clarifications.append(checks.performed_clarification(outcome, name, s.family, key))
@@ -285,6 +305,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         if s.family in checks.EM_FAMILIES and enc.procedure_day and checks.separate_em_statement(finding) is None:
             holds.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key, enc.possible_labels))
         found.append(checks.reinstatement_check(holds, date_unknown=day is None))
+        if any(code == s.code for code, _ in enc.if_reinstated):
+            found.append(checks.same_day_em_check(enc.gated_visits))
     if s.excluded:
         status = 'excluded'
     elif clarifications or day is None:  # an unknown service date holds every proposal on the encounter question
