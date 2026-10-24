@@ -2125,8 +2125,10 @@ def _unchecked_state(an: Analysis, start: int, end: int) -> bool:
 # performed" - negates the printed line or table cell on the same page whose words equal its label (ignoring case,
 # whitespace, a colon and list markers or boxes around it); when it names none, the page's items are held.
 FORM_HEADER = re.compile(r'^[ \t]*\[PDF (form fields|annotation text) on page (\d+)\][ \t]*$', re.A | re.M)
-_FIELD_DENIED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected'
-                           r'|no|none|not[ \t]+done|not[ \t]+performed)[ \t.]*', re.A | re.I)
+# A denying value is a box state, a selected denial ("No", "None", "Not done", "Not performed"), or a short answer this
+# reader cannot read as done or not done ("N", "0", "N/A"); _box_field_answer decides what each says of the label.
+_FIELD_DENIED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:(?P<box>not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected)'
+                           r'|(?P<answer>no|none|not[ \t]+done|not[ \t]+performed)|(?P<unclear>n/a|na|n|0))[ \t.]*', re.A | re.I)
 _FIELD_CHECKED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:checked|yes)[ \t.]*', re.A | re.I)
 _BLANK_LINE = re.compile(r'\n[ \t]*\n')
 _LEADING_MARK = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?\d{1,3}[.)]|\(?[a-z][.)]'
@@ -2136,13 +2138,23 @@ FIELD_LABEL_CHARS = 200  # a printed line or cell longer than this never equals 
 FIELD_UNTIED = "uncertain: the form field '{}' says its item was not done, and no printed line on its page names it"
 FIELD_PAGE = ("uncertain: the form field '{}' says this item was not done, but the page it is on cannot be told from "
               "the pages before it")
+# Round 4 (structure:6, structure:7, contract:2, evidence:4, contract:4, release:12): a "No" or "None" denies or holds
+# only an item its label names or a field with a widget's default name; one whose label names the item among other
+# words ("Flexible sigmoidoscopy in the last 10 years: No"), and a short answer ("Biopsy (Y/N): N"), hold it; a status
+# field that gives no completion holds its page.
+BOX_FIELD_HELD = "uncertain: the form field '{}' answers for this item in a way this reader cannot read as done or not done"
+BOX_FIELD_HELD_UNTIED = ("uncertain: the form field '{}' answers for an item on its page in a way this reader cannot read "
+                         "as done or not done, and no printed line on its page names it")
+BOX_FIELD_ANSWER_UNTIED = ("uncertain: the form field '{}' may answer for an item on its page, and no printed line on its "
+                           "page names it")
+BOX_FIELD_STATUS = "uncertain: the form field '{}' gives the procedure on its page a status other than completed"
 
 
 @dataclass(frozen=True)
 class _Named:
     start: int
     end: int
-    state: str  # 'off' (a denying field line names it) | 'on' (a checked one) | 'mixed'
+    state: str  # 'off' (a denying field line names it) | 'on' (a checked one) | 'held' (_box_field_answer) | 'mixed'
     exact: bool  # its page's printed text is known exactly
     line: str  # the field line, as written
 
@@ -2152,6 +2164,7 @@ class _FieldPage:
     start: int  # the page's printed text, as far as it can be told: from the end of the previous block
     end: int  # the end of the page's form-field block
     unmatched: str  # the first denying field line whose label names nothing printed on the page ('' for none)
+    cue: str = FIELD_UNTIED  # the hold the page gives its items, with that line in it
 
 
 @dataclass(frozen=True)
@@ -2162,6 +2175,12 @@ class _Fields:
     denying_starts: tuple = ()
     named_starts: tuple = ()
     page_starts: tuple = ()
+    held: tuple = ()  # _Named spans of the field lines that hold their item ('held'), sorted
+    held_starts: tuple = ()
+    checked: tuple = ()  # _Named spans of the checked or Yes field lines: silent, never held by their page
+    checked_starts: tuple = ()
+    untied: tuple = ()  # _FieldPage of each block with any denying or answering line that names nothing printed
+    untied_starts: tuple = ()
 
 
 def _label_key(raw: str) -> str:
@@ -2190,12 +2209,15 @@ def _form_fields(an: Analysis) -> _Fields:
     cells their labels name on their page, and the pages with a denying line that names none. A page's printed text
     runs from the end of the previous page's block to its own block; it is known exactly when that previous block is
     the previous page's (or there is none before page 1), else it may hold earlier pages too, and a line it names is
-    held instead of negated."""
+    held instead of negated. What a denying line says of its label is _box_field_answer's; a label names a printed line
+    or cell that equals it, an option row it opens, or an item a printed row's boxes delimit (_box_label_candidates).
+    A status field that gives the procedure no completion holds its page (contract:4); every denying or answering
+    line that names nothing printed is recorded for the separately identifiable E/M statement (_box_attestation_refused)."""
     key = ('form-fields',)
     if key not in an.memo:
         text = an.text
         headers = list(FORM_HEADER.finditer(text))
-        denying, named, pages = [], [], []
+        denying, held, checked, named, pages, untied = [], [], [], [], [], []
         previous_end, previous_page = 0, 0
         for i, header in enumerate(headers):
             limit = headers[i + 1].start() if i + 1 < len(headers) else len(text)
@@ -2204,46 +2226,173 @@ def _form_fields(an: Analysis) -> _Fields:
             page = int(header.group(2))
             if header.group(1) == 'form fields':
                 exact = page == previous_page + 1
-                labels: dict = {}
+                labels: dict = {}  # label key -> (state, its first line, the hold its page takes when it names nothing)
+                answered: dict = {}  # label key -> its first denying or answering line, whatever its label names
+                status = ''  # the first status field that gives the procedure no completion
                 for line in re.finditer(r'[^\n]+', text[header.end():block_end]):
                     words = line.group(0)
                     at = header.end() + line.start()
+                    if not status and _box_status_field(an, at, at + len(words)):
+                        status = words.strip()
                     denied = _FIELD_DENIED.fullmatch(words)
-                    checked = None if denied else _FIELD_CHECKED.fullmatch(words)
-                    if denied:
-                        denying.append(_Named(at, at + len(words), 'off', exact, words.strip()))
-                    if denied or checked:
-                        label = _label_key((denied or checked).group('label'))
-                        state = 'off' if denied else 'on'
-                        previous = labels.get(label)
-                        labels[label] = (state if previous is None or previous[0] == state else 'mixed',
-                                         previous[1] if previous else words.strip())
+                    is_checked = None if denied else _FIELD_CHECKED.fullmatch(words)
+                    if is_checked:
+                        checked.append(_Named(at, at + len(words), 'on', exact, words.strip()))
+                        _box_label_state(labels, _label_key(is_checked.group('label')), 'on', words.strip(), FIELD_UNTIED)
+                    if not denied:
+                        continue
+                    label = _label_key(denied.group('label'))
+                    answered.setdefault(label, words.strip())
+                    state, template = _box_field_answer(an, at, at + len(denied.group('label')), denied)
+                    if state is not None:
+                        (denying if state == 'off' else held).append(_Named(at, at + len(words), state, exact,
+                                                                             words.strip()))
+                        _box_label_state(labels, label, state, words.strip(), template)
                 found = set()
-                if labels:
+                if answered or labels:
+                    wanted = set(answered) | set(labels)
                     for line in re.finditer(r'[^\n]+', text[previous_end:header.start()]):
                         at = previous_end + line.start()
-                        cells = line.group(0).split(' | ')
                         offset = 0
-                        for cell in cells:
-                            stripped = cell.strip()
-                            if stripped and len(stripped) <= FIELD_LABEL_CHARS:
-                                label = _label_key(stripped)
-                                if label in labels:
-                                    begin = at + offset + (len(cell) - len(cell.lstrip()))
-                                    named.append(_Named(begin, begin + len(stripped), labels[label][0], exact,
-                                                        labels[label][1]))
+                        for cell in line.group(0).split(' | '):
+                            for candidates in _box_label_candidates(cell, at + offset):
+                                matches = [(begin, part, _label_key(part)) for begin, part in candidates]
+                                matches = [m for m in matches if m[2] in wanted]
+                                for begin, part, label in matches:
+                                    if label in labels:
+                                        named.append(_Named(begin, begin + len(part), labels[label][0], exact,
+                                                            labels[label][1]))
                                     found.add(label)
+                                if matches:
+                                    break
                             offset += len(cell) + 3
-                unmatched = next((line for label, (state, line) in labels.items() if state != 'on' and label not in found),
-                                 '')
-                if unmatched:
-                    pages.append(_FieldPage(previous_end, block_end, unmatched))
+                unmatched = next(((line, template) for label, (state, line, template) in labels.items()
+                                  if state != 'on' and label not in found), None)
+                if status:
+                    pages.append(_FieldPage(previous_end, block_end, status, BOX_FIELD_STATUS))
+                elif unmatched is not None:
+                    pages.append(_FieldPage(previous_end, block_end, *unmatched))
+                untied_line = next((line for label, line in answered.items() if label not in found), '')
+                if untied_line:
+                    untied.append(_FieldPage(previous_end, block_end, untied_line))
             previous_end, previous_page = block_end, page
-        denying.sort(key=lambda n: n.start)
-        named.sort(key=lambda n: n.start)
+        for spans in (denying, held, checked, named):
+            spans.sort(key=lambda n: n.start)
         an.memo[key] = _Fields(tuple(denying), tuple(named), tuple(pages), tuple(n.start for n in denying),
-                               tuple(n.start for n in named), tuple(p.start for p in pages))
+                               tuple(n.start for n in named), tuple(p.start for p in pages), tuple(held),
+                               tuple(n.start for n in held), tuple(checked), tuple(n.start for n in checked),
+                               tuple(untied), tuple(p.start for p in untied))
     return an.memo[key]
+
+
+def _box_label_state(labels: dict, label: str, state: str, line: str, template: str) -> None:
+    """Record a field line's state for its label: lines for one label that disagree make it 'mixed'."""
+    previous = labels.get(label)
+    if previous is None:
+        labels[label] = (state, line, template)
+    elif previous[0] != state:
+        labels[label] = ('mixed', previous[1], previous[2])
+
+
+def _box_field_answer(an: Analysis, start: int, end: int, denied: re.Match) -> tuple[Optional[str], Optional[str]]:
+    """(state, the hold of its page when its label names nothing printed) of a denying field line whose label is
+    [start, end): a box state ('<label>: not checked') is 'off', whatever the label, as before; a selected "No", "None",
+    "Not done" or "Not performed" is 'off' when the label names an item alone ("Biopsy", "Biopsy taken") or is a
+    widget's default name ("Check Box1", "Text7"), 'held' when it names an item among other words ("Flexible
+    sigmoidoscopy in the last 10 years", "Colonoscopy complications", "Biopsy (Y/N)"), and nothing when it names
+    none ("Complications: None", "EBL: None", "Procedure cancelled: No"); a short answer this reader cannot read ("N",
+    "0", "N/A") is 'held' when the label names an item, and nothing otherwise. (None, None): the line holds nothing."""
+    if denied.group('box'):
+        return 'off', FIELD_UNTIED
+    kind = _box_label_kind(an, start, end)
+    if denied.group('answer'):
+        return {'item': ('off', FIELD_UNTIED), 'generic': ('off', BOX_FIELD_ANSWER_UNTIED),
+                'qualified': ('held', BOX_FIELD_HELD_UNTIED)}.get(kind, (None, None))
+    return ('held', BOX_FIELD_HELD_UNTIED) if kind in ('item', 'qualified') else (None, None)
+
+
+# A field label that is a widget's default name, not a question: "Check Box1", "Text 7", "Field3", "Group1".
+_BOX_GENERIC_FIELD = re.compile(r'(?:check[ \t]*box|checkbox|text(?:[ \t]*field)?|field|group|radio(?:[ \t]*button)?|'
+                                r'button|option|choice|drop[ \t]*down|combo[ \t]*box|list[ \t]*box|untitled|'
+                                r'form[ \t]*field)[ \t]*\d*', re.A | re.I)
+# The words an item's own question adds to its name ("Biopsy taken", "Was a polypectomy performed").
+_BOX_ITEM_WORDS = frozenset(('taken', 'performed', 'done', 'completed', 'obtained', 'attempted', 'given', 'placed',
+                             'today', 'was', 'were', 'a', 'an', 'the', 'any'))
+_BOX_LABEL_WORD = re.compile(r"[A-Za-z0-9][\w/'-]*", re.A)
+
+
+def _box_label_kind(an: Analysis, start: int, end: int) -> str:
+    """What the field label [start, end) names: 'generic' (a widget's default name), 'item' (a service, an
+    intervention or another procedure's word alone, with the words of its own question), 'qualified' (one among other
+    words: a time, an attribute, a count), or 'other' (none)."""
+    text = an.text
+    if _BOX_GENERIC_FIELD.fullmatch(_label_key(text[start:end])):
+        return 'generic'
+    names = ({(m.start, m.end) for m in an.services_in(start, end)} | {(iv.start, iv.end) for iv in
+                                                                       an.interventions_in(start, end)}
+             | {m.span() for m in _PROCEDURE_WORD.finditer(text, start, end)})
+    if not names:
+        return 'other'
+    rest = [w.group(0).lower() for w in _BOX_LABEL_WORD.finditer(text, start, end)
+            if not any(s <= w.start() < e for s, e in names)]
+    return 'item' if all(word in _BOX_ITEM_WORDS for word in rest) else 'qualified'
+
+
+# A form field that asks whether the procedure was done, answered with a denial ("Procedure performed: No").
+_BOX_DONE_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+(?:performed|completed|'
+                                r'done|attempted|started)[ \t]*[:?=][ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)'
+                                r'[ \t.]*', re.A | re.I)
+
+
+def _box_status_field(an: Analysis, start: int, end: int) -> bool:
+    """Whether the form-field line [start, end) gives the procedure a status that is no completion: a status field
+    whose value is not one of completion and holds or denies as a status line's would ("Procedure status: Cancelled -
+    the patient had eaten breakfast", "Status: Not performed", "Status: Rescheduled"), or a question whether the
+    procedure was done answered with a denial (contract:4). Its page's services are then held, wherever the field
+    stands: extraction writes every field after its page's text, beyond the status readers' reach."""
+    text = an.text
+    if _BOX_DONE_QUESTION.fullmatch(text, start, end):
+        return True
+    key = _STATUS_KEY.match(text, start, end)
+    if key is None:
+        return False
+    value = _SEPARATOR.match(text, key.end(), end).end()
+    if value >= end or _STATUS_DONE.match(text, value, end):
+        return False
+    return bool(_STATUS_HOLD.match(text, value, end)) or _bare_denial(an, value, end) or _value_calls_off(an, value, end)
+
+
+# The option row a field's label opens on its printed page ("Complications: ☐ Yes ☒ No", "Biopsy taken: [ ] Yes [x]
+# No"): after the label's colon, only boxes, unread marks and option words.
+_BOX_OPTION_VALUE = re.compile(r'(?:[ \t]*(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern
+                               + r'|yes|no|none|done|not[ \t]+done|n/a))+[ \t.]*', re.I)
+_BOX_MARK = re.compile('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern)
+
+
+def _box_label_candidates(cell: str, base: int) -> list:
+    """The ways a printed cell (at text offset ``base``) may give a form field its label, in order, each a list of
+    (start, text): the whole cell ("Biopsy", "☐ Biopsy"); the label of an option row it opens ("Complications" of
+    "Complications: ☐ Yes ☒ No"); the items its boxes delimit ("EGD", "Colonoscopy" of "☐ EGD ☒ Colonoscopy"). The first
+    way that names a field is the cell's."""
+    stripped = cell.strip()
+    if not stripped or len(stripped) > 4 * FIELD_LABEL_CHARS:
+        return []
+    lead = len(cell) - len(cell.lstrip())
+    found = [[(base + lead, stripped)]] if len(stripped) <= FIELD_LABEL_CHARS else []
+    colon = stripped.find(':')
+    if 0 < colon <= FIELD_LABEL_CHARS and _BOX_OPTION_VALUE.fullmatch(stripped, colon + 1):
+        found.append([(base + lead, stripped[:colon])])
+    marks = list(_BOX_MARK.finditer(stripped))
+    if len(marks) >= 2:
+        parts, previous = [], 0
+        for mark in marks + [None]:
+            stop = mark.start() if mark else len(stripped)
+            part = stripped[previous:stop]
+            if part.strip() and len(part.strip()) <= FIELD_LABEL_CHARS:
+                parts.append((base + lead + previous + len(part) - len(part.lstrip()), part.strip()))
+            previous = mark.end() if mark else stop
+        found.append(parts)
+    return found
 
 
 def _within(spans: tuple, starts: tuple, start: int, end: int):
@@ -2256,23 +2405,33 @@ def _within(spans: tuple, starts: tuple, start: int, end: int):
 
 def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     """What the check boxes and form-field lines say of [start, end), or None when they say nothing: negated by an
-    unchecked box or a denying field line (UNCHECKED); held when its boxes disagree, when a box cannot be read, when
-    a field line names it on a page that cannot be bounded, or when its page has a denying field line that names no
-    printed item (and its own reading has no explicit performance cue and no checked box of its own)."""
+    unchecked box or a denying field line (UNCHECKED); held when its boxes disagree, when a box cannot be read, when a
+    box later on its line may govern it, when a field line answers for it in a way this reader cannot read, when a
+    field line names it on a page that cannot be bounded, or when its page has a denying field line that names no
+    printed item or a status field that gives no completion (and its own reading has no explicit performance cue and no
+    checked box of its own). A checked field line itself stays silent. A field that answers for an item in a way this
+    reader cannot read holds that passage only, with no doubt about its family's service: such an answer is about
+    another time or attribute ("Flexible sigmoidoscopy in the last 10 years: No"), or one this reader cannot read."""
     state = _box_state(an, start, end)
     fields = _form_fields(an)
-    named = _within(fields.named, fields.named_starts, start, end) if an.text.find('\n', start, end) < 0 else None
+    one_line = an.text.find('\n', start, end) < 0
+    named = _within(fields.named, fields.named_starts, start, end) if one_line else None
     if state == 'unknown':
         return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
     if state == 'unclear':
         return Reading('uncertain', (BOX_LATER,), 'cue', doubt=True)
+    if named is not None and named.state == 'held':  # a hold of this passage, no doubt about its family's service
+        return Reading('uncertain', (BOX_FIELD_HELD.format(named.line),), 'cue')
     if state == 'mixed' or (named is not None and (named.state == 'mixed' or state not in (None, named.state))):
         return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
     if state == 'off' or _unchecked_state(an, start, end):
         return Reading('negated', (UNCHECKED,), 'cue')
+    held = _within(fields.held, fields.held_starts, start, end) if one_line else None
+    if held is not None:
+        return Reading('uncertain', (BOX_FIELD_HELD.format(held.line),), 'cue')
     if named is not None and named.state == 'off':
         return Reading('uncertain', (FIELD_PAGE.format(named.line),), 'cue', doubt=True)
-    if state == 'on':
+    if state == 'on' or (one_line and _within(fields.checked, fields.checked_starts, start, end) is not None):
         return None
     pages = fields.pages
     index = bisect.bisect_right(fields.page_starts, start) - 1
@@ -2281,7 +2440,7 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     cue = _cue_reading(an, start, end)
     if cue is not None or _default_reading(an, start, end).status not in ('performed', 'uncertain'):
         return None
-    return Reading('uncertain', (FIELD_UNTIED.format(pages[index].unmatched),), 'cue', doubt=True)
+    return Reading('uncertain', (pages[index].cue.format(pages[index].unmatched),), 'cue', doubt=True)
 
 
 def _names_an_item(an: Analysis, start: int, end: int) -> bool:

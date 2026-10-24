@@ -5,7 +5,11 @@ extract_document, then routing for the document's own date and the real validati
   in a text font, made fillable: the widget over the printed box replaces it with its own state, so a checked
   polypectomy is never excluded;
 - release:12 (b): a Word document whose box cell or paragraph is a plain box character (U+25A2, U+2B1C) in a text font:
-  the unchecked biopsy is never ready.
+  the unchecked biopsy is never ready;
+- structure:6, evidence:4, contract:2 and contract:4: fillable PDFs whose fields answer 'No' or 'None' to a question
+  that names no item, to one that names an item among other words, or give the procedure a status: an ordinary field
+  holds nothing, a qualified one holds only itself, and a status field that says the procedure was not done holds it;
+- release:0: a fillable EUS form whose 'Procedure status' radio group has Cancelled selected never readies 43242.
 
 Synthetic documents only, built here from raw PDF syntax or WordprocessingML.
 """
@@ -16,7 +20,8 @@ from tests.test_repairs_ingest_pdf import stream
 from tests.test_repairs_r3_forms_docx import DOCX, docx_result, note_paragraphs, paragraph
 from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FONT_OBJECTS, FONTS, NOTE, SNARE_ROW, Form, codes, extracted,
                                              text_line, to_unicode, widget_rect)
-from tests.test_repairs_status_r2_routing import read
+from tests.test_repairs_r3_forms_routing import outcome
+from tests.test_repairs_status_r2_routing import clarified, family, read, run_engine
 
 SNARE = 'Cold snare polypectomy'
 
@@ -121,6 +126,140 @@ class Release12PlainBoxCharactersInWordTests(unittest.TestCase):
                     self.assertIn(glyph, result.text)
                     self.assertEqual(read(result.text, 'Biopsy')[0], 'negated')
                     self.assertEqual(codes(result.text, ('45380', 'Biopsy'), ('45385', SNARE)), ('excluded', 'ready'))
+
+
+DATE_LINES = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'), (72, 720, 'Date of service: 2026-10-21')]
+
+
+def page_form(lines):
+    """A form page with DATE_LINES and then ``lines`` (one Helvetica line each, 20 points apart)."""
+    return Form(DATE_LINES + [(72, 700 - 20 * n, line) for n, line in enumerate(lines)])
+
+
+def row_y(lines, index):
+    return 700 - 20 * index
+
+
+OFFICE_LINES = ['Place of service: Office (POS 11)', 'Established patient office visit for rectal bleeding.',
+                'Chief complaint: Rectal bleeding.', 'Assessment: Hematochezia.', 'Medical decision making: moderate.',
+                'Total time: 32 minutes.', 'Procedure: Flexible sigmoidoscopy with biopsy. The sigmoidoscope was advanced to '
+                '40 cm.', 'Biopsies were taken from the rectum.']
+VISIT = 'Established patient office visit for rectal bleeding.'
+
+
+class Structure6QualifiedFieldInAPdfTests(unittest.TestCase):
+    """structure:6 (critical): a text field answering 'No' to 'Flexible sigmoidoscopy in the last 10 years', beside its
+    printed label, negated the same-day flexible sigmoidoscopy and released the office E/M."""
+
+    def test_the_office_e_m_stays_held(self):
+        for label, value in (('Flexible sigmoidoscopy in the last 10 years:', 'No'),
+                             ('Flexible sigmoidoscopy complications:', 'None')):
+            with self.subTest(label=label):
+                form = page_form(OFFICE_LINES + [label])
+                y = row_y(OFFICE_LINES, len(OFFICE_LINES))
+                form.textfield(label.rstrip(':'), (330, y - 3, 450, y + 11), value)
+                result = extracted(form.build())
+                self.assertEqual(result.status, 'ok', result.messages)
+                self.assertIn(f'{label.rstrip(":")}: {value}', result.text)
+                self.assertEqual(family(result.text, 'gi.flex_sig'), 'performed')
+                proposals, _ = run_engine(result.text, [('99214', VISIT)])
+                self.assertEqual(outcome(proposals['99214']), 'held')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+
+COLON_LINES = ['Procedure: Colonoscopy. The colonoscope was advanced to the cecum.',
+               'Findings: A 6 mm sigmoid polyp was removed with a cold snare.', 'Complications (if any):']
+POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+class Evidence4OrdinaryTextFieldInAPdfTests(unittest.TestCase):
+    """evidence:4 and contract:2 (medium/high, new in 686d60b11): a text field 'Complications' typed 'None' held every
+    code on a fillable report; a generic text field may still answer for an item, so it still holds."""
+
+    def form(self, name, value):
+        form = page_form(COLON_LINES)
+        y = row_y(COLON_LINES, 2)
+        form.textfield(name, (220, y - 3, 400, y + 11), value)
+        return extracted(form.build()).text
+
+    def test_an_ordinary_field_holds_nothing(self):
+        for name, value in (('Complications', 'None'), ('Complications', 'No'), ('Complications if any', 'None'),
+                            ('EBL', 'None')):
+            with self.subTest(name=name, value=value):
+                text = self.form(name, value)
+                self.assertEqual(codes(text, ('45385', POLYP), ('45378', 'Colonoscopy')), ('ready', 'ready'))
+
+    def test_a_generic_field_still_holds_truthfully(self):
+        text = self.form('Text7', 'None')
+        self.assertEqual(codes(text, ('45378', 'Colonoscopy'))[0], 'held')
+        self.assertIn('may answer for an item', read(text, 'Colonoscopy')[1][0])
+
+
+EUS_LINES = ['Procedure: EUS with fine-needle biopsy of a pancreatic cyst.', 'Indication: Pancreatic cyst on CT.',
+             'History reviewed.', 'Consent obtained.', 'ASA class II.', 'Airway assessed.', 'Allergies: none known.',
+             'Anticoagulants: none.', 'NPO since midnight.']
+EUS_LINE = 'EUS with fine-needle biopsy of a pancreatic cyst.'
+
+
+def status_radio_form(selected, lines_after=0):
+    """EUS_LINES' procedure line, the 'Procedure status' radio row (Completed / Cancelled), then the rest."""
+    lines = EUS_LINES[:1] + ['Procedure status:'] + EUS_LINES[1:1 + lines_after]
+    form = page_form(lines)
+    y = row_y(lines, 1)
+    form.line(text_line(200, y, 'Completed')).line(text_line(300, y, 'Cancelled'))
+    form.group('Procedure status', [(widget_rect(y, 184), '/Completed'), (widget_rect(y, 284), '/Cancelled')],
+               f'/{selected}')
+    return extracted(form.build())
+
+
+class Contract4StatusFieldInAPdfTests(unittest.TestCase):
+    """contract:4 (critical): every field is written after its page's text, beyond the status readers' reach, so a
+    'Procedure status' field saying Cancelled or Not performed never reached routing and the cancelled EUS was a ready,
+    approvable 43242. release:0 (critical): the same through a radio group with Cancelled selected."""
+
+    def text_field_form(self, value):
+        form = page_form(EUS_LINES + ['Procedure status:'])
+        y = row_y(EUS_LINES, len(EUS_LINES))
+        form.textfield('Procedure status', (190, y - 3, 560, y + 11), value)
+        return extracted(form.build()).text
+
+    def test_a_status_text_field(self):
+        for value in ('Cancelled - the patient had eaten breakfast', 'Not performed', 'Rescheduled to next week'):
+            with self.subTest(value=value):
+                text = self.text_field_form(value)
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+                self.assertEqual(codes(text, ('43242', EUS_LINE))[0], 'held')
+        self.assertEqual(codes(self.text_field_form('Completed'), ('43242', EUS_LINE))[0], 'ready')
+
+    def test_a_status_radio_group(self):
+        for lines_after in (0, 8):
+            with self.subTest(lines_after=lines_after):
+                result = status_radio_form('Cancelled', lines_after)
+                self.assertEqual(result.status, 'ok', result.messages)
+                self.assertTrue(result.text.rstrip().endswith('Procedure status: Cancelled'), result.text[-80:])
+                self.assertEqual(codes(result.text, ('43242', EUS_LINE))[0], 'held')
+                # Completed selected writes the mirror row '☒ Completed ☐ Cancelled', which stays at most held (as at
+                # HEAD: the hold-only repair keeps the old first-box test as its precondition), never excluded
+                completed = status_radio_form('Completed', lines_after)
+                self.assertIn(codes(completed.text, ('43242', EUS_LINE))[0], ('ready', 'held'))
+
+
+class Contract2CancelledNoRadioTests(unittest.TestCase):
+    """contract:2 (S5): a radio 'Procedure cancelled' with No selected (the procedure was not cancelled) is a status
+    question answered no: held, never excluded, and never with the false 'no printed line on its page names it'."""
+
+    def test_the_colonoscopy_is_never_excluded(self):
+        lines = COLON_LINES[:2] + ['Procedure cancelled:']
+        form = page_form(lines)
+        y = row_y(lines, 2)
+        form.line(text_line(200, y, 'Yes')).line(text_line(260, y, 'No'))
+        form.group('Procedure cancelled', [(widget_rect(y, 184), '/Yes'), (widget_rect(y, 244), '/No')], '/No')
+        result = extracted(form.build())
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertNotIn(family(result.text, 'gi.colonoscopy'), ('cancelled', 'negated'))
+        self.assertNotEqual(codes(result.text, ('45385', POLYP))[0], 'excluded')
+        for cue in read(result.text, 'Colonoscopy')[1]:
+            self.assertNotIn('no printed line on its page names it', cue)
 
 
 if __name__ == '__main__':

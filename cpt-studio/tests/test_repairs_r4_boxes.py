@@ -441,6 +441,24 @@ class Release12BoxShapesAndShortAnswersTests(BoxCase):
                 self.assert_outcome(text, '45380', 'Biopsy', 'excluded')
                 self.assert_outcome(text, '45385', 'Cold snare polypectomy', 'ready')
 
+    def test_short_answers_hold(self):
+        page = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 5 mm polyp was '
+                'found.\n{printed}\n\n[PDF form fields on page 1]\n{field}')
+        for printed, field in (('Biopsy (Y/N):', 'Biopsy (Y/N): N'), ('Number of biopsies:', 'Number of biopsies: 0'),
+                               ('Biopsy:', 'Biopsy: N'), ('Biopsy:', 'Biopsy: N/A')):
+            with self.subTest(field=field):
+                text = page.format(printed=printed, field=field)
+                for phrase in (printed, field):
+                    self.assert_held_reading(text, phrase)
+                    self.assert_outcome(text, '45380', phrase, 'held')
+
+    def test_a_yes_and_ordinary_values_stay_silent(self):
+        page = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 5 mm polyp was '
+                'biopsied.\nBiopsy (Y/N):\n\n[PDF form fields on page 1]\nBiopsy (Y/N): {value}')
+        for value in ('Y', 'Yes'):
+            with self.subTest(value=value):
+                self.assert_outcome(page.format(value=value), '45380', 'A 5 mm polyp was biopsied.', 'ready')
+
 
 # --- form-field lines: structure:6, structure:7, contract:2, evidence:4 -------------------------------------------
 
@@ -482,6 +500,165 @@ ATTEST_PICKS = [('99214', 'Total time on the date of the encounter was 32 minute
 def separate_em(text):
     finding = routed(text).finding('gi.office_em')
     return next((f for f in finding.facts if f.name == 'separate_em'), None)
+
+
+class Structure6QualifiedFieldLabelTests(BoxCase):
+    """structure:6 (critical, new in 686d60b11). A form field answering 'No' or 'None' to another question whose label
+    names the service ('Flexible sigmoidoscopy in the last 10 years: No', '... complications: None') negated the family,
+    releasing the office E/M beside a same-day flexible sigmoidoscopy. Such a denial is about another time or attribute:
+    the field holds the item, never negates it."""
+    FIELDS = (('Flexible sigmoidoscopy in the last 10 years:\n', 'Flexible sigmoidoscopy in the last 10 years: No'),
+              ('', 'Flexible sigmoidoscopy in the last 10 years: No'),
+              ('Flexible sigmoidoscopy complications:\n', 'Flexible sigmoidoscopy complications: None'),
+              ('Prior flexible sigmoidoscopy:\n', 'Prior flexible sigmoidoscopy: No'))
+
+    def test_the_office_e_m_stays_held(self):
+        for printed, field in self.FIELDS:
+            with self.subTest(field=field, printed=bool(printed)):
+                text = OFFICE_FLEX.format(printed=printed, field=field)
+                self.assertNotIn(family(text, 'gi.flex_sig'), NOT_TODAY)
+                proposals, result = run_engine(text, [('99214', VISIT)])
+                self.assertEqual(outcome(proposals['99214']), 'held')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+                self.assertNotEqual(read(text, field)[0], 'negated')
+                if printed:  # tied to its printed label: only the field's own passages are held, as at d05326ef
+                    self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+                    self.assertEqual(unproposed(result).status, 'warn')
+
+    def test_a_colonoscopy_reports_complications_field(self):
+        text = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp '
+                'was removed with a cold snare.\nColonoscopy complications:\n\n[PDF form fields on page 1]\nColonoscopy '
+                'complications: None')
+        self.assertNotIn(family(text, 'gi.colonoscopy'), NOT_TODAY)
+        self.assert_outcome(text, '45385', 'A 6 mm sigmoid polyp was removed with a cold snare.', ('ready', 'held'))
+
+    def test_a_yes_and_an_item_answer_are_unchanged(self):
+        text = OFFICE_FLEX.format(printed='Flexible sigmoidoscopy in the last 10 years:\n',
+                                  field='Flexible sigmoidoscopy in the last 10 years: Yes')
+        self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+        page = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp '
+                'was seen.\nInterventions:\nBiopsy\nCold snare polypectomy\n\n[PDF form fields on page 1]\n{field}\nCold '
+                'snare polypectomy: checked')
+        for field in ('Biopsy: No', 'Biopsy: None', 'Biopsy: Not done', 'Biopsy: not checked'):
+            with self.subTest(field=field):
+                text = page.format(field=field)
+                self.assertEqual(read(text, 'Biopsy')[0], 'negated')
+                self.assert_outcome(text, '45380', 'Biopsy', 'excluded')
+
+
+class Evidence4AndStructure7PageHoldTests(BoxCase):
+    """evidence:4, structure:7 (medium, over-correction) and contract:2 (high, new in 686d60b11). The unmatched-field page
+    hold fired on an ordinary text field whose value is 'None' or 'No' ('Complications: None', 'EBL: None', a radio
+    'Procedure cancelled: No'), and on a shared option row whose labels the field names, holding every code on the page,
+    explicitly cued passages included. A 'No' or 'None' holds the page only when its label names a service or an
+    intervention, or is a generic widget name; a field label is also tied to the box-delimited items of a printed row and
+    to a printed row it opens."""
+
+    def test_ordinary_text_fields_hold_nothing(self):
+        for printed, field in (('Complications (if any):', 'Complications: None'),
+                               ('Complications (if any):', 'Complications: No'),
+                               ('Estimated blood loss:', 'EBL: None'), ('Specimens:', 'Specimens: None'),
+                               ('Complications (if any):', 'Complications (if any): None'),
+                               ('Sedation:', 'Sedation: None')):
+            with self.subTest(field=field):
+                text = EV4_PAGE.format(printed=printed, field=field)
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assertEqual(read(text, EV4_POLYP)[0], 'performed')
+                self.assert_outcome(text, '45385', EV4_POLYP, 'ready')
+                self.assert_outcome(text, '45378', 'Colonoscopy', 'ready')
+
+    def test_the_report_whose_text_is_all_fields(self):
+        text = (HEADER + 'COLONOSCOPY REPORT\nProcedure:\nIndication:\nFindings:\nComplications (if any):\n\n[PDF form '
+                'fields on page 1]\nProcedure: Colonoscopy with cold snare polypectomy\nIndication: Positive FIT\nFindings: '
+                'The colonoscope was advanced to the cecum. A 6 mm polyp was removed with a cold snare.\nComplications: '
+                'None')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assert_outcome(text, '45385', 'A 6 mm polyp was removed with a cold snare.', 'ready')
+        self.assert_outcome(text, '45385', 'Colonoscopy with cold snare polypectomy', 'ready')
+
+    def test_generic_and_item_fields_still_hold_the_page(self):
+        for field in ('Text7: None', 'Check Box1: not checked', 'Text 3: No'):
+            with self.subTest(field=field):
+                text = EV4_PAGE.format(printed='Complications (if any):', field=field)
+                self.assert_held_reading(text, 'Colonoscopy')
+                self.assert_outcome(text, '45378', 'Colonoscopy', 'held')
+        text = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp '
+                'was seen.\nInterventions:\nBiopsy  Cold snare polypectomy\n\n[PDF form fields on page 1]\nBiopsy taken: No')
+        self.assert_held_reading(text, 'Cold snare polypectomy')
+
+    def test_a_shared_option_row_ties_its_labels(self):
+        text = (HEADER + 'Procedure: ☐ EGD ☒ Colonoscopy ☐ Flexible sigmoidoscopy\nFindings: The colonoscope was advanced to '
+                'the cecum. A 6 mm polyp was removed with a cold snare.\n\n[PDF form fields on page 1]\nEGD: not checked\n'
+                'Colonoscopy: checked\nFlexible sigmoidoscopy: not checked')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assertNotEqual(family(text, 'gi.egd'), 'performed')
+        self.assert_outcome(text, '45385', 'A 6 mm polyp was removed with a cold snare.', 'ready')
+        self.assertTrue(all(c.startswith(SILENT) for c in cues_of(text, 'Colonoscopy: checked')))
+        row = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp '
+               'was seen.\nInterventions:\n☐ Biopsy ☒ Cold snare polypectomy\n\n[PDF form fields on page 1]\nBiopsy: not '
+               'checked\nCold snare polypectomy: checked')
+        self.assertEqual(read(row, 'Biopsy')[0], 'negated')
+        self.assert_outcome(row, '45385', 'Cold snare polypectomy', 'ready')
+        self.assert_outcome(row, '45378', 'Colonoscopy', 'ready')
+
+    def test_a_checked_field_line_is_silent_on_a_held_page(self):
+        """structure:7: 'Colonoscopy: checked' read the untied field's hold; a checked line says nothing of its page."""
+        text = EV4_PAGE.format(printed='Complications (if any):', field='Check Box1: not checked\nColonoscopy: checked')
+        self.assertTrue(all(c.startswith(SILENT) for c in cues_of(text, 'Colonoscopy: checked')))
+        self.assert_held_reading(text, 'Colonoscopy')
+
+    def test_a_printed_row_its_field_opens_is_tied(self):
+        for row, field in (('Complications: ☐ Yes ☒ No', 'Complications: No'),
+                           ('Biopsy taken: ☐ Yes ☒ No', 'Biopsy taken: No'),
+                           ('Biopsy taken:   Yes   No', 'Biopsy taken: No')):  # a radio row whose glyphs were not placed
+            with self.subTest(field=field):
+                text = EV4_PAGE.format(printed=row, field=field)
+                self.assert_outcome(text, '45385', EV4_POLYP, 'ready')
+                self.assert_outcome(text, '45378', 'Colonoscopy', 'ready')
+
+    def test_an_egd_report_with_an_ordinary_field(self):
+        egd = (HEADER + 'Procedure: EGD with biopsy.\nFindings: The endoscope was advanced to the second part of the duodenum. '
+               'Biopsies were taken from the gastric antrum.\nComplications:\n\n[PDF form fields on page 1]\n{field}')
+        for field in ('Complications (if any): None', 'EBL: None'):
+            with self.subTest(field=field):
+                self.assert_outcome(egd.format(field=field), '43239', 'EGD with biopsy.', 'ready')
+        held_egd = egd.format(field='Text1: None')  # a generic text field may answer an item: still held, truthfully
+        cues = self.assert_held_reading(held_egd, 'EGD with biopsy.')
+        self.assertNotIn('says its item was not done', cues[0])
+
+    def test_the_office_note_keeps_its_missed_service_warning(self):
+        text = OFFICE_FLEX.format(printed='', field='Complications: None')
+        proposals, result = run_engine(text, [('99214', VISIT)])
+        self.assertEqual(unproposed(result).status, 'warn')
+        self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+
+
+class Contract4StatusFieldTests(BoxCase):
+    """contract:4 (critical). Extraction writes every form field after the page's text, beyond the six sentences the
+    status readers look at, so a 'Procedure status: Cancelled' or 'Not performed' field never reached routing and the
+    cancelled EUS was a ready 43242. A status field whose value is no completion holds the service mentions of its page
+    that carry no explicit performance cue."""
+
+    def test_the_claimed_fields(self):
+        for printed, field in (('Procedure status:', 'Procedure status: Cancelled - the patient had eaten breakfast'),
+                               ('Procedure status:', 'Procedure status: Not performed'),
+                               ('Procedure status: ☐ Completed ☒ Cancelled', 'Procedure status: Cancelled'),
+                               ('Procedure performed:', 'Procedure performed: No'),
+                               ('Status:', 'Status: Rescheduled to next week'),
+                               ('Procedure status:', 'Procedure status: Aborted before sedation')):
+            with self.subTest(field=field):
+                text = C4_NOTE.format(printed=printed, field=field)
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+                self.assertNotIn('FNB', str(fact_value(text, 'gi.eus', 'tissue_sampling')))
+                self.assert_outcome(text, '43242', C4_LINE, 'held')
+
+    def test_a_completed_status_stays_ready(self):
+        for field in ('Procedure status: Completed', 'Procedure performed: Yes', 'Status: Done',
+                      'Procedure status: Completed - recall planned', 'Status: Completed; follow-up scheduled'):
+            with self.subTest(field=field):
+                text = C4_NOTE.format(printed=field.split(':')[0] + ':', field=field)
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_outcome(text, '43242', C4_LINE, 'ready')
 
 
 # --- bounded cost --------------------------------------------------------------------------------------------------
