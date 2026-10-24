@@ -211,6 +211,11 @@ HISTORICAL_PRE = (
     ('prior', _pre(r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside',
                    _HIST_FILLER, 3)),
 )
+# Who asked for a service is no history: "requested by her previous gastroenterologist", "ordered by the outside
+# physician" (the "elsewhere" history cue is not read after these).
+REQUEST_BEFORE = rx(r'\b(?:requested|ordered|recommended|referred|suggested|advised|proposed|arranged|scheduled)\s+$')
+# "as scheduled", "as planned", "as previously arranged": the booking a done service kept, not a future.
+AS_BOOKED_BEFORE = rx(r'\bas\s+(?:(?:previously|originally|initially|already)\s+)?$')
 # "had a colonoscopy" is history unless the clause says today.
 HAD_PRE = _pre(r'had|has\s+had|have\s+had', _HIST_FILLER, 3)
 # What a relative time ("ago", "last month") right after these dates is a symptom, not the service:

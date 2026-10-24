@@ -694,6 +694,9 @@ def _stop_word(an: Analysis, word: re.Match, limit: int, first: bool, procedure:
     if lowered == 'outside':
         place = _OUTSIDE_PLACE.match(text, word.end(), limit)
         return said + place.group(0) if place else None
+    if previous == 'as' or (previous in ('previously', 'originally', 'initially', 'already')
+                            and cues.AS_BOOKED_BEFORE.search(text, max(0, word.start() - 30), word.start())):
+        return None  # "as scheduled", "as previously planned": the booking it kept
     if lowered in ('previously', 'earlier') and previous in _DETERMINERS:
         return None  # "the previously tattooed site": it describes a place
     if lowered in ('pending', 'awaiting') and previous in _RESULT_WORDS:
@@ -942,6 +945,11 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             continue
         if cue.name in ('ago', 'last month') and cues.SYMPTOM_TIME_BEFORE.search(text, max(cs, cue.start - 40), cue.start):
             continue  # "bleeding since last month": the symptom's time, not the service's
+        if cue.name == 'elsewhere' and cues.REQUEST_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
+            continue  # "EUS requested by her previous gastroenterologist": a request, not a history
+        if cue.name in ('scheduled', 'plan', 'booked', 'ordered', 'recommend') \
+                and cues.AS_BOOKED_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
+            continue  # "was performed today as scheduled": the booking it kept, not a future
         if _attached(spans, index, cue.start, cue.end):
             label = (f'uncertain: {cue.text}, with no statement whether the procedure had started' if doubt
                      else f'{status}: {cue.text}')

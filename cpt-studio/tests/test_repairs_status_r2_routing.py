@@ -770,12 +770,61 @@ class Status8UndatedHistoryTests(unittest.TestCase):
         self.assertTrue(ready(run_engine(text, [('45385', 'A polyp was removed with a cold snare.')])[0]['45385']))
         self.assertEqual(family(HEADER + 'Colonoscopy five years ago was normal.\n', 'gi.colonoscopy'), 'historical')
 
+    def test_a_request_is_not_history(self):
+        """Coordination (orchestrator probe): "by the referring physician" names who asked, not who did it."""
+        text = (HEADER + 'Indication: Dysphagia. Pancreatic cyst on CT; EUS requested by the referring physician.\n'
+                'Procedure: EGD\nFindings: The endoscope was advanced to the second part of the duodenum. Normal EGD.\n')
+        status, cues = read(text, 'EUS')
+        self.assertNotEqual(status, 'historical', cues)
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE + ('historical',))
+        for line in ('Indication: Pancreatic cyst; EUS requested by her previous gastroenterologist.',
+                     'Indication: Pancreatic cyst; EUS was ordered by the outside physician.'):
+            with self.subTest(line=line):
+                self.assertNotEqual(family(HEADER + line + '\n', 'gi.eus'), 'historical')
+        for line in ('Indication: Anemia. EGD was performed by her previous gastroenterologist.',
+                     'Indication: Anemia. EGD was performed by the referring gastroenterologist.'):
+            with self.subTest(line=line):
+                self.assertEqual(family(HEADER + line + '\n', 'gi.egd'), 'historical')
+
     def test_an_office_visit_statement_in_an_indication_still_counts(self):
         text = (HEADER + 'Reason for visit: Established patient office visit was completed for reflux.\n'
                 'Medical decision making: low.\n')
         self.assertEqual(family(text, 'gi.office_em'), 'performed')
         visit = next(m for m in routed(text).finding('gi.office_em').mentions if m.span.text == 'office visit')
         self.assertEqual(visit.status, 'performed', visit.cues)
+
+
+class AsScheduledTests(unittest.TestCase):
+    """Coordination (orchestrator probe, pre-existing): "as scheduled" and its kin describe the booking a done
+    service kept, never a future; "is scheduled", "scheduled for <date>", "will be" and "to be scheduled" stay
+    planned."""
+
+    BANDING = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+               'Established patient.\nChief complaint: Rectal bleeding.\nAssessment and plan:\nGrade II internal '
+               'hemorrhoids.\nRubber band ligation of an internal hemorrhoid was performed today as scheduled.\n'
+               'Medical decision making: low.\nTotal time on the date of the encounter was 24 minutes.\n')
+
+    def test_a_kept_booking_reads_performed(self):
+        for line in ('Colonoscopy was performed today as scheduled.', 'Colonoscopy was performed today as planned.',
+                     'Colonoscopy was performed as previously scheduled.', 'Colonoscopy was performed today as arranged.'):
+            text = HEADER + 'Findings: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(read(text, line)[0], 'performed')
+        for line in ('Procedure: Colonoscopy as scheduled.', 'Procedure: Colonoscopy as previously scheduled.'):
+            self.assertEqual(read(HEADER + line + '\n', 'Colonoscopy')[0], 'performed', line)
+        band = 'Rubber band ligation of an internal hemorrhoid was performed today as scheduled.'
+        status, cues = read(self.BANDING, band)
+        self.assertEqual(status, 'uncertain', cues)  # a plan section downgrades an explicit performance cue
+        self.assertIn('performed: was performed', cues)
+        proposals, _ = run_engine(self.BANDING, [('46221', band)])
+        self.assertEqual(proposals['46221'].bucket, 'selected', proposals['46221'].exclusion_reason)
+
+    def test_a_future_booking_stays_planned(self):
+        for line in ('Colonoscopy is scheduled for 2026-11-03.', 'Colonoscopy is scheduled.', 'Colonoscopy will be scheduled.',
+                     'Colonoscopy to be scheduled.', 'Colonoscopy has been arranged.'):
+            text = HEADER + 'Findings: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(read(text, line)[0], 'planned')
 
 
 class Status12DeniedFindingBesideAnActTests(unittest.TestCase):
