@@ -155,7 +155,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     if selection.family == OTHER_GI:
         own = _unnamed_other(own, text, routing, day, code)
     if selection.family in checks.EM_FAMILIES:
-        own = _undated_visit(own, routing)
+        own = _undated_visit(own, routing, text, day)
     own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing, text) else r
                 for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
@@ -219,19 +219,37 @@ def _other_service(reading: checks.Reading, family: str, routing: RoutingResult,
                                                                                   family)
 
 
-def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> tuple[checks.Reading, ...]:
+def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult, text: str,
+                   day: Optional[date]) -> tuple[checks.Reading, ...]:
     """An E/M code's linked passages without the negative readings its section default alone gave them. The history
     and the plan of an office visit are that visit's own documentation: "Intermittent heartburn for 8 weeks despite
     omeprazole." under History of present illness is not a historical E/M, and "Increase omeprazole to 40 mg twice
     daily." under Assessment and plan is not a planned one, so such a passage is silent and routing's E/M reading
     (visit statement, MDM, time) decides. The same holds for a plan sentence routing holds only because its clause
     says today ("Start omeprazole 40 mg today.": checks.PLAN_TODAY_CUE). Kept: any cue that dates, plans or denies the
-    visit ("Return office visit is scheduled for 2026-12-01."), and a passage that is itself a visit statement routing
-    reads in that section ("Follow-up office visit." under Plan)."""
-    visits = [m.span for f in routing.findings if f.family == 'gi.office_em' for m in f.mentions]
-    return tuple(reading for reading in own
-                 if not (reading.status not in checks.POSITIVE and checks.section_default(reading)
-                         and not any(span.start < reading.end and reading.start < span.end for span in visits)))
+    visit ("Return office visit is scheduled for 2026-12-01.", "Return in three months."), and a passage that is itself
+    a visit statement routing reads in that section ("Follow-up office visit." under Plan).
+
+    A negative reading by a cue, in a passage that touches no routed E/M mention and names another service (a routed
+    mention of another family lies in it, or checks._VAL_names_other_service: "No laboratory testing, imaging,
+    endoscopy or other procedure was performed at this encounter."), is about that service, not the visit: it holds
+    the E/M (checks._VAL_OTHER_SERVICE_CUE, round 4 validation:6), never excludes it and never stays silent. Indexed
+    once per code: two bisections per passage for each overlap question."""
+    visits = _VAL_overlap_test([(m.span.start, m.span.end) for f in routing.findings if f.family == 'gi.office_em'
+                                for m in f.mentions])
+    others = _VAL_overlap_test([(m.span.start, m.span.end) for f in routing.findings
+                                if f.family not in checks.EM_FAMILIES for m in f.mentions])
+    kept = []
+    for reading in own:
+        if reading.status not in checks.POSITIVE and not visits(reading.start, reading.end):
+            if checks.section_default(reading):
+                continue
+            if reading.status in checks.NEGATIVE and (
+                    others(reading.start, reading.end)
+                    or checks._VAL_names_other_service(text, reading.start, reading.end, day)):
+                reading = replace(reading, status='uncertain', cues=(checks._VAL_OTHER_SERVICE_CUE,) + reading.cues)
+        kept.append(reading)
+    return tuple(kept)
 
 
 # --- phase 2: checks that depend on the other proposals -----------------------------------

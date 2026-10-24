@@ -500,3 +500,93 @@ class PlanTodayRealRoutingTests(Case):
         self.assertEqual(detect.PLAN_TODAY, checks.PLAN_TODAY_CUE)
         self.assertTrue(detect.OTHER_STATED.startswith(checks._VAL_OTHER_STATED_CUE))
         self.assertEqual(detect.ANOTHER_TIME_PREFIX, checks._VAL_ANOTHER_TIME_CUE)
+
+
+# --- validation:6: an E/M is never excluded by a negative reading about other services ------------------------------
+
+def rowan_assessment():
+    """The retained real Corti response for the Rowan note (tests/fixtures/corti), its context-0 evidence re-bound from
+    the CRLF source to the canonical text (every move asserted), normalized by the real adapter, with real routing
+    (JSON round trip) and the member's service date, as the pipeline would assess it."""
+    import json
+    import tempfile
+    from datetime import date
+    from pathlib import Path
+    from studio.gi.context import extract_context, merge_user_values
+    from studio.gi.detect import route
+    from studio.ingest.text import canonicalize
+    from studio.providers import CortiProvider
+    from studio.types import PageSpan, RoutingResult, from_jsonable, to_jsonable
+    from studio.validation.engine import assess
+    from tests.test_repairs_r3_validation_b import REFERENCE
+    fixtures = Path(__file__).resolve().parent / 'fixtures' / 'corti'
+    source = (fixtures / 'rowan.source.txt').read_bytes().decode()
+    text = canonicalize(source)
+    raw = json.loads((fixtures / 'rowan.response.raw.json').read_bytes())
+    for key in ('codes', 'candidates'):
+        for item in raw[key]:
+            for group in [item] + list(item.get('alternatives', [])):
+                for span in group.get('evidences', []):
+                    if span['contextIndex'] != 0:
+                        continue
+                    start, end = span['start'], span['end']
+                    assert source[start:end] == span['text']
+                    start, end = start - source[:start].count('\r'), end - source[:end].count('\r')
+                    assert text[start:end] == span['text'].replace('\r\n', '\n')
+                    span.update(start=start, end=end, text=text[start:end])
+    day = date(2026, 10, 16)
+    with tempfile.TemporaryDirectory() as folder:
+        provider = CortiProvider(Path(folder) / 'never-read.env')
+        normalized = provider.normalize(provider.build_request(text, day), json.dumps(raw).encode())
+    assert normalized.problems == ()
+    routing = from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(route(text, day)))))
+    context = merge_user_values(extract_context(text), {'service_date': '2026-10-16'})
+    return text, assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=context, routing=routing,
+                        normalized=normalized, reference=REFERENCE, service_date=day, provider_status='succeeded',
+                        extraction_status='ok')
+
+
+class EmNegativeAboutOtherServicesTests(Case):
+    """validation:6 (critical, under-correction of round 3 validation:3). The retained real Corti response's 99213
+    cites "No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter." (negated, about
+    other services, overlapping routing's negated gi.other mention) and "Further testing will be considered after review
+    of the prior records; no procedure has been ordered or performed today." (historical: the records cue). 99213 was
+    excluded "Documented as negated", and services.unproposed warned of a possible missed E/M although 99213 was
+    selected. A negative reading of an E/M's passage that touches no routed E/M mention and names another service now
+    holds the E/M (hold-only: never silent, never an exclusion). A cue that plans, dates or denies the visit itself
+    keeps excluding."""
+
+    def test_the_retained_rowan_response_does_not_exclude_the_visit(self):
+        from tests.test_repairs_r3_validation_b import encounter_check
+        _, result = rowan_assessment()
+        visit = next(p for p in result.proposals if p.code == '99213')
+        self.assertEqual((visit.bucket, visit.status), ('selected', 'needs_clarification'), visit.exclusion_reason)
+        self.assertFalse(visit.reinstatable)
+        status = check_of(visit, 'service.status')
+        self.assertNotIn('Documented as negated', status.detail)
+        self.assertNotIn('Documented as historical', status.detail)
+        unproposed = encounter_check(result, 'services.unproposed')
+        self.assertNotIn('Office / outpatient evaluation and management', unproposed.detail)
+
+    def test_each_channel_alone_holds_rather_than_excludes(self):
+        text, _ = rowan_assessment()
+        for passage in ('No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter.',
+                        'Further testing will be considered after review of the prior records; no procedure has been '
+                        'ordered or performed today.'):
+            with self.subTest(passage=passage):
+                proposals, _ = real(text.replace('Date of service: 16 October 2026', 'Date of service: 2026-10-16'),
+                                    ('99213', passage))
+                self.assertEqual((proposals['99213'].bucket, proposals['99213'].status),
+                                 ('selected', 'needs_clarification'))
+
+    def test_controls_a_cue_about_the_visit_still_excludes(self):
+        from tests.test_repairs_status_r2_validation import ASSESSMENT_AND_PLAN
+        text = ASSESSMENT_AND_PLAN.format(plan='Discussed colonoscopy; the patient will think about it. '
+                                               'Return in three months.')
+        proposals, _ = real(text, ('99214', 'Return in three months.'))
+        self.assertEqual((proposals['99214'].bucket, proposals['99214'].reinstatable), ('excluded', True))
+        from tests.test_repairs_r3_validation_b3 import V3
+        for line in ('Return office visit is scheduled for 2026-12-01.', 'Follow-up office visit.'):
+            with self.subTest(line=line):
+                proposals, _ = real(V3.format(extra=f'{line}\n'), ('99213', line))
+                self.assertEqual((proposals['99213'].bucket, proposals['99213'].reinstatable), ('excluded', True))

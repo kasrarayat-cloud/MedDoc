@@ -287,6 +287,26 @@ _VAL_OTHER_STATED_CUE = 'uncertain: a procedure is stated by its act or its find
 _VAL_ANOTHER_TIME_CUE = 'uncertain: another time'
 
 
+# Validation's hold of an E/M code's own negative reading that is about another service its passage names (round 4
+# validation:6): "No laboratory testing, imaging, endoscopy or other procedure was performed at this encounter." denies
+# other services, not the visit. Never silent and never an exclusion: the E/M is held, and a reviewer decides.
+_VAL_OTHER_SERVICE_CUE = 'uncertain: its negative reading is about another service it names, not about this visit'
+# Words that name a service other than the visit, beside routing's own procedure form (_PROCEDURE_WORD) and its named
+# services: used only to hold an E/M's negative reading, never to release or exclude anything.
+_VAL_SERVICE_NOUNS = re.compile(r'\b(?:procedures?|tests?|testing|imaging|laborator(?:y|ies)|labs?)\b', re.A | re.I)
+
+
+def _VAL_names_other_service(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """Whether the passage [start, end) names a service other than the visit: by routing's own procedure form
+    (detect._PROCEDURE_WORD: "endoscopy", "banding") or service names and intervention words (touches_service), or by
+    a test or procedure word (_VAL_SERVICE_NOUNS: "laboratory testing", "imaging", "no procedure"). Resolved at call
+    time, like span_status."""
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    return bool(detect._PROCEDURE_WORD.search(text, start, end) or an.touches_service(start, end)
+                or _VAL_SERVICE_NOUNS.search(text, start, end))
+
+
 def _VAL_routing_holds(cues: Sequence[str]) -> bool:
     """Whether routing held a passage for a procedure stated with no performance cue, or for a time that may place it on
     another date (round 4 release:7): in a plan, history or indication section these may be today's procedure, as a
