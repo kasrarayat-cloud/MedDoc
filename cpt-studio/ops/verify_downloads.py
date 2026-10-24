@@ -42,6 +42,7 @@ import io
 import json
 import re
 import sys
+import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -64,6 +65,18 @@ CODE_TOKEN = re.compile(rf'(?<![\w.@/-]){CODE}(?![\w/])')
 # not pass as "not itemised" (round 3, orchestrator:3).
 ITEM_LINE = re.compile(rf'^ {{0,6}}(?:(?:\(?\w{{1,4}}[.)]+|#\d+|[^\w\s])\s*)?(?P<code>{CODE})\b(?P<rest>.*)$')
 CONTINUATION = '       '  # reports.CONTINUATION
+# ITEM_LINE reads ASCII indentation only. A line is also read the way a viewer draws it (round 4, pipeline:5): every
+# whitespace character takes one column, a tab included (a viewer draws one as anything from one to eight columns, the
+# renderer never indents with one, and the narrowest reading is the one that counts the line); a zero-width character
+# takes none and is dropped wherever it stands: a format character (Cf: ZWSP, joiners, BOM, bidi marks, soft hyphen),
+# a combining mark (Mn, Me), or one of the default-ignorable letters below (the Hangul fillers).
+_PIPE_IGNORABLE = frozenset('\u115f\u1160\u3164\uffa0')
+# ITEM_LINE without its column limit: a code-first line at any depth. Before a list's first item there is nothing for a
+# continuation to continue, so such a line there is no continuation (round 4, evidence:7).
+_PIPE_ANY_DEPTH = re.compile(rf'^ *(?:(?:\(?\w{{1,4}}[.)]+|#\d+|[^\w\s])\s*)?(?P<code>{CODE})\b(?P<rest>.*)$')
+# What _listed records for a line drawn as an item where the renderer writes none: never a persisted value, so the
+# list check fails whatever code the line carries, the persisted approval itself included.
+_PIPE_UNREAD = 'drawn as an item where the renderer writes none'
 UNITS = re.compile(r'\bunits?\s+(\d+)\b', re.I)
 TXT_OFFSETS = re.compile(r'\[chars (\d+)[–-](\d+)\b')
 CSV_OFFSETS = re.compile(r'\[(\d+)-(\d+)(?:, p\d+)?\]')
@@ -368,13 +381,41 @@ def _txt_citations(doc, name, text, revision) -> list[Result]:
     return out
 
 
+def _PIPE_zero_width(ch) -> bool:
+    return unicodedata.category(ch) in ('Cf', 'Mn', 'Me') or ch in _PIPE_IGNORABLE
+
+
+def _PIPE_shown(line) -> str:
+    """The line as a viewer draws it: its leading whitespace and zero-width characters redrawn as the ASCII spaces
+    they occupy, and every other zero-width character dropped."""
+    width = index = 0
+    while index < len(line) and (line[index].isspace() or _PIPE_zero_width(line[index])):
+        width += line[index].isspace()
+        index += 1
+    return ' ' * width + ''.join(ch for ch in line[index:] if not _PIPE_zero_width(ch))
+
+
+def _PIPE_unread_item(line, before_first_item):
+    """The code of a line a viewer reads as an item and ITEM_LINE does not: one that reads as an item once drawn as a
+    viewer draws it, or, before the list's first item, a code-first line at continuation depth. None otherwise."""
+    shown = _PIPE_shown(line)
+    match = ITEM_LINE.match(shown) or (_PIPE_ANY_DEPTH.match(shown) if before_first_item else None)
+    return match.group('code') if match else None
+
+
 def _listed(body, with_units) -> Counter:
     listed = Counter()
+    before_first_item = True
     for line in body:
         match = ITEM_LINE.match(line)
         if match:
+            before_first_item = False
             units = UNITS.search(match.group('rest'))
             listed[(match.group('code'), (units.group(1) if units else '?') if with_units else '')] += 1
+            continue
+        unread = _PIPE_unread_item(line, before_first_item)
+        if unread:
+            listed[(unread, _PIPE_UNREAD)] += 1
     return listed
 
 
@@ -522,7 +563,14 @@ def _txt_passages(doc, name, text, listed, revision_text, sections, kind) -> lis
     wrong = []
     for entry, start, end in _evidence_entries(sections, kind):
         passage = cp_slice(revision_text, start, end)
-        if passage is None or not collapse(entry).startswith(collapse(f'"{txt_shown(passage)}" [chars {start}')):
+        flat = collapse(entry)
+        tail = TXT_EVIDENCE_END.search(flat)
+        # The WHOLE quoted text before the entry's structural bracket must be the revision text at its offsets: a
+        # prefix test let anything, an inner bracket with a wrong end offset included, stand between the passage and
+        # the bracket read (round 4, pipeline:4). The closing quote stays in the comparison, so a space before it is
+        # not collapsed away.
+        quoted = collapse(flat[:tail.start()] + '"') if tail else None
+        if passage is None or quoted != collapse(f'"{txt_shown(passage)}"'):
             wrong.append(f'{start}-{end}')
     return [Result(doc, name, 'evidence.present', 'fail' if missing else 'pass',
                    f'missing: {missing}' if missing else f'{sum(len(exact_spans(i, revision_text)) for i in listed)}'
