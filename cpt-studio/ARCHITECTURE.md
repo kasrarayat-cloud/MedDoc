@@ -323,7 +323,10 @@ run exists for the same provider + adapter version + request sha256, it is
 reused (`reused_from`) and no paid call is made. Context-only changes that do
 not change the request (setting, billing context) never re-predict; whether the
 request changed is decided against the run in use, never the previous
-context. Every member action that can queue a stage runs under the encounter
+context. The run in use is the revision's newest request that finished,
+whether or not an assessment was made with it (a Stop during the send or a
+swept or expired assess cancels that assess); a reconciled unknown outcome no
+longer stands, so its one released attempt is made. Every member action that can queue a stage runs under the encounter
 row lock and is refused while a stage is queued or running. The predict stage
 sends only the current revision's text with that revision's current context;
 each run records the service date it was built with, and assessment refuses

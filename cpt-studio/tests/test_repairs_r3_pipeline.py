@@ -235,3 +235,113 @@ class SystemCancelledStagesAreNotMemberStopsTests(ApiHarness, TestCase):
         detail = self.client.get(f'/api/encounters/{encounter_id}').json()
         self.assertEqual(detail['state'], 'stopped')
         self.assertIs(detail['pipeline']['stopped_by_member'], True)
+
+
+@override_settings(**LIVE)
+class ContextChangeAfterACancelledAssessTests(ApiHarness, TestCase):
+    """Round 3, orchestrator:0 — the run in use is the revision's newest finished request even when the assess that
+    would have used it was cancelled (a member's Stop during the send, a swept or expired assess), so a setting or
+    billing change, or a Resume after one, never re-sends an identical request that already failed."""
+
+    def stop_during_the_send(self, encounter_id, outcome='failed'):
+        """The member presses Stop while the provider request is in flight; the request then returns ``outcome``."""
+        send = self.provider.send
+
+        def stopping_send(request, *, deadline_s):
+            self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
+            self.provider.send = send
+            self.provider.outcomes.insert(0, outcome)
+            return send(request, deadline_s=deadline_s)
+
+        self.provider.send = stopping_send
+
+    def change(self, encounter_id, body, status=201):
+        response = self.post(f'/api/encounters/{encounter_id}/context', body)
+        self.assertEqual(response.status_code, status, response.content)
+        drain()
+
+    def assert_failed_once(self, encounter_id, sends=1):
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(len(self.provider.requests), sends)
+        self.assertEqual(encounter.state, 'provider_failed')
+        self.assertEqual(encounter.current_assessment.provider_run.state, models.ProviderRun.FAILED)
+        self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
+
+    def test_a_setting_change_after_a_stop_during_a_failed_send(self):
+        encounter_id = self.create()
+        self.stop_during_the_send(encounter_id)
+        drain()
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual((encounter.state, encounter.current_assessment), ('stopped', None))
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_failed_once(encounter_id)
+
+    def test_a_billing_change_after_a_swept_assess(self):
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create()
+        for _ in range(3):  # extract, analyze, predict
+            jobs.run_job(jobs.claim_next())
+        assess = jobs.claim_next()  # its worker dies before it records anything
+        self.assertEqual(assess.kind, models.Job.ASSESS)
+        models.Job.objects.filter(pk=assess.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+        jobs.mark_stale()
+        self.assertEqual(models.Job.objects.get(pk=assess.pk).state, models.Job.CANCELLED)
+        self.change(encounter_id, {'billing_context': 'professional'})
+        self.assert_failed_once(encounter_id)
+
+    def test_a_setting_change_after_an_expired_assess(self):
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create()
+        for _ in range(3):
+            jobs.run_job(jobs.claim_next())
+        models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.ASSESS,
+                                  state=models.Job.QUEUED).update(deadline_at=timezone.now() - timedelta(seconds=1))
+        drain()
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'stopped')
+        self.change(encounter_id, {'setting': 'office'})
+        self.assert_failed_once(encounter_id)
+
+    def test_a_billing_change_after_a_stopped_date_change_whose_send_failed(self):
+        encounter_id = self.create()
+        drain()  # succeeds for the document's date
+        self.stop_during_the_send(encounter_id)
+        self.change(encounter_id, {'service_date': '2026-10-19'})
+        self.assertEqual(len(self.provider.requests), 2)
+        self.change(encounter_id, {'billing_context': 'facility'})
+        self.assert_failed_once(encounter_id, sends=2)
+
+    def test_a_resume_after_a_context_change_and_a_stop(self):
+        encounter_id = self.create()
+        self.stop_during_the_send(encounter_id)
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume', {}).status_code, 201)
+        drain()
+        self.assert_failed_once(encounter_id)
+
+    def test_a_reconciled_unknown_still_gets_its_one_attempt(self):
+        # The member released the unknown outcome for one new attempt; a Stop before that attempt ran, then a
+        # setting change, must still make it, never re-assess with the released unknown run.
+        self.provider.outcomes = ['unknown']
+        encounter_id = self.create()
+        drain()
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': self.unknown_run_id(encounter_id),
+                              'note': 'Checked the synthetic provider console: no result exists.'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        self.change(encounter_id, {'setting': 'office'})
+        self.assertEqual(len(self.provider.requests), 2)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+
+    def test_a_changed_service_date_still_requests_new_proposals(self):
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create()
+        self.stop_during_the_send(encounter_id)
+        drain()
+        self.change(encounter_id, {'service_date': '2026-10-19'})
+        self.assertEqual(len(self.provider.requests), 2)

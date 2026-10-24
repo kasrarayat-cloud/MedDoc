@@ -604,6 +604,22 @@ def _run_answers(run, revision, context):
     return request.canonical_sha256 == run.request_sha256
 
 
+def _run_in_use(revision):
+    """The provider run whose outcome stands for ``revision``: its newest request that finished.
+
+    That is so whether or not an assessment was made with it. A member's Stop during the send, a swept assess or an
+    expired one cancels the assess that would have used it, and a Resume would re-assess with it, so a context change
+    does the same (round 3, orchestrator:0). A reconciled unknown outcome no longer stands: the member released it for
+    one new attempt, which a context change must not consume by re-assessing with it.
+    """
+    finished = (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED, models.ProviderRun.NOT_SENT,
+                models.ProviderRun.UNKNOWN)
+    run = revision.provider_runs.filter(state__in=finished).order_by('-created_at').first()
+    if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
+        return None
+    return run
+
+
 def change_context(encounter, user, values):
     """Apply member-supplied metadata, snapshot a new context and re-assess.
 
@@ -632,8 +648,7 @@ def change_context(encounter, user, values):
         encounter.save(update_fields=['current_context', 'updated_at'])
         audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
                      fields=sorted(values), context=str(context.pk))
-        assessment = encounter.current_assessment
-        last_run = assessment.provider_run if assessment and assessment.revision_id == revision.pk else None
+        last_run = _run_in_use(revision)
         clear_stop(encounter)
         if _run_answers(last_run, revision, context):
             enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,

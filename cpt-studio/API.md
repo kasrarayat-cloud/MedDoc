@@ -148,7 +148,10 @@ running. The addendum revision carries the original's extraction limitations.
 "billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Empty string clears a
 user value. Re-assesses with the provider run in use only when that run answers
 exactly the request the new context would send; otherwise re-predicts (an
-identical retained result is reused at no cost). 409 while a stage is queued or
+identical retained result is reused at no cost). The run in use is the current
+revision's newest finished request, also when a Stop or an expired stage
+cancelled the assess that would have used it; a reconciled unknown outcome is
+not, so the attempt the reconciliation released is still made. 409 while a stage is queued or
 running, or before the text is extracted.
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
