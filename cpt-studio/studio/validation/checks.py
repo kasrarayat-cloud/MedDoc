@@ -1058,12 +1058,14 @@ def procedure_words(name: str) -> int:
 
 
 def names_procedure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
-    """Whether the passage [start, end) names a procedure by routing's gi.other form rule (ARCHITECTURE 5.3): one of its
-    sentences opens with a procedure's name (as the first sentence of a procedure section does: "Rubber band ligation of
-    a grade 2 internal hemorrhoid x1", "Anoscopy revealed ...", "On anoscopy, ..."), or states a procedure's act by its
-    participle. Never a name that is an examination, test, sedation, consent or person, one led by a negation,
-    condition or plan word, or one in a passage about a detected family's procedure. Resolved at call time, like
-    ``span_status``: the routing module owns the form rule. Bounded: one name per sentence of the passage."""
+    """Whether the passage [start, end) names a procedure by routing's gi.other form rule (ARCHITECTURE 5.3): a sentence
+    it lies in opens with a procedure's name (as the first sentence of a procedure section does: "Rubber band ligation
+    of a grade 2 internal hemorrhoid x1", "Anoscopy revealed ...", "On anoscopy, ..."), or states a procedure's act by
+    its participle. Each sentence is read whole, whatever part of it the provider cited: "banding" cut out of "Grade 2
+    internal hemorrhoids, banding candidate." names nothing. Never a name that is an examination, test, sedation,
+    consent or person, one led by a negation, condition or plan word, or one in a passage about a detected family's
+    procedure. Resolved at call time, like ``span_status``: the routing module owns the form rule. Bounded: one name
+    and one participle scan per sentence the passage overlaps."""
     from studio.gi import detect
     an = detect._analysis(text, service_date)[0]
     detected = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
@@ -1079,14 +1081,12 @@ def names_procedure(text: str, start: int, end: int, service_date: Optional[date
             break
         if sentence[1] <= start:
             continue
-        pos, limit = max(sentence[0], start), min(sentence[1], end)
-        marker = _LIST_MARKER.match(text, pos, limit)
-        span = detect._procedure_name(an, marker.end() if marker else pos, limit)
-        if span is None:
-            continue
-        name = text[span[0]:span[1]]
-        if (detect._PROCEDURE_WORD.search(name) and not detect._NOT_A_PROCEDURE.search(name)
+        marker = _LIST_MARKER.match(text, *sentence)
+        span = detect._procedure_name(an, marker.end() if marker else sentence[0], sentence[1])
+        name = text[span[0]:span[1]] if span else ''
+        if (span and detect._PROCEDURE_WORD.search(name) and not detect._NOT_A_PROCEDURE.search(name)
                 and not detect._NOT_DONE_LED.match(name) and free(*span, sentence)):
             return True
-    return any(free(m.start(), m.end(), an.lay.sentence_for(m.start(), m.end()))
-               for m in _ACT_STATED.finditer(text, start, end))
+        if any(free(m.start(), m.end(), sentence) for m in _ACT_STATED.finditer(text, *sentence)):
+            return True
+    return False

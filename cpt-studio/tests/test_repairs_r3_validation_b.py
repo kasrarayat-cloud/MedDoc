@@ -165,6 +165,22 @@ class Validation0SectionOnlyOtherCodeTests(Case):
                 proposals, _ = real(GI03, ('46221', passage))
                 self.assertHeldUnnamed(proposals['46221'], passage)
 
+    def test_a_cited_fragment_is_read_in_its_sentence(self):
+        """A provider may cite part of a sentence: the sentence's own leading name decides, never the fragment's
+        first word ("banding" cut out of "Grade 2 internal hemorrhoids, banding candidate.")."""
+        for line, fragment in (('Grade 2 internal hemorrhoids, banding candidate.', 'banding candidate'),
+                               ('Grade 2 internal hemorrhoids, banding candidate.', 'banding'),
+                               ('Grade 2 internal hemorrhoids, suitable for banding.', 'suitable for banding')):
+            with self.subTest(fragment=fragment):
+                proposals, _ = real(OFFICE_OTHER.format(body=f'{DECLINED}\n{line}'), ('46221', fragment))
+                self.assertHeldUnnamed(proposals['46221'], fragment)
+        for line, fragment in (('Rubber band ligation of a grade 2 internal hemorrhoid x1.',
+                                'grade 2 internal hemorrhoid x1'),
+                               ('Internal hemorrhoids were banded x3 today.', 'Internal hemorrhoids')):
+            with self.subTest(fragment=fragment):
+                proposals, _ = real(OFFICE_OTHER.format(body=f'{DECLINED}\n{line}'), ('46221', fragment))
+                self.assertEqual(proposals['46221'].status, 'ready')
+
     def test_controls_a_detected_family_code_citing_the_same_passage_is_held_as_before(self):
         proposals, _ = real(COLONOSCOPY_A, ('45330', RETROFLEXION), ('43239', RETROFLEXION))
         for code in ('45330', '43239'):
