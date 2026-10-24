@@ -337,14 +337,27 @@ _LIST_OR_FIELD = re.compile(r'[ \t]*(?:[-*]\s|\d{1,2}[.)]\s|[A-Za-z][.)]\s|[^:\n
 # a word cut from the next line ("Schatzki ring present: no", "Hiatal hernia - no", "Hiatal hernia? no",
 # "Sedation: patient declined", "Biopsy taken [ ] Yes [x] No", "Biopsy taken   Yes   No").
 WRAP_TAIL = 200  # only the end of a line is read for its shape (bounds the work per line)
-_FIELD_ANSWER = re.compile(r'(?:^|[.;][ \t]+)(?P<label>[^:.;?=|\n]{1,60}?)[ \t]*'
+# The LAST field on the line is read: its label may also start after a comma, a tab or a run of spaces, so two fields
+# on one line, or a field after a comma, end the line too ("Hiatal hernia: no, Schatzki ring: no", "Mucosa: normal,
+# hiatal hernia: no", "Hiatal hernia: no   Schatzki ring: no"; round 4 structure:1, restoring 57b4b3747).
+_FIELD_ANSWER = re.compile(r'(?:^|[.;,][ \t]+|\t[ \t]*|[ ]{2,})(?P<label>[^:.;?=|\n]{1,60}?)[ \t]*'
                            r'(?P<sep>:|\?|=|[ \t][-\u2013\u2014][ \t])[ \t]*'
                            r'(?P<value>[^\s:?=|]+(?:[ \t]+[^\s:?=|]+){0,2})[ \t]*$', re.A)
 # Before a dash a field's label names a thing; a clause ("Colonoscopy was performed - no EGD was done") is prose.
 _LABEL_CLAUSE = re.compile(r'\b(?:was|were|is|are|has|have|had|did|does|do|will|would|shall|should|can|could|may|'
                            r'might|must)\b', re.A | re.I)
 _ALONE_ANSWERS = frozenset(('no', 'not', 'never', 'none'))  # a whole answer when it is the whole value
+# A column answer: a whole line that is a short label, then a tab or three or more spaces, then a lone negation
+# ("Hiatal hernia      no", "Hiatal hernia\tno"; round 4 structure:1). No comma or clause in the label.
+_SEC_COLUMN_ANSWER = re.compile(r'[ \t]*(?P<label>[A-Za-z][^:.;,?=|\n\t]{0,58}?[^\s:.;,?=|])(?:[ \t]*\t[ \t]*|[ ]{3,})'
+                                r'(?:no|none|never|not)[ \t]*', re.A | re.I)
 _DENIALS = frozenset(('declined', 'declines', 'refused', 'refuses', 'denied', 'denies'))
+# A spoken answer ends its sentence when the next line opens a clause of its own: "the patient said no\nColonoscopy
+# was then performed", "she was asked about a biopsy and answered no\nA 6 mm polyp was removed" (a closed list of
+# verbs of saying or choosing; round 4 structure:3, restoring 57b4b3747). Cut prose still runs on ("because of time
+# constraints, no\nEUS of the pancreatic cyst was performed today").
+_SEC_SPOKEN_ANSWER = re.compile(r'\b(?:said|says|answered|answers|replied|replies|responded|responds|chose|chooses)'
+                                r'[ \t]+(?:no|neither|never|not)$', re.A | re.I)
 _OPTION_ROW = re.compile(r'(?:[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752\u2611\u2612\u2713\u2714\u25a0\u2327]'
                          r'|\[[ \t]*[xXvV*_\u2713\u2714]?[ \t]*\]|\([ \t]*[xX]?[ \t]*\)|\byes\b)[ \t/|,-]*\bno[ \t]*$',
                          re.A | re.I)
@@ -382,7 +395,11 @@ _DESCRIBING_BEFORE = frozenset(('the', 'a', 'an', 'this', 'that', 'these', 'thos
 
 def _answered(tail: str) -> bool:
     """Whether a line ends answering a field: "<label>: no", "<label> - no", "<label>? never", "<label>: patient
-    declined" (a lone negation, or a short value ending in a denial)."""
+    declined" (a lone negation, or a short value ending in a denial), its last field read when it has two; or the
+    whole line, when ``tail`` is all of it, is a column answer ("Hiatal hernia\tno")."""
+    column = _SEC_COLUMN_ANSWER.fullmatch(tail)
+    if column and not _LABEL_CLAUSE.search(column.group('label')):
+        return True
     field = _FIELD_ANSWER.search(tail)
     if not field or (field.group('sep') not in ':?=' and _LABEL_CLAUSE.search(field.group('label'))):
         return False
@@ -422,14 +439,14 @@ def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
     if ' | ' in before or ' | ' in after or _LIST_OR_FIELD.match(after) or len(before.split()) < 3:
         return False
     tail = before[-WRAP_TAIL:]
-    if _answered(tail) or _OPTION_ROW.search(tail):
+    if _answered(before if len(before) <= WRAP_TAIL else tail) or _OPTION_ROW.search(tail):
         return False
     last = _LAST_TOKEN.search(tail)
     if last is None:
         return False
     word = last.group(1).lower()
     if word in _WRAP_WORDS or last.group(1) in _WRAP_WORDS_LOWER:
-        return True
+        return not (_SEC_SPOKEN_ANSWER.search(tail) and _own_clause(after))
     return (word in _DENIALS or bool(_OPEN_VERB.search(tail))) and not _own_clause(after)
 
 

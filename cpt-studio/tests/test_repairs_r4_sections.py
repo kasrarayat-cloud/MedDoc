@@ -15,8 +15,9 @@ from studio.gi.sections import layout
 from studio.reference.store import InMemoryReferenceLookup
 from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode
 from studio.validation.engine import assess
-from tests.test_repairs_r3_sections import (EMR_LINE, HEADER, NOT_TODAY, POSITIVE, clarified, emr_note, fact_value, family,
-                                            read, ready, routed, run_engine, service_date, span, word_document)
+from tests.test_repairs_r3_sections import (EMR_LINE, HEADER, NOT_TODAY, OFFICE, POSITIVE, clarified, emr_note, fact_value,
+                                            family, read, ready, routed, run_engine, service_date, span, starts_a_sentence,
+                                            word_document)
 
 
 def kind_at(text, phrase):
@@ -392,6 +393,129 @@ class Structure9TodayLabelAnsweredNoneTests(unittest.TestCase):
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, 'lexible sigmoidoscopy to 30 cm'), 'procedure')
                 self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+
+
+# --- structure:1 / structure:2 / structure:3: a line that ends with an answer --------------------------------------
+
+STRUCTURE1_BIOPSY = 'Biopsies were taken from the mid esophagus to evaluate for eosinophilic esophagitis.'
+
+
+def structure1_note(line):
+    return (HEADER + 'Procedure: EGD with biopsy.\nIndication: Dysphagia.\nFindings:\nEsophagus: normal\n' + line + '\n'
+            + STRUCTURE1_BIOPSY + '\nThe gastroscope was advanced to the second part of the duodenum.\n')
+
+
+class Structure1LastFieldOnTheLineTests(unittest.TestCase):
+    """structure:1 (a round-2b regression from status:16, under-corrected by round 3b) - a line whose LAST field answers
+    "no" ends its sentence whatever comes before that field (two fields, a comma, a tab, a run of spaces), and so does a
+    column answer without a colon: the performed biopsy on the next line is never negated, as at 57b4b3747."""
+
+    CLAIMED = ('Hiatal hernia: no, Schatzki ring: no', 'Hiatal hernia: no   Schatzki ring: no', 'Hiatal hernia: no\tSchatzki ring: no',
+               'Mucosa: normal, hiatal hernia: no', 'Hiatal hernia      no', 'Hiatal hernia\tno')
+
+    def test_the_claimed_lines(self):
+        for line in self.CLAIMED:
+            text = structure1_note(line)
+            with self.subTest(line=line):
+                self.assertTrue(starts_a_sentence(text, STRUCTURE1_BIOPSY))
+                self.assertEqual(read(text, STRUCTURE1_BIOPSY)[0], 'performed')
+                self.assertTrue(ready(run_engine(text, [('43239', STRUCTURE1_BIOPSY)])['43239']))
+
+    def test_the_office_note(self):
+        flex = 'Flexible sigmoidoscopy to 30 cm with cold forceps biopsy was performed today.'
+        text = OFFICE + 'Procedure note\nAnal fissure: no, external hemorrhoids: no\n' + flex + '\n'
+        proposals = run_engine(text, [('99214', 'Established patient office visit.'), ('45331', flex)])
+        self.assertTrue(ready(proposals['45331']))
+        self.assertEqual(proposals['99214'].status, 'needs_clarification')
+        self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_a_real_word_document(self):
+        for line in ('Hiatal hernia: no, Schatzki ring: no', 'Hiatal hernia\tno', 'Hiatal hernia: no   Schatzki ring: no'):
+            text = word_document([('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', None), ('Date of service: 2026-10-21', None),
+                                  ('Procedure: EGD with biopsy.', None), ('Indication: Dysphagia.', None), ('Findings:', None),
+                                  ('Esophagus: normal', None), (line, None), (STRUCTURE1_BIOPSY, None),
+                                  ('The gastroscope was advanced to the second part of the duodenum.', None)])
+            with self.subTest(line=line):
+                self.assertIn('\n' + line + '\n', text)
+                self.assertTrue(ready(run_engine(text, [('43239', STRUCTURE1_BIOPSY)])['43239']))
+
+    def test_cut_prose_still_runs_on(self):
+        """status:16 (round 2): a value that is cut prose is no answer, however its spaces or commas fall."""
+        for cut in ('Comment: because of time constraints, no', 'Comment: patient had no',
+                    'Comment: because of time constraints,   no', 'The patient asked about the cyst; because of time constraints, no',
+                    'Because of time constraints,   no', 'In the end there was   no'):  # no column answer: a comma, a clause
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n' + cut + '\nEUS of the '
+                    'pancreatic cyst was performed today.\n')
+            with self.subTest(cut=cut):
+                self.assertFalse(starts_a_sentence(text, 'EUS of the pancreatic cyst'))
+                self.assertEqual(family(text, 'gi.eus'), 'negated')
+
+
+class Structure2LowerCaseAfterAnAnswerTests(unittest.TestCase):
+    """structure:2 is NOT repaired here: a lower-case line after an answered field still runs on, as it has since
+    57b4b3747. Splitting it would release the wrapped negation below, and a layout rule may only hold; the hold the
+    verifier asked for needs a cue that detect owns. This pins the direction any later change must keep."""
+
+    def test_a_wrapped_negation_is_never_released(self):
+        text = (HEADER + 'Procedure: EGD with biopsy.\nFindings:\nEsophagus: normal\nComment: no\nbiopsies were taken because the '
+                'patient takes apixaban.\nThe gastroscope was advanced to the second part of the duodenum.\n')
+        proposal = run_engine(text, [('43239', 'biopsies were taken because the patient takes apixaban.')])['43239']
+        self.assertFalse(ready(proposal))
+
+
+STRUCTURE3_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+class Structure3SpokenAnswerTests(unittest.TestCase):
+    """structure:3 (a round-2b regression from status:16) - a spoken answer ("the patient said no", "answered no", "chose
+    neither") ends its sentence when the next line opens a clause of its own: the performed colonoscopy family is not
+    negated and 45385 is ready, as at 57b4b3747. Cut prose and a verbless next line still run on."""
+
+    def test_the_claimed_inputs(self):
+        polyp = 'A 6 mm polyp was removed with a cold snare.'
+        a = (HEADER + 'Procedure: Colonoscopy.\nTechnique: Sedation was offered; the patient said no\nColonoscopy was then performed '
+             'without sedation and the colonoscope was advanced to the cecum.\nFindings: ' + polyp + '\n')
+        self.assertTrue(starts_a_sentence(a, 'Colonoscopy was then performed'))
+        self.assertEqual(family(a, 'gi.colonoscopy'), 'performed')
+        self.assertEqual(fact_value(a, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(a, [('45385', polyp)])['45385']))
+        snare = 'Cold snare polypectomy of a 6 mm sigmoid polyp was performed.'
+        b = (HEADER + 'Procedure: Colonoscopy.\nFindings: The colonoscope was advanced to the cecum. She was asked whether she wanted '
+             'a biopsy of the hemorrhoid and said no\n' + snare + '\n')
+        self.assertTrue(ready(run_engine(b, [('45385', snare)])['45385']))
+
+    def test_the_listed_variants(self):
+        for line in ('Asked about a biopsy of the hemorrhoid, she said no', 'Asked about a biopsy of the hemorrhoid, she answered no',
+                     'Asked about a biopsy of the hemorrhoid, she replied no', 'Asked about a biopsy of the hemorrhoid, patient says no',
+                     'Asked about a biopsy or a tattoo, the patient chose neither'):
+            text = (HEADER + 'Procedure: Colonoscopy.\nFindings: The colonoscope was advanced to the cecum. ' + line + '\n'
+                    + STRUCTURE3_POLYP + '\n')
+            with self.subTest(line=line):
+                self.assertTrue(starts_a_sentence(text, STRUCTURE3_POLYP))
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE3_POLYP)])['45385']))
+        egd = (HEADER + 'Procedure: EGD.\nFindings: The gastroscope was advanced to the second part of the duodenum. The patient was '
+               'asked whether she wanted propofol and said no\nBiopsies were taken from the gastric antrum.\n')
+        self.assertTrue(ready(run_engine(egd, [('43239', 'Biopsies were taken from the gastric antrum.')])['43239']))
+        extent = ('The colonoscope was advanced to the cecum and a 6 mm polyp was removed with a cold snare.')
+        text = HEADER + 'Procedure: Colonoscopy.\nTechnique: Propofol was offered and the patient said no\n' + extent + '\n'
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(text, [('45385', extent)])['45385']))
+
+    def test_a_real_word_document(self):
+        text = word_document([('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', None), ('Date of service: 2026-10-21', None),
+                              ('Procedure: Colonoscopy.', None),
+                              ('Findings: The colonoscope was advanced to the cecum. Asked about a biopsy of the hemorrhoid, she '
+                               'said no', None), (STRUCTURE3_POLYP, None)])
+        self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE3_POLYP)])['45385']))
+
+    def test_cut_prose_and_a_verbless_next_line_still_run_on(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nComment: because of time '
+                'constraints, no\nEUS of the pancreatic cyst was performed today.\n')
+        self.assertEqual(family(text, 'gi.eus'), 'negated')
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Asked about the pancreatic '
+                'cyst, she said no\nEUS of the pancreatic cyst.\n')
+        self.assertFalse(starts_a_sentence(text, 'EUS of the pancreatic cyst.'))
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
 
 
 if __name__ == '__main__':
