@@ -775,8 +775,12 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
         messages.append(f'{page_phrase(obscured)} {agree(obscured, "has", "have")} text that a viewer may not show '
                         '(white on the page, painted over, or clipped in a way that could not be checked); it was '
                         'read, so check it against the original.')
+    struck = [n for n, page in enumerate(read, 1) if page.content.struck_text and n not in ocr.texts]
+    if struck:
+        messages.append(f'{page_phrase(struck)} {agree(struck, "has", "have")} text struck through by a line drawn '
+                        'across it; it was read as written, so check it against the original.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
-    return messages, bool(damaged or unchecked or limited or overlapped or marked or obscured) or annotation_partial
+    return messages, bool(damaged or unchecked or limited or overlapped or marked or obscured or struck) or annotation_partial
 
 
 def _scanned_phrase(pages) -> str:

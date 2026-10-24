@@ -26,6 +26,11 @@ form XObjects it draws, with the current transformation matrix tracked:
   nothing painted under it, text a later opaque fill or image covers (over
   the band every glyph inks, for at least a glyph's width), text inside a
   clipping path too complex to follow, and pages past the work limits.
+  Invisible text (render mode 3 or 7, or no opacity) is read as the layer of
+  what the page paints under it (OCR text over its scan) and named when
+  nothing is; zero-size text is named. Text a thin line crosses through the
+  middle of its glyphs is struck through: kept and flagged (struck_text),
+  whether the line is drawn after it or, ending within an em of it, before.
 - **Symbol fonts.** A simple symbol font in the resources of the page or of a
   form it draws is replaced, in the copy extraction reads, by one that maps
   its glyphs to the characters they show (studio.ingest.pdffonts).
@@ -287,6 +292,13 @@ WHITE_LEVEL = 0.99
 CORE_LOW, CORE_HIGH, COVER_WIDTH = 0.1, 0.6, 0.6
 # Text painted with less opacity than this shows nothing, like invisible text (render mode 3).
 MIN_ALPHA = 0.05
+# A line painted over text strikes it through when it is no thicker than STRIKE_THICKNESS font sizes, meets the
+# band STRIKE_LOW to STRIKE_HIGH font sizes above the baseline (fonts put their strikeout at about 0.25; underlines
+# lie below the baseline, overlines near the cap height), and runs along STRIKE_SPAN font sizes (or the whole run).
+STRIKE_LOW, STRIKE_HIGH, STRIKE_THICKNESS, STRIKE_SPAN = 0.15, 0.5, 0.35, 1.2
+# A line drawn before the text strikes it only when it ends within STRIKE_REACH font sizes of the run (a ruled or
+# grid line running past the text is not a strike-through; some producers draw their strike line first).
+STRIKE_REACH = 1.0
 CURVE_STEPS = 8  # straight pieces per Bézier curve of a clipping path
 MAX_PATH_POINTS = 512  # a clipping path with more points is not followed: text inside its bounds is named
 GRID_CELLS = 32  # cells per side of the page-space index of what has been painted
@@ -414,6 +426,7 @@ class _Path:
         self.start = None
         self.last = None
         self.edges = None  # (x0, y0, x1, y1) of every point
+        self.curved = False  # a curve was flattened into it
 
     def _bound(self, point) -> None:
         x, y = point
@@ -437,6 +450,7 @@ class _Path:
             self.rings[-1].append(point)
 
     def curve(self, current, c1, c2, end) -> None:
+        self.curved = True
         for step in range(1, CURVE_STEPS + 1):
             t = step / CURVE_STEPS
             u = 1 - t
@@ -561,6 +575,24 @@ class _Run:
     def page_core(self) -> tuple:
         return transformed_box(self.core, self.place)
 
+    def struck_by(self, rect, before: bool = False) -> bool:
+        """Whether the page-space rectangle ``rect``, a line painted over the run (or under it, ``before``),
+        strikes it through."""
+        back = _inverse(self.place)
+        if back is None or not rectilinear(self.place):
+            return False
+        x0, y0, x1, y1 = transformed_box(rect, back)
+        if y1 - y0 > STRIKE_THICKNESS * self.size:
+            return False
+        reach = STRIKE_REACH * self.width / COVER_WIDTH
+        if before and (x0 < self.low - reach or x1 > self.high + reach):
+            return False
+        if y1 <= self.rise + STRIKE_LOW * self.size or y0 >= self.rise + STRIKE_HIGH * self.size:
+            return False
+        overlap = min(x1, self.high) - max(x0, self.low)
+        span = self.width * STRIKE_SPAN / COVER_WIDTH  # STRIKE_SPAN font sizes, horizontal scaling applied
+        return overlap > 0 and overlap >= min(self.high - self.low, span) - 1e-9
+
     def covered_by(self, rect) -> bool:
         """Whether the opaque page-space rectangle ``rect`` hides at least one glyph of the run: it covers the
         band every glyph inks, over at least COVER_WIDTH font sizes along the baseline (or the whole run)."""
@@ -590,6 +622,8 @@ class _Paint:
         self.unseen: list = []  # runs of invisible text, judged against all the page paints (finish)
         self.checks = 0
         self.obscured = False
+        self.struck = False  # a line was painted through shown text
+        self.lines = _Grid(box)  # thin horizontal lines painted so far, for text drawn over them
 
     def _text(self) -> _Grid:
         if self.text is None:
@@ -612,6 +646,10 @@ class _Paint:
         if white and not self.obscured and not any(clip(core, rect) is not None
                                                    for rect in self._near(self.backdrop, core)):
             self.obscured = True
+        if self.lines.cells or self.lines.wide:
+            band = run.page_core
+            if not self.struck and any(run.struck_by(rect, before=True) for rect in self._near(self.lines, band)):
+                self.struck = True
         self.runs.append(run)
 
     def invisible(self, run: _Run) -> None:
@@ -630,6 +668,15 @@ class _Paint:
     def painted(self, bounds, colour: str) -> None:
         if bounds is not None and colour != WHITE:
             self.backdrop.add(bounds, bounds)
+
+    def line(self, rect) -> None:
+        """A thin horizontal line painted over what was drawn before it (and under what is drawn after)."""
+        if rect is None or self.struck:
+            return
+        if any(run.struck_by(rect) for run in self._near(self._text(), rect)):
+            self.struck = True
+            return
+        self.lines.add(rect, rect)
 
     def opaque(self, rect) -> None:
         """An opaque rectangle painted over what was drawn before it."""
@@ -664,6 +711,7 @@ class PageContent:
     offpage_text: bool = False  # text drawn wholly outside the visible page area, which was dropped
     clipped_text: bool = False  # text drawn wholly outside what its clipping path or form box shows, dropped
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
+    struck_text: bool = False  # text kept that a line painted over it strikes through
     paint: _Paint | None = field(default=None, repr=False, compare=False)
 
     @property
@@ -875,6 +923,7 @@ class _Walker:
         self.content.operations = kept
         self.paint.finish()
         self.content.obscured_text = self.content.obscured_text or self.paint.obscured
+        self.content.struck_text = self.paint.struck
         fonts = self.mapped_fonts(resources)
         if replaced or fonts:
             self.content.resources = with_replacements(resources, replaced, fonts)
@@ -1075,11 +1124,19 @@ class _Walker:
                         covers.append(inside)
             if self.positions:
                 self.paint.painted(clip(bounds, area), graphics.fill)
+                if rect is not None and graphics.fill_alpha >= MIN_ALPHA and not graphics.clip.shapes:
+                    self.paint.line(clip(rect, area))
         if operator in STROKES and self.positions:
             half = graphics.line_width * math.sqrt(abs(graphics.ctm[0] * graphics.ctm[3]
                                                        - graphics.ctm[1] * graphics.ctm[2])) / 2
             self.paint.painted(clip((bounds[0] - half, bounds[1] - half, bounds[2] + half, bounds[3] + half), area),
                                graphics.stroke)
+            if not path.curved and graphics.stroke_alpha >= MIN_ALPHA and not graphics.clip.shapes:
+                for ring in path.rings:  # each straight horizontal segment, as the band its stroke paints
+                    for (px, py), (qx, qy) in zip(ring, ring[1:]):
+                        if abs(py - qy) <= 0.01 * abs(px - qx):
+                            self.paint.line(clip((min(px, qx), min(py, qy) - half, max(px, qx), max(py, qy) + half),
+                                                 area))
 
     def image_painted(self, graphics: _Graphics, *, opaque: bool, covers: list, colour: str = UNKNOWN) -> None:
         box = transformed_box(UNIT_SQUARE, graphics.ctm)

@@ -17,6 +17,8 @@ from tests.test_repairs_ingest_pdf import HELVETICA, serialise, serialise_again,
 from tests.test_repairs_ingest_r2 import OFF_PAGE, SHOWN_LINE, UNSHOWN, esc, pdf_extract, placed_pdf
 
 CLIPPED = 'Page 1 has text outside the area its clipping path or form box shows; that text was not extracted.'
+STRUCK_TEXT = ('Page 1 has text struck through by a line drawn across it; it was read as written, so check it against '
+               'the original.')
 OBSCURED = ('Page 1 has text that a viewer may not show (white on the page, painted over, or clipped in a way that '
             'could not be checked); it was read, so check it against the original.')
 SENTENCE = f'BT /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET'
@@ -277,6 +279,70 @@ class UnseenTextTests(unittest.TestCase):
                 result = pdf_extract(data, ocr=None)
                 self.assertEqual((result.status, result.messages), ('ok', ()))
                 self.assertIn('cold snare polypectomy', result.text)
+
+
+class StruckTextTests(unittest.TestCase):
+    """ingest:8, the same marks drawn in the page's own content: a line across the middle of the glyphs (a
+    browser's line-through, ReportLab's <strike>, a Word strikethrough) strikes the text through; it is kept,
+    named and partial, never read as current with no limitation."""
+
+    def test_text_struck_through_is_named(self):
+        cases = {'a line-through drawn after the text, as a thin fill': f'{SENTENCE} 0 g 72 503 476 0.8 re f',
+                 'a stroked line drawn after it': f'{SENTENCE} 0 G 0.8 w 72 503.4 m 548 503.4 l S',
+                 'a strike line drawn first': f'0 G 0.8 w 72 503.4 m 548 503.4 l S {SENTENCE}',
+                 'a line through one word': f'{SENTENCE} 0 g 140 503 40 0.8 re f',
+                 'a red strike line': f'{SENTENCE} 1 0 0 rg 72 503 476 0.8 re f',
+                 'a strike drawn by a form': f'{SENTENCE} q /Sk Do Q'}
+        strike_form = stream('0 g 72 503 476 0.8 re f', '/Type /XObject /Subtype /Form /BBox [0 0 612 792]')
+        for label, content in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(placed_pdf(content, resources='/XObject << /Sk 6 0 R >>', extra={6: strike_form}),
+                                     ocr=None)
+                self.assertEqual((result.status, result.messages), ('partial', (STRUCK_TEXT,)))
+                self.assertIn('cold snare polypectomy', result.text)
+
+    def test_lines_that_do_not_strike_the_text(self):
+        cases = {'an underline': f'{SENTENCE} 0 g 72 498 476 0.8 re f',
+                 'an underline drawn first': f'0 g 72 498 476 0.8 re f {SENTENCE}',
+                 'an overline': f'{SENTENCE} 0 g 72 511 476 0.8 re f',
+                 'a rule between lines': f'{SENTENCE} 0 G 0.5 w 72 515 m 548 515 l S',
+                 'a ruled line drawn first, running past the text': f'0 G 0.5 w 0 503.4 m 612 503.4 l S {SENTENCE}',
+                 'a vertical line across it': f'{SENTENCE} 0 G 0.5 w 300 480 m 300 530 l S',
+                 'a tick through one letter': f'{SENTENCE} 0 g 72 503 5 0.8 re f',
+                 'a box drawn around it': f'{SENTENCE} 0 G 0.5 w 66 494 488 22 re S',
+                 'a thick translucent highlight': f'{SENTENCE} /Half gs 1 1 0 rg 60 497 500 14 re f'}
+        for label, content in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(placed_pdf(content, resources='/ExtGState << /Half << /ca 0.4 >> >>'), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertIn('cold snare polypectomy', result.text)
+
+    def test_reportlab_decorations(self):
+        import io
+
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
+        styles = getSampleStyleSheet()
+
+        def built(flowables) -> bytes:
+            buffer = io.BytesIO()
+            SimpleDocTemplate(buffer, pagesize=letter, invariant=1).build(flowables)
+            return buffer.getvalue()
+
+        lead = Paragraph('Procedure: Colonoscopy to the cecum.', styles['Normal'])
+        struck = pdf_extract(built([lead, Paragraph('<strike>Biopsy of the polyp was taken.</strike>',
+                                                    styles['Normal'])]), ocr=None)
+        self.assertEqual((struck.status, struck.messages), ('partial', (STRUCK_TEXT,)))
+        for label, flowables in {
+                'underlined': [lead, Paragraph('<u>Biopsy of the polyp was taken.</u>', styles['Normal'])],
+                'a table grid': [Table([['Procedure', 'Colonoscopy'], ['Biopsy', 'taken, cold forceps']],
+                                       style=TableStyle([('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                                                         ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey)]))]}.items():
+            with self.subTest(label):
+                result = pdf_extract(built(flowables), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
 
 
 # --- ingest:8 — annotations that strike, redact or cover the text under them --------------------------
