@@ -23,7 +23,10 @@ The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
 default: their lines never open sections of their own, each line is a
 sentence, and the section before the block resumes after the blank line that
-ends it.
+ends it (unless a heading opens on that line, as the next page often does).
+The header an addendum opens with ("ADDENDUM (revision 2, added 2026-10-22
+10:00 UTC)") is likewise an ``other`` section with no default, so an addendum
+never takes the reading of the section the document ended in.
 """
 from __future__ import annotations
 
@@ -146,6 +149,11 @@ _LIST_ITEM = re.compile(r'[ \t]*(?:(?:\d{1,2}|[A-Za-z])[.)]|\*(?!\*))[ \t]+', re
 # A document title is never such a label: "Office follow-up visit - progress note", "Prior procedure report".
 _TITLE_WORDS = re.compile(r'\b(?:note|report|visit|consultation|encounter)\b', re.A | re.I)
 FORM_BLOCK = re.compile(r'\[PDF (?P<what>form fields|annotation text) on page \d+\]', re.A)
+# The header studio/jobs.py (addendum_block_text) writes before an addendum: a boundary of kind other with no
+# default, so an answer never takes the parent's last section (under a Plan, "The colonoscope was advanced to the
+# cecum." read uncertain and the extent hold stayed open). Only this exact header; the clock's colon kept it from
+# reading as a label.
+ADDENDUM_HEADER = re.compile(r'ADDENDUM \(revision \d+, added \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\)', re.A)
 
 
 def _colonless_label(line: str) -> Optional[str]:
@@ -199,10 +207,10 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     body_start = _PREFIX.match(text, ls, le).end()
     line = text[body_start:le]
     block = FORM_BLOCK.fullmatch(line.strip())
-    if block:
+    if block or ADDENDUM_HEADER.fullmatch(line.strip()):
         lead = len(line) - len(line.lstrip())
-        return 'other', f"pdf {block.group('what')}", Span(body_start + lead, body_start + lead + len(line.strip()),
-                                                          line.strip())
+        return 'other', f"pdf {block.group('what')}" if block else 'addendum', Span(
+            body_start + lead, body_start + lead + len(line.strip()), line.strip())
     colon = line.find(':')
     raw = line if colon < 0 else line[:colon]
     if not raw.strip() or len(raw) > 60:
@@ -462,8 +470,11 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
 def layout(text: str) -> Layout:
     lines = _lines(text)
     headings, inside, resumes = _headings(text, lines)
+    # Where a block's section resumes on a heading line (the next page opens with "Findings:", an addendum's
+    # header), the heading wins: the resume is placed first.
     marks = sorted([(i, 'heading', h) for i, h in headings.items() if h]
-                   + [(i, 'resume', header) for i, header in resumes if i < len(lines)])
+                   + [(i, 'resume', header) for i, header in resumes if i < len(lines)],
+                   key=lambda mark: (mark[0], mark[1] == 'heading'))
     opened, current, before_block = [], ('other', '', None), {}
     for i, what, value in marks:
         if what == 'heading':

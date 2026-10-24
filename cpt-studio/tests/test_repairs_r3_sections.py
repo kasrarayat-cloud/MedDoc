@@ -486,5 +486,131 @@ class Contract8PerformedTodayHeadingTests(unittest.TestCase):
 
 
 
+# --- routing:24: the addendum header, and a heading where a block's section resumes ---------------------------
+
+def with_addendum(parent, answer):
+    """The text an addendum revision routes, built as stage_extract builds it."""
+    from datetime import datetime, timezone
+
+    from studio.ingest.extract import extract_paste
+    from studio.jobs import addendum_block_text
+    stamp = datetime(2026, 10, 22, 10, 0, tzinfo=timezone.utc)
+    return extract_paste(parent + addendum_block_text(2, stamp, answer), method='addendum').text
+
+
+ENDS_IN_PLAN = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: A 6 mm polyp was removed with a cold '
+                'snare.\nPlan: Await pathology.\n')
+POLYP_PICK = [('45385', 'A 6 mm polyp was removed with a cold snare.')]
+
+
+class Routing24AddendumHeaderTests(unittest.TestCase):
+    """routing:24 - the product's own addendum header is a section boundary of kind other with no default, so an
+    addendum answer is read on its own words, never under the parent's last section (a Plan held it open)."""
+
+    def test_the_addendum_is_its_own_section(self):
+        text = with_addendum(ENDS_IN_PLAN, 'The colonoscope was advanced to the cecum.')
+        self.assertIn('\nADDENDUM (revision 2, added 2026-10-22 10:00 UTC)\n', text)
+        section = layout(text).section_at(text.index('The colonoscope was advanced'))
+        self.assertEqual((section.kind, section.label), ('other', 'addendum'))
+        self.assertEqual(section.heading.text, 'ADDENDUM (revision 2, added 2026-10-22 10:00 UTC)')
+
+    def test_an_answer_that_states_the_extent_clears_the_hold(self):
+        self.assertEqual(clarified(run_engine(ENDS_IN_PLAN, POLYP_PICK)['45385']), ['extent'])
+        for answer in ('The colonoscope was advanced to the cecum.', 'Cecum was reached.',
+                       'The cecum was reached and photographed.'):
+            text = with_addendum(ENDS_IN_PLAN, answer)
+            with self.subTest(answer=answer):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+                self.assertTrue(ready(run_engine(text, POLYP_PICK)['45385']))
+
+    def test_the_separately_identifiable_em_answer_counts_after_a_plan(self):
+        parent = (OFFICE + 'Procedure: Flexible sigmoidoscopy to 30 cm with cold forceps biopsy was performed today.\n'
+                  'Plan: Await pathology.\n')
+        text = with_addendum(parent, 'A significant, separately identifiable E/M service was performed today.')
+        separate = next((f for f in routed(text).finding('gi.office_em').facts if f.name == 'separate_em'), None)
+        self.assertIsNotNone(separate)
+        self.assertEqual(separate.value, 'documented')
+
+    def test_an_addendum_that_states_no_extent_of_today_stays_unread(self):
+        for answer in ('Repeat colonoscopy to the cecum in 3 years.', 'A colonoscopy to the cecum is planned next year.',
+                       'Prior colonoscopy reached the cecum in 2019.'):
+            text = with_addendum(ENDS_IN_PLAN, answer)
+            with self.subTest(answer=answer):
+                self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))
+                self.assertIn('extent', clarified(run_engine(text, POLYP_PICK)['45385']))
+
+    def test_headings_inside_an_addendum_still_open(self):
+        text = with_addendum(ENDS_IN_PLAN, 'Findings: The colonoscope was advanced to the cecum.\nPlan: Repeat colonoscopy '
+                                           'in 3 years.')
+        self.assertEqual(layout(text).section_at(text.index('The colonoscope was advanced')).kind, 'findings')
+        self.assertEqual(layout(text).section_at(text.index('Repeat colonoscopy')).kind, 'plan')
+
+    def test_only_the_exact_header_is_this_boundary(self):
+        for line in ('ADDENDUM', 'Addendum (revision 2, added 2026-10-22 10:00 UTC)',
+                     'ADDENDUM (revision 2, added 2026-10-22 10:00 UTC) The colonoscope was advanced to the cecum.'):
+            text = ENDS_IN_PLAN + '\n' + line + '\nThe colonoscope was advanced to the cecum.\n'
+            with self.subTest(line=line):
+                self.assertNotEqual(layout(text).section_at(text.rindex('The colonoscope was advanced')).label,
+                                    'addendum')
+
+
+def two_page_form_pdf(page2_first_line):
+    """A real two-page PDF: page 1 ends in "Plan:" and carries a filled form field, page 2 opens with a heading."""
+    import io
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen.canvas import Canvas
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, pagesize=letter, invariant=1)
+    canvas.setFont('Helvetica', 11)
+    for y, line in ((740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT'), (722, 'Date of service: 2026-10-21'),
+                    (704, 'Procedure: Colonoscopy with cold snare polypectomy.'),
+                    (686, 'Findings: The colonoscope was advanced to the cecum.'), (668, 'Plan: Await pathology.'),
+                    (640, 'Specimen jar:')):
+        canvas.drawString(72, y, line)
+    canvas.acroForm.textfield(name='Specimen jar', x=160, y=634, width=200, height=16, value='A', borderWidth=0,
+                              fontSize=10)
+    canvas.showPage()
+    canvas.setFont('Helvetica', 11)
+    canvas.drawString(72, 740, page2_first_line)
+    canvas.showPage()
+    canvas.save()
+    return buffer.getvalue()
+
+
+class BlockResumeOnAHeadingTests(unittest.TestCase):
+    """Found while repairing routing:24, at d05326ef5 already: where a form block's section resumes after its blank
+    line, a heading on that line (the next page opens with "Findings:", an addendum's header) was overridden by the
+    section in force before the block, so the next page's findings read as the previous page's Plan."""
+
+    POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+    def test_the_next_pages_heading_opens_its_section(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nPlan: Await pathology.\n\n[PDF form fields on page 1]\nBiopsy: checked\n\n'
+                'Findings: The colonoscope was advanced to the cecum. ' + self.POLYP + '\n')
+        self.assertEqual(layout(text).section_at(text.index(self.POLYP)).kind, 'findings')
+        self.assertTrue(ready(run_engine(text, [('45385', self.POLYP)])['45385']))
+        text = text.replace('\n\nFindings: The colonoscope was advanced to the cecum. ' + self.POLYP,
+                            '\n\nThe next page goes on with the plan.')
+        self.assertEqual(layout(text).section_at(text.index('The next page')).kind, 'plan')  # no heading: it resumes
+
+    def test_a_real_two_page_pdf(self):
+        from studio.ingest import extract_document
+        result = extract_document(two_page_form_pdf('Findings: ' + self.POLYP), 'report.pdf', 'application/pdf',
+                                  ocr=None)
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertIn('[PDF form fields on page 1]\nSpecimen jar: A\n\nFindings: ' + self.POLYP, result.text)
+        self.assertEqual(layout(result.text).section_at(result.text.index(self.POLYP)).kind, 'findings')
+        self.assertTrue(ready(run_engine(result.text, [('45385', self.POLYP)])['45385']))
+
+    def test_an_addendum_after_a_form_block(self):
+        parent = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: A 6 mm polyp was removed with a '
+                  'cold snare.\nPlan: Await pathology.\n\n[PDF form fields on page 1]\nSpecimen jar: A')
+        text = with_addendum(parent, 'The colonoscope was advanced to the cecum.')
+        section = layout(text).section_at(text.index('The colonoscope was advanced'))
+        self.assertEqual((section.kind, section.label), ('other', 'addendum'))
+        self.assertTrue(ready(run_engine(text, POLYP_PICK)['45385']))
+
+
 if __name__ == '__main__':
     unittest.main()
