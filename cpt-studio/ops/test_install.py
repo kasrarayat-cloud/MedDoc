@@ -456,6 +456,20 @@ class DoorTests(TemporaryDirectoryTest):
         outside = self.tmp / 'outside.md'
         outside.symlink_to(self.repo / self.NAME)
         self.refuses(outside, commit, 'inside this repository')
+        # A directory link followed by '..' (round 3, installer3:2): the OS opens a byte-identical copy OUTSIDE the
+        # tree (link first, then '..'), while a lexical collapse names the committed file the git checks run on.
+        far = self.tmp / 'elsewhere' / 'a' / 'b'
+        far.mkdir(parents=True)
+        copy = self.tmp / 'elsewhere' / 'a' / 'declaration.md'
+        copy.write_bytes((self.repo / self.NAME).read_bytes())
+        (self.repo / 'docs' / 'linkdir').symlink_to(far, target_is_directory=True)
+        for named in ('docs/linkdir/../declaration.md', str(self.repo / 'docs' / 'linkdir' / '..' / 'declaration.md'),
+                      'docs/../docs/declaration.md'):
+            with self.subTest(named=named):
+                self.refuses(named, commit, r"contains '\.\.'")
+        with self.assertRaisesRegex(install.InstallError, r"contains '\.\.'"):
+            install.committed_declaration(self.repo / 'docs' / 'linkdir' / '..' / 'declaration.md', commit,
+                                          copy.read_bytes())
         # The receipt names the repository path actually checked, whatever form the variable took.
         for named in (self.NAME, f'./{self.NAME}', str(self.repo / self.NAME)):
             self.assertEqual(self.door(named, commit)['declaration'], self.NAME, named)

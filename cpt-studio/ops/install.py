@@ -205,7 +205,18 @@ def check_door(environ, revision) -> dict:
                            'RULED_MUTATION_DECL_COMMIT must both be set.')
     if not SHA_RE.fullmatch(commit):
         raise InstallError('RULED_MUTATION_DECL_COMMIT is not a full commit sha.')
-    path = Path(declaration) if Path(declaration).is_absolute() else ROOT / declaration
+    named = Path(declaration)
+    # '..' is refused before any normalisation: the OS applies it AFTER following a link, os.path.abspath
+    # collapses it lexically, so 'linkdir/../x' can open a file outside the tree that the checks never see.
+    if '..' in named.parts:
+        raise InstallError("The declaration path contains '..'; name the committed file itself.")
+    absolute = Path(os.path.abspath(named if named.is_absolute() else ROOT / named))
+    try:
+        rel = absolute.relative_to(ROOT).as_posix()
+    except ValueError:
+        raise InstallError('The declaration is not a file inside this repository.') from None
+    # The bytes are read from the repository path the git checks below run on, never from the raw value.
+    path = ROOT / rel
     try:
         data = path.read_bytes()
         text = data.decode('utf-8')
@@ -220,10 +231,12 @@ def check_door(environ, revision) -> dict:
     return {'declaration': rel, 'declaration_commit': commit, 'declaration_sha256': sha256(data)}
 
 
-def committed_declaration(path: Path, commit: str, data: bytes) -> None:
+def committed_declaration(path: Path, commit: str, data: bytes) -> str:
     """The phase is bound to a COMMITTED declaration, as the door's strict gate requires: inside this repository,
     tracked, unmodified, last touched by ``commit``, and byte-identical to that commit's copy. Two exported
     variables naming an arbitrary file and an arbitrary ancestor are refused."""
+    if '..' in Path(path).parts:
+        raise InstallError("The declaration path contains '..'; name the committed file itself.")
     absolute = Path(os.path.abspath(path))  # the path as named, links NOT followed
     try:
         rel = absolute.relative_to(ROOT.resolve()).as_posix()
