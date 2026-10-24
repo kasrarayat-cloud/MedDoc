@@ -212,3 +212,89 @@ class RunInUseTests(ApiHarness, TestCase):
             with self.subTest(state=state):
                 run = self.make_run(state=state, finished_at=timezone.now())
                 self.assertEqual(jobs._run_in_use(self.revision), run)
+
+
+@override_settings(**LIVE)
+class ContextValuesAreStringsTests(ApiHarness, TestCase):
+    """Round 4, pipeline:6 — POST /context takes, per field, a listed string, or null or '' to clear it (API.md). Any
+    other JSON type answers 400 and changes nothing, never a silent clear (the round-3 orchestrator:5 class, on
+    another endpoint). A service date is a string in YYYY-MM-DD form only: never a JSON number, a basic or week date
+    that date.fromisoformat also accepts; on the upload too."""
+
+    NON_STRINGS = (False, 0, [], {}, 0.0, True, 1, ['office'], {'a': 1}, 1.5)
+
+    def setUp(self):
+        super().setUp()
+        self.encounter_id = self.create(NO_DATE_NOTE)
+        drain()
+        self.assertEqual(self.change({'setting': 'office', 'billing_context': 'facility'}).status_code, 201)
+
+    def change(self, body):
+        response = self.post(f'/api/encounters/{self.encounter_id}/context', body)
+        drain()
+        return response
+
+    def snapshot(self):
+        encounter = models.Encounter.objects.get(pk=self.encounter_id)
+        return (dict(encounter.user_values), encounter.contexts.count(), len(self.provider.requests))
+
+    def assert_refused(self, body):
+        before = self.snapshot()
+        response = self.change(body)
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn('error', response.json())
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_non_string_setting_or_billing_context_answers_400(self):
+        for field in ('setting', 'billing_context'):
+            for value in self.NON_STRINGS:
+                with self.subTest(field=field, value=repr(value)):
+                    self.assert_refused({field: value})
+        self.assertEqual(models.Encounter.objects.get(pk=self.encounter_id).user_values,
+                         {'setting': 'office', 'billing_context': 'facility'})
+
+    def test_an_unlisted_string_still_answers_400(self):
+        for field, value in (('setting', 'bogus'), ('setting', ' office'), ('billing_context', 'Facility')):
+            with self.subTest(field=field, value=value):
+                self.assert_refused({field: value})
+
+    def test_null_and_the_empty_string_clear(self):
+        for field, value in (('setting', None), ('billing_context', '')):
+            with self.subTest(field=field, value=value):
+                response = self.change({field: value})
+                self.assertEqual(response.status_code, 201, response.content)
+                self.assertNotIn(field, models.Encounter.objects.get(pk=self.encounter_id).user_values)
+
+    def test_a_listed_string_is_stored(self):
+        response = self.change({'setting': 'asc', 'billing_context': 'professional'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(models.Encounter.objects.get(pk=self.encounter_id).user_values,
+                         {'setting': 'asc', 'billing_context': 'professional'})
+
+    def test_a_service_date_that_is_not_a_yyyy_mm_dd_string_answers_400(self):
+        for value in (20261020, 20261020.0, '20261020', '2026-W43-2', '2026W432', '2026-W43', '2026-293',
+                      '10/20/2026', ' 2026-10-20', '2026-10-20\n', '2026-10-20T00:00', '２０２６-１'
+                      '０-２０', '2026-02-30', True, False, 0, [], {}, ['2026-10-20']):
+            with self.subTest(value=repr(value)):
+                self.assert_refused({'service_date': value})
+        self.assertNotIn('service_date', models.Encounter.objects.get(pk=self.encounter_id).user_values)
+
+    def test_a_yyyy_mm_dd_service_date_is_sent_and_null_clears_it(self):
+        response = self.change({'service_date': '2026-10-20'})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIn('Date of service: 2026-10-20', self.provider.requests[-1].contexts)
+        response = self.change({'service_date': None})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertNotIn('service_date', models.Encounter.objects.get(pk=self.encounter_id).user_values)
+
+    def test_the_upload_takes_only_a_yyyy_mm_dd_service_date(self):
+        encounters = models.Encounter.objects.count()
+        for value in ('2026-W43-2', '20261020', '2026-W43', '2026-02-30'):
+            with self.subTest(value=value):
+                response = self.client.post('/api/encounters', {'text': NO_DATE_NOTE, 'synthetic_attestation': 'yes',
+                                                                'service_date': value})
+                self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(models.Encounter.objects.count(), encounters)
+        for value in ('2026-10-20', ''):
+            with self.subTest(value=value):
+                self.create(NO_DATE_NOTE, service_date=value)

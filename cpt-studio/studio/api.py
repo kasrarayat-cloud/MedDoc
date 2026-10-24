@@ -109,13 +109,31 @@ def _attested(value):
         raise ApiError(400, 'Confirm that the document is synthetic and contains no real patient information.')
 
 
+# The one form API.md documents. date.fromisoformat alone also reads a JSON number's str() ('20261020'), a basic date
+# and an ISO week date ('2026-W43-2', or '2026-W43' as its Monday), dates the member never wrote (round 4, pipeline:6).
+_PIPE_DATE = re.compile(r'[0-9]{4}-[0-9]{2}-[0-9]{2}')
+
+
 def _parse_date(value, field):
-    if value in (None, ''):
+    if value is None or value == '':
         return ''
+    if not isinstance(value, str) or not _PIPE_DATE.fullmatch(value):
+        raise ApiError(400, f'{field} must be a date in YYYY-MM-DD form.')
     try:
-        return date.fromisoformat(str(value)).isoformat()
+        return date.fromisoformat(value).isoformat()
     except ValueError:
         raise ApiError(400, f'{field} must be a date in YYYY-MM-DD form.')
+
+
+def _PIPE_choice(data, name, choices, message):
+    """A listed string, or '' for null or '' (which clear the value). Any other JSON type is refused, never read as
+    "no value" by its truthiness: 0, false, [] and {} cleared the member's value (round 4, pipeline:6)."""
+    value = data.get(name)
+    if value is None or value == '':
+        return ''
+    if not isinstance(value, str) or value not in choices:
+        raise ApiError(400, message)
+    return value
 
 
 def _clean_title(raw, fallback):
@@ -252,15 +270,10 @@ def context(request, encounter_id):
     if 'service_date' in data:
         values['service_date'] = _parse_date(data.get('service_date'), 'Service date')
     if 'setting' in data:
-        setting = str(data.get('setting') or '')
-        if setting and setting not in SETTINGS_CHOICES:
-            raise ApiError(400, 'Choose a listed care setting.')
-        values['setting'] = setting
+        values['setting'] = _PIPE_choice(data, 'setting', SETTINGS_CHOICES, 'Choose a listed care setting.')
     if 'billing_context' in data:
-        billing = str(data.get('billing_context') or '')
-        if billing and billing not in BILLING_CHOICES:
-            raise ApiError(400, 'Billing context must be professional or facility.')
-        values['billing_context'] = billing
+        values['billing_context'] = _PIPE_choice(data, 'billing_context', BILLING_CHOICES,
+                                                 'Billing context must be professional or facility.')
     if not values:
         raise ApiError(400, 'Nothing to change.')
     try:
