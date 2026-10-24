@@ -615,9 +615,16 @@ def marked_row(count, *, wide):
 
 class Extraction8CrowdedRowCostTests(unittest.TestCase):
     def timed(self, data):
-        started = time.monotonic()
-        result = in_process(data)
-        return time.monotonic() - started, result
+        """The best of two extractions, each after a collection (a timing, not the collector's or a busy host's)."""
+        import gc
+        best = result = None
+        for _ in range(2):
+            gc.collect()
+            started = time.monotonic()
+            result = in_process(data)
+            elapsed = time.monotonic() - started
+            best = elapsed if best is None else min(best, elapsed)
+        return best, result
 
     def test_marks_across_a_crowded_row_cost_what_marks_over_one_box_cost(self):
         """Every mark over every box: past the candidates one mark may examine, the page's boxes are all unread
@@ -626,10 +633,14 @@ class Extraction8CrowdedRowCostTests(unittest.TestCase):
         timings = []
         for wide in (True, False):
             layer, annotations = placement_inputs(marked_row(4000, wide=wide))
-            gc.collect()
-            started = time.monotonic()
-            text, _, overlap, named = pdf_module._placed_boxes(layer, annotations)
-            timings.append(time.monotonic() - started)
+            best = None
+            for _ in range(3):  # the best of three, each after a collection
+                gc.collect()
+                started = time.monotonic()
+                text, _, overlap, named = pdf_module._placed_boxes(layer, annotations)
+                elapsed = time.monotonic() - started
+                best = elapsed if best is None else min(best, elapsed)
+            timings.append(best)
             self.assertEqual(text.count(UNREAD), 4000)
             self.assertEqual((overlap, named), (True, False) if wide else (False, True))
         self.assertLess(timings[0], 3 * timings[1] + 0.1, timings)
