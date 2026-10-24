@@ -44,9 +44,12 @@ class ReportCase(TestCase):
     def csv(self, kind='draft'):
         return reports.render_csv(reports.snapshot(self.s.encounter, kind))
 
-    def review_all(self, approver=None, rejecter=None):
+    def review_all(self, approver=None, rejecter=None, exclusion='confirm'):
         self.s.decide('sel:0', 'approve', approver or self.s.agent, note='Biopsy passage matches.')
         self.s.decide('sel:1', 'reject', rejecter or self.s.reviewer, note='Not supported as documented.')
+        # Round 4: a documentation check's exclusion needs a reviewer decision before a reviewed report exists.
+        if exclusion == 'confirm':
+            self.s.decide('exc:0', 'confirm', rejecter or self.s.reviewer, note='Planned; not performed on this date.')
 
 
 class TxtReportTests(ReportCase):
@@ -102,7 +105,7 @@ class TxtReportTests(ReportCase):
         self.assertNotIn(reports.AGENT_LINE, self.txt('reviewed'))
 
     def test_reinstated_and_approved_exclusion_is_an_approved_selection(self):
-        self.review_all()
+        self.review_all(exclusion=None)
         self.s.decide('exc:0', 'reinstate', note='Performed today; the plan line was mis-read.')
         draft = self.txt('draft')
         self.assertIn('45378 was reinstated and has no decision', draft)
@@ -125,7 +128,8 @@ class TxtReportTests(ReportCase):
     def test_excluded_alternatives_checks_and_not_verified(self):
         text = self.txt('draft')
         self.assertIn('45378 · Colonoscopy · cpt1 — Excluded: The colonoscopy is planned, not performed on this '
-                      'date. (a reviewer may reinstate it)', section(text, 'EXCLUDED CANDIDATES'))
+                      'date. (a reviewer may reinstate it; no reviewer has confirmed this exclusion)',
+                      section(text, 'EXCLUDED CANDIDATES'))
         self.assertIn('45380 · Colonoscopy — provider alternative, never selectable',
                       section(text, 'ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED'))
         checks = section(text, 'CHECKS')
@@ -331,7 +335,7 @@ class ReadinessGateTests(ReportCase):
     def test_reviewed_snapshot_is_refused_until_the_review_is_complete(self):
         with self.assertRaises(reports.ReportNotReady) as caught:
             reports.snapshot(self.s.encounter, 'reviewed')
-        self.assertEqual(caught.exception.blockers, ['43239 has no decision', '45385 has no decision'])
+        self.assertEqual(caught.exception.blockers, ['43239 has no decision', '45385 has no decision', '45378 was excluded by a documentation check: confirm the exclusion or reinstate it'])
         self.assertIn('43239 has no decision; 45385 has no decision', str(caught.exception))
         self.assertIsInstance(caught.exception, ValueError)
         with self.assertRaises(ValueError):
@@ -386,7 +390,7 @@ class CsvReportTests(ReportCase):
         self.assertEqual(approved['evidence'], f'"{pf.EGD_PASSAGE}" [{span.start}-{span.end}, p1]')
         self.assertTrue(approved['checks'].startswith('evidence.exact=pass;routing.family=pass;'))
         self.assertEqual(approved['not_verified'], 'cpt.descriptor=withheld;cpt.membership=not_verified;'
-                                                   'ncci.ptp=not_verified')
+                                                   'ncci.ptp=not_verified;service.performed=not_verified')
         self.assertEqual(data[1]['modifier_considerations'], 'Consider whether modifier 59 applies.')
         self.assertEqual(data[2]['exclusion_reason'], 'The colonoscopy is planned, not performed on this date.')
         self.assertEqual({r['synthetic'] for r in data}, {'SYNTHETIC — NOT FOR BILLING'})

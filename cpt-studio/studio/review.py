@@ -20,6 +20,7 @@ from .models import (Assessment, Clarification, Decision, DecisionInvalidation, 
 from .types import sha256_json, to_jsonable
 
 APPROVE, REJECT, REINSTATE, REVOKE = Decision.APPROVE, Decision.REJECT, Decision.REINSTATE, Decision.REVOKE
+CONFIRM = Decision.CONFIRM  # confirm a documentation check's exclusion (round 4: never a silent drop)
 ACTION_LABELS = dict(Decision.ACTIONS)
 SELECTED, EXCLUDED, ALTERNATIVE = Proposal.SELECTED, Proposal.EXCLUDED, Proposal.ALTERNATIVE
 # The only (bucket, status) pairs a proposal may have; anything else is refused when persisted.
@@ -122,7 +123,7 @@ def _current_decision(proposal):
 
 def _actions(proposal, current, text, same_day_held=False):
     """``same_day_held``: an E/M that a reviewer's reinstatement of a same-day procedure now holds (no approve)."""
-    if current is not None and current.action in (APPROVE, REJECT):
+    if current is not None and current.action in (APPROVE, REJECT, CONFIRM):
         return [REVOKE]
     exact = bool(exact_evidence(proposal.evidence, text))
     if proposal.bucket == SELECTED and proposal.status in BUCKET_STATUSES[SELECTED]:
@@ -130,7 +131,11 @@ def _actions(proposal, current, text, same_day_held=False):
         return actions + [REJECT] + ([REVOKE] if current else [])
     if proposal.bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
         if current is None:
-            return [REINSTATE] if proposal.reinstatable and exact else []
+            # A documentation check's exclusion (reinstatable) is a recommendation: the reviewer confirms it or
+            # reinstates the code, and the reviewed report waits for one of the two (round 4).
+            if not proposal.reinstatable:
+                return []
+            return ([REINSTATE] if exact else []) + [CONFIRM]
         return ([APPROVE] if exact and _reinstatement_clear(proposal) and not same_day_held else []) + [REJECT, REVOKE]
     return [REVOKE] if current else []
 
@@ -390,7 +395,7 @@ def _carry_target(decision, old, candidates, all_new):
         before, after = getattr(old, field), getattr(target, field)
         if before != after:
             return None, f'the {label} of {old.code} changed from {show(before)} to {show(after)}'
-    if decision.action == REINSTATE and not target.reinstatable:
+    if decision.action in (REINSTATE, CONFIRM) and not target.reinstatable:
         return None, f'{old.code} can no longer be reinstated'
     return target, ''
 
@@ -490,8 +495,10 @@ def _unreconciled_unknown(encounter):
 
 
 def _reviewable(proposal, decision):
-    """Selected proposals, and excluded ones a reviewer has reinstated, need an approve or reject."""
-    return proposal.bucket == SELECTED or (proposal.bucket == EXCLUDED and decision is not None)
+    """Selected proposals need an approve or reject. A documentation check's exclusion (reinstatable) needs the
+    reviewer to confirm it or to reinstate the code and decide it; a reinstated exclusion needs an approve or reject."""
+    return proposal.bucket == SELECTED or (proposal.bucket == EXCLUDED
+                                           and (decision is not None or proposal.reinstatable))
 
 
 def _assessment_blockers(encounter, assessment):
@@ -521,10 +528,13 @@ def _assessment_blockers(encounter, assessment):
         if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and not (decision and decision.action == REJECT):
             # Also when this E/M was approved before the procedure was brought back.
             blockers.append(_same_day_blocker(proposal, reinstated))
-        if decision is not None and decision.action in (APPROVE, REJECT):
+        if decision is not None and decision.action in (APPROVE, REJECT, CONFIRM):
             continue
         if decision is not None:
             blockers.append(f'{proposal.code} was reinstated and has no decision')
+        elif proposal.bucket == EXCLUDED:
+            blockers.append(f'{proposal.code} was excluded by a documentation check: confirm the exclusion '
+                            'or reinstate it')
         elif proposal.pk in asked:
             blockers.append(f'{proposal.code} has an open clarification')
         elif proposal.status == Proposal.NEEDS_CLARIFICATION:

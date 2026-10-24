@@ -32,18 +32,19 @@ const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', '
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
 const CHECK_LOOKS = { pass: ['', 'circle-check'], info: ['muted', 'info'], not_applicable: ['muted', 'info'], warn: ['pending', 'info'], fail: ['pending', 'close'], not_verified: ['pending', 'clock'] };
 const RUN_STATES = { reserved: 'Reserved', sending: 'Sending', succeeded: 'Succeeded', failed: 'Failed', unknown: 'Outcome unknown', not_sent: 'Not sent', cancelled: 'Cancelled' };
-const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', revoke: 'Revoked the decision on' };
-const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['revoke', 'secondary', 'Undo decision', '']];
+const DECISION_TITLES = { approve: 'Approved', reject: 'Rejected', reinstate: 'Reinstated for review', confirm: 'Exclusion confirmed', revoke: 'Revoked the decision on' };
+const ACTION_BUTTONS = [['approve', 'primary', 'Approve', 'check'], ['reject', 'secondary', 'Reject', ''], ['reinstate', 'secondary', 'Reinstate for review', ''], ['confirm', 'secondary', 'Confirm exclusion', ''], ['revoke', 'secondary', 'Undo decision', '']];
 const TABS = [['codes', 'Suggestions'], ['checks', 'Checks'], ['timeline', 'Activity']];
 const ROUTE_TITLES = { workspace: 'Overview', documents: 'Documents', queue: 'Review queue', 'how-it-works': 'How it works', doc: 'Document review' };
 const ACKNOWLEDGEMENTS = {
-  human: 'I reviewed the source evidence for this code. This synthetic review is not clinical approval or billing advice.',
-  agent: 'I am an automated agent and reviewed the source evidence for this code. This agent-executed synthetic review is not clinical approval or billing advice.',
+  human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
+  agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
 };
 const REVIEW_COPY = {
   approve: { eyebrow: 'APPROVE', title: 'Make the decision visible.', button: 'Approve code' },
   reject: { eyebrow: 'REJECT', title: 'Leave a clear record.', button: 'Reject code' },
   reinstate: { eyebrow: 'REINSTATE', title: 'Bring it back for review.', button: 'Reinstate for review' },
+  confirm: { eyebrow: 'CONFIRM EXCLUSION', title: 'Agree with the check, on the record.', button: 'Confirm exclusion' },
 };
 
 // --- pure helpers ----------------------------------------------------------------
@@ -317,6 +318,7 @@ function proposalBadge(proposal) {
   if (proposal.decision_state === 'approved') return badge('green', proposal.decision?.reviewer_kind === 'agent' ? 'Approved · agent' : 'Approved', 'check');
   if (proposal.decision_state === 'rejected') return badge('gray', 'Rejected');
   if (proposal.decision_state === 'reinstated') return badge('green', 'Reinstated for review');
+  if (proposal.decision_state === 'exclusion_confirmed') return badge('gray', 'Exclusion confirmed');
   if (proposal.status === 'excluded') return badge('gray', 'Excluded');
   if (proposal.status === 'needs_clarification') return badge('amber', 'Needs clarification');
   if (proposal.status === 'ready') return badge('green', proposal.status_label || 'Ready for review');
@@ -375,7 +377,7 @@ function documentsView(name) {
 
 function howItWorksView() {
   const mode = lookup({ live: 'Provider mode in this deployment: live requests to the configured provider.', replay: 'Provider mode in this deployment: REPLAY — recorded responses, not live output.', disabled: 'Provider mode in this deployment: disabled — no proposals are requested.' }, state.session?.provider_mode, '');
-  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF or Word document, or paste the note. The text is extracted as written; scanned pages are read with OCR where it is available, and anything that could not be read is listed.</p></article><article class="flow-card"><span class="step">02</span><h2>Suggestions<br>need support.</h2><p>A coding provider proposes CPT codes. A code is kept only with exact source passages, then checked separately against the connected reference files for the service date. Whatever cannot be checked is labelled not verified.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer focused clarifications, approve or reject each code, and download a draft or reviewed report. A changed source invalidates earlier decisions.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors and NCCI procedure-to-procedure edits are not connected in this release, so descriptors are withheld and code-set validity and PTP edits stay not verified. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.${mode ? `<br>${escapeHtml(mode)}` : ''}</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
+  return `<section class="view-entrance"><div class="heading-row how-heading"><div><span class="eyebrow">A FOCUSED PRODUCT, BY DESIGN</span><h1>A reason behind<br><em>every suggestion.</em></h1><p>A standalone CPT workspace that keeps the original clinical story and the coding review connected.</p></div><button type="button" class="button primary" data-action="upload">Start a coding review ${icon('arrow')}</button></div><div class="flow-overview"><article class="flow-card"><span class="step">01</span><h2>The source<br>comes first.</h2><p>Upload the original PDF or Word document, or paste the note. The text is extracted as written; scanned pages are read with OCR where it is available, and anything that could not be read is listed.</p></article><article class="flow-card"><span class="step">02</span><h2>Suggestions<br>need support.</h2><p>A coding provider proposes CPT codes. A code is kept only with exact source passages, then checked separately against the connected reference files for the service date. Whatever cannot be checked is labelled not verified.</p></article><article class="flow-card"><span class="step">03</span><h2>Review makes<br>the difference.</h2><p>Answer focused clarifications, approve or reject each code, confirm or reinstate each code a documentation check excluded, and download a draft or reviewed report. A changed source invalidates earlier decisions.</p></article></div><div class="how-note"><strong>This is a synthetic demonstration.</strong><br>Licensed CPT descriptors and NCCI procedure-to-procedure edits are not connected in this release, so descriptors are withheld and code-set validity and PTP edits stay not verified. The documentation checks read declared wording, layouts and check boxes, and they can miss wording they do not recognise, so every code needs a reviewer who reads the whole document. Accuracy has not been independently evaluated; no accuracy percentage or payment guarantee is claimed.${mode ? `<br>${escapeHtml(mode)}` : ''}</div><button type="button" class="button secondary" data-action="about">${icon('info')}About CPT Studio</button></section>`;
 }
 
 function messageView(title, detail, retry = false) {
@@ -515,12 +517,23 @@ function clarificationCard(clarification, doc) {
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>A question is better<br>than an assumption.</h3>${clarification.reason ? `<p>${escapeHtml(clarification.reason)}</p>` : ''}<div class="clarification-question"><strong>${escapeHtml(family ? `Clarification needed · ${family}` : 'Clarification needed')}</strong><br>${escapeHtml(clarification.question)}</div>${answer}</div>`;
 }
 
+// What a reviewer did with an excluded candidate, or that a documentation check's exclusion still needs a decision.
+function candidateDecision(proposal) {
+  const who = proposal.decision?.reviewer || 'a reviewer whose name was not recorded';
+  if (proposal.decision_state === 'exclusion_confirmed') return `Exclusion confirmed by ${who}.`;
+  if (proposal.decision_state === 'reinstated') return `Reinstated for review by ${who}; approve or reject it.`;
+  if (proposal.decision_state === 'approved' || proposal.decision_state === 'rejected') return `${lookup(DECISION_TITLES, proposal.decision?.action, 'Decided')} by ${who} after reinstatement.`;
+  if (proposal.bucket === 'excluded' && proposal.reinstatable) return 'Needs your decision: confirm the exclusion or reinstate the code.';
+  return '';
+}
+
 function candidateSection(title, proposals, fallback) {
   if (!proposals.length) return '';
   const items = proposals.map(proposal => {
     const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-    const actions = ['reinstate', 'revoke'].filter(name => allowed.includes(name)).map(name => decisionButton(name, proposal)).join(' ');
-    return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}`, proposal.exclusion_reason || fallback, actions);
+    // Every action the server allows, in the card order: a reinstated code is approved or rejected here too.
+    const actions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal)).join(' ');
+    return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions);
   });
   return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
 }
@@ -537,7 +550,7 @@ function suggestionsPanel(doc, layout) {
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : ['<div class="check-list-card"><p class="card-empty">No CPT codes were proposed for this document.</p></div>'];
-  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>Planned, historical, cancelled and uncertain services are not coded as performed, and agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -1060,6 +1073,7 @@ async function openReview(proposalId, action) {
     approve: agent ? `This approval is recorded as an agent-executed synthetic review, with the agent's identity and the time, against revision ${revision} of this document. A changed source invalidates it.` : `Your approval is recorded with your identity and the time, against revision ${revision} of this document. A changed source invalidates it.`,
     reject: 'A rejected code is excluded from approved results. Add a note so the next reviewer knows why.',
     reinstate: 'This code was excluded by a documentation check. Reinstating records your judgement and makes it reviewable; it does not approve it.',
+    confirm: 'A documentation check read this service as not performed on the date of service. Confirming records your judgement that the exclusion is right. The reviewed report waits until each such code is confirmed or reinstated.',
   }[action];
   const notVerified = (proposal.checks || []).filter(check => check.status === 'not_verified').map(check => check.label);
   state.review = { proposalId, action };
@@ -1116,7 +1130,7 @@ function submitReview(event) {
       await postDecision({ proposal_id: review.proposalId, action: review.action, note: $('#reviewNote').value.trim(), acknowledgement: review.action === 'approve' ? $('#reviewAckText').textContent : '' });
       const code = findProposal(review.proposalId)?.code || 'the code';
       closeDialog('reviewDialog');
-      await afterChange({ approve: `Approval recorded for ${code}.`, reject: `Rejection recorded for ${code}.`, reinstate: `${code} reinstated for review.` }[review.action]);
+      await afterChange({ approve: `Approval recorded for ${code}.`, reject: `Rejection recorded for ${code}.`, reinstate: `${code} reinstated for review.`, confirm: `Exclusion of ${code} confirmed.` }[review.action]);
     } catch (error) {
       showError('reviewError', error.message);
     } finally {

@@ -51,6 +51,7 @@ class Review0GateTests(TestCase):
         return review.readiness(self.s.encounter)
 
     def test_a_reinstated_procedure_withholds_approve_until_it_is_rejected_or_revoked(self):
+        self.s.decide('exc:1', 'confirm')  # round 4: the unmarked exclusion needs a decision too
         self.assertEqual(self.actions('sel:0'), ['approve', 'reject'])
         self.s.decide('exc:0', 'reinstate', note='Banding was done today.')
         self.assertEqual(self.actions('sel:0'), ['reject'])
@@ -68,8 +69,10 @@ class Review0GateTests(TestCase):
         self.assertTrue(self.ready()['reviewed'], self.ready())
 
     def test_approving_the_e_m_first_blocks_the_reviewed_report(self):
+        self.s.decide('exc:1', 'confirm')  # round 4: the unmarked exclusion needs a decision too
         self.s.decide('sel:0', 'approve')
-        self.assertTrue(self.ready()['reviewed'])
+        self.assertEqual(self.ready()['blockers'],
+                         ['46221 was excluded by a documentation check: confirm the exclusion or reinstate it'])
         self.s.decide('exc:0', 'reinstate')
         self.s.decide('exc:0', 'approve')
         readiness = self.ready()
@@ -201,6 +204,9 @@ class Review0ReinstatedProcedureApiTests(ApiCase, TestCase):
         # Revoking the procedure's approval returns it to the exclusion (nothing earlier is resurrected), which
         # releases the E/M.
         self.assertEqual(self.decide(encounter_id, '46221', 'revoke').status_code, 201)
+        # Round 4: back at the exclusion it needs a decision; confirming it releases the E/M.
+        self.assertFalse(self.detail(encounter_id)['readiness']['reviewed'])
+        self.assertEqual(self.decide(encounter_id, '46221', 'confirm').status_code, 201)
         self.assertTrue(self.detail(encounter_id)['readiness']['reviewed'])
         self.assertEqual(self.report(encounter_id, 'reviewed').status_code, 201)
 

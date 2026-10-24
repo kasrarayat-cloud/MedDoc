@@ -43,7 +43,13 @@ imported.
 5. **Status before code.** A service that is planned, historical, cancelled,
    negated or uncertain must not silently become a performed service.
    Incomplete procedures are routed to review, never auto-completed or
-   auto-dropped.
+   auto-dropped. **Routing's status reading is advisory:** it reads declared
+   wording, layouts and boxes, and it can miss wording it does not recognise
+   (four refutation rounds found new phrasings every time). So nothing it decides
+   is final without a reviewer: a status exclusion is a recommendation the
+   reviewer confirms or reverses (5.7), and an approval is the reviewer's
+   statement that the whole document, not only the cited passages, supports the
+   code. The UI and reports never claim that unrecognised wording is caught.
 6. **Agreement is not verification.** Nothing upgrades a status because two
    sources agree.
 7. **Agent review is labelled as agent review** everywhere it appears.
@@ -534,17 +540,24 @@ relevant context values).
 ### 5.7 `studio/review` — decisions
 
 Actions: `approve` (only `ready` proposals on the current assessment, with
-acknowledgement), `reject` (any selected proposal), `reinstate` (a reinstatable
-excluded proposal → becomes reviewable, recorded), `revoke` (undo the
-reviewer's current decision). Decisions are bound to assessment, revision,
+an acknowledgement that the reviewer read the whole document and it supports
+the code), `reject` (any selected proposal), `reinstate` (a reinstatable
+excluded proposal → becomes reviewable, recorded), `confirm` (agree with a
+reinstatable exclusion: it stays excluded, now with a named reviewer), `revoke`
+(undo the reviewer's current decision). A reinstatable exclusion is a
+documentation check's recommendation, so it needs `confirm` or `reinstate`
+before a reviewed report exists ("<code> was excluded by a documentation
+check: confirm the exclusion or reinstate it"); an exclusion for scope or
+evidence (not reinstatable) needs nothing. Decisions are bound to assessment, revision,
 proposal fingerprint and profile version. **New revision (source change):**
 every current decision is invalidated (`DecisionInvalidation`, reason names
 the new revision). **New assessment on the same revision (context change):**
 a decision is carried (`carried_from`) only when a proposal with the same
 fingerprint exists in the new assessment; otherwise invalidated with the
 context field that changed. Readiness: a reviewed report is available only
-when every selected, non-excluded proposal has a current approve/reject
-decision; anything else is draft-only, with the blocking items listed. While a
+when every selected proposal has a current approve/reject decision, every
+reinstatable exclusion is confirmed or reinstated and decided; anything else
+is draft-only, with the blocking items listed. While a
 code marked `review.same_day_em` has a current reinstate or approve decision,
 an E/M marked `em.same_day_if_reinstated` cannot be approved, and if it was
 approved first the reviewed report is blocked ("<E/M> needs a separately

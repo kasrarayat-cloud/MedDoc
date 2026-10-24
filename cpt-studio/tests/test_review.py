@@ -259,7 +259,7 @@ class DecisionTests(ReviewCase):
         self.assertEqual(list(models.Decision.objects.values_list('action', flat=True)), ['approve', 'revoke'])
 
     def test_reinstate_then_approve_records_both(self):
-        self.assertEqual(self.actions('exc:0'), ['reinstate'])
+        self.assertEqual(self.actions('exc:0'), ['reinstate', 'confirm'])
         with self.assertRaises(ValidationError):
             self.s.decide('exc:0', 'approve')
         self.s.decide('exc:0', 'reinstate', note='The colonoscopy was performed today.')
@@ -272,7 +272,7 @@ class DecisionTests(ReviewCase):
         self.assertEqual(list(models.Decision.objects.values_list('action', flat=True)), ['reinstate', 'approve'])
         self.s.decide('exc:0', 'revoke')
         self.assertNotIn('exc:0', self.current())
-        self.assertEqual(self.actions('exc:0'), ['reinstate'])
+        self.assertEqual(self.actions('exc:0'), ['reinstate', 'confirm'])
 
     def test_reinstate_needs_a_reinstatable_exclusion_with_exact_evidence(self):
         span = pf.evidence(pf.GI_NOTE, pf.PLAN_PASSAGE)
@@ -282,8 +282,8 @@ class DecisionTests(ReviewCase):
             pf.proposal('exc:2', '3017F', [pf.PLAN_PASSAGE], bucket='excluded', reinstatable=True, code_kind='cpt2'))
         self.reassess(result, setting='office')
         self.assertEqual(self.actions('exc:0'), [])
-        self.assertEqual(self.actions('exc:1'), [])
-        self.assertEqual(self.actions('exc:2'), ['reinstate'])
+        self.assertEqual(self.actions('exc:1'), ['confirm'])  # confirming an exclusion needs no exact evidence
+        self.assertEqual(self.actions('exc:2'), ['reinstate', 'confirm'])
         with self.assertRaises(ValidationError):
             self.s.decide('exc:0', 'reinstate')
 
@@ -305,10 +305,11 @@ class CarryAndInvalidateTests(ReviewCase):
         self.rejected = self.s.decide('sel:1', 'reject', self.s.agent, note='Not separately reportable here.')
 
     def test_context_change_with_identical_proposals_carries_decisions(self):
+        self.confirmed = self.s.decide('exc:0', 'confirm', note='Planned; not performed on this date.')
         second = self.reassess(pf.standard_result(), setting='office')
         carried = self.current(second)
-        self.assertEqual(set(carried), {'sel:0', 'sel:1'})
-        for key, old in (('sel:0', self.approved), ('sel:1', self.rejected)):
+        self.assertEqual(set(carried), {'sel:0', 'sel:1', 'exc:0'})
+        for key, old in (('sel:0', self.approved), ('sel:1', self.rejected), ('exc:0', self.confirmed)):
             new = carried[key]
             self.assertEqual(new.carried_from, old)
             self.assertEqual((new.action, new.reviewer, new.reviewer_kind, new.note, new.acknowledgement),
@@ -396,11 +397,13 @@ class ReadinessTests(ReviewCase):
 
     def test_undecided_codes_are_named(self):
         self.assertEqual(self.ready(), {'draft': True, 'reviewed': False,
-                                        'blockers': ['43239 has no decision', '45385 has no decision']})
+                                        'blockers': ['43239 has no decision', '45385 has no decision', '45378 was excluded by a documentation check: confirm the exclusion or reinstate it']})
 
     def test_every_selected_code_decided_is_reviewed(self):
         self.s.decide('sel:0', 'approve')
         self.s.decide('sel:1', 'reject')
+        self.assertEqual(self.ready(), {'draft': True, 'reviewed': False, 'blockers': ['45378 was excluded by a documentation check: confirm the exclusion or reinstate it']})
+        self.s.decide('exc:0', 'confirm')
         self.assertEqual(self.ready(), {'draft': True, 'reviewed': True, 'blockers': []})
 
     def test_open_encounter_clarification_blocks(self):
@@ -540,6 +543,8 @@ class StateTests(ReviewCase):
         self.s.decide('sel:0', 'approve')
         self.assertEqual(self.encounter().state, 'ready_for_review')
         self.s.decide('sel:1', 'reject')
+        self.assertEqual(self.encounter().state, 'ready_for_review')  # the exclusion still needs a decision
+        self.s.decide('exc:0', 'confirm')
         self.assertEqual(self.encounter().state, 'reviewed')
         self.s.decide('sel:1', 'revoke')
         self.assertEqual(self.encounter().state, 'ready_for_review')

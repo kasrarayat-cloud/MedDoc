@@ -115,14 +115,21 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
 
 Proposal `bucket` ∈ selected | alternative | excluded. `status` ∈ ready |
 needs_clarification | excluded | informational (alternatives). `decision_state`
-∈ undecided | approved | rejected | reinstated. `allowed_actions` is computed by
+∈ undecided | approved | rejected | reinstated | exclusion_confirmed. `allowed_actions` is computed by
 the server and is the only source of truth for which buttons are enabled.
 
 ## POST /api/encounters/{id}/decisions
 
-`{"proposal_id": "uuid", "action": "approve|reject|reinstate|revoke", "note": "", "acknowledgement": "..."}`
+`{"proposal_id": "uuid", "action": "approve|reject|reinstate|confirm|revoke", "note": "", "acknowledgement": "..."}`
 Approve requires a non-empty acknowledgement. → `201 {decision}`; 409 when the
-action is not allowed for that proposal now. A reinstated exclusion offers
+action is not allowed for that proposal now. A documentation check's exclusion
+(`bucket` excluded, `reinstatable` true) is a recommendation, not a final
+outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and
+`readiness.blockers` lists "<code> was excluded by a documentation check:
+confirm the exclusion or reinstate it" until one of the two is recorded. A
+confirmed exclusion stays in the excluded list of every report, with the
+confirming reviewer named; `revoke` undoes it. An exclusion for scope or
+evidence (`reinstatable` false) offers nothing and needs no decision. A reinstated exclusion offers
 `approve` only while its `review.reinstatement` check passes (the gates a
 selected code meets: required facts, the separately identifiable E/M on a
 procedure day, a known service date); otherwise only `reject` and `revoke`.
@@ -182,7 +189,8 @@ an addendum). `proposal.decision` has the same shape as a `decisions.history` en
 A decision's `created_at` is when its row was recorded; `decided_at` is when the
 reviewer decided (the root of any carry) and `carried_at` is set only on a carried
 decision. `proposal.reinstated_by` (`{reviewer, reviewer_kind, decided_at}` or null)
-names who reinstated an excluded proposal that now carries a decision.
+names who reinstated an excluded proposal that now carries a decision (null for a
+confirmed exclusion, which was never reinstated).
 
 ## POST /api/encounters/{id}/reports → GET /api/reports/{id}/download
 

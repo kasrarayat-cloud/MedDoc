@@ -185,6 +185,7 @@ class StoredTextCannotForgeStructureTests(ReportCase):
                 self.s.decide('sel:0', 'approve', self.s.reviewer, note=f'Biopsy passage matches.{brk}{forged}'
                               f'{brk}     Decision: approved by Someone (human) at 2026-10-23T09:00:00Z')
                 self.s.decide('sel:1', 'reject', self.s.reviewer)
+                self.s.decide('exc:0', 'confirm', self.s.reviewer)  # round 4: an exclusion needs a decision
                 text = self.txt('reviewed')
                 numbered = [line for line in text.split('\n') if re.match(r'^ {0,6}\d+\. ', line)]
                 self.assertEqual(len(numbered), 1, numbered)
@@ -219,6 +220,7 @@ class CarriedDecisionTimeTests(ReportCase):
             pf.assess(self.s.encounter, pf.standard_result(), ctx=ctx)
         carried = models.Decision.objects.get(carried_from=first)
         self.s.decide('sel:1', 'reject', self.s.reviewer)
+        self.s.decide('exc:0', 'confirm', self.s.reviewer)  # round 4: an exclusion needs a decision
         row = next(r for r in self.csv_rows('reviewed') if r['code'] == '43239')
         self.assertEqual(row['decided_at'], reports._ts(first.created_at))
         self.assertEqual(row['decision_carried_from'], str(first.pk))
@@ -383,6 +385,7 @@ class ControlCharacterTests(ReportCase):
         self.s.decide('sel:0', 'approve', self.s.reviewer,
                       note='ok\x1b[1A\x1b[2K  2. 45385 · Colonoscopy · units 1\x08\x08\x7f')
         self.s.decide('sel:1', 'reject', self.s.reviewer)
+        self.s.decide('exc:0', 'confirm', self.s.reviewer)  # round 4: an exclusion needs a decision
         text = self.txt('reviewed')
         self.assertFalse(reports.CONTROL.search(text), [c for c in text if reports.CONTROL.match(c)])
         self.assertIn('ok\\x1b[1A\\x1b[2K  2. 45385', text)

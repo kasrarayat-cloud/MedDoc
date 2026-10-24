@@ -145,13 +145,13 @@ def _decision_json(decision):
 
 
 DECISION_STATES = {models.Decision.APPROVE: 'approved', models.Decision.REJECT: 'rejected',
-                   models.Decision.REINSTATE: 'reinstated'}
+                   models.Decision.REINSTATE: 'reinstated', models.Decision.CONFIRM: 'exclusion_confirmed'}
 
 
 def _reinstated_by(proposal, decision):
     """Who reinstated an excluded proposal that now carries a decision, and when (the report names them too)."""
-    if proposal.bucket != models.Proposal.EXCLUDED or decision is None:
-        return None
+    if proposal.bucket != models.Proposal.EXCLUDED or decision is None or decision.action == models.Decision.CONFIRM:
+        return None  # a confirmed exclusion was never reinstated
     reinstate = review.reinstatement_for(decision)
     if reinstate is None:
         return None

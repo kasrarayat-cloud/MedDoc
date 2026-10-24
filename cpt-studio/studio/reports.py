@@ -39,6 +39,10 @@ STANDING_NOT_VERIFIED = (
                                        'code: no CPT edition is licensed.'),
     ('ncci.ptp', 'not_verified', 'NCCI procedure-to-procedure edits are not verified for any code: the CMS PTP '
                                  'tables are not connected.'),
+    ('service.performed', 'not_verified', 'Whether each service was performed at this encounter is not verified: the '
+                                       'documentation checks read declared wording, layouts and check boxes and can '
+                                       'miss wording they do not recognise. The reviewer decides from the whole '
+                                       'document.'),
 )
 # Standing statements, used when the assessment did not record its own entry for the same key.
 NOT_CONNECTED = (
@@ -152,13 +156,19 @@ def _list_for(proposal, decision, kind):
         return 'rejected'
     if action == Decision.APPROVE and kind == REVIEWED:
         return 'approved'
-    if proposal.bucket == Proposal.EXCLUDED and action is None:
+    if proposal.bucket == Proposal.EXCLUDED and action in (None, Decision.CONFIRM):
         return 'excluded'
     return 'undecided'
 
 
 def _check(check):
     return {key: str(check.get(key) or '') for key in ('id', 'label', 'status', 'detail', 'source')}
+
+
+def _reinstated(proposal, decision):
+    """An excluded proposal carrying a decision was reinstated, unless that decision confirms the exclusion."""
+    return (proposal.bucket == Proposal.EXCLUDED and decision is not None
+            and decision.action != Decision.CONFIRM)
 
 
 def _item(proposal, decision, kind, text):
@@ -169,9 +179,8 @@ def _item(proposal, decision, kind, text):
         'family_label': _family_label(proposal.family), 'profile_version': proposal.profile_version,
         'status': proposal.status, 'status_label': review.status_label(proposal.status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
-        'reinstated': proposal.bucket == Proposal.EXCLUDED and decision is not None,
-        'reinstated_by': (_decision(review.reinstatement_for(decision))
-                          if proposal.bucket == Proposal.EXCLUDED and decision is not None else None),
+        'reinstated': _reinstated(proposal, decision),
+        'reinstated_by': _decision(review.reinstatement_for(decision)) if _reinstated(proposal, decision) else None,
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
@@ -317,7 +326,8 @@ def _who(reviewer, kind):
 
 
 def _decision_words(decision):
-    verb = {'approve': 'approved', 'reject': 'rejected', 'reinstate': 'reinstated for review'}[decision['action']]
+    verb = {'approve': 'approved', 'reject': 'rejected', 'reinstate': 'reinstated for review',
+            'confirm': 'exclusion confirmed'}[decision['action']]
     carried = (f' (carried from an earlier assessment of this revision at {decision["carried_at"]})'
                if decision['carried_from'] else '')
     return f'{verb} by {_who(decision["reviewer"], decision["reviewer_kind"])} at {decision["decided_at"]}{carried}'
@@ -433,9 +443,16 @@ def _excluded_section(snap):
     lines = []
     for item in snap['proposals']:
         if item['list'] == 'excluded':
-            hint = ' (a reviewer may reinstate it)' if item['reinstatable'] else ''
+            decision = item['decision']
+            if decision is not None:  # only a confirmation leaves an item in this list
+                hint = f'. Decision: {_decision_words(decision)}'
+            else:
+                hint = (' (a reviewer may reinstate it; no reviewer has confirmed this exclusion)'
+                        if item['reinstatable'] else '')
             lines.append(f'{_short_line(item)} · {item["code_kind"]} — Excluded: '
                          f'{item["exclusion_reason"] or "no reason recorded"}{hint}')
+            if decision is not None and decision['note']:
+                lines.append(f'     Note: {_indent(decision["note"], "       ")}')
     return lines or ['  None.']
 
 

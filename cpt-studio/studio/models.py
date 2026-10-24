@@ -309,8 +309,9 @@ class Clarification(models.Model):
 
 
 class Decision(ImmutableModel):
-    APPROVE, REJECT, REINSTATE, REVOKE = 'approve', 'reject', 'reinstate', 'revoke'
-    ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REINSTATE, 'Reinstate for review'), (REVOKE, 'Revoke decision')]
+    APPROVE, REJECT, REINSTATE, REVOKE, CONFIRM = 'approve', 'reject', 'reinstate', 'revoke', 'confirm'
+    ACTIONS = [(APPROVE, 'Approve'), (REJECT, 'Reject'), (REINSTATE, 'Reinstate for review'), (REVOKE, 'Revoke decision'),
+               (CONFIRM, 'Confirm exclusion')]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     encounter = models.ForeignKey(Encounter, on_delete=models.PROTECT, related_name='decisions')
     assessment = models.ForeignKey(Assessment, on_delete=models.PROTECT, related_name='decisions')

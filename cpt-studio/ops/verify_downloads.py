@@ -208,7 +208,7 @@ def expected_list(proposal: dict, kind: str) -> str:
         return 'rejected'
     if action == 'approve' and kind == 'reviewed':
         return 'approved'
-    if proposal.get('bucket') == 'excluded' and action is None:
+    if proposal.get('bucket') == 'excluded' and action in (None, 'confirm'):
         return 'excluded'
     return 'undecided'
 
@@ -218,8 +218,10 @@ def items_from_api(api: dict, kind: str) -> dict[str, Item]:
     for p in ((api.get('assessment') or {}).get('proposals')) or []:
         decision = p.get('decision') or {}
         labels = tuple(x for x in (p.get('family_label'), p.get('eyebrow'), p.get('family')) if x)
-        # Mirrors serializers._reinstated_by: only an excluded proposal is ever reinstated.
-        derived = (reinstatement_from_history(api, decision.get('id', '')) or {}) if p.get('bucket') == 'excluded' else {}
+        # Mirrors serializers._reinstated_by: only an excluded proposal is ever reinstated, and a confirmed
+        # exclusion never was.
+        reinstated = p.get('bucket') == 'excluded' and decision.get('action') != 'confirm'
+        derived = (reinstatement_from_history(api, decision.get('id', '')) or {}) if reinstated else {}
         items[str(p['id'])] = Item(
             proposal_id=str(p['id']), code=str(p.get('code', '')), item_list=expected_list(p, kind),
             bucket=p.get('bucket', ''), status=p.get('status', ''), units=str(p.get('units', '')),
@@ -749,7 +751,7 @@ def _decisions_match(doc_id, doc, api) -> Result:
     wrong = []
     for decision in recorded:
         state = (proposals.get(str(decision.get('proposal_id'))) or {}).get('decision_state')
-        expected = {'approve': 'approved', 'reject': 'rejected'}.get(decision.get('action'))
+        expected = {'approve': 'approved', 'reject': 'rejected', 'confirm': 'exclusion_confirmed'}.get(decision.get('action'))
         if state != expected:
             wrong.append(f'{decision.get("code")}: recorded {decision.get("action")}, persisted {state}')
     return Result(doc_id, '-', 'decisions.persisted', 'fail' if wrong else 'pass',
