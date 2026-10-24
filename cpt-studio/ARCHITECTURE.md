@@ -427,7 +427,16 @@ overrides the document's).
 
 Validation reads routing's cues by prefix, a contract with 5.3:
 `uncertain: no performance evidence` (silent), `performed:` (an explicit
-performance statement) and `section: <kind>` (a section downgrade).
+performance statement), `section: <kind>` (a section downgrade),
+`performed: office E/M documentation` (the visit's own documentation, never a
+procedure's) and routing's PLAN_TODAY cue (`uncertain: its clause says today,
+so its plan section does not make it planned`): such a plan mention can speak
+for the date of service, and for an E/M code's own passage it is a section
+default like any other. It reads a hedge only from routing's own hedge words
+(5.3's uncertain cue lists), so any other uncertain cue is a doubt. A passage
+that states the act but is held because of its section is reported as
+"stated as performed under <section>; confirm it was performed on the date of
+service", citing the section cue, never as "no documentation establishes".
 
 Proposal status: `excluded` (scope, no exact evidence, planned / historical /
 cancelled / negated status — reinstatable by a reviewer where the exclusion

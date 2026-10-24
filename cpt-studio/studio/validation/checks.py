@@ -268,12 +268,26 @@ def _silent(reading: Reading) -> bool:
 # Routing's cue for a reading of the office visit's own documentation ("performed: office E/M documentation (visit
 # statement)"): it says the visit was documented, never that a procedure was done.
 EM_DOCUMENTATION_CUE_PREFIX = 'performed: office E/M documentation'
+# Routing's cue for a plan-section passage whose clause says today (studio.gi.detect.PLAN_TODAY, round 3b): its section
+# no longer makes it planned, it only holds it. Part of the cue contract (ARCHITECTURE 5.3 / 5.6).
+PLAN_TODAY_CUE = 'uncertain: its clause says today, so its plan section does not make it planned'
+
+
+def says_today_in_plan(cues: Sequence[str]) -> bool:
+    """Whether routing held a plan-section passage only because its clause says today (PLAN_TODAY_CUE)."""
+    return any(cue.startswith(PLAN_TODAY_CUE) for cue in cues)
 
 
 def by_section_alone(reading: Reading) -> bool:
     """A reading that only its section decided: every cue is a 'section: <kind>' cue (routing's section default), so
     no wording in the passage says anything of a service."""
     return bool(reading.cues) and all(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
+
+
+def section_default(reading: Reading) -> bool:
+    """A reading its section's default decided, plain or held because its clause says today: every cue is a 'section:
+    <kind>' cue or routing's PLAN_TODAY cue, so no wording in the passage says anything of a service."""
+    return bool(reading.cues) and all(cue.startswith((SECTION_CUE_PREFIX, PLAN_TODAY_CUE)) for cue in reading.cues)
 
 
 def states_no_procedure(reading: Reading) -> bool:
@@ -346,10 +360,15 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     return StatusOutcome('uncertain', _first(readings, ('uncertain',)))
 
 
+def _section_cue(reading: Reading) -> str:
+    return next((cue for cue in reading.cues if cue.startswith(SECTION_CUE_PREFIX)), '')
+
+
 def cite(reading: Reading) -> str:
-    """'“<passage>” (cue “<cue>”, linked passage)'; routing readings say 'routing' instead."""
+    """'“<passage>” (cue “<cue>”, linked passage)'; routing readings say 'routing' instead. The cue is the one that
+    decided the reading: for an explicit performance statement held because of its section, that section's cue."""
     origin = 'linked passage' if reading.origin == 'evidence' else 'routing'
-    cue = next((c.strip() for c in reading.cues if c.strip()), '')
+    cue = _section_cue(reading) if restated(reading) else next((c.strip() for c in reading.cues if c.strip()), '')
     detail = f'cue “{excerpt(cue)}”, {origin}' if cue else origin
     if reading.passage.strip():
         return f'“{excerpt(reading.passage)}” ({detail})'
@@ -403,6 +422,16 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
                   f'reads as {outcome.decisive.status} only {basis} ({cite(outcome.decisive)}) and names no procedure.')
         if outcome.contrary:
             reason += f' Another linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}.'
+        return reason
+    if outcome.reason in ('', 'hedged') and outcome.decisive and restated(outcome.decisive):
+        # The act is stated; only its section holds it: never "no documentation establishes ... performed".
+        heading = re.match(r'section: (\w+)(?: \((.+)\))?', _section_cue(outcome.decisive))
+        where = heading.group(2) or f'its {heading.group(1)} section'
+        subject = 'The linked passage' if outcome.decisive.origin == 'evidence' else 'Routing'
+        reason = (f'{subject} states {name} as performed under {where}: {cite(outcome.decisive)}; confirm it was '
+                  'performed on the date of service.')
+        if outcome.contrary:
+            reason += f' Routing reads it as {outcome.contrary.status} elsewhere: {cite(outcome.contrary)}.'
         return reason
     reason = f'No documentation establishes that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:

@@ -207,12 +207,13 @@ def _undated_visit(own: tuple[checks.Reading, ...], routing: RoutingResult) -> t
     and the plan of an office visit are that visit's own documentation: "Intermittent heartburn for 8 weeks despite
     omeprazole." under History of present illness is not a historical E/M, and "Increase omeprazole to 40 mg twice
     daily." under Assessment and plan is not a planned one, so such a passage is silent and routing's E/M reading
-    (visit statement, MDM, time) decides. Kept: any cue that dates, plans or denies the visit ("Return office visit is
-    scheduled for 2026-12-01."), and a passage that is itself a visit statement routing reads in that section
-    ("Follow-up office visit." under Plan)."""
+    (visit statement, MDM, time) decides. The same holds for a plan sentence routing holds only because its clause
+    says today ("Start omeprazole 40 mg today.": checks.PLAN_TODAY_CUE). Kept: any cue that dates, plans or denies the
+    visit ("Return office visit is scheduled for 2026-12-01."), and a passage that is itself a visit statement routing
+    reads in that section ("Follow-up office visit." under Plan)."""
     visits = [m.span for f in routing.findings if f.family == 'gi.office_em' for m in f.mentions]
     return tuple(reading for reading in own
-                 if not (reading.status in checks.NEGATIVE and checks.by_section_alone(reading)
+                 if not (reading.status not in checks.POSITIVE and checks.section_default(reading)
                          and not any(span.start < reading.end and reading.start < span.end for span in visits)))
 
 
@@ -248,7 +249,10 @@ def _speaks_for_today(mention: ServiceMention) -> bool:
         return False
     if any(cue.startswith(checks.PERFORMED_CUE_PREFIX) for cue in mention.cues):
         return True
-    if mention.section in NOT_TODAY_SECTIONS or checks.silent(mention.status, mention.cues):
+    if mention.section in NOT_TODAY_SECTIONS:
+        # routing holds a plan passage whose clause says today (PLAN_TODAY): it may be today's procedure (validation:1)
+        return checks.says_today_in_plan(mention.cues)
+    if checks.silent(mention.status, mention.cues):
         return False
     if mention.section in DISCUSSION_SECTIONS:
         return not checks.hedges_only(mention.cues) or checks.says_today(mention.sentence.text)
