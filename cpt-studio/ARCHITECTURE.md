@@ -50,6 +50,8 @@ imported.
    reviewer confirms or reverses (5.7), and an approval is the reviewer's
    statement that the whole document, not only the cited passages, supports the
    code. The UI and reports never claim that unrecognised wording is caught.
+   Wording outside every declared list is recorded, not chased, in
+   `ACCURACY-RESIDUALS.md` for the adjudicated accuracy evaluation.
 6. **Agreement is not verification.** Nothing upgrades a status because two
    sources agree.
 7. **Agent review is labelled as agent review** everywhere it appears.

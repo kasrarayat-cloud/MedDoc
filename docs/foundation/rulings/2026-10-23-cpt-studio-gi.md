@@ -310,3 +310,24 @@ owner said, and so any of them can be overruled.
 4. **A login-protected synthetic demonstration is not a public clinical
    launch**, by the owner's own wording ("protected synthetic
    demonstration").
+5. **Routing's status reading is advisory; the reviewer decides every code
+   (2026-10-24, after refutation round 4).** Rounds 1-4 confirmed 47, 49, 71
+   and 99 defects: each round found new phrasings that the performed /
+   planned / cancelled / incomplete reader misreads, in both directions. A
+   reader of open clinical prose cannot be made complete, so nothing it decides
+   is final: a status exclusion is a recommendation the reviewer must confirm
+   (new decision action `confirm`) or reinstate before a reviewed report
+   exists; approving a code means the reviewer read the whole document, not
+   only the cited passages; the UI and every report say the service status is
+   not verified. This adds a click per excluded code and is the directive's
+   own instruction to handle status by "review rather than automatically
+   treating them as completed or excluding them", applied to every status.
+6. **How refutation is graded from round 5.** Misreadings of wording OUTSIDE
+   every declared list are recorded as accuracy residuals
+   (`cpt-studio/ACCURACY-RESIDUALS.md`), for the adjudicated evaluation the
+   directive requires, and are not merge blockers. Critical and high stay
+   reserved for: a code approved or removed without a reviewer decision,
+   report or export errors, data loss, security, cost and memory limits,
+   regressions, and misreadings of what the code declares it reads. This is a
+   change of the session's own stopping rule, recorded so it can be
+   overruled.
