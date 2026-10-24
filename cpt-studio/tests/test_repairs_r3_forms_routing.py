@@ -79,6 +79,11 @@ class Routing5RemarkAfterTheLastBoxTests(BoxCase):
             with self.subTest(row=row):
                 self.assert_items(BOXED + row + '\n', {'Biopsy': 'negated', 'Cold snare polypectomy': 'performed'},
                                   {'45380': ('Biopsy', 'excluded'), '45385': ('Cold snare polypectomy', 'ready')})
+        text = HEADER + 'Findings: A 6 mm polyp was found.\nColonoscopy: ☐ EGD: ☒ dilation to 15 mm\n'
+        self.assertEqual((read(text, 'Colonoscopy')[0], read(text, 'EGD')[0]), ('negated', 'performed'))
+        # under a heading an item after a box is followed by the next box with no colon: the boxes still lead
+        text = HEADER + 'Findings: A 6 mm polyp was found.\nColonoscopy: ☐ biopsy: sigmoid ☒ cold snare\n'
+        self.assertEqual((read(text, 'biopsy')[0], read(text, 'cold snare')[0]), ('negated', 'performed'))
 
     def test_a_parenthetical_remark(self):
         text = BOXED + 'Biopsy: ☐   Polypectomy: ☒ (cold snare)\n'
@@ -177,7 +182,7 @@ class Routing15CheckedBoxSpellingsTests(BoxCase):
 
     def test_a_box_written_in_a_way_the_reader_cannot_classify_holds_its_item(self):
         """Never the neighbour's box: an unreadable mark holds the item it marks, and leaves the others alone."""
-        for mark in ('(•)', '(●)', '[√]', '(✓)', '( ✔ )', '[?]', '(*)', '(o)'):
+        for mark in ('(•)', '(●)', '[√]', '(✓)', '( ✔ )', '[?]', '(*)', '(o)', '[/]'):
             with self.subTest(mark=mark):
                 text = BOXED + f'( ) Biopsy {mark} Cold snare polypectomy\n'
                 status, cues = read(text, 'Cold snare polypectomy')

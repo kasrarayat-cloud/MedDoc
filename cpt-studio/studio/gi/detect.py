@@ -1564,9 +1564,9 @@ _BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\
                   + _BOX_PAD + r'+\))|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[' + _BOX_PAD
                   + r'*[xX\u2713\u2714]' + _BOX_PAD + r'*\]|\(' + _BOX_PAD + r'*[xX]' + _BOX_PAD + r'*\)|\[[*v]\])')
 # A mark in brackets that looks like a box but is none of the contract's ("(•)", "(●)", "[√]", "(✓)", "[?]", "(*)",
-# "(o)"): the item it marks is held, and it is never passed over to hand the item a neighbour's box.
+# "(o)", "[/]"): the item it marks is held, and it is never passed over to hand the item a neighbour's box.
 _BOX_UNREAD = re.compile(r'[\[(]' + _BOX_PAD + r'*[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717'
-                         r'\u2718\u2715\u2716?*o]' + _BOX_PAD + r'*[\])]')
+                         r'\u2718\u2715\u2716?*o/\\]' + _BOX_PAD + r'*[\])]')
 UNCHECKED = 'negated: an unchecked box'
 BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
 BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
@@ -1587,6 +1587,7 @@ _LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
 # their own ("Anoscopy | ☒ | ☐", a flattened "Done | Not done" table) are its options, and the first governs.
 _BOX_RUN_GAP = re.compile(r'[ \t\u00a0]*')
 _CELL_GAP = re.compile(r'[ \t\u00a0|:]*')  # what may open a sentence before its first box ("| ☐")
+_LABEL_COLON = re.compile(r'[ \t\u00a0]*:[ \t\u00a0]*')  # between a label and the box after it ("Biopsy: ☐")
 
 
 def _box_tokens(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
@@ -1643,9 +1644,9 @@ def _opens_with_a_box(an: Analysis, sentence: tuple[int, int]) -> bool:
 def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, int]] = None) -> str:
     """'lead' or 'trail': whether the boxes of [lo, hi) mark the items after them or before them (``extra``: the
     passage being read when it is not an item itself, read as one). Boxes lead when the text opens with a box
-    ("☐ Biopsy ☒ Cold snare polypectomy"), or when every box is followed straight by an item and a service name
-    opens the text ("Colonoscopy: [ ] biopsy [x] cold snare"), or a label with a colon that no later box repeats
-    ("Polypectomy: [ ] cold snare [x] hot snare").
+    ("☐ Biopsy ☒ Cold snare polypectomy"), or when a service name or a label with a colon opens it, every box is
+    followed straight by an item, and no item after a box is the next box's label ("Colonoscopy: [ ] biopsy [x] cold
+    snare", "Polypectomy: [ ] cold snare [x] hot snare").
     Otherwise they trail ("Biopsy | ☐ | Cold snare polypectomy | ☒"), and items written after the last box are
     remarks that no box governs ("... | ☒ | clip placed after polypectomy")."""
     key = ('box-orientation', lo, hi, extra)
@@ -1671,10 +1672,18 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
                 if _BOX_RUN_GAP.match(text, e, hi).end() not in starts:
                     followed = False
                     break
-            # under a label heading only the first box follows a colon; boxes that each follow 'label:' trail their
-            # labels ("Biopsy: [ ] Cold snare polypectomy: [x] clip placed")
-            colons = sum(text[max(lo, s - 8):s].rstrip(' \t\u00a0').endswith(':') for s, _, _ in boxes)
-            an.memo[key] = 'lead' if followed and (by_service or (by_label and colons <= 1)) else 'trail'
+            # A label written straight after a box and followed by a colon and the next box is that box's label, so
+            # the boxes trail ("Biopsy: [ ] Cold snare polypectomy: [x] clip placed", "Colonoscopy: [ ] EGD: [x]
+            # dilation"); under a heading an item after a box is followed by the next box with no colon.
+            labelled = False
+            for (_, previous_end, _), (s, _, _) in zip(boxes, boxes[1:]):
+                at = _BOX_RUN_GAP.match(text, previous_end, hi).end()
+                index = bisect.bisect_left(items, (at, -1))
+                if index < len(items) and items[index][0] == at and _LABEL_COLON.fullmatch(
+                        text, _label_end(text, items, index), s):
+                    labelled = True
+                    break
+            an.memo[key] = 'lead' if followed and (by_service or by_label) and not labelled else 'trail'
     return an.memo[key]
 
 
