@@ -141,25 +141,63 @@ lines) in document order; headers/footers are listed in `messages` as not
 extracted. TXT: UTF-8 (BOM stripped) or explicit decode failure.
 Encrypted/corrupt/oversized/too-many-pages files fail with a specific message.
 
-Never silently partial (`cpt-studio-ingest@2`): content a viewer would show is
+Never silently partial (`cpt-studio-ingest@3`): content a viewer would show is
 read or reported, and content it would not show is excluded with a message.
-- PDF: filled form values (text, choice, checked / not checked, radio) and
-  FreeText / stamp text are read into a labelled block after the page text; a
-  field whose stored value differs from its appearance, or any XFA form, makes
-  the result partial. A page at least half covered by images with under 200
-  characters of text is OCRed (or named and left unread). Every compressed
-  stream the text depends on must decode completely; a page count that
+- Check boxes (a contract with routing, 5.3): every box extraction recognises
+  is written as ☐ (U+2610, unchecked) or ☒ (U+2612, checked), never another
+  box glyph. DOCX: symbol-font boxes (Wingdings, Wingdings 2, Zapf Dingbats;
+  the tables in `studio/ingest/symbols.py` are shared with PDF), content-control
+  boxes, and a legacy FORMCHECKBOX, written in place of the field from
+  `w:checked`, else `w:default`. A filled square ■ is kept as written (it is a
+  bullet as often as a box). PDF: a form check box writes its glyph and a space
+  at the start of the one upright page-level line it sits beside (baseline
+  within the box's height, text starting at most three box sizes to its right,
+  no other box or radio button on the row, the line claimed by no other box);
+  otherwise nothing is written in the page text. Either way the form block
+  keeps `<label>: checked` / `<label>: not checked`.
+- PDF symbol fonts read as the glyphs they draw: a simple symbol font through a
+  copy whose ToUnicode maps every code (widths, and so the layout, unchanged), a
+  composite one character by character. A composite font that writes glyph
+  indices (Identity, no ToUnicode, no CIDToGIDMap stream) is dropped.
+  Private-use and control characters are dropped and counted per page; the
+  status stays ok, and dropped characters are not readable text.
+- PDF forms and annotations: filled form values (text, choice, checked / not
+  checked, radio — the selected widget's /Opt entry, found by its place in
+  /Kids) and FreeText / stamp text are read into a labelled block after the page
+  text; the headers `[PDF form fields on page N]` and `[PDF annotation text on
+  page N]` are fixed. A field whose stored value differs from what its
+  appearance draws, or any XFA form, makes the result partial. The comparison
+  first applies Acrobat's standard formats to the value (`AFNumber_Format`,
+  `AFPercent_Format`, `AFDate_FormatEx`, `AFDate_Format`, `AFSpecial_Format`,
+  exactly one call with literal arguments); any other script, a time format or
+  an unparsable value keeps the difference. An appearance that exists but draws
+  no text differs from a non-empty value; one that cannot be read is counted as
+  unreadable; a FreeText whose own appearance layer is off is hidden.
+- PDF pages: a page at least half covered by images with under 200 characters
+  of text is OCRed; without OCR it is named and the result is partial, keeping
+  its text layer (a page with no text at all fails). Images a displayed
+  annotation's appearance paints count as page images. Dense images covering a
+  fifth of the page or more get the large-image note. Text drawn wholly outside
+  the visible page (the crop box within the media box) by more than one em, or
+  inside a form whose box lies outside it, is excluded and the page named; OCR
+  renders the crop box. Optional content that is OFF by default is excluded and
+  named.
+- PDF integrity: every stream the text depends on must decode to the end its
+  encoding declares (Flate; LZW to its end-of-data code; RunLength to its
+  end-of-data byte). On OCR pages so must every image: Flate followed to its
+  end within a budget of four times the declared size, JPEG, CCITT Group 4 to
+  EOFB, Group 3 to RTC or one EOL per row, JBIG2 in whole segments, JPEG 2000
+  to its end-of-codestream marker. An image that cannot be checked makes the
+  result partial ("could not be checked for completeness"). A page count that
   disagrees with the page tree, or a file truncated inside an incremental
-  update, fails. Optional content that is OFF by default is excluded and named.
+  update, fails; whitespace, NUL, 0x1A, comment lines and repeated end markers
+  after the last `%%EOF` are padding, not an update.
 - DOCX: text hidden through direct formatting or a character, paragraph or
   table style is excluded and counted; a content control is a placeholder only
   when its flag is on; comments or processing instructions inside a run never
   cut it; `mc:AlternateContent` reads the first Choice this reader understands,
-  else the Fallback (partial when neither); symbol-font check boxes become
-  ☐ / ☑ / ☒ / ✓, other symbol glyphs are counted and dropped. A DOCX can be
-  partial.
-- Routing reads an item governed by an unchecked box on its line (☐, □, `[ ]`)
-  as negated; the nearest box before an item governs it.
+  else the Fallback (partial when neither); symbol-font glyphs other than boxes
+  and Word's library bullets are counted and dropped. A DOCX can be partial.
 
 ### 5.2 `studio/gi/context` — encounter context
 
@@ -261,23 +299,47 @@ II and HCPCS Level II excluded with reason — CPT-only results), exact
 evidence, family routing, service status vs routing, required facts →
 scoped clarifications, CMS PFS presence for the service date, MUE units,
 endoscopic-family combinations, E/M + same-day procedure (global days) →
-separately identifiable E/M not established (a same-day procedure is any
-performed non-E/M code with a procedure profile or a global period other than
-XXX — no fee-schedule row counts — and any procedure whose performance is
-uncertain), modifier *considerations*
+separately identifiable E/M not established, modifier *considerations*
 (never assigned), CPT membership `not_verified`, descriptor `withheld`, NCCI
 PTP `not_verified`. Encounter checks: extraction status, service date,
-unsupported performed services, performed services with no proposal
-(possible missed code). Each check: `{id, label, status ∈ pass | warn | fail |
-not_verified | not_applicable | info, detail, source}`.
+services outside the GI profiles (`services.unsupported`: warn when any is
+selected or detected, otherwise `not_verified`, since routing recognises only
+the profiled families), performed services with no proposal
+(`services.unproposed`, a possible missed code; a performed `gi.other` finding
+counts). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
+
+Same-day procedure, for the E/M hold (fail-closed): a performed non-E/M code
+with a procedure profile or a global period other than XXX (no fee-schedule
+row counts); a selected procedural code whose performance is uncertain; a
+routed procedure family, or a routed `gi.other` service (global period
+unknown, so it counts), read as performed; one read as uncertain through a
+mention that can speak for the date of service — outside plan, history and
+indication / chief-complaint sections a mention that hedges or doubts (never a
+silent one), inside them only an explicit performance statement that routing
+downgraded for its section; and an excluded procedural code whose own passage
+states the act although only the family's document-level reading makes it
+negative. On an E/M with no same-day procedure detected, `em.same_day_coverage`
+(`not_verified`) says a procedure of another kind is not detected; if an
+excluded, reinstatable procedural code exists and no separately identifiable
+E/M is documented, the E/M carries `em.same_day_if_reinstated` and each such
+code `review.same_day_em` (both warn), which review enforces (5.7).
 
 Status resolution is fail-closed: a code's own linked passage decides first;
-a passage that hedges holds the code (routing never overrides it); routing
-decides only when the passage is silent (routing's default "no performance
-evidence" reading). A positive passage cannot establish a family that routing
-documents only as not performed, nor a recognisable family the document never
-names. Routing and span status read dated history against the encounter's
-effective service date (a member value overrides the document's).
+a passage that hedges holds the code — routing never overrides it, and neither
+does another of the code's own passages that reads as performed (`contested`:
+the clarification names both passages); routing decides only when the
+passage is silent (routing's default "no performance evidence" reading). A
+positive passage cannot establish a family that routing documents only as not
+performed, nor a recognisable family the document never names or names only
+as uncertain. An exclusion never presents the code's own passage as the
+service "documented as performed elsewhere". Routing and span status read
+dated history against the encounter's effective service date (a member value
+overrides the document's).
+
+Validation reads routing's cues by prefix, a contract with 5.3:
+`uncertain: no performance evidence` (silent), `performed:` (an explicit
+performance statement) and `section: <kind>` (a section downgrade).
 
 Proposal status: `excluded` (scope, no exact evidence, planned / historical /
 cancelled / negated status — reinstatable by a reviewer where the exclusion
@@ -302,7 +364,12 @@ a decision is carried (`carried_from`) only when a proposal with the same
 fingerprint exists in the new assessment; otherwise invalidated with the
 context field that changed. Readiness: a reviewed report is available only
 when every selected, non-excluded proposal has a current approve/reject
-decision; anything else is draft-only, with the blocking items listed.
+decision; anything else is draft-only, with the blocking items listed. While a
+code marked `review.same_day_em` has a current reinstate or approve decision,
+an E/M marked `em.same_day_if_reinstated` cannot be approved, and if it was
+approved first the reviewed report is blocked ("<E/M> needs a separately
+identifiable E/M: <code> was reinstated as a same-day procedure"); rejecting
+or revoking the reinstatement releases it.
 
 ### 5.8 `studio/reports` — exports
 

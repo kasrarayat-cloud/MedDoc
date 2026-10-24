@@ -127,6 +127,12 @@ action is not allowed for that proposal now. A reinstated exclusion offers
 selected code meets: required facts, the separately identifiable E/M on a
 procedure day, a known service date); otherwise only `reject` and `revoke`.
 The current decision is the one recorded last (by sequence, never by clock).
+An E/M whose checks include `em.same_day_if_reinstated` offers no `approve`
+while a code carrying `review.same_day_em` has a current `reinstate` or
+`approve` decision, since that code is then a same-day procedure; if the E/M
+was approved first, `readiness.blockers` lists "<E/M> needs a separately
+identifiable E/M: <code> was reinstated as a same-day procedure". Rejecting or
+revoking the reinstatement releases the E/M.
 
 ## POST /api/encounters/{id}/addenda
 
