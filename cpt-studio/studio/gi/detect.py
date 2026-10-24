@@ -954,7 +954,7 @@ _TIME_PASS = frozenset((
     'received', 'mm', 'cm', 'x', cues.SERVICE_TOKEN))
 # Words that describe the service itself (beside its names, interventions and landmarks, which are read as spans).
 _TIME_OWN = frozenset((
-    'screening', 'surveillance', 'diagnostic', 'therapeutic', 'routine', 'repeat', 'complete', 'full', 'upper', 'lower',
+    'screening', 'surveillance', 'diagnostic', 'therapeutic', 'routine', 'complete', 'full', 'upper', 'lower',
     'flexible', 'cold', 'hot', 'snare', 'forceps', 'scope', 'colonoscope', 'endoscope', 'gastroscope', 'sigmoidoscope',
     'duodenoscope', 'echoendoscope', 'enteroscope', 'procedure', 'exam', 'examination'))
 # What another thing's time trails: a test, a result or a diagnosis, by its noun or its participle.
@@ -1050,10 +1050,16 @@ def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], wind
 # The prefix of every time hold (here and in _owned_time_cue): no fact is read from a clause about a service so held
 # (_about_another_procedure).
 ANOTHER_TIME_PREFIX = 'uncertain: another time'
-# A relational time written straight before the service names it as the point of reference ("the day before the
-# colonoscopy", "two weeks after the EGD"): it is another event's time, not the service's.
-_RELATIONAL_END = re.compile(r'(?:before|after|prior|later|earlier|afterwards?)$', re.A | re.I)
-_TO_THE_SERVICE = re.compile(r'[ \t]+(?:to[ \t]+)?(?:(?:the|her|his|their|a|an|this|that)[ \t]+)?', re.A | re.I)
+# A time told against an event written after it is that event's relation, not another date of the service: "the day
+# before the colonoscopy", "two weeks after a positive FIT", "3 days prior to surgery". Only "... before.", "...
+# prior." or "... after." with no event after them tell another date.
+_RELATIONAL_END = re.compile(r'(?:before|after)$', re.A | re.I)
+_PRIOR_END = re.compile(r'prior$', re.A | re.I)
+_AN_EVENT_AFTER = re.compile(r'[ \t]+[A-Za-z0-9]', re.A)
+_TO_AN_EVENT_AFTER = re.compile(r'[ \t]+to[ \t]+[A-Za-z0-9]', re.A | re.I)
+# The times that tell history (_tells_history): a past-tense performed clause told so is no same-day procedure.
+_HISTORY_TIMES = ('another encounter', 'childhood', 'recently', 'yesterday')
+_PAST_INTERVAL = re.compile(r'(?:prior|earlier|before|previously|back)$', re.A | re.I)
 # A time a comparison names is no time of the service: "The cecum was reached, as on her prior exam".
 _COMPARE_LEAD = re.compile(r'\b(?:as|than|unlike|compared\s+(?:with|to)|in\s+comparison\s+(?:with|to)|similar\s+to)[\s,]*$',
                            re.A | re.I)
@@ -1091,43 +1097,78 @@ def _today_compatible(an: Analysis, name: str, m: re.Match) -> bool:
     return month == day.month and (mday is None or int(mday) == day.day)
 
 
+def _tells_history(an: Analysis, name: str, m: re.Match) -> bool:
+    """Whether an OTHER_TIME match tells a time before the date of service ("at her last visit", "as a child",
+    "recently underwent", "two weeks prior", "last Tuesday", "in June" before an October date of service), never a
+    later or an unknown one ("in 6 wks", "next Tuesday", "in December")."""
+    if name in _HISTORY_TIMES:
+        return True
+    if name == 'interval':
+        return bool(_PAST_INTERVAL.search(m.group(0)))
+    if name == 'weekday':
+        return (m.group('rel') or '').lower() in ('last', 'past', 'previous')
+    day = an.service_date
+    if day is None or name not in ('month', 'month/day'):
+        return False
+    if name == 'month/day':
+        return (int(m.group('m')), int(m.group('d'))) < (day.month, day.day)
+    said = m.group(0).lower()
+    if said.startswith(('last', 'past', 'next', 'this')):
+        return said.startswith(('last', 'past'))
+    month = _MONTH_INDEX[(m.group('month') or m.group('may') or m.group('month2')).lower()]
+    mday = m.group('mday') or m.group('mday2')
+    return (month, int(mday)) < (day.month, day.day) if mday else month < day.month
+
+
+def _attached_times(an: Analysis, start: int, end: int):
+    """(name, match, owner) of each OTHER_TIME match that attaches to the passage [start, end) in one of its clauses,
+    other than a symptom's, a test's or a result's (owner 'other'), one told against an event after it
+    (_RELATIONAL_END), one a comparison names, a weekday, month or month/day that may be the date of service, and any
+    in a clause whose today marker attaches to the passage. Owner: 'service' or 'unclear' (_time_owner)."""
+    found, starts = _other_times(an)
+    text = an.text
+    for clause in an.lay.clauses_for(start, end):
+        cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)
+        times = [item for item in found[bisect.bisect_left(starts, cs):bisect.bisect_left(starts, ce)] if item[1] <= ce]
+        if not times:
+            continue
+        spans, index, members = _groups(an, cs, ce, start, end)
+        if any(_attached(spans, index, m.start(), m.end()) for m in cues.TODAY.finditer(text, cs, ce)):
+            continue
+        history = [(c.start, c.end) for c in an.cues_in(cs, ce) if c.status == 'historical']
+        names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end)
+                                                                       for iv in an.interventions_in(cs, ce)}
+        named = [m for m in members if m in names] or [(max(start, cs), min(max(end, start + 1), ce))]
+        for ts_, te_, name, m in times:
+            if not _attached(spans, index, ts_, te_):
+                continue
+            if _today_compatible(an, name, m) or _COMPARE_LEAD.search(text, max(cs, ts_ - 30), ts_):
+                continue
+            said = m.group(0)
+            if (_RELATIONAL_END.search(said) and _AN_EVENT_AFTER.match(text, te_, ce)) \
+                    or (_PRIOR_END.search(said) and _TO_AN_EVENT_AFTER.match(text, te_, ce)):
+                continue  # "two weeks after a positive FIT", "the day before the colonoscopy": told against an event
+            owner = _time_owner(an, ts_, te_, named, (cs, ce), history)
+            if owner != 'other':
+                yield name, m, owner
+
+
 def _another_time(an: Analysis, start: int, end: int) -> Optional[str]:
-    """A cue holding the passage [start, end), which would read performed, when a time no listed cue reads
-    (cues.OTHER_TIME) attaches to it in one of its clauses: not a symptom's, a test's or a relational time's (see
-    _time_owner, _RELATIONAL_END), not in a clause whose today marker attaches to it, and not a weekday, month or
-    month/day that may be the date of service. (A listed history or planned cue or a date that attaches already
-    outranks a hold.) It never excludes: the hold-only rule."""
+    """A cue holding the passage [start, end), which would read performed, when a time no listed cue reads attaches
+    to it (_attached_times). (A listed history or planned cue or a date that attaches already outranks a hold.) It
+    never excludes: the hold-only rule."""
     key = ('another-time', start, end)
     if key not in an.memo:
-        an.memo[key] = None
-        found, starts = _other_times(an)
-        text = an.text
-        for clause in an.lay.clauses_for(start, end):
-            cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)
-            times = [item for item in found[bisect.bisect_left(starts, cs):bisect.bisect_left(starts, ce)] if item[1] <= ce]
-            if not times:
-                continue
-            spans, index, members = _groups(an, cs, ce, start, end)
-            if any(_attached(spans, index, m.start(), m.end()) for m in cues.TODAY.finditer(text, cs, ce)):
-                continue
-            history = [(c.start, c.end) for c in an.cues_in(cs, ce) if c.status == 'historical']
-            names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end)
-                                                                           for iv in an.interventions_in(cs, ce)}
-            named = [m for m in members if m in names] or [(max(start, cs), min(max(end, start + 1), ce))]
-            for ts_, te_, name, m in times:
-                if not _attached(spans, index, ts_, te_):
-                    continue
-                if _today_compatible(an, name, m) or _COMPARE_LEAD.search(text, max(cs, ts_ - 30), ts_):
-                    continue
-                if _RELATIONAL_END.search(m.group(0)):
-                    lead = _TO_THE_SERVICE.match(text, te_, ce)
-                    if lead and any(s == lead.end() for s, _ in named):
-                        continue  # "the day before the colonoscopy": the service is the reference point
-                if _time_owner(an, ts_, te_, named, (cs, ce), history) == 'other':
-                    continue
-                an.memo[key] = f"{ANOTHER_TIME_PREFIX}: '{m.group(0)}' may place it on another date"
-                return an.memo[key]
+        an.memo[key] = next((f"{ANOTHER_TIME_PREFIX}: '{m.group(0)}' may place it on another date"
+                             for _, m, _ in _attached_times(an, start, end)), None)
     return an.memo[key]
+
+
+def _told_at_another_time(an: Analysis, start: int, end: int) -> bool:
+    """Whether the passage [start, end) is told at a time before the date of service that is its own (owner
+    'service', _tells_history): "Hemorrhoid banding was performed at her last visit", "Appendectomy was done as a
+    child". A later or unknown time ("with a repeat banding in 6 wks") is never this: it holds, it never releases."""
+    return any(owner == 'service' and _tells_history(an, name, m) for name, m, owner in _attached_times(an, start, end))
 
 
 def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
@@ -1828,6 +1869,15 @@ _ANOTHER_EXAM = re.compile(r'\b(?:prior|previous|last|index|outside|earlier|prec
                            r'|\bper\s+(?:the\s+)?(?:outside|prior|previous|old|last)\s+(?:reports?|records?)\b', re.A | re.I)
 _PREVIOUSLY_LEAD = re.compile(r'[\s,]*previously\b(?![\s,]+\w+(?:ed|en)\b)', re.A | re.I)
 _DENIED_BEFORE = re.compile(r'\b(?:no|not|never|without)\s+(?:(?:a|an|the|any)\s+)?$', re.A | re.I)
+# The other examination tells the time of the clause only as an adverbial ("On a prior exam ...", "... at her last
+# procedure") or as the subject of a verb ("Her most recent examination reached the cecum"), never as an object or a
+# modifier ("Prior exam notes were reviewed and the cecum was reached").
+_EXAM_LEAD = re.compile(r'\b(?:on|at|during|in|from|by|after|following|according\s+to)\s+(?:(?:a|an|the|her|his|'
+                        r'their|this|that|its)\s+)?$', re.A | re.I)
+_EXAM_SUBJECT_BEFORE = re.compile(r'[\s,]*(?:(?:a|an|the|her|his|their|this|that|its)\s+)?', re.A | re.I)
+_EXAM_VERB_AFTER = re.compile(r'\s+(?:also\s+|then\s+)?(?:was|were|had|has|is|showed|shows|revealed|demonstrated|'
+                              r'reached|found|noted|documented|confirmed|identified|visualized|removed|took)\b',
+                              re.A | re.I)
 
 
 def _another_exam(an: Analysis, clause: tuple[int, int], cs: int, ce: int) -> bool:
@@ -1841,7 +1891,10 @@ def _another_exam(an: Analysis, clause: tuple[int, int], cs: int, ce: int) -> bo
         if _DENIED_BEFORE.search(text, max(cs, m.start() - 20), m.start()) \
                 or _COMPARED_WITH.search(text, max(cs, m.start() - 60), m.start()):
             continue
-        return True
+        if m.group(0).lower().startswith('per') or _EXAM_LEAD.search(text, max(cs, m.start() - 30), m.start()) \
+                or (_EXAM_SUBJECT_BEFORE.fullmatch(text, clause[0], m.start())
+                    and _EXAM_VERB_AFTER.match(text, m.end(), ce)):
+            return True
     return False
 
 
@@ -2202,8 +2255,10 @@ def _another_encounters_time(an: Analysis, start: int, end: int) -> bool:
     another provider (_SEPARATE_EM_HISTORY: "two days ago", "last week", "by the referring physician"), an unlisted
     time (cues.OTHER_TIME: "yesterday", "on October 14", "on Tuesday", "next ...") that may not be the date of service,
     or a month and a day with no year that are not the date of service's (or any when that is unknown)."""
-    if any(c.name in _SEPARATE_EM_HISTORY for c in an.cues_in(start, end)):
-        return True
+    if any(c.name in _SEPARATE_EM_HISTORY
+           and not cues.SYMPTOM_TIME_BEFORE.search(an.text, max(start, c.start - 40), c.start)
+           for c in an.cues_in(start, end)):
+        return True  # a symptom's time ("pain that began last week") is not the encounter's
     found, starts = _other_times(an)
     for ts_, te_, name, m in found[bisect.bisect_left(starts, start):bisect.bisect_left(starts, end)]:
         if te_ <= end and not _today_compatible(an, name, m):
@@ -2484,10 +2539,10 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
         found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name, form)
 
     def told_done(span, clause, form=''):
-        """An explicit performed clause names a same-day procedure only when it tells no other time: one that does
-        ("was performed at her last visit", "was done as a child", "in June") is history, as it read at 57b4b3747,
-        before gi.other existed (routing:21)."""
-        if span is not None and not _another_time(an, *span):
+        """An explicit performed clause names no same-day procedure when it is told at an earlier time of its own
+        ("was performed at her last visit", "was done as a child", "in June"): history, as it read at 57b4b3747,
+        before gi.other existed (routing:21). A later or unknown time names it, and its reading holds it."""
+        if span is not None and not _told_at_another_time(an, *span):
             consider(span, clause, form)
 
     def subject(m, cs):

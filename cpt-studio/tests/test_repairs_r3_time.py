@@ -323,7 +323,9 @@ class Routing8UnlistedFutureTimeTests(unittest.TestCase):
                      'Clear liquids were taken the day before the colonoscopy.',
                      'Aspirin was held for two weeks before the colonoscopy.',
                      'Colonoscopy with polypectomy for a positive FIT in November.',
-                     'Colonoscopy was performed today, two weeks after her last visit.'):
+                     'Colonoscopy was performed today, two weeks after her last visit.',
+                     'Colonoscopy two weeks after a positive FIT.', 'Colonoscopy 3 days prior to surgery.',
+                     'Colonoscopy two weeks before her hernia repair.'):
             slug = 'gi.eus' if line.startswith('EUS') else 'gi.colonoscopy'
             text = HEADER + 'Procedure: ' + line + '\n'
             with self.subTest(line=line):
@@ -452,7 +454,8 @@ class Routing13PriorExamWithoutAServiceNameTests(unittest.TestCase):
         for body in ('The cecum was reached, as on her prior exam.', 'Compared with her prior exam, the cecum was '
                      'reached.', 'The cecum was reached in this patient with no prior colonoscopy.',
                      'The cecum was reached today, unlike on her prior exam.',
-                     'The colonoscope was advanced to the cecum; her prior exam was incomplete.'):
+                     'The colonoscope was advanced to the cecum; her prior exam was incomplete.',
+                     'Prior exam notes were reviewed and the cecum was reached.'):
             text = HEADER + 'Procedure: Colonoscopy\nFindings: ' + body + '\n'
             with self.subTest(body=body):
                 self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
@@ -505,7 +508,8 @@ class Routing17SeparateEmAnotherEncounterTests(unittest.TestCase):
     def test_statements_about_this_encounter_are_documented(self):
         for said in ('performed today', 'provided', 'provided on 10/21', 'provided on October 21',
                      'provided on Wednesday', 'provided on the date of service',
-                     'provided, including review of outside records'):
+                     'provided, including review of outside records',
+                     'provided for abdominal pain that began last week'):
             text = SEPARATE_NOTE + STATEMENT.format(said) + '\n'
             with self.subTest(said=said):
                 fact = separate_em(text)
@@ -632,11 +636,17 @@ class Routing21OtherHistoryTests(unittest.TestCase):
     def test_controls_a_same_day_or_ambiguous_banding_still_holds_the_visit(self):
         for text in (history_office('Rubber band ligation of an internal hemorrhoid was performed today.'),
                      history_office('Hemorrhoid banding was performed with good relief.'),
+                     # a time that is not history (a repeat to come) never releases the hold
+                     history_office('Hemorrhoid banding was performed with a repeat banding in 6 wks.'),
+                     history_office('Anoscopy was performed with banding to follow in 2 wks.'),
+                     # a later time that is the procedure's own is no history either: it holds, never releases
+                     history_office('Anoscopy was performed next Tuesday.'),
+                     history_office('Hemorrhoid banding was done in December.'),
                      OFFICE_HEAD + BLEEDING_VISIT + '\nHistory: Colonoscopy in 2023 was normal.\nProcedure: Rubber band '
                      'ligation of an internal hemorrhoid was performed today.\nMedical decision making: moderate.\n'
                      'Total time: 32 minutes.\n'):
             with self.subTest(text=text.splitlines()[-4]):
-                self.assertIn(other_finding(text).status, POSITIVE)
+                self.assertIn(other_finding(text).status, POSITIVE + ('uncertain',))
                 proposals, _ = run_engine(text, [('99214', BLEEDING_VISIT)])
                 self.assertIn('separate_em', clarified(proposals['99214']))
 
