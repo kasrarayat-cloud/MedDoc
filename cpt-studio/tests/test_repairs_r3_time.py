@@ -137,6 +137,23 @@ class Routing0TimeOfAnotherThingTests(unittest.TestCase):
         text = HEADER + 'Procedure: Colonoscopy today; she underwent EGD last year and colonoscopy today.\n'
         self.assertEqual(read(text, 'EGD')[0], 'historical')
 
+    def test_the_services_own_verb_time_is_never_a_tests(self):
+        """A finite verb or a comma between a test and the time leaves the time to the service's own verb: never
+        released. A reduced relative ("a CT done last week") or a relative clause ("a CT that was done last week")
+        keeps it the test's."""
+        for line in ('Colonoscopy for a positive FIT was performed last month.',
+                     'Colonoscopy for a positive FIT, performed last month.',
+                     'EGD for an abnormal CT was done at an outside hospital.'):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                status, cues = read(text, line.split()[0])
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertNotIn(family(text, 'gi.colonoscopy' if line[0] == 'C' else 'gi.egd'), POSITIVE)
+        for line in ('Colonoscopy for a CT that was done last week.', 'Colonoscopy for a positive FIT which was obtained '
+                     'last month.'):
+            with self.subTest(line=line):
+                self.assertEqual(family(HEADER + 'Procedure: ' + line + '\n', 'gi.colonoscopy'), 'performed')
+
     def test_a_symptoms_time_and_a_request_are_still_not_history(self):
         for line in ('Colonoscopy for rectal bleeding since last month.', 'Colonoscopy for bleeding that started two '
                      'weeks ago.', 'Colonoscopy for anemia noted over the last year.'):

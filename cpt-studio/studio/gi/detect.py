@@ -951,7 +951,11 @@ _TIME_PASS = frozenset((
     'subsequently', 'successfully', 'uneventfully', 'a', 'an', 'the', 'her', 'his', 'their', 'its', 'this', 'that',
     'of', 'on', 'at', 'by', 'in', 'from', 'with', 'for', 'to', 'into', 'and', 'or', 'she', 'he', 'they', 'we', 'i',
     'patient', 'pt', 'performed', 'done', 'completed', 'carried', 'out', 'undertaken', 'underwent', 'undergone',
-    'received', 'mm', 'cm', 'x', cues.SERVICE_TOKEN))
+    'received', 'obtained', 'taken', 'collected', 'drawn', 'reviewed', 'mm', 'cm', 'x', cues.SERVICE_TOKEN))
+# A finite verb passed on the walk back makes the time its subject's ("Colonoscopy for a positive FIT was performed last
+# month"), unless a relative pronoun makes it a clause of the thing ("a CT that was done last week").
+_FINITE = frozenset(('was', 'were', 'is', 'are', 'has', 'have', 'had', 'been', 'being'))
+_RELATIVE_PRONOUN = frozenset(('that', 'which', 'who'))
 # Words that describe the service itself (beside its names, interventions and landmarks, which are read as spans).
 _TIME_OWN = frozenset((
     'screening', 'surveillance', 'diagnostic', 'therapeutic', 'routine', 'complete', 'full', 'upper', 'lower',
@@ -970,20 +974,27 @@ TIME_REACH = 120  # how far back a time's owner is looked for (bounds the work p
 
 def _trails_another_thing(an: Analysis, pos: int, lo: int) -> bool:
     """Whether the time told at ``pos`` trails a test, a result or a diagnosis: walking back from ``pos`` (not before
-    ``lo``, nor past a sentence stop) over words that tell nobody's time, the first other word names one."""
+    ``lo``, nor past a sentence stop or a comma) over words that tell nobody's time, the first other word names one,
+    and no finite verb outside a relative clause stands between them (_FINITE)."""
     text = an.text
     lo = max(lo, pos - TIME_REACH)
     lo = max(lo, text.rfind('\n', lo, pos) + 1)  # never past a line start, and never scanned beyond the reach
     tokens = list(_TIME_TOKEN.finditer(text, lo, pos))
-    end = pos
+    end, finite = pos, False
     for token in reversed(tokens):
-        if any(ch in '.;!?' for ch in text[token.end():end]):
+        if any(ch in '.;!?,' for ch in text[token.end():end]):
             return False
         end = token.start()
         word = token.group(0).lower()
+        if word in _FINITE:
+            finite = True
+            continue
+        if word in _RELATIVE_PRONOUN:
+            finite = False
+            continue
         if word in _TIME_PASS:
             continue
-        return bool(_ANOTHER_THING.fullmatch(token.group(0)))
+        return not finite and bool(_ANOTHER_THING.fullmatch(token.group(0)))
     return False
 
 
