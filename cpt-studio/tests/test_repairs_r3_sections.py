@@ -427,5 +427,64 @@ class Routing12PlanHeadingTests(unittest.TestCase):
                 self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'findings')
 
 
+# --- contract:8: a bare label with a participle --------------------------------------------------------------
+
+class Contract8PerformedTodayHeadingTests(unittest.TestCase):
+    """contract:8 - "Procedures performed today:", "Procedures done today:" and "Interventions performed:" open a
+    procedure section like "Procedures performed:" does, so a checked procedure under them no longer inherits the
+    previous "Assessment and plan" (excluded as planned, with the E/M released)."""
+
+    FLEX = '☒ Flexible sigmoidoscopy to 30 cm'
+    PICKS = [('99214', 'Established patient office visit.'), ('45330', 'Flexible sigmoidoscopy to 30 cm')]
+    LABELS = ('Procedures performed today:', 'Procedures done today:', 'Interventions performed:',
+              'Procedure performed today:', 'Interventions performed today:')
+
+    def office(self, label, items):
+        return (OFFICE.replace('moderate.', 'Moderate.') + 'Assessment and plan: Grade II internal hemorrhoids.\n'
+                + label + '\n' + items + '\n')
+
+    def test_the_claimed_labels(self):
+        for label in self.LABELS + ('Procedures performed:',):
+            text = self.office(label, self.FLEX)
+            with self.subTest(label=label):
+                self.assertEqual(layout(text).section_at(text.index(self.FLEX)).kind, 'procedure')
+                self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+                self.assertEqual(fact_value(text, 'gi.flex_sig', 'extent'), '30 cm')
+                proposals = run_engine(text, self.PICKS)
+                self.assertTrue(ready(proposals['45330']))
+                self.assertEqual(proposals['99214'].status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_other_procedures_listed_under_the_label_hold_the_visit(self):
+        items = '☒ Anoscopy\n☒ Rubber band ligation of an internal hemorrhoid x3'
+        text = OFFICE + 'Procedures performed today:\n' + items + '\n'
+        other = routed(text).finding('gi.other')
+        self.assertIsNotNone(other)
+        self.assertEqual({m.span.text for m in other.mentions},
+                         {'Anoscopy', 'Rubber band ligation of an internal hemorrhoid x3'})
+        visit = run_engine(text, [('99214', 'Established patient office visit.')])['99214']
+        self.assertEqual(visit.status, 'needs_clarification')
+
+    def test_labels_for_procedures_still_to_be_done_are_plan_headings(self):
+        line = 'EGD to the second portion of the duodenum with esophageal balloon dilation.'
+        for label in ('Procedures to be done:', 'Procedures to be performed:', 'Procedures that will be performed:',
+                      'Procedure to be done'):
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm '
+                    'laterally spreading polyp in the ascending colon was tattooed and not removed.\n' + label + '\n'
+                    + line + '\n')
+            with self.subTest(label=label):
+                self.assertEqual(layout(text).section_at(text.index(line)).kind, 'plan')
+                self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+                self.assertEqual(run_engine(text, [('43249', line)])['43249'].bucket, 'excluded')
+
+    def test_a_sentence_ending_in_a_colon_is_still_content(self):
+        for line in ('The following procedures were performed today:', 'Findings included:'):
+            text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n' + line +
+                    '\nA 6 mm sigmoid polyp was removed with a cold snare.\n')
+            with self.subTest(line=line):
+                self.assertEqual(layout(text).section_at(text.index('A 6 mm sigmoid')).kind, 'findings')
+
+
+
 if __name__ == '__main__':
     unittest.main()

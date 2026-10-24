@@ -10,7 +10,9 @@ Labels in ``HEADINGS`` open a section. A key-value line such as
 A line that is only an unrecognised "Label:" also opens a section, so the text
 under it never inherits the previous section's reading: a plan or history
 section when the label says so ("Next procedures:", "Earlier work-up:"),
-otherwise an ``other`` section with no default. A label line without a colon
+otherwise an ``other`` section with no default. A label with a verb in it is a
+sentence that ends in a colon ("The following were noted:") and opens none,
+unless HEADINGS lists it ("Procedures performed today:"). A label line without a colon
 ("Planned procedures", "Further management", a Word heading paragraph) opens a
 plan or history section when its words say so and it ends with the section of
 a note it names (procedures, plan, management, work-up ...), never a service,
@@ -46,7 +48,12 @@ HEADINGS: dict[str, str] = {
     **_kind('procedure', 'procedure', 'procedures', 'procedure performed', 'procedures performed',
             'procedure done', 'procedures done', 'name of procedure', 'procedure name', 'operation',
             'operation performed', 'operations performed', 'procedure note', 'procedure report', 'endoscopy report',
-            'operative note', 'operative report', 'service performed', 'services performed'),
+            'operative note', 'operative report', 'service performed', 'services performed',
+            # the same headings for this encounter's own procedures (a closed list: a bare label with a verb in
+            # it is otherwise a sentence, and the text under it would inherit the previous section)
+            'procedure performed today', 'procedures performed today', 'procedure done today', 'procedures done today',
+            'intervention performed', 'interventions performed', 'intervention performed today',
+            'interventions performed today'),
     **_kind('technique', 'technique', 'procedure technique', 'description of procedure', 'description of the procedure',
             'procedure description', 'procedure details', 'details of procedure', 'details of the procedure',
             'procedure in detail', 'procedure narrative', 'operative technique', 'description'),
@@ -88,7 +95,8 @@ HEADINGS: dict[str, str] = {
             'further management', 'planned procedures', 'future plan', 'future plans',
             # orders, referrals and pending procedures name what is still to be done (a closed list)
             'pending procedures', 'pending procedure', 'pending orders', 'orders', 'referrals', 'referral', 'to do',
-            'to-do',
+            'to-do', 'procedure to be done', 'procedures to be done', 'procedure to be performed',
+            'procedures to be performed', 'procedures that will be performed',
             # discussion, counseling and education never document a procedure done at this encounter
             'discussion', 'discussions', 'counseling', 'counselling', 'patient counseling', 'patient counselling',
             'patient education', 'education', 'counseling and education', 'education and counseling',
