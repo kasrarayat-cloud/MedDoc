@@ -12,6 +12,7 @@ it recognises as ☐ (unchecked) or ☒ (checked).
 from __future__ import annotations
 
 import io
+import re
 import unittest
 
 import docx
@@ -540,6 +541,152 @@ class PdfFormCheckboxPlacementTests(unittest.TestCase):
         from tests.test_repairs_ingest_pdf import FORM_BLOCK, acroform_pdf
         result = pdf_extract(acroform_pdf(), ocr=None)
         self.assertTrue(result.text.endswith('Biopsy taken:\n\n' + FORM_BLOCK), result.text)
+
+
+# --- ingest:11 — an appearance that is hidden, or draws nothing, is not what the value says --------
+
+HIDDEN_ANNOTATIONS = 'Page 1 has hidden form fields or annotations; their text was not extracted.'
+LAYER_NOTE = ('Page 1 has text in a layer that is hidden by default (optional content); that text was not '
+              'extracted.')
+MISMATCH = ('Page 1: form field "procedure" shows text that differs from its stored value; the stored value was '
+            'read, so check it against the original.')
+OFF_LAYER = '/OCProperties << /OCGs [30 0 R] /D << /OFF [30 0 R] >> >>'
+
+
+def patched(data: bytes, replacements, extra: dict[int, bytes] | None = None) -> bytes:
+    """``data`` with each (old, new) replaced exactly once and ``extra`` objects added, re-serialised."""
+    for old, new in replacements:
+        assert data.count(old) == 1, (old, data.count(old))
+        data = data.replace(old, new)
+    added = b''.join(b'%d 0 obj\n' % number + body + b'\nendobj\n' for number, body in (extra or {}).items())
+    cut = data.rindex(b'xref\n')
+    return serialise_again(data[:cut] + added + data[cut:])
+
+
+class AnnotationAppearanceRuleTests(unittest.TestCase):
+    """ingest:11 — the annotation reader keeps its own rule: an appearance whose /OC is off draws nothing."""
+
+    def test_freetext_whose_appearance_is_in_an_off_layer_is_not_read(self):
+        from tests.test_repairs_ingest_pdf import ADDENDUM, freetext_pdf
+        for contents in (ADDENDUM, 'Different stored note: hot snare polypectomy of a 5 mm polyp.'):
+            with self.subTest(contents=contents[:20]):
+                data = freetext_pdf(contents=contents, catalog=OFF_LAYER.replace('30 0 R', '9 0 R'),
+                                    extra_objects={9: b'<< /Type /OCG /Name (Draft) >>'})
+                data = patched(data, [(b'/Subtype /Form /BBox [0 0 470 40]', b'/Subtype /Form /OC 9 0 R /BBox [0 0 470 40]')])
+                result = pdf_extract(data, ocr=None)
+                self.assertNotIn('polypectomy', result.text)
+                self.assertNotIn('[PDF annotation', result.text)
+                self.assertEqual(result.status, 'ok')
+                self.assertIn(HIDDEN_ANNOTATIONS, result.messages)
+
+    def test_freetext_whose_appearance_draws_nothing_is_partial(self):
+        from tests.test_repairs_ingest_pdf import ADDENDUM, freetext_pdf
+        data = patched(freetext_pdf(), [(b'Tj 0 -13 Td (', b'Tj 0 -13 Td (')], {})  # control: unchanged shape
+        self.assertEqual(pdf_extract(data, ocr=None).status, 'ok')
+        empty = freetext_pdf(extra_objects={7: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 470 40]')})
+        result = pdf_extract(empty, ocr=None)
+        self.assertEqual(result.status, 'partial')
+        self.assertIn(ADDENDUM, result.text)
+        self.assertIn('Page 1: a text annotation shows text that differs from its stored text; the stored text was '
+                      'read, so check it against the original.', result.messages)
+
+    def test_text_field_whose_appearance_draws_nothing_or_is_hidden_is_partial(self):
+        from tests.test_repairs_ingest_pdf import acroform_pdf
+        procedure_ap = b'/Tx BMC q BT /Helv 11 Tf 0 g 2 4 Td (Colonoscopy, screening, to the cecum) Tj ET Q EMC'
+        cases = {'empty string': acroform_pdf(appearance_override={'procedure': ''}),
+                 'bare marked content': patched(acroform_pdf(), [(procedure_ap, b'/Tx BMC EMC')]),
+                 'own /OC off': patched(acroform_pdf(), [
+                     (b'/Type /Catalog /Pages 2 0 R /AcroForm 10 0 R', b'/Type /Catalog /Pages 2 0 R /AcroForm 10 0 R '
+                      + OFF_LAYER.encode()),
+                     (b'14 0 obj\n<< /Type /XObject /Subtype /Form', b'14 0 obj\n<< /Type /XObject /Subtype /Form /OC 30 0 R')],
+                                       {30: b'<< /Type /OCG /Name (Draft) >>'})}
+        for label, data in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(data, ocr=None)
+                self.assertEqual(result.status, 'partial')
+                self.assertIn('procedure: Colonoscopy, screening, to the cecum', result.text)
+                self.assertIn(MISMATCH, result.messages)
+
+    def test_fields_viewers_draw_from_their_values_stay_ok(self):
+        from tests.test_repairs_ingest_pdf import FIELDS_NOTE as ROUND1_FIELDS, acroform_pdf
+        no_appearance = re.sub(rb' /AP << /N 14 0 R >>', b'', acroform_pdf())
+        self.assertNotEqual(no_appearance, acroform_pdf())
+        for label, data in (('no /AP', serialise_again(no_appearance)),
+                            ('NeedAppearances', acroform_pdf(appearance_override={'procedure': ''},
+                                                             need_appearances='true'))):
+            with self.subTest(label):
+                result = pdf_extract(data, ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', (ROUND1_FIELDS,)))
+                self.assertIn('procedure: Colonoscopy, screening, to the cecum', result.text)
+
+    def test_stamp_whose_appearance_is_in_an_off_layer_is_named(self):
+        from tests.test_repairs_ingest_pdf import freetext_pdf
+        data = freetext_pdf(subtype='Stamp', catalog=OFF_LAYER.replace('30 0 R', '9 0 R'),
+                            extra_objects={9: b'<< /Type /OCG /Name (Draft) >>'})
+        data = patched(data, [(b'/Subtype /Form /BBox [0 0 470 40]', b'/Subtype /Form /OC 9 0 R /BBox [0 0 470 40]')])
+        result = pdf_extract(data, ocr=None)
+        self.assertNotIn('polypectomy', result.text)
+        self.assertEqual((result.status, result.messages), ('ok', (LAYER_NOTE,)))
+
+
+# --- ingest:12 — a radio group with /Opt reports the option, not its position ------------------------
+
+def radio_form(options: list[str] | None, states: list[str], selected: int | None, label: str = 'Extent reached',
+               printed: list[str] | None = None) -> bytes:
+    """A radio group, one widget per state, each beside its printed option label."""
+    printed = printed or options or states
+    lines = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'), (72, 720, label + ':')]
+    lines += [(300, 700 - 20 * index, text) for index, text in enumerate(printed)]
+    content = '\n'.join(f'BT /F1 11 Tf {x} {y} Td ({esc(text)}) Tj ET' for x, y, text in lines)
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R /AcroForm 10 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: HELVETICA, 5: stream(content), 6: ZAPF,
+               7: stream('q BT /ZaDb 10 Tf 0 g 1.5 2 Td (l) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 12 12] '
+                         '/Resources << /Font << /ZaDb 6 0 R >> >>'),
+               8: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 12 12]')}
+    kids = []
+    for index, state in enumerate(states):
+        number = 20 + index
+        shown = f'/{state}' if selected == index else '/Off'
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /Parent 11 0 R /AS {shown} '
+                           f'/Rect [280 {698 - 20 * index} 292 {710 - 20 * index}] /F 4 /P 3 0 R '
+                           f'/AP << /N << /{state} 7 0 R /Off 8 0 R >> >> >>').encode()
+        kids.append(f'{number} 0 R')
+    value = f'/{states[selected]}' if selected is not None else '/Off'
+    opt = '/Opt [' + ' '.join(f'({esc(option)})' for option in options) + ']' if options else ''
+    objects[11] = (f'<< /FT /Btn /Ff 49152 /T (extent) /TU ({esc(label)}) /V {value} {opt} '
+                   f'/Kids [{" ".join(kids)}] >>').encode()
+    objects[3] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  f'/Contents 5 0 R /Annots [{" ".join(kids)}] >>').encode()
+    objects[10] = b'<< /Fields [11 0 R] /NeedAppearances false /DR << /Font << /ZaDb 6 0 R >> >> >>'
+    return serialise(objects)
+
+
+EXTENTS = ['Cecum', 'Hepatic flexure', 'Rectosigmoid only']
+
+
+class RadioOptionTests(unittest.TestCase):
+    """ingest:12 — with /Opt, the selected widget's /Opt entry (by its place in /Kids) is the option."""
+
+    def test_option_texts_are_reported(self):
+        result = pdf_extract(radio_form(EXTENTS, ['0', '1', '2'], 2), ocr=None)
+        self.assertEqual(result.status, 'ok')
+        self.assertTrue(result.text.endswith('[PDF form fields on page 1]\nExtent reached: Rectosigmoid only'),
+                        result.text)
+
+    def test_numeric_option_texts_are_not_read_as_positions(self):
+        polyps = ['1', '2', '3', '4 or more']
+        pdflib = pdf_extract(radio_form(polyps, ['0', '1', '2', '3'], 2, label='Number of polyps removed'), ocr=None)
+        self.assertTrue(pdflib.text.endswith('\nNumber of polyps removed: 3'), pdflib.text)
+        named = pdf_extract(radio_form(['1', '2', '3'], ['1', '2', '3'], 0, label='Number of polyps removed'),
+                            ocr=None)
+        self.assertTrue(named.text.endswith('\nNumber of polyps removed: 1'), named.text)
+
+    def test_named_states_and_no_selection_are_unchanged(self):
+        named = pdf_extract(radio_form(None, ['Cecum', 'Hepatic#20flexure', 'Rectosigmoid#20only'], 2,
+                                       printed=EXTENTS), ocr=None)
+        self.assertTrue(named.text.endswith('\nExtent reached: Rectosigmoid only'), named.text)
+        none = pdf_extract(radio_form(EXTENTS, ['0', '1', '2'], None), ocr=None)
+        self.assertTrue(none.text.endswith('\nExtent reached: no option selected'), none.text)
 
 
 if __name__ == '__main__':

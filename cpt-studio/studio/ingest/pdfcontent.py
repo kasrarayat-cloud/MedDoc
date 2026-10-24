@@ -436,12 +436,7 @@ class _Walker:
         return self.forms[key]
 
     def form_shows_text(self, xobject) -> bool:
-        """Whether a hidden form shows any text: only to name the exclusion in a message."""
-        try:
-            return any(operator in TEXT_SHOWING and shows_text(operands)
-                       for operands, operator in ContentStream(xobject, self.reader, 'bytes').operations)
-        except Exception:  # an unreadable form that is hidden anyway
-            return False
+        return form_shows_text(xobject, self.reader)
 
     def check_stream(self, stream) -> None:
         if isinstance(stream, StreamObject) and id(stream) not in self.checked:
@@ -497,6 +492,15 @@ def with_replacements(resources, replaced: dict, fonts: dict | None = None) -> D
             names[NameObject(name)] = font
         copy[NameObject('/Font')] = names
     return copy
+
+
+def form_shows_text(xobject, reader) -> bool:
+    """Whether a hidden form shows any text: only to name the exclusion in a message."""
+    try:
+        return any(operator in TEXT_SHOWING and shows_text(operands)
+                   for operands, operator in ContentStream(xobject, reader, 'bytes').operations)
+    except Exception:  # an unreadable form that is hidden anyway
+        return False
 
 
 def shows_text(operands) -> bool:

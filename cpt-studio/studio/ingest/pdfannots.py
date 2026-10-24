@@ -8,13 +8,20 @@ where that can be done exactly, and accounts for the rest:
 - A displayed form field is read from its stored value (``/V``, inherited
   through ``/Parent``): a text field as its text, a choice field as the option
   shown, a check box as checked or not checked, a radio group as the option
-  selected. Each displayed check box's rectangle and state is kept, so that
-  its glyph can be written beside its label in the page text (pdf.py). Push buttons and fields without a value contribute the text their
+  selected: with /Opt, the entry of the selected widget, by its place in the
+  field's /Kids (PDF 32000-1 Table 227), else the state's name. Each
+  displayed check box's rectangle and state is kept, so that its glyph can be
+  written beside its label in the page text (pdf.py). Push buttons and fields without a value contribute the text their
   appearance draws. Password fields are not read.
 - A text or combo-box field whose appearance draws text that differs from its
-  stored value is named, because viewers differ in which one they show.
-- A FreeText annotation is read from ``/Contents`` (else its appearance); any
-  other annotation whose appearance draws text is read from that text.
+  stored value is named, because viewers differ in which one they show. An
+  appearance that draws no text, or whose own /OC group is off, differs from
+  a non-empty value; a field with no appearance is drawn from its value.
+- A FreeText annotation is read from ``/Contents`` (else its appearance), and
+  named when its appearance shows different text. One whose appearance's own
+  /OC group is off shows nothing: it is not read and is counted as hidden.
+  Any other annotation whose appearance draws text is read from that text;
+  one whose appearance is in a hidden layer is named.
 - Annotation notes that are not drawn on the page (sticky notes, comment
   text) are counted, not read, like DOCX comments; ink and stamp drawings
   without text are counted. Hidden annotations — the Hidden or NoView flag,
@@ -39,7 +46,8 @@ from dataclasses import dataclass, field
 from lxml import etree
 from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
 
-from .pdfcontent import OptionalContent, as_list, clip, number, page_box, raw_entry, resolved, visible_form
+from .pdfcontent import (OptionalContent, as_list, clip, form_shows_text, number, page_box, raw_entry, resolved,
+                         visible_form)
 from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
 
@@ -156,7 +164,9 @@ class _Reader:
             line = f'{info.label}: {value}'
             comparable = info.kind == '/Tx' or bool(info.flags & FIELD_COMBO)
             drawn = squeezed(appearance or '')
-            if shown and comparable and not self.regenerated and drawn and drawn != squeezed(value):
+            # An appearance that exists is what viewers draw, even when it draws nothing or is in a hidden layer.
+            drawing = normal_appearance(widget) is not None
+            if shown and comparable and not self.regenerated and drawing and drawn != squeezed(value):
                 self.found.mismatched.append(info.label)
         elif appearance is None:
             self.found.unreadable += shown
@@ -193,6 +203,9 @@ class _Reader:
         contents = canonicalize(text_of(annotation.get('/Contents'))).strip('\n')
         if not contents.strip():
             contents = rich_text(annotation.get('/RC'))
+        if self.appearance_hidden(annotation):  # it draws nothing, so what /Contents says is not shown
+            self.found.hidden += bool(contents.strip()) or self.hidden_appearance_shows_text(annotation)
+            return
         appearance = self.appearance_text(annotation)
         text = contents if contents.strip() else (appearance or '').strip('\n')
         if not text.strip():
@@ -202,7 +215,7 @@ class _Reader:
             self.found.hidden += 1
             return
         drawn = squeezed(appearance or '')
-        if contents.strip() and drawn and drawn != squeezed(contents):
+        if contents.strip() and normal_appearance(annotation) is not None and drawn != squeezed(contents):
             self.found.mismatched.append('text annotation')
         self.found.texts.append(self.clean(text))
 
@@ -212,6 +225,8 @@ class _Reader:
         if not shown:
             self.found.hidden += bool((appearance or '').strip())
             return
+        if self.appearance_hidden(annotation) and self.hidden_appearance_shows_text(annotation):
+            self.found.hidden_text = True
         self.found.note_chars += non_space_count(note)
         if appearance is None:
             self.found.unreadable += 1
@@ -219,6 +234,15 @@ class _Reader:
             self.found.texts.append(self.clean(appearance.strip('\n')))
         elif subtype in DRAWINGS and self.drawn_appearance(annotation):
             self.found.drawn += 1
+
+    def appearance_hidden(self, annotation) -> bool:
+        """Whether the annotation has a normal appearance whose own /OC group is off (it then draws nothing)."""
+        stream = normal_appearance(annotation)
+        return stream is not None and not self.optional.visible(raw_entry(stream, '/OC'))
+
+    def hidden_appearance_shows_text(self, annotation) -> bool:
+        stream = normal_appearance(annotation)
+        return stream is not None and form_shows_text(stream, self.page.pdf)
 
     def drawn_appearance(self, annotation) -> bool:
         stream = normal_appearance(annotation)
@@ -288,8 +312,21 @@ def button_line(widget, info: _Field) -> tuple[str, bool]:
     on = state is not None and state != '/Off' and (not states or state in states)
     if info.flags & FIELD_RADIO:
         option = text_of(state).removeprefix('/') if on else ''
+        if on and info.options:
+            option = listed_option(widget, info) or option
         return (f'{info.label}: {option}' if option else f'{info.label}: no option selected'), on
     return (f'{info.label}: checked' if on else f'{info.label}: not checked'), on
+
+
+def listed_option(widget, info: _Field) -> str:
+    """The /Opt entry of ``widget``: one per widget, in the order of the field's /Kids (PDF 32000-1 Table 227).
+    Read by position, never from a decimal state name, whose digits may be the option itself."""
+    kids = as_list(info.node.get('/Kids'))
+    index = next((place for place, kid in enumerate(kids) if resolved(kid) is widget), None)
+    if index is None or index >= len(info.options):
+        return ''
+    entry = resolved(info.options[index])
+    return one_line(text_of(entry)) if isinstance(entry, (str, bytes)) else ''
 
 
 def choice_text(info: _Field) -> str:
