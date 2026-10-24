@@ -407,5 +407,60 @@ class Routing10UnlistedHistoryTests(unittest.TestCase):
         self.assertEqual(read(reflux_office('Recent EGD was normal.'), 'EGD')[0], 'historical')
 
 
+
+# --- routing:13 --------------------------------------------------------------------------------------------------
+
+STATUS13_LEAD = ('Findings: The colonoscope was advanced to the splenic flexure, where an obstructing mass was '
+                 'biopsied. ')
+PRIOR_EXAM_TAILS = ('On a prior exam the cecum was reached.', 'At her last procedure the cecum was reached.',
+                    'Previously the scope reached the cecum.', 'Previously, the cecum was reached.',
+                    'The cecum was reached on a prior exam.', 'On a previous study the cecum was reached.',
+                    'At the index exam the cecum was reached.', 'Per the outside report the cecum was reached.',
+                    'On prior exams the cecum was reached.', 'At her prior exam the scope reached the cecum.',
+                    'Her most recent examination reached the cecum.')
+
+
+def colon_report(tail):
+    return HEADER + 'Procedure: Colonoscopy\n' + STATUS13_LEAD + tail + '\n'
+
+
+class Routing13PriorExamWithoutAServiceNameTests(unittest.TestCase):
+    """routing:13 (critical, under). A prior exam named without a service name ('On a prior exam', 'At her last
+    procedure', 'Previously the scope ...') supplied today's extent: an incomplete colonoscopy became complete. No
+    fact is read from a clause about another examination, named or not."""
+
+    def test_the_claimed_tails_leave_the_colonoscopy_incomplete(self):
+        for tail in PRIOR_EXAM_TAILS:
+            text = colon_report(tail)
+            with self.subTest(tail=tail):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'incomplete: splenic flexure')
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+                proposals, _ = run_engine(text, [('45380', 'where an obstructing mass was biopsied')])
+                item = proposals['45380']
+                self.assertIsNotNone(check(item, 'service.incomplete'))
+                self.assertTrue(item.modifier_considerations)
+
+    def test_other_facts_and_the_egd(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. On a prior exam '
+                'a polyp was removed with a cold snare.\n')
+        self.assertNotIn('cold snare', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        text = (HEADER + 'Procedure: EGD\nFindings: The gastroscope was advanced to the stomach. On a prior exam the '
+                'second part of the duodenum was reached.\n')
+        self.assertEqual(fact_value(text, 'gi.egd', 'extent'), 'incomplete: stomach')
+
+    def test_controls_keep_todays_facts(self):
+        for body in ('The cecum was reached, as on her prior exam.', 'Compared with her prior exam, the cecum was '
+                     'reached.', 'The cecum was reached in this patient with no prior colonoscopy.',
+                     'The cecum was reached today, unlike on her prior exam.',
+                     'The colonoscope was advanced to the cecum; her prior exam was incomplete.'):
+            text = HEADER + 'Procedure: Colonoscopy\nFindings: ' + body + '\n'
+            with self.subTest(body=body):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        text = (HEADER + 'Procedure: ERCP\nFindings: The duodenoscope was advanced to the papilla. Deep biliary '
+                'cannulation was achieved. Previously placed biliary stent was removed and a new stent was placed.\n')
+        self.assertEqual(fact_value(text, 'gi.ercp', 'cannulation'), 'successful')
+        self.assertIn('stent', fact_value(text, 'gi.ercp', 'interventions') or '')
+
+
 if __name__ == '__main__':
     unittest.main()

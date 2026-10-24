@@ -1054,6 +1054,9 @@ ANOTHER_TIME_PREFIX = 'uncertain: another time'
 # colonoscopy", "two weeks after the EGD"): it is another event's time, not the service's.
 _RELATIONAL_END = re.compile(r'(?:before|after|prior|later|earlier|afterwards?)$', re.A | re.I)
 _TO_THE_SERVICE = re.compile(r'[ \t]+(?:to[ \t]+)?(?:(?:the|her|his|their|a|an|this|that)[ \t]+)?', re.A | re.I)
+# A time a comparison names is no time of the service: "The cecum was reached, as on her prior exam".
+_COMPARE_LEAD = re.compile(r'\b(?:as|than|unlike|compared\s+(?:with|to)|in\s+comparison\s+(?:with|to)|similar\s+to)[\s,]*$',
+                           re.A | re.I)
 _WEEKDAYS = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
 _MONTH_INDEX = {name: n for n, names in enumerate((('jan', 'january'), ('feb', 'february'), ('mar', 'march'),
                                                    ('apr', 'april'), ('may',), ('jun', 'june'), ('jul', 'july'),
@@ -1114,7 +1117,7 @@ def _another_time(an: Analysis, start: int, end: int) -> Optional[str]:
             for ts_, te_, name, m in times:
                 if not _attached(spans, index, ts_, te_):
                     continue
-                if _today_compatible(an, name, m):
+                if _today_compatible(an, name, m) or _COMPARE_LEAD.search(text, max(cs, ts_ - 30), ts_):
                     continue
                 if _RELATIONAL_END.search(m.group(0)):
                     lead = _TO_THE_SERVICE.match(text, te_, ce)
@@ -1809,11 +1812,37 @@ def _about_another_procedure(an: Analysis, start: int, end: int) -> bool:
             cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)  # bounded, like every clause reading
             if cues.TODAY.search(an.text, cs, ce):
                 continue
-            if _names_another_procedure(an, cs, ce) or (not an.services_in(cs, ce)
-                                                        and _continues_another_procedure(an, clause)):
+            if _names_another_procedure(an, cs, ce) or _another_exam(an, clause, cs, ce) \
+                    or (not an.services_in(cs, ce) and _continues_another_procedure(an, clause)):
                 an.memo[key] = True
                 break
     return an.memo[key]
+
+
+# Another examination named without a service name (routing:13): "On a prior exam the cecum was reached", "At her last
+# procedure", "Her most recent examination", "Per the outside report", and a clause led by "Previously" (not
+# "Previously placed", which tells the time of another act).
+_ANOTHER_EXAM = re.compile(r'\b(?:prior|previous|last|index|outside|earlier|preceding|old|most\s+recent)\s+'
+                           r'(?:(?:diagnostic|screening|surveillance|endoscopic|colonoscopic|gi|incomplete|complete)\s+)?'
+                           r'(?:exam(?:ination)?s?|procedures?|stud(?:y|ies)|scopes?|endoscop(?:y|ies))\b'
+                           r'|\bper\s+(?:the\s+)?(?:outside|prior|previous|old|last)\s+(?:reports?|records?)\b', re.A | re.I)
+_PREVIOUSLY_LEAD = re.compile(r'[\s,]*previously\b(?![\s,]+\w+(?:ed|en)\b)', re.A | re.I)
+_DENIED_BEFORE = re.compile(r'\b(?:no|not|never|without)\s+(?:(?:a|an|the|any)\s+)?$', re.A | re.I)
+
+
+def _another_exam(an: Analysis, clause: tuple[int, int], cs: int, ce: int) -> bool:
+    """Whether the clause (window [cs, ce)) speaks of another examination without naming its service (see
+    _ANOTHER_EXAM), other than one it denies ("no prior exam") or names only to compare with ("as on her prior exam",
+    "Compared with her prior exam")."""
+    text = an.text
+    if clause[0] == cs and _PREVIOUSLY_LEAD.match(text, cs, ce):
+        return True
+    for m in _ANOTHER_EXAM.finditer(text, cs, ce):
+        if _DENIED_BEFORE.search(text, max(cs, m.start() - 20), m.start()) \
+                or _COMPARED_WITH.search(text, max(cs, m.start() - 60), m.start()):
+            continue
+        return True
+    return False
 
 
 def _held_for_another_time(reading: Reading) -> bool:
