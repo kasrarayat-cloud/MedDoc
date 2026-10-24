@@ -1563,10 +1563,10 @@ _BOX_PAD = r'[ \t\u00a0\u2000-\u200a\u202f\u205f\u3000]'  # a box's padding: any
 _BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\[' + _BOX_PAD + r'*\]|\[_\]|\('
                   + _BOX_PAD + r'+\))|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[' + _BOX_PAD
                   + r'*[xX\u2713\u2714]' + _BOX_PAD + r'*\]|\(' + _BOX_PAD + r'*[xX]' + _BOX_PAD + r'*\)|\[[*v]\])')
-# A mark in brackets that looks like a box but is none of the contract's ("(•)", "(●)", "[√]", "(✓)", "[?]"): the
-# item it marks is held, and it is never passed over to hand the item a neighbour's box.
+# A mark in brackets that looks like a box but is none of the contract's ("(•)", "(●)", "[√]", "(✓)", "[?]", "(*)",
+# "(o)"): the item it marks is held, and it is never passed over to hand the item a neighbour's box.
 _BOX_UNREAD = re.compile(r'[\[(]' + _BOX_PAD + r'*[\u2022\u25cf\u25cb\u25ef\u25c9\u25ce\u29bf\u2713\u2714\u221a\u2717'
-                         r'\u2718\u2715\u2716?]' + _BOX_PAD + r'*[\])]')
+                         r'\u2718\u2715\u2716?*o]' + _BOX_PAD + r'*[\])]')
 UNCHECKED = 'negated: an unchecked box'
 BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
 BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
@@ -1643,10 +1643,11 @@ def _opens_with_a_box(an: Analysis, sentence: tuple[int, int]) -> bool:
 def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, int]] = None) -> str:
     """'lead' or 'trail': whether the boxes of [lo, hi) mark the items after them or before them (``extra``: the
     passage being read when it is not an item itself, read as one). Boxes lead when the text opens with a box
-    ("☐ Biopsy ☒ Cold snare polypectomy"), or when a service name or a label with a colon opens it and every box is
-    followed straight by an item ("Colonoscopy: [ ] biopsy [x] cold snare"). Otherwise they trail ("Biopsy | ☐ |
-    Cold snare polypectomy | ☒"), and items written after the last box are remarks that no box governs
-    ("... | ☒ | clip placed after polypectomy")."""
+    ("☐ Biopsy ☒ Cold snare polypectomy"), or when every box is followed straight by an item and a service name
+    opens the text ("Colonoscopy: [ ] biopsy [x] cold snare"), or a label with a colon that no later box repeats
+    ("Polypectomy: [ ] cold snare [x] hot snare").
+    Otherwise they trail ("Biopsy | ☐ | Cold snare polypectomy | ☒"), and items written after the last box are
+    remarks that no box governs ("... | ☒ | clip placed after polypectomy")."""
     key = ('box-orientation', lo, hi, extra)
     if key not in an.memo:
         text = an.text
@@ -1660,8 +1661,8 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
         else:
             first = items[0]
             label_end = _label_end(text, items, 0)
-            headed = any(m.start == first[0] for m in an.services_in(first[0], first[1])) \
-                or text.startswith(':', _BOX_RUN_GAP.match(text, label_end, hi).end(), hi)
+            by_service = any(m.start == first[0] for m in an.services_in(first[0], first[1]))
+            by_label = text.startswith(':', _BOX_RUN_GAP.match(text, label_end, hi).end(), hi)
             starts = {s for s, _ in items}
             followed = True
             for i, (s, e, _) in enumerate(boxes):
@@ -1670,7 +1671,10 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
                 if _BOX_RUN_GAP.match(text, e, hi).end() not in starts:
                     followed = False
                     break
-            an.memo[key] = 'lead' if headed and followed else 'trail'
+            # under a label heading only the first box follows a colon; boxes that each follow 'label:' trail their
+            # labels ("Biopsy: [ ] Cold snare polypectomy: [x] clip placed")
+            colons = sum(text[max(lo, s - 8):s].rstrip(' \t\u00a0').endswith(':') for s, _, _ in boxes)
+            an.memo[key] = 'lead' if followed and (by_service or (by_label and colons <= 1)) else 'trail'
     return an.memo[key]
 
 

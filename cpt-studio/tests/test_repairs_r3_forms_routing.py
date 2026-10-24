@@ -73,6 +73,13 @@ class Routing5RemarkAfterTheLastBoxTests(BoxCase):
                 self.assertNotIn('biopsy', interventions)
                 self.assertIn('cold snare', interventions)
 
+    def test_a_remark_straight_after_the_last_box(self):
+        """Each box follows its own 'label:', so the boxes trail even though every box is followed by an item."""
+        for row in ('Biopsy: [ ] Cold snare polypectomy: [x] clip placed', 'Biopsy: ☐ Cold snare polypectomy: ☒ clip'):
+            with self.subTest(row=row):
+                self.assert_items(BOXED + row + '\n', {'Biopsy': 'negated', 'Cold snare polypectomy': 'performed'},
+                                  {'45380': ('Biopsy', 'excluded'), '45385': ('Cold snare polypectomy', 'ready')})
+
     def test_a_parenthetical_remark(self):
         text = BOXED + 'Biopsy: ☐   Polypectomy: ☒ (cold snare)\n'
         self.assert_items(text, {'Biopsy': 'negated', 'Polypectomy': 'performed'},
@@ -170,7 +177,7 @@ class Routing15CheckedBoxSpellingsTests(BoxCase):
 
     def test_a_box_written_in_a_way_the_reader_cannot_classify_holds_its_item(self):
         """Never the neighbour's box: an unreadable mark holds the item it marks, and leaves the others alone."""
-        for mark in ('(•)', '(●)', '[√]', '(✓)', '( ✔ )', '[?]'):
+        for mark in ('(•)', '(●)', '[√]', '(✓)', '( ✔ )', '[?]', '(*)', '(o)'):
             with self.subTest(mark=mark):
                 text = BOXED + f'( ) Biopsy {mark} Cold snare polypectomy\n'
                 status, cues = read(text, 'Cold snare polypectomy')
@@ -184,7 +191,8 @@ class Routing15CheckedBoxSpellingsTests(BoxCase):
 
     def test_ordinary_brackets_are_not_boxes(self):
         for row in ('Biopsy (x2) of the sigmoid colon', 'Biopsy (sigmoid) [sic]', 'Biopsy (1) and polypectomy (2)',
-                    'Biopsy for H. pylori (-)', 'Cold snare polypectomy (+) margin'):
+                    'Biopsy for H. pylori (-)', 'Cold snare polypectomy (+) margin', 'Biopsy(s) of the sigmoid',
+                    'Biopsy (a) and (b)', 'Biopsy (or brushing) of the sigmoid'):
             with self.subTest(row=row):
                 text = BOXED + row + '\n'
                 self.assertEqual(read(text, 'Biopsy' if 'Biopsy' in row else 'Cold snare polypectomy')[0], 'performed')
