@@ -2275,8 +2275,27 @@ def _missing(family: str, facts: list[Fact]) -> tuple[str, ...]:
     return tuple(name for name in PROFILES[family].required_facts if name not in known)
 
 
+# A mention stores its sentence whole up to this length; a longer one by its clause, and a longer clause by the part
+# within CLAUSE_REACH of the mention, which is all routing reads of it. Without the bound every mention of a long
+# sentence carried a copy of it, and the stored routing grew as mentions x sentence length (routing:19).
+MENTION_SENTENCE_LIMIT = 1000
+
+
+def _stored_sentence(an: Analysis, start: int, end: int) -> tuple[int, int]:
+    """The span a mention at [start, end) stores as its sentence (see MENTION_SENTENCE_LIMIT); it holds the mention."""
+    s, e = an.lay.sentence_for(start, end)
+    if e - s <= MENTION_SENTENCE_LIMIT:
+        return s, e
+    clauses = an.lay.clauses_for(start, end)
+    cs, ce = max(s, clauses[0][0]), min(e, clauses[-1][1])
+    if ce - cs <= MENTION_SENTENCE_LIMIT and cs <= start and end <= ce:
+        return cs, ce
+    lo, hi = an.lay.window((s, e), start, end, CLAUSE_REACH)
+    return min(lo, start), max(hi, end)
+
+
 def _mention(an: Analysis, m: Mention, reading: Reading) -> ServiceMention:
-    s, e = an.lay.sentence_for(m.start, m.end)
+    s, e = _stored_sentence(an, m.start, m.end)
     return ServiceMention(family=m.family, status=reading.status, span=_span(an.text, m.start, m.end),
                           sentence=_span(an.text, s, e), section=an.lay.section_at(m.start).kind, cues=reading.cues)
 

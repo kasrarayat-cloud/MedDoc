@@ -705,5 +705,69 @@ class Routing22OtherSameDayFormsTests(unittest.TestCase):
                 self.assertIsNone(other_finding(text))
 
 
+
+# --- routing:19, validation:10 -----------------------------------------------------------------------------------
+
+class Routing19StoredSizeTests(unittest.TestCase):
+    """routing:19 and validation:10 (medium). Every ServiceMention carried a copy of its whole sentence, so the routing
+    JSON grew as (mentions in a sentence) x (sentence length): the round-2b ScaleTests input (140 KB) gave 320 MB, and
+    storing it killed the test PostgreSQL backend. A mention stores its sentence when that is short, else its clause,
+    else the part of its clause within CLAUSE_REACH of it: bounded per mention, and it always holds the mention."""
+
+    @staticmethod
+    def stored(text):
+        import json
+        from studio.gi.detect import route
+        from studio.types import to_jsonable
+        result = route(text)
+        return result, len(json.dumps(to_jsonable(result)))
+
+    def assert_mentions_hold_their_spans(self, text, result):
+        for finding in result.findings:
+            for m in finding.mentions:
+                self.assertEqual(text[m.sentence.start:m.sentence.end], m.sentence.text)
+                self.assertTrue(m.sentence.start <= m.span.start < m.span.end <= m.sentence.end)
+
+    def test_the_scale_input_stores_a_bounded_result(self):
+        import time
+        text = HEADER + 'Findings: ' + ' '.join(['colonoscopy: \u2610 biopsy of the sigmoid colon \u2612 cold snare '
+                                                 'polypectomy |'] * 2000)
+        started = time.monotonic()
+        result, size = self.stored(text)
+        self.assertLess(time.monotonic() - started, 20)
+        self.assertLess(size, 20 * len(text), size)
+        self.assertEqual(result.finding('gi.colonoscopy').status, 'performed')
+        self.assert_mentions_hold_their_spans(text, result)
+
+    def test_many_mentions_in_one_sentence_store_linearly(self):
+        """A mention every 27 characters, all in one sentence: twice the mentions store about twice as much (it was
+        four times: 6.9 MB, 27 MB, 108 MB for 500, 1000, 2000), within a bound per character of text."""
+        sizes = {}
+        for count in (500, 1000, 2000):
+            text = HEADER + 'Colonoscopy was performed, ' * count
+            with self.subTest(count=count):
+                result, sizes[count] = self.stored(text)
+                self.assertLess(sizes[count], 40 * len(text), sizes[count])
+                self.assert_mentions_hold_their_spans(text, result)
+        self.assertLess(sizes[2000] / sizes[1000], 2.2)
+        self.assertLess(sizes[1000] / sizes[500], 2.2)
+
+    def test_a_short_sentence_is_stored_whole_and_a_long_one_by_its_clause(self):
+        line = 'Rubber band ligation of an internal hemorrhoid was performed today without complication.'
+        result, _ = self.stored(OFFICE_HEAD + BLEEDING_VISIT + '\n' + line + '\n')
+        self.assertEqual(result.finding('gi.other').mentions[0].sentence.text, line)
+        filler = ' '.join(['the mucosa of the rectum looked normal'] * 40)
+        text = HEADER + 'Findings: ' + filler + '; colonoscopy was performed to the cecum; ' + filler + '.\n'
+        result, _ = self.stored(text)
+        (mention,) = result.finding('gi.colonoscopy').mentions
+        self.assertEqual(mention.sentence.text, 'colonoscopy was performed to the cecum;')
+
+    def test_a_routing_reading_still_cites_the_mention(self):
+        text = HEADER + 'Findings: ' + ' '.join(['the colonoscopy and the egd were discussed with the family at length'] * 60)
+        proposals, _ = run_engine(text, [('45378', 'colonoscopy')])
+        status = check(proposals['45378'], 'service.status')
+        self.assertIn('colonoscopy', status.detail)
+
+
 if __name__ == '__main__':
     unittest.main()
