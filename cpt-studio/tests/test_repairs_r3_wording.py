@@ -465,3 +465,59 @@ class R7CancelledOrRescheduledFurtherDownTests(unittest.TestCase):
         self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
         status, cues = read(text, 'Colonoscopy with biopsy.')
         self.assertEqual(status, 'incomplete', cues)
+
+
+# --- routing:23 -----------------------------------------------------------------------------------------------
+
+GI02_LINE = 'Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.'
+GI02_BIOPSY = ('Two cold forceps biopsies were taken from the gastric antrum for histology and Helicobacter pylori '
+               'assessment.')
+GI03_LINE = 'Colonoscopy with cold snare polypectomy and cold forceps biopsy.'
+GI03_PICKS = [('45385', 'were each removed completely with a cold snare and retrieved (jar A)'),
+              ('45380', 'was sampled with cold forceps biopsy for histology (jar B)')]
+
+
+class R23PurposeClauseTests(unittest.TestCase):
+    """routing:23 - a purpose clause whose verb follows a manner adverb ("to further evaluate") or is written as the
+    standard abbreviation ("to eval", "to r/o") is an ordinary procedure line: performed, codes ready, intent kept.
+    _TO_PURPOSE stays a safe list, so an unlisted verb after "to" still holds."""
+
+    def test_the_claimed_gi02_lines(self):
+        original = doc('gi-02')
+        for purpose in ('to further evaluate epigastric pain', 'to eval epigastric pain', 'to r/o celiac disease'):
+            text = original.replace(GI02_LINE, f'Esophagogastroduodenoscopy (EGD) {purpose}, with cold forceps biopsy.')
+            self.assertNotEqual(text, original)
+            with self.subTest(purpose=purpose):
+                self.assertEqual(family(text, 'gi.egd'), 'performed')
+                self.assertTrue(ready(run_engine(text, [('43239', GI02_BIOPSY)])[0]['43239']))
+
+    def test_the_claimed_gi03_line_keeps_its_intent(self):
+        original = doc('gi-03')
+        text = original.replace(GI03_LINE, 'Colonoscopy to further evaluate iron deficiency anemia, with cold snare '
+                                           'polypectomy and cold forceps biopsy.')
+        self.assertNotEqual(text, original)
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'intent'), 'screening')
+        proposals, _ = run_engine(text, GI03_PICKS)
+        for code, _evidence in GI03_PICKS:
+            self.assertTrue(ready(proposals[code]), (code, proposals[code].clarifications))
+
+    def test_the_verified_manner_adverbs(self):
+        for purpose in ('to better evaluate', 'to fully evaluate', 'to further assess', 'to more fully evaluate',
+                        'to thoroughly evaluate', 'to completely evaluate', 'to again evaluate', 'to further eval',
+                        'to further r/o'):
+            text = HEADER + f'Procedure: Colonoscopy {purpose} rectal bleeding.\n'
+            with self.subTest(purpose=purpose):
+                status, cues = read(text, 'Colonoscopy')
+                self.assertEqual(status, 'performed', cues)
+
+    def test_unlisted_words_after_to_still_hold(self):
+        for line in ('Colonoscopy to further discuss with the patient.', 'Colonoscopy to be scheduled.',
+                     'Colonoscopy to follow.', 'Colonoscopy to possibly evaluate the polyp.',
+                     'Colonoscopy to further f/u the polyp.', 'Colonoscopy to more fully discuss the options.',
+                     'Colonoscopy to further further further evaluate.'):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                status, cues = read(text, 'Colonoscopy')
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)

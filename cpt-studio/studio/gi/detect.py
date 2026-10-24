@@ -635,7 +635,13 @@ _TO_PURPOSE = frozenset((
     'localize', 'localise', 'identify', 'define', 'delineate', 'diagnose', 'determine', 'sample', 'biopsy', 'remove',
     'resect', 'excise', 'treat', 'dilate', 'retrieve', 'extract', 'drain', 'decompress', 'mark', 'tattoo', 'ablate',
     'control', 'obtain', 'clear', 'relieve', 'palliate', 'place', 'insert', 'deploy', 'replace', 'exchange',
-    'measure', 'map', 'monitor', 'document'))
+    'measure', 'map', 'monitor', 'document',
+    # the standard abbreviations of "evaluate" and "rule out"
+    'eval', 'r/o'))
+# Manner adverbs that may stand between "to" and a listed purpose verb ("to further evaluate", "to better
+# evaluate", "to more fully assess"): verified forms only, at most two of them. Any other word there ("to possibly
+# evaluate", "to further discuss") keeps the "to" a stop.
+_TO_MANNER = frozenset(('further', 'better', 'fully', 'again', 'more', 'thoroughly', 'completely'))
 # A "to" that ends one of these relations is part of it, not a purpose or a future ("due to anemia",
 # "secondary to bleeding", "prior to surgery", "distal to the lesion").
 _TO_RELATIONS = frozenset(('due', 'owing', 'secondary', 'related', 'according', 'addition', 'prior', 'subsequent',
@@ -699,8 +705,14 @@ def _to_stops(an: Analysis, word: re.Match, limit: int, purpose: bool) -> Option
     if (following[0].isdigit() or following in _TO_EXTENT or _LANDMARK_AT.match(text, at, limit)
             or any(m.start == at for m in an.services_in(at, min(limit, at + 120)))):
         return None
-    if purpose and following in _TO_PURPOSE:
-        return None
+    if purpose:
+        verb = follow
+        for _ in range(2):  # at most two manner adverbs before the purpose verb
+            if verb is None or verb.group(0).lower() not in _TO_MANNER:
+                break
+            verb = _NEXT_WORD.match(text, _SEPARATOR.match(text, verb.end(), limit).end(), limit)
+        if verb is not None and verb.group(0).lower() in _TO_PURPOSE:
+            return None
     return f'to {follow.group(0)}'
 
 
