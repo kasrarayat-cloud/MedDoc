@@ -183,9 +183,11 @@ class Intervention:
 
 
 def _inside(items, starts: list[int], start: int, end: int) -> list:
-    """Items (sorted by start) lying wholly inside [start, end)."""
+    """Items (sorted by start) lying wholly inside [start, end). Indexed, never sliced: a slice would
+    copy every later item on each call."""
     found = []
-    for item in items[bisect.bisect_left(starts, start):]:
+    for index in range(bisect.bisect_left(starts, start), len(items)):
+        item = items[index]
         if item.start >= end:
             break
         if item.end <= end:
@@ -351,7 +353,7 @@ def _member_negations(an: Analysis, cs: int, ce: int, ms: int, me: int,
         pre = _masked(an, cs, ms) if pre is None else pre
         post = _masked(an, me, ce) if post is None else post
         found, governs_next = [], []
-        for _, pattern in cues.NEGATED_PRE:
+        for name, pattern in cues.NEGATED_PRE:
             m = pattern.search(pre)
             if not m:
                 continue
@@ -359,7 +361,8 @@ def _member_negations(an: Analysis, cs: int, ce: int, ms: int, me: int,
             if cues.NEGATION_HEAD_AFTER.match(post):
                 governs_next.append(where)
             else:
-                found.append((f'negated: {m.group(0).strip()}', bool(cues.NEGATION_ABOUT_PAST.search(m.group(0))), where))
+                past = name != cues.REFUSAL and bool(cues.NEGATION_ABOUT_PAST.search(m.group(0)))
+                found.append((f'negated: {m.group(0).strip()}', past, where))
         for _, pattern in cues.NEGATED_POST:
             m = pattern.search(post)
             if m:
@@ -500,15 +503,24 @@ def _doubt(an: Analysis, ts: int, te: int) -> Optional[str]:
     return an.memo[key]
 
 
-# What may follow a service name for its section alone to read it as performed. Under a
-# procedure heading the line names the service and how it was done, so only the words of a
-# procedure description may follow ("Colonoscopy with cold snare polypectomy", "EGD to the
-# second part of the duodenum", "EUS-guided", "Colonoscopy procedure report"): any other word
-# ("declined", "TBD", "on hold", "requested", "which", "however") leaves the section silent and
-# the reading a doubt. Under a findings or technique heading the words after the name describe
-# what was found ("Colonoscopy - two diminutive polyps"), so only a word that predicates
-# something of the service - an unlisted participle, an auxiliary, a status or linking word -
-# does. Either way an incomplete list fails safe: the service is held for clarification.
+# What may follow a service name for its section alone to read it as performed. The words of
+# the name's clause after it are read in order, within CONTINUATION_REACH characters, and none of
+# them may move the service to another time, place or state:
+# - the first word may begin a description of the procedure or of what it found ("with cold
+#   snare polypectomy", "to the cecum", "on 2026-10-21", "at Harborview", ", average-risk
+#   screening", "(EGD)"), but must not predicate something of the service: an auxiliary, a
+#   linking or status word (_PREDICATES), an unlisted participle ("requested", "omitted"), a
+#   copula that does not describe ("was felt to be"), or a "to" that opens neither an extent nor,
+#   under a procedure heading, the procedure's purpose ("to evaluate anemia", _TO_PURPOSE);
+# - every later word is read for a qualifier (_QUALIFIERS: "at a later date", "once", "pending
+#   clearance", "TBD", "last year", "at an outside hospital", "elsewhere", "previously", "to be
+#   determined", "(to confirm with the patient)", ": unknown") and for a status participle that
+#   closes the clause ("... requested by the referring physician").
+# Service names, interventions, landmarks, numbers, brackets ("(EGD)") and the joiners ' | '
+# (a table row's cells), '/', '+' and '&' are passed over, and so is any other word: the
+# vocabulary of a description is open, its qualifiers are not. A qualifier leaves the section
+# silent and the reading a doubt: the service is held for clarification, never excluded.
+CONTINUATION_REACH = 240  # how far after a name its clause is read (bounds the work per span)
 _NEXT_WORD = re.compile(r'[A-Za-z][\w/\'-]*|\d', re.A)
 _CONTINUES = frozenset((
     'with', 'w/', 'and', 'or', 'plus', 'including', 'includes', 'to', 'into', 'through', 'thru', 'of', 'for', 'via',
@@ -528,13 +540,32 @@ _CONTINUES = frozenset((
     'a', 'an', 'the', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'single',
     'multiple', 'several', 'few', 'numerous', 'many', 'small', 'large', 'diminutive', 'tiny', 'medium', 'mild',
     'moderate', 'severe', 'patchy', 'diffuse', 'focal', 'minimal'))
-# Under findings and technique headings: words that predicate something of the service.
+# Straight after the name: words that predicate something of the service.
 _PREDICATES = frozenset((
     'has', 'have', 'had', 'will', 'would', 'should', 'could', 'can', 'may', 'might', 'must', 'did', 'does', 'do',
     'shall', 'which', 'that', 'who', 'however', 'though', 'although', 'but', 'yet', 'instead', 'unfortunately',
     'ultimately', 'eventually', 'initially', 'originally', 'previously', 'tbd', 'tba', 'pending', 'unnecessary',
     'unavailable', 'impossible', 'inadvisable', 'inappropriate', 'later', 'next', 'tomorrow', 'soon', 'hold',
     'unable', 'unsafe', 'unwise', 'optional', 'possible', 'needed', 'required', 'indicated', 'due'))
+# Anywhere after the name in its clause: words that move the service to another time, place or state.
+_QUALIFIERS = frozenset((
+    'later', 'tomorrow', 'soon', 'someday', 'sometime', 'tbd', 'tba', 'pending', 'awaiting', 'once', 'when',
+    'whenever', 'until', 'unless', 'if', 'elsewhere', 'previously', 'earlier', 'formerly', 'maybe',
+    'perhaps', 'tentative', 'tentatively', 'hypothetical', 'hypothetically', 'unfortunately', 'unable', 'unsafe',
+    'unwise', 'unnecessary', 'unavailable', 'impossible', 'inadvisable', 'inappropriate', 'optional'))
+# A condition or a time these open is a description when it is told in the past ("biopsies taken when abnormal
+# mucosa was seen"), a qualifier otherwise ("once the INR is corrected").
+_WHEN_WORDS = frozenset(('once', 'when', 'whenever', 'until'))
+_TOLD_IN_THE_PAST = re.compile(r'(?:\s+[\w/-]+){0,6}?\s+(?:was|were|had|did)\b', re.A | re.I)
+# These end what the line says of the service: after a reporting verb the words report what it found
+# ("Colonoscopy showed a polyp, for EMR at a later date"), and after a relative pronoun (not as the first
+# word, where it predicates: "Colonoscopy, which ...") they speak of another thing or act.
+_REPORTING = frozenset(('showed', 'shows', 'revealed', 'reveals', 'demonstrated', 'demonstrates', 'disclosed',
+                        'found', 'noted', 'identified', 'documented'))
+_RELATIVES = frozenset(('that', 'which', 'who', 'whom', 'whose', 'where'))
+# A state word that qualifies the service only where it closes its clause ("Colonoscopy: unknown."), not
+# where it qualifies a noun ("a lesion of uncertain significance").
+_PREDICATIVE_STATES = frozenset(('unknown', 'unclear', 'uncertain', 'undecided', 'undetermined', 'unconfirmed'))
 # Participles that describe a performed service or what it found, never its status.
 _DESCRIPTIVE_ED = frozenset((
     'performed', 'completed', 'guided', 'assisted', 'related', 'associated', 'pedunculated', 'serrated', 'ulcerated',
@@ -547,20 +578,47 @@ _DESCRIPTIVE_ED = frozenset((
     'aspirated', 'lifted', 'closed', 'marked', 'washed', 'irrigated', 'suctioned', 'imaged', 'measured', 'sized',
     'sent', 'submitted', 'labeled', 'labelled', 'tolerated', 'uncomplicated', 'complicated', 'limited', 'extended'))
 _ON_HOLD = re.compile(r'on\s+hold\b|to\s+follow\b|at\s+a\s+later\b', re.A | re.I)
-# After "to", only an extent goes on describing the service ("to the cecum", "to 40 cm"); anything else
-# ("to come", "to be scheduled") is a purpose or a future, so the section does not speak for it.
+# After "to", an extent goes on describing the service ("to the cecum", "to 40 cm") ...
 _TO_EXTENT = frozenset(('the', 'a', 'an', 'its', 'approximately', 'approx', 'about', 'around', 'roughly', 'nearly',
                         'near', 'level', 'mid', 'distal', 'proximal', 'terminal', 'second', 'third', 'fourth', 'beyond',
                         'within'))
+# ... and, under a procedure heading or later in the line, so does the purpose of the procedure or of
+# an act it describes ("EGD to evaluate dysphagia", "ERCP to remove common bile duct stones", "with
+# biopsies to evaluate for celiac disease"). Only these verbs (fail-closed): an unlisted one ("to
+# come", "to be scheduled", "to confirm with the patient", "to check") stays a future or a status.
+_TO_PURPOSE = frozenset((
+    'evaluate', 'reevaluate', 're-evaluate', 'assess', 'reassess', 'investigate', 'exclude', 'rule', 'screen',
+    'survey', 'stage', 'restage', 'characterize', 'characterise', 'examine', 'inspect', 'visualize', 'visualise',
+    'localize', 'localise', 'identify', 'define', 'delineate', 'diagnose', 'determine', 'sample', 'biopsy', 'remove',
+    'resect', 'excise', 'treat', 'dilate', 'retrieve', 'extract', 'drain', 'decompress', 'mark', 'tattoo', 'ablate',
+    'control', 'obtain', 'clear', 'relieve', 'palliate', 'place', 'insert', 'deploy', 'replace', 'exchange',
+    'measure', 'map', 'monitor', 'document'))
+# A "to" that ends one of these relations is part of it, not a purpose or a future ("due to anemia",
+# "secondary to bleeding", "prior to surgery", "distal to the lesion").
+_TO_RELATIONS = frozenset(('due', 'owing', 'secondary', 'related', 'according', 'addition', 'prior', 'subsequent',
+                           'next', 'close', 'adjacent', 'similar', 'compared', 'proximal', 'distal'))
 _COPULA = frozenset(('was', 'were', 'is', 'are'))
 _AFTER_COPULA = frozenset(('normal', 'unremarkable', 'negative', 'positive', 'complete', 'completed', 'performed',
                            'done', 'uneventful', 'successful', 'successfully', 'notable', 'significant', 'remarkable',
                            'otherwise', 'technically', 'difficult', 'challenging', 'prolonged', 'then', 'also',
                            'carried', 'undertaken', 'accomplished', 'without', 'essentially', 'grossly', 'entirely',
                            'within', 'subsequently', 'uneventfully', 'easily', 'routinely'))
+_DETERMINERS = frozenset(('the', 'a', 'an', 'this', 'that', 'these', 'those', 'its', 'her', 'his', 'their', 'our'))
+# Words that report a result, so a "pending" after them is the result's ("pathology pending").
+_RESULT_WORDS = frozenset(('pathology', 'path', 'histology', 'cytology', 'result', 'results', 'report', 'reports',
+                           'labs', 'culture', 'cultures'))
+_TIME_UNIT = re.compile(r'\s+(?:\d+\s+)?(?:weeks?|months?|years?|visits?|time|spring|summer|fall|autumn|winter)\b',
+                        re.A | re.I)
+_OUTSIDE_PLACE = re.compile(r'\s+(?:hospitals?|facilit(?:y|ies)|institutions?|cent(?:er|re)s?|clinics?|practices?|'
+                            r'providers?|offices?|gastroenterologists?|physicians?|endoscopists?|doctors?)\b',
+                            re.A | re.I)
+# A participle or a state word is predicative when its clause ends after it, or when it opens an agent,
+# a condition or a reason ("... requested by the referring physician"); before a noun it describes one.
+_PREDICATIVE_AFTER = re.compile(r'[\s,]*(?:$|[.;:!?)\]]|(?:by|until|pending|due|because|per)\b)', re.A | re.I)
 _VERB_BEFORE = re.compile(r'\b(?:was|were|is|are|has|have|had|did|does|will)\b', re.A | re.I)
-_ABBREVIATION = re.compile(r'\(\s*[A-Z][A-Z0-9/&+ -]{0,11}\s*\)', re.A)
 _SEPARATOR = re.compile(r'[\s,:\u2013\u2014-]*', re.A)
+_LANDMARK_AT = re.compile('|'.join(f'(?:{p.pattern})' for _, _, p in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS),
+                          re.A | re.I)
 
 
 def _group_end(an: Analysis, m: Mention, limit: int) -> int:
@@ -574,55 +632,115 @@ def _group_end(an: Analysis, m: Mention, limit: int) -> int:
     return end
 
 
-def _continuation(an: Analysis, pos: int, limit: int, strict: bool) -> Optional[str]:
-    """The first word after ``pos`` (up to ``limit``) that keeps a section from speaking for
-    the service named before ``pos``, or None when the description simply goes on or ends
-    there. ``strict`` under a procedure heading (see _CONTINUES)."""
-    text = an.text
-    pos = _SEPARATOR.match(text, pos, limit).end()
-    abbreviation = _ABBREVIATION.match(text, pos, limit)
-    if abbreviation:
-        return _continuation(an, abbreviation.end(), limit, strict)
-    if pos >= limit or text[pos] in '.;!?\n)':
-        return None
-    if text[pos] == '(':
-        return _continuation(an, pos + 1, limit, strict)
+def _named_at(an: Analysis, pos: int, limit: int) -> Optional[int]:
+    """The end of a service name, an intervention or a landmark that starts at ``pos``."""
     near = min(limit, pos + 120)  # a name that starts here is short; never list the whole sentence
-    if any(m.start == pos for m in an.services_in(pos, near)):
-        return None  # another service name: a list or a coordination
-    if any(iv.start == pos for iv in an.interventions_in(pos, near)):
+    for m in an.services_in(pos, near):
+        if m.start == pos:
+            return m.end
+    for iv in an.interventions_in(pos, near):
+        if iv.start == pos:
+            return iv.end
+    landmark = _LANDMARK_AT.match(an.text, pos, limit)
+    return landmark.end() if landmark else None
+
+
+def _to_stops(an: Analysis, word: re.Match, limit: int, purpose: bool) -> Optional[str]:
+    """None when this "to" opens an extent (or, with ``purpose``, a listed purpose); else what it opens."""
+    text = an.text
+    at = _SEPARATOR.match(text, word.end(), limit).end()
+    follow = _NEXT_WORD.match(text, at, limit)
+    if follow is None:
+        return 'to'
+    following = follow.group(0).lower()
+    if (following[0].isdigit() or following in _TO_EXTENT or _LANDMARK_AT.match(text, at, limit)
+            or any(m.start == at for m in an.services_in(at, min(limit, at + 120)))):
         return None
-    if any(p.match(text, pos, limit) for _, _, p in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS):
+    if purpose and following in _TO_PURPOSE:
         return None
-    if cues.DOUBT_TOKEN.match(text, pos, limit):
-        return None  # a negation word: the unresolved-negation check reads it, with its exceptions
-    word = _NEXT_WORD.match(text, pos, limit)
-    if word is None:
-        return text[pos]
-    lowered = word.group(0).lower()
-    if _ON_HOLD.match(text, word.start(), limit):
-        return word.group(0)
+    return f'to {follow.group(0)}'
+
+
+def _stop_word(an: Analysis, word: re.Match, limit: int, first: bool, procedure: bool,
+               previous: str) -> Optional[str]:
+    """The words that keep the section from speaking for the service, when ``word`` opens them."""
+    text, said = an.text, word.group(0)
+    lowered = said.lower()
+    hold = _ON_HOLD.match(text, word.start(), limit)
+    if hold:
+        return hold.group(0)
     if lowered == 'to':
-        at = _SEPARATOR.match(text, word.end(), limit).end()
-        follow = _NEXT_WORD.match(text, at, limit)
-        near = min(limit, at + 120)
-        if follow is not None and (follow.group(0)[0].isdigit() or follow.group(0).lower() in _TO_EXTENT
-                                   or any(p.match(text, at, limit) for _, _, p in cues.UPPER_LANDMARKS
-                                          + cues.LOWER_LANDMARKS)
-                                   or any(m.start == at for m in an.services_in(at, near))):
-            return None
-        return f'to {follow.group(0)}' if follow is not None else 'to'
-    if lowered[0].isdigit() or lowered in _CONTINUES:
+        return None if previous in _TO_RELATIONS else _to_stops(an, word, limit, purpose=procedure or not first)
+    if lowered[0].isdigit():
         return None
-    if lowered in _COPULA:
+    if lowered == 'due' and re.match(r'\s+to\b', text[word.end():limit]):
+        return None  # "due to iron deficiency anemia": a reason
+    if first and lowered in _COPULA:
         at = _SEPARATOR.match(text, word.end(), limit).end()
         after = _NEXT_WORD.match(text, at, limit)
-        if cues.DOUBT_TOKEN.match(text, at, limit) or (after and after.group(0).lower() in _AFTER_COPULA):
+        following = after.group(0).lower() if after else ''
+        if cues.DOUBT_TOKEN.match(text, at, limit) or following in _AFTER_COPULA or following in _DESCRIPTIVE_ED:
             return None
-        return word.group(0)
-    if strict or lowered in _PREDICATES or (lowered.endswith('ed') and lowered not in _DESCRIPTIVE_ED):
-        return word.group(0)
+        return said
+    if lowered == 'last':
+        unit = _TIME_UNIT.match(text, word.end(), limit)
+        return said + unit.group(0) if unit and previous not in _DETERMINERS else None
+    if lowered == 'outside':
+        place = _OUTSIDE_PLACE.match(text, word.end(), limit)
+        return said + place.group(0) if place else None
+    if lowered in ('previously', 'earlier') and previous in _DETERMINERS:
+        return None  # "the previously tattooed site": it describes a place
+    if lowered in ('pending', 'awaiting') and previous in _RESULT_WORDS:
+        return None  # "pathology pending": the result's, not the service's
+    if lowered in _WHEN_WORDS and _TOLD_IN_THE_PAST.match(text, word.end(), limit):
+        return None
+    if lowered in _QUALIFIERS:
+        return said
+    if lowered in _PREDICATIVE_STATES and _PREDICATIVE_AFTER.match(text, word.end(), limit):
+        return said
+    if lowered in _CONTINUES:
+        return None
+    participle = lowered.endswith('ed') and lowered not in _DESCRIPTIVE_ED
+    if first:
+        return said if lowered in _PREDICATES or participle else None
+    if participle and _PREDICATIVE_AFTER.match(text, word.end(), limit):
+        return said
     return None
+
+
+def _continuation(an: Analysis, pos: int, limit: int, clause_end: int, procedure: bool) -> Optional[str]:
+    """The words after ``pos`` (up to ``limit``, the end of the name's sentence) that keep a section
+    from speaking for the service named before ``pos``, or None when they describe the procedure or
+    what it found (see above). The first word is read even where a clause word opens it
+    ("Colonoscopy, however, was not."); later words only up to ``clause_end``, the end of the name's
+    own clause. ``procedure``: under a procedure heading, where a "to" may open the procedure's
+    purpose."""
+    text = an.text
+    limit = min(limit, pos + CONTINUATION_REACH)
+    first, previous = True, ''
+    while True:
+        pos = _SEPARATOR.match(text, pos, limit).end()
+        if pos >= limit or text[pos] in '.;!?\n' or (not first and pos >= clause_end):
+            return None
+        named = _named_at(an, pos, limit)
+        if named is not None:
+            pos, first, previous = named, False, ''
+            continue
+        token = cues.DOUBT_TOKEN.match(text, pos, limit)
+        if token:  # a negation word: the unresolved-negation check reads it, with its exceptions
+            pos, first, previous = token.end(), False, ''
+            continue
+        word = _NEXT_WORD.match(text, pos, limit)
+        if word is None:
+            pos += 1  # other punctuation (' | ', '/', '+', '&', a bracket, a bullet, a box) carries no status
+            continue
+        lowered = word.group(0).lower()
+        if lowered in _REPORTING or (not first and lowered in _RELATIVES):
+            return None
+        stop = _stop_word(an, word, limit, first, procedure, previous)
+        if stop is not None:
+            return stop
+        pos, first, previous = word.end(), False, word.group(0).lower()
 
 
 # The subject of a sentence that speaks of the service named just before it.
@@ -677,6 +795,14 @@ def _next_line_denial(an: Analysis, s: int, e: int, bare: bool) -> Optional[str]
     return line if cancelled or _denying_word(an, ns, ne) else None
 
 
+def _clause_end(an: Analysis, pos: int, e: int) -> int:
+    """The end of the clause that holds ``pos`` (at most ``e``)."""
+    for cs, ce in an.lay.clauses_for(pos, pos + 1):
+        if cs <= pos < ce:
+            return min(ce, e)
+    return e
+
+
 def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
     """A cue when a section default would make a named service performed although the words
     around the name are not those of a procedure description, or the next line speaks of it
@@ -689,7 +815,8 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
                  if _overlaps(m.start, m.end, ts, max(te, ts + 1))]
         for m in named:
             end = _group_end(an, m, e)
-            word = _continuation(an, end, e, strict=an.lay.section_at(m.start).kind == 'procedure')
+            word = _continuation(an, end, e, _clause_end(an, m.start, e),
+                                 procedure=an.lay.section_at(m.start).kind == 'procedure')
             if word is not None:
                 an.memo[key] = f"{SILENT_SECTION_PREFIX} '{word}' follows the service name, so its section does not make it performed"
                 break

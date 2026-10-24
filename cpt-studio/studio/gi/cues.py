@@ -64,6 +64,7 @@ def _pre(trigger: str, filler: str, count: int = 5) -> re.Pattern:
 
 # --- negation: the service did not happen --------------------------------------
 
+REFUSAL = 'refusal'  # the NEGATED_PRE label whose trigger never speaks of earlier encounters ("left before")
 NEGATED_PRE = (
     ('no / without', _pre(r'no|without|w/o', _NEG_FILLER)),
     ('did not undergo', _pre(r"(?:did|does|has|have|had)\s+not\s+(?:yet\s+|previously\s+|ever\s+)?"
@@ -80,6 +81,13 @@ NEGATED_PRE = (
     ('not', _pre(r'not', _NOT_FILLER, 3)),
     # a replacement: "flexible sigmoidoscopy instead of colonoscopy", "EGD rather than EUS"
     ('instead of', _pre(r'instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to|in\s+place\s+of', _NEG_FILLER, 4)),
+    # a refusal or an avoidance written before the service: "chose to forgo colonoscopy", "opted out of EUS",
+    # "decided against EGD", "elected not to undergo colonoscopy", "left before the EUS". Always about today.
+    (REFUSAL, _pre(r'(?:forgo|forego)(?:es|ing|ne)?|fore?went'
+                   r'|opt(?:s|ed|ing)?\s+out\s+of|(?:decid|opt|elect)(?:e|es|ed|ing|s)?\s+against'
+                   r'|(?:elect|chose|choose|decid|opt|wish|want)(?:e|es|ed|ing|s)?\s+not\s+to\s+'
+                   r'(?:have|undergo|proceed\s+with|pursue)'
+                   r'|(?:left|leaves|leaving)\s+(?:before|without|prior\s+to)', _NEG_FILLER, 4)),
 )
 # What a "no <service> ..." phrase governs when the service name only qualifies the next
 # word: "No flexible sigmoidoscopy complications", "no EGD-related bleeding", "no EUS-guided
@@ -104,9 +112,10 @@ NEGATED_POST = (
     # elliptical: "EGD was performed; EUS was not." / "colonoscopy wasn't"
     ('was not', rx(r"^[\s,]*(?:was|were|is|are|has\s+been|have\s+been|had\s+been|did|does|do|could|can|will)"
                    r"\s*(?:not|n't)\s*(?=[.;,!?)\]]|$)")),
-    # listed or key-value: "EUS: not performed", "Colonoscopy - not performed", "(not performed)",
+    # listed or key-value: "EUS: not performed", "Colonoscopy - not performed", "(not performed)", a table
+    # row "Colonoscopy | Not performed",
     # "Stent: none", "Colonoscopy: N/A", "Colonoscopy: no", "Colonoscopy: patient declined"
-    ('listed as not done', rx(r'^\s*(?:[:=\u2013\u2014-]+|\(|,)\s*(?:(?:was|were|is|are)\s+)?(?:not\s+(?:yet\s+)?(?:'
+    ('listed as not done', rx(r'^\s*(?:[:=\u2013\u2014|-]+|\(|,)\s*(?:(?:was|were|is|are)\s+)?(?:not\s+(?:yet\s+)?(?:'
                               + _NOT_DONE + r')\b(?<!completed)|none\b|nil\b|no\s*(?=[.;,)\]]|$)|n/?a(?![\w/])|not\s+applicable\b'
                               r'|(?:the\s+)?(?:patient|pt)\s+(?:declined|refused)\b|declined\b|refused\b|omitted\b'
                               r'|not\s+done\b)')),

@@ -264,6 +264,178 @@ class Status1EmHoldSurvivesTests(unittest.TestCase):
                 self.assert_held_beside_a_kept_procedure(text)
 
 
+def ready(proposal):
+    return (proposal.bucket, proposal.status) == ('selected', 'ready')
+
+
+class Status2OrdinaryProcedureLinesTests(unittest.TestCase):
+    """status:2 - a purpose, a date, a place, a joiner (' | ', '/', '+') or a descriptive word after
+    the service name is part of an ordinary procedure line: performed family, ready codes, kept facts."""
+
+    def test_gi02_with_a_purpose_clause(self):
+        original = doc('gi-02')
+        text = original.replace('Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.',
+                                'Esophagogastroduodenoscopy (EGD) to evaluate epigastric pain, with cold forceps biopsy.')
+        self.assertNotEqual(text, original)
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+        proposals, _ = run_engine(text, [('43239', 'Two cold forceps biopsies were taken from the gastric antrum for '
+                                                   'histology and Helicobacter pylori assessment.')])
+        self.assertTrue(ready(proposals['43239']), proposals['43239'].clarifications)
+
+    def test_gi10_with_a_purpose_clause(self):
+        original = doc('gi-10')
+        text = original.replace('Endoscopic retrograde cholangiopancreatography (ERCP) with biliary sphincterotomy and '
+                                'balloon extraction of common bile duct stones.',
+                                'ERCP to remove common bile duct stones, with biliary sphincterotomy and balloon '
+                                'extraction.')
+        self.assertNotEqual(text, original)
+        pick = [('43262', 'A biliary sphincterotomy of moderate size was performed with blended current.')]
+        self.assertEqual(family(text, 'gi.ercp'), family(original, 'gi.ercp'))
+        self.assertEqual(family(text, 'gi.ercp'), 'performed')
+        self.assertTrue(ready(run_engine(text, pick)[0]['43262']))
+
+    def test_eus_purpose_clause_keeps_its_target(self):
+        text = (HEADER + 'Procedure: EUS to evaluate a pancreatic head mass.\nTechnique: The linear echoendoscope was '
+                'advanced to the second part of the duodenum.\nFindings: A 24 mm hypoechoic mass was seen in the '
+                'pancreatic head. Fine-needle biopsy (FNB) was performed with a 22-gauge needle using three passes.\n')
+        self.assertEqual(family(text, 'gi.eus'), 'performed')
+        self.assertEqual(fact_value(text, 'gi.eus', 'target'), 'pancreatic head mass')
+        proposals, _ = run_engine(text, [('43242', 'Fine-needle biopsy (FNB) was performed with a 22-gauge needle using '
+                                                   'three passes.')])
+        self.assertTrue(ready(proposals['43242']), proposals['43242'].clarifications)
+
+    def test_docx_table_rows(self):
+        text = (HEADER + 'Procedures performed:\nColonoscopy | Performed | Cecum reached, 2 polyps removed\nFindings: '
+                'The colonoscope was advanced to the cecum. Two polyps were removed with a cold snare.\n')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assertTrue(ready(run_engine(text, [('45385', 'Two polyps were removed with a cold snare.')])[0]['45385']))
+        denied = HEADER + 'Procedures performed:\nColonoscopy | Not performed | Patient declined\n'
+        self.assertEqual(family(denied, 'gi.colonoscopy'), 'negated')
+
+    def test_status0_and_status1_inputs_are_ready(self):
+        text = doc('gi-03').replace(GI03_LINE, 'Colonoscopy to screen for colorectal cancer, with cold snare polypectomy '
+                                               'and cold forceps biopsy.')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        proposals, _ = run_engine(text, [('45385', GI03_SNARE), ('45380', GI03_FORCEPS)])
+        self.assertTrue(ready(proposals['45385']) and ready(proposals['45380']))
+        for line in ('Colonoscopy to evaluate iron deficiency anemia.', 'Colonoscopy on 2026-10-21.',
+                     'Colonoscopy/polypectomy.', 'Colonoscopy, average-risk screening.'):
+            text = colon_with_plan(line)
+            with self.subTest(line=line):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assertTrue(ready(run_engine(text, [('45385', POLYPS)])[0]['45385']))
+        self.assertEqual(family(EGD_C, 'gi.egd'), 'performed')
+        proposals, _ = run_engine(EGD_C, EGD_PICKS)
+        self.assertTrue(ready(proposals['43249']) and ready(proposals['43239']))
+        self.assertEqual(family(STATUS1, 'gi.flex_sig'), 'performed')
+        proposals, _ = run_engine(STATUS1, STATUS1_PICKS)
+        self.assertTrue(ready(proposals['45331']))
+        self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_ordinary_lines_read_performed_under_a_procedure_heading(self):
+        for line in ('Colonoscopy for evaluation of rectal bleeding.', 'Colonoscopy to evaluate rectal bleeding.',
+                     'Colonoscopy on 2026-10-21.', 'Colonoscopy at Harborview Endoscopy Center.',
+                     'Colonoscopy, average-risk screening.', 'Colonoscopy + polypectomy.', 'Colonoscopy/polypectomy.',
+                     'Colonoscopy due to iron deficiency anemia.', 'Colonoscopy prior to surgery.',
+                     'Colonoscopy | Diagnostic | Biopsies taken',
+                     'Colonoscopy, screening, with cold snare polypectomy of a 6 mm polyp that was retrieved.',
+                     'Colonoscopy with biopsy of a lesion of uncertain significance.',
+                     'Colonoscopy with cold snare polypectomy, pathology pending.',
+                     'Colonoscopy with biopsy of a suspected adenoma at the previously tattooed site.',
+                     'Colonoscopy with polypectomy of a polyp detected on CT.',
+                     'Colonoscopy with polypectomy upon withdrawal.',
+                     'Colonoscopy with biopsies taken when abnormal mucosa was seen.',
+                     'Colonoscopy with removal of a polyp that had a stalk.', 'Colonoscopy was uncomplicated.',
+                     'Colonoscopy (diagnostic) to the terminal ileum.'):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                status, cues = read(text, 'Colonoscopy')
+                self.assertEqual(status, 'performed', cues)
+        for line in ('EGD with duodenal biopsies to evaluate for possible celiac disease.',
+                     'EUS-guided fine-needle biopsy of a mass that was suspicious for malignancy.'):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(read(text, line.split()[0].split('-')[0])[0], 'performed')
+
+    def test_findings_text_about_another_act_does_not_hold_the_service(self):
+        for line in ('Colonoscopy showed a large polyp in the ascending colon that will require EMR at a later date.',
+                     'Colonoscopy revealed a 3 cm polyp, which is to be removed at a later date.',
+                     'Colonoscopy showed a 3 cm polyp in the ascending colon, for EMR at a later date.',
+                     'Colonoscopy with polypectomy of a polyp that had been seen previously on CT.',
+                     'Colonoscopy with cold snare polypectomy, but the patient may need surveillance later.'):
+            text = HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+    def test_round1_rules_kept(self):
+        """Outside a procedure heading only an extent continues after 'to'; a future after 'to' never does."""
+        for line in ('Findings: Colonoscopy to check for recurrence.', 'Findings: Colonoscopy to evaluate the polyp.',
+                     'Procedure: Colonoscopy to be scheduled.', 'Procedure: Colonoscopy to follow.',
+                     'Procedure: Colonoscopy to come.', 'Procedure: Colonoscopy to check for recurrence.'):
+            with self.subTest(line=line):
+                self.assertNotEqual(read(HEADER + line + '\n', 'Colonoscopy')[0], 'performed')
+
+
+class Status6QualifierAnywhereInTheClauseTests(unittest.TestCase):
+    """status:6 - a planned, historical, pending or questioned qualifier anywhere after the name in its
+    clause, or a refusal before it, keeps the section from speaking for the service."""
+
+    EUS_LINES = ('EUS with fine-needle biopsy at a later date.', 'EUS with fine-needle biopsy once the INR is corrected.',
+                 'EUS with fine-needle biopsy at an outside hospital last year.',
+                 'EUS with fine-needle biopsy (to confirm with the patient).',
+                 'The patient opted out of EUS with fine-needle biopsy.',
+                 'The patient left before the EUS with fine-needle biopsy.')
+
+    def test_the_claimed_eus_lines(self):
+        for line in self.EUS_LINES:
+            text = HEADER + 'Indication: A 2.4 cm pancreatic head mass on CT.\nProcedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+                self.assertNotEqual(fact_value(text, 'gi.eus', 'tissue_sampling'), 'FNB')
+                proposals, _ = run_engine(text, [('43242', 'EUS with fine-needle biopsy')])
+                self.assertNotEqual(proposals['43242'].status, 'ready')
+
+    def test_a_refusal_before_the_name_is_about_today(self):
+        for line in ('The patient opted out of EUS with fine-needle biopsy.',
+                     'The patient left before the EUS with fine-needle biopsy.',
+                     'The patient chose to forgo EUS.', 'The patient elected not to undergo EUS.',
+                     'The patient decided against EUS.'):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(family(text, 'gi.eus'), 'negated')
+        # the refusal denies the section-read service line above it: it is not about earlier encounters
+        text = HEADER + 'Procedure: EUS\nThe patient left before the EUS could be started.\n'
+        self.assertEqual(family(text, 'gi.eus'), 'negated')
+
+    def test_the_colonoscopy_matrix(self):
+        for heading in ('Procedure:', 'Findings:', 'Technique:'):
+            for line in ('Colonoscopy with polypectomy pending clearance.', 'Colonoscopy with polypectomy, date TBD.',
+                         'Colonoscopy with polypectomy to be determined.', 'Colonoscopy with polypectomy last year.',
+                         'Colonoscopy with polypectomy elsewhere.', 'Colonoscopy with polypectomy previously.',
+                         'Colonoscopy with polypectomy: unknown.', 'The patient chose to forgo colonoscopy.',
+                         'Colonoscopy with polypectomy at an outside hospital.',
+                         'Colonoscopy with polypectomy when the INR is corrected.',
+                         'Colonoscopy with polypectomy, requested by the referring physician.'):
+                text = HEADER + heading + ' ' + line + '\n'
+                with self.subTest(heading=heading, line=line):
+                    self.assertNotIn(family(text, 'gi.colonoscopy'), POSITIVE)
+                    status, cues = read(text, 'olonoscopy')
+                    self.assertNotEqual(status, 'performed', cues)
+                    self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+
+    def test_controls_stay_performed(self):
+        for line in ('EUS with fine-needle biopsy of the pancreatic head mass.', 'Colonoscopy with polypectomy.',
+                     'Colonoscopy with cold snare polypectomy of a 6 mm sigmoid polyp that was retrieved.',
+                     'The patient underwent colonoscopy with polypectomy.',
+                     'Under monitored anesthesia care, colonoscopy with polypectomy.',
+                     'Colonoscopy with polypectomy, which was uncomplicated.',
+                     'Colonoscopy with polypectomy of the last remaining polyp.'):
+            slug = 'gi.eus' if 'EUS' in line else 'gi.colonoscopy'
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(family(text, slug), 'performed')
+
+
 STATUS9 = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the splenic flexure, where an '
            'obstructing mass was biopsied. On her colonoscopy in 2023 the cecum was reached.\n')
 
