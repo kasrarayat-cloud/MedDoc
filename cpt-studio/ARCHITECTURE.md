@@ -211,22 +211,76 @@ recorded as encounter metadata, never as clinical facts.
 
 ### 5.3 `studio/gi/profiles` + `studio/gi/detect` — routing
 
-`PROFILES`: versioned internal profiles `gi.office_em`, `gi.egd`,
-`gi.colonoscopy`, `gi.flex_sig`, `gi.eus`, `gi.ercp`, `gi.other_supported`
-(none yet), `gi.unsupported`; each has `version`, `label`, card `eyebrow`,
-numeric code ranges used **only for routing**, `required_facts`, and
-`supported` (bool). Codes outside every GI range route to `gi.unsupported`.
+`PROFILES` (`gi-profiles@2`): versioned internal profiles. Supported:
+`gi.office_em`, `gi.egd`, `gi.colonoscopy`, `gi.flex_sig`, `gi.eus`,
+`gi.ercp`. Recognised without a profile (review required): `gi.sedation`,
+`gi.em_other`, `gi.other`. Codes outside every GI range route to
+`gi.unsupported`. Each has `version`, `label`, card `eyebrow`, numeric code
+ranges used **only for routing**, `required_facts`, `procedure`, and
+`supported` (bool).
 
-`route(text) -> RoutingResult` detects documented services per family with:
-mention span, containing sentence span, section (procedure, findings,
-technique, impression, indication, history, plan, assessment, other), status
-(performed | incomplete | planned | historical | cancelled | negated |
-uncertain) with the cues that decided it, and family facts with evidence
-(extent reached, interventions/technique, anatomic location, intent
-screening/surveillance/diagnostic, prep quality, E/M basis: total time /
-MDM). Status is **fail-closed**: "performed" needs positive evidence;
-anything ambiguous is `uncertain`. Plan/recommendation sections and future
-dates default to `planned`; history sections to `historical`.
+`route(text, service_date) -> RoutingResult` (`gi-routing@3`) detects
+documented services per family with: mention span, containing sentence span,
+section (procedure, findings, technique, impression, indication, history,
+plan, assessment, other), status (performed | incomplete | planned |
+historical | cancelled | negated | uncertain) with the cues that decided it,
+and family facts with evidence (extent reached, interventions/technique,
+anatomic location, intent screening/surveillance/diagnostic, prep quality,
+E/M basis: total time / MDM, the separately identifiable E/M statement).
+Status is **fail-closed**: "performed" needs positive evidence; anything
+ambiguous is `uncertain`. Plan/recommendation sections and future dates
+default to `planned`; history sections to `historical`.
+
+The six supported families are `DETECTED_FAMILIES`. Routing also emits one
+`gi.other` finding for procedures documented at this encounter that name none
+of them. It is recognised by form, not by a list of names (-scopy, -ectomy and
+similar endings, ligation, banding, biopsy...), in three places: the first
+sentence of a procedure section and the items on its check-box lines; the
+subject of "<procedure> was performed"; and the object of "underwent" or "we
+performed". A name is never `gi.other` if it belongs to a detected family, is
+an examination, test, sedation, consent or person, or opens with a negation,
+condition or plan word. Each mention is read on its own; the family reads
+performed, then incomplete, then uncertain if any mention does, otherwise the
+usual aggregate. `gi.other` stays outside `DETECTED_FAMILIES`: a `gi.other`
+code's own status comes from its own passage (5.6).
+
+- A family's status ranks what its mentions say of today's service
+  (incomplete, cancelled, negated today, uncertain) before what they say of
+  other encounters (never before, historical, planned); a plan or history
+  mention never contradicts today's service unless its clause says today. A
+  family's reading reaches its explicitly performed passages only as
+  cancelled, incomplete or uncertain, never as planned, historical or negated.
+- A service's whole clause is read for qualifiers (a later or outside date,
+  outside provider, pending, TBD, last year, a refusal before its name); a
+  status line or a later denial ("Status: Cancelled.", "Not performed.",
+  "Patient declined.") denies the line above. History told by relative time
+  or by another provider reads historical; an explicit performance cue under
+  Indication reads uncertain unless its clause says today. "As scheduled",
+  "as planned" and "as arranged" keep a done service done; a request
+  ("requested by the referring physician") reads uncertain, never historical.
+- No fact is read from a clause about another procedure (a dated, planned,
+  denied or doubtful one); a failed sub-act (terminal ileum, retroflexion)
+  does not make a family that reached its expected extent incomplete;
+  shorthand extents ("to cecum", "to TI", "to 30 cm", "to D2") are read;
+  intent is never read from a question.
+- Sections open on a heading with or without a colon; discussion,
+  counseling, education and "risks and benefits" headings are plan sections.
+  A prose line cut on a word a sentence cannot end on runs on into the next
+  line, whatever its case.
+- The separately identifiable E/M statement counts only when it is about this
+  encounter: no conditional or normative wording, no other encounter, no date
+  other than the date of service.
+- Check boxes (the contract with 5.1; pasted text is read the same way):
+  unchecked ☐ □ ◻ ◽ ❏ ❐ ❑ ❒, `[ ]`, `[_]`, `( )`; checked ☑ ☒ ✓ ✔ ■ ⌧,
+  `[x]`, `(x)`. A box governs an item on its own sentence and line within
+  `BOX_REACH`, before it (`☐ Biopsy`) or after it (`Biopsy | ☐`,
+  `Biopsy: ☐`); a yes/no pair is read by the option marked. The
+  `[PDF form fields on page N]` and `[PDF annotation text on page N]` blocks
+  are section boundaries of kind `other` with no default; `<label>: not
+  checked` (unchecked, no option selected) negates the item its label names;
+  `<label>: checked` is silent, so the rest of the document decides.
+- Validation reads three cue prefixes (5.6): `uncertain: no performance
+  evidence` (silent), `performed:` and `section: <kind>`.
 
 ### 5.4 `studio/providers` — proposal adapters
 
