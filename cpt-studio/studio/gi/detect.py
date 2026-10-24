@@ -445,7 +445,7 @@ def _token_explanations(an: Analysis, clause: tuple[int, int], token: tuple[int,
         explains = [(c.start, c.end) for c in an.cues_in(max(cs, token[0] - 200), min(ce, token[1] + 200))]
         explains += _landmark_negations_near(an, clause, token)
         masked, where = _masked_map(an, max(cs, token[0] - 40), min(ce, token[1] + 400))
-        for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION):
+        for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, _OPTION_LABEL):
             explains += [(where[m.start()], where[m.end()]) for m in pattern.finditer(masked)]
         # A denied finding or a denied other act explains the word only outside the passage being
         # read: "No polyps were seen" quoted as the evidence for a polypectomy is not "performed".
@@ -771,7 +771,7 @@ _OPENER = re.compile(r'(?:(?:however|unfortunately|ultimately|eventually|subsequ
                      r'\b[\s,]*)+', re.A | re.I)
 # A status line: "Status: Cancelled.", "Procedure status: Not performed - the patient had eaten breakfast."
 _STATUS_KEY = re.compile(r'(?:(?:procedure|case|exam|examination|study|service|endoscopy)[ \t]+)?status[ \t]*'
-                         r'[:=–—-][ \t]*', re.A | re.I)
+                         r'[:=\u2013\u2014-][ \t]*', re.A | re.I)
 _STATUS_DONE = re.compile(r'(?:performed|completed?|done|successful(?:ly)?|finished|accomplished)\b', re.A | re.I)
 # A status value that holds the service ("Status: Pending.", "Status: TBD"); a negation or a cancelling,
 # deferring or doubting cue is read as on a bare line.
@@ -1025,24 +1025,81 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     return Reading('uncertain', (SILENT,), 'default')
 
 
-# Checkbox glyphs as extraction writes them (Wingdings and form fields map to these) and their ASCII forms.
-# The box nearest before an item on its line governs it: "☐ Biopsy ☒ Cold snare polypectomy".
-_BOX = re.compile(r'(?P<off>\u2610|\u25a1|\[[ _]?\])|(?P<on>\u2611|\u2612|\u2713|\u2714|\u25a0|\[[xX\u2713\u2714]\])')
+# Check boxes, as extraction writes them (U+2610 unchecked, U+2612 checked) and as pasted text carries them
+# (the shared contract): unchecked U+2610 U+25A1 U+25FB U+25FD U+274F U+2750 U+2751 U+2752, "[ ]", "[_]",
+# "( )"; checked U+2611 U+2612 U+2713 U+2714 U+25A0 U+2327, "[x]", "(x)". PDF form fields are also written
+# as "<label>: not checked" (see _unchecked_state).
+_BOX = re.compile(r'(?P<off>[\u2610\u25a1\u25fb\u25fd\u274f\u2750\u2751\u2752]|\[[ _]?\]|\( \))'
+                  r'|(?P<on>[\u2611\u2612\u2713\u2714\u25a0\u2327]|\[[xX\u2713\u2714]\]|\([xX]\))')
 UNCHECKED = 'negated: an unchecked box'
-
-
-BOX_REACH = 200  # a box governs only an item within this many characters after it (bounds the work per span)
+BOX_REACH = 200  # a box governs only an item within this many characters of it, on its line (bounds the work per span)
+# The option a box marks in a yes/no pair ("Biopsy taken: [x] Yes [ ] No", "Biopsy taken: Yes [ ] No [x]").
+_OPTION_WORDS = r'(?:(?P<yes>yes|done|performed)|(?P<no>no|not[ \t]+done|not[ \t]+performed|none))'
+_OPTION_AFTER = re.compile(r'[ \t]*' + _OPTION_WORDS + r'\b', re.A | re.I)
+_OPTION_BEFORE = re.compile(r'\b' + _OPTION_WORDS + r'[ \t]*$', re.A | re.I)
+# A "No" that labels a box is an option, not a negation of the item ("[x] Yes [ ] No"): it explains itself.
+_BOX_TEXT = _BOX.pattern.replace('?P<off>', '?:').replace('?P<on>', '?:')
+_NO_OPTION = r'(?:no|none|not[ \t]+done|not[ \t]+performed)'
+_OPTION_LABEL = re.compile(r'(?:' + _BOX_TEXT + r')[ \t]*' + _NO_OPTION + r'\b|\b' + _NO_OPTION + r'[ \t]*(?:' + _BOX_TEXT
+                           + r')', re.A | re.I)
 
 
 def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
-    """Whether the item at [start, end) is governed by an unchecked box on its own line, within BOX_REACH."""
-    reach = max(0, start - BOX_REACH)
-    newline = an.text.rfind('\n', reach, start)
-    line_start = newline + 1 if newline >= 0 else reach
-    last = None
-    for m in _BOX.finditer(an.text, line_start, max(end, start + 1)):
-        last = m
-    return last is not None and last.group('off') is not None
+    """Whether the item at [start, end) is governed by an unchecked box in its own sentence and line,
+    within BOX_REACH of it. Whether the boxes there lead or trail their items is told by what comes last:
+    - an item ("[ ] Biopsy [x] Cold snare polypectomy", "( ) Biopsy", "Checklist: [ ] Biopsy.",
+      "Colonoscopy: [ ] biopsy [x] cold snare"): boxes lead, so the box nearest before the item (or inside
+      the passage) governs it;
+    - a box ("Biopsy | [ ]", "Biopsy: [ ]", "Biopsy [ ]", "Biopsy | [ ] | Cold snare polypectomy | [x]",
+      "Biopsy taken: [ ] Yes [x] No"): boxes trail, so the first box after the item, with no other item
+      between them, governs it; a yes/no pair there is read by the option it marks."""
+    key = ('box', start, end)
+    if key not in an.memo:
+        text, span_end = an.text, max(end, start + 1)
+        sentence_start, sentence_end = an.lay.sentence_for(start, end)
+        lo = max(0, start - BOX_REACH, min(sentence_start, start))
+        newline = text.rfind('\n', lo, start)
+        line_start = newline + 1 if newline >= 0 else lo
+        hi = min(len(text), span_end + BOX_REACH, max(sentence_end, span_end))
+        newline = text.find('\n', end, hi)
+        line_end = hi if newline < 0 else newline
+        boxes = list(_BOX.finditer(text, line_start, line_end))
+        result = False
+        if boxes:
+            items = sorted({(m.start, m.end) for m in an.services_in(line_start, line_end)}
+                           | {(iv.start, iv.end) for iv in an.interventions_in(line_start, line_end)} | {(start, end)})
+            if items[-1][1] > boxes[-1].start():
+                before = [b for b in boxes if b.start() < span_end]
+                result = bool(before) and before[-1].group('off') is not None
+            else:
+                label_end = span_end  # items written on to the passage are one label ("Cold snare polypectomy")
+                for item_start, item_end in items:
+                    if item_start >= label_end and not text[label_end:item_start].strip(' \t-'):
+                        label_end = item_end
+                after = next((s for s, _ in items if s >= label_end), line_end)
+                group = [b for b in boxes if start <= b.start() < after]
+                result = bool(group) and _group_unchecked(text, group)
+        an.memo[key] = result
+    return an.memo[key]
+
+
+def _group_unchecked(text: str, group: list[re.Match]) -> bool:
+    """The boxes after an item, up to the next item: the first one governs, unless they mark yes/no options.
+    Then the item is denied when "No" is checked or "Yes" is not."""
+    first = group[0]
+    if _OPTION_BEFORE.search(text, max(0, first.start() - 20), first.start()):
+        marks = [(b, _OPTION_BEFORE.search(text, max(0, b.start() - 20), b.start())) for b in group]
+    elif _OPTION_AFTER.match(text, first.end()):
+        marks = [(b, _OPTION_AFTER.match(text, b.end())) for b in group]
+    else:
+        return first.group('off') is not None
+    yes = next((b for b, word in marks if word and word.group('yes')), None)
+    no = next((b for b, word in marks if word and word.group('no')), None)
+    if no is not None and no.group('on'):
+        return True
+    if yes is not None:
+        return yes.group('off') is not None
+    return False
 
 
 # A form line whose whole value says its box is off ("Biopsy: not checked", "Extent reached: no option
@@ -1378,11 +1435,13 @@ def _about_another_procedure(an: Analysis, start: int, end: int) -> bool:
     say today. A fact read there ("On her colonoscopy in 2023 the cecum was reached", "Her prior
     colonoscopy reached the cecum", "EUS with fine-needle biopsy at a later date") is that other
     procedure's, never today's. A negation of earlier encounters ("no prior colonoscopy") and a
-    service named only to compare with do not count."""
+    service named only to compare with do not count. Only the clause within CLAUSE_REACH of the
+    fact is read, so a long clause naming many services costs no more per fact."""
     key = ('another-procedure', start, end)
     if key not in an.memo:
         an.memo[key] = False
-        for cs, ce in an.lay.clauses_for(start, end):
+        for clause in an.lay.clauses_for(start, end):
+            cs, ce = an.lay.window(clause, start, end, CLAUSE_REACH)  # bounded, like every clause reading
             if cues.TODAY.search(an.text, cs, ce):
                 continue
             for svc in an.services_in(cs, ce):

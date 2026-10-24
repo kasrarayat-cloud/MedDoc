@@ -712,6 +712,99 @@ class Status10FormBlockTests(unittest.TestCase):
         self.assertNotIn(read(annotations, 'Cold snare polypectomy: checked')[0], ('planned', 'historical'))
 
 
+BOXED = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
+         'was found.\nInterventions performed\n')
+
+
+class Status11BoxAfterItsLabelTests(unittest.TestCase):
+    """status:11 - a box after its label on the same line or table cell, or a '( )' box, is read; the
+    layout of the item's own sentence decides which box governs; a yes/no pair is read by its options."""
+
+    def assert_boxes(self, rows, biopsy, snare):
+        text = BOXED + rows
+        self.assertEqual(read(text, 'Biopsy')[0], biopsy, rows)
+        self.assertEqual(read(text, 'Cold snare polypectomy')[0], snare, rows)
+        interventions = fact_value(text, 'gi.colonoscopy', 'interventions') or ''
+        self.assertEqual('biopsy' in interventions, biopsy == 'performed', (rows, interventions))
+        self.assertEqual('cold snare' in interventions, snare == 'performed', (rows, interventions))
+        proposals, _ = run_engine(text, [('45380', 'Biopsy')])
+        self.assertEqual(proposals['45380'].bucket == 'excluded', biopsy == 'negated', rows)
+
+    def test_the_claimed_layouts(self):
+        for rows in ('Biopsy | ☐\nCold snare polypectomy | ☒\n', 'Biopsy: ☐\nCold snare polypectomy: ☒\n',
+                     'Biopsy [ ]\nCold snare polypectomy [x]\n', '( ) Biopsy\n(x) Cold snare polypectomy\n',
+                     'Biopsy | ☐ | Cold snare polypectomy | ☒\n', '☐ Biopsy ☒ Cold snare polypectomy\n'):
+            with self.subTest(rows=rows):
+                self.assert_boxes(rows, 'negated', 'performed')
+
+    def test_a_checked_box_after_its_label_changes_nothing(self):
+        self.assert_boxes('Biopsy | ☒\nCold snare polypectomy | ☒\n', 'performed', 'performed')
+        self.assert_boxes('Biopsy [X]\nCold snare polypectomy (X)\n', 'performed', 'performed')
+
+    def test_every_contract_glyph(self):
+        for off in ('☐', '□', '◻', '◽', '❏', '❐', '❑', '❒', '[ ]', '[_]', '( )'):
+            for on in ('☑', '☒', '✓', '✔', '■', '⌧', '[x]', '[X]', '(x)', '(X)'):
+                with self.subTest(off=off, on=on):
+                    text = BOXED + f'Biopsy: {off}\nCold snare polypectomy: {on}\n'
+                    self.assertEqual(read(text, 'Biopsy')[0], 'negated')
+                    self.assertEqual(read(text, 'Cold snare polypectomy')[0], 'performed')
+
+    def test_yes_no_pairs_are_read_by_the_option_marked(self):
+        for rows, biopsy, snare in (
+                ('Biopsy taken: ☐ Yes ☒ No\nCold snare polypectomy: ☒ Yes ☐ No\n', 'negated', 'performed'),
+                ('Biopsy taken: No ☐ Yes ☒\nCold snare polypectomy: No ☒ Yes ☐\n', 'performed', 'negated'),
+                ('Biopsy taken: ☐ No ☒ Yes\nCold snare polypectomy: ☒ No ☐ Yes\n', 'performed', 'negated'),
+                ('Biopsy taken: Yes ☐ No ☒\nCold snare polypectomy: Yes ☒ No ☐\n', 'negated', 'performed'),
+                ('Biopsy: ☐ Yes\nCold snare polypectomy: ☒ Yes\n', 'negated', 'performed')):
+            with self.subTest(rows=rows):
+                self.assert_boxes(rows, biopsy, snare)
+
+    def test_a_word_table_with_check_box_controls(self):
+        from studio.ingest import Limits
+        from studio.ingest import docx as docx_ingest
+        from tests.support import docgen
+
+        def control(checked):
+            return ('<w:sdt><w:sdtPr><w14:checkbox><w14:checked w14:val="%d"/></w14:checkbox></w:sdtPr><w:sdtContent>'
+                    '<w:r><w:t>%s</w:t></w:r></w:sdtContent></w:sdt>' % (checked, '☒' if checked else '☐'))
+
+        def row(label, checked):
+            return f'<w:tr><w:tc><w:p><w:r><w:t>{label}</w:t></w:r></w:p></w:tc><w:tc><w:p>{control(checked)}</w:p></w:tc></w:tr>'
+
+        paragraphs = ''.join(f'<w:p><w:r><w:t>{line}</w:t></w:r></w:p>' for line in BOXED.strip('\n').split('\n'))
+        body = paragraphs + '<w:tbl>' + row('Biopsy', 0) + row('Cold snare polypectomy', 1) + '</w:tbl>'
+        result = docx_ingest.extract_docx(docgen.make_docx_from_body(body), Limits())
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertTrue(result.text.endswith('Biopsy | ☐\nCold snare polypectomy | ☒'), result.text)
+        self.assertEqual(read(result.text, 'Biopsy')[0], 'negated')
+        self.assertEqual(fact_value(result.text, 'gi.colonoscopy', 'interventions'), 'cold snare')
+
+    def test_the_box_of_another_sentence_or_item_never_governs(self):
+        text = (HEADER + 'Procedure: Colonoscopy. Checklist: ☐ Biopsy. Findings: The colonoscope was advanced to the '
+                'cecum. A polyp was removed with a cold snare.\n')
+        self.assertEqual(read(text, 'Biopsy')[0], 'negated')
+        self.assertEqual(read(text, 'Colonoscopy')[0], 'performed')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        text = HEADER + 'Procedure: Colonoscopy with biopsy \u2610\nFindings: The colonoscope was advanced to the cecum.\n'
+        self.assertEqual((read(text, 'Colonoscopy')[0], read(text, 'biopsy')[0]), ('performed', 'negated'))
+        text = HEADER + 'Findings: Checklist: \u2610 Biopsy. Colonoscopy with cold snare polypectomy was performed.\n'
+        self.assertEqual((read(text, 'Biopsy')[0], read(text, 'Colonoscopy')[0]), ('negated', 'performed'))
+
+    def test_a_no_option_label_is_not_an_unresolved_negation(self):
+        text = BOXED + 'Cold snare polypectomy: ☒ Yes ☐ No\n'
+        status, cues = read(text, 'Cold snare polypectomy')
+        self.assertEqual(status, 'performed', cues)
+
+    def test_the_reach_after_a_label_is_bounded(self):
+        """Literal distances: a box 152 characters after its label governs it, one 252 after does not."""
+        near = BOXED + 'Biopsy ' + 'x ' * 72 + '☐\n'
+        far = BOXED + 'Biopsy ' + 'x ' * 122 + '☐\n'
+        self.assertEqual(near.index('☐') - near.index('Biopsy'), 151)
+        self.assertEqual(far.index('☐') - far.index('Biopsy'), 251)
+        self.assertEqual(read(near, 'Biopsy')[0], 'negated')
+        self.assertNotEqual(read(far, 'Biopsy')[0], 'negated')
+
+
 STATUS9 = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the splenic flexure, where an '
            'obstructing mass was biopsied. On her colonoscopy in 2023 the cecum was reached.\n')
 
@@ -767,6 +860,20 @@ class Status9FactsFromAnotherProcedureTests(unittest.TestCase):
         text = self.colon('The colonoscope was advanced to the cecum. Two polyps were removed with a cold snare.')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'interventions'), 'cold snare')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'polyp_count'), '2')
+
+
+class ScaleTests(unittest.TestCase):
+    """Every new reading is bounded per span: a long single-clause line naming one family, with boxes and
+    facts in every segment, routes in bounded time (it took 21 s with the fact guard unbounded)."""
+
+    def test_a_long_boxed_line_routes_in_bounded_time(self):
+        import time
+        text = HEADER + 'Findings: ' + ' '.join(['colonoscopy: \u2610 biopsy of the sigmoid colon \u2612 cold snare '
+                                                 'polypectomy |'] * 2000)
+        started = time.monotonic()
+        result = route(text)
+        self.assertLess(time.monotonic() - started, 20)
+        self.assertEqual(result.finding('gi.colonoscopy').status, 'performed')
 
 
 if __name__ == '__main__':
