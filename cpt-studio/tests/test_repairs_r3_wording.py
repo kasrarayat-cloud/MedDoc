@@ -305,3 +305,73 @@ class R20ShortLineDenyingAnotherActTests(unittest.TestCase):
     def test_after_a_bare_service_line_the_57b_hold_is_kept(self):
         text = egd_after('Sedation was not needed.', line='EGD')
         self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+
+
+# --- routing:9 ------------------------------------------------------------------------------------------------
+
+def procedure_line(line):
+    return HEADER + 'Indication: Rectal bleeding.\nProcedure: ' + line + '\n'
+
+
+class R9RefusalAfterTheInterventionTests(unittest.TestCase):
+    """routing:9 - a refusal or "not performed" set off after the intervention of the service's own description
+    ("EGD to D2 with biopsy, declined by the patient.") has no subject of its own: it may deny the whole service,
+    so the service is held (never negated, never performed) and no extent is read from the line. An intervention
+    that is the denial's own subject ("biopsies not taken", ", biopsy declined") still explains it."""
+
+    HELD = (('Flexible sigmoidoscopy to 30 cm with biopsy, declined by the patient.', 'gi.flex_sig', '45330',
+             'Flexible sigmoidoscopy'),
+            ('EGD to D2 with biopsy, declined by the patient.', 'gi.egd', '43235', 'EGD'),
+            ('Colonoscopy with cold snare polypectomy, not performed.', 'gi.colonoscopy', '45378', 'Colonoscopy'))
+    VARIANTS = (('Colonoscopy to the cecum with biopsy, not performed.', 'gi.colonoscopy', '45378', 'Colonoscopy'),
+                ('EUS with fine-needle biopsy, not performed.', 'gi.eus', '43259', 'EUS'),
+                ('Colonoscopy with biopsy, not performed.', 'gi.colonoscopy', '45378', 'Colonoscopy'),
+                ('EGD with dilation, patient declined.', 'gi.egd', '43235', 'EGD'),
+                ('Flexible sigmoidoscopy to 30 cm with biopsy, patient declined.', 'gi.flex_sig', '45330',
+                 'Flexible sigmoidoscopy'),
+                ('EGD with biopsy (declined by the patient).', 'gi.egd', '43235', 'EGD'),
+                ('EGD with biopsy and dilation - not performed.', 'gi.egd', '43235', 'EGD'))
+
+    def assert_held(self, line, slug, code, cite):
+        text = procedure_line(line)
+        self.assertNotIn(family(text, slug), POSITIVE)
+        status, cues = read(text, cite)
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+        self.assertIsNone(fact_value(text, slug, 'extent'))
+        proposals, _ = run_engine(text, [(code, cite)])
+        self.assertFalse(ready(proposals[code]), proposals[code].status)
+
+    def test_the_claimed_inputs(self):
+        for line, slug, code, cite in self.HELD:
+            with self.subTest(line=line):
+                self.assert_held(line, slug, code, cite)
+
+    def test_the_minimal_pairs_and_variants(self):
+        for line, slug, code, cite in self.VARIANTS:
+            with self.subTest(line=line):
+                self.assert_held(line, slug, code, cite)
+        text = procedure_line('EUS with fine-needle biopsy, declined by the patient.')
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+        self.assertNotEqual(fact_value(text, 'gi.eus', 'tissue_sampling'), 'FNB')
+
+    def test_an_intervention_denied_as_its_own_subject_keeps_the_service_performed(self):
+        for line, slug, code, cite in (
+                ('Colonoscopy with polypectomy, biopsies not taken.', 'gi.colonoscopy', '45378', 'Colonoscopy'),
+                ('EGD to D2, biopsy declined by the patient.', 'gi.egd', '43235', 'EGD'),
+                ('EGD to D2 with biopsy.', 'gi.egd', '43239', 'EGD'),
+                ('Colonoscopy with polypectomy; however, biopsies were not taken.', 'gi.colonoscopy', '45378',
+                 'Colonoscopy'),
+                ('Colonoscopy with polypectomy, biopsy: not taken.', 'gi.colonoscopy', '45378', 'Colonoscopy')):
+            text = procedure_line(line)
+            with self.subTest(line=line):
+                self.assertEqual(family(text, slug), 'performed')
+                self.assertEqual(read(text, cite)[0], 'performed')
+        text = procedure_line('EGD to D2, biopsy declined by the patient.')
+        self.assertEqual(read(text, 'biopsy')[0], 'negated')  # the biopsy itself stays denied
+
+    def test_status5_later_clause_holds_are_kept(self):
+        for line, slug in (('Colonoscopy with biopsy; not performed.', 'gi.colonoscopy'),
+                           ('EGD with dilation; patient declined.', 'gi.egd')):
+            with self.subTest(line=line):
+                self.assertNotIn(family(procedure_line(line), slug), POSITIVE)

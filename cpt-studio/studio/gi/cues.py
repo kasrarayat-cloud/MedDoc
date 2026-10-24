@@ -211,7 +211,7 @@ _OTHER_ACT = (r'(?:(?:conscious|moderate|deep|general|IV|intravenous|procedural)
               r'propofol|MAC|analgesia|retroflexion|photo(?:graph)?s?|photodocumentation|images?|irrigation|lavage|'
               r'chromoendoscopy|narrow[- ]band\s+imaging|NBI|contrast|fluoroscopy|intubation\s+of\s+the\s+(?:terminal\s+)?'
               r'ileum)')
-OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=–-]\s*)?(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|"
+OTHER_ACT_DENIED = rx(r'\b' + _OTHER_ACT + r"\s*(?:[:=\u2013-]\s*)?(?:(?:was|were|is|are|has\s+been|have\s+been|had\s+been|"
                       r"could|can|did|does|will)\s*)?(?:not|never|n't)\s+(?:be\s+|been\s+)?(?:needed|required|used|given|"
                       r'administered|performed|done|taken|saved|obtained|indicated|necessary|attempted)\b'
                       r'|\b(?:did|does|do|will)\s*(?:not|n\'t)\s+(?:require|need|receive|undergo|get)\s+(?:any\s+)?'

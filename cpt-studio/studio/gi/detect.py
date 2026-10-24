@@ -403,19 +403,41 @@ def _memberless_negations(an: Analysis, cs: int, ce: int) -> list[tuple[str, tup
     return an.memo[key]
 
 
-def _anchored_explains(an: Analysis, cs: int, ce: int, token: tuple[int, int]) -> bool:
+def _anchored_explains(an: Analysis, cs: int, ce: int, token: tuple[int, int], served: Optional[int] = None) -> bool:
     """Whether an anchored negation of a service or intervention named next to ``token`` (the
     two names after it, the one before it) covers it - "no colonoscopy", "EUS was not",
-    "Neither EUS nor ERCP" - or is a pre-trigger that governs the word after its mention."""
+    "Neither EUS nor ERCP" - or is a pre-trigger that governs the word after its mention.
+    ``served``: the end of the service read (named before ``token``). For it, an intervention of
+    its own description ("EGD to D2 with biopsy") does not explain a denial set off after it by a
+    separator (", declined by the patient", ", not performed", " (declined)"): that denial has no
+    subject of its own and may deny the whole service, so it stays unresolved (_described_with)."""
     after = sorted({(m.start, m.end) for m in an.services_in(token[1], ce)}
                    | {(iv.start, iv.end) for iv in an.interventions_in(token[1], ce)})[:2]
     before = sorted({(m.start, m.end) for m in an.services_in(cs, token[0])}
                     | {(iv.start, iv.end) for iv in an.interventions_in(cs, token[0])})[-1:]
     for ms, me in after + before:
         found, governs_next = _member_negations(an, cs, ce, ms, me)
-        if any(s <= token[0] and token[1] <= e for s, e in [where for _, _, where in found] + governs_next):
+        spans = [where for _, _, where in found] + governs_next
+        if served is not None and (ms, me) in before and _described_with(an, served, ms, me):
+            spans = [w for w in spans if not (w[0] == me and _SEPARATOR_LED.match(an.text, me, ce))]
+        if any(s <= token[0] and token[1] <= e for s, e in spans):
             return True
     return False
+
+
+# A denial set off from the name before it ("biopsy, declined by the patient", "biopsy (declined)", "biopsy -
+# not performed"), not one that has the name as its subject ("biopsies not taken", "biopsy declined").
+_SEPARATOR_LED = re.compile(r'\s*[,:;=|(\u2013\u2014-]', re.A)
+_DESCRIPTION_BREAK = re.compile(r'[,;:(|\u2013\u2014]|\s-\s', re.A)
+
+
+def _described_with(an: Analysis, served: int, ms: int, me: int) -> bool:
+    """Whether [ms, me) is an intervention named in the description of the service that ends at ``served``: after
+    it, with no separator between them ("Flexible sigmoidoscopy to 30 cm with biopsy", "Colonoscopy with cold snare
+    polypectomy"). After a separator it starts an item of its own ("Colonoscopy with polypectomy, biopsies ...")."""
+    if served > ms or not any(iv.start == ms and iv.end == me for iv in an.interventions_in(ms, me)):
+        return False
+    return not _DESCRIPTION_BREAK.search(an.text, served, ms)
 
 
 def _landmark_negations_near(an: Analysis, clause: tuple[int, int], token: tuple[int, int]) -> list[tuple[int, int]]:
@@ -482,7 +504,9 @@ def _unexplained(an: Analysis, clause: tuple[int, int], cs: int, ce: int, token:
     outside = [w for w in outside_only
                if named or (stated and not _NEEDED_ACT_AFTER.match(an.text, w[1], ce)) or not _overlaps(*w, *target)]
     outside += [w for _, w in _memberless_negations(an, cs, ce) if not _overlaps(*w, *target)]
-    return not _covered(token, outside) and not _anchored_explains(an, cs, ce, token)
+    # the service the target reads, when one is named in it before the negation word (see _anchored_explains)
+    served = [m.end for m in an.services_in(max(cs, ts), min(token[0], target[1]))]
+    return not _covered(token, outside) and not _anchored_explains(an, cs, ce, token, served[-1] if served else None)
 
 
 # An act a denied finding would have needed, within five words after the denial: "no polyps were found to remove",
@@ -1679,7 +1703,7 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
 
 
 # Where the words that lead an extent label start: after the last separator before it in its clause.
-_LEAD_BREAK = re.compile(r'[,;:|(\[–—]|\s-\s', re.A)
+_LEAD_BREAK = re.compile(r'[,;:|(\[\u2013\u2014]|\s-\s', re.A)
 # A list marker or a bullet, which leads no label ("1) Extent: cecum", "- Extent: cecum").
 _LIST_MARK = re.compile(r'(?:\d{1,2}[.)]?|[A-Za-z][.)]|[^\w]+)', re.A)
 
