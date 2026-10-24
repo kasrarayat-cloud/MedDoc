@@ -12,14 +12,14 @@ from dataclasses import dataclass, replace
 from datetime import date
 from typing import Mapping, Optional, Sequence
 
-from studio.gi.profiles import PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
+from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, ServiceProfile, family_for_code
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
                           ReferenceLookup, ReferenceSourceInfo, RoutingResult, sha256_json)
 from studio.validation import checks, rationale
 
-ENGINE_VERSION = 'cpt-studio-validation@1'
+ENGINE_VERSION = 'cpt-studio-validation@2'
 PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
@@ -135,7 +135,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     if scope_reason or not kept:
         return selection
     finding = routing.finding(selection.family)
-    outcome = checks.resolve_status(checks.evidence_readings(text, kept, day) + checks.routing_readings(finding))
+    outcome = checks.resolve_status(checks.evidence_readings(text, kept, day) + checks.routing_readings(finding),
+                                    detectable=selection.family in DETECTED_FAMILIES)
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day)))
 
 
@@ -144,14 +145,25 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
 def _encounter(provider, context, routing, sources, date_state, selections) -> _Encounter:
     active = [s for s in selections if not s.excluded]
     pfs_source = applied_sources(sources, date_state.value).get(PFS)
-    procedures = [s for s in active if s.profile.procedure and s.performed]
+    procedures = [s for s in active if _same_day_procedure(s)]
     labels = [PROFILES[f.family].label for f in routing.findings
               if f.family in PROFILES and PROFILES[f.family].procedure and f.status in checks.POSITIVE]
-    labels += [s.profile.label for s in procedures]
+    labels += [checks.service_name(s.profile, s.code) for s in procedures]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
     return _Encounter(provider=provider, context=context, sources=sources, date_state=date_state,
                       pfs_source=pfs_source, active_pfs=rows, procedure_labels=tuple(dict.fromkeys(labels)),
                       global_days=_global_days(procedures, pfs_source, sources, date_state.value))
+
+
+def _same_day_procedure(s: _Selection) -> bool:
+    """A performed, non-E/M code that is procedural: a procedure profile, or a CMS global period other than
+    XXX. A code with no fee-schedule row for the date counts (fail-closed): the E/M is then held."""
+    if not s.performed or s.family in checks.EM_FAMILIES:
+        return False
+    if s.profile.procedure:
+        return True
+    pfs = s.evaluation.reference.pfs if s.evaluation else None
+    return not pfs or pfs.get('global_days') != 'XXX'
 
 
 def _global_days(procedures: Sequence[_Selection], pfs_source, sources, day) -> str:
@@ -214,6 +226,11 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
         considerations.append(pctc)
 
     if s.excluded:
+        holds = list(checks.fact_clarifications(states, profile, s.family, key))
+        if s.family in checks.EM_FAMILIES and enc.procedure_labels and checks.separate_em_statement(finding) is None:
+            holds.append(checks.separate_em_clarification(enc.procedure_labels, s.family, key))
+        found.append(checks.reinstatement_check(holds, date_unknown=day is None))
+    if s.excluded:
         status = 'excluded'
     elif clarifications or day is None:  # an unknown service date holds every proposal on the encounter question
         status = 'needs_clarification'
@@ -255,13 +272,17 @@ def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str
     family = family_for_code(item.code)
     found = (checks.scope_check(code_kind, scope_reason),)
     profile_version = PROFILES[family].version
+    # A parent code is quoted only in a strict code shape: an unlisted provider 'code' may carry wording or line
+    # breaks, and is never shown anywhere.
+    parent = item.parent_code if item.parent_code and checks.code_scope(item.parent_code)[0] != 'invalid' else None
+    unlisted_parent = bool(item.parent_code) and parent is None
     return ProposalAssessment(
         key=f'alt:{index}', bucket='alternative', code=item.code, code_kind=code_kind, family=family,
         profile_version=profile_version, status='informational',
-        exclusion_reason=rationale.alternative_note(item.role, item.parent_code), reinstatable=False,
-        provider_display=item.display, evidence=kept,
-        rationale=rationale.alternative_rationale(provider=provider, role=item.role, parent_code=item.parent_code,
-                                                  evidence_count=len(kept)),
+        exclusion_reason=rationale.alternative_note(item.role, parent, unlisted_parent=unlisted_parent),
+        reinstatable=False, provider_display=item.display, evidence=kept,
+        rationale=rationale.alternative_rationale(provider=provider, role=item.role, parent_code=parent,
+                                                  evidence_count=len(kept), unlisted_parent=unlisted_parent),
         checks=found, modifier_considerations=(), units=1,
         fingerprint=_fingerprint(item.code, family, profile_version, kept, found, {}, 1, 'informational'))
 

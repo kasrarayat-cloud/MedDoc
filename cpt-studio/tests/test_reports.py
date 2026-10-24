@@ -118,7 +118,8 @@ class TxtReportTests(ReportCase):
         text = self.txt('reviewed')
         approved = section(text, APPROVED)
         self.assertIn('2. 45378 · Colonoscopy · units 1', approved)
-        self.assertIn('Reinstated by a reviewer from exclusion: The colonoscopy is planned', approved)
+        self.assertRegex(approved, r'Reinstated from exclusion by Reviewer\d+ \(human\) at \d{4}-\d\d-\d\dT[0-9:]+Z: '
+                                   r'The colonoscopy is planned')
         self.assertEqual(section(text, 'EXCLUDED CANDIDATES'), '  None.')
 
     def test_excluded_alternatives_checks_and_not_verified(self):
@@ -199,7 +200,7 @@ class TxtReportTests(ReportCase):
         self.assertIn(f'Extracted text: {len(pf.GI_NOTE)} characters · sha256 {revision.text_sha256}', source)
         self.assertIn(f'Assessment: {self.assessment.pk}', source)
         self.assertIn(f'sha256 {self.assessment.sha256}', source)
-        self.assertIn(f'profiles gi-profiles@1 · engine {pf.ENGINE_VERSION} · routing {pf.ROUTING_VERSION}', source)
+        self.assertIn(f'profiles gi-profiles@2 · engine {pf.ENGINE_VERSION} · routing {pf.ROUTING_VERSION}', source)
 
     def test_uploaded_and_addendum_revisions_name_their_root_file(self):
         enc = f.encounter(self.s.workspace, self.s.reviewer, title='Uploaded synthetic note')

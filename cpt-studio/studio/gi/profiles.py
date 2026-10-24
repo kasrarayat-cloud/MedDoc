@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 CATEGORY_SLUG = 'gastroenterology'
 CATEGORY_NAME = 'Gastroenterology'
-PROFILES_VERSION = 'gi-profiles@1'
+PROFILES_VERSION = 'gi-profiles@2'
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,10 @@ def _p(slug, label, eyebrow, supported, ranges, *, excluded=(), required=(), pro
                           procedure=procedure, note=note)
 
 
-EUS_CODES = ('43231', '43232', '43237', '43238', '43242', '43253', '43259', '45341', '45342', '45391', '45392', '76975')
+EUS_CODES = ('43231', '43232', '43237', '43238', '43242', '43253', '43259', '44406', '44407', '45341', '45342', '45391',
+             '45392', '76975')
+# Inside the colonoscopy number range but not colonoscopy: they route on to 'outside the GI profiles'.
+NOT_COLONOSCOPY = ('45395', '45397', '45399')
 
 PROFILES: dict[str, ServiceProfile] = {p.slug: p for p in (
     _p('gi.office_em', 'Office / outpatient evaluation and management', 'EVALUATION & MANAGEMENT', True,
@@ -55,7 +58,7 @@ PROFILES: dict[str, ServiceProfile] = {p.slug: p for p in (
        excluded=EUS_CODES + tuple(str(c) for c in range(43260, 43271) if c not in (43266, 43270)),
        required=('extent',), procedure=True),
     _p('gi.colonoscopy', 'Colonoscopy', 'COLONOSCOPY', True,
-       [('45378', '45399'), ('44388', '44408')], excluded=EUS_CODES,
+       [('45378', '45399'), ('44388', '44408')], excluded=EUS_CODES + NOT_COLONOSCOPY,
        required=('extent',), procedure=True),
     _p('gi.flex_sig', 'Flexible sigmoidoscopy', 'FLEXIBLE SIGMOIDOSCOPY', True,
        [('45330', '45350')], excluded=EUS_CODES,

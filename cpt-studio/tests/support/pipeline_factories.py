@@ -83,7 +83,13 @@ def proposal(key, code, passages=(), *, text=GI_NOTE, bucket='selected', status=
     profile_version = PROFILES[family].version
     status = status or {'selected': 'ready', 'excluded': 'excluded', 'alternative': 'informational'}[bucket]
     spans = tuple(spans) if spans is not None else tuple(evidence(text, passage) for passage in passages)
-    checks = standard_checks() if checks is None else tuple(checks)
+    if checks is None:
+        # As the engine records it: an excluded, reinstatable code carries its approval-after-reinstatement gate.
+        reinstatement = (check('review.reinstatement', 'pass', 'Approval after reinstatement',
+                               source='cpt-studio:reinstatement@1'),) if bucket == 'excluded' else ()
+        checks = standard_checks() + reinstatement
+    else:
+        checks = tuple(checks)
     return ProposalAssessment(
         key=key, bucket=bucket, code=code, code_kind=code_kind, family=family, profile_version=profile_version,
         status=status, exclusion_reason=exclusion_reason, reinstatable=reinstatable, provider_display=PROVIDER_DISPLAY,

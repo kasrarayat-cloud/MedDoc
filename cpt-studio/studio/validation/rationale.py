@@ -44,20 +44,25 @@ def selected_rationale(*, provider: str, units: int, evidence_count: int, profil
     return ' '.join(parts)
 
 
-def _listing(role: str, parent_code: Optional[str]) -> str:
+def _listing(role: str, parent_code: Optional[str], unlisted_parent: bool = False) -> str:
     if role == 'alternative':
-        return f'alternative to {parent_code}' if parent_code else 'alternative'
+        if parent_code:
+            return f'alternative to {parent_code}'
+        return 'alternative to a provider code that is not listed' if unlisted_parent else 'alternative'
     if role == 'candidate':
         return 'candidate'
     return f'code listed with role “{role}”'
 
 
-def alternative_rationale(*, provider: str, role: str, parent_code: Optional[str], evidence_count: int) -> str:
-    text = f'Listed by {provider} as {_listing(role, parent_code)}; the provider did not select it. Informational only.'
+def alternative_rationale(*, provider: str, role: str, parent_code: Optional[str], evidence_count: int,
+                          unlisted_parent: bool = False) -> str:
+    text = (f'Listed by {provider} as {_listing(role, parent_code, unlisted_parent)}; the provider did not select '
+            'it. Informational only.')
     if evidence_count:
         text += f' {plural(evidence_count, "exact evidence passage")}.'
     return text
 
 
-def alternative_note(role: str, parent_code: Optional[str]) -> str:
-    return f'Provider {_listing(role, parent_code)}; not selected. Candidates and alternatives cannot be approved.'
+def alternative_note(role: str, parent_code: Optional[str], *, unlisted_parent: bool = False) -> str:
+    return (f'Provider {_listing(role, parent_code, unlisted_parent)}; not selected. Candidates and alternatives '
+            'cannot be approved.')

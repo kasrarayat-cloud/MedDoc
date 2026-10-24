@@ -105,7 +105,7 @@ def _is_reviewer(membership, encounter):
 def current_decisions(assessment):
     """proposal id -> its current Decision on ``assessment`` (approve, reject or reinstate)."""
     latest = {}
-    for decision in assessment.decisions.select_related('reviewer').order_by('created_at', 'pk'):
+    for decision in assessment.decisions.select_related('reviewer').order_by('sequence'):
         latest[decision.proposal_id] = decision
     invalidated = set(DecisionInvalidation.objects.filter(
         decision_id__in=[d.pk for d in latest.values()]).values_list('decision_id', flat=True))
@@ -114,7 +114,7 @@ def current_decisions(assessment):
 
 
 def _current_decision(proposal):
-    latest = proposal.decisions.order_by('-created_at', '-pk').first()
+    latest = proposal.decisions.order_by('-sequence').first()
     if latest is None or latest.action == REVOKE or DecisionInvalidation.objects.filter(decision=latest).exists():
         return None
     return latest
@@ -130,8 +130,14 @@ def _actions(proposal, current, text):
     if proposal.bucket == EXCLUDED and proposal.status == Proposal.STATUS_EXCLUDED:
         if current is None:
             return [REINSTATE] if proposal.reinstatable and exact else []
-        return ([APPROVE] if exact else []) + [REJECT, REVOKE]
+        return ([APPROVE] if exact and _reinstatement_clear(proposal) else []) + [REJECT, REVOKE]
     return [REVOKE] if current else []
+
+
+def _reinstatement_clear(proposal):
+    """A reinstated exclusion is approvable only under the gates a selected code meets, as the validation layer
+    recorded them in its 'review.reinstatement' check. Fail-closed: without a passing check, no approve."""
+    return any(c.get('id') == 'review.reinstatement' and c.get('status') == 'pass' for c in proposal.checks or [])
 
 
 def _allowed(proposal, assessment, membership, encounter):
@@ -363,7 +369,7 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
     if not current:
         return 0, 0
     old_proposals = {item.pk: item for item in previous.proposals.all()}
-    ordered = sorted(current.values(), key=lambda d: (old_proposals[d.proposal_id].position, d.created_at))
+    ordered = sorted(current.values(), key=lambda d: (old_proposals[d.proposal_id].position, d.sequence))
     if previous.revision_id != revision.pk:
         for decision in ordered:
             _invalidate(decision, revised_reason(revision), by_revision=revision)

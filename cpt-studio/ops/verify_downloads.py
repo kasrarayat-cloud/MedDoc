@@ -29,7 +29,7 @@ Per report file:
 Exit status: 0 all checks passed; 1 at least one check failed; 2 nothing failed
 but at least one check could not be performed (fail closed).
 
-The report format is studio/reports.py ('cpt-studio-report@1'); the item-list
+The report format is studio/reports.py ('cpt-studio-report@2'); the item-list
 rules below mirror its _list_for. When the format changes, change these
 constants and expected_list with it; never loosen a check to fit.
 """
@@ -431,14 +431,23 @@ def check_csv(doc: str, name: str, text: str, kind: str, api: dict | None) -> li
     columns = resolve_columns(header)
     rows = [row for row in data if len(row) == len(header)]
     out.append(_csv_kind(doc, name, text, kind, rows, columns))
+    # A report with no proposals carries exactly one placeholder row (item list 'none') so that the file itself
+    # still names its kind and SYNTHETIC; it is never an item.
+    placeholder = [row for row in rows if 'item_list' in columns and norm_list(row[columns['item_list']]) == 'none']
+    items_rows = [row for row in rows if not ('item_list' in columns and norm_list(row[columns['item_list']]) == 'none')]
+    if placeholder:
+        ok = len(placeholder) == 1 and not items_rows
+        out.append(Result(doc, name, 'csv.placeholder', 'pass' if ok else 'fail',
+                          'no proposals: one placeholder row names the report kind' if ok else
+                          f'{len(placeholder)} placeholder row(s) beside {len(items_rows)} item row(s)'))
     if api is None:
         out.append(Result(doc, name, 'content.vs.api', 'incomplete', 'no encounter JSON; content checks skipped'))
         return out
     items = items_from_api(api, kind)
     revision_text = (api.get('revision') or {}).get('text') or ''
-    out.extend(_csv_items(doc, name, rows, columns, items, kind))
+    out.extend(_csv_items(doc, name, items_rows, columns, items, kind))
     out.extend(_csv_constants(doc, name, rows, columns, api))
-    out.extend(_csv_evidence(doc, name, rows, columns, items, revision_text))
+    out.extend(_csv_evidence(doc, name, items_rows, columns, items, revision_text))
     return out
 
 

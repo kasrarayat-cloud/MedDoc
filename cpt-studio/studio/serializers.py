@@ -252,7 +252,7 @@ def encounter_detail(encounter, membership):
         'assessment': assessment,
         'clarifications': [_clarification_json(c) for c in clarifications],
         'decisions': {'history': [_decision_json(d) for d in encounter.decisions.select_related(
-            'proposal', 'reviewer', 'revision').order_by('created_at')]},
+            'proposal', 'reviewer', 'revision').order_by('sequence')]},
         'readiness': review.readiness(encounter),
         'reports': [_report_json(r) for r in encounter.reports.order_by('-generated_at')],
         'activity': [_activity_json(e) for e in encounter.audit_events.select_related('actor').order_by('created_at')],

@@ -33,6 +33,7 @@ CONTEXT_SOURCE = 'cpt-studio:context@1'
 PROVIDER_SOURCE = 'cpt-studio:provider@1'
 EXTRACTION_SOURCE = 'cpt-studio:extraction@1'
 COVERAGE_SOURCE = 'cpt-studio:coverage@1'
+REINSTATEMENT_SOURCE = 'cpt-studio:reinstatement@1'
 
 EXCERPT_CHARS = 160
 
@@ -150,6 +151,10 @@ def routing_check(profile: ServiceProfile, finding: Optional[FamilyFinding]) -> 
         return Check('routing.family', label, 'warn',
                      f'Routed to {profile.label} ({profile.version}) by code number; routing did not detect this '
                      'service in the document.', ROUTING_SOURCE)
+    if finding.status not in POSITIVE:
+        return Check('routing.family', label, 'warn',
+                     f'Routed to {profile.label} ({profile.version}) by code number; routing detected this service '
+                     f'in the document only as {finding.status}.', ROUTING_SOURCE)
     return Check('routing.family', label, 'pass',
                  f'Routed to {profile.label} ({profile.version}); routing also detected this service in the document.',
                  ROUTING_SOURCE)
@@ -173,6 +178,9 @@ class StatusOutcome:
     # performed/incomplete: a linked passage that reads otherwise; not_performed: routing reads the family as performed
     contrary: Optional[Reading] = None
     incomplete: Optional[Reading] = None
+    # uncertain only: 'hedged' (the code's own passage hedges) or 'unnamed' (its passage reads as performed
+    # but the document never names the code's service family).
+    reason: str = ''
 
 
 def normalise_span_status(value) -> Optional[tuple[str, tuple[str, ...]]]:
@@ -222,24 +230,50 @@ def _first(readings: Sequence[Reading], statuses: Sequence[str]) -> Optional[Rea
     return next((reading for reading in readings if reading.status in statuses), None)
 
 
-def resolve_status(readings: Sequence[Reading]) -> StatusOutcome:
-    """A code's own evidence decides first; routing decides only when that evidence is silent.
+# Routing's reading of a span that carries no status wording at all. Only this is "silent"; any other
+# 'uncertain' saw a hedge (a condition, a question, an unclear plan) and is the code's own answer.
+SILENT_CUE_PREFIX = 'uncertain: no performance evidence'
 
-    A linked passage that reads as planned / historical / cancelled / negated
-    excludes the code even when the family is performed elsewhere (another
-    passage may support a different code of the same family); the exclusion
-    stays reinstatable and names the performed mention.
+
+def _silent(reading: Reading) -> bool:
+    return reading.status == 'uncertain' and all(cue.startswith(SILENT_CUE_PREFIX) for cue in reading.cues)
+
+
+def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> StatusOutcome:
+    """A code's own evidence decides first; routing decides only when that evidence is silent. Fail-closed.
+
+    - A linked passage that reads as planned / historical / cancelled / negated excludes the code even when
+      the family is performed elsewhere (another passage may support a different code of the same family);
+      the exclusion stays reinstatable and names the performed mention.
+    - A linked passage that hedges holds the code for clarification; routing never overrides it.
+    - A positive passage cannot establish a family that routing documents only as not performed, nor
+      (``detectable``: routing can recognise the family in text) a family the document never names.
     """
     own = [r for r in readings if r.origin == 'evidence']
     routed = [r for r in readings if r.origin == 'routing']
     own_positive, own_negative = _first(own, POSITIVE), _first(own, NEGATIVE)
+    own_hedged = next((r for r in own if r.status == 'uncertain' and not _silent(r)), None)
     routed_positive, routed_negative = _first(routed, POSITIVE), _first(routed, NEGATIVE)
-    if own_positive or (routed_positive and not own_negative):
-        incomplete = _first(readings, ('incomplete',))
-        return StatusOutcome('incomplete' if incomplete else 'performed', own_positive or routed_positive,
-                             contrary=own_negative, incomplete=incomplete)
-    if own_negative or routed_negative:
-        return StatusOutcome('not_performed', own_negative or routed_negative, contrary=routed_positive)
+    incomplete = _first(readings, ('incomplete',))
+
+    def positive(decisive: Reading, contrary: Optional[Reading] = None) -> StatusOutcome:
+        return StatusOutcome('incomplete' if incomplete else 'performed', decisive, contrary=contrary,
+                             incomplete=incomplete)
+
+    if own_positive:
+        if routed_negative and not routed_positive:
+            return StatusOutcome('not_performed', routed_negative, contrary=own_positive)
+        if detectable and not routed:
+            return StatusOutcome('uncertain', own_positive, reason='unnamed')
+        return positive(own_positive, contrary=own_negative)
+    if own_negative:
+        return StatusOutcome('not_performed', own_negative, contrary=routed_positive)
+    if own_hedged:
+        return StatusOutcome('uncertain', own_hedged, contrary=routed_positive, reason='hedged')
+    if routed_positive:
+        return positive(routed_positive)
+    if routed_negative:
+        return StatusOutcome('not_performed', routed_negative)
     return StatusOutcome('uncertain', _first(readings, ('uncertain',)))
 
 
@@ -282,8 +316,13 @@ def exclusion_reason(outcome: StatusOutcome, name: str) -> str:
 
 def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
     reason = f'No documentation establishes that {name} was performed on the date of service.'
-    if outcome.decisive:
+    if outcome.reason == 'unnamed' and outcome.decisive:
+        reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
+                   f'document never names {name}.')
+    elif outcome.decisive:
         reason += f' Read as uncertain: {cite(outcome.decisive)}.'
+    if outcome.contrary:
+        reason += f' Routing reads it as {outcome.contrary.status} elsewhere: {cite(outcome.contrary)}.'
     return reason
 
 
@@ -443,6 +482,25 @@ def em_procedure_check(labels: Sequence[str], global_days_note: str, documented:
                      f'{detail} {global_days_note}'.strip(), EM_SOURCE)
     return Check('em.same_day_procedure', 'Separately identifiable E/M on a procedure day', 'warn',
                  f'{same_day_reason(labels)} {global_days_note}'.strip(), EM_SOURCE)
+
+
+def reinstatement_check(holds: Sequence[ClarificationSpec], *, date_unknown: bool) -> Check:
+    """For an excluded, reinstatable code: what approval would wait for if a reviewer reinstated it.
+
+    A reinstated code is held to the same gates as a selected one (required facts, the separately
+    identifiable E/M on a procedure day, a known date of service). Review offers approve on a reinstated
+    code only while this check passes.
+    """
+    label = 'Approval after reinstatement'
+    waits = (['the date of service is not established for this encounter.'] if date_unknown else []) + [
+        spec.question for spec in holds]
+    if not waits:
+        return Check('review.reinstatement', label, 'pass',
+                     'If a reviewer reinstates this code, it can be approved: no clarification would be pending.',
+                     REINSTATEMENT_SOURCE)
+    return Check('review.reinstatement', label, 'warn',
+                 'If a reviewer reinstates this code, it can only be rejected until the documentation is completed '
+                 '(add it as an addendum): ' + ' '.join(waits), REINSTATEMENT_SOURCE)
 
 
 def separate_em_clarification(labels: Sequence[str], family: str, key: str) -> ClarificationSpec:

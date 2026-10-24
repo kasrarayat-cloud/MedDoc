@@ -858,7 +858,7 @@ class EncounterCheckTests(EngineCase):
 
     def test_assessment_identity(self):
         result = self.snare()
-        self.assertEqual((result.engine_version, result.profiles_version), (ENGINE_VERSION, 'gi-profiles@1'))
+        self.assertEqual((result.engine_version, result.profiles_version), (ENGINE_VERSION, 'gi-profiles@2'))
         self.assertEqual(result.summary['service_date'], '2026-10-21')
 
 

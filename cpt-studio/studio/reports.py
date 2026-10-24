@@ -25,7 +25,7 @@ from .types import CONTEXT_FACTS, sha256_json
 
 DRAFT, REVIEWED = ReportArtifact.DRAFT, ReportArtifact.REVIEWED
 KINDS = (DRAFT, REVIEWED)
-FORMAT_VERSION = 'cpt-studio-report@1'
+FORMAT_VERSION = 'cpt-studio-report@2'
 HEADLINES = {DRAFT: 'CPT STUDIO CODING REPORT — DRAFT — NOT REVIEWED', REVIEWED: 'CPT STUDIO CODING REPORT — REVIEWED'}
 SYNTHETIC_LINE = 'SYNTHETIC DATA — NOT FOR BILLING OR CLAIMS'
 SYNTHETIC_CELL = 'SYNTHETIC — NOT FOR BILLING'
@@ -50,8 +50,11 @@ NOT_CONNECTED = (
 LISTS = ('approved', 'rejected', 'undecided', 'excluded', 'alternative')
 CSV_COLUMNS = ('report_kind', 'encounter_id', 'revision_number', 'source_sha256', 'text_sha256', 'assessment_id',
                'proposal_id', 'item_list', 'code', 'code_kind', 'family', 'family_label', 'status', 'decision', 'reviewer',
-               'reviewer_kind', 'decided_at', 'units', 'evidence', 'checks', 'not_verified',
-               'modifier_considerations', 'exclusion_reason', 'synthetic')
+               'reviewer_kind', 'decided_at', 'decision_carried_from', 'decision_carried_at', 'units', 'evidence',
+               'checks', 'not_verified', 'modifier_considerations', 'exclusion_reason', 'synthetic')
+# A line break inside stored text always continues at least this deep: deeper than any structural line of
+# the TXT (headings at column 0, list lines at 2, item detail at 5), so stored text can never forge one.
+CONTINUATION = '       '
 # Leading characters a spreadsheet may read as a formula (fullwidth forms and LF included, beyond the minimum).
 FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r', '\n', '＝', '＋', '－', '＠')
 REFERENCE_KEYS = ('key', 'kind', 'publisher', 'title', 'release', 'url', 'sha256', 'effective_start',
@@ -128,13 +131,39 @@ def _context(context, text):
             'user_values': dict(context.user_values or {})}
 
 
+def _decision_root(decision):
+    """The decision a carried decision was copied from, followed back to the reviewer's own act."""
+    root = decision
+    while root.carried_from_id:
+        root = root.carried_from
+    return root
+
+
 def _decision(decision):
+    """decided_at is when the reviewer decided; a carry is reported separately, never as the decision time."""
     if decision is None:
         return None
+    carried = bool(decision.carried_from_id)
     return {'id': str(decision.pk), 'action': decision.action, 'reviewer': decision.reviewer.label(),
-            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(decision.created_at), 'note': decision.note,
-            'acknowledgement': decision.acknowledgement,
-            'carried_from': str(decision.carried_from_id) if decision.carried_from_id else None}
+            'reviewer_kind': decision.reviewer_kind, 'decided_at': _ts(_decision_root(decision).created_at),
+            'note': decision.note, 'acknowledgement': decision.acknowledgement,
+            'carried_from': str(decision.carried_from_id) if carried else None,
+            'carried_at': _ts(decision.created_at) if carried else None}
+
+
+def _reinstatement(decision):
+    """The reinstate decision that a current decision on an excluded proposal rests on, following carries."""
+    node = decision
+    while node is not None:
+        if node.action == Decision.REINSTATE:
+            return node
+        prior = (Decision.objects.filter(proposal_id=node.proposal_id, action=Decision.REINSTATE,
+                                         sequence__lt=node.sequence, invalidation__isnull=True)
+                 .select_related('reviewer').order_by('-sequence').first())
+        if prior is not None:
+            return prior
+        node = node.carried_from
+    return None
 
 
 def _list_for(proposal, decision, kind):
@@ -163,6 +192,8 @@ def _item(proposal, decision, kind, text):
         'status': proposal.status, 'status_label': review.status_label(proposal.status),
         'exclusion_reason': proposal.exclusion_reason, 'reinstatable': proposal.reinstatable,
         'reinstated': proposal.bucket == Proposal.EXCLUDED and decision is not None,
+        'reinstated_by': (_decision(_reinstatement(decision))
+                          if proposal.bucket == Proposal.EXCLUDED and decision is not None else None),
         'units': proposal.units, 'rationale': proposal.rationale,
         'evidence': [{'start': s['start'], 'end': s['end'], 'text': s['text'], 'page': s.get('page')} for s in exact],
         'unmatched_evidence': len(proposal.evidence or []) - len(exact),
@@ -219,7 +250,7 @@ def _provider_runs(encounter, assessment):
 
 def _history(encounter, assessment):
     decisions = list(encounter.decisions.select_related('proposal', 'reviewer', 'revision', 'invalidation',
-                                                        'invalidation__by_revision').order_by('created_at', 'pk'))
+                                                        'invalidation__by_revision').order_by('sequence'))
     carried = {d.carried_from_id for d in decisions if d.carried_from_id}
     history = []
     for decision in decisions:
@@ -261,7 +292,8 @@ def snapshot(encounter, kind):
     return {
         'format_version': FORMAT_VERSION, 'kind': kind, 'generated_at': _ts(timezone.now()),
         'synthetic': SYNTHETIC_LINE,
-        'agent_review': any(item['decision'] and item['decision']['reviewer_kind'] == 'agent' for item in items),
+        'agent_review': any(entry['reviewer_kind'] == 'agent' for item in items
+                            for entry in (item['decision'], item['reinstated_by']) if entry),
         'encounter': {'id': str(encounter.pk), 'title': encounter.title,
                       'workspace': {'id': str(workspace.pk), 'name': workspace.name},
                       'category': {'slug': workspace.category.slug, 'name': workspace.category.name}},
@@ -290,7 +322,8 @@ def snapshot_digest(snap):
 # --- TXT -----------------------------------------------------------------------------
 
 def _indent(text, prefix):
-    return str(text).replace('\n', '\n' + prefix)
+    """Stored text on a report line: a line break in any form (CR, CRLF, LF, U+2028 ...) continues at prefix."""
+    return ('\n' + prefix).join(str(text).splitlines() or [''])
 
 
 def _evidence_line(span):
@@ -307,7 +340,8 @@ def _who(reviewer, kind):
 
 def _decision_words(decision):
     verb = {'approve': 'approved', 'reject': 'rejected', 'reinstate': 'reinstated for review'}[decision['action']]
-    carried = ' (carried from an earlier assessment of this revision)' if decision['carried_from'] else ''
+    carried = (f' (carried from an earlier assessment of this revision at {decision["carried_at"]})'
+               if decision['carried_from'] else '')
     return f'{verb} by {_who(decision["reviewer"], decision["reviewer_kind"])} at {decision["decided_at"]}{carried}'
 
 
@@ -337,7 +371,9 @@ def _item_block(number, item, kind):
         lines.append(f'{pad}Status: ' + ('Reinstated by a reviewer' if item['reinstated'] else item['status_label']))
     if item['reinstated']:
         reason = item['exclusion_reason'] or 'no reason recorded'
-        lines.append(f'{pad}Reinstated by a reviewer from exclusion: {reason}')
+        by = item['reinstated_by']
+        who = f'by {_who(by["reviewer"], by["reviewer_kind"])} at {by["decided_at"]}' if by else 'by a reviewer'
+        lines.append(f'{pad}Reinstated from exclusion {who}: {_indent(reason, pad + "  ")}')
     lines += _decision_lines(item, kind)
     lines.append(f'{pad}Evidence:')
     lines += [f'{pad}  - {_indent(_evidence_line(span), pad + "    ")}' for span in item['evidence']] or [
@@ -542,9 +578,9 @@ def _join(lines):
     blank line: stored text (a note, a title) cannot forge a section heading or a section boundary."""
     out = []
     for line in lines:
-        first, *rest = str(line).replace('\r\n', '\n').replace('\r', '\n').split('\n')
+        first, *rest = str(line).splitlines() or ['']
         out.append(first)
-        out += [part if part.startswith(' ') else '       ' + part for part in rest]
+        out += [part if part.startswith(CONTINUATION) else CONTINUATION + part for part in rest]
     return '\n'.join(out)
 
 
@@ -589,18 +625,34 @@ def _not_verified_cell(item):
     return ';'.join(f'{entry_id}={status}' for entry_id, status in entries)
 
 
+def _identity_cells(snap):
+    return {'report_kind': snap['kind'], 'encounter_id': snap['encounter']['id'],
+            'revision_number': snap['revision']['number'], 'source_sha256': snap['revision']['source']['sha256'],
+            'text_sha256': snap['revision']['text_sha256'], 'assessment_id': snap['assessment']['id'],
+            'synthetic': SYNTHETIC_CELL}
+
+
 def _csv_row(snap, item):
     decision = item['decision'] or {}
     evidence = ' | '.join(f'"{s["text"]}" [{s["start"]}-{s["end"]}' + (f', p{s["page"]}]' if s.get('page') else ']')
                           for s in item['evidence'])
-    return [snap['kind'], snap['encounter']['id'], snap['revision']['number'], snap['revision']['source']['sha256'],
-            snap['revision']['text_sha256'], snap['assessment']['id'], item['id'], item['list'], item['code'],
-            item['code_kind'],
-            item['family'], item['family_label'], item['status'], decision.get('action', ''),
-            decision.get('reviewer', ''), decision.get('reviewer_kind', ''), decision.get('decided_at', ''),
-            item['units'], evidence, ';'.join(f'{c["id"]}={c["status"]}' for c in item['checks']),
-            _not_verified_cell(item), ' | '.join(item['modifier_considerations']), item['exclusion_reason'],
-            SYNTHETIC_CELL]
+    row = {**_identity_cells(snap), 'proposal_id': item['id'], 'item_list': item['list'], 'code': item['code'],
+           'code_kind': item['code_kind'], 'family': item['family'], 'family_label': item['family_label'],
+           'status': item['status'], 'decision': decision.get('action', ''), 'reviewer': decision.get('reviewer', ''),
+           'reviewer_kind': decision.get('reviewer_kind', ''), 'decided_at': decision.get('decided_at', ''),
+           'decision_carried_from': decision.get('carried_from') or '',
+           'decision_carried_at': decision.get('carried_at') or '', 'units': item['units'], 'evidence': evidence,
+           'checks': ';'.join(f'{c["id"]}={c["status"]}' for c in item['checks']),
+           'not_verified': _not_verified_cell(item), 'modifier_considerations': ' | '.join(item['modifier_considerations']),
+           'exclusion_reason': item['exclusion_reason']}
+    return [row[column] for column in CSV_COLUMNS]
+
+
+def _placeholder_row(snap):
+    """A report with no proposals still says, in the file, what it is: its kind, its identity and SYNTHETIC."""
+    row = {**dict.fromkeys(CSV_COLUMNS, ''), **_identity_cells(snap), 'item_list': 'none',
+           'not_verified': _not_verified_cell({'checks': []})}
+    return [row[column] for column in CSV_COLUMNS]
 
 
 def render_csv(snap) -> bytes:
@@ -609,8 +661,9 @@ def render_csv(snap) -> bytes:
     writer = csv.writer(buffer, quoting=csv.QUOTE_ALL, lineterminator='\r\n')
     writer.writerow([neutralise(column) for column in CSV_COLUMNS])
     order = {name: index for index, name in enumerate(LISTS)}
-    for item in sorted(snap['proposals'], key=lambda i: order[i['list']]):
-        writer.writerow([neutralise(cell) for cell in _csv_row(snap, item)])
+    rows = [_csv_row(snap, item) for item in sorted(snap['proposals'], key=lambda i: order[i['list']])]
+    for row in rows or [_placeholder_row(snap)]:
+        writer.writerow([neutralise(cell) for cell in row])
     return buffer.getvalue().encode('utf-8')
 
 
