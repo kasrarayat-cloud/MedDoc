@@ -287,6 +287,13 @@ class JoinedAnswerAndSilentSectionTests(unittest.TestCase):
         proposal = run_engine(text, [('45385', 'Colonoscopy with cold snare polypectomy under moderate sedation.')])[0]['45385']
         self.assertNotEqual(proposal.bucket, 'excluded')
 
+    def test_a_lost_negation_never_lets_section_evidence_release_the_family(self):
+        # The hold is a doubt: without it the procedure line's section evidence alone made EUS performed (8 fuzz
+        # texts did exactly that before the hold was made a doubt).
+        text = (HEADER + 'Procedure: EUS\nIndication: Pancreatic cyst.\nFindings: The risks were reviewed and the '
+                'patient declined\nEUS of the pancreatic cyst.\n')
+        self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+
     def test_controls_cut_prose_and_a_denial_on_the_line_itself_still_negate(self):
         cut = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nComment: because of '
                'time constraints, no\nEUS of the pancreatic cyst was performed today.\n')
