@@ -18,10 +18,9 @@ Synthetic documents only, built here from raw PDF syntax or WordprocessingML.
 import unittest
 
 from tests.support import docgen
-from tests.test_repairs_ingest_pdf import stream
-from tests.test_repairs_r3_forms_docx import DOCX, control, docx_result, note_paragraphs, paragraph
-from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FONT_OBJECTS, FONTS, NOTE, SNARE_ROW, Form, codes, extracted,
-                                             text_line, to_unicode, widget_rect)
+from tests.test_repairs_r3_forms_docx import control, docx_result, note_paragraphs, paragraph
+from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FONTS, SNARE_ROW, Form, codes, extracted, text_line, to_unicode,
+                                             widget_rect)
 from tests.test_repairs_r3_forms_routing import outcome
 from tests.test_repairs_status_r2_routing import clarified, family, read, routed, run_engine
 

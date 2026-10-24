@@ -16,9 +16,9 @@ import unittest
 from studio.gi import detect, sections
 from studio.gi.detect import route, status_for_span
 from studio.ingest import symbols
-from tests.test_repairs_status_r2_routing import (BOXED, HEADER, SILENT, clarified, fact_value, family, read, ready,
-                                                  routed, run_engine, span)
-from tests.test_repairs_r3_forms_routing import excluded, held, not_silent, outcome
+from tests.test_repairs_status_r2_routing import (BOXED, HEADER, SILENT, clarified, fact_value, family, read, routed,
+                                                  run_engine, span)
+from tests.test_repairs_r3_forms_routing import not_silent, outcome
 
 NBSP, EN_SPACE, NARROW_NBSP = chr(0xA0), chr(0x2002), chr(0x202F)
 NOT_TODAY = ('planned', 'historical', 'cancelled', 'negated')
@@ -100,25 +100,6 @@ RELEASE0_NOTE = (HEADER + 'Procedure: EUS of the pancreatic head mass with fine-
 RELEASE0_LINE = 'EUS of the pancreatic head mass with fine-needle biopsy'
 
 
-# --- structure:13 -- a status option answered No holds, never cancels -------------------------------------------------
-
-COLON_NOTE = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\n{rows}\nFindings: The colonoscope was advanced to '
-              'the cecum. A 6 mm polyp was removed with a cold snare.\n')
-POLYP = 'A 6 mm polyp was removed with a cold snare.'
-
-
-# --- structure:15 -- a yes/no pair with both options checked holds ----------------------------------------------------
-
-
-# --- structure:0 -- a remark after the last box never makes the boxes lead ----------------------------------------------
-
-S0_NOTE = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp was '
-           'found.\n{row}\n')
-
-
-# --- structure:16 -- a trailing box after a label joined by 'with', ';' or 'plus' --------------------------------------
-
-
 class Routing0CheckedCancelOptionTests(BoxCase):
     """routing:0 and release:0 (critical, new in 82e9692c9). _unchecked_option judged a status line by its first box,
     so a line whose 'Cancelled' option is checked read as an option nobody selected, and the cancelled EUS was a ready
@@ -191,6 +172,13 @@ class Routing0CheckedCancelOptionTests(BoxCase):
                 self.assert_outcome(text, '43242', EUS_LINE, 'ready')
 
 
+# --- structure:13 -- a status option answered No holds, never cancels -------------------------------------------------
+
+COLON_NOTE = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\n{rows}\nFindings: The colonoscope was advanced to '
+              'the cecum. A 6 mm polyp was removed with a cold snare.\n')
+POLYP = 'A 6 mm polyp was removed with a cold snare.'
+
+
 class Structure13StatusAnswerTests(BoxCase):
     """structure:13 (critical). A typed status answer 'Procedure cancelled: No' cancelled a completed colonoscopy (45385
     excluded) and 'Procedure aborted: No' marked it incomplete. A status option answered with a denial holds the family;
@@ -233,6 +221,8 @@ class Structure13StatusAnswerTests(BoxCase):
                 self.assert_outcome(text, '45385', POLYP, 'ready')
 
 
+# --- structure:15 -- a yes/no pair with both options checked holds ----------------------------------------------------
+
 class Structure15BothOptionsCheckedTests(BoxCase):
     """structure:15 (high). A yes/no pair with both options checked was negated with the false cue 'negated: an unchecked
     box'. Both options marked are boxes that disagree: the item is held (BOXES_DISAGREE)."""
@@ -253,6 +243,12 @@ class Structure15BothOptionsCheckedTests(BoxCase):
     def test_single_marked_pairs_are_unchanged(self):
         self.assert_outcome(BOXED + 'Biopsy taken: ☒ Yes ☐ No\nCold snare polypectomy ☒\n', '45380', 'Biopsy', 'ready')
         self.assert_outcome(BOXED + 'Biopsy taken: ☐ Yes ☒ No\nCold snare polypectomy ☒\n', '45380', 'Biopsy', 'excluded')
+
+
+# --- structure:0 -- a remark after the last box never makes the boxes lead ----------------------------------------------
+
+S0_NOTE = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp was '
+           'found.\n{row}\n')
 
 
 class Structure0RemarkAfterTheLastBoxTests(BoxCase):
@@ -308,6 +304,8 @@ class Structure0RemarkAfterTheLastBoxTests(BoxCase):
                 s = 'cold snare' if 'cold snare' in row else 'Cold snare polypectomy'
                 self.assertEqual((read(text, b)[0], read(text, s)[0]), (biopsy, snare))
 
+
+# --- structure:16 -- a trailing box after a label joined by 'with', ';' or 'plus' --------------------------------------
 
 class Structure16TrailingBoxAfterAJoinedLabelTests(BoxCase):
     """structure:16 (critical). A trailing box after 'Polypectomy with cold snare' governed only 'cold snare', so the
@@ -473,35 +471,6 @@ def unproposed(result):
     return next(c for c in result.encounter_checks if c.id == 'services.unproposed')
 
 
-EV4_PAGE = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp was '
-            'removed with a cold snare.\n{printed}\n\n[PDF form fields on page 1]\n{field}')
-EV4_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
-
-
-# --- contract:4 -- a status field that says the procedure was not done holds its page -----------------------------
-
-C4_NOTE = (HEADER + 'Procedure: EUS with fine-needle biopsy of a pancreatic cyst.\nIndication: Pancreatic cyst on CT.\nHistory '
-           'reviewed.\nConsent obtained.\nASA class II.\nAirway assessed.\nAllergies: none known.\nAnticoagulants: none.\nNPO '
-           'since midnight.\n{printed}\n\n[PDF form fields on page 1]\n{field}')
-C4_LINE = 'EUS with fine-needle biopsy of a pancreatic cyst.'
-
-
-# --- contract:0 / release:5 / routing:11 / structure:10 -- the separately identifiable E/M attestation -------------
-
-ATTEST_NOTE = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit for rectal bleeding.\nMedical '
-               'decision making: Moderate.\nTotal time on the date of the encounter was 32 minutes.\nProcedure: Flexible '
-               'sigmoidoscopy with biopsy was performed. The sigmoidoscope was advanced to 40 cm.\n{tail}')
-ATTESTATION = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
-STATEMENT = 'A significant, separately identifiable E/M service was provided'
-ATTEST_PICKS = [('99214', 'Total time on the date of the encounter was 32 minutes.'),
-                ('45331', 'Flexible sigmoidoscopy with biopsy was performed.')]
-
-
-def separate_em(text):
-    finding = routed(text).finding('gi.office_em')
-    return next((f for f in finding.facts if f.name == 'separate_em'), None)
-
-
 class Structure6QualifiedFieldLabelTests(BoxCase):
     """structure:6 (critical, new in 686d60b11). A form field answering 'No' or 'None' to another question whose label
     names the service ('Flexible sigmoidoscopy in the last 10 years: No', '... complications: None') negated the family,
@@ -544,6 +513,11 @@ class Structure6QualifiedFieldLabelTests(BoxCase):
                 text = page.format(field=field)
                 self.assertEqual(read(text, 'Biopsy')[0], 'negated')
                 self.assert_outcome(text, '45380', 'Biopsy', 'excluded')
+
+
+EV4_PAGE = (HEADER + 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp was '
+            'removed with a cold snare.\n{printed}\n\n[PDF form fields on page 1]\n{field}')
+EV4_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
 
 
 class Evidence4AndStructure7PageHoldTests(BoxCase):
@@ -633,6 +607,14 @@ class Evidence4AndStructure7PageHoldTests(BoxCase):
         self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
 
 
+# --- contract:4 -- a status field that says the procedure was not done holds its page -----------------------------
+
+C4_NOTE = (HEADER + 'Procedure: EUS with fine-needle biopsy of a pancreatic cyst.\nIndication: Pancreatic cyst on CT.\nHistory '
+           'reviewed.\nConsent obtained.\nASA class II.\nAirway assessed.\nAllergies: none known.\nAnticoagulants: none.\nNPO '
+           'since midnight.\n{printed}\n\n[PDF form fields on page 1]\n{field}')
+C4_LINE = 'EUS with fine-needle biopsy of a pancreatic cyst.'
+
+
 class Contract4StatusFieldTests(BoxCase):
     """contract:4 (critical). Extraction writes every form field after the page's text, beyond the six sentences the
     status readers look at, so a 'Procedure status: Cancelled' or 'Not performed' field never reached routing and the
@@ -659,6 +641,22 @@ class Contract4StatusFieldTests(BoxCase):
                 text = C4_NOTE.format(printed=field.split(':')[0] + ':', field=field)
                 self.assertEqual(family(text, 'gi.eus'), 'performed')
                 self.assert_outcome(text, '43242', C4_LINE, 'ready')
+
+
+# --- contract:0 / release:5 / routing:11 / structure:10 -- the separately identifiable E/M attestation -------------
+
+ATTEST_NOTE = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit for rectal bleeding.\nMedical '
+               'decision making: Moderate.\nTotal time on the date of the encounter was 32 minutes.\nProcedure: Flexible '
+               'sigmoidoscopy with biopsy was performed. The sigmoidoscope was advanced to 40 cm.\n{tail}')
+ATTESTATION = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
+STATEMENT = 'A significant, separately identifiable E/M service was provided'
+ATTEST_PICKS = [('99214', 'Total time on the date of the encounter was 32 minutes.'),
+                ('45331', 'Flexible sigmoidoscopy with biopsy was performed.')]
+
+
+def separate_em(text):
+    finding = routed(text).finding('gi.office_em')
+    return next((f for f in finding.facts if f.name == 'separate_em'), None)
 
 
 class AttestationCase(BoxCase):
