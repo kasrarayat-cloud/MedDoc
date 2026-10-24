@@ -326,9 +326,10 @@ class DocxTests(unittest.TestCase):
                '</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r><w:r>'
                '<w:t xml:space="preserve"> Biopsy taken</w:t></w:r></w:p>')
         result = self.body(xml)
-        self.assertEqual(result.text, 'Consent signed \n Biopsy taken')
-        self.assertEqual(result.messages, ('Not extracted from the document body: 1 image, 1 symbol-font character, '
-                                           '1 legacy form-field value.',))
+        # The Wingdings check box (F0FE) is read as the character it shows (ingest:11).
+        self.assertEqual(result.text, 'Consent signed ☑\n Biopsy taken')
+        self.assertEqual(result.messages, ('Not extracted from the document body: 1 image, 1 legacy form-field '
+                                           'value.',))
 
     def test_empty_document_fails_and_keeps_its_notes(self):
         self.assertEqual(self.extract(docgen.make_docx([])).messages, ('The Word document is empty.',))
@@ -399,7 +400,7 @@ class PdfTests(unittest.TestCase):
         self.assertEqual((result.status, result.method, result.messages, result.ocr_pages),
                          ('ok', 'pdf-text', (), ()))
         self.assertEqual([text.strip() for text in page_texts(result)], self.PAGES)
-        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@1', 'pypdf': '6.21.2'})
+        self.assertEqual(result.engine, {'ingest': 'cpt-studio-ingest@2', 'pypdf': '6.21.2'})
 
     def test_each_page_marker_lands_in_its_own_span(self):
         pages = [f'Marker page {n}: synthetic findings text for this page only.' for n in range(1, 7)]
@@ -776,7 +777,7 @@ class SandboxTests(unittest.TestCase):
             json.dumps(good | {'pages': [{'page': 1, 'start': 0, 'end': 2}]}),  # span short of the text
             json.dumps(good | {'text': 'a\r\nb', 'pages': [{'page': 1, 'start': 0, 'end': 4}]}),  # not canonical
             json.dumps(good | {'method': 'docx'}),  # wrong method for the file type
-            json.dumps(good | {'status': 'partial', 'messages': ['x']}),  # partial is PDF-only
+            json.dumps(good | {'status': 'partial', 'messages': ['x']}),  # a text file is never partial
             json.dumps(good | {'status': 'failed', 'text': '', 'pages': [], 'messages': []}),  # a failure says why
             json.dumps(good | {'ocr_pages': [1]}),  # OCR claimed for a text file
             json.dumps(good | {'pages': [{'page': True, 'start': 0, 'end': 3}]}),  # a bool is not a page number

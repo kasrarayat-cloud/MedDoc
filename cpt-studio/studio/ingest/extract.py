@@ -387,4 +387,5 @@ def _consistent(result: ExtractionResult, kind: str, limits: Limits) -> bool:
         return False
     if kind == 'pdf':
         return result.method == pdf_method(len(ocr_pages), len(pages))
-    return result.status == 'ok' and len(pages) == 1 and not ocr_pages
+    # A Word document can be partial (content it could not read); a text file cannot.
+    return (result.status == 'ok' or kind == 'docx') and len(pages) == 1 and not ocr_pages
