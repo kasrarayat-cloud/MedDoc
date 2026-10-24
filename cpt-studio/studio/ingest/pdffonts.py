@@ -176,12 +176,20 @@ def composite_map(font: DictionaryObject) -> frozenset:
 
 
 def composite_glyph(char: str, trusted: frozenset, table: dict[int, str]) -> str | None:
-    """The character a composite symbol font's extracted ``char`` stands for, or None when it names none."""
+    """The character a composite symbol font's extracted ``char`` stands for, or None when it names none.
+
+    A character the font's ToUnicode gives is trusted. A Latin-1 one is the echo of the symbol code (a browser
+    printing a page styled in Wingdings writes '¨' for the empty box), read through the table as ``glyph_for``
+    reads a simple font's echo; but only in a font none of whose glyphs is a Latin-1 character (not Symbol, whose
+    '×' or '±' may be the glyph itself): there it stays unread and counted."""
     if char.isspace():
         return char
     value = ord(char)
     if 0xF000 <= value <= 0xF0FF:
         return table.get(value - 0xF000)
-    if char in trusted and not undecodable(char) and value > 0xFF:
-        return as_box(char)
+    if char in trusted and not undecodable(char):
+        if value > 0xFF:
+            return as_box(char)
+        if not getattr(table, 'latin', True):
+            return table.get(value)
     return None
