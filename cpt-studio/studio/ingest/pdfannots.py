@@ -8,7 +8,8 @@ where that can be done exactly, and accounts for the rest:
 - A displayed form field is read from its stored value (``/V``, inherited
   through ``/Parent``): a text field as its text, a choice field as the option
   shown, a check box as checked or not checked, a radio group as the option
-  selected. Push buttons and fields without a value contribute the text their
+  selected. Each displayed check box's rectangle and state is kept, so that
+  its glyph can be written beside its label in the page text (pdf.py). Push buttons and fields without a value contribute the text their
   appearance draws. Password fields are not read.
 - A text or combo-box field whose appearance draws text that differs from its
   stored value is named, because viewers differ in which one they show.
@@ -65,6 +66,8 @@ class PageAnnotations:
     note_chars: int = 0
     hidden_text: bool = False  # an appearance held text in optional content that is hidden by default
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
+    boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
+    buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
 
     def block(self, page: int) -> str:
         """The labelled text added after the page's own text ('' when there is none)."""
@@ -127,9 +130,8 @@ class _Reader:
         flags = int(number(annotation.get('/F'), 0))
         if flags & HIDDEN_FLAGS or not self.optional.visible(raw_entry(annotation, '/OC')):
             return False
-        rect = [number(v) for v in as_list(annotation.get('/Rect'))]
-        return len(rect) == 4 and clip((min(rect[0], rect[2]), min(rect[1], rect[3]), max(rect[0], rect[2]),
-                                        max(rect[1], rect[3])), self.box) is not None
+        rect = rect_of(annotation)
+        return rect is not None and clip(rect, self.box) is not None
 
     # Form fields -------------------------------------------------------------------
     def widget(self, widget, shown: bool) -> None:
@@ -141,6 +143,11 @@ class _Reader:
             if not shown:
                 self.found.hidden += on
                 return
+            rect = rect_of(widget)
+            if rect is not None:
+                self.found.buttons.append(rect)
+                if not info.flags & FIELD_RADIO:
+                    self.found.boxes.append((rect, on))
             self.add_line(info, line, replace=on)
             return
         value = choice_text(info) if info.kind == '/Ch' else value_text(info.value) if info.kind == '/Tx' else ''
@@ -243,6 +250,14 @@ class _Reader:
             raise
         except Exception:
             return None
+
+
+def rect_of(annotation) -> tuple[float, float, float, float] | None:
+    """An annotation's /Rect as (x0, y0, x1, y1) with x0 <= x1 and y0 <= y1, or None."""
+    rect = [number(v) for v in as_list(annotation.get('/Rect'))]
+    if len(rect) != 4:
+        return None
+    return min(rect[0], rect[2]), min(rect[1], rect[3]), max(rect[0], rect[2]), max(rect[1], rect[3])
 
 
 def field_of(widget) -> _Field:

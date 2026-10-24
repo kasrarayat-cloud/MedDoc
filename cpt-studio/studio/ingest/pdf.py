@@ -19,7 +19,11 @@ What a page shows is read, or the result says what was not read:
   layer: OCRed, or named and unread. A page-sized image under a substantial
   text layer, or any large image beside one, is named.
 - **Forms and annotations.** Displayed form-field values and annotation text
-  are read and added after the page's text under a labelled heading; notes,
+  are read and added after the page's text under a labelled heading. A
+  displayed check box is also written as ☐ / ☒ at the start of the page-text
+  line it sits beside, when it can be tied to exactly one: that line's
+  baseline lies within the box's height and its text starts just right of
+  the box, with no other button on the row (the shared box contract). Notes,
   drawings and hidden annotations are counted; a field whose appearance
   disagrees with its value, or an annotation that cannot be read, makes the
   result 'partial'. XFA form content is not read: 'partial'.
@@ -51,6 +55,7 @@ from studio.types import ExtractionResult
 from .ocr import OcrTools, ocr_page
 from .pdfannots import PageAnnotations, read_annotations
 from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
+from .symbols import CHECKED_BOX, UNCHECKED_BOX
 from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, object_key, resolved,
                          stream_damaged)
 from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
@@ -73,6 +78,10 @@ SCAN_COVERAGE = 0.5
 # a header over the scan, not the scan's content: the page is read with OCR.
 SCAN_TEXT_CHARS = 200
 MAX_PAGE_TREE_NODES = 100_000
+# A form check box is tied to a page-text line whose baseline lies within the box's height (give or take this
+# many points) and whose text starts no further right of the box than BOX_GAP box sizes (within the bounds).
+BOX_SLACK = 1.0
+BOX_GAP, BOX_GAP_MIN, BOX_GAP_MAX = 3.0, 18.0, 48.0
 
 # PDF Reference, implementation notes: readers require the header within the
 # first 1024 bytes and %%EOF within the last 1024. A file without them is
@@ -120,6 +129,7 @@ class _Page:
     damaged: bool
     limited: bool = False  # pypdf stopped reading form XObjects at its invocation limit
     undecodable: int = 0  # glyphs of the text layer that name no character, dropped
+    placed: int = 0  # check-box glyphs written into the layer (not read from it)
 
     @property
     def text(self) -> str:
@@ -132,9 +142,9 @@ class _Page:
 
     @property
     def readable_chars(self) -> int:
-        """Non-whitespace characters of what was read, without the labels this module adds."""
-        return non_space_count(self.layer) + sum(non_space_count(line) for line in
-                                                 self.annotations.fields + self.annotations.texts)
+        """Non-whitespace characters of what was read, without the labels and glyphs this module adds."""
+        return non_space_count(self.layer) - self.placed + sum(non_space_count(line) for line in
+                                                               self.annotations.fields + self.annotations.texts)
 
 
 @dataclass
@@ -321,11 +331,44 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
         content = analyse_page(page, reader, optional)
         layer = _layer_text(page, content)
         annotations = read_annotations(page, optional, acroform)
-    text, replaced = replace_surrogates(layer.text)
+    text, placed = _placed_boxes(layer, annotations)
+    text, replaced = replace_surrogates(text)
     block, block_replaced = replace_surrogates(annotations.block(number))
     return _Page(layer=canonicalize(text), replaced=replaced or block_replaced, content=content,
                  annotations=annotations, block=block, damaged=content.damaged or warnings.seen,
-                 limited=warnings.limited, undecodable=layer.undecodable)
+                 limited=warnings.limited, undecodable=layer.undecodable, placed=placed)
+
+
+def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int]:
+    """The layer text with each displayed check box's glyph and a space at the start of the one line it sits
+    beside, and how many were written. A box is tied to a line only when exactly one upright line drawn by the
+    page itself has its baseline within the box's height (BOX_SLACK) and starts just right of the box
+    (BOX_GAP), no other button sits further along that row, and no other box claims the line."""
+    lines = [(offset, origin) for offset, origin in layer.lines
+             if origin is not None and origin[2] and _line_at(layer.text, offset).strip()]
+    claims: dict[int, str | None] = {}
+    for (x0, y0, x1, y1), checked in annotations.boxes:
+        gap = min(BOX_GAP_MAX, max(BOX_GAP_MIN, BOX_GAP * max(x1 - x0, y1 - y0)))
+        beside = [(offset, origin) for offset, origin in lines
+                  if y0 - BOX_SLACK <= origin[1] <= y1 + BOX_SLACK and x1 - (x1 - x0) / 2 <= origin[0] <= x1 + gap]
+        if len(beside) != 1:
+            continue
+        offset, (x, y, _) = beside[0]
+        crowded = any(other[0] > x and other[1] - BOX_SLACK <= y <= other[3] + BOX_SLACK
+                      for other in annotations.buttons if other != (x0, y0, x1, y1))
+        if crowded:
+            continue
+        claims[offset] = None if offset in claims else (CHECKED_BOX if checked else UNCHECKED_BOX)
+    text, placed = layer.text, 0
+    for offset in sorted((offset for offset, glyph in claims.items() if glyph), reverse=True):
+        text = text[:offset] + claims[offset] + ' ' + text[offset:]
+        placed += 1
+    return text, placed
+
+
+def _line_at(text: str, offset: int) -> str:
+    end = text.find('\n', offset)
+    return text[offset:] if end < 0 else text[offset:end]
 
 
 @dataclass(frozen=True)

@@ -19,6 +19,8 @@ import pypdf
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from pypdf.generic._font import Font
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen.canvas import Canvas
 
 from studio.gi.detect import status_for_span
 from studio.ingest import Limits, extract_document
@@ -395,6 +397,149 @@ class PdfSymbolFontTests(unittest.TestCase):
                 for code in range(256):
                     if chr(code) != before.space_char:
                         self.assertEqual(after.get_text_width(chr(code)), before.get_text_width(chr(code)), hex(code))
+
+
+# --- ingest:1 (PDF half) — a form check box's state at the start of the line it sits beside --------
+
+ZAPF = b'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>'
+FORM_NOTE = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'),
+             (72, 720, 'Date of service: 2026-10-21'),
+             (72, 700, 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.'),
+             (72, 680, 'Findings: A 6 mm sigmoid polyp was seen.'), (72, 660, 'Interventions:')]
+BOX_ROWS = [('Check Box1', 'Biopsy', False, (72, 618, 84, 630), (90, 620, 'Biopsy')),
+            ('Check Box2', 'Cold snare polypectomy', True, (72, 598, 84, 610), (90, 600, 'Cold snare polypectomy'))]
+
+
+def box_form(rows=BOX_ROWS, *, note=FORM_NOTE, tooltips: bool = False, flags: int = 4, radio: list | None = None) -> bytes:
+    """``note`` and each row's label in the page content; one check-box widget per row.
+
+    rows: (field name, tooltip, checked, widget rect, (x, y, label) or None).
+    """
+    lines = list(note) + [row[4] for row in rows if row[4]]
+    content = '\n'.join(f'BT /F1 11 Tf {x} {y} Td ({esc(text)}) Tj ET' for x, y, text in lines)
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R /AcroForm 10 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: HELVETICA, 5: stream(content), 6: ZAPF,
+               7: stream('q BT /ZaDb 10 Tf 0 g 1.5 2 Td (4) Tj ET Q', '/Type /XObject /Subtype /Form /BBox [0 0 12 12] '
+                         '/Resources << /Font << /ZaDb 6 0 R >> >>'),
+               8: stream('', '/Type /XObject /Subtype /Form /BBox [0 0 12 12]')}
+    widgets, number = [], 11
+    for name, tooltip, checked, rect, _ in rows:
+        state = '/Yes' if checked else '/Off'
+        tu = f'/TU ({esc(tooltip)})' if tooltips else ''
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /T ({esc(name)}) {tu} /V {state} /AS {state} '
+                           f'/Rect [{rect[0]} {rect[1]} {rect[2]} {rect[3]}] /F {flags} /P 3 0 R /MK << /CA (4) >> '
+                           '/DA (/ZaDb 0 Tf 0 g) /AP << /N << /Yes 7 0 R /Off 8 0 R >> >> >>').encode()
+        widgets.append(number)
+        number += 1
+    for name, rect, selected in radio or []:
+        objects[number] = (f'<< /Type /Annot /Subtype /Widget /FT /Btn /Ff 49152 /T ({esc(name)}) '
+                           f'/V {"/Yes" if selected else "/Off"} /AS {"/Yes" if selected else "/Off"} '
+                           f'/Rect [{rect[0]} {rect[1]} {rect[2]} {rect[3]}] /F 4 /P 3 0 R '
+                           '/AP << /N << /Yes 7 0 R /Off 8 0 R >> >> >>').encode()
+        widgets.append(number)
+        number += 1
+    refs = ' '.join(f'{n} 0 R' for n in widgets)
+    objects[3] = (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  b'/Contents 5 0 R /Annots [%s] >>' % refs.encode())
+    objects[10] = (f'<< /Fields [{refs}] /NeedAppearances false /DA (/Helv 0 Tf 0 g) /DR << /Font << /Helv 4 0 R '
+                   '/ZaDb 6 0 R >> >> >>').encode()
+    return serialise(objects)
+
+
+FIELDS_NOTE = ('Page 1 has PDF form fields; their values were read and added after the page text, labelled as form '
+               'fields.')
+
+
+class PdfFormCheckboxPlacementTests(unittest.TestCase):
+    """ingest:1 (PDF) — the box's glyph goes at the start of the one line it sits beside; the block is unchanged."""
+
+    def test_boxes_left_of_their_labels(self):
+        for tooltips, block in ((False, 'Check Box1: not checked\nCheck Box2: checked'),
+                                (True, 'Biopsy: not checked\nCold snare polypectomy: checked')):
+            with self.subTest(tooltips=tooltips):
+                result = pdf_extract(box_form(tooltips=tooltips), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', (FIELDS_NOTE,)))
+                self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy\n☒ Cold snare polypectomy\n\n'
+                                                     '[PDF form fields on page 1]\n' + block), result.text)
+                self.assertEqual(reading(result.text, 'Biopsy'), 'negated')
+                self.assertNotEqual(reading(result.text, 'Cold snare polypectomy'), 'negated')
+
+    def test_reportlab_form(self):
+        buffer = io.BytesIO()
+        canvas = Canvas(buffer, pagesize=letter, invariant=1)
+        canvas.setFont('Helvetica', 11)
+        for x, y, text in FORM_NOTE + [(90, 620, 'Biopsy'), (90, 600, 'Cold snare polypectomy')]:
+            canvas.drawString(x, y, text)
+        canvas.acroForm.checkbox(name='Check Box1', x=72, y=617, size=12, checked=False, buttonStyle='check')
+        canvas.acroForm.checkbox(name='Check Box2', x=72, y=597, size=12, checked=True, buttonStyle='check')
+        canvas.showPage()
+        canvas.save()
+        result = pdf_extract(buffer.getvalue(), ocr=None)
+        self.assertEqual(result.status, 'ok')
+        self.assertIn('Interventions:\n☐ Biopsy\n☒ Cold snare polypectomy\n', result.text)
+        self.assertTrue(result.text.endswith('Check Box1: not checked\nCheck Box2: checked'), result.text)
+
+    def test_no_glyph_when_the_box_cannot_be_tied_exactly(self):
+        biopsy = ('Check Box1', 'Biopsy', False)
+        cases = {
+            # The label starts left of the box ("Biopsy: [box]"): the line does not start beside it.
+            'label before the box': [biopsy + ((140, 618, 152, 630), (90, 620, 'Biopsy:'))],
+            # Two baselines inside the box's height.
+            'two lines beside a tall box': [biopsy + ((72, 590, 84, 640), (90, 620, 'Biopsy'))],
+            # The label starts far from the box.
+            'label far away': [biopsy + ((72, 618, 84, 630), (300, 620, 'Biopsy'))],
+            # The baseline is outside the box's vertical extent.
+            'box above the label': [biopsy + ((72, 640, 84, 652), (90, 620, 'Biopsy'))],
+        }
+        for label, rows in cases.items():
+            with self.subTest(label):
+                note = FORM_NOTE + ([(90, 630, 'Cold snare polypectomy')] if label.startswith('two lines') else [])
+                result = pdf_extract(box_form(rows, note=note), ocr=None)
+                self.assertNotIn('☐', result.text)
+                self.assertTrue(result.text.endswith('[PDF form fields on page 1]\nCheck Box1: not checked'),
+                                result.text)
+
+    def test_no_glyph_on_a_row_holding_another_button(self):
+        rows = [('Check Box1', 'Biopsy', False, (72, 618, 84, 630), (90, 620, 'Biopsy')),
+                ('Check Box2', 'Cold snare', True, (200, 618, 212, 630), (218, 620, 'Cold snare'))]
+        result = pdf_extract(box_form(rows), ocr=None)
+        self.assertNotIn('☐', result.text)
+        self.assertNotIn('☒', result.text)
+        self.assertTrue(result.text.endswith('Check Box1: not checked\nCheck Box2: checked'), result.text)
+        radio = pdf_extract(box_form(rows[:1], radio=[('Extent', (200, 618, 212, 630), True)]), ocr=None)
+        self.assertNotIn('☐', radio.text)
+
+    def test_rotated_label_is_not_tied(self):
+        upright = box_form(BOX_ROWS[:1])
+        rotated = upright.replace(b'BT /F1 11 Tf 90 620 Td (Biopsy) Tj ET', b'BT /F1 11 Tf 0 1 -1 0 90 620 Tm (Biopsy) Tj ET')
+        self.assertNotEqual(rotated, upright)
+        result = pdf_extract(serialise_again(rotated), ocr=None)
+        self.assertIn('Biopsy', result.text)
+        self.assertNotIn('\u2610', result.text)
+
+    def test_radio_buttons_write_no_glyph(self):
+        result = pdf_extract(box_form([], note=FORM_NOTE + [(90, 620, 'Rectosigmoid only')],
+                                      radio=[('Extent', (72, 618, 84, 630), True)]), ocr=None)
+        self.assertTrue(result.text.endswith('Interventions:\nRectosigmoid only\n\n[PDF form fields on page 1]\n'
+                                             'Extent: Yes'), result.text)
+
+    def test_placed_glyphs_are_not_counted_as_read_text(self):
+        # Read: 'Biopsy' (6) and 'Check Box1: not checked' (20 non-space characters) = 26; the glyph is not read.
+        data = box_form(BOX_ROWS[:1], note=[])
+        self.assertEqual(pdf_extract(data, ocr=None, limits=Limits(min_text_chars_per_page=26)).status, 'ok')
+        short = pdf_extract(data, ocr=None, limits=Limits(min_text_chars_per_page=27))
+        self.assertNotEqual(short.status, 'ok')
+        self.assertEqual(short.messages[0], 'Page 1 has no usable text layer and OCR is not available on this server.')
+
+    def test_hidden_box_writes_nothing(self):
+        result = pdf_extract(box_form(BOX_ROWS[:1], flags=2), ocr=None)
+        self.assertNotIn('☐', result.text)
+        self.assertNotIn('[PDF form fields', result.text)
+
+    def test_existing_label_then_box_form_is_unchanged(self):
+        from tests.test_repairs_ingest_pdf import FORM_BLOCK, acroform_pdf
+        result = pdf_extract(acroform_pdf(), ocr=None)
+        self.assertTrue(result.text.endswith('Biopsy taken:\n\n' + FORM_BLOCK), result.text)
 
 
 if __name__ == '__main__':
