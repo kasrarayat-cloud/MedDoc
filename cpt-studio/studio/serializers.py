@@ -264,6 +264,8 @@ def encounter_detail(encounter, membership):
         'routing': _routing_json(encounter),
         'pipeline': {'busy': busy(encounter), 'can_stop': busy(encounter) and membership.can_review,
                      'can_resume': review.can_resume(encounter) and membership.can_review,
+                     # A member's Stop, as opposed to a stage the system cancelled (expired, or left by a dead worker).
+                     'stopped_by_member': encounter.stopped_at is not None,
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
                                  'finished_at': _iso(j.finished_at)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],

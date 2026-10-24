@@ -56,29 +56,64 @@ class ResumeOnlyTheLatestCancelledStageTests(ApiHarness, TestCase):
 
 
 @override_settings(**LIVE)
-class OnlyAnAnswerAnswersTests(ApiHarness, TestCase):
-    """pipeline:1 — a run that holds no answer (not sent, failed) is never reused by a context change."""
+class MetadataChangesNeverResendTests(ApiHarness, TestCase):
+    """Round 3, pipeline3:0 — ARCHITECTURE 5.4: a setting or billing change leaves the request unchanged, so it
+    re-checks with the run in use and sends nothing, whatever that run's outcome.
 
-    def test_a_setting_change_after_a_not_sent_run_sends(self):
-        self.provider.outcomes = ['not_sent']
+    fb65bf79f implemented pipeline:1, which its second, final verifier had REFUTED, and re-sent the identical
+    request after a failed or not-sent run on every metadata save. These pin the contract instead.
+    """
+
+    def change(self, encounter_id, *bodies):
+        for body in bodies:
+            response = self.post(f'/api/encounters/{encounter_id}/context', body)
+            self.assertEqual(response.status_code, 201, response.content)
+            drain()
+
+    def assert_rechecked_with(self, encounter_id, state, run_state):
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual(encounter.state, state)
+        self.assertEqual(encounter.current_assessment.provider_run.state, run_state)
+        self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
+
+    def test_after_a_failed_send(self):
+        self.provider.outcomes = ['failed', 'failed', 'failed']
         encounter_id = self.create()
         drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        self.change(encounter_id, {'billing_context': 'facility'}, {'setting': 'office'})
+        self.assertEqual(len(self.provider.requests), 1)
+        self.assert_rechecked_with(encounter_id, 'provider_failed', models.ProviderRun.FAILED)
+
+    def test_after_an_attempt_that_was_not_sent(self):
+        self.provider.outcomes = ['not_sent', 'not_sent']
+        encounter_id = self.create()
+        drain()
+        self.change(encounter_id, {'setting': 'office'}, {'billing_context': 'professional'})
+        self.assertEqual(len(self.provider.requests), 1)
         self.assertEqual(self.provider.sent, [])
-        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
-        drain()
-        self.assertEqual(len(self.provider.sent), 1)
-        run = models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run
-        self.assertEqual(run.state, models.ProviderRun.SUCCEEDED)
+        self.assert_rechecked_with(encounter_id, 'provider_failed', models.ProviderRun.NOT_SENT)
 
-    def test_a_setting_change_after_a_failed_run_is_a_new_attempt(self):
-        self.provider.outcomes = ['failed']
+    def test_after_a_reconciled_unknown_whose_one_attempt_failed(self):
+        self.provider.outcomes = ['unknown', 'failed', 'failed', 'failed']
         encounter_id = self.create()
         drain()
-        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'office'}).status_code, 201)
+        response = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                             {'provider_run_id': self.unknown_run_id(encounter_id),
+                              'note': 'Checked the synthetic provider console: no result exists.'})
+        self.assertEqual(response.status_code, 201, response.content)
         drain()
-        self.assertEqual(len(self.provider.sent), 2)
-        run = models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run
-        self.assertEqual(run.state, models.ProviderRun.SUCCEEDED)
+        self.assertEqual(len(self.provider.requests), 2)
+        self.change(encounter_id, {'billing_context': 'facility'}, {'billing_context': ''}, {'setting': 'office'})
+        self.assertEqual(len(self.provider.requests), 2)
+        self.assert_rechecked_with(encounter_id, 'provider_failed', models.ProviderRun.FAILED)
+
+    def test_a_changed_service_date_still_requests_new_proposals(self):
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        self.change(encounter_id, {'service_date': '2026-10-19'})
+        self.assertEqual(len(self.provider.requests), 2)
 
 
 @override_settings(**LIVE)

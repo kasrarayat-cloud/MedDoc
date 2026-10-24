@@ -78,6 +78,7 @@
  "routing": null,
  "pipeline": {
   "can_resume": true,
+  "stopped_by_member": true,
   "busy": false,
   "can_stop": false,
   "stages": [

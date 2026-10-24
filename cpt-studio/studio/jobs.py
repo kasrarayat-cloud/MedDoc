@@ -429,6 +429,16 @@ def mark_stale():
     cutoff = timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS)
     for job in Job.objects.filter(state=Job.RUNNING, started_at__lt=cutoff):
         with transaction.atomic():
+            # A predict whose run had already FINISHED when the worker died (its outcome recorded, the assess not
+            # yet queued) is settled by that run, exactly as the stage would have settled it, so a Resume can
+            # never re-send an identical request that already failed. Read before reserved runs are settled below.
+            finished = None
+            if job.kind == Job.PREDICT and job.context_id:
+                finished = (models.ProviderRun.objects
+                            .filter(revision=job.revision, created_at__gte=job.started_at,
+                                    state__in=(models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED,
+                                               models.ProviderRun.UNKNOWN, models.ProviderRun.NOT_SENT))
+                            .order_by('-created_at').first())
             sending = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.SENDING)
             reserved = models.ProviderRun.objects.filter(revision=job.revision, state=models.ProviderRun.RESERVED)
             unknown = job.kind == Job.PREDICT and sending.exists()
@@ -441,13 +451,21 @@ def mark_stale():
                 run.state, run.error, run.finished_at = (models.ProviderRun.NOT_SENT,
                                                          'The worker stopped before sending.', timezone.now())
                 run.save(update_fields=['state', 'error', 'finished_at'])
-            # A send in flight is unknown (reconcile it); any other stage recorded nothing it would not redo,
-            # so it is cancelled and can be resumed rather than stranding the encounter.
-            job.state = Job.UNKNOWN if unknown else Job.CANCELLED
-            job.error = ('The worker stopped while this stage was running.' if unknown else
-                         'The worker stopped while this stage was running; resume to run it again.')
+            if finished is not None and not unknown:
+                enqueue(Job.ASSESS, encounter=job.encounter, revision=job.revision, context=job.context,
+                        provider_run=finished, key=f'assess:{job.context_id}:{finished.pk}',
+                        requested_by=job.requested_by)
+                job.state, job.error = Job.SUCCEEDED, ''
+                job.result = {'provider': finished.state, 'run': str(finished.pk),
+                              'settled': 'the worker stopped after the provider outcome was recorded'}
+            else:
+                # A send in flight is unknown (reconcile it); any other stage recorded nothing it would not redo,
+                # so it is cancelled and can be resumed rather than stranding the encounter.
+                job.state = Job.UNKNOWN if unknown else Job.CANCELLED
+                job.error = ('The worker stopped while this stage was running.' if unknown else
+                             'The worker stopped while this stage was running; resume to run it again.')
             job.finished_at = timezone.now()
-            job.save(update_fields=['state', 'error', 'finished_at'])
+            job.save(update_fields=['state', 'error', 'result', 'finished_at'])
         review.refresh_state(job.encounter)
 
 
@@ -570,9 +588,12 @@ def _run_answers(run, revision, context):
 
     Compared on the request itself (provider, adapter and canonical request hash), never
     on the previous context: the run in use may have been requested for another date.
+    Whatever that run's outcome: a setting or billing change that leaves the request
+    unchanged re-checks and never sends (ARCHITECTURE 5.4), so a failed or not-sent
+    request is never re-sent behind a metadata save.
     """
-    if run is None or not run.request_sha256 or run.state != models.ProviderRun.SUCCEEDED:
-        return False  # no answer to reuse: not sent, unknown or failed goes through predict (reuse is free there)
+    if run is None or not run.request_sha256:
+        return False
     try:
         provider = get_provider()
         if provider is None or (provider.name, provider.adapter_version) != (run.provider, run.adapter_version):

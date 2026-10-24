@@ -72,7 +72,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
        "mentions": [{"status": "performed", "section": "procedure", "cues": ["..."], "span": {"start": 0, "end": 0, "text": ""}}],
        "facts": [{"name": "extent", "value": "cecum", "origin": "document", "evidence": [], "note": ""}],
        "missing": []}]},
-  "pipeline": {"busy": false, "can_stop": false, "can_resume": false,
+  "pipeline": {"busy": false, "can_stop": false, "can_resume": false, "stopped_by_member": false,
                "stages": [{"kind": "extract", "state": "succeeded", "error": "", "finished_at": "..."}]},
   "provider_runs": [{"id": "uuid", "provider": "corti", "mode": "live", "state": "succeeded", "http_status": 200,
                      "latency_ms": 6123.4, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
@@ -150,7 +150,11 @@ running, or before the text is extracted.
 Stop: records an encounter-level Stop; queued stages are cancelled, no further
 stage starts and no provider request is sent while it stands. Resume (when
 `pipeline.can_resume`): lifts the Stop and re-runs the stage it cancelled, with
-the current context. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
+the current context. A stage the system cancelled (it expired in the queue, or
+a worker stopped mid-stage) is resumable the same way; `pipeline.stopped_by_member`
+is false then, and the stage's `error` records what happened. A predict whose
+provider outcome was already recorded when its worker stopped is settled by that
+outcome instead, so a Resume never re-sends a request that already failed. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
 (note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
 attempt, for the current revision's current context. Context, resume and
 reconcile each run under the encounter's row lock and answer 409 while any
@@ -158,7 +162,10 @@ stage is queued or running, so one member action yields at most one provider
 attempt.
 
 Notes and acknowledgements are at most 2,000 characters (400 beyond that,
-never truncated). An addendum is at most 20,000 characters. `revision.addendum_offset`
+never truncated). An addendum is at most 20,000 characters. A note,
+acknowledgement or addendum sent as anything but a JSON string (a list, an
+object, a number, a boolean) answers 400 and is never stored as a rendering of
+that value; an identifier sent as anything but a string answers the endpoint's 404. `revision.addendum_offset`
 is the offset where the latest addendum begins (null when the revision is not
 an addendum). `proposal.decision` has the same shape as a `decisions.history` entry.
 A decision's `created_at` is when its row was recorded; `decided_at` is when the

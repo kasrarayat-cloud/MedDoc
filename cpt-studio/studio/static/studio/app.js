@@ -638,7 +638,15 @@ function stateCards(doc) {
   }
   if (doc.state === 'stopped') {
     const resume = doc.pipeline?.can_resume ? `<button type="button" class="button primary" data-action="resume">${icon('arrow')}Resume processing</button>` : '';
-    cards.push(infoCard('Processing was<br>stopped.', ['Queued stages were cancelled, and no unsent provider request is made unless processing is resumed.'], resume));
+    // A stage the system cancelled (it expired in the queue, or a worker stopped mid-stage) is not a member's Stop:
+    // say what was recorded instead of telling the member they stopped it.
+    const cause = [...stages].reverse().find(stage => stage.state === 'cancelled' && stage.error);
+    if (doc.pipeline?.stopped_by_member === false && cause) {
+      const label = lookup(Object.fromEntries(STAGES), cause.kind, 'A processing stage');
+      cards.push(infoCard('Processing did<br>not finish.', [`${label}: ${cause.error}`, 'Nothing was resent automatically.'], resume));
+    } else {
+      cards.push(infoCard('Processing was<br>stopped.', ['Queued stages were cancelled, and no unsent provider request is made unless processing is resumed.'], resume));
+    }
   }
   return cards.join('');
 }

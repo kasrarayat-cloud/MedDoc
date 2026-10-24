@@ -35,8 +35,27 @@ def _storable(value, label):
     return value
 
 
+def _text_value(data, name, label):
+    """A member-supplied text field: a string, or absent/null as ''. Any other JSON type is refused, never
+    turned into its Python repr (API.md: invalid input answers 400 and is never altered)."""
+    value = data.get(name)
+    if value is None:
+        return ''
+    if not isinstance(value, str):
+        raise ApiError(400, f'{label} must be text.')
+    return value
+
+
+def _identifier(value):
+    """A row identifier from the request body. A non-string is not an identifier: refused before the ORM, whose
+    lookup recurses once per level of a nested list (a RecursionError, i.e. an HTML 500)."""
+    if not isinstance(value, str):
+        raise ValueError('not an identifier')
+    return value
+
+
 def _text_field(data, name, label):
-    value = _storable(str(data.get(name, '') or ''), label)
+    value = _storable(_text_value(data, name, label), label)
     if len(value) > MAX_NOTE_CHARS:
         raise ApiError(400, f'{label} can be at most {MAX_NOTE_CHARS} characters.')
     return value
@@ -63,6 +82,8 @@ def api_view(view):
             return JsonResponse({'error': str(exc) or 'Your role cannot do that.'}, status=403)
         except ValidationError as exc:
             return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
+        except RecursionError:  # a backstop: a nested value that reached code recursing per level
+            return JsonResponse({'error': 'The request is nested too deeply.'}, status=400)
     return wrapper
 
 
@@ -161,7 +182,7 @@ def decisions(request, encounter_id):
         if encounter.current_assessment_id is None:
             raise ApiError(409, 'There are no proposals to decide on yet.')
         try:
-            proposal = encounter.current_assessment.proposals.get(pk=data.get('proposal_id'))
+            proposal = encounter.current_assessment.proposals.get(pk=_identifier(data.get('proposal_id')))
         except (models.Proposal.DoesNotExist, ValueError, ValidationError):
             raise ApiError(404, 'That proposal is not part of the current review.')
         decision = review.record_decision(
@@ -179,7 +200,7 @@ def addenda(request, encounter_id):
         encounter, membership = scoped_encounter(request.user, encounter_id, for_update=True)
         _require_reviewer(membership)
         _attested(data.get('synthetic_attestation'))
-        text = _storable(str(data.get('text', '')), 'The addendum').strip()
+        text = _storable(_text_value(data, 'text', 'The addendum'), 'The addendum').strip()
         if not text:
             raise ApiError(400, 'Write the additional documentation to add.')
         if len(text) > 20000:
@@ -197,7 +218,7 @@ def addenda(request, encounter_id):
         clarification = None
         if data.get('clarification_id'):
             try:
-                clarification = encounter.clarifications.get(pk=data['clarification_id'],
+                clarification = encounter.clarifications.get(pk=_identifier(data['clarification_id']),
                                                             state=models.Clarification.OPEN)
             except (models.Clarification.DoesNotExist, ValueError, ValidationError):
                 raise ApiError(404, 'That clarification is not open on this document.')
@@ -280,7 +301,7 @@ def reconcile(request, encounter_id):
     if len(note) < 12:
         raise ApiError(400, 'Describe how the unknown outcome was reconciled (at least 12 characters).')
     try:
-        run = encounter.provider_runs.get(pk=data.get('provider_run_id'))
+        run = encounter.provider_runs.get(pk=_identifier(data.get('provider_run_id')))
     except (models.ProviderRun.DoesNotExist, ValueError, ValidationError):
         raise ApiError(404, 'That provider request is not part of this document.')
     try:

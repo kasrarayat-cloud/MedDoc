@@ -312,6 +312,17 @@ test('state fixtures: processing, provider_unknown and extraction_failed show th
   const stopped = fixture('encounter-stopped.json');
   assert.ok(render(stopped).includes('data-action="resume"'));
   assert.equal(render({ ...stopped, pipeline: { ...stopped.pipeline, can_resume: false } }).includes('data-action="resume"'), false);
+  // Round 3, pipeline3:3: a stage the system cancelled is not a member's Stop; its recorded cause is shown.
+  assert.ok(render(stopped).includes('Queued stages were cancelled'), 'a member Stop keeps its wording');
+  const cause = 'The worker stopped while this stage was running; resume to run it again.';
+  const swept = { ...stopped, pipeline: { ...stopped.pipeline, stopped_by_member: false,
+    stages: stopped.pipeline.stages.map(stage => (stage.kind === 'predict' ? { ...stage, error: cause } : stage)) } };
+  const sweptHtml = render(swept);
+  assert.ok(sweptHtml.includes('Processing did<br>not finish.'));
+  assert.ok(sweptHtml.includes(`Request CPT proposals from the provider: ${cause}`));
+  assert.equal(sweptHtml.includes('Queued stages were cancelled'), false);
+  assert.equal(sweptHtml.includes('Processing was<br>stopped.'), false);
+  assert.ok(sweptHtml.includes('data-action="resume"'));
   assert.equal(busy.includes('data-action="edit-context"'), false, 'context is not editable while a stage runs');
   assert.ok(render(fixture('encounter-ready.json')).includes('data-action="edit-context"'));
   assert.equal(failedHtml.includes('data-action="edit-context"'), false, 'no context edits without extracted text');
