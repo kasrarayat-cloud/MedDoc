@@ -253,24 +253,55 @@ def _stated_as_done(s: _Selection) -> bool:
                for r in s.evaluation.own)
 
 
-def _done_today(finding: FamilyFinding) -> Optional[str]:
+def _done_today(finding: FamilyFinding, selections: Sequence[_Selection] = ()) -> Optional[str]:
     """The status in which a routed family documents a service as done on the date of service (performed or
     incomplete), or None. A gi.other finding gathers different procedures, and its family status may rank another
-    procedure's denial first ("Anoscopy: patient declined." beside a banding performed today), so one of its
-    mentions read as done is enough."""
-    if finding.status in checks.POSITIVE:
-        return finding.status
-    if finding.family == OTHER_GI:
-        return next((m.status for m in finding.mentions if m.status in checks.POSITIVE), None)
-    return None
+    procedure's denial first ("Anoscopy: patient declined." beside a banding performed today), so it is read mention
+    by mention: one of its mentions read as done is enough. With ``selections``, a mention a selected test code
+    describes (_coded_test) is not counted."""
+    if finding.family == OTHER_GI and finding.mentions:
+        done = {m.status for m in finding.mentions if m.status in checks.POSITIVE and not _coded_test(m, selections)}
+        return next((status for status in checks.POSITIVE if status in done), None)
+    return finding.status if finding.status in checks.POSITIVE else None
 
 
-def _possibly_today(finding: FamilyFinding) -> bool:
+def _possibly_today(finding: FamilyFinding, selections: Sequence[_Selection] = ()) -> bool:
     """A routed family whose performance on the date of service is not established, through a mention that can speak
     for that date. A gi.other finding is read mention by mention: each of its mentions may be another procedure."""
     if finding.family == OTHER_GI:
-        return any(m.status == 'uncertain' and _speaks_for_today(m) for m in finding.mentions)
+        return any(m.status == 'uncertain' and _speaks_for_today(m) and not _coded_test(m, selections)
+                   for m in finding.mentions)
     return finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions)
+
+
+def _coded_test(mention: ServiceMention, selections: Sequence[_Selection]) -> bool:
+    """A routed gi.other mention that a selected test code describes, so it is no uncoded same-day procedure
+    (validation:7): a selected, non-excluded gi.other code that is not procedural (its fee-schedule row for the date
+    gives the global period XXX: "Esophageal manometry was performed today." with 91010) has an exact evidence span
+    over the mention's name, and the name holds one procedure word. A name with a second procedure ("Esophageal
+    manometry and esophageal dilation"), a code with another global period or none, and evidence beside the name
+    keep the mention counted, fail-closed."""
+    if not selections or checks.procedure_words(mention.span.text) != 1:
+        return False
+    return any(s.family == OTHER_GI and not s.excluded and not _procedural(s)
+               and any(e.start <= mention.span.start and mention.span.end <= e.end for e in s.evidence)
+               for s in selections)
+
+
+def _cited(mention: ServiceMention, selections: Sequence[_Selection]) -> bool:
+    """Whether a selected, non-excluded gi.other code has an exact evidence span lying in the mention's sentence
+    (validation:5): only then does a code speak for that procedure. A passage across two procedures' sentences speaks
+    for neither."""
+    lo, hi = mention.sentence.start, mention.sentence.end
+    for s in selections:
+        if s.family != OTHER_GI or s.excluded:
+            continue
+        for span in s.evidence:
+            start = span.start + len(span.text) - len(span.text.lstrip())
+            end = span.end - (len(span.text) - len(span.text.rstrip()))
+            if lo <= start and end <= hi:
+                return True
+    return False
 
 
 def _same_day_family(finding: FamilyFinding) -> bool:
@@ -289,11 +320,11 @@ def _encounter(provider, context, routing, sources, date_state, selections) -> _
     possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
     possible += [s for s in selections if _procedural(s) and _stated_as_done(s)]
     same_day = [f for f in routing.findings if _same_day_family(f)]
-    labels = [PROFILES[f.family].label for f in same_day if _done_today(f)]
+    labels = [PROFILES[f.family].label for f in same_day if _done_today(f, selections)]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]
     # A routed family whose performance is not established holds the E/M only through a mention that can speak for
     # the date of service; a selected procedural code whose own status is uncertain always does.
-    possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f)]
+    possible_labels = [PROFILES[f.family].label for f in same_day if _possibly_today(f, selections)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}
@@ -498,14 +529,25 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
     proposal, whether an E/M was not counted).
 
     On a procedure day an unproposed E/M is never reported as missed: that would push toward adding an office
-    visit because a procedure report contains history or examination text.
+    visit because a procedure report contains history or examination text. Other GI services are read mention by
+    mention (validation:5): a procedure done today is covered only by a selected gi.other code citing its sentence
+    (_cited), and when another gi.other code is selected the uncovered procedures are named.
     """
     proposed = {s.family for s in selections if not s.excluded}
-    unproposed = [f.family for f in routing.findings
-                  if f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI)
-                  and _done_today(f) and f.family not in proposed]
+    unproposed, named = [], {}
+    for f in routing.findings:
+        if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
+            continue
+        if f.family == OTHER_GI and f.mentions:
+            uncited = [m.span.text for m in f.mentions if m.status in checks.POSITIVE and not _cited(m, selections)]
+            if uncited and OTHER_GI in proposed:
+                named[OTHER_GI] = checks.uncited_label(PROFILES[OTHER_GI].label, uncited)
+            if uncited:
+                unproposed.append(f.family)
+        elif f.family not in proposed:
+            unproposed.append(f.family)
     visit_skipped = procedure_day and any(family in checks.EM_FAMILIES for family in unproposed)
-    labels = [PROFILES[family].label for family in unproposed
+    labels = [named.get(family, PROFILES[family].label) for family in unproposed
               if not (procedure_day and family in checks.EM_FAMILIES)]
     return list(dict.fromkeys(labels)), visit_skipped
 

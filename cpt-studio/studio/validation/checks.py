@@ -925,6 +925,12 @@ SAME_DAY_COVERAGE_CHECK = Check(
     'significant, separately identifiable E/M service, is not verified.', COVERAGE_SOURCE)
 
 
+def uncited_label(label: str, names: Sequence[str]) -> str:
+    """A family label that names the procedures no selected code cites ("Other GI service (“Rubber band ligation
+    x3”)"), when another code of the family is selected."""
+    return f'{label} ({_join([f"“{excerpt(name)}”" for name in dict.fromkeys(names)])})'
+
+
 def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Check:
     """``visit_beside_procedure``: routing found an E/M service on a procedure day that was not counted as missed."""
     label = 'Performed services without a proposal'
@@ -1012,6 +1018,13 @@ def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
 _ACT_STATED = re.compile(r'\b(?:was|were|been|we|i)\s+(?:(?!not\b|never\b)[a-z]+\s+)?(?:banded|drained|excised|ablated|'
                          r'cauteri[sz]ed)\b', re.A | re.I)
 _LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # "2)", "(2)", "2.", "*", a bullet
+
+
+def procedure_words(name: str) -> int:
+    """How many procedure words a routed gi.other name holds by routing's form rule (studio.gi.detect._PROCEDURE_WORD),
+    resolved at call time like ``span_status``."""
+    from studio.gi import detect
+    return len(detect._PROCEDURE_WORD.findall(name))
 
 
 def names_procedure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:

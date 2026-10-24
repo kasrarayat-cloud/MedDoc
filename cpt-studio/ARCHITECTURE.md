@@ -364,15 +364,19 @@ selected or detected — a selected one held for clarification is listed as not
 established, never as performed and never left out — otherwise `not_verified`,
 since routing recognises only the profiled families), performed services with
 no proposal
-(`services.unproposed`, a possible missed code; a performed `gi.other` finding
-counts). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
+(`services.unproposed`, a possible missed code; each performed `gi.other`
+procedure counts unless a selected `gi.other` code's exact evidence lies in its
+sentence, and is named when another `gi.other` code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 
 Same-day procedure, for the E/M hold (fail-closed): a performed non-E/M code
 with a procedure profile or a global period other than XXX (no fee-schedule
 row counts); a selected procedural code whose performance is uncertain; a
 routed procedure family, or a routed `gi.other` service (global period
-unknown, so it counts), read as performed; one read as uncertain through a
+unknown, so it counts), read as performed — unless a selected, non-excluded
+`gi.other` code whose fee-schedule row gives the global period XXX covers that
+mention's name with its exact evidence and the name holds one procedure (a coded
+test such as 91010 manometry); one read as uncertain through a
 mention that can speak for the date of service — outside plan, history and
 indication / chief-complaint sections a mention that hedges or doubts (never a
 silent one), inside them only an explicit performance statement that routing
