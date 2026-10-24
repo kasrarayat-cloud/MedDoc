@@ -1315,6 +1315,40 @@ _REFERENCE_PATTERNS = ((('cancelled', cues.PROCEDURE_CANCELLED), ('negated', cue
                        + tuple(('incomplete', pattern) for _, pattern in cues.INCOMPLETE_CLAUSE))
 
 
+# What a colonoscopy or an EGD may leave undone and still be complete: intubating the terminal ileum (or
+# traversing the ileocecal valve to it) and retroflexion (cues.OTHER_ACT_NEGATION treats them as other acts).
+_SUB_ACT = re.compile(r'\b(?:retroflex\w*|terminal\s+ile(?:um|al)|ile(?:um|al)\s+intubation|ileum|ileal|TI|'
+                      r'ileo-?cecal\s+valve)\b', re.A | re.I)
+_SUB_ACT_PLACE = re.compile(r'\bterminal\s+ileum\b|\bneo-?terminal\s+ileum\b|\bTI\b|\bileo-?cecal\s+valve\b', re.A | re.I)
+
+
+def _reached_expected_depth(an: Analysis, attributed: list[Optional[str]], family: str) -> bool:
+    """Whether the family's own text documents its expected extent reached: the cecum for a colonoscopy,
+    the depth the named upper endoscopy calls for for an EGD."""
+    key = ('reached-depth', family)
+    if key not in an.memo:
+        table, expected = ((cues.LOWER_LANDMARKS, cues.CECUM_DEPTH) if family == 'gi.colonoscopy'
+                           else (cues.UPPER_LANDMARKS, _expected_upper_depth(an)))
+        reached, _ = _landmarks(an, _family_sentences(an, attributed, family), table)
+        an.memo[key] = max((depth for depth, _, _ in reached), default=0) >= expected
+    return an.memo[key]
+
+
+def _only_a_sub_act(an: Analysis, attributed: list[Optional[str]], family: str, s: int, e: int) -> bool:
+    """Whether the sentence [s, e), which says something was not completed or was aborted, speaks only of
+    a sub-act (the terminal ileum, the ileocecal valve, retroflexion) of a procedure that reached its
+    expected extent: then it is no incompleteness of the procedure. A landmark short of that extent in the
+    same sentence ("could not be advanced beyond the splenic flexure") keeps it the procedure's."""
+    if family not in ('gi.colonoscopy', 'gi.egd') or not _SUB_ACT.search(an.text, s, e):
+        return False
+    table = cues.LOWER_LANDMARKS if family == 'gi.colonoscopy' else cues.UPPER_LANDMARKS
+    for _, _, pattern in table:
+        for m in pattern.finditer(an.text, s, e):
+            if not _SUB_ACT_PLACE.fullmatch(m.group(0)):
+                return False
+    return _reached_expected_depth(an, attributed, family)
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -1335,6 +1369,8 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                         continue
                     if family == 'gi.ercp' and 'cannulat' in m.group(0).lower() and _pancreatic_avoidance(an, m.start()):
                         continue
+                    if status in ('incomplete', None) and _only_a_sub_act(an, attributed, family, s, e):
+                        continue  # "The terminal ileum was not intubated" after the cecum was reached
                     mention = Mention(family, m.start(), m.end(), 'reference', m.group(0))
                     if status:
                         found[mention] = Reading(status, (f'{status}: {m.group(0)}',), 'cue')
@@ -1768,7 +1804,16 @@ _SEPARATE_EM = re.compile(r'\b(?:significant\s*,?\s*(?:and\s+)?)?separately[\s-]
 _SEPARATE_EM_CONTRARY = re.compile(
     r"\b(?:no|not|none|never|neither|nor|without|cannot|nil|denied|declined|absent|lacking|unclear|uncertain|unknown|"
     r"whether|if|unless|may|might|could|would|should|possibl[ey]|questionabl[ey]|consider\w*|recommend\w*|pending|"
-    r"question|answer)\b|n't\b|\?|(?<![\w/])n/?a(?![\w/])|(?:^|[\s(])[QA]\s*[:.)]", re.A | re.I)
+    r"question|answer|"
+    # a condition or a rule, not a statement of what was done: "requires that ... is documented", "applies only
+    # when ...", "must be documented", "criteria"
+    r"when|whenever|once|where|only|requires?|required|requirements?|must|needs?|needed|applies|apply|criteria|"
+    r"criterion|to\s+bill)\b|n't\b|\?|(?<![\w/])n/?a(?![\w/])|(?:^|[\s(])[QA]\s*[:.)]", re.A | re.I)
+# A statement about another encounter is not one about this one: "at the previous visit", "at that visit".
+_OTHER_ENCOUNTER = re.compile(r'\b(?:previous|prior|last|earlier|preceding|initial|first|next|upcoming|future|subsequent|'
+                              r'follow-?up)\s+(?:office\s+|clinic\s+)?(?:visit|encounter|consult(?:ation)?|appointment|'
+                              r'evaluation)s?\b|\b(?:at|during|on)\s+that\s+(?:visit|encounter|time|date|day)\b', re.A | re.I)
+SEPARATE_EM_REACH = 300  # how much of the rest of the statement's line is quoted with it (all of it is read)
 # An affirmative predicate in the same sentence: "... was provided", "I performed ...", ": yes".
 _SEPARATE_EM_AFFIRMED = re.compile(
     r'\b(?:was|were|is|are|has\s+been|have\s+been|had\s+been)\s+(?:also\s+|separately\s+)?(?:performed|provided|'
@@ -1781,20 +1826,29 @@ SEPARATE_EM_NOTE = 'The documentation states a significant, separately identifia
 def _separate_em_fact(an: Analysis) -> Optional[Fact]:
     """The clinician's explicit statement that a same-day E/M was significant and separately
     identifiable. Fail-closed over the whole sentence and the rest of its line: a denial, a
-    question, a hedge, or the lack of an affirmative predicate means it is not documented.
-    The evidence is the whole sentence, so a check quoting it cannot hide a trailing "not"."""
+    question, a hedge, a condition or a rule ("requires that ... is documented"), another
+    encounter ("at the previous visit"), a date that is not the date of service (or any date when
+    that is unknown), or the lack of an affirmative predicate means it is not documented. The
+    evidence is the sentence and the rest of its line (within SEPARATE_EM_REACH), so a check
+    quoting it cannot hide what follows."""
     text, spans = an.text, []
     for match in _SEPARATE_EM.finditer(text):
         if an.lay.section_at(match.start()).kind in ('plan', 'history'):
             continue
         start, end = an.lay.sentence_for(match.start(), match.end())
         line_end = text.find('\n', end)
-        rest = text[end:len(text) if line_end < 0 else line_end]
-        if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(rest):
+        rest_end = len(text) if line_end < 0 else line_end
+        if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(text, end, rest_end):
             continue
         if not _SEPARATE_EM_AFFIRMED.search(text, start, end):
             continue
-        spans.append(_span(text, start, end))
+        # About this encounter only: no other visit, and no date that is not the date of service.
+        if _OTHER_ENCOUNTER.search(text, start, rest_end) or any(
+                an.service_date is None or ctx.compare_to_service(d, an.service_date) != 0
+                for d in an.dates_in(start, rest_end)):
+            continue
+        quoted = min(rest_end, end + SEPARATE_EM_REACH)
+        spans.append(_span(text, start, quoted if text[end:quoted].strip() else end))
     return Fact('separate_em', 'documented', 'document', tuple(dict.fromkeys(spans)), SEPARATE_EM_NOTE) if spans else None
 
 

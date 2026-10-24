@@ -874,6 +874,109 @@ class Status17IntentFromAQuestionTests(unittest.TestCase):
                 self.assertEqual(fact_value(self.note(indication), 'gi.colonoscopy', 'intent'), intent)
 
 
+SEPARATE_BASE = ('SYNTHETIC TEST NOTE - NOT A REAL PATIENT\nDate of service: 2026-10-21\nPlace of service: Office (POS 11)\n'
+                 'Established patient office visit for rectal bleeding.\nProcedure: Flexible sigmoidoscopy with biopsy.\n'
+                 'Findings: The sigmoidoscope was advanced to 40 cm. A biopsy was taken from the rectum.\n'
+                 'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+SEPARATE_PICKS = [('99214', 'Established patient office visit for rectal bleeding.'),
+                  ('45331', 'A biopsy was taken from the rectum.')]
+
+
+def separate_em(text):
+    return next((f for f in routed(text).finding('gi.office_em').facts if f.name == 'separate_em'), None)
+
+
+class Status14SeparateEmStatementTests(unittest.TestCase):
+    """status:14 - a requirement, a condition or a statement about another encounter is not the
+    separately identifiable E/M statement; the visit stays held."""
+
+    def test_the_claimed_and_listed_statements(self):
+        for extra in ('Billing note: modifier 25 requires that a significant, separately identifiable E/M service is '
+                      'documented.',
+                      'A significant, separately identifiable E/M service was provided at the previous visit.',
+                      'Modifier 25 applies only when a significant, separately identifiable E/M service is documented.',
+                      'Modifier 25 applies when a significant, separately identifiable E/M service is documented.',
+                      'Modifier 25 is appended once a significant, separately identifiable E/M service is documented.',
+                      'On 2026-09-15 a significant, separately identifiable E/M service was provided.',
+                      'At the last visit a significant, separately identifiable E/M service was provided.',
+                      'A significant, separately identifiable E/M service was provided at the prior consultation.',
+                      '\nADDENDUM (revision 2, added 2026-10-22 09:00 UTC)\nThe significant, separately identifiable E/M '
+                      'service was provided at the 2026-10-14 consultation. Today was the usual pre-procedure assessment.'):
+            text = SEPARATE_BASE + extra + '\n'
+            with self.subTest(extra=extra):
+                self.assertIsNone(separate_em(text))
+                proposals, _ = run_engine(text, SEPARATE_PICKS)
+                self.assertEqual(proposals['99214'].status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_statements_about_this_encounter_are_documented(self):
+        for extra in ('A significant, separately identifiable E/M service was performed today.',
+                      'On 2026-10-21 a significant, separately identifiable E/M service was provided.',
+                      'Attestation: A significant, separately identifiable E/M service was performed.',
+                      'A significant, separately identifiable E/M service was provided on the date of service.'):
+            with self.subTest(extra=extra):
+                fact = separate_em(SEPARATE_BASE + extra + '\n')
+                self.assertIsNotNone(fact)
+                self.assertEqual(fact.value, 'documented')
+
+    def test_a_dated_statement_needs_the_date_of_service(self):
+        undated_note = SEPARATE_BASE.replace('Date of service: 2026-10-21\n', '')
+        self.assertIsNone(separate_em(undated_note + 'On 2026-10-21 a significant, separately identifiable E/M service was '
+                                                     'provided.\n'))
+        self.assertIsNotNone(separate_em(undated_note + 'A significant, separately identifiable E/M service was '
+                                                        'provided.\n'))
+
+    def test_the_evidence_quotes_the_rest_of_the_line(self):
+        statement = 'A significant, separately identifiable E/M service was provided. Counseling took 20 minutes.'
+        fact = separate_em(SEPARATE_BASE + statement + '\n')
+        self.assertEqual(fact.evidence[0].text, statement)
+
+
+SUB_ACT_NOTE = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: The colonoscope was advanced to the '
+                'cecum, identified by the appendiceal orifice and the ileocecal valve. {x}A 6 mm sigmoid polyp was removed '
+                'with a cold snare.\n')
+
+
+class Status15SubActTests(unittest.TestCase):
+    """status:15 - a failed or aborted sub-act (terminal ileum intubation, ileocecal valve traversal,
+    retroflexion) does not make a procedure that reached its expected extent incomplete."""
+
+    FORMS = ('The terminal ileum was not intubated. ',
+             'Terminal ileal intubation was aborted because of a stenotic ileocecal valve. ',
+             'Retroflexion was attempted but aborted because of a narrow rectal vault. ',
+             'The terminal ileum could not be intubated. ', 'Attempts to intubate the terminal ileum were unsuccessful. ',
+             'The ileocecal valve could not be traversed. ',
+             'The cecum was reached without intubation of the terminal ileum. ')
+
+    def test_the_claimed_forms(self):
+        for x in self.FORMS:
+            text = SUB_ACT_NOTE.format(x=x)
+            with self.subTest(x=x):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+                proposals, _ = run_engine(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare.')])
+                item = proposals['45385']
+                self.assertTrue(ready(item))
+                self.assertIsNone(check(item, 'service.incomplete'))
+                self.assertFalse(item.modifier_considerations)
+
+    def test_an_egd_retroflexion(self):
+        text = (HEADER + 'Procedure: EGD\nFindings: The gastroscope was advanced to the second part of the duodenum. '
+                'Retroflexion was aborted because of patient discomfort. Biopsies were taken from the antrum.\n')
+        self.assertEqual(family(text, 'gi.egd'), 'performed')
+
+    def test_the_procedure_short_of_its_extent_stays_incomplete(self):
+        for body in ('The colonoscope could not be advanced beyond the splenic flexure, so the terminal ileum was not '
+                     'intubated.', 'The colonoscope was advanced to the splenic flexure. The procedure was aborted at the '
+                     'splenic flexure.', 'The colonoscope was advanced to the transverse colon. The cecum and terminal '
+                     'ileum could not be reached.', 'The terminal ileum could not be intubated.',
+                     'The colonoscope was advanced to the cecum. The terminal ileum and the sigmoid colon were not '
+                     'visualized.'):
+            text = HEADER + 'Procedure: Colonoscopy\nFindings: ' + body + '\n'
+            with self.subTest(body=body):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+
+
 BOXED = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
          'was found.\nInterventions performed\n')
 
