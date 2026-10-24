@@ -762,6 +762,30 @@ class Routing19StoredSizeTests(unittest.TestCase):
         self.assertLess(sizes[2000] / sizes[1000], 2.2)
         self.assertLess(sizes[1000] / sizes[500], 2.2)
 
+    def test_a_wrapped_run_of_short_lines_stores_a_bounded_result(self):
+        """The orchestrator's case (from the SECTIONS repair, whose soft wrap joins more lines): about 50,000 characters
+        of short lines, each cut on a function word, with a service name every ~500 characters, form one wrapped
+        sentence. At d05326ef5 its 98 mentions stored 5,077,711 characters (101x the text); a bounded window stores
+        about 83,000."""
+        import time
+        from studio.gi.sections import layout
+        for first in ('findings', 'Findings'):
+            lines = []
+            while sum(len(line) + 1 for line in lines) < 50000:
+                lines.append('colonoscopy was performed and the' if len(lines) % 16 == 0
+                             else f'{first} were reviewed with the')
+            text = HEADER + 'Findings: ' + '\n'.join(lines) + ' cecum.\n'
+            with self.subTest(first=first):
+                started = time.monotonic()
+                result, size = self.stored(text)
+                self.assertLess(time.monotonic() - started, 20)
+                lay = layout(text)
+                mentions = [m for f in result.findings for m in f.mentions]
+                whole = sum(e - s for s, e in (lay.sentence_for(m.span.start, m.span.end) for m in mentions))
+                self.assertGreater(whole, 50 * len(text))  # the shape: whole sentences would store quadratically
+                self.assertLess(size, 5 * len(text), size)
+                self.assert_mentions_hold_their_spans(text, result)
+
     def test_a_short_sentence_is_stored_whole_and_a_long_one_by_its_clause(self):
         line = 'Rubber band ligation of an internal hemorrhoid was performed today without complication.'
         result, _ = self.stored(OFFICE_HEAD + BLEEDING_VISIT + '\n' + line + '\n')
