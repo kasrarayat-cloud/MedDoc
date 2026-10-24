@@ -264,5 +264,62 @@ class Status1EmHoldSurvivesTests(unittest.TestCase):
                 self.assert_held_beside_a_kept_procedure(text)
 
 
+STATUS9 = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the splenic flexure, where an '
+           'obstructing mass was biopsied. On her colonoscopy in 2023 the cecum was reached.\n')
+
+
+class Status9FactsFromAnotherProcedureTests(unittest.TestCase):
+    """status:9 - a fact in a clause about a procedure not done at this encounter never supplies
+    today's facts."""
+
+    @staticmethod
+    def colon(body):
+        return HEADER + 'Procedure: Colonoscopy\nFindings: ' + body + '\n'
+
+    def test_the_claimed_input_is_incomplete(self):
+        self.assertEqual(fact_value(STATUS9, 'gi.colonoscopy', 'extent'), 'incomplete: splenic flexure')
+        self.assertEqual(family(STATUS9, 'gi.colonoscopy'), 'incomplete')
+        proposals, _ = run_engine(STATUS9, [('45380', 'where an obstructing mass was biopsied')])
+        item = proposals['45380']
+        self.assertIsNotNone(check(item, 'service.incomplete'))
+        self.assertTrue(item.modifier_considerations)
+        self.assertNotIn('cecum', item.rationale)
+
+    def test_undated_history_and_other_facts(self):
+        for sentence in ('Her prior colonoscopy reached the cecum.', 'On her colonoscopy in 2023 the cecum was reached.',
+                         'During the previous colonoscopy the scope was advanced to the cecum.'):
+            text = self.colon('The colonoscope was advanced to the splenic flexure. ' + sentence)
+            with self.subTest(sentence=sentence):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'incomplete: splenic flexure')
+        text = self.colon('The colonoscope was advanced to the cecum. On her colonoscopy in 2023 a polyp was removed '
+                          'with a cold snare.')
+        self.assertNotIn('cold snare', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        text = (HEADER + 'Procedure: ERCP\nFindings: The duodenoscope was advanced to the papilla. Deep biliary '
+                'cannulation was achieved. On her ERCP in 2021 the cannulation failed.\n')
+        self.assertEqual(fact_value(text, 'gi.ercp', 'cannulation'), 'successful')
+        text = (HEADER + 'Procedure: EUS\nFindings: The echoendoscope was advanced to the duodenum. A 2 cm pancreatic '
+                'cyst was seen. On her EUS in 2023 the cyst underwent FNA.\n')
+        self.assertNotIn('FNA', fact_value(text, 'gi.eus', 'tissue_sampling') or '')
+        text = (HEADER + 'Procedure: Flexible sigmoidoscopy\nFindings: The sigmoidoscope was advanced to 30 cm. Her '
+                'flexible sigmoidoscopy in 2022 was advanced to 50 cm.\n')
+        self.assertEqual(fact_value(text, 'gi.flex_sig', 'extent'), '30 cm')
+        text = self.colon('The colonoscope was advanced to the cecum. One polyp was removed with a cold snare. On her '
+                          'colonoscopy in 2023 the endoscopist found two polyps.')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'polyp_count'), '1')
+
+    def test_controls_keep_todays_facts(self):
+        for body in ('The colonoscope was advanced to the cecum; her prior colonoscopy in 2023 was normal.',
+                     'Compared with her 2023 colonoscopy, the cecum was reached today.',
+                     'Compared with her 2023 colonoscopy, the cecum was reached.',
+                     'The cecum was reached, as on her prior colonoscopy.',
+                     'The cecum was reached today despite her prior incomplete colonoscopy.',
+                     'The cecum was reached in this patient with no prior colonoscopy.'):
+            with self.subTest(body=body):
+                self.assertEqual(fact_value(self.colon(body), 'gi.colonoscopy', 'extent'), 'cecum')
+        text = self.colon('The colonoscope was advanced to the cecum. Two polyps were removed with a cold snare.')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'interventions'), 'cold snare')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'polyp_count'), '2')
+
+
 if __name__ == '__main__':
     unittest.main()

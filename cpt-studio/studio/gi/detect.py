@@ -27,7 +27,8 @@ planned, historical or negated. Sentences
 that refer to a service without naming it ("the procedure was cancelled")
 become mentions only when they say it was not done or not completed, never to
 make it performed. Facts are read only from text read as performed (or
-incomplete) for this encounter.
+incomplete) for this encounter, never from a clause that names a procedure not
+done at this encounter ("On her colonoscopy in 2023 the cecum was reached").
 
 Pure functions over the canonical text; results are cached per text.
 """
@@ -1015,6 +1016,8 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
         for cs, ce in _clauses_in(an, s, e):
             for label, depth, pattern in table:
                 for m in pattern.finditer(text, cs, ce):
+                    if _about_another_procedure(an, m.start(), m.end()):
+                        continue
                     reading = _generic_reading(an, m.start(), m.end())
                     status = reading.status
                     # the reading before an unresolved negation was found: blocked is read from it
@@ -1074,7 +1077,8 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
         index = _sentence_index(an, iv.start)
         if family not in iv.families or index < 0 or attributed[index] != family:
             continue
-        if _generic_reading(an, iv.start, iv.end).status == 'performed':
+        if _generic_reading(an, iv.start, iv.end).status == 'performed' \
+                and not _about_another_procedure(an, iv.start, iv.end):
             found.append((iv.label, _span(an.text, iv.start, iv.end)))
     labels = {label for label, _ in found}
     found = [(label, span) for label, span in found
@@ -1134,7 +1138,8 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
             if not cues.ADVANCED.search(text, cs, ce):
                 continue
             for m in cues.CENTIMETERS.finditer(text, cs, ce):
-                if _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete'):
+                if _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete') \
+                        and not _about_another_procedure(an, m.start(), m.end()):
                     found.append((f"{int(m.group('cm'))} cm", _span(text, cs, ce)))
     if found:
         return _fact('extent', found)
@@ -1159,6 +1164,39 @@ def _not_today(reading: Reading) -> bool:
     return reading.status in NOT_TODAY or reading.doubt
 
 
+# A service named only to compare with ("Compared with her 2023 colonoscopy, the cecum was reached")
+# does not make the rest of its clause about that other procedure.
+_COMPARED_WITH = re.compile(r'\b(?:compared\s+(?:with|to)|in\s+comparison\s+(?:with|to)|unlike|than|similar\s+to'
+                            r'|as\s+(?:on|in|at|with|during))\s+(?:(?:the|her|his|their|a|an|that|this)\s+)?'
+                            r'(?:[\w-]+\s+){0,3}$', re.A | re.I)
+
+
+def _about_another_procedure(an: Analysis, start: int, end: int) -> bool:
+    """Whether the clause holding [start, end) speaks of a procedure not done at this encounter: it
+    names a service read as planned, historical, cancelled, denied today or in doubt, and does not
+    say today. A fact read there ("On her colonoscopy in 2023 the cecum was reached", "Her prior
+    colonoscopy reached the cecum", "EUS with fine-needle biopsy at a later date") is that other
+    procedure's, never today's. A negation of earlier encounters ("no prior colonoscopy") and a
+    service named only to compare with do not count."""
+    key = ('another-procedure', start, end)
+    if key not in an.memo:
+        an.memo[key] = False
+        for cs, ce in an.lay.clauses_for(start, end):
+            if cues.TODAY.search(an.text, cs, ce):
+                continue
+            for svc in an.services_in(cs, ce):
+                reading = _generic_reading(an, svc.start, svc.end)
+                if not (_not_today(reading) and not reading.past_negation):
+                    continue
+                if _COMPARED_WITH.search(an.text, max(cs, svc.start - 60), svc.start):
+                    continue
+                an.memo[key] = True
+                break
+            if an.memo[key]:
+                break
+    return an.memo[key]
+
+
 def _polyp_count(an: Analysis, attributed: list[Optional[str]]) -> Optional[Fact]:
     text = an.text
     for kinds in (('findings',), ('procedure', 'technique')):
@@ -1170,7 +1208,8 @@ def _polyp_count(an: Analysis, attributed: list[Optional[str]]) -> Optional[Fact
             for m in cues.POLYP_COUNT.finditer(text, s, e):
                 if _generic_reading(an, m.start(), m.end()).status != 'performed':
                     continue
-                if _POLYP_DENIED.search(text, _clause_at(an, m.start())[0], m.end()):
+                if _POLYP_DENIED.search(text, _clause_at(an, m.start())[0], m.end()) \
+                        or _about_another_procedure(an, m.start(), m.end()):
                     continue
                 number = m.group('n').lower()
                 total += int(number) if number.isdigit() else cues.NUMBER_WORDS[number]
@@ -1251,7 +1290,8 @@ def _eus_facts(an: Analysis, sentences) -> list[Fact]:
     for s, e in sentences:
         for label, pattern in (('FNA', cues.EUS_FNA), ('FNB', cues.EUS_FNB)):
             for m in pattern.finditer(text, s, e):
-                if _generic_reading(an, m.start(), m.end()).status == 'performed':
+                if _generic_reading(an, m.start(), m.end()).status == 'performed' \
+                        and not _about_another_procedure(an, m.start(), m.end()):
                     sampling.append((label, _span(text, m.start(), m.end())))
                     sampled_sentences.append((s, e))
 
@@ -1325,7 +1365,8 @@ def _cannulation(an: Analysis, sentences) -> Optional[Fact]:
             for m in pattern.finditer(text, s, e):
                 if value == 'failed' and _pancreatic_avoidance(an, m.start()):
                     continue
-                if _generic_reading(an, m.start(), m.end()).status in readable:
+                if _generic_reading(an, m.start(), m.end()).status in readable \
+                        and not _about_another_procedure(an, m.start(), m.end()):
                     found.append((value, _span(text, m.start(), m.end())))
     failed_spans = {sp for v, sp in found if v == 'failed'}
     found = [(v, sp) for v, sp in found
