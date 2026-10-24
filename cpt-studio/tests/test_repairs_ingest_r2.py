@@ -779,7 +779,6 @@ class OffPageTextTests(unittest.TestCase):
         cases = {'on the page': f'BT /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET',
                  'starts inside, runs past the edge': f'BT /F1 12 Tf 400 500 Td ({esc(UNSHOWN)}) Tj ET',
                  'starts left of the page, runs into it': f'BT /F1 12 Tf -60 500 Td ({esc(UNSHOWN)}) Tj ET',
-                 'invisible OCR layer on the page': f'BT 3 Tr /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET',
                  'just inside the top edge': f'BT /F1 12 Tf 72 785 Td ({esc(UNSHOWN)}) Tj ET',
                  'rotated, on the page': f'BT /F1 12 Tf 0 1 -1 0 300 200 Tm ({esc(UNSHOWN)}) Tj ET',
                  # A TJ adjustment moves the next glyphs left: this one brings the sentence back onto the page.
@@ -789,6 +788,15 @@ class OffPageTextTests(unittest.TestCase):
                 result = pdf_extract(placed_pdf(content), ocr=None)
                 self.assertEqual((result.status, result.messages), ('ok', ()))
                 self.assertIn('cold snare polypectomy', result.text)
+        # An invisible OCR layer over its scan (round 3 ingest:9: invisible text with nothing painted under it
+        # shows nothing, so it is named; this case used to have no scan under it).
+        scan = stream(b'\x80' * 4, '/Type /XObject /Subtype /Image /Width 2 /Height 2 /ColorSpace /DeviceGray '
+                                   '/BitsPerComponent 8')
+        layered = pdf_extract(placed_pdf(f'q 500 0 0 40 60 490 cm /Im0 Do Q BT 3 Tr /F1 12 Tf 72 500 Td '
+                                         f'({esc(UNSHOWN)}) Tj ET', resources='/XObject << /Im0 6 0 R >>',
+                                         extra={6: scan}), ocr=None)
+        self.assertEqual((layered.status, layered.messages), ('ok', ()))
+        self.assertIn('cold snare polypectomy', layered.text)
 
     # Round 3 evidence:1 — every tracked text-state parameter is pinned: ignoring one of them would read text a
     # viewer does not show, or drop text it does.

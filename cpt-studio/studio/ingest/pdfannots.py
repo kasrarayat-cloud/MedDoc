@@ -35,9 +35,14 @@ where that can be done exactly, and accounts for the rest:
   Any other annotation whose appearance draws text is read from that text;
   one whose appearance is in a hidden layer is named.
 - Annotation notes that are not drawn on the page (sticky notes, comment
-  text) are counted, not read, like DOCX comments; ink and stamp drawings
-  without text are counted, as is any displayed annotation (an image field,
-  a Square, ...) whose appearance paints an image; those images also count
+  text) are counted, not read, like DOCX comments; any other displayed
+  annotation that draws without text (ink, a stamp, a shape, a highlight, a
+  mark viewers draw from its /QuadPoints) is counted as a drawing. Strike-out
+  and redaction marks are counted as marks, and the opaque rectangles an
+  annotation paints over the page (its appearance's fills and images, or a
+  Square / Circle's /IC interior) are kept, so that text they cover is named
+  (pdf.py). Any displayed annotation (an image field, a Square, ...) whose
+  appearance paints an image is counted as drawn; those images also count
   towards the page's image coverage, placed as viewers place the appearance
   (PDF 32000-1 12.5.5). Hidden annotations — the Hidden or NoView flag,
   an optional-content group that is off, or a rectangle that misses the page
@@ -62,7 +67,7 @@ from lxml import etree
 from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
 
 from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
-                         object_key, page_box, raw_entry, resolved, visible_form)
+                         object_key, page_box, raw_entry, rectilinear, resolved, transformed_box, visible_form)
 from .pdfformat import displayed_texts
 from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
@@ -74,7 +79,11 @@ FIELD_PUSH_BUTTON = 1 << 16
 FIELD_COMBO = 1 << 17
 MAX_PARENT_DEPTH = 32
 NOT_DRAWN = frozenset({'/Popup', '/Link'})  # a popup shows its parent's note; a link draws nothing of its own
-DRAWINGS = frozenset({'/Ink', '/Stamp'})
+# Marks that change what the text under them says: struck through, or redacted (shown as its overlay).
+MARKS = frozenset({'/StrikeOut', '/Redact'})
+# Text markup viewers draw from /QuadPoints when there is no appearance.
+QUAD_MARKUP = frozenset({'/Highlight', '/Underline', '/Squiggly', '/StrikeOut', '/Redact'})
+FILLED_SHAPES = frozenset({'/Square', '/Circle'})  # drawn from /IC (their interior colour) without an appearance
 _WHITESPACE = re.compile(r'\s+')
 _TAGS = re.compile(r'<[^>]*>')
 MARKS = frozenset({'X', 'x', '\u2713', '\u2714'})  # what a typed or stamped mark over a printed box says
@@ -108,6 +117,8 @@ class PageAnnotations:
     marks: list = field(default_factory=list)  # rect of each displayed FreeText or stamp that shows only a mark
     placements: list = field(default_factory=list)  # (CTM, pixels) of images displayed appearances paint, page space
     images: list = field(default_factory=list)  # the image XObjects displayed appearances paint
+    marked: int = 0  # displayed strike-out and redaction marks
+    covers: list = field(default_factory=list)  # opaque page-space rectangles displayed annotations paint
 
     def block(self, page: int) -> str:
         """The labelled text added after the page's own text ('' when there is none)."""
@@ -307,12 +318,43 @@ class _Reader:
         if self.appearance_hidden(annotation) and self.hidden_appearance_shows_text(annotation):
             self.found.hidden_text = True
         self.found.note_chars += non_space_count(note)
+        if subtype in MARKS:  # what the page now says of the text under it is not what that text reads
+            self.found.marked += 1
+        self.found.covers.extend(self.covers(annotation, subtype))
         if appearance is None:
             self.found.unreadable += 1
         elif appearance.strip():
             self.found.texts.append(self.clean(appearance.strip('\n')))
-        elif subtype in DRAWINGS and self.drawn_appearance(annotation):
-            self.found.drawn += 1
+        elif self.drawn_appearance(annotation) or (normal_appearance(annotation) is None and subtype in QUAD_MARKUP):
+            self.found.drawn += 1  # a drawing, a shape or a mark over the text: not text, so named
+
+    def covers(self, annotation, subtype) -> list:
+        """The opaque page-space rectangles a displayed annotation paints over the page: the opaque fills and images
+        of its appearance (read by appearance_text, mapped as viewers place it), or the interior of a Square or
+        Circle drawn from /IC when it has no appearance. None when the annotation is translucent (/CA)."""
+        if number(annotation.get('/CA'), 1.0) < 1:
+            return []
+        rect = rect_of(annotation)
+        stream = normal_appearance(annotation)
+        if stream is not None:
+            if rect is None or self.painted is None or self.painted[0] is not stream:
+                return []  # an appearance in a hidden layer paints nothing
+            matrix = appearance_matrix(stream, rect)
+            bbox = [number(v) for v in as_list(stream.get('/BBox'))]
+            if matrix is None or not rectilinear(matrix) or len(bbox) != 4:
+                return []
+            box = (min(bbox[0], bbox[2]), min(bbox[1], bbox[3]), max(bbox[0], bbox[2]), max(bbox[1], bbox[3]))
+            return [transformed_box(inside, matrix) for inside in (clip(cover, box) for cover in self.painted[1].covers)
+                    if inside is not None]
+        if rect is None or subtype not in FILLED_SHAPES or not as_list(annotation.get('/IC')):
+            return []
+        border = resolved(annotation.get('/BS'))
+        width = number(border.get('/W'), 1.0) if isinstance(border, DictionaryObject) else 1.0
+        x0, y0, x1, y1 = rect[0] + width, rect[1] + width, rect[2] - width, rect[3] - width
+        if subtype == '/Circle':  # the rectangle inscribed in the ellipse
+            cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2 * 0.7071, (y1 - y0) / 2 * 0.7071
+            x0, y0, x1, y1 = cx - rx, cy - ry, cx + rx, cy + ry
+        return [(x0, y0, x1, y1)] if x1 > x0 and y1 > y0 else []
 
     def appearance_hidden(self, annotation) -> bool:
         """Whether the annotation has a normal appearance whose own /OC group is off (it then draws nothing)."""

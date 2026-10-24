@@ -758,8 +758,25 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
     if outside:
         messages.append(f'{page_phrase(outside)} {agree(outside, "has", "have")} text placed outside the visible page '
                         'area; that text was not extracted.')
+    clipped = [n for n, page in enumerate(read, 1) if page.content.clipped_text]
+    if clipped:
+        messages.append(f'{page_phrase(clipped)} {agree(clipped, "has", "have")} text outside the area its clipping '
+                        'path or form box shows; that text was not extracted.')
+    # Marks that change what the page says (studio.ingest.pdfannots), also over a page read with OCR, which reads
+    # struck-through text as written. Checked before 'obscured': an undecidable check names the page there.
+    marked = [n for n, page in enumerate(read, 1) if page.annotations.marked
+              or (n not in ocr.texts and page.content.covered_by(page.annotations.covers))]
+    if marked:
+        messages.append(f'{page_phrase(marked)} {agree(marked, "has", "have")} strike-out, redaction or cover-up marks '
+                        'added as PDF annotations; the text under them was read as written, so check it against the '
+                        'original.')
+    obscured = [n for n, page in enumerate(read, 1) if page.content.obscured_text and n not in ocr.texts]
+    if obscured:
+        messages.append(f'{page_phrase(obscured)} {agree(obscured, "has", "have")} text that a viewer may not show '
+                        '(white on the page, painted over, or clipped in a way that could not be checked); it was '
+                        'read, so check it against the original.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
-    return messages, bool(damaged or unchecked or limited or overlapped) or annotation_partial
+    return messages, bool(damaged or unchecked or limited or overlapped or marked or obscured) or annotation_partial
 
 
 def _scanned_phrase(pages) -> str:

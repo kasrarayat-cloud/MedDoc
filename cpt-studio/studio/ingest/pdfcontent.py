@@ -11,13 +11,21 @@ form XObjects it draws, with the current transformation matrix tracked:
   ``extraction_page`` returns a copy of the page whose content omits the
   text-showing operators and XObjects inside hidden content; graphics- and
   text-state operators are kept, as a viewer keeps executing them.
-- **Text outside the page.** Text the page's own content draws wholly
-  outside the visible page area (the crop box within the media box) is not
-  shown by any viewer: its text-showing operators are dropped, keeping their
-  state effects, and the page is flagged. Positions follow the text and line
-  matrices and the text state (PDF 32000-1 9.3-9.4), with glyph widths from
-  the font; a form XObject whose bounding box lies wholly outside is dropped.
-  Text inside a form is judged only by its form's box.
+- **Text a viewer does not show.** Text is judged where it lands on the
+  page, at every depth: each form XObject is walked once per placement, in
+  page space. Text drawn wholly outside the visible page area (the crop box
+  within the media box) or wholly outside what its clipping region shows (the
+  boxes of the forms drawing it, and its clipping paths: rectangles exactly,
+  other paths as polygons with curves flattened) is not shown by any viewer:
+  its text-showing operators are dropped, keeping their state effects, and
+  the page is flagged (offpage_text, clipped_text). Positions follow the text
+  and line matrices and the text state (PDF 32000-1 9.3-9.4), with glyph
+  widths from the font; a form XObject whose bounding box lies wholly outside
+  the page is dropped. Where whether text shows cannot be decided exactly it
+  is kept and the page is flagged (obscured_text): text painted in white with
+  nothing painted under it, text a later opaque fill or image covers (over
+  the band every glyph inks, for at least a glyph's width), text inside a
+  clipping path too complex to follow, and pages past the work limits.
 - **Symbol fonts.** A simple symbol font in the resources of the page or of a
   form it draws is replaced, in the copy extraction reads, by one that maps
   its glyphs to the characters they show (studio.ingest.pdffonts).
@@ -53,7 +61,7 @@ import zlib
 from dataclasses import dataclass, field
 from itertools import pairwise
 
-from pypdf import PageObject
+from pypdf import PageObject, get_configuration
 from pypdf.filters import ASCII85Decode, ASCIIHexDecode
 from pypdf._text_extraction import get_text_operands
 from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, StreamObject
@@ -216,6 +224,9 @@ def multiply(m, n):
 def transformed_box(box, ctm) -> tuple[float, float, float, float]:
     x0, y0, x1, y1 = box
     a, b, c, d, e, f = ctm
+    if b == 0 and c == 0:  # no rotation or skew: the same values, computed directly
+        xa, xb, ya, yb = x0 * a + e, x1 * a + e, y0 * d + f, y1 * d + f
+        return min(xa, xb), min(ya, yb), max(xa, xb), max(ya, yb)
     points = [(x * a + y * c + e, x * b + y * d + f) for x in (x0, x1) for y in (y0, y1)]
     return (min(p[0] for p in points), min(p[1] for p in points),
             max(p[0] for p in points), max(p[1] for p in points))
@@ -267,6 +278,378 @@ def union_area(rects) -> float:
     return total
 
 
+# --- what a page paints: clipping, colour and opacity ------------------------------------
+
+# A colour is white when every DeviceGray / RGB component is at least this (every CMYK component at most 1 - it).
+WHITE_LEVEL = 0.99
+# The band of a line of glyphs that every letter and digit inks: from CORE_LOW to CORE_HIGH font sizes above the
+# baseline. An opaque paint that covers that band over COVER_WIDTH font sizes along the baseline hides a glyph.
+CORE_LOW, CORE_HIGH, COVER_WIDTH = 0.1, 0.6, 0.6
+# Text painted with less opacity than this shows nothing, like invisible text (render mode 3).
+MIN_ALPHA = 0.05
+CURVE_STEPS = 8  # straight pieces per Bézier curve of a clipping path
+MAX_PATH_POINTS = 512  # a clipping path with more points is not followed: text inside its bounds is named
+GRID_CELLS = 32  # cells per side of the page-space index of what has been painted
+MAX_GRID_SPAN = 256  # an item spanning more cells is kept apart and examined by every query
+MAX_PAINT_CHECKS = 250_000  # index entries examined per page; past it, what shows is not decided: the page is named
+MAX_SHAPE_CHECKS = 1_000_000  # clipping-path edges tested per page; past it, paths are not followed: text is named
+MAX_FORM_WALKS = 5_000  # form placements walked per page when pypdf's own limit cannot be read (form_walk_limit)
+NORMAL_BLENDS = frozenset({'/Normal', '/Compatible'})
+PATH_OPERATORS = frozenset({b'm', b'l', b'c', b'v', b'y', b'h', b're'})
+FILLS = frozenset({b'f', b'F', b'f*', b'B', b'B*', b'b', b'b*'})
+STROKES = frozenset({b'S', b's', b'B', b'B*', b'b', b'b*'})
+PAINTING = FILLS | STROKES | {b'n'}
+COLOUR_OPERATORS = frozenset({b'g', b'G', b'rg', b'RG', b'k', b'K', b'cs', b'CS', b'sc', b'scn', b'SC', b'SCN'})
+WHITE, COLOUR, UNKNOWN = 'white', 'colour', 'unknown'  # what a paint's colour is known to be
+COLOUR_SPACES = {'/DeviceGray': 1, '/G': 1, '/CalGray': 1, '/DeviceRGB': 3, '/RGB': 3, '/CalRGB': 3,
+                 '/DeviceCMYK': 4, '/CMYK': 4}
+
+
+def form_walk_limit() -> int:
+    """How many form XObjects pypdf enters per page while extracting text (its configuration): it reads none past
+    them, so none past them is walked."""
+    try:
+        return int(get_configuration().xform_maximum_invocations_per_extraction)
+    except Exception:
+        return MAX_FORM_WALKS
+
+
+def colour_class(components, count) -> str:
+    """WHITE, COLOUR or UNKNOWN for colour components in a space of ``count`` components (None: unknown)."""
+    try:
+        values = [float(resolved(value)) for value in components]
+    except (TypeError, ValueError):
+        return UNKNOWN
+    if count is None or len(values) != count:
+        return UNKNOWN
+    if count == 4:
+        return WHITE if all(value <= 1 - WHITE_LEVEL for value in values) else COLOUR
+    return WHITE if all(value >= WHITE_LEVEL for value in values) else COLOUR
+
+
+def rectilinear(m) -> bool:
+    """Whether matrix ``m`` maps axis-aligned rectangles to axis-aligned rectangles."""
+    a, b, c, d = m[:4]
+    return (abs(b) < 1e-9 and abs(c) < 1e-9) or (abs(a) < 1e-9 and abs(d) < 1e-9)
+
+
+def _inverse(m):
+    a, b, c, d, e, f = m
+    det = a * d - b * c
+    if abs(det) < 1e-12:
+        return None
+    return (d / det, -b / det, -c / det, a / det, (c * f - d * e) / det, (b * e - a * f) / det)
+
+
+def _apply(m, x, y) -> tuple[float, float]:
+    return x * m[0] + y * m[2] + m[4], x * m[1] + y * m[3] + m[5]
+
+
+def _segment_meets(rect, p, q) -> bool:
+    """Whether the segment p-q meets the closed rectangle ``rect`` (Liang-Barsky)."""
+    x0, y0, x1, y1 = rect
+    t0, t1 = 0.0, 1.0
+    dx, dy = q[0] - p[0], q[1] - p[1]
+    for edge_p, edge_q in ((-dx, p[0] - x0), (dx, x1 - p[0]), (-dy, p[1] - y0), (dy, y1 - p[1])):
+        if edge_p == 0:
+            if edge_q < 0:
+                return False
+            continue
+        t = edge_q / edge_p
+        if edge_p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return True
+
+
+def _inside(point, rings, even_odd: bool) -> bool:
+    """Whether ``point`` lies inside the closed polygon ``rings`` under the non-zero or even-odd rule."""
+    x, y = point
+    winding = 0
+    for ring in rings:
+        for (ax, ay), (bx, by) in zip(ring, ring[1:] + ring[:1]):
+            if ay <= y < by and (bx - ax) * (y - ay) - (x - ax) * (by - ay) > 0:
+                winding += 1
+            elif by <= y < ay and (bx - ax) * (y - ay) - (x - ax) * (by - ay) < 0:
+                winding -= 1
+    return winding % 2 == 1 if even_odd else winding != 0
+
+
+def _apart(rect, rings, even_odd: bool) -> bool:
+    """Whether the rectangle ``rect`` and the polygon ``rings`` have no point in common."""
+    for ring in rings:
+        for p, q in zip(ring, ring[1:] + ring[:1]):
+            if _segment_meets(rect, p, q):
+                return False
+    centre = ((rect[0] + rect[2]) / 2, (rect[1] + rect[3]) / 2)
+    return not _inside(centre, rings, even_odd)
+
+
+@dataclass(frozen=True)
+class _Clip:
+    """The area content is clipped to, in page space: a rectangle (the page box, the boxes of the forms being
+    drawn and rectangular clipping paths, intersected), polygons for the other clipping paths, and whether a path
+    was too complex to follow."""
+    rect: tuple
+    shapes: tuple = ()  # ((rings, even_odd), ...)
+    unknown: bool = False
+
+    def narrowed(self, rect, shape=None, unknown: bool = False) -> '_Clip':
+        x0, y0, x1, y1 = max(self.rect[0], rect[0]), max(self.rect[1], rect[1]), \
+            min(self.rect[2], rect[2]), min(self.rect[3], rect[3])
+        return _Clip((x0, y0, max(x0, x1), max(y0, y1)), self.shapes + ((shape,) if shape else ()),
+                     self.unknown or unknown)
+
+
+class _Path:
+    """The current path, in page space: rings of points (curves flattened), at most MAX_PATH_POINTS of them
+    kept, and the exact bounds of every point."""
+
+    def __init__(self):
+        self.rings: list[list[tuple[float, float]]] = []
+        self.points = 0
+        self.start = None
+        self.last = None
+        self.edges = None  # (x0, y0, x1, y1) of every point
+
+    def _bound(self, point) -> None:
+        x, y = point
+        self.edges = (x, y, x, y) if self.edges is None else (min(self.edges[0], x), min(self.edges[1], y),
+                                                              max(self.edges[2], x), max(self.edges[3], y))
+        self.last = point
+        self.points += 1
+
+    def move(self, point) -> None:
+        self._bound(point)
+        self.start = point
+        if self.points <= MAX_PATH_POINTS:
+            self.rings.append([point])
+
+    def line(self, point) -> None:
+        if self.start is None:
+            self.move(point)
+            return
+        self._bound(point)
+        if self.points <= MAX_PATH_POINTS and self.rings:
+            self.rings[-1].append(point)
+
+    def curve(self, current, c1, c2, end) -> None:
+        for step in range(1, CURVE_STEPS + 1):
+            t = step / CURVE_STEPS
+            u = 1 - t
+            self.line((u * u * u * current[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * end[0],
+                       u * u * u * current[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * end[1]))
+
+    def rectangle(self, corners) -> None:
+        self.move(corners[0])
+        for corner in corners[1:]:
+            self.line(corner)
+        self.start = self.last = corners[0]  # 're' leaves the current point at its origin
+
+    @property
+    def current(self):
+        return self.last
+
+    def bounds(self) -> tuple | None:
+        return self.edges
+
+    def rect(self) -> tuple | None:
+        """The path's area when it is exactly one axis-aligned rectangle (by 're' or by four sides), else None."""
+        if len(self.rings) != 1 or self.points > MAX_PATH_POINTS:
+            return None
+        ring = self.rings[0]
+        if len(ring) == 5 and ring[4] == ring[0]:
+            ring = ring[:4]
+        if len(ring) != 4:
+            return None
+        if any(abs(p[0] - q[0]) > 1e-6 and abs(p[1] - q[1]) > 1e-6 for p, q in zip(ring, ring[1:] + ring[:1])):
+            return None  # a side that is neither horizontal nor vertical
+        x0, y0, x1, y1 = self.edges
+        return (x0, y0, x1, y1) if x1 > x0 and y1 > y0 else None
+
+
+@dataclass
+class _Graphics:
+    """The part of the graphics state the walker follows (saved by q, restored by Q)."""
+    ctm: tuple
+    clip: _Clip
+    text: '_TextState'
+    fill: str = COLOUR  # black
+    stroke: str = COLOUR
+    fill_space: int | None = 1
+    stroke_space: int | None = 1
+    fill_alpha: float = 1.0
+    stroke_alpha: float = 1.0
+    soft_mask: bool = False
+    normal_blend: bool = True
+    line_width: float = 1.0
+
+    def copy(self) -> '_Graphics':
+        return dataclasses.replace(self, text=dataclasses.replace(self.text))
+
+    @property
+    def fill_opaque(self) -> bool:
+        return self.fill_alpha >= 1 and not self.soft_mask and self.normal_blend
+
+    @property
+    def stroke_opaque(self) -> bool:
+        return self.stroke_alpha >= 1 and not self.soft_mask and self.normal_blend
+
+
+class _Grid:
+    """A page-space index of rectangles: each item is filed under the cells its rectangle meets."""
+
+    def __init__(self, box):
+        self.x0, self.y0 = box[0], box[1]
+        self.dx = max((box[2] - box[0]) / GRID_CELLS, 1e-6)
+        self.dy = max((box[3] - box[1]) / GRID_CELLS, 1e-6)
+        self.cells: dict[tuple[int, int], list] = {}
+        self.wide: list = []
+
+    def _span(self, rect) -> tuple[int, int, int, int]:
+        def index(value, origin, step):
+            return min(GRID_CELLS - 1, max(0, int((value - origin) // step)))
+        return (index(rect[0], self.x0, self.dx), index(rect[1], self.y0, self.dy),
+                index(rect[2], self.x0, self.dx), index(rect[3], self.y0, self.dy))
+
+    def add(self, rect, item) -> None:
+        i0, j0, i1, j1 = self._span(rect)
+        if (i1 - i0 + 1) * (j1 - j0 + 1) > MAX_GRID_SPAN:
+            self.wide.append(item)
+            return
+        for i in range(i0, i1 + 1):
+            for j in range(j0, j1 + 1):
+                self.cells.setdefault((i, j), []).append(item)
+
+    def near(self, rect):
+        """The items whose cells meet ``rect``'s, each once (with a count of the entries examined)."""
+        yield from self.wide
+        i0, j0, i1, j1 = self._span(rect)
+        if (i1 - i0 + 1) * (j1 - j0 + 1) > len(self.cells):
+            buckets = [items for (i, j), items in self.cells.items() if i0 <= i <= i1 and j0 <= j <= j1]
+        else:
+            buckets = [self.cells[(i, j)] for i in range(i0, i1 + 1) for j in range(j0, j1 + 1)
+                       if (i, j) in self.cells]
+        seen = set()
+        for items in buckets:
+            for item in items:
+                if id(item) not in seen:
+                    seen.add(id(item))
+                    yield item
+
+
+@dataclass(frozen=True)
+class _Run:
+    """The glyphs of one text-showing operator: where they lie, in text space and on the page."""
+    box: tuple  # page space: generous bounds of the glyphs (descent 0.3, ascent 1.0 font sizes)
+    margin: float  # one font size in page space: by how much a run must clear an edge to count as beyond it
+    place: tuple  # text space (the text matrix at the run's start) to page space
+    low: float  # the run's extent along the baseline, text space
+    high: float
+    rise: float
+    size: float
+    width: float  # COVER_WIDTH font sizes along the baseline, text space (horizontal scaling applied)
+
+    @property
+    def core(self) -> tuple:
+        return (self.low, self.rise + CORE_LOW * self.size, self.high, self.rise + CORE_HIGH * self.size)
+
+    @functools.cached_property
+    def page_core(self) -> tuple:
+        return transformed_box(self.core, self.place)
+
+    def covered_by(self, rect) -> bool:
+        """Whether the opaque page-space rectangle ``rect`` hides at least one glyph of the run: it covers the
+        band every glyph inks, over at least COVER_WIDTH font sizes along the baseline (or the whole run)."""
+        back = _inverse(self.place)
+        if back is None or not rectilinear(self.place):
+            core = self.page_core
+            return rect[0] <= core[0] and rect[1] <= core[1] and rect[2] >= core[2] and rect[3] >= core[3]
+        x0, y0, x1, y1 = transformed_box(rect, back)
+        low, bottom, high, top = self.core
+        if y0 > bottom or y1 < top:
+            return False
+        overlap = min(x1, high) - max(x0, low)
+        return overlap > 0 and overlap >= min(high - low, self.width) - 1e-9
+
+
+class _Paint:
+    """What a page has painted so far, in drawing order and page space, to judge whether text drawn on it shows:
+    text painted in white over nothing, or text an opaque fill or image painted later covers, may not be shown.
+    Invisible text (render mode 3, or no opacity) shows nothing itself: it is read as the layer of what is painted
+    under it (OCR text over its scan, drawn before or after it), and named when nothing is."""
+
+    def __init__(self, box):
+        self.box = box
+        self.runs: list = []  # runs of shown text not yet filed in the index (filed when a later paint asks)
+        self.text: _Grid | None = None  # the runs of shown text
+        self.backdrop = _Grid(box)  # bounds of everything painted in a colour that is not (known to be) white
+        self.unseen: list = []  # runs of invisible text, judged against all the page paints (finish)
+        self.checks = 0
+        self.obscured = False
+
+    def _text(self) -> _Grid:
+        if self.text is None:
+            self.text = _Grid(self.box)
+        for run in self.runs:
+            self.text.add(run.page_core, run)
+        self.runs = []
+        return self.text
+
+    def _near(self, grid, rect):
+        for item in grid.near(rect):
+            self.checks += 1
+            if self.checks > MAX_PAINT_CHECKS:
+                self.obscured = True  # too much to decide: named, not guessed
+                return
+            yield item
+
+    def shown_text(self, run: _Run, white: bool) -> None:
+        core = run.page_core if white else None
+        if white and not self.obscured and not any(clip(core, rect) is not None
+                                                   for rect in self._near(self.backdrop, core)):
+            self.obscured = True
+        self.runs.append(run)
+
+    def invisible(self, run: _Run) -> None:
+        self.unseen.append(run)
+
+    def finish(self) -> None:
+        """Invisible text over nothing the page paints, before or after it, describes nothing shown: named."""
+        for run in self.unseen:
+            if self.obscured:
+                break
+            core = run.page_core
+            if not any(clip(core, rect) is not None for rect in self._near(self.backdrop, core)):
+                self.obscured = True
+        self.unseen = []
+
+    def painted(self, bounds, colour: str) -> None:
+        if bounds is not None and colour != WHITE:
+            self.backdrop.add(bounds, bounds)
+
+    def opaque(self, rect) -> None:
+        """An opaque rectangle painted over what was drawn before it."""
+        if rect is None or self.obscured:
+            return
+        if any(run.covered_by(rect) for run in self._near(self._text(), rect)):
+            self.obscured = True
+
+    def covers_text(self, rects) -> bool | None:
+        """Whether one of ``rects`` (opaque page-space areas painted over the page later) covers shown text; None
+        when there was too much to decide."""
+        text = self._text()
+        for rect in rects:
+            if any(run.covered_by(rect) for run in self._near(text, rect)):
+                return True
+            if self.checks > MAX_PAINT_CHECKS:
+                return None
+        return False
+
+
 # --- walking a page -----------------------------------------------------------------
 
 @dataclass
@@ -279,6 +662,9 @@ class PageContent:
     damaged: bool = False
     box: tuple = (0.0, 0.0, 612.0, 792.0)
     offpage_text: bool = False  # text drawn wholly outside the visible page area, which was dropped
+    clipped_text: bool = False  # text drawn wholly outside what its clipping path or form box shows, dropped
+    obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
+    paint: _Paint | None = field(default=None, repr=False, compare=False)
 
     @property
     def largest_image_pixels(self) -> int:
@@ -299,16 +685,29 @@ class PageContent:
         page_area = area(self.box)
         return min(1.0, union_area(rects) / page_area) if page_area > 0 else 0.0
 
+    def covered_by(self, rects) -> bool:
+        """Whether opaque areas painted over the page after its content (``rects``, page space: annotation
+        appearances) cover glyphs of its shown text. When that cannot be decided the page's text is named as
+        possibly not shown (obscured_text) instead."""
+        if not rects or self.paint is None:
+            return False
+        covered = self.paint.covers_text(rects)
+        if covered is None:
+            self.obscured_text = True
+        return bool(covered)
+
 
 @dataclass
 class _Form:
     replacement: ContentStream | None  # a copy without its hidden content, when it had any
     placements: list  # (CTM in the form's own space, pixels or None) of the images it paints
+    covers: list = field(default_factory=list)  # opaque rectangles it paints, in its own space
 
 
 @dataclass
 class _TextState:
-    """The text-state parameters that are part of the graphics state (saved by q, restored by Q)."""
+    """The text-state parameters that are part of the graphics state (saved by q, restored by Q). ``font`` is the
+    font dictionary Tf selected, so that a form drawn with the state measures with the same font."""
     font: object = None
     size: float = 0.0
     char_spacing: float = 0.0
@@ -316,26 +715,34 @@ class _TextState:
     scale: float = 1.0
     leading: float = 0.0
     rise: float = 0.0
+    mode: int = 0  # the text rendering mode (Tr)
 
 
 class _TextPlacement:
-    """Where the page's own content draws its text (PDF 32000-1 9.3-9.4), to find text wholly outside ``box``."""
+    """Where a content stream draws its text (PDF 32000-1 9.3-9.4), in page space."""
 
-    def __init__(self, resources, box, fonts: dict):
-        self.box = box
+    def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None):
         table = resolved(resources.get('/Font'))
         self.table = table if isinstance(table, DictionaryObject) else DictionaryObject()
         self.fonts = fonts  # id(font dict) -> pypdf Font, or None when it cannot be read
-        self.state = _TextState()
+        self.measured = {} if measured is None else measured  # (id(font dict), string) -> (glyphs, spaces, widths)
+        self.graphics = graphics
         self.matrix = self.line = IDENTITY
+        self.nothing = False  # the last run drew nothing: a zero font size, or a matrix that flattens it
+
+    @property
+    def state(self) -> _TextState:
+        return self.graphics.text
 
     def apply(self, operator, operands) -> None:
         state = self.state
         if operator == b'BT':
             self.matrix = self.line = IDENTITY
         elif operator == b'Tf' and len(operands) >= 2:
-            state.font, state.size = operands[0], number(operands[1])
-        elif operator in (b'Tc', b'Tw', b'Tz', b'TL', b'Ts') and operands:
+            name = operands[0]
+            font = resolved(self.table.raw_get(name)) if isinstance(name, str) and name in self.table else None
+            state.font, state.size = (font if isinstance(font, DictionaryObject) else None), number(operands[1])
+        elif operator in (b'Tc', b'Tw', b'Tz', b'TL', b'Ts', b'Tr') and operands:
             value = number(operands[0])
             if operator == b'Tc':
                 state.char_spacing = value
@@ -345,6 +752,8 @@ class _TextPlacement:
                 state.scale = value / 100
             elif operator == b'TL':
                 state.leading = value
+            elif operator == b'Tr':
+                state.mode = int(value)
             else:
                 state.rise = value
         elif operator in (b'Td', b'TD') and len(operands) >= 2:
@@ -359,8 +768,9 @@ class _TextPlacement:
     def move(self, tx: float, ty: float) -> None:
         self.matrix = self.line = multiply((1.0, 0.0, 0.0, 1.0, tx, ty), self.line)
 
-    def outside(self, operator, operands, ctm) -> bool:
-        """Apply a text-showing operator; whether all it shows lies wholly outside the page box."""
+    def run(self, operator, operands) -> _Run | None:
+        """Apply a text-showing operator: where what it shows lies, or None when there is nothing to measure
+        it by (no font size, a degenerate matrix)."""
         state = self.state
         if operator == b"'":
             self.move(0.0, -state.leading)
@@ -384,32 +794,35 @@ class _TextPlacement:
             low, high = min(low, x), max(high, x)
         self.matrix = multiply((1.0, 0.0, 0.0, 1.0, x, 0.0), start)
         size = state.size
-        place = multiply(start, ctm)
+        place = multiply(start, self.graphics.ctm)
         scale = math.sqrt(abs(place[0] * place[3] - place[1] * place[2]))
-        if size <= 0 or scale <= 0:
-            return False  # nothing to measure it by: keep it
-        x0, y0, x1, y1 = transformed_box((low, state.rise - GLYPH_DESCENT * size, high,
-                                          state.rise + GLYPH_ASCENT * size), place)
-        margin = OUTSIDE_MARGIN * size * scale
-        return clip((x0 - margin, y0 - margin, x1 + margin, y1 + margin), self.box) is None
+        self.nothing = size == 0 or scale == 0
+        if size <= 0 or scale <= 0:  # nothing drawn, or mirrored text (a negative size): not measured
+            return None
+        box = transformed_box((low, state.rise - GLYPH_DESCENT * size, high, state.rise + GLYPH_ASCENT * size), place)
+        return _Run(box, OUTSIDE_MARGIN * size * scale, place, low, high, state.rise, size,
+                    COVER_WIDTH * size * abs(state.scale))
 
     def advance(self, string) -> float:
-        """How far ``string`` moves the text position, in text-space units."""
+        """How far ``string`` moves the text position, in text-space units (each string measured once per font: a
+        form drawn many times shows the same strings)."""
         state = self.state
-        font = self.font()
-        if font is None:
-            glyphs, spaces, widths = len(string), 0, UNKNOWN_GLYPH_WIDTH * len(string)
-        else:
-            try:
-                text, _, widths = get_text_operands([string], list(IDENTITY), list(IDENTITY), font, ORIENTATIONS)
-            except Exception:
-                text, widths = '', UNKNOWN_GLYPH_WIDTH * len(string)
-            glyphs, spaces = max(len(text), 1 if string else 0), text.count(' ')
+        key = (id(state.font), bytes(string) if isinstance(string, bytes) else string)
+        if key not in self.measured:
+            font = self.font()
+            if font is None:
+                self.measured[key] = (len(string), 0, UNKNOWN_GLYPH_WIDTH * len(string))
+            else:
+                try:
+                    text, _, widths = get_text_operands([string], list(IDENTITY), list(IDENTITY), font, ORIENTATIONS)
+                except Exception:
+                    text, widths = '', UNKNOWN_GLYPH_WIDTH * len(string)
+                self.measured[key] = (max(len(text), 1 if string else 0), text.count(' '), widths)
+        glyphs, spaces, widths = self.measured[key]
         return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
 
     def font(self):
-        name = self.state.font
-        font = resolved(self.table.raw_get(name)) if isinstance(name, str) and name in self.table else None
+        font = self.state.font
         if not isinstance(font, DictionaryObject):
             return None
         if id(font) not in self.fonts:
@@ -425,9 +838,19 @@ class _Walker:
         self.reader = reader
         self.optional = optional
         self.content = PageContent(box=box)
-        self.positions = positions  # box is the page's: text and forms drawn wholly outside it are dropped
+        # The page's own walk: text is judged where it lands on the page, at every depth (forms are walked once
+        # per placement, in page space), and what is painted is followed. An appearance is walked in its own space.
+        self.positions = positions
+        self.paint = _Paint(box) if positions else None
+        self.content.paint = self.paint
         self.text_fonts: dict = {}  # id(font dict) -> pypdf Font, for measuring text
-        self.forms: dict[tuple, _Form] = {}  # each form is walked once; its images are re-placed per use
+        self.measured: dict = {}  # (id(font dict), string) -> its measure (_TextPlacement.advance)
+        self.shape_checks = 0  # clipping-path edges tested (MAX_SHAPE_CHECKS)
+        self.forms: dict[tuple, _Form] = {}  # own-space walks: each form once; its images are re-placed per use
+        self.parsed: dict[int, list] = {}  # id(form) -> its operations, parsed once
+        self.variants: dict[tuple, ContentStream] = {}  # (form, resources, changes) -> its filtered copy
+        self.walks = 0
+        self.walk_limit = form_walk_limit()
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
         self.font_copies: dict[int, DictionaryObject | None] = {}  # id(font) -> its glyph-mapped copy, or None
@@ -447,79 +870,280 @@ class _Walker:
             self.content.damaged = True
             return self.content
         self.check_fonts(resources)
-        kept, replaced, _ = self.walk(operations, resources, IDENTITY, 0, self.content.placements)
+        graphics = _Graphics(IDENTITY, _Clip(self.content.box), _TextState())
+        kept, replaced, _, _ = self.walk(operations, resources, graphics, 0, self.content.placements, [])
         self.content.operations = kept
+        self.paint.finish()
+        self.content.obscured_text = self.content.obscured_text or self.paint.obscured
         fonts = self.mapped_fonts(resources)
         if replaced or fonts:
             self.content.resources = with_replacements(resources, replaced, fonts)
         return self.content
 
-    def walk(self, operations, resources, ctm, depth: int, placements: list) -> tuple[list, dict, bool]:
-        """(kept operations, {XObject name: filtered form}, changed) for one content stream; the images it
-        paints are added to ``placements``."""
+    def walk(self, operations, resources, graphics: _Graphics, depth: int, placements: list,
+             covers: list) -> tuple[list, dict, bool, tuple]:
+        """(kept operations, {new XObject name: filtered form}, changed, changes) for one content stream, drawn
+        with ``graphics`` (copied: the caller's state is not changed). The images it paints are added to
+        ``placements`` and the opaque rectangles to ``covers`` (both in the space the walk starts in); ``changes``
+        names each operation not kept as it was, so equal filtered copies can be shared."""
+        graphics = graphics.copy()
         kept: list = []
         replaced: dict = {}
-        changed = False
+        names: dict[int, str] = {}  # id(filtered form) -> its name in this stream's resources
+        changes: list = []
         saved: list = []
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
-        # Positions are known in page space only for the page's own content (forms are walked in their own space).
-        text = _TextPlacement(resources, self.content.box, self.text_fonts) if self.positions and depth == 0 else None
-        for operands, operator in operations:
+        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured)
+        path, pending = _Path(), None
+        for index, (operands, operator) in enumerate(operations):
             hidden = any(marked)
             if operator in (b'BMC', b'BDC'):
                 marked.append(operator == b'BDC' and not self.marked_visible(operands, properties))
                 if hidden or marked[-1]:
-                    changed = True
+                    changes.append(index)
                     continue
             elif operator == b'EMC':
                 closing = marked.pop() if marked else False
                 if hidden or closing:
+                    changes.append(index)
                     continue
             elif operator == b'q':
-                saved.append((ctm, dataclasses.replace(text.state) if text else None))
+                saved.append(graphics.copy())
             elif operator == b'Q':
                 if saved:
-                    ctm, state = saved.pop()
-                    if text and state:
-                        text.state = state
+                    graphics = saved.pop()
+                    text.graphics = graphics
             elif operator == b'cm' and len(operands) == 6:
-                ctm = multiply(tuple(number(v) for v in operands), ctm)
-            elif operator in TEXT_SHOWING and hidden:
-                if text:
-                    text.outside(operator, operands, ctm)  # keeps later positions right
-                changed = True
-                self.content.hidden_text = self.content.hidden_text or shows_text(operands)
-                kept.extend(state_only(operator, operands))
-                continue
-            elif operator in TEXT_SHOWING and text and text.outside(operator, operands, ctm):
-                changed = True
-                self.content.offpage_text = self.content.offpage_text or shows_text(operands)
-                kept.extend(state_only(operator, operands))
-                continue
-            elif operator in TEXT_STATE and text:
+                graphics.ctm = multiply(tuple(number(v) for v in operands), graphics.ctm)
+            elif operator in TEXT_SHOWING:
+                run = text.run(operator, operands) if self.positions else None
+                verdict = self.judge(run, graphics) if not hidden else None
+                if hidden or verdict in ('offpage', 'clipped'):
+                    changes.append(index)
+                    if hidden:
+                        self.content.hidden_text = self.content.hidden_text or shows_text(operands)
+                    elif verdict == 'offpage':
+                        self.content.offpage_text = self.content.offpage_text or shows_text(operands)
+                    else:
+                        self.content.clipped_text = self.content.clipped_text or shows_text(operands)
+                    kept.extend(state_only(operator, operands))
+                    continue
+                if self.positions and run is not None and shows_text(operands):
+                    self.shown(run, graphics, verdict)
+                elif self.positions and text.nothing and shows_text(operands):
+                    self.paint.obscured = True  # zero-size glyphs show nothing: kept, named
+            elif operator in TEXT_STATE or operator == b'Tr':
                 text.apply(operator, operands)
+            elif operator in PATH_OPERATORS:
+                path = self.build(path, operator, operands, graphics)
+            elif operator in PAINTING:
+                if not hidden:
+                    self.painted(path, operator, graphics, covers)
+                if pending is not None:
+                    graphics.clip = self.clipped(graphics.clip, path, pending)
+                path, pending = _Path(), None
+            elif operator in (b'W', b'W*'):
+                pending = operator == b'W*'
+            elif operator in COLOUR_OPERATORS:
+                self.colour(operator, operands, graphics, resources)
+            elif operator == b'gs' and operands:
+                self.state_dictionary(operands[0], resources, graphics)
+            elif operator == b'w' and operands:
+                graphics.line_width = abs(number(operands[0], 1.0))
+            elif operator == b'sh':
+                if self.positions and not hidden:
+                    self.paint.painted(graphics.clip.rect, UNKNOWN)
             elif operator == b'INLINE IMAGE':
                 if hidden:
-                    changed = True
+                    changes.append(index)
                     continue
                 settings = operands.get('settings', {}) if isinstance(operands, dict) else {}
-                placements.append((ctm, pixel_count(settings.get('/W', settings.get('/Width')),
-                                                    settings.get('/H', settings.get('/Height')))))
+                placements.append((graphics.ctm, pixel_count(settings.get('/W', settings.get('/Width')),
+                                                             settings.get('/H', settings.get('/Height')))))
+                mask = is_true(settings.get('/IM', settings.get('/ImageMask')))
+                self.image_painted(graphics, opaque=not mask, covers=covers,
+                                   colour=graphics.fill if mask else UNKNOWN)
             elif operator == b'Do' and operands:
-                action, replacement = self.draw(operands[0], xobjects, resources, ctm, depth, hidden, placements)
+                action, replacement = self.draw(operands[0], xobjects, resources, graphics, depth, hidden, placements,
+                                                covers)
                 if action == 'drop':
-                    changed = True
+                    changes.append(index)
                     continue
                 if action == 'replace':
-                    changed = True
-                    replaced[operands[0]] = replacement
-                    kept.append(([NameObject(operands[0] + REPLACEMENT_SUFFIX)], b'Do'))
+                    name = names.get(id(replacement))
+                    if name is None:
+                        taken = sum(1 for other in names.values() if other.startswith(operands[0] + REPLACEMENT_SUFFIX))
+                        name = operands[0] + REPLACEMENT_SUFFIX + (str(taken + 1) if taken else '')
+                        names[id(replacement)] = name
+                        replaced[name] = replacement
+                    changes.append((index, id(replacement)))
+                    kept.append(([NameObject(name)], b'Do'))
                     continue
             kept.append((operands, operator))
-        return kept, replaced, changed
+        return kept, replaced, bool(changes), tuple(changes)
 
+    # Text ------------------------------------------------------------------------
+    def judge(self, run: _Run | None, graphics: _Graphics) -> str:
+        """'offpage', 'clipped', 'unknown' (inside a clipping path this did not follow) or 'shown'."""
+        if not self.positions or run is None:
+            return 'shown'  # nothing to measure it by: keep it
+        x0, y0, x1, y1 = run.box
+        margin = run.margin
+        reach = (x0 - margin, y0 - margin, x1 + margin, y1 + margin)
+        if clip(reach, self.content.box) is None:
+            return 'offpage'
+        area = graphics.clip
+        if clip(reach, area.rect) is None:
+            return 'clipped'
+        undecided = area.unknown
+        for rings, even_odd in area.shapes:
+            cost = sum(len(ring) for ring in rings)
+            if self.shape_checks + cost > MAX_SHAPE_CHECKS:
+                undecided = True  # too many edges to test: not followed, named
+                continue
+            self.shape_checks += cost
+            if _apart(reach, rings, even_odd):
+                return 'clipped'
+        return 'unknown' if undecided else 'shown'
+
+    def shown(self, run: _Run, graphics: _Graphics, verdict: str) -> None:
+        mode = graphics.text.mode
+        if verdict == 'unknown':
+            self.paint.obscured = True
+        fill, stroke = mode in (0, 2, 4, 6), mode in (1, 2, 5, 6)  # modes 3 and 7 paint neither
+        if not ((fill and graphics.fill_alpha >= MIN_ALPHA) or (stroke and graphics.stroke_alpha >= MIN_ALPHA)):
+            self.paint.invisible(run)  # read as the layer of what is painted under it (OCR text over its scan)
+            return
+        white = (not fill or graphics.fill == WHITE) and (not stroke or graphics.stroke == WHITE)
+        self.paint.shown_text(run, white)
+
+    # Paths, colour and painting ------------------------------------------------------
+    def build(self, path: _Path, operator, operands, graphics: _Graphics) -> _Path:
+        values = [number(v) for v in operands]
+        ctm = graphics.ctm
+        if operator == b're' and len(values) == 4:
+            x, y, w, h = values
+            path.rectangle([_apply(ctm, x, y), _apply(ctm, x + w, y), _apply(ctm, x + w, y + h),
+                            _apply(ctm, x, y + h)])
+        elif operator == b'm' and len(values) == 2:
+            path.move(_apply(ctm, *values))
+        elif operator == b'l' and len(values) == 2:
+            path.line(_apply(ctm, *values))
+        elif operator in (b'c', b'v', b'y') and path.current is not None:
+            current = path.current
+            if operator == b'c' and len(values) == 6:
+                c1, c2, end = _apply(ctm, *values[0:2]), _apply(ctm, *values[2:4]), _apply(ctm, *values[4:6])
+            elif operator == b'v' and len(values) == 4:
+                c1, c2, end = current, _apply(ctm, *values[0:2]), _apply(ctm, *values[2:4])
+            elif operator == b'y' and len(values) == 4:
+                c1, c2, end = _apply(ctm, *values[0:2]), _apply(ctm, *values[2:4]), _apply(ctm, *values[2:4])
+            else:
+                return path
+            path.curve(current, c1, c2, end)
+        elif operator == b'h' and path.start is not None:
+            path.line(path.start)
+        return path
+
+    def clipped(self, area: _Clip, path: _Path, even_odd: bool) -> _Clip:
+        bounds = path.bounds()
+        if bounds is None:  # an empty clipping path shows nothing
+            return area.narrowed((0.0, 0.0, 0.0, 0.0))
+        rect = path.rect()
+        if rect is not None:
+            return area.narrowed(rect)
+        if path.points > MAX_PATH_POINTS:
+            return area.narrowed(bounds, unknown=True)
+        return area.narrowed(bounds, shape=(tuple(tuple(ring) for ring in path.rings if len(ring) > 1), even_odd))
+
+    def painted(self, path: _Path, operator, graphics: _Graphics, covers: list) -> None:
+        if operator not in FILLS and operator not in STROKES:
+            return
+        bounds = path.bounds()
+        if bounds is None:
+            return
+        area = graphics.clip.rect
+        if operator in FILLS:
+            rect = path.rect()
+            if graphics.fill_opaque and rect is not None and not graphics.clip.shapes:
+                inside = clip(rect, area)
+                if inside is not None:
+                    if self.positions:
+                        self.paint.opaque(inside)
+                    else:
+                        covers.append(inside)
+            if self.positions:
+                self.paint.painted(clip(bounds, area), graphics.fill)
+        if operator in STROKES and self.positions:
+            half = graphics.line_width * math.sqrt(abs(graphics.ctm[0] * graphics.ctm[3]
+                                                       - graphics.ctm[1] * graphics.ctm[2])) / 2
+            self.paint.painted(clip((bounds[0] - half, bounds[1] - half, bounds[2] + half, bounds[3] + half), area),
+                               graphics.stroke)
+
+    def image_painted(self, graphics: _Graphics, *, opaque: bool, covers: list, colour: str = UNKNOWN) -> None:
+        box = transformed_box(UNIT_SQUARE, graphics.ctm)
+        inside = clip(box, graphics.clip.rect)
+        if inside is None:
+            return
+        if opaque and graphics.fill_opaque and rectilinear(graphics.ctm) and not graphics.clip.shapes:
+            if self.positions:
+                self.paint.opaque(inside)
+            else:
+                covers.append(inside)
+        if self.positions:
+            self.paint.painted(inside, colour)
+
+    def colour(self, operator, operands, graphics: _Graphics, resources) -> None:
+        stroke = operator in (b'G', b'RG', b'K', b'CS', b'SC', b'SCN')
+        if operator in (b'g', b'G', b'rg', b'RG', b'k', b'K'):
+            count = {b'g': 1, b'G': 1, b'rg': 3, b'RG': 3, b'k': 4, b'K': 4}[operator]
+            value, space = colour_class(operands, count), count
+        elif operator in (b'cs', b'CS'):
+            space = self.colour_space(operands[0] if operands else None, resources)
+            value = COLOUR if space is not None else UNKNOWN  # each space's initial colour is black
+        else:  # sc, scn, SC, SCN in the current space (a pattern's name, or an unknown space: unknown)
+            space = graphics.stroke_space if stroke else graphics.fill_space
+            value = colour_class(operands, space) if all(not isinstance(v, str) for v in operands) else UNKNOWN
+        if stroke:
+            graphics.stroke, graphics.stroke_space = value, space
+        else:
+            graphics.fill, graphics.fill_space = value, space
+
+    def colour_space(self, name, resources) -> int | None:
+        """The number of components of a DeviceGray / RGB / CMYK-like colour space, else None."""
+        space = resolved(name)
+        if isinstance(space, str) and space not in COLOUR_SPACES:
+            table = resolved(resources.get('/ColorSpace'))
+            space = resolved(raw_entry(table, space)) if isinstance(table, DictionaryObject) else None
+        if isinstance(space, str):
+            return COLOUR_SPACES.get(space)
+        items = as_list(space)
+        family = resolved(items[0]) if items else None
+        if family == '/ICCBased' and len(items) > 1:
+            profile = resolved(items[1])
+            count = int(number(profile.get('/N'), 0)) if isinstance(profile, DictionaryObject) else 0
+            return count if count in (1, 3, 4) else None
+        return {'/CalGray': 1, '/CalRGB': 3}.get(family)
+
+    def state_dictionary(self, name, resources, graphics: _Graphics) -> None:
+        table = resolved(resources.get('/ExtGState'))
+        entry = resolved(raw_entry(table, name)) if isinstance(table, DictionaryObject) else None
+        if not isinstance(entry, DictionaryObject):
+            return
+        if '/ca' in entry:
+            graphics.fill_alpha = number(entry.get('/ca'), 1.0)
+        if '/CA' in entry:
+            graphics.stroke_alpha = number(entry.get('/CA'), 1.0)
+        if '/SMask' in entry:
+            graphics.soft_mask = resolved(entry.get('/SMask')) != '/None'
+        if '/BM' in entry:
+            blends = [resolved(item) for item in as_list(entry.get('/BM'))]
+            graphics.normal_blend = bool(blends) and blends[0] in NORMAL_BLENDS
+        if '/LW' in entry:
+            graphics.line_width = abs(number(entry.get('/LW'), graphics.line_width))
+
+    # Forms and images --------------------------------------------------------------
     def marked_visible(self, operands, properties) -> bool:
         if len(operands) < 2 or resolved(operands[0]) != '/OC':
             return True
@@ -528,7 +1152,7 @@ class _Walker:
             entry = raw_entry(properties, entry)
         return self.optional.visible(entry)
 
-    def draw(self, name, xobjects, resources, ctm, depth, hidden, placements):
+    def draw(self, name, xobjects, resources, graphics: _Graphics, depth, hidden, placements, covers):
         """('keep' | 'drop' | 'replace', replacement form) for one ``Do``."""
         xobject = resolved(raw_entry(xobjects, name))
         if not isinstance(xobject, StreamObject):
@@ -539,15 +1163,19 @@ class _Walker:
                 self.content.hidden_text = self.content.hidden_text or self.form_shows_text(xobject)
             return 'drop', None
         if subtype == '/Image':
-            placements.append((ctm, pixel_count(xobject.get('/Width'), xobject.get('/Height'))))
+            placements.append((graphics.ctm, pixel_count(xobject.get('/Width'), xobject.get('/Height'))))
             if all(image is not xobject for image in self.content.images):
                 self.content.images.append(xobject)
+            masked = (is_true(xobject.get('/ImageMask')) or '/SMask' in xobject or '/Mask' in xobject
+                      or '/SMaskInData' in xobject)
+            self.image_painted(graphics, opaque=not masked, covers=covers,
+                               colour=graphics.fill if is_true(xobject.get('/ImageMask')) else UNKNOWN)
             return 'keep', None
         if subtype != '/Form':
             return 'keep', None
         matrix = [number(v) for v in as_list(xobject.get('/Matrix'))]
-        form_ctm = multiply(tuple(matrix), ctm) if len(matrix) == 6 else ctm
-        if self.positions and depth == 0 and self.form_outside(xobject, form_ctm):
+        form_ctm = multiply(tuple(matrix), graphics.ctm) if len(matrix) == 6 else graphics.ctm
+        if self.positions and self.form_outside(xobject, form_ctm):
             self.content.offpage_text = self.content.offpage_text or self.form_shows_text(xobject)
             return 'drop', None
         if depth >= MAX_FORM_DEPTH or id(xobject) in self.active:
@@ -556,10 +1184,70 @@ class _Walker:
                 x0, x1 = sorted((bbox[0], bbox[2]))
                 y0, y1 = sorted((bbox[1], bbox[3]))
                 placements.append((multiply((x1 - x0, 0.0, 0.0, y1 - y0, x0, y0), form_ctm), None))
+            if self.positions and id(xobject) not in self.active and self.form_shows_text(xobject):
+                self.paint.obscured = True  # pypdf reads its text, which is not judged here: named
             return 'keep', None
+        if self.positions:
+            if self.walks >= self.walk_limit:
+                # pypdf enters the forms kept here, in the same order, and stops at the same count: it reads none
+                # past this one, and the page is named as drawing more forms than the extractor reads.
+                return 'keep', None
+            return self.placed_form(xobject, resources, graphics, form_ctm, depth + 1, placements, covers)
         form = self.form(xobject, resources, depth + 1)
         placements.extend((multiply(local, form_ctm), pixels) for local, pixels in form.placements)
+        covers.extend(transformed_box(rect, form_ctm) for rect in form.covers if rectilinear(form_ctm))
         return ('replace', form.replacement) if form.replacement is not None else ('keep', None)
+
+    def placed_form(self, xobject, parent_resources, graphics: _Graphics, form_ctm, depth, placements, covers):
+        """Walk a form where it is placed, in page space, inside its box: its text is judged where it lands."""
+        own = resolved(xobject.get('/Resources'))
+        resources = own if isinstance(own, DictionaryObject) else parent_resources
+        operations = self.operations(xobject)
+        self.check_fonts(resources)
+        self.walks += 1
+        inner = graphics.copy()
+        inner.ctm = form_ctm
+        bbox = [number(v) for v in as_list(xobject.get('/BBox'))]
+        if len(bbox) == 4:
+            x0, x1 = sorted((bbox[0], bbox[2]))
+            y0, y1 = sorted((bbox[1], bbox[3]))
+            corners = [_apply(form_ctm, x, y) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+            box = transformed_box((x0, y0, x1, y1), form_ctm)
+            inner.clip = inner.clip.narrowed(box) if rectilinear(form_ctm) else \
+                inner.clip.narrowed(box, shape=((tuple(corners),), False))
+        self.active.add(id(xobject))
+        try:
+            kept, replaced, changed, changes = self.walk(operations, resources, inner, depth, placements, covers)
+        finally:
+            self.active.discard(id(xobject))
+        fonts = self.mapped_fonts(resources)
+        if not changed and not fonts:
+            return 'keep', None
+        key = (id(xobject), id(resources), changes)
+        if key not in self.variants:
+            self.variants[key] = self.filtered(xobject, kept, resources, replaced, fonts)
+        return 'replace', self.variants[key]
+
+    def operations(self, xobject) -> list:
+        if id(xobject) not in self.parsed:
+            self.check_stream(xobject)
+            try:
+                self.parsed[id(xobject)] = list(ContentStream(xobject, self.reader, 'bytes').operations)
+            except (MemoryError, RecursionError):
+                raise
+            except Exception:
+                self.content.damaged = True
+                self.parsed[id(xobject)] = []
+        return self.parsed[id(xobject)]
+
+    def filtered(self, xobject, kept, resources, replaced, fonts) -> ContentStream:
+        replacement = ContentStream(None, self.reader)
+        for name in xobject:
+            if name not in ('/Filter', '/DecodeParms', '/Length', '/Resources'):
+                replacement[NameObject(name)] = xobject.raw_get(name)
+        replacement[NameObject('/Resources')] = with_replacements(resources, replaced, fonts)
+        replacement.operations = kept
+        return replacement
 
     def form(self, xobject, parent_resources, depth) -> _Form:
         """Walk a form XObject once (in its own space); later uses re-place what it paints."""
@@ -568,31 +1256,21 @@ class _Walker:
         key = (id(xobject), id(resources))
         if key in self.forms:
             return self.forms[key]
-        self.check_stream(xobject)
+        operations = self.operations(xobject)
         self.check_fonts(resources)
-        try:
-            operations = list(ContentStream(xobject, self.reader, 'bytes').operations)
-        except (MemoryError, RecursionError):
-            raise
-        except Exception:
-            self.content.damaged = True
-            operations = []
         placements: list = []
+        covers: list = []
         self.active.add(id(xobject))
         try:
-            kept, replaced, changed = self.walk(operations, resources, IDENTITY, depth, placements)
+            graphics = _Graphics(IDENTITY, _Clip((-math.inf, -math.inf, math.inf, math.inf)), _TextState())
+            kept, replaced, changed, _ = self.walk(operations, resources, graphics, depth, placements, covers)
         finally:
             self.active.discard(id(xobject))
         replacement = None
         fonts = self.mapped_fonts(resources)
         if changed or fonts:
-            replacement = ContentStream(None, self.reader)
-            for name in xobject:
-                if name not in ('/Filter', '/DecodeParms', '/Length', '/Resources'):
-                    replacement[NameObject(name)] = xobject.raw_get(name)
-            replacement[NameObject('/Resources')] = with_replacements(resources, replaced, fonts)
-            replacement.operations = kept
-        self.forms[key] = _Form(replacement, placements)
+            replacement = self.filtered(xobject, kept, resources, replaced, fonts)
+        self.forms[key] = _Form(replacement, placements, covers)
         return self.forms[key]
 
     def form_shows_text(self, xobject) -> bool:
@@ -640,19 +1318,24 @@ class _Walker:
         return mapped
 
 
+def is_true(value) -> bool:
+    value = resolved(value)
+    return getattr(value, 'value', value) is True
+
+
 def pixel_count(width, height) -> int:
     return max(0, int(number(width))) * max(0, int(number(height)))
 
 
 def with_replacements(resources, replaced: dict, fonts: dict | None = None) -> DictionaryObject:
-    """A copy of ``resources`` whose XObject table also names each filtered form, and whose font table
-    names each glyph-mapped symbol font in place of the original."""
+    """A copy of ``resources`` whose XObject table also names each filtered form (under the name ``replaced``
+    gives it), and whose font table names each glyph-mapped symbol font in place of the original."""
     copy = DictionaryObject({NameObject(key): resources.raw_get(key) for key in resources})
     table = resolved(resources.get('/XObject'))
     entries = DictionaryObject({NameObject(key): table.raw_get(key) for key in table}) \
         if isinstance(table, DictionaryObject) else DictionaryObject()
     for name, form in replaced.items():
-        entries[NameObject(name + REPLACEMENT_SUFFIX)] = form
+        entries[NameObject(name)] = form
     copy[NameObject('/XObject')] = entries
     if fonts:
         font_table = resolved(resources.get('/Font'))
@@ -701,6 +1384,7 @@ class VisibleForm:
     hidden_text: bool  # hidden optional content inside it showed text, which was dropped
     placements: list  # (CTM in the form's own space, before its /Matrix; pixels or None) of each image it paints
     images: list  # the image XObjects it paints, each once
+    covers: tuple = ()  # the opaque rectangles it paints (fills and images), in its own space, before its /Matrix
 
 
 def visible_form(xobject, reader, optional: OptionalContent, resources) -> VisibleForm:
@@ -708,7 +1392,7 @@ def visible_form(xobject, reader, optional: OptionalContent, resources) -> Visib
     form = walker.form(xobject, resources if isinstance(resources, DictionaryObject) else DictionaryObject(), 0)
     target = form.replacement if form.replacement is not None else xobject
     return VisibleForm(target, walker.content.damaged, walker.content.hidden_text, list(form.placements),
-                       list(walker.content.images))
+                       list(walker.content.images), tuple(form.covers))
 
 
 def appearance_matrix(stream, rect) -> tuple | None:
