@@ -32,17 +32,69 @@ def as_box(glyph: str) -> str:
     return _BOX_SHAPES.get(glyph, glyph)
 
 
+# The built-in encodings of the two Adobe symbol fonts: glyph names in code order from each run's first code
+# (Adobe's ZapfDingbats.afm and Symbol.afm). A PDF font's /Differences re-encodes codes by glyph name, so
+# a code re-encoded to one of these names shows the glyph that name has in the built-in encoding.
+_ZAPF_RUNS = {
+    0x20: (
+        'space a1 a2 a202 a3 a4 a5 a119 a118 a117 a11 a12 a13 a14 a15 a16 a105 a17 a18 a19 a20 a21 a22 '
+        'a23 a24 a25 a26 a27 a28 a6 a7 a8 a9 a10 a29 a30 a31 a32 a33 a34 a35 a36 a37 a38 a39 a40 a41 a42 '
+        'a43 a44 a45 a46 a47 a48 a49 a50 a51 a52 a53 a54 a55 a56 a57 a58 a59 a60 a61 a62 a63 a64 a65 a66 '
+        'a67 a68 a69 a70 a71 a72 a73 a74 a203 a75 a204 a76 a77 a78 a79 a81 a82 a83 a84 a97 a98 a99 a100'),
+    0x80: (
+        'a89 a90 a93 a94 a91 a92 a205 a85 a206 a86 a87 a88 a95 a96'),
+    0xA1: (
+        'a101 a102 a103 a104 a106 a107 a108 a112 a111 a110 a109 a120 a121 a122 a123 a124 a125 a126 a127 '
+        'a128 a129 a130 a131 a132 a133 a134 a135 a136 a137 a138 a139 a140 a141 a142 a143 a144 a145 a146 '
+        'a147 a148 a149 a150 a151 a152 a153 a154 a155 a156 a157 a158 a159 a160 a161 a163 a164 a196 a165 '
+        'a192 a166 a167 a168 a169 a170 a171 a172 a173 a162 a174 a175 a176 a177 a178 a179 a193 a180 a199 '
+        'a181 a200 a182'),
+    0xF1: (
+        'a201 a183 a184 a197 a185 a194 a198 a186 a195 a187 a188 a189 a190 a191'),
+}
+_SYMBOL_RUNS = {
+    0x20: (
+        'space exclam universal numbersign existential percent ampersand suchthat parenleft parenright '
+        'asteriskmath plus comma minus period slash zero one two three four five six seven eight nine '
+        'colon semicolon less equal greater question congruent Alpha Beta Chi Delta Epsilon Phi Gamma Eta '
+        'Iota theta1 Kappa Lambda Mu Nu Omicron Pi Theta Rho Sigma Tau Upsilon sigma1 Omega Xi Psi Zeta '
+        'bracketleft therefore bracketright perpendicular underscore radicalex alpha beta chi delta '
+        'epsilon phi gamma eta iota phi1 kappa lambda mu nu omicron pi theta rho sigma tau upsilon omega1 '
+        'omega xi psi zeta braceleft bar braceright similar'),
+    0xA0: (
+        'Euro Upsilon1 minute lessequal fraction infinity florin club diamond heart spade arrowboth '
+        'arrowleft arrowup arrowright arrowdown degree plusminus second greaterequal multiply '
+        'proportional partialdiff bullet divide notequal equivalence approxequal ellipsis arrowvertex '
+        'arrowhorizex carriagereturn aleph Ifraktur Rfraktur weierstrass circlemultiply circleplus '
+        'emptyset intersection union propersuperset reflexsuperset notsubset propersubset reflexsubset '
+        'element notelement angle gradient registerserif copyrightserif trademarkserif product radical '
+        'dotmath logicalnot logicaland logicalor arrowdblboth arrowdblleft arrowdblup arrowdblright '
+        'arrowdbldown lozenge angleleft registersans copyrightsans trademarksans summation parenlefttp '
+        'parenleftex parenleftbt bracketlefttp bracketleftex bracketleftbt bracelefttp braceleftmid '
+        'braceleftbt braceex'),
+    0xF1: (
+        'angleright integral integraltp integralex integralbt parenrighttp parenrightex parenrightbt '
+        'bracketrighttp bracketrightex bracketrightbt bracerighttp bracerightmid bracerightbt'),
+}
+
+
+def _codes(runs: dict[int, str]) -> dict[str, int]:
+    return {name: start + offset for start, names in runs.items() for offset, name in enumerate(names.split())}
+
+
 class GlyphTable(dict):
     """A symbol font's glyphs, {code: character}. ``latin`` says whether some of its glyphs are Latin-1 characters
     of their own (Symbol's punctuation, digits and ±): only in a font without them is a Latin-1 character that a
-    ToUnicode map gives certainly an echo of the glyph's code."""
+    ToUnicode map gives certainly an echo of the glyph's code. ``names`` maps the glyph names of the font's
+    built-in encoding to their codes (empty where they are not known: the TrueType symbol fonts)."""
 
-    def __init__(self, entries=()):
+    def __init__(self, entries=(), names: dict[str, int] | None = None):
         super().__init__(entries)
         self.latin = any(len(char) == 1 and ord(char) <= 0xFF for char in self.values())
+        self.names = names or {}
 
 
-def _adobe_table(module: str, name: str, *, latin: bool = True) -> GlyphTable:
+def _adobe_table(module: str, name: str, runs: dict[int, str], *, latin: bool = True) -> GlyphTable:
     """pypdf's Adobe Symbol / Zapf Dingbats encodings, keeping only real characters. pypdf fills the codes Zapf
     Dingbats leaves undefined (0xF0, 0xFF) with their Latin-1 characters, which no Zapf glyph is: ``latin=False``
     drops them, so such a code is counted like any other glyph without a character."""
@@ -50,9 +102,9 @@ def _adobe_table(module: str, name: str, *, latin: bool = True) -> GlyphTable:
         table = getattr(__import__(f'pypdf._codecs.{module}', fromlist=[name]), name)
     except (ImportError, AttributeError):  # count the glyphs instead of mapping them
         return GlyphTable()
-    return GlyphTable((code, as_box(char)) for code, char in enumerate(table)
-                      if char.strip() and char.isprintable() and not 0xE000 <= ord(char) <= 0xF8FF
-                      and (latin or ord(char) > 0xFF))
+    return GlyphTable(((code, as_box(char)) for code, char in enumerate(table)
+                       if char.strip() and char.isprintable() and not 0xE000 <= ord(char) <= 0xF8FF
+                       and (latin or ord(char) > 0xFF)), _codes(runs))
 
 
 # Wingdings: its check boxes and check marks, and the bullets Word's bullet library draws with it. Every box
@@ -65,9 +117,9 @@ _WINGDINGS_2 = GlyphTable({0x51: CHECKED_BOX, 0x52: CHECKED_BOX, 0x53: CHECKED_B
                            0xA3: UNCHECKED_BOX, 0xA4: UNCHECKED_BOX, 0xA5: UNCHECKED_BOX, 0xA6: UNCHECKED_BOX})
 _WEBDINGS = GlyphTable({0x63: UNCHECKED_BOX})
 SYMBOL_FONTS = {
-    'symbol': _adobe_table('symbol', '_symbol_encoding'),
-    'zapfdingbats': _adobe_table('zapfding', '_zapfding_encoding', latin=False),
-    'itczapfdingbats': _adobe_table('zapfding', '_zapfding_encoding', latin=False),
+    'symbol': _adobe_table('symbol', '_symbol_encoding', _SYMBOL_RUNS),
+    'zapfdingbats': _adobe_table('zapfding', '_zapfding_encoding', _ZAPF_RUNS, latin=False),
+    'itczapfdingbats': _adobe_table('zapfding', '_zapfding_encoding', _ZAPF_RUNS, latin=False),
     'wingdings': _WINGDINGS,
     'wingdings2': _WINGDINGS_2,
     'webdings': _WEBDINGS,

@@ -93,22 +93,70 @@ def _mapped_cids(font) -> bool:
     return False
 
 
-def glyph_for(code: int, shown: str | None, table: dict[int, str]) -> str:
-    """The character code ``code`` of a simple symbol font shows; ``shown`` is what its ToUnicode gives."""
+def glyph_for(code: int, shown: str | None, table: dict[int, str], named: str | None = None,
+              renamed: bool = False) -> str:
+    """The character code ``code`` of a simple symbol font shows; ``shown`` is what its ToUnicode gives.
+
+    ``renamed``: the font's /Differences re-encodes the code to a glyph name; ``named`` is the character that name
+    shows (None when it cannot be resolved). The glyph a name selects is what viewers draw, so it decides over a
+    private-use value or a Latin echo, and over the built-in table; a real Unicode ToUnicode value stays trusted.
+    A re-encoded code whose name cannot be resolved names no character: the built-in table no longer applies."""
     if shown:
         if shown.isspace():
             return shown
         if len(shown) == 1:
             value = ord(shown)
             if 0xF000 <= value <= 0xF0FF:
-                return table.get(value - 0xF000, UNMAPPED)
+                return named if named is not None else table.get(value - 0xF000, UNMAPPED)
             if value <= 0xFF or 0xE000 <= value <= 0xF8FF:  # a Latin echo of the code, or another private code
-                return table.get(code, UNMAPPED)
+                return named if named is not None else UNMAPPED if renamed else table.get(code, UNMAPPED)
             return as_box(shown)
         return shown
+    if renamed:
+        return named if named is not None else UNMAPPED
     if code == 0x20:
         return ' '
     return table.get(code, UNMAPPED)
+
+
+MAX_DIFFERENCES = 4096  # entries of an /Encoding /Differences array read (a meaningful one has at most 256 names)
+_UNI_NAME = re.compile(r'uni([0-9A-F]{4})|u([0-9A-F]{4,6})')
+
+
+def differences(font: DictionaryObject) -> dict[int, str]:
+    """{code: glyph name} for the codes a simple font's /Encoding /Differences re-encodes."""
+    encoding = resolved(font.get('/Encoding'))
+    items = resolved(encoding.get('/Differences')) if isinstance(encoding, DictionaryObject) else None
+    names: dict[int, str] = {}
+    code = None
+    for item in list(items)[:MAX_DIFFERENCES] if isinstance(items, (list, ArrayObject)) else []:
+        item = resolved(item)
+        if isinstance(item, NameObject):
+            if code is not None and 0 <= code <= 0xFF:
+                names[code] = str(item).removeprefix('/')
+            code = None if code is None else code + 1
+        elif isinstance(item, int) and not isinstance(item, bool):
+            code = int(item)
+    return names
+
+
+def named_glyph(name: str, table: dict[int, str]) -> str | None:
+    """The character the glyph ``name`` shows in the symbol font whose glyphs are ``table``: one of the font's own
+    built-in glyph names, or a uniXXXX / uXXXX name; None for a name this cannot resolve (.notdef, a glyph
+    index such as g17, a suffixed variant such as a74.alt, a name the font does not have). pypdf's glyph list is
+    not used: it reads Zapf Dingbats' 'a74' as 'J' and '.notdef' as '□'."""
+    if name == 'space':
+        return ' '
+    match = _UNI_NAME.fullmatch(name)
+    if match:
+        value = int(match.group(1) or match.group(2), 16)
+        if 0xF000 <= value <= 0xF0FF:
+            return table.get(value - 0xF000, UNMAPPED)
+        if value > 0x10FFFF or 0xD800 <= value <= 0xDFFF or undecodable(chr(value)):
+            return UNMAPPED
+        return as_box(chr(value))
+    code = getattr(table, 'names', {}).get(name)
+    return None if code is None else table.get(code, UNMAPPED)
 
 
 def mapped_simple_font(font: DictionaryObject) -> DictionaryObject | None:
@@ -124,9 +172,13 @@ def mapped_simple_font(font: DictionaryObject) -> DictionaryObject | None:
     except Exception:  # a font pypdf cannot read: its text is extracted (or not) as before
         return None
     try:
-        encoding = original.encoding if isinstance(original.encoding, dict) else {}
+        # pypdf keys a simple font's ToUnicode map by the code's own character (its encoding maps a /Differences
+        # code to its glyph name's character, which may be another code's key).
         own_map = original.character_map if '/ToUnicode' in font else {}
-        glyphs = {code: glyph_for(code, own_map.get(encoding.get(code, chr(code))), table) for code in range(256)}
+        renamed = differences(font)
+        glyphs = {code: glyph_for(code, own_map.get(chr(code)), table,
+                                  named_glyph(renamed[code], table) if code in renamed else None, code in renamed)
+                  for code in range(256)}
         copy = _with_to_unicode(font, glyphs, ('/ToUnicode', '/FirstChar', '/LastChar', '/Widths', '/FontDescriptor'))
         _copy_widths(original, font, copy)
         return copy

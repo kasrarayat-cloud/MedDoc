@@ -165,6 +165,98 @@ class CompositeLatinEchoTests(unittest.TestCase):
         self.assertIsNone(composite_glyph('¨', frozenset(), symbols.SYMBOL_FONTS['wingdings']))  # not its map's
 
 
+# --- ingest:11 — a symbol font's /Differences names the glyph each code draws ---------------------------
+
+def zapf(differences: str = '', to_unicode_pairs=None) -> tuple[str, dict]:
+    """The non-embedded Zapf Dingbats (viewers draw it by glyph name), re-encoded by ``differences``."""
+    encoding = f'/Encoding << /Differences [{differences}] >>' if differences else ''
+    extra = {}
+    if to_unicode_pairs is not None:
+        encoding += ' /ToUnicode 7 0 R'
+        extra[7] = to_unicode(to_unicode_pairs)
+    return f'<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats {encoding} >>', extra
+
+
+class SymbolFontDifferencesTests(unittest.TestCase):
+    """ingest:11 — the glyph a /Differences entry names is what the code shows (pdftotext and viewers agree):
+    a74 is Zapf Dingbats' shadowed box, wherever it is encoded."""
+
+    def extract(self, font, extra, code, label=' Biopsy'):
+        return pdf_extract(font_pdf(font, box_line(code, label), extra=extra), ocr=None)
+
+    def test_zapf_box_re_encoded_by_differences_is_an_unchecked_box(self):
+        for label, (differences, code) in {'Differences [33 /a74]': ('33 /a74', '21'),
+                                           'subset form [1 /a74]': ('1 /a74', '01'),
+                                           'built-in code 0x6F (control)': ('', '6F')}.items():
+            with self.subTest(label):
+                result = self.extract(*zapf(differences), code)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy'), result.text)
+                self.assertEqual(reading(result.text, 'Biopsy'), 'negated')
+
+    def test_a_code_re_encoded_away_from_a_box_is_not_a_box(self):
+        # [111 /a1]: code 0x6F, the built-in box, now draws the scissors a1 (U+2701); the page shows no box.
+        result = self.extract(*zapf('111 /a1'), '6F')
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('Interventions:\n✁ Biopsy'), result.text)
+        self.assertNotEqual(reading(result.text, 'Biopsy'), 'negated')
+
+    def test_tounicode_beside_differences(self):
+        cases = {'real Unicode U+274F (trusted)': [(0x21, '❏')],
+                 'private-use echo U+F021': [(0x21, '')],
+                 'Latin echo !': [(0x21, '!')],
+                 'an entry for another code only (0x4A)': [(0x4A, 'X')],
+                 # pypdf's encoding gives code 0x21 the character 'J' (its reading of a74); keyed through it, the
+                 # map would hand 0x21 the trusted scissors of code 0x4A.
+                 'a real-Unicode entry for another code only (0x4A)': [(0x4A, '✁')]}
+        for label, pairs in cases.items():
+            with self.subTest(label):
+                result = self.extract(*zapf('33 /a74', pairs), '21')
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertTrue(result.text.endswith('Interventions:\n☐ Biopsy'), result.text)
+
+    def test_uni_glyph_names(self):
+        cases = {'Wingdings uniF0A8': wingdings_font(None, encoding='/Encoding << /Differences [65 /uniF0A8] >>'),
+                 'Zapf uni2610': zapf('65 /uni2610'), 'Zapf u2612': zapf('65 /u2612')}
+        for label, (font, extra) in cases.items():
+            with self.subTest(label):
+                result = self.extract(font, extra, '41')
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                glyph = CHECKED if label.endswith('u2612') else UNCHECKED
+                self.assertTrue(result.text.endswith(f'Interventions:\n{glyph} Biopsy'), result.text)
+
+    def test_a_name_that_names_no_known_glyph_is_counted(self):
+        # pypdf's own glyph list would read '.notdef' as '□' and 'a74' in another font as 'J'.
+        for label, (font, extra) in {'Zapf g17': zapf('33 /g17'), 'Zapf .notdef': zapf('33 /.notdef'),
+                                     'Wingdings a74': wingdings_font(None, encoding='/Encoding << /Differences '
+                                                                                    '[33 /a74] >>')}.items():
+            with self.subTest(label):
+                result = self.extract(font, extra, '21', ' Mood')
+                self.assertEqual((result.status, result.messages), ('ok', (undecodable_note(1),)))
+                self.assertTrue(result.text.endswith('Interventions:\n Mood'), result.text)
+
+    def test_built_in_glyph_names_read_the_right_glyphs(self):
+        # Values from pdf.js's own Zapf Dingbats glyph list (an independent source): name -> character, as boxes.
+        from studio.ingest.pdffonts import named_glyph
+        zapf_table = symbols.SYMBOL_FONTS['zapfdingbats']
+        for name, char in {'a1': '✁', 'a12': '☞', 'a71': '●', 'a74': UNCHECKED, 'a203': UNCHECKED,
+                           'a75': UNCHECKED, 'a204': UNCHECKED, 'a20': '✔', 'a191': '➾'}.items():
+            self.assertEqual(named_glyph(name, zapf_table), char, name)
+        symbol_table = symbols.SYMBOL_FONTS['symbol']
+        self.assertEqual(named_glyph('bullet', symbol_table), '•')
+        self.assertEqual(named_glyph('alpha', symbol_table), 'α')
+        for name in ('.notdef', 'a74.alt', 'g17', 'H', 'a74x'):
+            self.assertIsNone(named_glyph(name, zapf_table), name)
+        self.assertIsNone(named_glyph('a74', symbols.SYMBOL_FONTS['wingdings']))
+
+    def test_symbol_glyph_names(self):
+        font = '<< /Type /Font /Subtype /Type1 /BaseFont /Symbol /Encoding << /Differences [33 /bullet /alpha] >> >>'
+        result = pdf_extract(font_pdf(font, [(620, '21', ' Cold snare polypectomy'), (600, '22', ' 2 mm')]),
+                             ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertTrue(result.text.endswith('Interventions:\n• Cold snare polypectomy\nα 2 mm'), result.text)
+
+
 # --- ingest:15 — one malformed ToUnicode entry never fails the document ----------------------------------
 
 INVALID_TEXT = 'Page 1 contains characters the PDF does not encode as valid text; they are shown as �.'
