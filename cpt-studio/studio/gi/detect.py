@@ -529,6 +529,11 @@ _DESCRIPTIVE_ED = frozenset((
     'aspirated', 'lifted', 'closed', 'marked', 'washed', 'irrigated', 'suctioned', 'imaged', 'measured', 'sized',
     'sent', 'submitted', 'labeled', 'labelled', 'tolerated', 'uncomplicated', 'complicated', 'limited', 'extended'))
 _ON_HOLD = re.compile(r'on\s+hold\b|to\s+follow\b|at\s+a\s+later\b', re.A | re.I)
+# After "to", only an extent goes on describing the service ("to the cecum", "to 40 cm"); anything else
+# ("to come", "to be scheduled") is a purpose or a future, so the section does not speak for it.
+_TO_EXTENT = frozenset(('the', 'a', 'an', 'its', 'approximately', 'approx', 'about', 'around', 'roughly', 'nearly',
+                        'near', 'level', 'mid', 'distal', 'proximal', 'terminal', 'second', 'third', 'fourth', 'beyond',
+                        'within'))
 _COPULA = frozenset(('was', 'were', 'is', 'are'))
 _AFTER_COPULA = frozenset(('normal', 'unremarkable', 'negative', 'positive', 'complete', 'completed', 'performed',
                            'done', 'uneventful', 'successful', 'successfully', 'notable', 'significant', 'remarkable',
@@ -579,6 +584,16 @@ def _continuation(an: Analysis, pos: int, limit: int, strict: bool) -> Optional[
     lowered = word.group(0).lower()
     if _ON_HOLD.match(text, word.start(), limit):
         return word.group(0)
+    if lowered == 'to':
+        at = _SEPARATOR.match(text, word.end(), limit).end()
+        follow = _NEXT_WORD.match(text, at, limit)
+        near = min(limit, at + 120)
+        if follow is not None and (follow.group(0)[0].isdigit() or follow.group(0).lower() in _TO_EXTENT
+                                   or any(p.match(text, at, limit) for _, _, p in cues.UPPER_LANDMARKS
+                                          + cues.LOWER_LANDMARKS)
+                                   or any(m.start == at for m in an.services_in(at, near))):
+            return None
+        return f'to {follow.group(0)}' if follow is not None else 'to'
     if lowered[0].isdigit() or lowered in _CONTINUES:
         return None
     if lowered in _COPULA:
@@ -629,6 +644,10 @@ def _next_line_denial(an: Analysis, s: int, e: int, bare: bool) -> Optional[str]
     if bare:
         first = cues.DOUBT_TOKEN.match(an.text, at, ne)
         if first and _denying_word(an, first.start(), first.end()):
+            return line
+        # A short line after a bare service line ("Patient declined.", "Pt refused.") denies it with
+        # any negation or refusal word nothing else accounts for ("declined sedation" is accounted for).
+        if len(line.split()) <= 6 and _denying_word(an, at, ne):
             return line
         if len(line.split()) <= 5 and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical')
                                           for c in an.cues_in(ns, ne)):

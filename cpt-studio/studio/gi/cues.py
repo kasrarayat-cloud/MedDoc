@@ -157,7 +157,10 @@ _ACT_WORD = (SERVICE_TOKEN + r'|polypectom\w*|biops\w*|snar\w*|forceps|dilat\w*|
              r'|hemostasis|interventions?|specimens?|retroflex\w*|intubat\w*|insert\w*|advanc\w*|EMR|PEG|bougie\w*'
              r'|balloon\w*|basket\w*|brush\w*|extract\w*|treat\w*|therap\w*|ultrasound|sonograph\w*|cholangiogra\w*'
              r'|pancreatogra\w*|sweep\w*|swept|marking|performed|done|taken|obtained|placed|attempted|completed'
-             r'|required|needed|indicated|planned|scheduled')
+             r'|required|needed|indicated|planned|scheduled'
+             # A denied precondition ("no prep", "no consent") is a reason a procedure may not have
+             # happened, never a finding that explains the negation away.
+             r'|prep\w*|consent\w*')
 _AUX_WORD = r'was|were|is|are|be|been|being|has|have|had|did|does|do|will|would|could|can|should|may|might|must'
 _NP_WORD = r'(?!(?:' + _ACT_WORD + r'|' + _AUX_WORD + r')\b)[\w/-]+'
 _NP = r'(?:' + _NP_WORD + r'(?:\s*,\s*|\s+)){0,7}?' + _NP_WORD
