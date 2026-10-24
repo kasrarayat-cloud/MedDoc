@@ -155,6 +155,15 @@ _SECTION_NOUN_LAST = re.compile(r'(?:' + _SECTION_NOUN.pattern + r')[ \t]*$', re
 # Or it starts with the noun of the plan or of the procedures, and a plan word says which: "Procedures planned",
 # "Plan going forward", "Procedures recommended" (round 4 release:2: these opened a plan at R3B-BASE).
 _SEC_PLAN_FIRST = re.compile(r'(?:plans?|procedures?)\b', re.A | re.I)
+# A line that ends with its section noun but reads as a phrase is a finding or a statement, never such a label (round
+# 4 structure:4, a round-2b regression): a comma, a preposition, or an -ing word after its first word ("Changes of
+# prior radiation therapy", "Specimens sent for further testing", "Possible stricture, further imaging", "Retained
+# stool limiting further evaluation"). It opens an 'other' section with no default, so the lines under it neither
+# inherit the findings reading nor are excluded; in a numbered or bulleted list it stays content. A label that starts
+# with a section's own name ("Recommendations for follow-up", "History of prior procedures", "Summary of
+# recommendations") or whose comma parts all name sections ("Impression, plan") still opens its plan or history section.
+_SEC_PHRASE_WORD = re.compile(r'\b(?:of|from|for|with|to|by|in|on|at|after|due|per|via|into|without|than)\b', re.A | re.I)
+_SEC_LABEL_PARTICIPLES = frozenset(('upcoming', 'pending', 'ongoing', 'remaining'))
 _TRAILING_ASIDE = re.compile(r'[ \t]*\([^()\n]*\)[ \t]*$', re.A)
 _LIST_ITEM = re.compile(r'[ \t]*(?:(?:\d{1,2}|[A-Za-z])[.)]|\*(?!\*))[ \t]+', re.A)
 # A document title is never such a label: "Office follow-up visit - progress note", "Prior procedure report".
@@ -167,8 +176,9 @@ FORM_BLOCK = re.compile(r'\[PDF (?P<what>form fields|annotation text) on page \d
 ADDENDUM_HEADER = re.compile(r'ADDENDUM \(revision \d+, added \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC\)', re.A)
 
 
-def _colonless_label(line: str) -> Optional[str]:
-    """'plan' or 'history' when a line without a colon is a label of that kind (see above)."""
+def _colonless_label(line: str, listed: bool = False) -> Optional[str]:
+    """'plan' or 'history' when a line without a colon is a label of that kind (see above); 'other' when it would
+    be one but reads as a phrase (_sec_phrase), or None for such a line in a numbered or bulleted list (``listed``)."""
     named = _TRAILING_ASIDE.sub('', line.strip().rstrip('*#').rstrip())  # "**Upcoming procedures**" names its noun
     if _TITLE_WORDS.search(line) or _service_named(line) or _act_or_place_named(line):
         return None
@@ -176,9 +186,29 @@ def _colonless_label(line: str) -> Optional[str]:
         return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE)
     if not _SECTION_NOUN_LAST.search(named):
         return None
-    if _PLAN_LABEL.search(line):
-        return 'plan'
-    return 'history' if _COLONLESS_HISTORY.search(line) else None
+    kind = 'plan' if _PLAN_LABEL.search(line) else 'history' if _COLONLESS_HISTORY.search(line) else None
+    if kind and _sec_phrase(named):
+        return None if listed else 'other'  # structure:4: a finding or a statement, never history or plan
+    return kind
+
+
+def _sec_phrase(named: str) -> bool:
+    """Whether a colon-less line that ends with a section noun reads as a phrase, not a label (_SEC_PHRASE_WORD)."""
+    words = named.split()
+    first = normalize_label(words[0])
+    if _SECTION_NOUN.match(named) or HEADINGS.get(first, 'findings') not in POSITIVE_KINDS:
+        return False  # it starts with a section's own name: "Recommendations for follow-up", "Summary of ..."
+    if ',' in named and not all(normalize_label(part) in HEADINGS or _SECTION_NOUN_LAST.search(part.strip())
+                                for part in named.split(',')):
+        return True
+    if _SEC_PHRASE_WORD.search(named):
+        return True
+    for word in words[1:]:
+        lowered = word.lower().strip('*#()')
+        if lowered.endswith('ing') and len(lowered) > 4 and lowered not in _SEC_LABEL_PARTICIPLES \
+                and not _SECTION_NOUN.fullmatch(lowered):
+            return True
+    return False
 
 
 def _act_or_place_named(line: str) -> bool:
@@ -238,7 +268,7 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
     if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
         kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
     if kind is None and colon < 0 and _bare_label(raw):
-        kind = _colonless_label(raw)
+        kind = _colonless_label(raw, listed=bool(_LIST_ITEM.match(text, ls, le)))
     if kind is None or (kind == 'time' and _CLOCK.match(content)):
         return None
     lead = len(raw) - len(raw.lstrip())

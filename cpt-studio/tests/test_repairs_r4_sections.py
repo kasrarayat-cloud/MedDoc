@@ -160,5 +160,87 @@ class Release2PlanLabelsTests(PlannedEmrAssertions, unittest.TestCase):
                 self.assertNotIn(read(text, polyp)[0], POSITIVE)
 
 
+# --- structure:4: a colon-less line that ends with a section noun but reads as a phrase ---------------------------------
+
+STRUCTURE4_POLYP = '6 mm sigmoid polyp removed with cold snare'
+
+
+def structure4_note(line, polyp=STRUCTURE4_POLYP):
+    return (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings:\nThe colonoscope was advanced to the '
+            'cecum.\nA 3 cm ascending colon mass, biopsied and tattooed\n' + line + '\n' + polyp + '\n')
+
+
+class Structure4PhraseLinesTests(unittest.TestCase):
+    """structure:4 (a round-2b regression that round 3b fixed for one word order) - a findings line or a statement that
+    ends with a section noun but reads as a phrase (a comma, a preposition, an -ing word after its first word) opens an
+    'other' section, never a history or a plan one: the performed polypectomy after it is never excluded, and 45385 is
+    ready as at 57b4b3747."""
+
+    CLAIMED = ('Changes of prior radiation therapy', 'Evidence of past radiation therapy', 'Scarring from prior treatment',
+               'Healed scar from previous procedures', 'Specimens sent for further testing', 'Specimen sent for further evaluation',
+               'Sent to pathology for further evaluation', 'Awaiting pathology for management', 'Possible stricture, further imaging',
+               'Mucosa photographed for future records')
+    LISTED = ('Changes consistent with prior radiation therapy', 'Mucosal changes from prior radiation therapy',
+              'Telangiectasias from previous radiation therapy', 'Retained stool limiting further evaluation',
+              'Stricture precluding further evaluation')
+
+    def test_the_claimed_and_listed_lines(self):
+        for line in self.CLAIMED + self.LISTED:
+            text = structure4_note(line)
+            with self.subTest(line=line):
+                self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'other')
+                self.assertNotIn(read(text, STRUCTURE4_POLYP)[0], ('planned', 'historical', 'cancelled', 'negated'))
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+    def test_the_cued_polyp_line(self):
+        polyp = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+        for line in ('Changes of prior radiation therapy', 'Specimens sent for further testing'):
+            text = structure4_note(line, polyp)
+            with self.subTest(line=line):
+                self.assertEqual(read(text, polyp)[0], 'performed')
+                self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+
+    def test_a_word_bullet_list_whose_bullets_extraction_drops(self):
+        for line in ('Changes of prior radiation therapy', 'Specimens sent for further testing'):
+            text = word_document([('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', None), ('Date of service: 2026-10-21', None),
+                                  ('Procedure: Colonoscopy with biopsy and cold snare polypectomy.', None), ('Findings', 'Heading 2'),
+                                  ('The colonoscope was advanced to the cecum', 'List Bullet'),
+                                  ('A 3 cm ascending colon mass, biopsied and tattooed', 'List Bullet'), (line, 'List Bullet'),
+                                  (STRUCTURE4_POLYP, 'List Bullet')])
+            with self.subTest(line=line):
+                self.assertIn('\n' + line + '\n', text)
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+    def test_a_numbered_phrase_item_stays_content(self):
+        for line in ('2. Specimens sent for further testing', '* Changes of prior radiation therapy',
+                     'b) Retained stool limiting further evaluation'):
+            text = structure4_note(line)
+            with self.subTest(line=line):
+                self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+    def test_labels_that_name_their_section_still_open(self):
+        """A label that starts with a section's own name, or whose comma parts all name sections, still opens its plan or
+        history section, so the planned EMR under it is still excluded."""
+        for label, kind in (('Recommendations for follow-up', 'plan'), ('Instructions for follow-up', 'plan'),
+                            ('History of prior procedures', 'history'), ('Summary of recommendations', 'plan'),
+                            ('Discussion of future management', 'plan'), ('Impression, plan', 'plan'),
+                            ('Findings, recommendations', 'plan'), ('Previously scheduled procedures', 'plan'),
+                            ('Plan for further management', 'plan'), ('Upcoming procedures (pending authorization)', 'plan'),
+                            ('Further management', 'plan'), ('Earlier endoscopic work-up', 'history'),
+                            ('Appointments for follow-up', 'plan'), ('Imaging for further evaluation', 'plan')):
+            text = emr_note(label)
+            with self.subTest(label=label):
+                self.assertEqual(kind_at(text, EMR_LINE), kind)
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+
+    def test_findings_lines_without_a_phrase_are_unchanged(self):
+        for line in ('Prior radiation therapy changes', 'Small internal hemorrhoids', 'Diverticulosis in the sigmoid colon'):
+            text = structure4_note(line)
+            with self.subTest(line=line):
+                self.assertEqual(kind_at(text, STRUCTURE4_POLYP), 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE4_POLYP)])['45385']))
+
+
 if __name__ == '__main__':
     unittest.main()
