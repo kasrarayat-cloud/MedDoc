@@ -748,6 +748,16 @@ class OffPageTextTests(unittest.TestCase):
         self.assertIn(lead, result.text)
         self.assertNotIn('cold snare', result.text)
 
+    def test_text_after_a_long_lead_on_the_same_line_is_still_read(self):
+        # The lead is measured with its font's own widths (about 330 pt here), so the next piece starts on the page.
+        # One em per glyph, the estimate for a font that cannot be measured, would start it past the right edge.
+        lead = 'Findings: the mucosa of the whole colon looked normal today ok.'
+        content = f'BT /F1 12 Tf 72 500 Td ({esc(lead)}) Tj ({esc(UNSHOWN)}) Tj ET'
+        result = pdf_extract(placed_pdf(content), ocr=None)
+        self.assertEqual(result.messages, ())
+        self.assertIn(lead, result.text)
+        self.assertIn('cold snare', result.text)
+
     def test_text_state_is_restored_by_q(self):
         content = f'/F1 12 Tf q /F1 400 Tf Q BT 72 -30 Td ({esc(UNSHOWN)}) Tj ET'
         result = pdf_extract(placed_pdf(content), ocr=None)
