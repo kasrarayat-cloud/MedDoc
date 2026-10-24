@@ -154,6 +154,11 @@ PROVIDER_READ_TIMEOUT_SECONDS = 120
 PROVIDER_MAX_REQUEST_BYTES = 512_000
 PROVIDER_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 60}
+# Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
+# above, this growth of address space past what the worker already uses, and a shorter wall clock when a
+# member's context change runs the extraction inside a web request.
+BOUNDED_MEMORY_BYTES = 512 * 1024 * 1024
+CONTEXT_REQUEST_SECONDS = 15
 STALE_RUNNING_SECONDS = 600
 
 LOGGING = {

@@ -19,7 +19,7 @@ from django.conf import settings
 from django.db import connection, transaction
 from django.utils import timezone
 
-from . import audit, models, review
+from . import audit, bounded, models, review
 from .gi import context as gi_context
 from .gi import detect as gi_detect
 from .ingest import Limits, extract_document, extract_paste
@@ -101,9 +101,28 @@ def context_service_date(context):
         return None
 
 
-def make_context(encounter, revision, *, created_by=None):
+OVERRUN_MESSAGES = {
+    'time': 'Reading this document took longer than {seconds} seconds and was stopped. The document may be too long '
+            'or unusual to read within the limit; shorten it or split it, then upload it again.',
+    'memory': 'Reading this document needed more memory than the limit allows and was stopped. Shorten it or split '
+              'it, then upload it again.',
+}
+
+
+def _bounded(fn, *args, seconds, refusal=None):
+    """``fn(*args)`` under the wall-clock and memory limits (studio/bounded.py); an overrun fails the stage, or is
+    refused to the member when ``refusal`` is given (a web request)."""
+    try:
+        return bounded.run_bounded(fn, *args, seconds=seconds, memory_bytes=settings.BOUNDED_MEMORY_BYTES)
+    except bounded.Overrun as exc:
+        message = OVERRUN_MESSAGES[exc.reason].format(seconds=seconds)
+        raise (refusal or StageFailure)(message) from None
+
+
+def make_context(encounter, revision, *, created_by=None, seconds=None, refusal=None):
     """Snapshot document facts merged with the encounter's member-supplied values."""
-    document_facts = gi_context.extract_context(revision.text)
+    document_facts = _bounded(gi_context.extract_context, revision.text,
+                              seconds=seconds or settings.JOB_DEADLINE_SECONDS['analyze'], refusal=refusal)
     merged = gi_context.merge_user_values(document_facts, dict(encounter.user_values or {}))
     facts = {name: to_jsonable(fact) for name, fact in merged.items()}
     user_values = dict(encounter.user_values or {})
@@ -113,9 +132,9 @@ def make_context(encounter, revision, *, created_by=None):
         created_by=created_by)
 
 
-def routing_for(revision, service_date=None):
+def routing_for(revision, service_date=None, *, stage='analyze'):
     """The deterministic routing of a revision for an effective service date, stored once per distinct result."""
-    result = gi_detect.route(revision.text, service_date)
+    result = _bounded(gi_detect.route, revision.text, service_date, seconds=settings.JOB_DEADLINE_SECONDS[stage])
     data = to_jsonable(result)
     digest = sha256_json(data)
     existing = models.RoutingRun.objects.filter(revision=revision, version=result.version, sha256=digest).first()
@@ -354,7 +373,7 @@ def stage_assess(job):
     if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
-    routing_run = routing_for(revision, context_service_date(context))
+    routing_run = routing_for(revision, context_service_date(context), stage='assess')
     provider_status, normalized = _provider_inputs(run)
     result = run_assessment(
         text=revision.text, pages=tuple(PageSpan(**p) for p in revision.pages), context=context_facts(context),
@@ -643,7 +662,8 @@ def change_context(encounter, user, values):
                 merged.pop(key, None)
         encounter.user_values = merged
         encounter.save(update_fields=['user_values', 'updated_at'])
-        context = make_context(encounter, revision, created_by=user)
+        context = make_context(encounter, revision, created_by=user, seconds=settings.CONTEXT_REQUEST_SECONDS,
+                               refusal=Refused)
         encounter.current_context = context
         encounter.save(update_fields=['current_context', 'updated_at'])
         audit.record(encounter.workspace, 'context.changed', encounter=encounter, actor=user,
