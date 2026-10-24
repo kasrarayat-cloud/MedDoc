@@ -299,6 +299,15 @@ class OwnProcedureNamedTests(Case):
                 proposals, _ = real(FOLLOW_UP.format(line=line), (code, line))
                 self.assertSectionOnly(proposals[code], line)
 
+    def test_validation2_s_sentences_in_a_procedure_report(self):
+        # Routing reads its stated-act mention there done by the findings section; the act is only told of (a relative
+        # clause, or "we" after the sentence's own subject), so it names no banding done.
+        for line in ('The hemorrhoids that were banded at the first session have resolved.',
+                     'The internal hemorrhoids we banded have resolved.'):
+            with self.subTest(line=line):
+                proposals, _ = real(HEAD + f'Procedure: Anoscopy\nFindings: {line}\n', ('46221', line))
+                self.assertSectionOnly(proposals['46221'], line)
+
     def test_validation2_a_procedure_line_that_is_not_done(self):
         for body, line in (('Procedure: Rubber band ligation, patient prefers to wait.',
                             'Rubber band ligation, patient prefers to wait.'),

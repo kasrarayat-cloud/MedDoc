@@ -177,18 +177,21 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     own documentation, checks.states_no_procedure) marked ``unnamed`` unless it documents the code's own procedure as
     done (round 4 validation:2, validation:3, evidence:0, release:11): a routed gi.other mention read as done lies in
     it, or it lies in the first sentence of a procedure section whose routed mention is read as done - in both, a
-    mention whose name is the code's own procedure (checks._VAL_owns, by the gi.other number ranges) - or it states
-    the code's own act today (checks.names_procedure). "Grade 2 internal hemorrhoids were seen on retroflexion." and
-    "Banding sites well healed." under Findings read performed only because of their section, "Established patient
-    office visit was performed today." as E/M documentation, and "Anoscopy showed grade 3 internal hemorrhoids." names
-    another procedure for 46221: none is evidence that the code's procedure was done. Fail-closed: an unnamed passage
-    holds the code (section_only), never excludes it. Routing's gi.other finding still never decides the code's status
-    (it may be another procedure). Indexed once per code: each passage costs a few bisections."""
+    mention whose name is the code's own procedure (checks._VAL_owns, by the gi.other number ranges) and not an act
+    its sentence only tells of (checks._VAL_told_act: "The hemorrhoids that were banded at the first session have
+    resolved.") - or it states the code's own act today (checks.names_procedure). "Grade 2 internal hemorrhoids were
+    seen on retroflexion." and "Banding sites well healed." under Findings read performed only because of their
+    section, "Established patient office visit was performed today." as E/M documentation, and "Anoscopy showed grade 3
+    internal hemorrhoids." names another procedure for 46221: none is evidence that the code's procedure was done.
+    Fail-closed: an unnamed passage holds the code (section_only), never excludes it. Routing's gi.other finding still
+    never decides the code's status (it may be another procedure). Indexed once per code: each passage costs a few
+    bisections."""
     if not any(r.status in checks.POSITIVE and checks.states_no_procedure(r) for r in own):
         return own
     other = routing.finding(OTHER_GI)
     done = [m for m in (other.mentions if other else ())
-            if m.status in checks.POSITIVE and checks._VAL_owns(code, m.span.text)]
+            if m.status in checks.POSITIVE and checks._VAL_owns(code, m.span.text)
+            and not checks._VAL_told_act(text, m.span.start, m.span.end, day)]
     names = _VAL_overlap_test([(m.span.start, m.span.end) for m in done])
     opened = _VAL_overlap_test([sentence for sentence in checks._VAL_opening_sentences(text, day) if names(*sentence)])
     marked = []

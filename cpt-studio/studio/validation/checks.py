@@ -1126,6 +1126,29 @@ _VAL_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who|whom|whose)\s+$', re.A |
 _VAL_WE_LEAD = 40  # how far back "we" / "I" may follow its clause's start, by at most one word ("Today we banded ...")
 
 
+def _VAL_stated(an, text: str, m) -> bool:
+    """Whether an _ACT_STATED match ``m`` is the act its sentence states rather than one it tells of: not right after a
+    relative pronoun ("The hemorrhoids that were banded at the first session have resolved."), and "we" / "I" opening
+    its clause or following one word ("Today we banded ...", never "The internal hemorrhoids we banded have
+    resolved."). ``an``: routing's analysis of ``text``. Bounded: a window of a few words before the match."""
+    from studio.gi import detect
+    if _VAL_RELATIVE_BEFORE.search(text, max(0, m.start() - 12), m.start()):
+        return False
+    if m.group(0).split()[0].lower() in ('we', 'i'):
+        clause = detect._clause_at(an, m.start())
+        if clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1:
+            return False
+    return True
+
+
+def _VAL_told_act(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
+    """Whether the routed name at [start, end) holds an act its sentence only tells of (_VAL_stated): routing's stated-
+    act mention "hemorrhoids that were banded", read done by a findings section, names no banding done today."""
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    return any(not _VAL_stated(an, text, m) for m in _ACT_STATED.finditer(text, max(0, start - 12), end))
+
+
 def _VAL_own_procedure(code: str):
     """The _VAL_OWN_PROCEDURES entry whose number range holds the code, or None."""
     return next((entry for entry in _VAL_OWN_PROCEDURES if entry[0] <= code <= entry[1]), None)
@@ -1162,16 +1185,9 @@ def _VAL_text_index(text: str, service_date: Optional[date]):
     for m in _ACT_STATED.finditer(text):
         participle = m.group(0).split()[-1].lower()
         index = detect._sentence_index(an, m.start())
-        if participle not in owned or index < 0 or _VAL_RELATIVE_BEFORE.search(text, max(0, m.start() - 12),
-                                                                               m.start()):
+        if participle not in owned or index < 0 or not _VAL_stated(an, text, m):
             continue
-        clause = detect._clause_at(an, m.start())
-        if m.group(0).split()[0].lower() in ('we', 'i'):
-            # "we" / "I" opens its clause, or follows one word: never a subject written before it ("The internal
-            # hemorrhoids we banded have resolved.")
-            if clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1:
-                continue
-        lo, hi = an.lay.window(clause, m.start(), m.end(), detect.CLAUSE_REACH)
+        lo, hi = an.lay.window(detect._clause_at(an, m.start()), m.start(), m.end(), detect.CLAUSE_REACH)
         sentence = sentences[index]
         scope = (max(sentence[0], m.start() - detect.CLAUSE_REACH), min(sentence[1], m.end() + detect.CLAUSE_REACH))
         if words.TODAY.search(text, lo, hi) and not detect._about_a_detected_family(an, *scope, detected):
