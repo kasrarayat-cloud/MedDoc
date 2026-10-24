@@ -311,3 +311,37 @@ class JoinedAnswerAndSilentSectionTests(unittest.TestCase):
         self.assertEqual((status, cues[0]), ('uncertain', detect.HELD_AFTER_A_CUT))
         proposal = run_engine(text, [('43242', 'EUS with fine-needle aspiration of the pancreatic head mass.')])[0]['43242']
         self.assertNotEqual(proposal.status, 'ready')
+
+
+class BoxedStatusValueTests(unittest.TestCase):
+    """BOXES' round-4b residuals: a status value with boxes was read by its first word, and a boxed answer to whether
+    the procedure was done was not read at all, so a cancelled EUS stayed a ready 43242."""
+
+    def held(self, line):
+        text = eus_note(EUS_LINE, INDICATION, line)
+        status, cues = read(text, EUS_LINE)
+        self.assertNotEqual(status, 'performed', (line, cues))
+        proposal = run_engine(text, [('43242', EUS_LINE)])[0]['43242']
+        self.assertNotEqual(proposal.status, 'ready', line)
+        self.assertNotEqual(proposal.bucket, 'excluded', line)
+
+    def test_a_checked_denying_option_holds_whatever_comes_first(self):
+        for line in ('Procedure status: [ ] Completed [x] Cancelled - patient ate breakfast',
+                     'Status: Completed ☐ Cancelled ☒ Postponed', 'Procedure status: ☐ Completed ☒ Cancelled'):
+            with self.subTest(line=line):
+                self.held(line)
+
+    def test_a_boxed_answer_that_it_was_not_done_holds(self):
+        for line in ('Procedure completed: ☐ Yes ☒ No', 'Procedure performed: [ ] Yes [x] No',
+                     'Procedure completed: ☒ Yes ☒ No'):
+            with self.subTest(line=line):
+                self.held(line)
+
+    def test_controls_a_completed_status_stays_performed(self):
+        for line in ('Procedure status: ☒ Completed ☐ Cancelled', 'Procedure completed: ☒ Yes ☐ No'):
+            text = eus_note(EUS_LINE, INDICATION, line)
+            with self.subTest(line=line):
+                if line.startswith('Procedure status'):
+                    self.assertNotEqual(read(text, EUS_LINE)[0], 'negated')  # the mirror row is held, as at HEAD
+                else:
+                    self.assertEqual(read(text, EUS_LINE)[0], 'performed')

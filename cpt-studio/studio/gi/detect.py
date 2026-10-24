@@ -950,6 +950,8 @@ def _unchecked_option(an: Analysis, start: int, end: int) -> bool:
     not "Procedure status: Not performed")."""
     if _box_state(an, start, end) == 'off':
         options = _box_denying_options(an, start, end)
+        if not options:  # nothing on the line would deny if selected ("Procedure completed: ☐ Yes ☒ No"): no option
+            return False
         words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, start, end)]
         return all(state == 'off' for state in _box_option_states(an, start, end, options, words))
     if not _unchecked_state(an, start, end):
@@ -1020,6 +1022,21 @@ def _cancels(an: Analysis, start: int, end: int) -> bool:
                for c in an.cues_in(start, end))
 
 
+def _boxed_status_denies(an: Analysis, lo: int, hi: int) -> Optional[bool]:
+    """For a status value with boxes ("[ ] Completed [x] Cancelled - patient ate breakfast", "Completed ☐ Cancelled ☒
+    Postponed"; round 4, BOXES' residual): True when any denying option is not plainly unchecked (checked,
+    disagreeing, unread, or governed by no box), False when every one is unchecked, None when the value has no box
+    (it is read as text). The caller holds the service line; it never excludes."""
+    _, boxes = _box_tokens(an, lo, hi)
+    if not boxes:
+        return None
+    options = _box_denying_options(an, lo, hi)
+    if not options:
+        return False
+    words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, lo, hi)]
+    return any(state != 'off' for state in _box_option_states(an, lo, hi, options, words))
+
+
 def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     """Whether [ns, ne) - the next sentence of the section, or a later clause of the service's own
     sentence, naming no service - denies or doubts the service named just before it. A sentence
@@ -1041,6 +1058,9 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     key = _STATUS_KEY.match(text, body, ne)
     if key:
         value = key.end()
+        boxed = _boxed_status_denies(an, value, ne)
+        if boxed is not None:
+            return boxed  # a value with boxes is read option by option, never by its first word
         if _STATUS_DONE.match(text, value, ne):
             return False
         return (bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
@@ -1108,12 +1128,31 @@ _PERFORMED_ANSWERED_NO = re.compile(r'[ \t]*(?:procedure|exam|examination|study|
                                     r'(?:no|n|not\s+(?:done|performed|completed))\b', re.A | re.I)
 
 
+# The question whether the procedure was done, answered with boxes: "Procedure completed: ☐ Yes ☒ No".
+_PERFORMED_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
+                                 r'(?:performed|done|completed)[ \t]*[:?=|\u2013\u2014-]?', re.A | re.I)
+
+
+def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
+    """Whether the line [ls, le) asks whether the procedure was done and its boxes answer anything but a plain Yes
+    (No checked, Yes unchecked, both, or an unread mark: _group_state). Round 4, BOXES' residual."""
+    question = _PERFORMED_QUESTION.match(an.text, ls, le)
+    if question is None:
+        return False
+    _, boxes = _box_tokens(an, question.end(), le)
+    return bool(boxes) and _group_state(an.text, boxes) != 'on'
+
+
 def _calls_off(an: Analysis, ks: int, ke: int) -> bool:
-    """Whether the sentence [ks, ke) is a status line or a typed answer that denies the service, or says the procedure
-    was called off."""
-    line = an.text.rfind('\n', 0, ks) + 1  # the answer's label may be a heading, read as a sentence of its own
+    """Whether the sentence [ks, ke) is a status line or a typed or boxed answer that denies the service, or says the
+    procedure was called off."""
+    text = an.text
+    line = text.rfind('\n', 0, ks) + 1  # the answer's label may be a heading, read as a sentence of its own
+    line_end = text.find('\n', ks)
+    line_end = len(text) if line_end < 0 else line_end
     return ((_status_line(an, ks, ke) and _denies(an, ks, ke, bare=False))
-            or bool(_PERFORMED_ANSWERED_NO.match(an.text, line, ke)) or _procedure_called_off(an, ks, ke))
+            or bool(_PERFORMED_ANSWERED_NO.match(text, line, ke)) or _performed_answer_denies(an, line, line_end)
+            or _procedure_called_off(an, ks, ke))
 
 
 def _called_off_further(an: Analysis, index: int) -> Optional[str]:
