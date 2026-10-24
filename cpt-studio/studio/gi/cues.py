@@ -528,11 +528,11 @@ FS_ABBREVIATION = re.compile(r'(?<![\w/.-])FS(?![\w/-])', re.A)
 
 # --- uncertain: a hypothetical or a hedge in a sentence that names no service -----------------------------------
 # "Had there been a stricture, it would have been dilated with a balloon.", "A stricture would have been dilated had
-# one been found.", "Biopsies of the antrum were possibly obtained.", "Biopsy of the cecal lesion, if feasible.". An
-# uncertain clause cue that runs from the start of
-# its sentence, read only where nothing in the sentence names a service: so it never attaches to a service mention
-# and never turns a doubt about today's service into a plain hedge (after a service name, UNCERTAIN_POST's
-# HEDGED_AFTER reads the hedge as a doubt). Added to UNCERTAIN_CLAUSE here because it needs SERVICE_PATTERNS.
+# one been found.", "Biopsies of the antrum were possibly obtained.", "Biopsy of the cecal lesion, if feasible.".
+# An uncertain clause cue that runs from the start of its sentence, read only where nothing in the sentence names a
+# service: so it never attaches to a service mention and never turns a doubt about today's service into a plain
+# hedge (after a service name, UNCERTAIN_POST's HEDGED_AFTER reads the hedge as a doubt). Added to UNCERTAIN_CLAUSE
+# here because it needs SERVICE_PATTERNS.
 _ANY_SERVICE = '|'.join(f'(?:{p.pattern})' for _, p in SERVICE_PATTERNS) + r'|(?<![\w/.-])FS(?![\w/-])'
 _NO_SERVICE = r'(?:(?!' + _ANY_SERVICE + r')[^.;:!?\n])'
 _SENTENCE_HEDGE = (r'(?:' + _HEDGE_MODAL + r'|(?:would|should|may|might)\s+(?:then\s+|also\s+)?be)\s+' + _HEDGE_ACT + r'\b'

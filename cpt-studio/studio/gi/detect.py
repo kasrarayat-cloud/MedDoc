@@ -1001,11 +1001,12 @@ def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optio
     ns, ne = an.lay.sentences[index + 1]
     if an.lay.section_at(ns) is an.lay.section_at(s):
         named = an.services_in(ns, ne)
-        own = {m.family for m in an.services_in(s, after)}
         if not named and _denies(an, ns, ne, bare):
             return an.text[ns:ne]
-        if named and own and all(m.family in own for m in named) and _reschedules(an, ns, ne):
-            return an.text[ns:ne]
+        if named and _reschedules(an, ns, ne):
+            own = {m.family for m in an.services_in(s, after)}
+            if own and all(m.family in own for m in named):
+                return an.text[ns:ne]
     return _called_off_further(an, index)
 
 
