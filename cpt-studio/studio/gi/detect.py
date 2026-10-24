@@ -16,7 +16,14 @@ contradicts (in an office visit note, section evidence also needs documented
 extent or interventions). A performed service whose incompleteness is
 documented - an incomplete mention, extent short of the cecum or of the
 duodenum, failed cannulation, "the procedure was terminated" - is incomplete.
-Otherwise the family takes the most informative remaining status. Sentences
+Otherwise the family is cancelled or negated when a mention says so of today's
+service, and uncertain when a doubt about today's service leaves it open; only
+then does it take what its mentions say of other encounters (historical,
+planned, or a negation of earlier encounters such as "no prior colonoscopy").
+A plan or history section speaks of other encounters, so nothing there
+contradicts today's service. Doubt never cascades: a family's judgement reaches
+its other passages only as cancelled, incomplete or uncertain, never as
+planned, historical or negated. Sentences
 that refer to a service without naming it ("the procedure was cancelled")
 become mentions only when they say it was not done or not completed, never to
 make it performed. Facts are read only from text read as performed (or
@@ -39,13 +46,20 @@ from studio.gi.profiles import DETECTED_FAMILIES, FAMILY_ORDER, PROFILES
 from studio.gi.sections import Layout, layout
 from studio.types import Fact, FamilyFinding, RoutingResult, ServiceMention, Span
 
-ROUTING_VERSION = 'gi-routing@2'
+ROUTING_VERSION = 'gi-routing@3'
 PROCEDURE_FAMILIES = tuple(f for f in DETECTED_FAMILIES if PROFILES[f].procedure)
 # Within one mention the strongest reading wins; "performed" never beats a doubt.
 STATUS_PRECEDENCE = ('negated', 'historical', 'cancelled', 'incomplete', 'planned', 'uncertain', 'performed')
-# Across a family's mentions, after performed and incomplete (ARCHITECTURE 5.3).
-AGGREGATE_ORDER = ('cancelled', 'negated', 'historical', 'planned', 'uncertain')
+# Across a family's mentions (ARCHITECTURE 5.3), after performed and incomplete: first what the
+# mentions say of today's service (cancelled, negated, a doubt), then this order, for what they say
+# only of other encounters. A doubt about today ranks above every reading about another encounter,
+# so a plan, a history or a negation of earlier encounters never decides a family whose service
+# today is in doubt (see _aggregate).
+ELSEWHERE_ORDER = ('negated', 'historical', 'planned')
 POSITIVE_SECTIONS = ('procedure', 'findings', 'technique')
+# Sections whose text speaks of other encounters: a mention there (unless its clause says today)
+# never contradicts today's service, whatever its cues.
+ELSEWHERE_SECTIONS = ('plan', 'history')
 EM_SECTIONS = ('mdm', 'time')
 DATE_REACH = 40  # a date speaks for a mention only within this many characters
 CLAUSE_REACH = 300  # cues further than this from a span never govern it (bounds the work per span)
@@ -55,6 +69,9 @@ EM_WITHOUT_BASIS = ('uncertain: procedure documentation with no MDM or E/M time 
                     'office E/M service')
 HEADING_ONLY = ('uncertain: an office visit note names this service under a procedure heading without documented '
                 'extent or interventions')
+# What a performed passage of a family takes when no mention of the family documents it as performed
+# at this encounter: held for clarification, never excluded as that other status.
+UNESTABLISHED = 'uncertain: no mention of this service documents it as performed at this encounter'
 EM_HEADINGS = {'chief complaint': 'chief complaint', 'cc': 'chief complaint', 'reason for visit': 'reason for visit',
                'medical decision making': 'medical decision making', 'medical decision-making': 'medical decision making',
                'mdm': 'medical decision making', 'decision making': 'medical decision making'}
@@ -876,8 +893,9 @@ def _read_span(an: Analysis, start: int, end: int) -> Reading:
 
 
 def _adjusted(reading: Reading, adjustment: Optional[tuple[str, str]]) -> Reading:
-    """A performed reading takes the document-level judgement of its family's service
-    (cancelled, not evidenced in an office note, or not completed)."""
+    """A performed reading takes the document-level judgement of its family's service when
+    that judgement is cancelled, not completed, or uncertain (see _adjustment): never planned,
+    historical or negated, which other mentions say of other encounters or of other passages."""
     if adjustment is None or reading.status != 'performed':
         return reading
     status, cue = adjustment
@@ -1334,21 +1352,55 @@ def _egd_location(an: Analysis, interventions: Optional[Fact]) -> Optional[Fact]
 
 def _contradicts(reading: Reading) -> bool:
     """A reading that denies or doubts today's service: cancelled, negated (not only about
-    earlier encounters), or an uncertain doubt."""
+    earlier encounters), or an uncertain doubt. Only readings about this encounter are asked
+    (see _elsewhere): a plan's "no further colonoscopy is needed" denies no service of today."""
     return (reading.status == 'cancelled' or (reading.status == 'negated' and not reading.past_negation)
             or (reading.status == 'uncertain' and reading.doubt))
 
 
-def _aggregate(readings: list[Reading], section_suffices: bool = True) -> str:
-    """Performed on explicit evidence, or on section evidence nothing contradicts;
-    else incomplete; else the most informative remaining status."""
+def _elsewhere(an: Analysis, m: Mention) -> bool:
+    """A mention in a plan or history section whose clause does not say today: whatever it reads,
+    it speaks of another encounter, not of this one."""
+    if an.lay.section_at(m.start).kind not in ELSEWHERE_SECTIONS:
+        return False
+    return not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(m.start, m.end))
+
+
+def _today_doubt(reading: Reading, kind: str) -> bool:
+    """An uncertain reading about this encounter that leaves today's service open: a doubt (an
+    unresolved negation, an unread section, "pending", an abort that does not say whether the
+    procedure started) anywhere, or a hedge ("?", "possible") in a procedure, findings or
+    technique section. Silence (no evidence at all) is never one: it is no doubt, and a positive
+    section never reads silent."""
+    return reading.status == 'uncertain' and (reading.doubt or kind in POSITIVE_SECTIONS)
+
+
+def _aggregate(readings: list[Reading], section_suffices: bool = True, kinds: tuple = (),
+               away: tuple = ()) -> str:
+    """Performed on explicit evidence, or on section evidence that no reading about this encounter
+    contradicts; else incomplete; else what the readings say of today's service: cancelled, negated,
+    or uncertain when a doubt or a hedge about it (or section evidence that is contradicted or does
+    not suffice) leaves it open. Only then what they say of other encounters (ELSEWHERE_ORDER):
+    doubt never cascades into a plan, a history or a negation of earlier encounters ("no prior
+    colonoscopy"). ``kinds``: each reading's section kind; ``away``: whether it speaks of another
+    encounter (_elsewhere). Both default to "about this encounter, section unknown"."""
+    kinds = tuple(kinds) or ('',) * len(readings)
+    away = tuple(away) or (False,) * len(readings)
+    here = [(r, k) for r, k, elsewhere in zip(readings, kinds, away) if not elsewhere]
     explicit = any(r.status == 'performed' and r.basis == 'cue' for r in readings)
-    by_section = section_suffices and any(r.status == 'performed' and r.basis == 'section' for r in readings)
-    contradicted = any(_contradicts(r) for r in readings)
-    if explicit or (by_section and not contradicted):
+    section = any(r.status == 'performed' and r.basis == 'section' for r, _ in here)
+    if explicit or (section and section_suffices and not any(_contradicts(r) for r, _ in here)):
         return 'performed'
     statuses = {r.status for r in readings}
-    return next((s for s in ('incomplete',) + AGGREGATE_ORDER if s in statuses), 'uncertain')
+    if 'incomplete' in statuses:
+        return 'incomplete'
+    if 'cancelled' in statuses:
+        return 'cancelled'
+    if any(r.status == 'negated' and not r.past_negation for r, _ in here):
+        return 'negated'
+    if section or any(_today_doubt(r, k) for r, k in here):
+        return 'uncertain'
+    return next((s for s in ELSEWHERE_ORDER if s in statuses), 'uncertain')
 
 
 def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
@@ -1455,9 +1507,14 @@ def _mention(an: Analysis, m: Mention, reading: Reading) -> ServiceMention:
                           sentence=_span(an.text, s, e), section=an.lay.section_at(m.start).kind, cues=reading.cues)
 
 
-def _adjustment(status: str, readings: list[Reading], facts: list[Fact], plain: str) -> Optional[tuple[str, str]]:
-    """(status, cue) a performed mention of a family takes when the family as a whole is
-    not performed; None when the family is performed."""
+def _adjustment(status: str, readings: list[Reading], facts: list[Fact], plain: str, kinds: tuple = (),
+                away: tuple = ()) -> Optional[tuple[str, str]]:
+    """(status, cue) a performed passage of a family takes when the family as a whole is not
+    performed; None when the family is performed. Only a judgement about today's service is passed
+    on, and only as cancelled, incomplete or uncertain: a family denied today, held in doubt, or
+    named only as planned, historical or never done before holds its performed passages for
+    clarification. A plan, a history or a negation never rewrites a passage as that status.
+    ``kinds`` and ``away`` as for _aggregate."""
     if status == 'performed':
         return None
     if status == 'incomplete':
@@ -1466,10 +1523,22 @@ def _adjustment(status: str, readings: list[Reading], facts: list[Fact], plain: 
                        if (f.name, f.value) == ('cannulation', 'failed')
                        or (f.name == 'extent' and (f.value or '').startswith('incomplete'))]
         return 'incomplete', cues_found[0]
-    contrary = [r for r in readings if _contradicts(r)]
-    if plain == 'performed' and not contrary:
-        return 'uncertain', HEADING_ONLY
-    return status, next(r for r in contrary + readings if r.status == status).cues[0]
+    if status == 'cancelled':
+        return 'cancelled', next(r for r in readings if r.status == 'cancelled').cues[0]
+    kinds = tuple(kinds) or ('',) * len(readings)
+    away = tuple(away) or (False,) * len(readings)
+    here = [(r, k) for r, k, elsewhere in zip(readings, kinds, away) if not elsewhere]
+    contrary = [r for r, _ in here if _contradicts(r)]
+    denial = next((r for r in contrary if r.status == 'negated'), None)
+    if status == 'negated' and denial is not None:
+        return 'uncertain', f'uncertain: the document denies this service ({denial.cues[0]})'
+    if status == 'uncertain':
+        if plain == 'performed' and not contrary:
+            return 'uncertain', HEADING_ONLY
+        doubt = next((r for r, k in here if _today_doubt(r, k)), None)
+        if doubt is not None:
+            return 'uncertain', doubt.cues[0]
+    return 'uncertain', UNESTABLISHED
 
 
 def _with_fact(facts: list[Fact], name: str, fact: Optional[Fact], after: tuple[str, ...]) -> list[Fact]:
@@ -1502,7 +1571,9 @@ def _route(an: Analysis) -> RoutingResult:
         evidenced = any(f.name in EVIDENCE_FACTS and f.origin == 'document' and f.value not in (None, 'none documented')
                         for f in facts)
         family_readings = [readings[m] for m in mentions]
-        status = _aggregate(family_readings, section_suffices=evidenced or not has_basis)
+        kinds = tuple(an.lay.section_at(m.start).kind for m in mentions)
+        away = tuple(_elsewhere(an, m) for m in mentions)
+        status = _aggregate(family_readings, section_suffices=evidenced or not has_basis, kinds=kinds, away=away)
         if status not in ('performed', 'incomplete'):
             facts = [f for f in facts if f.origin != 'missing']  # "no sampling documented" speaks only of a done EUS
             if family == 'gi.colonoscopy':  # the intent of a colonoscopy that is only planned may be in the plan
@@ -1510,7 +1581,8 @@ def _route(an: Analysis) -> RoutingResult:
                                    after=('extent', 'interventions', 'polyp_count'))
         if status == 'performed' and short:
             status = 'incomplete'
-        an.adjustments[family] = _adjustment(status, family_readings, facts, _aggregate(family_readings))
+        an.adjustments[family] = _adjustment(status, family_readings, facts,
+                                             _aggregate(family_readings, kinds=kinds, away=away), kinds, away)
         findings[family] = FamilyFinding(
             family, status, tuple(_mention(an, m, _adjusted(readings[m], an.adjustments[family])) for m in mentions),
             tuple(facts), _missing(family, facts))
