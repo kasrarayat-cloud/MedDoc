@@ -462,5 +462,98 @@ class Routing13PriorExamWithoutAServiceNameTests(unittest.TestCase):
         self.assertIn('stent', fact_value(text, 'gi.ercp', 'interventions') or '')
 
 
+
+# --- routing:17, contract:5 --------------------------------------------------------------------------------------
+
+SEPARATE_NOTE = (OFFICE_HEAD + 'Established patient office visit for rectal bleeding.\nProcedure: Flexible sigmoidoscopy '
+                 'with biopsy.\nFindings: The sigmoidoscope was advanced to 40 cm. A biopsy was taken from the rectum.\n'
+                 'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+SEPARATE_PICKS = [('99214', 'Established patient office visit for rectal bleeding.'),
+                  ('45331', 'A biopsy was taken from the rectum.')]
+STATEMENT = 'A significant, separately identifiable E/M service was {}.'
+
+
+def separate_em(text):
+    finding = routed(text).finding('gi.office_em')
+    return next((f for f in finding.facts if f.name == 'separate_em'), None)
+
+
+class Routing17SeparateEmAnotherEncounterTests(unittest.TestCase):
+    """routing:17 (high, under). A separately identifiable E/M statement about another encounter in words not on the
+    list ('yesterday', 'two days ago', 'last week', 'on 10/14', 'by the referring physician') was accepted, so 99214
+    was ready beside a same-day flexible sigmoidoscopy with biopsy. Any time that is not the date of service, and any
+    history cue that tells a time or another provider, means the statement is not documented."""
+
+    def test_the_claimed_and_listed_statements_are_not_documented(self):
+        for said in ('provided yesterday', 'provided two days ago', 'provided last week', 'provided on 10/14',
+                     'documented by the referring physician', 'provided on October 14', 'provided 3 weeks ago',
+                     'provided last month', 'provided earlier this week', 'provided by an outside gastroenterologist',
+                     'provided 10/14', 'provided on Tuesday', 'provided at her last visit'):
+            text = SEPARATE_NOTE + STATEMENT.format(said) + '\n'
+            with self.subTest(said=said):
+                self.assertIsNone(separate_em(text))
+                proposals, _ = run_engine(text, SEPARATE_PICKS)
+                self.assertEqual(proposals['99214'].status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_the_round_2_addendum_with_a_month_and_day(self):
+        text = (SEPARATE_NOTE + '\nADDENDUM (revision 2, added 2026-10-22 09:00 UTC)\nThe significant, separately '
+                'identifiable E/M service was provided at the 10/14 consultation. Today was the usual pre-procedure '
+                'assessment.\n')
+        self.assertIsNone(separate_em(text))
+
+    def test_statements_about_this_encounter_are_documented(self):
+        for said in ('performed today', 'provided', 'provided on 10/21', 'provided on October 21',
+                     'provided on Wednesday', 'provided on the date of service',
+                     'provided, including review of outside records'):
+            text = SEPARATE_NOTE + STATEMENT.format(said) + '\n'
+            with self.subTest(said=said):
+                fact = separate_em(text)
+                self.assertIsNotNone(fact)
+                self.assertEqual(fact.value, 'documented')
+        self.assertIsNotNone(separate_em(SEPARATE_NOTE + 'On 2026-10-21 a significant, separately identifiable E/M '
+                                                         'service was provided.\n'))
+
+
+ATTESTATION_NOTE = (OFFICE_HEAD + 'Established patient office visit for rectal bleeding.\nMedical decision making: '
+                    'Moderate.\nTotal time on the date of the encounter was 32 minutes.\nProcedure: Colonoscopy. The '
+                    'colonoscope was advanced to the cecum.\nFindings: A 6 mm sigmoid polyp was biopsied with cold '
+                    'forceps.\n')
+ATTESTATION = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
+ATTESTATION_PICKS = [('99214', 'Total time on the date of the encounter was 32 minutes.'),
+                     ('45380', 'A 6 mm sigmoid polyp was biopsied with cold forceps.')]
+
+
+class Contract5UncheckedAttestationTests(unittest.TestCase):
+    """contract:5 (high, under). An unchecked attestation box in front of the separately identifiable E/M sentence
+    was accepted as the clinician's statement, releasing the same-day E/M hold. An unchecked box that governs the
+    statement (FORMS' _unchecked_box / _unchecked_state), or one written after it on its line, means it is not
+    documented."""
+
+    def test_an_unchecked_box_is_not_a_statement(self):
+        for line in ('\u2610 ' + ATTESTATION, '\u2610  ' + ATTESTATION, '\u25a1 ' + ATTESTATION, '[ ] ' + ATTESTATION,
+                     '( ) ' + ATTESTATION, ATTESTATION + ' [ ]', ATTESTATION + ' \u2610',
+                     'Modifier 25 attestation: \u2610 A significant, separately identifiable E/M service was '
+                     'performed.', 'Separately identifiable E/M service was provided: not checked',
+                     'Separately identifiable E/M service was provided: unchecked'):
+            text = ATTESTATION_NOTE + line + '\n'
+            with self.subTest(line=line):
+                self.assertIsNone(separate_em(text))
+                proposals, _ = run_engine(text, ATTESTATION_PICKS)
+                self.assertEqual(proposals['99214'].status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_a_checked_box_or_no_box_is_a_statement(self):
+        for line in ('\u2612 ' + ATTESTATION, '[x] ' + ATTESTATION, ATTESTATION, ATTESTATION + ' [x]',
+                     'Modifier 25 attestation: \u2612 A significant, separately identifiable E/M service was '
+                     'performed.'):
+            text = ATTESTATION_NOTE + line + '\n'
+            with self.subTest(line=line):
+                fact = separate_em(text)
+                self.assertIsNotNone(fact)
+                proposals, _ = run_engine(text, ATTESTATION_PICKS)
+                self.assertNotIn('separate_em', clarified(proposals['99214']))
+
+
 if __name__ == '__main__':
     unittest.main()

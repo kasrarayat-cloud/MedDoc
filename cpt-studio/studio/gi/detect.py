@@ -2190,6 +2190,27 @@ _SEPARATE_EM_AFFIRMED = re.compile(
     r'|\b(?:I|we)\s+(?:also\s+|separately\s+)?(?:performed|provided|rendered|furnished|conducted)\b'
     r'|[:=-]\s*yes\b', re.A | re.I)
 SEPARATE_EM_NOTE = 'The documentation states a significant, separately identifiable E/M service.'
+# The history cues that tell a time or another provider (routing:17); 'records reviewed' and 'in the past' are not
+# read here ("including review of outside records" describes this visit).
+_SEPARATE_EM_HISTORY = ('ago', 'last month', 'elsewhere')
+# A month and a day with no year, anywhere in the statement ("at the 10/14 consultation").
+_BARE_MONTH_DAY = re.compile(r'(?<![\w/.-])(?P<m>\d{1,2})/(?P<d>\d{1,2})(?![\w/-])', re.A)
+
+
+def _another_encounters_time(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) tells a time that is not the date of service (routing:17): a history cue of time or of
+    another provider (_SEPARATE_EM_HISTORY: "two days ago", "last week", "by the referring physician"), an unlisted
+    time (cues.OTHER_TIME: "yesterday", "on October 14", "on Tuesday", "next ...") that may not be the date of service,
+    or a month and a day with no year that are not the date of service's (or any when that is unknown)."""
+    if any(c.name in _SEPARATE_EM_HISTORY for c in an.cues_in(start, end)):
+        return True
+    found, starts = _other_times(an)
+    for ts_, te_, name, m in found[bisect.bisect_left(starts, start):bisect.bisect_left(starts, end)]:
+        if te_ <= end and not _today_compatible(an, name, m):
+            return True
+    day = an.service_date
+    return any(day is None or (int(m.group('m')), int(m.group('d'))) != (day.month, day.day)
+               for m in _BARE_MONTH_DAY.finditer(an.text, start, end) if 1 <= int(m.group('m')) <= 12)
 
 
 def _separate_em_fact(an: Analysis) -> Optional[Fact]:
@@ -2197,9 +2218,11 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
     identifiable. Fail-closed over the whole sentence and the rest of its line: a denial, a
     question, a hedge, a condition or a rule ("requires that ... is documented"), another
     encounter ("at the previous visit"), a date that is not the date of service (or any date when
-    that is unknown), or the lack of an affirmative predicate means it is not documented. The
-    evidence is the sentence and the rest of its line (within SEPARATE_EM_REACH), so a check
-    quoting it cannot hide what follows."""
+    that is unknown), or the lack of an affirmative predicate means it is not documented. So does an
+    unchecked box that governs it (FORMS' _unchecked_box / _unchecked_state, or the first box after it
+    on its line: contract:5), and a time that is not the date of service within SEPARATE_EM_REACH of it
+    (_another_encounters_time: routing:17). The evidence is the sentence and the rest of its line
+    (within SEPARATE_EM_REACH), so a check quoting it cannot hide what follows."""
     text, spans = an.text, []
     for match in _SEPARATE_EM.finditer(text):
         if an.lay.section_at(match.start()).kind in ('plan', 'history'):
@@ -2207,6 +2230,12 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
         start, end = an.lay.sentence_for(match.start(), match.end())
         line_end = text.find('\n', end)
         rest_end = len(text) if line_end < 0 else line_end
+        # An unchecked attestation is no statement (contract:5): a box that governs the sentence, or the first box
+        # written after it on its line.
+        after = _BOX.search(text, end, min(rest_end, end + BOX_REACH))
+        if _unchecked_box(an, start, end) or _unchecked_state(an, start, end) \
+                or (after is not None and after.group('off') is not None):
+            continue
         if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(text, end, rest_end):
             continue
         if not _SEPARATE_EM_AFFIRMED.search(text, start, end):
@@ -2215,6 +2244,8 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
         if _OTHER_ENCOUNTER.search(text, start, rest_end) or any(
                 an.service_date is None or ctx.compare_to_service(d, an.service_date) != 0
                 for d in an.dates_in(start, rest_end)):
+            continue
+        if _another_encounters_time(an, start, min(rest_end, end + SEPARATE_EM_REACH)):
             continue
         quoted = min(rest_end, end + SEPARATE_EM_REACH)
         spans.append(_span(text, start, quoted if text[end:quoted].strip() else end))
