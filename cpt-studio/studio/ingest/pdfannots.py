@@ -24,7 +24,10 @@ where that can be done exactly, and accounts for the rest:
   one whose appearance is in a hidden layer is named.
 - Annotation notes that are not drawn on the page (sticky notes, comment
   text) are counted, not read, like DOCX comments; ink and stamp drawings
-  without text are counted. Hidden annotations — the Hidden or NoView flag,
+  without text are counted, as is any displayed annotation (an image field,
+  a Square, ...) whose appearance paints an image; those images also count
+  towards the page's image coverage, placed as viewers place the appearance
+  (PDF 32000-1 12.5.5). Hidden annotations — the Hidden or NoView flag,
   an optional-content group that is off, or a rectangle that misses the page
   — are not read and are counted.
 - An appearance is read like page content: optional content hidden by
@@ -46,8 +49,8 @@ from dataclasses import dataclass, field
 from lxml import etree
 from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, StreamObject
 
-from .pdfcontent import (OptionalContent, as_list, clip, form_shows_text, number, page_box, raw_entry, resolved,
-                         visible_form)
+from .pdfcontent import (OptionalContent, appearance_matrix, as_list, clip, form_shows_text, multiply, number,
+                         page_box, raw_entry, resolved, visible_form)
 from .pdffonts import undecodable
 from .text import canonicalize, non_space_count
 
@@ -76,6 +79,8 @@ class PageAnnotations:
     undecodable: int = 0  # characters dropped from what is written: they name no glyph
     boxes: list = field(default_factory=list)  # (rect, checked) of each displayed check box
     buttons: list = field(default_factory=list)  # rect of each displayed check box or radio button
+    placements: list = field(default_factory=list)  # (CTM, pixels) of images displayed appearances paint, page space
+    images: list = field(default_factory=list)  # the image XObjects displayed appearances paint
 
     def block(self, page: int) -> str:
         """The labelled text added after the page's own text ('' when there is none)."""
@@ -121,18 +126,32 @@ class _Reader:
         self.optional = optional
         self.found = found
         self.lines: dict[int, int] = {}  # id(terminal field) -> index in found.fields
+        self.painted = None  # the appearance read for the current annotation: (stream, VisibleForm)
 
     def read(self, annotation) -> None:
         subtype = resolved(annotation.get('/Subtype'))
         if subtype in NOT_DRAWN:
             return
         shown = self.displayed(annotation)
+        self.painted = None
         if subtype == '/Widget':
             self.widget(annotation, shown)
         elif subtype == '/FreeText':
             self.free_text(annotation, shown)
         else:
             self.other(annotation, subtype, shown)
+        if shown and self.painted is not None and self.painted[1].placements:
+            self.add_images(annotation, *self.painted)
+
+    def add_images(self, annotation, stream, form) -> None:
+        """An appearance that paints images is not text: counted as drawn, its images placed on the page."""
+        self.found.drawn += 1
+        matrix = appearance_matrix(stream, rect_of(annotation))
+        if matrix is None:
+            return
+        self.found.placements.extend((multiply(local, matrix), pixels) for local, pixels in form.placements)
+        self.found.images.extend(image for image in form.images
+                                 if all(image is not known for known in self.found.images))
 
     def displayed(self, annotation) -> bool:
         flags = int(number(annotation.get('/F'), 0))
@@ -253,9 +272,11 @@ class _Reader:
         stream = normal_appearance(annotation)
         if stream is None or not self.optional.visible(raw_entry(stream, '/OC')):
             return ''
-        stream, damaged, hidden = visible_form(stream, self.page.pdf, self.optional, self.defaults)
-        self.found.hidden_text = self.found.hidden_text or hidden
-        if damaged:
+        form = visible_form(stream, self.page.pdf, self.optional, self.defaults)
+        self.painted = (stream, form)
+        stream = form.stream
+        self.found.hidden_text = self.found.hidden_text or form.hidden_text
+        if form.damaged:
             return None
         if not isinstance(resolved(stream.get('/Resources')), DictionaryObject) and self.defaults is not None:
             copy = DecodedStreamObject()  # an appearance relying on the form's default resources

@@ -16,13 +16,16 @@ import os
 import re
 import tempfile
 import unittest
+import zlib
 
 import docx
 import pypdf
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from PIL import Image, ImageDraw
 from pypdf.generic._font import Font
 from reportlab.lib.pagesizes import letter
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 
@@ -804,6 +807,179 @@ class OffPageTextTests(unittest.TestCase):
                                    workdir=tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
         self.assertEqual(outcome.text, 'Synthetic OCR text.')
         self.assertIn('-cropbox', calls[0])
+
+
+# --- ingest:3 — a short note typed over a full-page image is kept, never "No text could be read" ------
+
+LETTERHEAD_NOTE = ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'Date of service: 2026-10-21',
+                   'Office visit: colonoscopy reviewed with patient.', 'Dr. A. Rahman (fictional)']
+SCAN_NOTE = ('Page {n} is mostly covered by an image and has only a short text layer (for example a stamp or a fax '
+             'header), so it may be a scan; OCR is not available on this server, so the image was not read.')
+LARGE_IMAGE = ('Page 1 combines a text layer with a large image; only the text layer was read, so check the text '
+               'against the original if the image holds text.')
+DRAWN = ('Page 1 has handwriting, drawings or stamps added as PDF annotations; they are not text, so check the '
+         'original.')
+
+
+def letterhead_page(lines=LETTERHEAD_NOTE, pixels=(1275, 1650)) -> bytes:
+    """A full-page letterhead bitmap (header band, logo disc, footer band; no text) under a typed note."""
+    image = Image.new('RGB', pixels, (255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    draw.rectangle((0, 0, pixels[0], pixels[1] // 10), fill=(20, 40, 110))
+    draw.ellipse((pixels[0] - 260, 30, pixels[0] - 60, 230), fill=(200, 200, 230))
+    draw.rectangle((0, pixels[1] - pixels[1] // 16, pixels[0], pixels[1]), fill=(160, 160, 160))
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer, pagesize=letter, invariant=1)
+    canvas.drawImage(ImageReader(image), 0, 0, width=612, height=792)
+    canvas.setFont('Helvetica', 11)
+    for number, line in enumerate(lines):
+        canvas.drawString(72, 640 - 16 * number, line)
+    canvas.showPage()
+    canvas.save()
+    return buffer.getvalue()
+
+
+class ShortNoteOverImageTests(unittest.TestCase):
+    """ingest:3 — an unread scan-candidate page keeps its text layer; the result is partial, never failed."""
+
+    def test_letterhead_note_without_ocr_is_partial_with_its_text(self):
+        result = pdf_extract(letterhead_page(), ocr=None)
+        self.assertEqual((result.status, result.method), ('partial', 'pdf-text'))
+        self.assertEqual(result.text.strip(), '\n'.join(LETTERHEAD_NOTE))
+        self.assertEqual(result.messages, (SCAN_NOTE.format(n=1),))
+
+    def test_letterhead_note_whose_ocr_fails_is_partial_with_its_text(self):
+        with FakeOcr(recognise='exit 3') as fake:
+            result = pdf_extract(letterhead_page(), ocr=fake.tools)
+        self.assertEqual((result.status, result.method, result.ocr_pages), ('partial', 'pdf-text', ()))
+        self.assertEqual(result.text.strip(), '\n'.join(LETTERHEAD_NOTE))
+        self.assertEqual(result.messages, ('Page 1 is mostly covered by an image and has only a short text layer, and '
+                                           'OCR could not read it (tesseract exited with status 3).',))
+
+    def test_two_short_letterhead_pages_keep_both_texts(self):
+        data = docgen.concat_pdfs([letterhead_page(), letterhead_page(['Signature: Dr. A. Rahman (fictional)'])])
+        result = pdf_extract(data, ocr=None)
+        self.assertEqual(result.status, 'partial')
+        self.assertEqual([text.strip() for text in page_texts(result)],
+                         ['\n'.join(LETTERHEAD_NOTE), 'Signature: Dr. A. Rahman (fictional)'])
+        self.assertEqual(result.messages, ('Pages 1-2 are mostly covered by an image and have only a short text layer '
+                                           '(for example a stamp or a fax header), so they may be scans; OCR is not '
+                                           'available on this server, so the images were not read.',))
+
+    def test_round_one_protections_hold(self):
+        with FakeOcr() as fake:
+            read = pdf_extract(letterhead_page(), ocr=fake.tools)  # the contract: a short layer over an image is OCRed
+        self.assertEqual((read.status, read.method, read.ocr_pages), ('ok', 'pdf-ocr', (1,)))
+        long_note = LETTERHEAD_NOTE + ['Findings: ' + 'reflux symptoms reviewed in detail with the patient. ' * 5]
+        typed = pdf_extract(letterhead_page(long_note), ocr=None)
+        self.assertEqual((typed.status, typed.messages), ('ok', (LARGE_IMAGE,)))
+        blank = pdf_extract(letterhead_page([]), ocr=None)
+        self.assertEqual((blank.status, blank.text), ('failed', ''))
+
+
+# --- ingest:6 — images an annotation's appearance paints are content too ------------------------------
+
+FAX_LINES = [(72, 760, 'SYNTHETIC TEST DOCUMENT - fictional patient - NOT FOR BILLING'),
+             (36, 778, 'Received via secure e-fax 2026-10-21 14:32 UTC - Page 1 of 1')]
+
+
+def image_object(pixels=(1200, 1500)) -> bytes:
+    data = zlib.compress(b'\xff' * (pixels[0] * pixels[1]))
+    return (b'<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceGray /BitsPerComponent 8 '
+            b'/Filter /FlateDecode /Length %d >>\nstream\n' % (pixels[0], pixels[1], len(data)) + data + b'\nendstream')
+
+
+def annotated_image_pdf(annotation: str, *, rect=(36, 58, 576, 733), pixels=(1200, 1500),
+                        in_content: bool = False) -> bytes:
+    """A banner and a fax stamp; an image painted over ``rect`` by an annotation's appearance (or the content)."""
+    width, height = rect[2] - rect[0], rect[3] - rect[1]
+    content = '\n'.join(f'BT /F1 8 Tf {x} {y} Td ({esc(text)}) Tj ET' for x, y, text in FAX_LINES)
+    resources = ''
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: HELVETICA, 9: image_object(pixels)}
+    annots = ''
+    if in_content:
+        content += f'\nq {width} 0 0 {height} {rect[0]} {rect[1]} cm /Im0 Do Q'
+        resources = '/XObject << /Im0 9 0 R >>'
+    else:
+        objects[8] = stream(f'q {width} 0 0 {height} 0 0 cm /Im0 Do Q', f'/Type /XObject /Subtype /Form /BBox [0 0 '
+                            f'{width} {height}] /Resources << /XObject << /Im0 9 0 R >> >>')
+        objects[7] = (f'<< /Type /Annot {annotation} /Rect [{rect[0]} {rect[1]} {rect[2]} {rect[3]}] /F 4 /P 3 0 R '
+                      '/AP << /N 8 0 R >> >>').encode()
+        annots = '/Annots [7 0 R]'
+        if '/Widget' in annotation:
+            objects[1] = b'<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R] >> >>'
+    objects[3] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> '
+                  f'{resources} >> /Contents 5 0 R {annots} >>').encode()
+    objects[5] = stream(content)
+    return serialise(objects)
+
+
+IMAGE_FIELD = '/Subtype /Widget /FT /Btn /Ff 65536 /T (photo) /MK << /TP 1 /I 8 0 R >>'
+ANNOTATED = {'push-button image field': IMAGE_FIELD, 'square': '/Subtype /Square',
+             'screen': '/Subtype /Screen', 'watermark': '/Subtype /Watermark'}
+
+
+class AnnotationImageTests(unittest.TestCase):
+    """ingest:6 — an image an annotation paints counts as drawn and towards the page's scan coverage."""
+
+    def test_scan_painted_by_an_annotation_is_treated_like_a_page_scan(self):
+        control = pdf_extract(annotated_image_pdf('', in_content=True), ocr=None)
+        self.assertEqual((control.status, control.messages), ('partial', (SCAN_NOTE.format(n=1),)))
+        for label, annotation in ANNOTATED.items():
+            with self.subTest(label):
+                result = pdf_extract(annotated_image_pdf(annotation), ocr=None)
+                self.assertEqual(result.status, 'partial')
+                self.assertEqual(result.messages[0], SCAN_NOTE.format(n=1))
+                self.assertIn(DRAWN, result.messages)
+                with FakeOcr() as fake:
+                    read = pdf_extract(annotated_image_pdf(annotation), ocr=fake.tools)
+                self.assertEqual((read.method, read.ocr_pages), ('pdf-ocr', (1,)))
+
+    def test_small_image_field_is_named(self):
+        result = pdf_extract(annotated_image_pdf(IMAGE_FIELD, rect=(72, 400, 216, 580), pixels=(300, 375)), ocr=None)
+        self.assertEqual(result.status, 'ok')
+        self.assertIn(DRAWN, result.messages)
+
+    def test_appearance_is_placed_on_its_rectangle(self):
+        # A 540 x 675 appearance shown in a 144 x 180 pt field (PDF 32000-1 12.5.5): about 5% of the page, so
+        # not a scan; its 1.8-megapixel image still gets the large-image note.
+        data = annotated_image_pdf(IMAGE_FIELD).replace(b'/Rect [36 58 576 733]', b'/Rect [72 400 216 580]')
+        result = pdf_extract(serialise_again(data), ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', (LARGE_IMAGE, DRAWN)))
+
+    def test_hidden_annotation_image_is_not_counted(self):
+        result = pdf_extract(annotated_image_pdf('/Subtype /Square').replace(b'/F 4 /P 3 0 R', b'/F 2 /P 3 0 R'),
+                             ocr=None)
+        self.assertEqual(result.status, 'ok')
+        self.assertNotIn(DRAWN, result.messages)
+
+
+# --- ingest:7 — a scanned insert under half the page beside a short typed header is named -------------
+
+INSERT_HEADER = ['SYNTHETIC TEST DOCUMENT - fictional patient', 'Endoscopy unit (fictional)',
+                 'Date of service: 2026-10-21', 'See the scanned procedure record below.']
+
+
+def insert_pdf(pixels, placed) -> bytes:
+    content = '\n'.join(f'BT /F1 11 Tf 72 {740 - 16 * n} Td ({esc(line)}) Tj ET' for n, line in enumerate(INSERT_HEADER))
+    content += '\nq {} 0 0 {} {} {} cm /Im0 Do Q'.format(placed[2], placed[3], placed[0], placed[1])
+    return serialise({1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+                      3: (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> '
+                          b'/XObject << /Im0 6 0 R >> >> /Contents 5 0 R >>'),
+                      4: HELVETICA, 5: stream(content), 6: image_object(pixels)})
+
+
+class PartialPageInsertTests(unittest.TestCase):
+    """ingest:7 — a dense image over a fifth of the page or more is named beside a text layer."""
+
+    def test_inserts_under_one_megapixel_and_half_the_page_are_named(self):
+        for label, pixels, placed in (('150 dpi insert, 45% of the page', (1275, 750), (0, 300, 612, 360)),
+                                      ('96 dpi screenshot, 49% of the page', (816, 522), (0, 250, 612, 391))):
+            with self.subTest(label):
+                result = pdf_extract(insert_pdf(pixels, placed), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', (LARGE_IMAGE,)))
+                self.assertEqual(result.text.strip(), '\n'.join(INSERT_HEADER))
 
 
 if __name__ == '__main__':

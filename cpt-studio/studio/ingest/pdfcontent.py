@@ -23,7 +23,9 @@ form XObjects it draws, with the current transformation matrix tracked:
   its glyphs to the characters they show (studio.ingest.pdffonts).
 - **Painted images.** Each visible image placement (image XObjects and inline
   images, inside forms too) as a bounding box clipped to the page, so a scan
-  split into bands adds up; and the largest image's pixel count.
+  split into bands adds up; and the largest image's pixel count. The images
+  a displayed annotation's appearance paints are added by pdfannots, placed
+  as viewers place the appearance.
 - **Integrity.** Every FlateDecode stream the page's text depends on — its
   content streams, the form XObjects it draws and their fonts' ToUnicode and
   encoding CMaps — must decompress completely, checksum included. pypdf
@@ -684,13 +686,39 @@ def state_only(operator, operands) -> list:
     return []
 
 
-def visible_form(xobject, reader, optional: OptionalContent, resources) -> tuple[StreamObject, bool, bool]:
-    """(the form to read — a copy without its hidden optional content when it has any, damaged,
-    hidden text dropped) for a form XObject read on its own, such as an annotation appearance."""
+@dataclass(frozen=True)
+class VisibleForm:
+    """A form XObject read on its own, such as an annotation appearance."""
+    stream: StreamObject  # the form to read: a copy without its hidden optional content when it has any
+    damaged: bool
+    hidden_text: bool  # hidden optional content inside it showed text, which was dropped
+    placements: list  # (CTM in the form's own space, before its /Matrix; pixels or None) of each image it paints
+    images: list  # the image XObjects it paints, each once
+
+
+def visible_form(xobject, reader, optional: OptionalContent, resources) -> VisibleForm:
     walker = _Walker(reader, optional, (0.0, 0.0, 0.0, 0.0))
     form = walker.form(xobject, resources if isinstance(resources, DictionaryObject) else DictionaryObject(), 0)
     target = form.replacement if form.replacement is not None else xobject
-    return target, walker.content.damaged, walker.content.hidden_text
+    return VisibleForm(target, walker.content.damaged, walker.content.hidden_text, list(form.placements),
+                       list(walker.content.images))
+
+
+def appearance_matrix(stream, rect) -> tuple | None:
+    """The matrix that draws an annotation appearance on the page (PDF 32000-1 12.5.5): its /Matrix, then the
+    mapping of its transformed /BBox onto the annotation's /Rect; None when either is unusable."""
+    bbox = [number(v) for v in as_list(stream.get('/BBox'))]
+    if len(bbox) != 4 or rect is None:
+        return None
+    values = [number(v) for v in as_list(stream.get('/Matrix'))]
+    matrix = tuple(values) if len(values) == 6 else IDENTITY
+    x0, x1 = sorted((bbox[0], bbox[2]))
+    y0, y1 = sorted((bbox[1], bbox[3]))
+    tx0, ty0, tx1, ty1 = transformed_box((x0, y0, x1, y1), matrix)
+    if tx1 <= tx0 or ty1 <= ty0:
+        return None
+    sx, sy = (rect[2] - rect[0]) / (tx1 - tx0), (rect[3] - rect[1]) / (ty1 - ty0)
+    return multiply(matrix, (sx, 0.0, 0.0, sy, rect[0] - tx0 * sx, rect[1] - ty0 * sy))
 
 
 def analyse_page(page, reader, optional: OptionalContent) -> PageContent:

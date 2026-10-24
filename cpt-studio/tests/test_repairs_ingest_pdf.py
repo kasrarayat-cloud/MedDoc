@@ -480,8 +480,9 @@ class PdfScanBesideStampTests(unittest.TestCase):
         for name, (kind, pixels, bands) in SCAN_SHAPES.items():
             with self.subTest(name):
                 alone = extract(scan_page(kind, pixels, bands=bands), ocr=None)
-                self.assertEqual((alone.status, alone.text), ('failed', ''))
-                self.assertEqual(alone.messages, (SCAN_NOTE.format(n=1), 'No text could be read from the PDF.'))
+                # Round 2 (ingest:3): the stamp was read, so it is kept and the result is partial, not failed.
+                self.assertEqual((alone.status, alone.text.strip()), ('partial', STAMP))
+                self.assertEqual(alone.messages, (SCAN_NOTE.format(n=1),))
                 mixed = extract(docgen.concat_pdfs([docgen.make_pdf([TYPED]), scan_page(kind, pixels, bands=bands)]),
                                 ocr=None)
                 self.assertEqual((mixed.status, mixed.method, mixed.ocr_pages), ('partial', 'pdf-text', ()))

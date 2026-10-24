@@ -17,8 +17,12 @@ What a page shows is read, or the result says what was not read:
 - **Scans with a short text layer.** A page mostly covered by images (by area,
   however the images are split, inline or nested) whose text is short — a
   stamp or a fax header over a scan — is treated like a page without a text
-  layer: OCRed, or named and unread. A page-sized image under a substantial
-  text layer, or any large image beside one, is named.
+  layer: OCRed, or named and unread; an unread page keeps the text its layer
+  holds, so the result is then 'partial', never 'failed' with that text
+  thrown away. A page-sized image under a substantial text layer, any image
+  of a million pixels or more, or dense images covering a fifth of the page
+  or more beside one, is named. Images an annotation's appearance paints
+  count like images in the page's content.
 - **Forms and annotations.** Displayed form-field values and annotation text
   are read and added after the page's text under a labelled heading. A
   displayed check box is also written as ☐ / ☒ at the start of the page-text
@@ -73,6 +77,8 @@ MAX_RENDER_PIXELS = 40_000_000
 # An image this large beside a text layer may be scanned content that the text
 # layer does not cover; logos and thumbnails are smaller.
 LARGE_IMAGE_PIXELS = 1_000_000
+# ... and so may dense images covering this share of the page, whatever their pixel count.
+LARGE_IMAGE_COVERAGE = 0.2
 # A page whose images cover at least this share of its area may be a scan.
 SCAN_COVERAGE = 0.5
 # ... and when its readable text is shorter than this, the text is a stamp or
@@ -200,7 +206,8 @@ def _extract(data, limits, tools, deadline, workdir, engine) -> ExtractionResult
         messages.append(XFA)
     method = pdf_method(len(ocr.texts), count)
 
-    if not any(texts[n - 1].strip() for n in range(1, count + 1) if n not in unread):
+    # An unread page that may be a scan still had its text layer read: that text is kept, and it counts.
+    if not any(texts[n - 1].strip() for n in range(1, count + 1) if n not in unread or n in scanned):
         return failed(method, engine, *messages, NO_TEXT)
     text, spans = join_pages(texts)
     if len(text) > limits.max_chars:
@@ -332,6 +339,11 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
         content = analyse_page(page, reader, optional)
         layer = _layer_text(page, content)
         annotations = read_annotations(page, optional, acroform)
+    if annotations.placements:  # images displayed annotations paint are on the page too
+        content.placements.extend(annotations.placements)
+        content.images.extend(image for image in annotations.images
+                              if all(image is not known for known in content.images))
+        content.__dict__.pop('image_coverage', None)
     text, placed = _placed_boxes(layer, annotations)
     text, replaced = replace_surrogates(text)
     block, block_replaced = replace_surrogates(annotations.block(number))
@@ -550,7 +562,7 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
             messages.append(f'Page {n} {reason} and OCR could not read it ({problem}).')
     imaged = [n for n, page in enumerate(read, 1) if n not in no_layer and n not in scanned
               and (page.content.largest_image_pixels >= LARGE_IMAGE_PIXELS
-                   or page.content.image_coverage >= SCAN_COVERAGE)]
+                   or page.content.image_coverage >= LARGE_IMAGE_COVERAGE)]
     if imaged:
         messages.append(f'{page_phrase(imaged)} {agree(imaged, "combines", "combine")} a text layer with a large '
                         'image; only the text layer was read, so check the text against the original if the image '
