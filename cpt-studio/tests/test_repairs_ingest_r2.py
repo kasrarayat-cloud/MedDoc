@@ -12,7 +12,9 @@ it recognises as ☐ (unchecked) or ☒ (checked).
 from __future__ import annotations
 
 import io
+import os
 import re
+import tempfile
 import unittest
 
 import docx
@@ -21,6 +23,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from pypdf.generic._font import Font
 from reportlab.lib.pagesizes import letter
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 
 from studio.gi.detect import status_for_span
@@ -687,6 +690,120 @@ class RadioOptionTests(unittest.TestCase):
         self.assertTrue(named.text.endswith('\nExtent reached: Rectosigmoid only'), named.text)
         none = pdf_extract(radio_form(EXTENTS, ['0', '1', '2'], None), ocr=None)
         self.assertTrue(none.text.endswith('\nExtent reached: no option selected'), none.text)
+
+
+# --- ingest:10 — text outside the page box is not what the page shows --------------------------------
+
+SHOWN_LINE = 'Procedure: Colonoscopy cancelled before sedation; patient will reschedule.'
+UNSHOWN = 'Colonoscopy completed to the cecum; 7 mm polyp removed with cold snare polypectomy.'
+OFF_PAGE = 'Page 1 has text placed outside the visible page area; that text was not extracted.'
+
+
+def placed_pdf(extra_content: str, *, page_extra: str = '', resources: str = '',
+               extra: dict[int, bytes] | None = None) -> bytes:
+    content = f'BT /F1 12 Tf 72 720 Td ({esc(SHOWN_LINE)}) Tj ET\n' + extra_content
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               3: (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] {page_extra} /Resources << /Font << '
+                   f'/F1 4 0 R >> {resources} >> /Contents 5 0 R >>').encode(),
+               4: HELVETICA, 5: stream(content)}
+    objects.update(extra or {})
+    return serialise(objects)
+
+
+class OffPageTextTests(unittest.TestCase):
+    """ingest:10 — text wholly outside the visible page box (crop within media) is excluded and named."""
+
+    def test_text_a_viewer_does_not_show_is_excluded_and_named(self):
+        cases = {'right of the page': f'BT /F1 12 Tf 700 500 Td ({esc(UNSHOWN)}) Tj ET',
+                 'below the page': f'BT /F1 12 Tf 72 -40 Td ({esc(UNSHOWN)}) Tj ET',
+                 'moved off by cm': f'q 1 0 0 1 700 0 cm BT /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET Q',
+                 'left of the page': '\n'.join(f'BT /F1 12 Tf -900 {500 - 14 * n} Td ({esc(part)}) Tj ET'
+                                               for n, part in enumerate(UNSHOWN.split('; ')))}
+        for label, content in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(placed_pdf(content), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', (OFF_PAGE,)))
+                self.assertEqual(result.text.strip(), SHOWN_LINE)
+        cropped = pdf_extract(placed_pdf(f'BT /F1 12 Tf 72 50 Td ({esc(UNSHOWN)}) Tj ET',
+                                         page_extra='/CropBox [0 100 612 792]'), ocr=None)
+        self.assertEqual((cropped.status, cropped.messages, cropped.text.strip()), ('ok', (OFF_PAGE,), SHOWN_LINE))
+
+    def test_later_text_on_an_off_page_line_is_excluded_too(self):
+        content = f'BT /F1 12 Tf 72 500 Td (Visible note.) Tj 700 0 Td ({esc(UNSHOWN)}) Tj ET'
+        result = pdf_extract(placed_pdf(content), ocr=None)
+        self.assertEqual(result.messages, (OFF_PAGE,))
+        self.assertNotIn('cold snare', result.text)
+        self.assertIn('Visible note.', result.text)
+
+    def test_text_pushed_past_the_edge_by_the_text_before_it_is_excluded(self):
+        lead = 'Findings: a long visible sentence that runs right up to the edge'
+        start = 612 + 30 - stringWidth(lead, 'Helvetica', 12)  # the second piece starts 30 pt past the edge
+        content = f'BT /F1 12 Tf {start:.2f} 500 Td ({esc(lead)}) Tj ({esc(UNSHOWN)}) Tj ET'
+        result = pdf_extract(placed_pdf(content), ocr=None)
+        self.assertEqual(result.messages, (OFF_PAGE,))
+        self.assertIn(lead, result.text)
+        self.assertNotIn('cold snare', result.text)
+
+    def test_text_state_is_restored_by_q(self):
+        content = f'/F1 12 Tf q /F1 400 Tf Q BT 72 -30 Td ({esc(UNSHOWN)}) Tj ET'
+        result = pdf_extract(placed_pdf(content), ocr=None)
+        self.assertEqual((result.messages, result.text.strip()), ((OFF_PAGE,), SHOWN_LINE))
+
+    def test_form_placed_off_the_page_is_excluded(self):
+        form = stream(f'BT /F1 12 Tf 0 10 Td ({esc(UNSHOWN)}) Tj ET',
+                      '/Type /XObject /Subtype /Form /BBox [0 0 500 30] /Resources << /Font << /F1 4 0 R >> >>')
+        result = pdf_extract(placed_pdf('q 1 0 0 1 700 400 cm /Fx Do Q', resources='/XObject << /Fx 6 0 R >>',
+                                        extra={6: form}), ocr=None)
+        self.assertEqual((result.status, result.messages, result.text.strip()), ('ok', (OFF_PAGE,), SHOWN_LINE))
+        shown = pdf_extract(placed_pdf('q 1 0 0 1 72 400 cm /Fx Do Q', resources='/XObject << /Fx 6 0 R >>',
+                                       extra={6: form}), ocr=None)
+        self.assertEqual((shown.status, shown.messages), ('ok', ()))
+        self.assertIn('cold snare', shown.text)
+
+    def test_text_a_viewer_shows_is_still_read(self):
+        cases = {'on the page': f'BT /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET',
+                 'starts inside, runs past the edge': f'BT /F1 12 Tf 400 500 Td ({esc(UNSHOWN)}) Tj ET',
+                 'starts left of the page, runs into it': f'BT /F1 12 Tf -60 500 Td ({esc(UNSHOWN)}) Tj ET',
+                 'invisible OCR layer on the page': f'BT 3 Tr /F1 12 Tf 72 500 Td ({esc(UNSHOWN)}) Tj ET',
+                 'just inside the top edge': f'BT /F1 12 Tf 72 785 Td ({esc(UNSHOWN)}) Tj ET',
+                 'rotated, on the page': f'BT /F1 12 Tf 0 1 -1 0 300 200 Tm ({esc(UNSHOWN)}) Tj ET',
+                 # A TJ adjustment moves the next glyphs left: this one brings the sentence back onto the page.
+                 'kerned back onto the page': f'BT /F1 12 Tf 700 450 Td [(x) 60000 ({esc(UNSHOWN)})] TJ ET'}
+        for label, content in cases.items():
+            with self.subTest(label):
+                result = pdf_extract(placed_pdf(content), ocr=None)
+                self.assertEqual((result.status, result.messages), ('ok', ()))
+                self.assertIn('cold snare polypectomy', result.text)
+
+    def test_text_in_a_form_is_judged_where_the_form_is_placed(self):
+        # In the form's own space the sentence lies far left of x=0; the form is placed so that it shows.
+        form = stream(f'BT /F1 12 Tf -1000 10 Td ({esc(UNSHOWN)}) Tj ET',
+                      '/Type /XObject /Subtype /Form /BBox [-1100 0 0 30] /Resources << /Font << /F1 4 0 R >> >>')
+        result = pdf_extract(placed_pdf('q 1 0 0 1 1100 400 cm /Fx Do Q', resources='/XObject << /Fx 6 0 R >>',
+                                        extra={6: form}), ocr=None)
+        self.assertEqual((result.status, result.messages), ('ok', ()))
+        self.assertIn('cold snare polypectomy', result.text)
+
+    def test_ocr_renders_the_area_a_viewer_shows(self):
+        from unittest import mock
+
+        from studio.ingest import ocr
+        calls = []
+
+        def fake_run(name, argv, deadline, timeout_s):
+            calls.append(argv)
+            if name == 'pdftoppm':
+                with open(argv[-1] + '.png', 'wb') as handle:
+                    handle.write(b'page')
+                return b''
+            return b'Synthetic OCR text.'
+
+        with mock.patch.object(ocr, '_run', side_effect=fake_run):
+            outcome = ocr.ocr_page(ocr.OcrTools('/bin/true', '/bin/true', 'tesseract 0', 'pdftoppm 0'),
+                                   'document.pdf', 1, dpi=300, timeout_s=10,
+                                   workdir=tempfile.mkdtemp(dir=os.environ.get('TMPDIR')))
+        self.assertEqual(outcome.text, 'Synthetic OCR text.')
+        self.assertIn('-cropbox', calls[0])
 
 
 if __name__ == '__main__':

@@ -11,6 +11,13 @@ form XObjects it draws, with the current transformation matrix tracked:
   ``extraction_page`` returns a copy of the page whose content omits the
   text-showing operators and XObjects inside hidden content; graphics- and
   text-state operators are kept, as a viewer keeps executing them.
+- **Text outside the page.** Text the page's own content draws wholly
+  outside the visible page area (the crop box within the media box) is not
+  shown by any viewer: its text-showing operators are dropped, keeping their
+  state effects, and the page is flagged. Positions follow the text and line
+  matrices and the text state (PDF 32000-1 9.3-9.4), with glyph widths from
+  the font; a form XObject whose bounding box lies wholly outside is dropped.
+  Text inside a form is judged only by its form's box.
 - **Symbol fonts.** A simple symbol font in the resources of the page or of a
   form it draws is replaced, in the copy extraction reads, by one that maps
   its glyphs to the characters they show (studio.ingest.pdffonts).
@@ -30,14 +37,18 @@ Importable without Django (the extraction child imports it).
 """
 from __future__ import annotations
 
+import dataclasses
 import functools
+import math
 import zlib
 from dataclasses import dataclass, field
 from itertools import pairwise
 
 from pypdf import PageObject
 from pypdf.filters import ASCII85Decode, ASCIIHexDecode
+from pypdf._text_extraction import get_text_operands
 from pypdf.generic import ArrayObject, ContentStream, DictionaryObject, NameObject, StreamObject
+from pypdf.generic._font import Font
 
 from .pdffonts import mapped_simple_font
 
@@ -53,6 +64,12 @@ MAX_UNION_RECTANGLES = 400
 REPLACEMENT_SUFFIX = '_cpt_visible'
 
 TEXT_SHOWING = frozenset({b'Tj', b'TJ', b"'", b'"'})
+TEXT_STATE = frozenset({b'BT', b'Tf', b'Tc', b'Tw', b'Tz', b'TL', b'Ts', b'Td', b'TD', b'Tm', b'T*'})
+ORIENTATIONS = (0, 90, 180, 270)
+# A generous box around a run of glyphs, in font sizes: the descent, the ascent, and the margin by which the
+# whole run must clear the page box before it counts as outside it.
+GLYPH_DESCENT, GLYPH_ASCENT, OUTSIDE_MARGIN = 0.3, 1.0, 1.0
+UNKNOWN_GLYPH_WIDTH = 1000  # glyph-space units, for text in a font that cannot be read: one em per glyph
 FLATE = frozenset({'/FlateDecode', '/Fl'})
 ASCII_HEX = frozenset({'/ASCIIHexDecode', '/AHx'})
 ASCII_85 = frozenset({'/ASCII85Decode', '/A85'})
@@ -252,6 +269,7 @@ class PageContent:
     images: list = field(default_factory=list)  # the visible image XObjects, each once
     damaged: bool = False
     box: tuple = (0.0, 0.0, 612.0, 792.0)
+    offpage_text: bool = False  # text drawn wholly outside the visible page area, which was dropped
 
     @property
     def largest_image_pixels(self) -> int:
@@ -279,11 +297,127 @@ class _Form:
     placements: list  # (CTM in the form's own space, pixels or None) of the images it paints
 
 
+@dataclass
+class _TextState:
+    """The text-state parameters that are part of the graphics state (saved by q, restored by Q)."""
+    font: object = None
+    size: float = 0.0
+    char_spacing: float = 0.0
+    word_spacing: float = 0.0
+    scale: float = 1.0
+    leading: float = 0.0
+    rise: float = 0.0
+
+
+class _TextPlacement:
+    """Where the page's own content draws its text (PDF 32000-1 9.3-9.4), to find text wholly outside ``box``."""
+
+    def __init__(self, resources, box, fonts: dict):
+        self.box = box
+        table = resolved(resources.get('/Font'))
+        self.table = table if isinstance(table, DictionaryObject) else DictionaryObject()
+        self.fonts = fonts  # id(font dict) -> pypdf Font, or None when it cannot be read
+        self.state = _TextState()
+        self.matrix = self.line = IDENTITY
+
+    def apply(self, operator, operands) -> None:
+        state = self.state
+        if operator == b'BT':
+            self.matrix = self.line = IDENTITY
+        elif operator == b'Tf' and len(operands) >= 2:
+            state.font, state.size = operands[0], number(operands[1])
+        elif operator in (b'Tc', b'Tw', b'Tz', b'TL', b'Ts') and operands:
+            value = number(operands[0])
+            if operator == b'Tc':
+                state.char_spacing = value
+            elif operator == b'Tw':
+                state.word_spacing = value
+            elif operator == b'Tz':
+                state.scale = value / 100
+            elif operator == b'TL':
+                state.leading = value
+            else:
+                state.rise = value
+        elif operator in (b'Td', b'TD') and len(operands) >= 2:
+            if operator == b'TD':
+                state.leading = -number(operands[1])
+            self.move(number(operands[0]), number(operands[1]))
+        elif operator == b'Tm' and len(operands) == 6:
+            self.matrix = self.line = tuple(number(v) for v in operands)
+        elif operator == b'T*':
+            self.move(0.0, -state.leading)
+
+    def move(self, tx: float, ty: float) -> None:
+        self.matrix = self.line = multiply((1.0, 0.0, 0.0, 1.0, tx, ty), self.line)
+
+    def outside(self, operator, operands, ctm) -> bool:
+        """Apply a text-showing operator; whether all it shows lies wholly outside the page box."""
+        state = self.state
+        if operator == b"'":
+            self.move(0.0, -state.leading)
+            items = list(operands[:1])
+        elif operator == b'"':
+            if len(operands) >= 2:
+                state.word_spacing, state.char_spacing = number(operands[0]), number(operands[1])
+            self.move(0.0, -state.leading)
+            items = list(operands[2:3])
+        elif operator == b'TJ':
+            items = list(operands[0]) if operands and isinstance(operands[0], (list, ArrayObject)) else []
+        else:
+            items = list(operands[:1])
+        start = self.matrix
+        x = low = high = 0.0
+        for item in items:
+            if isinstance(item, (bytes, str)):
+                x += self.advance(item)
+            else:  # a TJ adjustment, in thousandths of a text-space unit, moves the next glyph left
+                x -= number(item) / 1000 * state.size * state.scale
+            low, high = min(low, x), max(high, x)
+        self.matrix = multiply((1.0, 0.0, 0.0, 1.0, x, 0.0), start)
+        size = state.size
+        place = multiply(start, ctm)
+        scale = math.sqrt(abs(place[0] * place[3] - place[1] * place[2]))
+        if size <= 0 or scale <= 0:
+            return False  # nothing to measure it by: keep it
+        x0, y0, x1, y1 = transformed_box((low, state.rise - GLYPH_DESCENT * size, high,
+                                          state.rise + GLYPH_ASCENT * size), place)
+        margin = OUTSIDE_MARGIN * size * scale
+        return clip((x0 - margin, y0 - margin, x1 + margin, y1 + margin), self.box) is None
+
+    def advance(self, string) -> float:
+        """How far ``string`` moves the text position, in text-space units."""
+        state = self.state
+        font = self.font()
+        if font is None:
+            glyphs, spaces, widths = len(string), 0, UNKNOWN_GLYPH_WIDTH * len(string)
+        else:
+            try:
+                text, _, widths = get_text_operands([string], list(IDENTITY), list(IDENTITY), font, ORIENTATIONS)
+            except Exception:
+                text, widths = '', UNKNOWN_GLYPH_WIDTH * len(string)
+            glyphs, spaces = max(len(text), 1 if string else 0), text.count(' ')
+        return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
+
+    def font(self):
+        name = self.state.font
+        font = resolved(self.table.raw_get(name)) if isinstance(name, str) and name in self.table else None
+        if not isinstance(font, DictionaryObject):
+            return None
+        if id(font) not in self.fonts:
+            try:
+                self.fonts[id(font)] = Font.from_font_resource(font)
+            except Exception:
+                self.fonts[id(font)] = None
+        return self.fonts[id(font)]
+
+
 class _Walker:
-    def __init__(self, reader, optional: OptionalContent, box):
+    def __init__(self, reader, optional: OptionalContent, box, positions: bool = False):
         self.reader = reader
         self.optional = optional
         self.content = PageContent(box=box)
+        self.positions = positions  # box is the page's: text and forms drawn wholly outside it are dropped
+        self.text_fonts: dict = {}  # id(font dict) -> pypdf Font, for measuring text
         self.forms: dict[tuple, _Form] = {}  # each form is walked once; its images are re-placed per use
         self.active: set[int] = set()  # forms being walked: a form that draws itself is not walked again
         self.checked: set[int] = set()
@@ -321,6 +455,8 @@ class _Walker:
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
+        # Positions are known in page space only for the page's own content (forms are walked in their own space).
+        text = _TextPlacement(resources, self.content.box, self.text_fonts) if self.positions and depth == 0 else None
         for operands, operator in operations:
             hidden = any(marked)
             if operator in (b'BMC', b'BDC'):
@@ -333,16 +469,28 @@ class _Walker:
                 if hidden or closing:
                     continue
             elif operator == b'q':
-                saved.append(ctm)
+                saved.append((ctm, dataclasses.replace(text.state) if text else None))
             elif operator == b'Q':
-                ctm = saved.pop() if saved else ctm
+                if saved:
+                    ctm, state = saved.pop()
+                    if text and state:
+                        text.state = state
             elif operator == b'cm' and len(operands) == 6:
                 ctm = multiply(tuple(number(v) for v in operands), ctm)
             elif operator in TEXT_SHOWING and hidden:
+                if text:
+                    text.outside(operator, operands, ctm)  # keeps later positions right
                 changed = True
                 self.content.hidden_text = self.content.hidden_text or shows_text(operands)
                 kept.extend(state_only(operator, operands))
                 continue
+            elif operator in TEXT_SHOWING and text and text.outside(operator, operands, ctm):
+                changed = True
+                self.content.offpage_text = self.content.offpage_text or shows_text(operands)
+                kept.extend(state_only(operator, operands))
+                continue
+            elif operator in TEXT_STATE and text:
+                text.apply(operator, operands)
             elif operator == b'INLINE IMAGE':
                 if hidden:
                     changed = True
@@ -390,6 +538,9 @@ class _Walker:
             return 'keep', None
         matrix = [number(v) for v in as_list(xobject.get('/Matrix'))]
         form_ctm = multiply(tuple(matrix), ctm) if len(matrix) == 6 else ctm
+        if self.positions and depth == 0 and self.form_outside(xobject, form_ctm):
+            self.content.offpage_text = self.content.offpage_text or self.form_shows_text(xobject)
+            return 'drop', None
         if depth >= MAX_FORM_DEPTH or id(xobject) in self.active:
             bbox = [number(v) for v in as_list(xobject.get('/BBox'))]
             if len(bbox) == 4:  # not looked into: assume it paints a dense image over its whole box
@@ -437,6 +588,15 @@ class _Walker:
 
     def form_shows_text(self, xobject) -> bool:
         return form_shows_text(xobject, self.reader)
+
+    def form_outside(self, xobject, form_ctm) -> bool:
+        """Whether a form's bounding box, which clips all it draws, lies wholly outside the page box."""
+        bbox = [number(v) for v in as_list(xobject.get('/BBox'))]
+        if len(bbox) != 4:
+            return False
+        x0, x1 = sorted((bbox[0], bbox[2]))
+        y0, y1 = sorted((bbox[1], bbox[3]))
+        return clip(transformed_box((x0, y0, x1, y1), form_ctm), self.content.box) is None
 
     def check_stream(self, stream) -> None:
         if isinstance(stream, StreamObject) and id(stream) not in self.checked:
@@ -534,8 +694,8 @@ def visible_form(xobject, reader, optional: OptionalContent, resources) -> tuple
 
 
 def analyse_page(page, reader, optional: OptionalContent) -> PageContent:
-    """Walk ``page``: visible images, hidden optional content and damaged streams."""
-    return _Walker(reader, optional, page_box(page)).page(page)
+    """Walk ``page``: visible images, hidden optional content, text outside the page and damaged streams."""
+    return _Walker(reader, optional, page_box(page), positions=True).page(page)
 
 
 def extraction_page(page, content: PageContent) -> PageObject:

@@ -86,7 +86,8 @@ def ocr_page(tools: OcrTools, pdf_path: str, page: int, *, dpi: int, timeout_s: 
     prefix = os.path.join(workdir, f'page-{page}')
     image = f'{prefix}.png'
     try:
-        _run('pdftoppm', [tools.pdftoppm, '-q', '-r', str(dpi), '-f', str(page), '-l', str(page),
+        # -cropbox: render the area a viewer shows (the crop box), not the whole media box.
+        _run('pdftoppm', [tools.pdftoppm, '-q', '-r', str(dpi), '-f', str(page), '-l', str(page), '-cropbox',
                           '-png', '-gray', '-singlefile', pdf_path, prefix], deadline, timeout_s)
         if not os.path.isfile(image):
             raise _ToolFailure('pdftoppm produced no image')

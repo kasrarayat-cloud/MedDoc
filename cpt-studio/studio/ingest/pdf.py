@@ -4,7 +4,8 @@ pages without a usable text layer, page spans over the final canonical text.
 What a page shows is read, or the result says what was not read:
 
 - **Text layer.** pypdf's text layer, with text in optional content that is
-  hidden by default removed (named in the messages). Symbol fonts are read
+  hidden by default, and text drawn wholly outside the visible page area,
+  removed (each named in the messages). Symbol fonts are read
   as the characters their glyphs show, check boxes as ☐ / ☒; glyphs that
   name no character (unmapped symbol glyphs, private-use or control codes,
   glyph-index fonts without a ToUnicode map) are counted and dropped, never
@@ -579,6 +580,10 @@ def _messages(read, texts, no_layer, scanned, unavailable, ocr: _Ocr, limits) ->
     if layered:
         messages.append(f'{page_phrase(layered)} {agree(layered, "has", "have")} text in a layer that is hidden by '
                         'default (optional content); that text was not extracted.')
+    outside = [n for n, page in enumerate(read, 1) if page.content.offpage_text]
+    if outside:
+        messages.append(f'{page_phrase(outside)} {agree(outside, "has", "have")} text placed outside the visible page '
+                        'area; that text was not extracted.')
     annotation_partial = _annotation_messages(read, set(ocr.texts), messages)
     return messages, bool(damaged or limited) or annotation_partial
 
