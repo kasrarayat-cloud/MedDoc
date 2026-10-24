@@ -690,12 +690,15 @@ def _stop_word(an: Analysis, word: re.Match, limit: int, first: bool, procedure:
     if lowered == 'last':
         unit = _TIME_UNIT.match(text, word.end(), limit)
         if unit is None or previous in _DETERMINERS \
-                or cues.SYMPTOM_TIME_BEFORE.search(text, max(0, word.start() - 40), word.start()):
-            return None  # "the last 5 cm", "bleeding since last month": not the service's time
+                or cues.SYMPTOM_TIME_BEFORE.search(text, max(0, word.start() - 40), word.start()) \
+                or _trails_another_thing(an, word.start(), 0):
+            return None  # "the last 5 cm", "bleeding since last month", "a positive FIT last month": not the service's
         return said + unit.group(0)
     if lowered == 'outside':
         place = _OUTSIDE_PLACE.match(text, word.end(), limit)
-        return said + place.group(0) if place else None
+        return said + place.group(0) if place and not _trails_another_thing(an, word.start(), 0) else None
+    if lowered == 'elsewhere' and _trails_another_thing(an, word.start(), 0):
+        return None  # "a CT colonography performed elsewhere": the test's place (routing:0)
     if previous == 'as' or (previous in ('previously', 'originally', 'initially', 'already')
                             and cues.AS_BOOKED_BEFORE.search(text, max(0, word.start() - 30), word.start())):
         return None  # "as scheduled", "as previously planned": the booking it kept
@@ -932,14 +935,133 @@ def _abort_status(an: Analysis, cue: Cue) -> tuple[str, bool]:
     return an.memo[key]
 
 
-def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int) -> list[tuple[str, str, bool, bool]]:
-    """(status, label, about_past, doubt) for every cue that governs the target in one clause."""
+# --- whose time a relative-time or outside-place cue tells (routing:0) --------------------------------------------
+# The history cues read for their owner: 'ago' (read at 57b4b3747), and 'last month' and 'elsewhere' (round 2b). A cue
+# is the service's only when nothing but the service's own act stands between them ("EGD was performed last month",
+# "She underwent EGD last year", "Last month she underwent EGD"). One that trails a test, a result or a diagnosis is
+# that thing's ("a positive FIT last month", "a CT scan done last week", "anemia diagnosed last month", "a mass seen
+# on CT last week"). Anything else, or the service's own history in a clause that says today, is held: never
+# historical, and a pre-57b4b3747 cue ('ago') never releases. The round-2b cues never demote an E/M visit statement.
+_OWNED_TIME_CUES = ('ago', 'last month', 'elsewhere')
+_ROUND_2B_TIME_CUES = ('last month', 'elsewhere')
+_TIME_TOKEN = re.compile(r"[A-Za-z][\w/'&-]*|\d+(?:\.\d+)?", re.A)
+# Words that tell nobody's time: auxiliaries, the subject and the act of a performance, determiners and links.
+_TIME_PASS = frozenset((
+    'was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had', 'did', 'does', 'do', 'also', 'then',
+    'subsequently', 'successfully', 'uneventfully', 'a', 'an', 'the', 'her', 'his', 'their', 'its', 'this', 'that',
+    'of', 'on', 'at', 'by', 'in', 'from', 'with', 'for', 'to', 'into', 'and', 'or', 'she', 'he', 'they', 'we', 'i',
+    'patient', 'pt', 'performed', 'done', 'completed', 'carried', 'out', 'undertaken', 'underwent', 'undergone',
+    'received', 'mm', 'cm', 'x', cues.SERVICE_TOKEN))
+# Words that describe the service itself (beside its names, interventions and landmarks, which are read as spans).
+_TIME_OWN = frozenset((
+    'screening', 'surveillance', 'diagnostic', 'therapeutic', 'routine', 'repeat', 'complete', 'full', 'upper', 'lower',
+    'flexible', 'cold', 'hot', 'snare', 'forceps', 'scope', 'colonoscope', 'endoscope', 'gastroscope', 'sigmoidoscope',
+    'duodenoscope', 'echoendoscope', 'enteroscope', 'procedure', 'exam', 'examination'))
+# What another thing's time trails: a test, a result or a diagnosis, by its noun or its participle.
+_ANOTHER_THING = re.compile(r'(?:FIT|i?FOBT|gFOBT|FIT-DNA|Cologuard|mt-?sDNA|stool|fecal|CT|CTA|CTE|CTC|MRI|MRCP|MRE|PET|'
+                            r'PET-CT|ultrasound|sonograms?|sonography|x-?rays?|radiographs?|imaging|scans?|colonography|'
+                            r'enterography|esophagram|barium|labs?|laboratory|bloodwork|CBC|hemoglobin|Hgb|ferritin|'
+                            r'LFTs?|lipase|bilirubin|CEA|calprotectin|serolog\w*|tests?|testing|results?|reports?|'
+                            r'patholog\w*|histolog\w*|cytolog\w*|cultures?|diagnos\w*|seen|found|noted|detected|'
+                            r'identified|discovered|shown|showed|demonstrated|revealed|suspected|confirmed|positive|'
+                            r'abnormal|elevated)', re.A | re.I)
+TIME_REACH = 120  # how far back a time's owner is looked for (bounds the work per cue)
+
+
+def _trails_another_thing(an: Analysis, pos: int, lo: int) -> bool:
+    """Whether the time told at ``pos`` trails a test, a result or a diagnosis: walking back from ``pos`` (not before
+    ``lo``, nor past a sentence stop) over words that tell nobody's time, the first other word names one."""
+    text = an.text
+    lo = max(lo, pos - TIME_REACH)
+    lo = max(lo, text.rfind('\n', lo, pos) + 1)  # never past a line start, and never scanned beyond the reach
+    tokens = list(_TIME_TOKEN.finditer(text, lo, pos))
+    end = pos
+    for token in reversed(tokens):
+        if any(ch in '.;!?' for ch in text[token.end():end]):
+            return False
+        end = token.start()
+        word = token.group(0).lower()
+        if word in _TIME_PASS:
+            continue
+        return bool(_ANOTHER_THING.fullmatch(token.group(0)))
+    return False
+
+
+def _only_its_own_act(an: Analysis, lo: int, hi: int, history: list[tuple[int, int]]) -> bool:
+    """Whether [lo, hi) holds nothing but words of the service's own act: words that tell nobody's time, words that
+    describe the service, and service names, interventions, landmarks and other history cues (``history``)."""
+    text = an.text
+    if hi - lo > TIME_REACH:
+        return False
+    covered = ([(m.start, m.end) for m in an.services_in(lo, hi)] + [(iv.start, iv.end) for iv in an.interventions_in(lo, hi)]
+               + [m.span() for m in _LANDMARK_AT.finditer(text, lo, hi)] + history)
+    for token in _TIME_TOKEN.finditer(text, lo, hi):
+        word = token.group(0).lower()
+        if word in _TIME_PASS or word in _TIME_OWN:
+            continue
+        if not any(s <= token.start() and token.end() <= e for s, e in covered):
+            return False
+    return True
+
+
+def _time_owner(an: Analysis, start: int, end: int, members: list[tuple[int, int]], window: tuple[int, int],
+                history: list[tuple[int, int]]) -> str:
+    """Whose time the expression at [start, end) tells, for the target whose service names and interventions are
+    ``members`` (see _groups), in the clause window ``window``: 'other' (a symptom's, or a test's, result's or
+    diagnosis's named before it), 'service' (only the service's own act stands between it and the nearest member) or
+    'unclear'. A member written after the time is reached only when none is written before it ("Last month she
+    underwent EGD")."""
+    cs, _ = window
+    if cues.SYMPTOM_TIME_BEFORE.search(an.text, max(cs, start - 40), start):
+        return 'other'
+    if any(_overlaps(s, e, start, end) for s, e in members):
+        return 'service'
+    before = [e for s, e in members if e <= start]
+    if before:
+        anchor = max(before)
+        if _trails_another_thing(an, start, anchor):
+            return 'other'
+        return 'service' if _only_its_own_act(an, anchor, start, history) else 'unclear'
+    if _trails_another_thing(an, start, cs):
+        return 'other'
+    after = [s for s, e in members if s >= end]
+    return 'service' if after and _only_its_own_act(an, end, min(after), history) else 'unclear'
+
+
+def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], window: tuple[int, int], em: bool,
+                    today: bool, history: list[tuple[int, int]]) -> Optional[tuple[str, str]]:
+    """(status, label) an attached 'ago', 'last month' or 'elsewhere' cue gives the target, or None when it is not the
+    target's time at all (see _OWNED_TIME_CUES). ``today``: a today marker of the clause attaches to the target."""
+    if em and cue.name in _ROUND_2B_TIME_CUES:
+        return None
+    owner = _time_owner(an, cue.start, cue.end, members, window, history)
+    if owner == 'other':
+        if cue.name in _ROUND_2B_TIME_CUES:
+            return None
+        return 'uncertain', f"uncertain: '{cue.text}' dates another thing named before it"
+    if owner == 'service' and not today:
+        return 'historical', f'historical: {cue.text}'
+    if owner == 'service':
+        return 'uncertain', f"uncertain: '{cue.text}' and today in one clause"
+    return 'uncertain', f"uncertain: '{cue.text}' may date another thing in its clause"
+
+
+def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int,
+                         em: bool = False) -> list[tuple[str, str, bool, bool]]:
+    """(status, label, about_past, doubt) for every cue that governs the target in one clause. ``em``: the target is
+    an E/M documentation mention (see _owned_time_cue)."""
     text = an.text
     cs, ce = an.lay.window(clause, ts, te, CLAUSE_REACH)
     spans, index, members = _groups(an, cs, ce, ts, te)
     words = text[cs:ce]
     found = []
-    for cue in an.cues_in(cs, ce):
+    clause_cues = an.cues_in(cs, ce)
+    today = any(_attached(spans, index, m.start(), m.end()) for m in cues.TODAY.finditer(text, cs, ce))
+    history = [(c.start, c.end) for c in clause_cues if c.status == 'historical']
+    # the service names and interventions of the target's group: a cited passage is no name of its own
+    names = {(m.start, m.end) for m in an.services_in(cs, ce)} | {(iv.start, iv.end) for iv in an.interventions_in(cs, ce)}
+    named = [m for m in members if m in names] or [(max(ts, cs), min(max(te, ts + 1), ce))]
+    for cue in clause_cues:
         status, doubt = cue.status, False
         if cue.name == 'aborted':
             status, doubt = _abort_status(an, cue)
@@ -953,6 +1075,11 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 and cues.AS_BOOKED_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
             continue  # "was performed today as scheduled": the booking it kept, not a future
         if _attached(spans, index, cue.start, cue.end):
+            if cue.name in _OWNED_TIME_CUES:
+                owned = _owned_time_cue(an, cue, named, (cs, ce), em, today, history)
+                if owned is not None:
+                    found.append((owned[0], owned[1], False, False))
+                continue
             label = (f'uncertain: {cue.text}, with no statement whether the procedure had started' if doubt
                      else f'{status}: {cue.text}')
             found.append((status, label, False, doubt))
@@ -1014,7 +1141,7 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     performed. ``em``: an E/M documentation mention, which the indication rule does not concern."""
     found = []
     for clause in an.lay.clauses_for(start, end):
-        found.extend(_clause_reading_cues(an, clause, start, end))
+        found.extend(_clause_reading_cues(an, clause, start, end, em))
     if not found:
         return None
     status = next(s for s in STATUS_PRECEDENCE if any(f[0] == s for f in found))
