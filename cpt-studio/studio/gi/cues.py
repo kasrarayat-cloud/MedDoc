@@ -559,6 +559,11 @@ _EXTENT_LABEL = (r'\b(?:(?:furthest|maximal|maximum|deepest)\s+)?(?:extent|depth
                  r'(?:to\s+)?(?:the\s+)?(?:approximately\s+|about\s+)?')
 EXTENT_LABEL_BEFORE = rx(_EXTENT_LABEL + r'$')
 EXTENT_CM = rx(_EXTENT_LABEL + r'(?P<cm>\d{1,3})\s*cm\b')
+# What may lead an extent label for it to name the extent reached: nothing (the label opens its clause or follows
+# a separator), the service's name ("Colonoscopy extent: cecum") or one of these words. Any other word names an
+# aim or a plan ("Intended extent: cecum", "Expected extent", "Target depth of insertion: 60 cm"), so the label is
+# then no extent read at all (detect._label_lead_plain): a lead this set does not list holds, never releases.
+EXTENT_LEAD = frozenset(('the', 'actual', 'final'))
 SERVICE_TO_GAP = rx(r'\s*(?:\(\s*[A-Z]{2,6}\s*\)\s*)?(?:to|into|through|up\s+to|as\s+far\s+as)\s+(?:the\s+)?'
                     r'(?:level\s+of\s+the\s+)?')
 ADVANCED = rx(r'\b(?:advanced|passed|inserted|introduced|examined|reached)\b')

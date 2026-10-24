@@ -1645,9 +1645,35 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
                         blocked.append(hit)
                     elif status in ('performed', 'incomplete') and (
                             cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
-                            or cues.EXTENT_LABEL_BEFORE.search(pre) or _straight_after_service(an, ws, m.start())):
+                            or _reached_label(an, ws, m.start()) or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
     return reached, blocked
+
+
+# Where the words that lead an extent label start: after the last separator before it in its clause.
+_LEAD_BREAK = re.compile(r'[,;:|(\[–—]|\s-\s', re.A)
+# A list marker or a bullet, which leads no label ("1) Extent: cecum", "- Extent: cecum").
+_LIST_MARK = re.compile(r'(?:\d{1,2}[.)]?|[A-Za-z][.)]|[^\w]+)', re.A)
+
+
+def _reached_label(an: Analysis, lo: int, pos: int) -> bool:
+    """Whether an extent label ends right before the landmark at ``pos`` ("Extent reached: ", "The furthest extent
+    reached was the ") and names the extent reached (_label_lead_plain), never an aim ("Intended extent: ")."""
+    label = cues.EXTENT_LABEL_BEFORE.search(an.text, lo, pos)
+    return bool(label) and _label_lead_plain(an, lo, label.start())
+
+
+def _label_lead_plain(an: Analysis, lo: int, start: int) -> bool:
+    """Whether only words that leave an extent label the extent reached (cues.EXTENT_LEAD), a service name, a list
+    marker or a bullet stand between the label at ``start`` and the last separator before it (or ``lo``, the start
+    of its clause). A word of aim ("Intended", "Expected", "Target", "Goal", "Planned") or any other word does not:
+    the label then names no extent reached. Only that stretch is read (bounded by the clause window)."""
+    breaks = [m.end() for m in _LEAD_BREAK.finditer(an.text, lo, start)]
+    for word in _masked(an, breaks[-1] if breaks else lo, start).split():
+        lowered = word.lower()
+        if lowered not in cues.EXTENT_LEAD and lowered != cues.SERVICE_TOKEN and not _LIST_MARK.fullmatch(word):
+            return False
+    return True
 
 
 def _straight_after_service(an: Analysis, lo: int, pos: int) -> bool:
@@ -1814,7 +1840,9 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
             advanced = bool(cues.ADVANCED.search(text, cs, ce))
             hits = [m for m in cues.CENTIMETERS.finditer(text, cs, ce)
                     if advanced or _cm_after_flex_sig(an, cs, m.start())]
-            hits += list(cues.EXTENT_CM.finditer(text, cs, ce))  # "Depth of insertion: 30 cm"
+            # "Depth of insertion: 30 cm", never an aim ("Intended depth of insertion: 60 cm")
+            hits += [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
+                     if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())]
             for m in hits:
                 if _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete') \
                         and not _about_another_procedure(an, m.start(), m.end()):
