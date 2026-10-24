@@ -217,16 +217,20 @@ class BrowserLogicTests(SimpleTestCase):
         # node counts a test FILE that registers no tests (an early return, an emptied file) as one passing test,
         # so exit 0 and '# fail 0' prove nothing alone (round 3, evidence:7): every test the file declares must
         # pass, and a named test that guards an agent-review label must be among them.
+        # A skipped or todo test is declared and never asserts (round 3, evidence:4), so every declaration form is
+        # counted and node must report none skipped and none todo.
         path = ROOT / 'tests' / 'frontend' / 'app.test.cjs'
-        declared = len(re.findall(r'(?m)^test\(', path.read_text(encoding='utf-8')))
+        declared = len(re.findall(r'(?m)^test(?:\.(?:skip|todo|only))?\(', path.read_text(encoding='utf-8')))
         result = subprocess.run([self.node, '--test', '--test-reporter=tap', str(path)],
                                 cwd=ROOT, capture_output=True, text=True, timeout=120, check=False)
         self.assertEqual(result.returncode, 0, result.stdout[-4000:] + result.stderr[-2000:])
-        passed = [int(n) for n in re.findall(r'(?m)^# pass (\d+)$', result.stdout)]
-        failed = [int(n) for n in re.findall(r'(?m)^# fail (\d+)$', result.stdout)]
+
+        def total(name):
+            return [int(n) for n in re.findall(rf'(?m)^# {name} (\d+)$', result.stdout)]
         self.assertGreater(declared, 20)
-        self.assertEqual(failed[-1:], [0], result.stdout[-2000:])
-        self.assertTrue(passed and passed[-1] >= declared, (passed, declared))
+        self.assertEqual(total('fail')[-1:], [0], result.stdout[-2000:])
+        self.assertEqual((total('skipped')[-1:], total('todo')[-1:]), ([0], [0]), result.stdout[-2000:])
+        self.assertTrue(total('pass') and total('pass')[-1] >= declared, (total('pass'), declared))
         self.assertRegex(result.stdout, r'(?m)^ok \d+ - an agent reinstatement behind a human decision labels the '
                                         r'reviewed export as agent review$')
 

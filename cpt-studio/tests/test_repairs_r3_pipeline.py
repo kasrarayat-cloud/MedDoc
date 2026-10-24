@@ -72,6 +72,32 @@ class SweptPredictSettlesByItsOutcomeTests(ApiHarness, TestCase):
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
         self.assertEqual(len(self.provider.requests), 1)
 
+    def test_a_predict_that_died_with_its_run_only_reserved_is_resumable(self):
+        # Round 3, evidence:3: the sweep reads the finished runs BEFORE it settles reserved ones as not sent, so a
+        # predict whose worker died after reserving its run is cancelled and resumable, never settled as if the
+        # provider had answered 'not sent'.
+        encounter_id = self.create()
+        jobs.run_job(jobs.claim_next())  # extract
+        jobs.run_job(jobs.claim_next())  # analyze
+        job = jobs.claim_next()
+        self.assertEqual(job.kind, models.Job.PREDICT)
+        with mock.patch('studio.jobs.is_stopped', side_effect=_WorkerDied()):  # dies right after reserving
+            with self.assertRaises(_WorkerDied):
+                jobs.run_job(job)
+        run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+        self.assertEqual(run.state, models.ProviderRun.RESERVED)
+        models.Job.objects.filter(pk=job.pk).update(started_at=timezone.now() - timedelta(minutes=11))
+        jobs.mark_stale()
+        job.refresh_from_db()
+        run.refresh_from_db()
+        self.assertEqual((job.state, run.state), (models.Job.CANCELLED, models.ProviderRun.NOT_SENT))
+        self.assertNotIn('settled', job.result or {})
+        self.assertTrue(self.client.get(f'/api/encounters/{encounter_id}').json()['pipeline']['can_resume'])
+        self.assertEqual(self.client.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
+
     def test_a_predict_that_died_before_sending_is_still_resumable(self):
         encounter_id = self.create()
         jobs.run_job(jobs.claim_next())  # extract
