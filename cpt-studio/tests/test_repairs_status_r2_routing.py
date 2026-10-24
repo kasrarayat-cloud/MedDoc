@@ -436,6 +436,83 @@ class Status6QualifierAnywhereInTheClauseTests(unittest.TestCase):
                 self.assertEqual(family(text, slug), 'performed')
 
 
+class Status5CancelledNextLineTests(unittest.TestCase):
+    """status:5 - a status line, a non-referring next sentence or a later clause that cancels or
+    denies the service named before it keeps the section from making it performed."""
+
+    LINE = 'EUS with fine-needle biopsy of the pancreatic head mass.'
+
+    def note(self, nxt):
+        return HEADER + f'Procedure: {self.LINE}\n{nxt}\nIndication: A 2.4 cm pancreatic head mass on CT.\n'
+
+    def test_the_claimed_next_lines(self):
+        for nxt in ('Status: Cancelled.', 'Procedure status: Not performed - the patient had eaten breakfast.',
+                    'However, it was not performed because the patient had eaten breakfast.',
+                    'Unfortunately, the patient declined after consent.', 'Status: Not performed.', 'Not performed.',
+                    'Cancelled.', 'Patient declined.', 'Pt refused.', 'Status: Postponed.', 'Status: Declined by patient.',
+                    'Ultimately it was not done.', 'Status: Pending.', 'Status: TBD'):
+            text = self.note(nxt)
+            with self.subTest(nxt=nxt):
+                self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+                self.assertNotEqual(fact_value(text, 'gi.eus', 'tissue_sampling'), 'FNB')
+                proposals, _ = run_engine(text, [('43242', self.LINE)])
+                self.assertNotEqual(proposals['43242'].status, 'ready')
+                status, cues = read(text, self.LINE)
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+
+    def test_the_same_for_other_services_and_headings(self):
+        for heading in ('Procedure:', 'Procedures performed:'):
+            for lines, slug in (('Colonoscopy with biopsy.\nStatus: Cancelled.', 'gi.colonoscopy'),
+                                ('Colonoscopy with biopsy.\nProcedure status: Not performed.', 'gi.colonoscopy'),
+                                ('Colonoscopy with biopsy.\nHowever, it was not performed.', 'gi.colonoscopy'),
+                                ('EGD with biopsy of the antrum.\nNot performed.', 'gi.egd'),
+                                ('EGD with biopsy of the antrum.\nCancelled.', 'gi.egd'),
+                                ('EGD with biopsy of the antrum.\nPatient declined.', 'gi.egd'),
+                                ('EUS\nProcedure status: Not performed - the patient had eaten breakfast.', 'gi.eus'),
+                                ('EUS\nHowever, it was not performed because the patient had eaten breakfast.', 'gi.eus')):
+                text = HEADER + heading + ' ' + lines + '\n'
+                with self.subTest(heading=heading, lines=lines):
+                    self.assertNotIn(family(text, slug), POSITIVE)
+
+    def test_a_later_clause_of_the_same_sentence(self):
+        for line, slug in (('Colonoscopy with biopsy; not performed.', 'gi.colonoscopy'),
+                           ('Colonoscopy with biopsy, but it was not performed.', 'gi.colonoscopy'),
+                           ('Colonoscopy with polypectomy; cancelled.', 'gi.colonoscopy'),
+                           ('EGD with dilation; patient declined.', 'gi.egd')):
+            text = HEADER + 'Procedure: ' + line + '\n'
+            with self.subTest(line=line):
+                self.assertNotIn(family(text, slug), POSITIVE)
+
+    def test_ordinary_next_lines_keep_the_service_performed(self):
+        for nxt in ('No complications.', 'No polyps were found.', 'No bleeding.', 'It was not difficult.',
+                    'Not difficult.', 'Status: Completed.', 'Status: stable.', 'The patient tolerated the procedure well '
+                    'without complications.', 'No sedation was given.', 'Patient declined sedation.',
+                    'However, it was uneventful.', 'No immediate complications.',
+                    'No retroflexion was performed in the rectum.', 'Repeat in 3 years.', 'Patient not sedated.',
+                    'No prep issues.', 'Status: Completed after the patient initially declined.'):
+            text = HEADER + f'Procedure: {self.LINE}\n{nxt}\n'
+            with self.subTest(nxt=nxt):
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
+        for line in ('Colonoscopy with polypectomy; no complications.', 'Colonoscopy with polypectomy, but the patient '
+                     'declined sedation.', 'Colonoscopy with polypectomy; however, biopsies were not taken.'):
+            with self.subTest(line=line):
+                self.assertEqual(family(HEADER + 'Procedure: ' + line + '\n', 'gi.colonoscopy'), 'performed')
+        text = HEADER + 'Procedure: Colonoscopy with polypectomy; EGD cancelled.\n'  # the later clause is the EGD's
+        self.assertEqual((family(text, 'gi.colonoscopy'), family(text, 'gi.egd')), ('performed', 'cancelled'))
+
+    def test_an_abort_after_the_start_stays_incomplete(self):
+        text = HEADER + 'Procedure: Colonoscopy with biopsy.\nAborted at 30 cm.\n'
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+        status, cues = read(text, 'Colonoscopy with biopsy.')
+        self.assertEqual(status, 'incomplete', cues)  # the started procedure is kept, not held as cancelled
+
+    def test_status0_bare_line_beside_a_denied_other_act(self):
+        text = colon_with_plan('Colonoscopy\nPatient not sedated.')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assertTrue(ready(run_engine(text, [('45385', POLYPS)])[0]['45385']))
+
+
 STATUS9 = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the splenic flexure, where an '
            'obstructing mass was biopsied. On her colonoscopy in 2023 the cecum was reached.\n')
 

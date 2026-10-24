@@ -748,12 +748,15 @@ _REFERRING_SUBJECT = re.compile(r'(?:it|this|that|the\s+(?:procedure|exam|examin
                                 re.A | re.I)
 
 
-def _denying_word(an: Analysis, start: int, end: int) -> Optional[re.Match]:
+def _denying_word(an: Analysis, start: int, end: int, only: Optional[re.Pattern] = None) -> Optional[re.Match]:
     """A negation word in [start, end) that nothing but a memberless negation accounts for:
     no clause cue, no complication, finding, qualifier or other-act exception, no anchored
     negation of a service or intervention named there. Read for the service named before
-    this text, a memberless "was not performed" denies it."""
+    this text, a memberless "was not performed" denies it. ``only``: consider only the
+    negation words it matches whole."""
     for token in cues.DOUBT_TOKEN.finditer(an.text, start, end):
+        if only is not None and not only.fullmatch(token.group(0)):
+            continue
         span = (token.start(), token.end())
         clause = an.lay.clauses_for(*span)[0]
         explains, outside_only = _token_explanations(an, clause, span)
@@ -762,37 +765,91 @@ def _denying_word(an: Analysis, start: int, end: int) -> Optional[re.Match]:
     return None
 
 
-def _next_line_denial(an: Analysis, s: int, e: int, bare: bool) -> Optional[str]:
-    """The next sentence of the same section when it speaks of the service named in the
-    sentence [s, e) and denies it: for a short, verbless service line ("Colonoscopy" / "Not
-    performed.", "Status: cancelled"), any sentence that names no service and opens with an
-    unexplained negation or is a short cancelling, deferring or doubting status line; for any
-    other line, a sentence whose subject refers back to it ("It was not performed.", "This was
-    cancelled.")."""
+# A sentence adverb or a conjunction that may open the text speaking of the service named before it:
+# "However, it was not performed.", "Unfortunately, the patient declined after consent."
+_OPENER = re.compile(r'(?:(?:however|unfortunately|ultimately|eventually|subsequently|regrettably|finally|but|instead)'
+                     r'\b[\s,]*)+', re.A | re.I)
+# A status line: "Status: Cancelled.", "Procedure status: Not performed - the patient had eaten breakfast."
+_STATUS_KEY = re.compile(r'(?:(?:procedure|case|exam|examination|study|service|endoscopy)[ \t]+)?status[ \t]*'
+                         r'[:=–—-][ \t]*', re.A | re.I)
+_STATUS_DONE = re.compile(r'(?:performed|completed?|done|successful(?:ly)?|finished|accomplished)\b', re.A | re.I)
+# A status value that holds the service ("Status: Pending.", "Status: TBD"); a negation or a cancelling,
+# deferring or doubting cue is read as on a bare line.
+_STATUS_HOLD = re.compile(r'(?:pending|scheduled|tbd|tba|requested|ordered|unknown|unclear|incomplete|planned|'
+                          r'awaiting|deferred|postponed|on\s+hold)\b', re.A | re.I)
+# The negation words that, unexplained, deny an act in a short line after any service line ("Patient
+# declined.", "Not performed."); "no" and "none" there deny a thing ("No complications.") and never do.
+_ACT_DENIAL = re.compile(r"\b(?:not|never|cannot|unable|declined|declines|refused|refuses)\b|n't\b", re.A | re.I)
+DENIAL_CLAUSES = 3  # later clauses of the service's own sentence read for a denial (bounds the work per span)
+
+
+def _bare_denial(an: Analysis, start: int, end: int) -> bool:
+    """[start, end), after a bare service line, denies it: it opens with a negation nothing explains,
+    or is a short line with such a negation or refusal ("Patient declined.", "Pt refused."; "declined
+    sedation" is explained), or a short cancelling, deferring, doubting or historical status line."""
+    first = cues.DOUBT_TOKEN.match(an.text, start, end)
+    if first and _denying_word(an, first.start(), first.end()):
+        return True
+    words = len(an.text[start:end].split())
+    if words <= 6 and _denying_word(an, start, end):
+        return True
+    return words <= 5 and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical')
+                              for c in an.cues_in(start, end))
+
+
+def _cancels(an: Analysis, start: int, end: int) -> bool:
+    """A cancellation cue in [start, end); an abort after the scope went in is not one."""
+    return any(c.status == 'cancelled' and (c.name != 'aborted' or _abort_status(an, c)[0] != 'incomplete')
+               for c in an.cues_in(start, end))
+
+
+def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
+    """Whether [ns, ne) - the next sentence of the section, or a later clause of the service's own
+    sentence, naming no service - denies or doubts the service named just before it. A sentence
+    adverb ("However,", "Unfortunately,") may open it, and then:
+    - a status line denies unless its value is one of completion ("Status: Cancelled.", "Procedure
+      status: Not performed - ...", "Status: Pending."; not "Status: Completed.");
+    - after a bare service line, the bare-line tests (_bare_denial);
+    - after any service line, a short line with an unexplained act denial ("Patient declined.",
+      "Not performed.") or a cancellation ("Cancelled."; not "Aborted at 30 cm."), never a denied
+      thing ("No complications.") or a plan ("Repeat in 5 years.");
+    - a sentence whose subject refers back to the service and cancels or denies it ("It was not
+      performed.", "However, this was cancelled.")."""
+    text = an.text
+    at = _SEPARATOR.match(text, ns, ne).end()
+    opener = _OPENER.match(text, at, ne)
+    body = opener.end() if opener else at
+    key = _STATUS_KEY.match(text, body, ne)
+    if key:
+        value = key.end()
+        if _STATUS_DONE.match(text, value, ne):
+            return False
+        return bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
+    if bare and _bare_denial(an, body, ne):
+        return True
+    if len(text[body:ne].split()) <= 6 and (_denying_word(an, body, ne, only=_ACT_DENIAL) or _cancels(an, body, ne)):
+        return True
+    if not _REFERRING_SUBJECT.match(text, body, ne):
+        return False
+    return _cancels(an, ns, ne) or bool(_denying_word(an, ns, ne))
+
+
+def _later_denial(an: Analysis, after: int, s: int, e: int, bare: bool) -> Optional[str]:
+    """The later clause of the sentence [s, e) (after ``after``, the end of the service's own clause),
+    or else the next sentence of the same section, that denies the service named before it (see
+    _denies); None when none does. A clause or a sentence that names a service speaks of that one."""
+    for cs, ce in _clauses_in(an, after, e)[:DENIAL_CLAUSES]:
+        if an.services_in(cs, ce):
+            return None
+        if _denies(an, cs, ce, bare=False):
+            return an.text[cs:ce]
     index = _sentence_index(an, s)
     if index < 0 or index + 1 >= len(an.lay.sentences):
         return None
     ns, ne = an.lay.sentences[index + 1]
     if an.lay.section_at(ns) is not an.lay.section_at(s) or an.services_in(ns, ne):
         return None
-    at = _SEPARATOR.match(an.text, ns, ne).end()
-    line = an.text[ns:ne]
-    if bare:
-        first = cues.DOUBT_TOKEN.match(an.text, at, ne)
-        if first and _denying_word(an, first.start(), first.end()):
-            return line
-        # A short line after a bare service line ("Patient declined.", "Pt refused.") denies it with
-        # any negation or refusal word nothing else accounts for ("declined sedation" is accounted for).
-        if len(line.split()) <= 6 and _denying_word(an, at, ne):
-            return line
-        if len(line.split()) <= 5 and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical')
-                                          for c in an.cues_in(ns, ne)):
-            return line
-    if not _REFERRING_SUBJECT.match(an.text, at, ne):
-        return None
-    cancelled = any(c.status == 'cancelled' and (c.name != 'aborted' or _abort_status(an, c)[0] != 'incomplete')
-                    for c in an.cues_in(ns, ne))
-    return line if cancelled or _denying_word(an, ns, ne) else None
+    return an.text[ns:ne] if _denies(an, ns, ne, bare) else None
 
 
 def _clause_end(an: Analysis, pos: int, e: int) -> int:
@@ -805,8 +862,9 @@ def _clause_end(an: Analysis, pos: int, e: int) -> int:
 
 def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
     """A cue when a section default would make a named service performed although the words
-    around the name are not those of a procedure description, or the next line speaks of it
-    and denies it: the section stays silent."""
+    after the name in its clause are not those of a procedure description (_continuation), or a
+    later clause or the next line speaks of it and denies it (_later_denial): the section stays
+    silent."""
     key = ('silent-section', ts, te)
     if key not in an.memo:
         an.memo[key] = None
@@ -822,9 +880,9 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
                 break
             before, after = an.text[s:m.start], an.text[end:e]
             bare = not after.strip(' \t.;:!?)') and len(before) <= 40 and not _VERB_BEFORE.search(before)
-            line = _next_line_denial(an, s, e, bare)
+            line = _later_denial(an, _clause_end(an, m.start, e), s, e, bare)
             if line is not None:
-                an.memo[key] = f"{SILENT_SECTION_PREFIX} the next line ('{line.strip()}') qualifies it"
+                an.memo[key] = f"{SILENT_SECTION_PREFIX} the text after it ('{line.strip()}') qualifies it"
                 break
     return an.memo[key]
 

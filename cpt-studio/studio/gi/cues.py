@@ -198,7 +198,8 @@ QUALIFIER_NEGATION = rx(r'\bnot\s+(?:a\s+|an\s+|the\s+)?(?:screening|surveillanc
 #    itself (no "procedure", "exam" or service name here).
 OTHER_ACT_NEGATION = rx(r'\b(?:no|without|w/o|not|nor|declined|declines|refused|refuses)\s+(?:(?:a|an|the|any|further|'
                         r'additional|other|routine|repeat|formal|separate|conscious|moderate|deep|general|IV)\s+){0,2}'
-                        r'(?:sedation|anesthesia|anaesthesia|propofol|MAC|analgesia|retroflexion|photo(?:graph)?s?|'
+                        r'(?:sedation|sedated|anesthesia|anaesthesia|anesthetized|anaesthetized|propofol|MAC|analgesia|'
+                        r'retroflexion|photo(?:graph)?s?|'
                         r'photodocumentation|irrigation|lavage|chromoendoscopy|narrow[- ]band\s+imaging|NBI|'
                         r'contrast|fluoroscopy|intubation\s+of\s+the\s+(?:terminal\s+)?ileum)\b')
 
