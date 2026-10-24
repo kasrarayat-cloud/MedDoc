@@ -213,9 +213,24 @@ HISTORICAL_PRE = (
 )
 # "had a colonoscopy" is history unless the clause says today.
 HAD_PRE = _pre(r'had|has\s+had|have\s+had', _HIST_FILLER, 3)
+# What a relative time ("ago", "last month") right after these dates is a symptom, not the service:
+# "bleeding since last month", "pain for the last week", "symptoms that began two weeks ago".
+SYMPTOM_TIME_BEFORE = rx(r'(?:\bsince|\b(?:over|for|in|during|within|throughout)\s+the'
+                         r'|\b(?:start|began|begun|beginning|onset|noted|noticed|develop|worsen|occur|recur)\w*)\s+'
+                         r'(?:(?:about|approximately|roughly|around|nearly)\s+)?$')
 HISTORICAL_CLAUSE = (
     ('ago', rx(r'\b(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|several|many|few)\s+'
                r'(?:days?|weeks?|months?|years?)\s+ago\b|\bago\b')),
+    # Undated, by relative time or by another provider or place: "performed last month", "earlier this year",
+    # "at an outside hospital", "by her previous gastroenterologist", "done elsewhere". "last" is anchored to a
+    # time unit ("the last 5 cm" and "at last" are not history).
+    ('last month', rx(r'\b(?:last|previous)\s+(?:week|month|year|spring|summer|fall|autumn|winter)\b'
+                      r'|\bearlier\s+this\s+(?:week|month|year)\b')),
+    ('elsewhere', rx(r'\b(?:at|from|by)\s+(?:an?\s+|the\s+)?(?:outside|another|other)\s+(?:hospital|facility|'
+                     r'institution|cent(?:er|re)|clinic|practice|gastroenterologist|physician|provider|endoscopist)\b'
+                     r'|\b(?:by|with)\s+(?:her|his|their|the)\s+(?:previous|prior|former|outside|referring|other)\s+'
+                     r'(?:gastroenterologist|physician|provider|doctor|endoscopist|surgeon)\b'
+                     r'|\b(?:performed|done|completed)\s+elsewhere\b')),
     ('in the past', rx(r'\bin\s+the\s+past\b|\byears?\s+before\b|\bformerly\b')),
     ('records reviewed', rx(r'\b(?:reports?|records?|results?|images?)\s+(?:were\s+|was\s+|have\s+been\s+)?reviewed\b'
                             r'|\breview\s+of\s+(?:the\s+)?(?:outside|prior|previous|old)\s+(?:reports?|records?)\b')),

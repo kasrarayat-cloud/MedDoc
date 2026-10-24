@@ -712,6 +712,72 @@ class Status10FormBlockTests(unittest.TestCase):
         self.assertNotIn(read(annotations, 'Cold snare polypectomy: checked')[0], ('planned', 'historical'))
 
 
+STATUS8 = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nIndication: Iron deficiency anemia. An EGD was '
+           'performed last month at an outside hospital; the endoscope was advanced to the second part of the duodenum '
+           'and the mucosa was normal.\nFindings: The colonoscope was advanced to the cecum. A 6 mm polyp in the sigmoid '
+           'colon was removed with a cold snare.\n')
+STATUS8_POLYP = 'A 6 mm polyp in the sigmoid colon was removed with a cold snare.'
+
+
+class Status8UndatedHistoryTests(unittest.TestCase):
+    """status:8 - undated history (relative time, another provider or place) is never today's
+    service, and an explicit performance in an indication section is held unless it says today."""
+
+    def test_the_claimed_input(self):
+        self.assertEqual(family(STATUS8, 'gi.egd'), 'historical')
+        self.assertIsNone(fact_value(STATUS8, 'gi.egd', 'extent'))
+        proposals, _ = run_engine(STATUS8, [('45385', STATUS8_POLYP),
+                                            ('43235', 'An EGD was performed last month at an outside hospital')])
+        self.assertTrue(ready(proposals['45385']))
+        self.assertEqual(proposals['43235'].bucket, 'excluded')
+        _, result = run_engine(STATUS8, [('45385', STATUS8_POLYP)])
+        unproposed = next(c for c in result.encounter_checks if c.id == 'services.unproposed')
+        self.assertNotIn('Upper GI endoscopy', unproposed.detail)
+
+    def test_the_listed_wordings(self):
+        for sentence in ('EGD was done last week at an outside hospital.', 'She underwent EGD last year.',
+                         'EGD was performed earlier this month.', 'EGD was performed by her previous gastroenterologist.',
+                         'She underwent an EGD at an outside facility in August.', 'An EGD was done elsewhere.',
+                         'EGD was performed at another hospital.'):
+            for lead in ('Indication: Anemia. ', 'Comments: Anemia. ', 'Findings: '):
+                text = (HEADER + 'Procedure: Colonoscopy\n' + lead + sentence + '\nFindings: The colonoscope was '
+                        'advanced to the cecum.\n')
+                with self.subTest(lead=lead, sentence=sentence):
+                    self.assertEqual(family(text, 'gi.egd'), 'historical')
+                    self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+    def test_an_unlisted_wording_in_an_indication_is_held(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nIndication: Anemia. An EGD was performed in August; the endoscope was '
+                'advanced to the duodenum.\nFindings: The colonoscope was advanced to the cecum.\n')
+        self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+        self.assertIsNone(fact_value(text, 'gi.egd', 'extent'))
+        proposals, _ = run_engine(text, [('43235', 'An EGD was performed in August')])
+        self.assertNotEqual(proposals['43235'].status, 'ready')
+
+    def test_controls_stay_performed(self):
+        for text, slug in (
+                (HEADER + 'Procedure: EGD performed today.\nFindings: The gastroscope was advanced to the duodenum.\n', 'gi.egd'),
+                (HEADER + 'Indication: Dysphagia. EGD was performed today for food impaction.\n', 'gi.egd'),
+                (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Bleeding over the '
+                          'past week was from a polyp, which was removed with a cold snare.\n', 'gi.colonoscopy'),
+                (HEADER + 'Procedure: Colonoscopy for rectal bleeding since last month.\n', 'gi.colonoscopy'),
+                (HEADER + 'Procedure: Colonoscopy for bleeding that started two weeks ago.\n', 'gi.colonoscopy'),
+                (HEADER + 'Procedure: Colonoscopy for anemia noted over the last year.\n', 'gi.colonoscopy')):
+            with self.subTest(text=text):
+                self.assertEqual(family(text, slug), 'performed')
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A polyp was removed '
+                'with a cold snare.\n')
+        self.assertTrue(ready(run_engine(text, [('45385', 'A polyp was removed with a cold snare.')])[0]['45385']))
+        self.assertEqual(family(HEADER + 'Colonoscopy five years ago was normal.\n', 'gi.colonoscopy'), 'historical')
+
+    def test_an_office_visit_statement_in_an_indication_still_counts(self):
+        text = (HEADER + 'Reason for visit: Established patient office visit was completed for reflux.\n'
+                'Medical decision making: low.\n')
+        self.assertEqual(family(text, 'gi.office_em'), 'performed')
+        visit = next(m for m in routed(text).finding('gi.office_em').mentions if m.span.text == 'office visit')
+        self.assertEqual(visit.status, 'performed', visit.cues)
+
+
 BOXED = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
          'was found.\nInterventions performed\n')
 

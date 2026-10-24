@@ -684,7 +684,10 @@ def _stop_word(an: Analysis, word: re.Match, limit: int, first: bool, procedure:
         return said
     if lowered == 'last':
         unit = _TIME_UNIT.match(text, word.end(), limit)
-        return said + unit.group(0) if unit and previous not in _DETERMINERS else None
+        if unit is None or previous in _DETERMINERS \
+                or cues.SYMPTOM_TIME_BEFORE.search(text, max(0, word.start() - 40), word.start()):
+            return None  # "the last 5 cm", "bleeding since last month": not the service's time
+        return said + unit.group(0)
     if lowered == 'outside':
         place = _OUTSIDE_PLACE.match(text, word.end(), limit)
         return said + place.group(0) if place else None
@@ -934,6 +937,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             status, doubt = _abort_status(an, cue)
         if cue.name in ('terminated', 'stopped') and cues.MEDICATION.search(words):
             continue
+        if cue.name in ('ago', 'last month') and cues.SYMPTOM_TIME_BEFORE.search(text, max(cs, cue.start - 40), cue.start):
+            continue  # "bleeding since last month": the symptom's time, not the service's
         if _attached(spans, index, cue.start, cue.end):
             label = (f'uncertain: {cue.text}, with no statement whether the procedure had started' if doubt
                      else f'{status}: {cue.text}')
@@ -988,7 +993,12 @@ def _section_label(section) -> str:
     return f'section: {section.kind}{heading}'
 
 
-def _cue_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
+def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
+    """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
+    a history section (uncertain if its clause says today), uncertain in a plan section, and uncertain in an
+    indication section unless its clause says today: an indication tells why today's service is done, or
+    its prior work-up ("An EGD was performed in August"), so a past-tense performance there is held, never
+    performed. ``em``: an E/M documentation mention, which the indication rule does not concern."""
     found = []
     for clause in an.lay.clauses_for(start, end):
         found.extend(_clause_reading_cues(an, clause, start, end))
@@ -1003,6 +1013,9 @@ def _cue_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain' if today else 'historical', deciding + (_section_label(section),), 'cue')
     if status == 'performed' and section.kind == 'plan':
+        return Reading('uncertain', deciding + (_section_label(section),), 'cue')
+    if status == 'performed' and section.kind == 'indication' and not em \
+            and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
         return Reading('uncertain', deciding + (_section_label(section),), 'cue')
     return Reading(status, deciding, 'cue', past, doubt)
 
@@ -1731,7 +1744,7 @@ def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
 
 
 def _em_base_reading(an: Analysis, m: Mention) -> Reading:
-    cue = _cue_reading(an, m.start, m.end)
+    cue = _cue_reading(an, m.start, m.end, em=True)
     if cue and cue.status != 'performed':
         return cue
     if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
