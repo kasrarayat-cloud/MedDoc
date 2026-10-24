@@ -153,7 +153,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     finding = routing.finding(selection.family) if selection.family in DETECTED_FAMILIES else None
     own = checks.evidence_readings(text, kept, day)
     if selection.family == OTHER_GI:
-        own = _unnamed_other(own, text, routing, day)
+        own = _unnamed_other(own, text, routing, day, code)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing)
     own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing, text) else r
@@ -163,23 +163,39 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
 
 
-def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingResult,
-                   day: Optional[date]) -> tuple[checks.Reading, ...]:
+def _VAL_overlap_test(intervals):
+    """A test of whether [start, end) overlaps any of the (start, end) intervals: two bisections per question (the
+    intervals starting before ``end``, less those ending by ``start``), never a scan."""
+    starts = sorted(s for s, _ in intervals)
+    ends = sorted(e for _, e in intervals)
+    return lambda start, end: bisect.bisect_left(starts, end) - bisect.bisect_right(ends, start) > 0
+
+
+def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingResult, day: Optional[date],
+                   code: str) -> tuple[checks.Reading, ...]:
     """A gi.other code's linked passages, each positive one that rests on its section alone (or on the office visit's
-    own documentation, checks.states_no_procedure) marked ``unnamed`` unless it names a procedure: a routed gi.other
-    mention read as done lies in it, or it names one by routing's form rule (checks.names_procedure). "Grade 2 internal
-    hemorrhoids were seen on retroflexion." under Findings reads performed only because of its section, and
-    "Established patient office visit." as E/M documentation; neither documents a banding or an anoscopy, so neither
-    is evidence that the code's procedure was done. Routing's gi.other finding still never decides the code's status
-    (it may be another procedure): only a mention inside the code's own passage counts, and only as the name of a
-    procedure."""
+    own documentation, checks.states_no_procedure) marked ``unnamed`` unless it documents the code's own procedure as
+    done (round 4 validation:2, validation:3, evidence:0, release:11): a routed gi.other mention read as done lies in
+    it, or it lies in the first sentence of a procedure section whose routed mention is read as done - in both, a
+    mention whose name is the code's own procedure (checks._VAL_owns, by the gi.other number ranges) - or it states
+    the code's own act today (checks.names_procedure). "Grade 2 internal hemorrhoids were seen on retroflexion." and
+    "Banding sites well healed." under Findings read performed only because of their section, "Established patient
+    office visit was performed today." as E/M documentation, and "Anoscopy showed grade 3 internal hemorrhoids." names
+    another procedure for 46221: none is evidence that the code's procedure was done. Fail-closed: an unnamed passage
+    holds the code (section_only), never excludes it. Routing's gi.other finding still never decides the code's status
+    (it may be another procedure). Indexed once per code: each passage costs a few bisections."""
+    if not any(r.status in checks.POSITIVE and checks.states_no_procedure(r) for r in own):
+        return own
     other = routing.finding(OTHER_GI)
-    done = [m.span for m in (other.mentions if other else ()) if m.status in checks.POSITIVE]
+    done = [m for m in (other.mentions if other else ())
+            if m.status in checks.POSITIVE and checks._VAL_owns(code, m.span.text)]
+    names = _VAL_overlap_test([(m.span.start, m.span.end) for m in done])
+    opened = _VAL_overlap_test([sentence for sentence in checks._VAL_opening_sentences(text, day) if names(*sentence)])
     marked = []
     for reading in own:
         if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
-                and not any(span.start < reading.end and reading.start < span.end for span in done)
-                and not checks.names_procedure(text, reading.start, reading.end, day)):
+                and not names(reading.start, reading.end) and not opened(reading.start, reading.end)
+                and not checks.names_procedure(text, reading.start, reading.end, code, day)):
             reading = replace(reading, unnamed=True)
         marked.append(reading)
     return tuple(marked)

@@ -230,14 +230,184 @@ class CoverageCostTests(Case):
     It is indexed once per assessment now."""
 
     def test_many_mentions_and_many_spans_assess_in_bounded_time(self):
-        lines, words = 8000, 4000
-        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
-                + 'Anoscopy was performed today.\n' * lines + 'Assessment: ' + ' '.join(['stable'] * words)
-                + '.\nTotal time: 32 minutes.\n')
-        first = text.index('Assessment: ') + len('Assessment: ')
-        visit = text.index(VISIT)
-        elapsed, result = assess_timed(text, ('99213', [(visit, visit + len(VISIT))]),
-                                       ('91010', [(first + 7 * n, first + 7 * n + 6) for n in range(words)]))
-        self.assertLess(elapsed, 6.0)  # 11.5 s with the per-mention scan, about 1.6 s indexed
-        unproposed = next(c for c in result.encounter_checks if c.id == 'services.unproposed')
-        self.assertIn('Possible missed service: Other GI service (“Anoscopy”)', unproposed.detail)
+        # Under Assessment the one-word passages read silent; under an MDM heading each reads performed by its
+        # section, so each is also read for the code's own procedure (engine._unnamed_other, round 4 validation:9's
+        # sibling loops: past 120 s at the start commit).
+        lines, words = 8000, 10000
+        for heading in ('Assessment: ', 'Medical decision making: '):
+            with self.subTest(heading=heading):
+                text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                        + 'Anoscopy was performed today.\n' * lines + heading + ' '.join(['stable'] * words)
+                        + '.\nTotal time: 32 minutes.\n')
+                first = text.index(heading) + len(heading)
+                visit = text.index(VISIT)
+                elapsed, result = assess_timed(text, ('99213', [(visit, visit + len(VISIT))]),
+                                               ('91010', [(first + 7 * n, first + 7 * n + 6) for n in range(words)]))
+                self.assertLess(elapsed, 10.0)  # 25 s or more scanning per mention or per passage; about 3.5 s now
+                unproposed = next(c for c in result.encounter_checks if c.id == 'services.unproposed')
+                self.assertIn('Possible missed service: Other GI service (“Anoscopy”)', unproposed.detail)
+
+
+# --- validation:2, validation:3, evidence:0, release:11: a gi.other code needs its own procedure named as done -----
+
+FOLLOW_UP = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+             'Chief complaint: follow-up after hemorrhoid banding.\nFindings: {line}\nMedical decision making: moderate.\n'
+             'Total time: 32 minutes.\n')
+OFFICE_DECLINED = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                   'Chief complaint: rectal bleeding.\n{body}\nMedical decision making: moderate.\n'
+                   'Total time: 32 minutes.\n')
+DECLINED = 'Procedure: Anoscopy - patient declined.'
+COLONOSCOPY = (HEAD + 'Procedure: Colonoscopy\nIndication: Average-risk screening.\nFindings: The colonoscope was '
+               'advanced to the cecum. The colon was normal. {line}\nImpression: Normal colonoscopy.\n'
+               'Plan: Repeat colonoscopy in 10 years.\n')
+CECUM = 'The colonoscope was advanced to the cecum.'
+
+
+class OwnProcedureNamedTests(Case):
+    """validation:2, validation:3, evidence:0 and release:11 (critical, under-corrections of round 3 validation:0). A
+    gi.other code was ready from a passage read performed only by its section (or as the office visit's own
+    documentation) whenever its sentence opened with any procedure word or held an act participle: a healed banding
+    site, a prior or future banding, a hemorrhoidectomy scar, a declined or deferred banding, the visit statement
+    worded with "was performed", or another procedure's findings. Such a passage now counts only when a routed gi.other
+    mention read as done lies in it, an explicit act is stated today, or it is the first sentence of a procedure section
+    whose routed mention is read as done - and the procedure that counts must be the code's own (by the gi.other
+    number ranges). Anything else holds (section_only), never excludes."""
+
+    def assertSectionOnly(self, item, passage):
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'),
+                         [c.detail for c in item.checks])
+        self.assertIn('performed_status', [c.fact for c in item.clarifications])
+        status = check_of(item, 'service.status')
+        self.assertEqual(status.status, 'warn')
+        self.assertNotIn('Documented as performed', status.detail)
+        self.assertIn(f'“{passage}”', status.detail)
+        self.assertIn('names no procedure', status.detail)
+
+    def test_validation2_a_follow_up_finding_names_no_banding_done(self):
+        for line, code in (('Banding sites well healed.', '46221'),
+                           ('The hemorrhoids that were banded at the first session have resolved.', '46221'),
+                           ('The internal hemorrhoids we banded have resolved.', '46221'),
+                           ('Ligation sites are healed.', '46221'),
+                           ('Post-banding ulcer at the right posterior column, healing.', '46221'),
+                           ('Hemorrhoidectomy scar noted.', '46221'), ('Hemorrhoidectomy scar noted.', '46250'),
+                           # each guard of the stated act on its own: another time no routing cue reads (no today),
+                           # a relative clause that says today, "we" after the sentence's own subject
+                           ('Internal hemorrhoids were banded at the first session.', '46221'),
+                           ('The hemorrhoid that was banded at her first session bled again today.', '46221'),
+                           ('The hemorrhoids we banded at the first session bled again today.', '46221')):
+            with self.subTest(line=line, code=code):
+                proposals, _ = real(FOLLOW_UP.format(line=line), (code, line))
+                self.assertSectionOnly(proposals[code], line)
+
+    def test_validation2_a_procedure_line_that_is_not_done(self):
+        for body, line in (('Procedure: Rubber band ligation, patient prefers to wait.',
+                            'Rubber band ligation, patient prefers to wait.'),
+                           ('Procedure: Rubber band ligation offered.', 'Rubber band ligation offered.'),
+                           ('Procedure: Rubber band ligation candidate.', 'Rubber band ligation candidate.'),
+                           (f'{DECLINED}\nBanding candidate.', 'Banding candidate.'),
+                           (f'{DECLINED}\nHemorrhoid banding candidate.', 'Hemorrhoid banding candidate.')):
+            with self.subTest(line=line):
+                proposals, _ = real(OFFICE_DECLINED.format(body=body), ('46221', line))
+                self.assertSectionOnly(proposals['46221'], line)
+
+    def test_validation3_a_visit_statement_worded_as_performed_names_no_procedure(self):
+        for visit in ('Established patient office visit was performed today.',
+                      'An established patient office visit was completed today.', 'Office visit performed today.',
+                      'Telehealth video visit was completed.'):
+            text = (HEAD + f'Place of service: Office (POS 11)\n{visit}\nChief complaint: rectal bleeding.\n{DECLINED}\n'
+                    'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+            for code in ('46221', '46600'):
+                with self.subTest(visit=visit, code=code):
+                    proposals, _ = real(text, ('99213', 'Total time: 32 minutes.'), (code, visit))
+                    self.assertSectionOnly(proposals[code], visit)
+                    self.assertIn('only as E/M documentation', check_of(proposals[code], 'service.status').detail)
+                    self.assertVisitHeld(proposals, f'the service reported as {code} is possibly performed', '99213')
+
+    def test_evidence0_a_prior_future_or_descriptive_findings_line(self):
+        for line, code in (('S/p hemorrhoid banding.', '46221'), ('History of hemorrhoid banding.', '46221'),
+                           ('Prior hemorrhoid banding sites were well healed.', '46221'),
+                           ('Previous rubber band ligation sites appeared well healed.', '46221'),
+                           ('Hemorrhoid banding at a later date.', '46221'),
+                           ('Banding candidate: grade 2 internal hemorrhoids.', '46221'),
+                           ('Hemorrhoidectomy scar noted.', '46250'), ('Post-hemorrhoidectomy changes were seen.', '46250'),
+                           ('Prior anoscopy showed grade 2 internal hemorrhoids.', '46600'),
+                           ('Anoscopy findings from her referral were reviewed.', '46600')):
+            with self.subTest(line=line):
+                proposals, _ = real(COLONOSCOPY.format(line=line), ('45378', CECUM), (code, line))
+                self.assertReady(proposals['45378'])
+                self.assertSectionOnly(proposals[code], line)
+
+    def test_evidence0_a_historical_procedure_line_in_an_office_note(self):
+        for line in ('Prior hemorrhoid banding.', 'History of hemorrhoid banding.', 'S/p hemorrhoid banding.'):
+            with self.subTest(line=line):
+                proposals, _ = real(OFFICE_DECLINED.format(body=f'Procedure: {line}'), ('46221', line))
+                self.assertSectionOnly(proposals['46221'], line)
+
+    def test_release11_another_procedure_s_passage_is_not_the_code_s(self):
+        report = (HEAD + 'Procedure: Anoscopy\nFindings: Anoscopy showed grade 3 internal hemorrhoids. Banding was '
+                  'deferred because she takes apixaban.\n')
+        line = 'Anoscopy showed grade 3 internal hemorrhoids.'
+        proposals, _ = real(report, ('46600', line), ('46221', line))
+        self.assertSectionOnly(proposals['46221'], line)
+        proposals, _ = real(report, ('46221', 'Anoscopy\nFindings'))  # the routed anoscopy itself
+        self.assertEqual(proposals['46221'].status, 'needs_clarification')
+        for body, cited, code in (
+                ('Procedure: Anoscopy\nFindings: On anoscopy, there were grade 3 internal hemorrhoids. The patient '
+                 'declined banding.', 'On anoscopy, there were grade 3 internal hemorrhoids.', '46221'),
+                ('Procedure: Anoscopy\nFindings: Anoscopy revealed grade 3 internal hemorrhoids.\nPlan: Rubber band '
+                 'ligation at the next visit.', 'Anoscopy revealed grade 3 internal hemorrhoids.', '46221'),
+                ('Procedure: Anoscopy\nFindings: Anoscopy showed a small anal fissure.',
+                 'Anoscopy showed a small anal fissure.', '45300'),
+                ('Procedure: Anal dilation.\nFindings: Stricture.', 'Anal dilation.', '43450'),  # not the esophagus
+                ('Procedure: Gastrostomy tube replacement.\nFindings: Done.', 'Gastrostomy tube replacement.',
+                 '43760')):  # a range that lists no procedure: never named by a section alone
+            with self.subTest(cited=cited, code=code):
+                proposals, _ = real(HEAD + body + '\n', (code, cited))
+                self.assertSectionOnly(proposals[code], cited)
+        # another act stated today, and a banding in a colonoscopy's own text, are not the code's
+        line = 'The hemorrhoid was cauterized today.'
+        proposals, _ = real(OFFICE_DECLINED.format(body=f'{DECLINED}\n{line}'), ('46221', line))
+        self.assertSectionOnly(proposals['46221'], line)
+        line = 'Internal hemorrhoids were banded today with the colonoscope in retroflexion.'
+        proposals, _ = real(COLONOSCOPY.format(line=line), ('45378', CECUM), ('46221', line))
+        self.assertSectionOnly(proposals['46221'], line)
+
+    def test_controls_the_code_s_own_procedure_named_as_done_stays_ready(self):
+        report = HEAD + 'Procedure: Anoscopy with rubber band ligation of two internal hemorrhoids.\nFindings: Grade 2.\n'
+        boxes = (HEAD + 'Procedure: ☒ Informed consent ☒ Rubber band ligation of two columns\n'
+                 'Findings: Grade 2 internal hemorrhoids.\n')
+        cases = (
+            # a routed gi.other mention read as done, the code's own, lies in the passage (procedure reports)
+            (report, 'Anoscopy with rubber band ligation of two internal hemorrhoids.', '46221'),
+            (report, 'Anoscopy with rubber band ligation of two internal hemorrhoids.', '46600'),
+            (boxes, '☒ Informed consent ☒ Rubber band ligation of two columns', '46221'),
+            (HEAD + 'Procedure: Anoscopy\nFindings: Grade 2.\n', 'Anoscopy', '46600'),
+            # routing's stated-act mention, read done by its findings section (no E/M documented)
+            (HEAD + 'Procedure: Anoscopy\nFindings: Internal hemorrhoids were banded x3.\n',
+             'Internal hemorrhoids were banded x3.', '46221'),
+            (HEAD + 'Procedure: Esophageal dilation with a 54 Fr bougie.\nFindings: Stricture.\n',
+             'Esophageal dilation with a 54 Fr bougie.', '43450'),
+            (HEAD + 'Procedure: Rigid proctosigmoidoscopy.\nFindings: Normal.\n', 'Rigid proctosigmoidoscopy.', '45300'),
+            (HEAD + 'Procedure: Liver biopsy.\nFindings: Two cores.\n', 'Liver biopsy.', '47000'),
+            (HEAD + 'Procedure: Paracentesis.\nFindings: 3 L removed.\n', 'Paracentesis.', '49082'),
+            # the first sentence of a procedure section whose routed mention, the code's own, is read as done
+            (HEAD + 'Procedure: Rubber band ligation, three columns.\nFindings: Grade 2.\n', 'three columns', '46221'),
+            # an explicit act stated today (office notes)
+            (OFFICE_DECLINED.format(body=f'{DECLINED}\nInternal hemorrhoids were banded x3 today.'),
+             'Internal hemorrhoids were banded x3 today.', '46221'),
+            (OFFICE_DECLINED.format(body=f'{DECLINED}\nTwo internal hemorrhoids were banded today without '
+                                         'complication.'),
+             'Two internal hemorrhoids were banded today without complication.', '46221'),
+            (OFFICE_DECLINED.format(body=f'{DECLINED}\nToday we banded two internal hemorrhoids.'),
+             'Today we banded two internal hemorrhoids.', '46221'),
+            (OFFICE_DECLINED.format(body=f'{DECLINED}\nInternal hemorrhoids were banded x3 today.'),
+             'Internal hemorrhoids', '46221'),
+            # an explicit performance cue is not a section-only reading (unchanged)
+            (OFFICE_DECLINED.format(body=f'{DECLINED}\nRubber band ligation x3 completed today.'),
+             'Rubber band ligation x3 completed today.', '46221'),
+        )
+        for text, passage, code in cases:
+            with self.subTest(passage=passage, code=code):
+                proposals, _ = real(text, (code, passage))
+                self.assertReady(proposals[code])
+                self.assertEqual(check_of(proposals[code], 'service.status').status, 'pass')

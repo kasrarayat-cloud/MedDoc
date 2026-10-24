@@ -188,12 +188,10 @@ class Validation0SectionOnlyOtherCodeTests(Case):
             with self.subTest(fragment=fragment):
                 proposals, _ = real(OFFICE_OTHER.format(body=f'{DECLINED}\n{line}'), ('46221', fragment))
                 self.assertHeldUnnamed(proposals['46221'], fragment)
-        for line, fragment in (('Rubber band ligation of a grade 2 internal hemorrhoid x1.',
-                                'grade 2 internal hemorrhoid x1'),
-                               ('Internal hemorrhoids were banded x3 today.', 'Internal hemorrhoids')):
-            with self.subTest(fragment=fragment):
-                proposals, _ = real(OFFICE_OTHER.format(body=f'{DECLINED}\n{line}'), ('46221', fragment))
-                self.assertEqual(proposals['46221'].status, 'ready')
+        # the stated act's sentence names the banding done today, whatever fragment is cited
+        proposals, _ = real(OFFICE_OTHER.format(body=f'{DECLINED}\nInternal hemorrhoids were banded x3 today.'),
+                            ('46221', 'Internal hemorrhoids'))
+        self.assertEqual(proposals['46221'].status, 'ready')
 
     def test_controls_a_detected_family_code_citing_the_same_passage_is_held_as_before(self):
         proposals, _ = real(COLONOSCOPY_A, ('45330', RETROFLEXION), ('43239', RETROFLEXION))
@@ -202,7 +200,7 @@ class Validation0SectionOnlyOtherCodeTests(Case):
 
     def test_controls_a_passage_that_names_or_states_the_procedure_stays_ready(self):
         cases = (
-            # af35d0ed0's real-routing control: the act stated by its participle
+            # af35d0ed0's real-routing control: the act stated by its participle, today
             (f'{DECLINED}\nInternal hemorrhoids were banded x3 today.', 'Internal hemorrhoids were banded x3 today.',
              '46221'),
             (f'{DECLINED}\nTwo internal hemorrhoids were banded today without complication.',
@@ -213,20 +211,6 @@ class Validation0SectionOnlyOtherCodeTests(Case):
             (f'{DECLINED}\nRubber band ligation x3 completed today.', 'Rubber band ligation x3 completed today.',
              '46221'),
             (f'{DECLINED}\nBands were placed on three columns.', 'Bands were placed on three columns.', '46221'),
-            # the routing:4 verifier's control G: the procedure named in its section
-            (f'{DECLINED}\nRubber band ligation of a grade 2 internal hemorrhoid x1.',
-             'Rubber band ligation of a grade 2 internal hemorrhoid x1.', '46221'),
-            ('Procedure: Anoscopy with rubber band ligation of two internal hemorrhoids.',
-             'Anoscopy with rubber band ligation of two internal hemorrhoids.', '46221'),
-            ('Procedure: Anoscopy.\nFindings: Anoscopy revealed grade 2 internal hemorrhoids.',
-             'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
-            ('Procedure: Anoscopy.\nFindings: On anoscopy, grade 2 internal hemorrhoids were seen.',
-             'On anoscopy, grade 2 internal hemorrhoids were seen.', '46600'),
-            ('Procedure: Anoscopy.\n2) Rubber band ligation of two columns.', '2) Rubber band ligation of two columns.',
-             '46221'),
-            ('Procedure: Anoscopy.\n(2) Rubber band ligation of two columns.',
-             '(2) Rubber band ligation of two columns.', '46221'),
-            ('Procedure: Anoscopy.\nThe hemorrhoid was cauterized.', 'The hemorrhoid was cauterized.', '46221'),
         )
         report = HEAD + 'Procedure: \u2612 Informed consent \u2612 Rubber band ligation of two columns\n' \
             'Findings: Grade 2 internal hemorrhoids.\n'
@@ -239,6 +223,36 @@ class Validation0SectionOnlyOtherCodeTests(Case):
                 item = proposals[code]
                 self.assertEqual((item.bucket, item.status), ('selected', 'ready'), [c.detail for c in item.checks])
                 self.assertEqual(check_of(item, 'service.status').status, 'pass')
+
+    def test_round_4_holds_a_section_that_only_names_the_procedure(self):
+        """Round 4 (validation:2, evidence:0, release:11) made the rule fail closed: a section-only passage counts for
+        a gi.other code only when a routed gi.other mention read as done, the code's own procedure, lies in it (or in
+        the first sentence of its procedure section), or the code's own act is stated today. In these office notes
+        routing reads the procedure heading only as uncertain (an office note's heading alone does not establish it),
+        the later lines of a procedure section are no routed mention, and a cauterization is no banding: each is now
+        held (an accepted over-hold, medium), never excluded."""
+        cases = (
+            # the routing:4 verifier's control G: the procedure named in its section, but not as its first sentence
+            (f'{DECLINED}\nRubber band ligation of a grade 2 internal hemorrhoid x1.',
+             'Rubber band ligation of a grade 2 internal hemorrhoid x1.', '46221'),
+            (f'{DECLINED}\nRubber band ligation of a grade 2 internal hemorrhoid x1.', 'grade 2 internal hemorrhoid x1',
+             '46221'),
+            ('Procedure: Anoscopy with rubber band ligation of two internal hemorrhoids.',
+             'Anoscopy with rubber band ligation of two internal hemorrhoids.', '46221'),
+            ('Procedure: Anoscopy.\nFindings: Anoscopy revealed grade 2 internal hemorrhoids.',
+             'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+            ('Procedure: Anoscopy.\nFindings: On anoscopy, grade 2 internal hemorrhoids were seen.',
+             'On anoscopy, grade 2 internal hemorrhoids were seen.', '46600'),
+            ('Procedure: Anoscopy.\n2) Rubber band ligation of two columns.', '2) Rubber band ligation of two columns.',
+             '46221'),
+            ('Procedure: Anoscopy.\n(2) Rubber band ligation of two columns.',
+             '(2) Rubber band ligation of two columns.', '46221'),
+            ('Procedure: Anoscopy.\nThe hemorrhoid was cauterized.', 'The hemorrhoid was cauterized.', '46221'),
+        )
+        for body, passage, code in cases:
+            with self.subTest(passage=passage, code=code):
+                proposals, _ = real(OFFICE_OTHER.format(body=body), (code, passage))
+                self.assertHeldUnnamed(proposals[code], passage)
 
     def test_resolve_status_holds_only_when_every_positive_passage_is_unnamed(self):
         section_only = checks.Reading('performed', ('section: findings (Findings)',), 'evidence', RETROFLEXION,

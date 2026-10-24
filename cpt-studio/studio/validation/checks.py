@@ -7,6 +7,7 @@ sources agree, never states a rule the system does not hold, and reports
 from __future__ import annotations
 
 import bisect
+import functools
 import re
 from collections import Counter
 from dataclasses import dataclass, replace
@@ -292,9 +293,12 @@ def section_default(reading: Reading) -> bool:
 
 def states_no_procedure(reading: Reading) -> bool:
     """A reading that only its section or the office visit's own documentation decided: every cue is a 'section:
-    <kind>' cue or routing's E/M documentation cue, so nothing in the passage states that a procedure was done."""
-    return bool(reading.cues) and all(cue.startswith((SECTION_CUE_PREFIX, EM_DOCUMENTATION_CUE_PREFIX))
-                                      for cue in reading.cues)
+    <kind>' cue or routing's E/M documentation cue, so nothing in the passage states that a procedure was done. A
+    reading that carries the E/M documentation cue is the visit statement's own, so its other 'performed:' cues are the
+    visit's words too ("Established patient office visit was performed today.": round 4 validation:3)."""
+    visit = any(cue.startswith(EM_DOCUMENTATION_CUE_PREFIX) for cue in reading.cues)
+    allowed = (SECTION_CUE_PREFIX, EM_DOCUMENTATION_CUE_PREFIX) + ((PERFORMED_CUE_PREFIX,) if visit else ())
+    return bool(reading.cues) and all(cue.startswith(allowed) for cue in reading.cues)
 
 
 def restated(reading: Reading) -> bool:
@@ -1060,7 +1064,84 @@ def evidence_readings(text: str, spans: Sequence[EvidenceSpan],
 # cues do not read (they read "was ligated", "was dilated", "was injected" and "was resected" themselves).
 _ACT_STATED = re.compile(r'\b(?:was|were|been|we|i)\s+(?:(?!not\b|never\b)[a-z]+\s+)?(?:banded|drained|excised|ablated|'
                          r'cauteri[sz]ed)\b', re.A | re.I)
-_LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[*\u2022])[ \t]+', re.A)  # "2)", "(2)", "2.", "*", a bullet
+# The procedure each number range of the gi.other profile reports (studio.gi.profiles), as (low, high, the patterns a
+# routed name of it holds - every one -, the participle that states its act or ''). Internal and used only to hold: a
+# passage read performed only by its section, or as the visit's own documentation, counts for a gi.other code only
+# through its own procedure (round 4 release:11), and a code in a range listed nowhere here (43752-43761) never counts
+# through such a passage (fail-closed). Never shown as a descriptor.
+_VAL_OWN_PROCEDURES = tuple(
+    (low, high, tuple(re.compile(pattern, re.A | re.I) for pattern in names), act) for low, high, names, act in (
+        ('43450', '43453', (r'\bdilat(?:ion|ation)s?\b', r'\b(?:esophag\w*|bougie\w*|maloney|savary)\b'), ''),
+        ('45300', '45327', (r'\bprocto(?:sigmoido)?scop(?:y|ies)\b',), ''),
+        ('46221', '46250', (r'\b(?:band(?:ed|ing)|ligat(?:ion|ions|ed)|RBL|hemorrhoidectom(?:y|ies))\b',), 'banded'),
+        ('46600', '46615', (r'\banoscop(?:y|ies)\b',), ''),
+        ('47000', '47001', (r'\bliver\b', r'\bbiops(?:y|ies)\b'), ''),
+        ('49082', '49084', (r'\bparacentes[ie]s\b',), ''),
+        ('91010', '91299', (r'\b(?:manometr(?:y|ies)|capsule\s+endoscop(?:y|ies))\b',), ''),
+    ))
+# A relative pronoun right before a stated act: the act is told of something else's subject ("The hemorrhoids that were
+# banded at the first session have resolved."), never stated as this sentence's own.
+_VAL_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who|whom|whose)\s+$', re.A | re.I)
+_VAL_WE_LEAD = 40  # how far back "we" / "I" may follow its clause's start, by at most one word ("Today we banded ...")
+
+
+def _VAL_own_procedure(code: str):
+    """The _VAL_OWN_PROCEDURES entry whose number range holds the code, or None."""
+    return next((entry for entry in _VAL_OWN_PROCEDURES if entry[0] <= code <= entry[1]), None)
+
+
+def _VAL_owns(code: str, name: str) -> bool:
+    """Whether a routed procedure's name is the gi.other code's own procedure (_VAL_OWN_PROCEDURES): "Anoscopy" is
+    46600's and never 46221's. False for a code whose range lists no procedure (fail-closed)."""
+    entry = _VAL_own_procedure(code)
+    return entry is not None and all(pattern.search(name) for pattern in entry[2])
+
+
+@functools.lru_cache(maxsize=4)
+def _VAL_text_index(text: str, service_date: Optional[date]):
+    """Read once per text: (routing's sentence starts, its sentences, the first sentence of each procedure section - as
+    routing's gi.other rule finds it -, and per own act participle the indexes of the sentences that state it explicitly
+    on the date of service, sorted). Bounded: one scan of the text for the act participles, a bounded window each."""
+    from studio.gi import cues as words
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    sentences = an.lay.sentences
+    opening = []
+    for section in an.lay.sections:
+        if section.kind != 'procedure':
+            continue
+        first = detect._SEPARATOR.match(text, section.heading.end if section.heading else section.start,
+                                        section.end).end()
+        index = detect._sentence_index(an, first)
+        if index >= 0 and an.lay.section_at(first) is section:
+            opening.append(sentences[index])
+    detected = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
+    owned = {entry[3] for entry in _VAL_OWN_PROCEDURES if entry[3]}
+    acts: dict[str, list[int]] = {}
+    for m in _ACT_STATED.finditer(text):
+        participle = m.group(0).split()[-1].lower()
+        index = detect._sentence_index(an, m.start())
+        if participle not in owned or index < 0 or _VAL_RELATIVE_BEFORE.search(text, max(0, m.start() - 12),
+                                                                               m.start()):
+            continue
+        clause = detect._clause_at(an, m.start())
+        if m.group(0).split()[0].lower() in ('we', 'i'):
+            # "we" / "I" opens its clause, or follows one word: never a subject written before it ("The internal
+            # hemorrhoids we banded have resolved.")
+            if clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1:
+                continue
+        lo, hi = an.lay.window(clause, m.start(), m.end(), detect.CLAUSE_REACH)
+        sentence = sentences[index]
+        scope = (max(sentence[0], m.start() - detect.CLAUSE_REACH), min(sentence[1], m.end() + detect.CLAUSE_REACH))
+        if words.TODAY.search(text, lo, hi) and not detect._about_a_detected_family(an, *scope, detected):
+            acts.setdefault(participle, []).append(index)
+    return (tuple(s for s, _ in sentences), sentences, tuple(opening),
+            {participle: tuple(sorted(set(found))) for participle, found in acts.items()})
+
+
+def _VAL_opening_sentences(text: str, service_date: Optional[date] = None) -> tuple[tuple[int, int], ...]:
+    """The first sentence of each procedure section, found as routing's gi.other rule finds it (_VAL_text_index)."""
+    return _VAL_text_index(text, service_date)[2]
 
 
 def names_intervention(text: str, start: int, end: int, family: str) -> bool:
@@ -1070,36 +1151,27 @@ def names_intervention(text: str, start: int, end: int, family: str) -> bool:
     return any(family in families and pattern.search(text, start, end) for _, pattern, families in words.INTERVENTIONS)
 
 
-def names_procedure(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
-    """Whether the passage [start, end) names a procedure by routing's gi.other form rule (ARCHITECTURE 5.3): a sentence
-    it lies in opens with a procedure's name (as the first sentence of a procedure section does: "Rubber band ligation
-    of a grade 2 internal hemorrhoid x1", "Anoscopy revealed ...", "On anoscopy, ..."), or states a procedure's act by
-    its participle. Each sentence is read whole, whatever part of it the provider cited: "banding" cut out of "Grade 2
-    internal hemorrhoids, banding candidate." names nothing. Never a name that is an examination, test, sedation,
-    consent or person, one led by a negation, condition or plan word, or one in a passage about a detected family's
-    procedure. Resolved at call time, like ``span_status``: the routing module owns the form rule. Bounded: one name
-    and one participle scan per sentence the passage overlaps."""
-    from studio.gi import detect
-    an = detect._analysis(text, service_date)[0]
-    detected = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
-
-    def free(s: int, e: int, sentence: tuple[int, int]) -> bool:  # not about a detected family's procedure
-        scope = (max(sentence[0], s - detect.CLAUSE_REACH), min(sentence[1], e + detect.CLAUSE_REACH))
-        return not detect._about_a_detected_family(an, *scope, detected)
-
-    sentences = an.lay.sentences
-    for index in range(max(bisect.bisect_right(sentences, (start, 1 << 62)) - 1, 0), len(sentences)):
-        sentence = sentences[index]  # indexed, never sliced: a slice copies every later sentence
-        if sentence[0] >= end:
-            break
-        if sentence[1] <= start:
-            continue
-        marker = _LIST_MARKER.match(text, *sentence)
-        span = detect._procedure_name(an, marker.end() if marker else sentence[0], sentence[1])
-        name = text[span[0]:span[1]] if span else ''
-        if (span and detect._PROCEDURE_WORD.search(name) and not detect._NOT_A_PROCEDURE.search(name)
-                and not detect._NOT_DONE_LED.match(name) and free(*span, sentence)):
-            return True
-        if any(free(m.start(), m.end(), sentence) for m in _ACT_STATED.finditer(text, *sentence)):
-            return True
-    return False
+def names_procedure(text: str, start: int, end: int, code: str, service_date: Optional[date] = None) -> bool:
+    """Whether the passage [start, end) states the gi.other code's own procedure as done today by its act (round 4
+    validation:2, evidence:0, release:11): a sentence it overlaps holds the code's own act participle
+    (_VAL_OWN_PROCEDURES: "banded" for 46221-46250) after an auxiliary or after "we" / "I" (_ACT_STATED), in a clause
+    that says today by routing's own words (cues.TODAY), not right after a relative pronoun ("The hemorrhoids that were
+    banded at the first session have resolved."), with "we" / "I" opening its clause or following one word ("Today we
+    banded two internal hemorrhoids.", never "The internal hemorrhoids we banded have resolved."), and not about a
+    detected family's procedure. A sentence that only opens with a procedure word names nothing done ("Banding sites
+    well healed.", "S/p hemorrhoid banding.", "Hemorrhoidectomy scar noted."): a routed mention read as done must say
+    so (engine._unnamed_other). Each sentence is read whole, whatever part of it the provider cited. Read once per
+    text (_VAL_text_index): each passage costs three bisections."""
+    entry = _VAL_own_procedure(code)
+    if entry is None or not entry[3] or start >= end:
+        return False
+    starts, sentences, _, acts = _VAL_text_index(text, service_date)
+    found = acts.get(entry[3], ())
+    if not found:
+        return False
+    last = bisect.bisect_left(starts, end) - 1  # the last sentence starting before the passage ends
+    first = max(bisect.bisect_right(starts, start) - 1, 0)
+    if first <= last and sentences[first][1] <= start:
+        first += 1  # that sentence ends before the passage starts
+    at = bisect.bisect_left(found, first)
+    return first <= last and at < len(found) and found[at] <= last
