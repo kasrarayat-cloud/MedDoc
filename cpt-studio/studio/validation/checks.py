@@ -179,8 +179,9 @@ class StatusOutcome:
     contrary: Optional[Reading] = None
     incomplete: Optional[Reading] = None
     # uncertain only: 'hedged' (the code's own passage hedges), 'unnamed' (its passage reads as performed but the
-    # document never names the code's service family) or 'unestablished' (its passage reads as performed but routing
-    # names the family only as uncertain; ``contrary`` is that routing reading).
+    # document never names the code's service family), 'unestablished' (its passage reads as performed but routing
+    # names the family only as uncertain; ``contrary`` is that routing reading) or 'contested' (one of its own
+    # passages reads as performed and another hedges; ``decisive`` is the hedge, ``contrary`` the performed one).
     reason: str = ''
 
 
@@ -255,7 +256,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
     - A linked passage that reads as planned / historical / cancelled / negated excludes the code even when
       the family is performed elsewhere (another passage may support a different code of the same family);
       the exclusion stays reinstatable and names the performed mention.
-    - A linked passage that hedges holds the code for clarification; routing never overrides it.
+    - A linked passage that hedges holds the code for clarification; neither routing nor another of the code's own
+      passages reading as performed overrides it, and the hold names both passages.
     - A positive passage cannot establish a family that routing documents only as not performed, nor
       (``detectable``: routing can recognise the family in text) a family the document never names or names only
       as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
@@ -278,6 +280,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
             named = next((r for r in routed if not _silent(r)), None) or _first(routed, ('uncertain',))
             return StatusOutcome('uncertain', own_positive, contrary=named,
                                  reason='unestablished' if routed else 'unnamed')
+        if own_hedged:
+            return StatusOutcome('uncertain', own_hedged, contrary=own_positive, reason='contested')
         return positive(own_positive, contrary=own_negative)
     if own_negative:
         return StatusOutcome('not_performed', own_negative, contrary=routed_positive)
@@ -334,6 +338,11 @@ def exclusion_reason(outcome: StatusOutcome, name: str) -> str:
 
 
 def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
+    if outcome.reason == 'contested' and outcome.decisive and outcome.contrary:
+        # Never "no documentation establishes ... performed": one of the code's own passages says it was.
+        return (f'A linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}, but another linked '
+                f'passage reads as uncertain: {cite(outcome.decisive)}. A passage that hedges holds the code, so '
+                f'{name} is not established as performed as coded on the date of service.')
     reason = f'No documentation establishes that {name} was performed on the date of service.'
     if outcome.reason == 'unnamed' and outcome.decisive:
         reason += (f' The linked passage reads as {outcome.decisive.status} ({cite(outcome.decisive)}), but the '
@@ -350,8 +359,11 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
 
 
 def performed_clarification(outcome: StatusOutcome, name: str, family: str, key: str) -> ClarificationSpec:
-    return ClarificationSpec(scope='proposal', fact='performed_status',
-                             question=f'Confirm whether {name} was performed on the date of service.',
+    question = f'Confirm whether {name} was performed on the date of service.'
+    if outcome.reason == 'contested':
+        question = (f'Confirm whether {name} was performed on the date of service as coded: one of its linked passages '
+                    'reads as uncertain.')
+    return ClarificationSpec(scope='proposal', fact='performed_status', question=question,
                              reason=uncertain_reason(outcome, name), family=family, proposal_key=key)
 
 

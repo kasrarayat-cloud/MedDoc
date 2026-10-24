@@ -351,6 +351,68 @@ CECUM = 'The colonoscope was advanced to the cecum.'
 PLAN_HEDGE = 'Repeat colonoscopy with biopsies if symptoms persist.'
 
 
+class Status13HedgedOwnPassageTests(RealCase):
+    """status:13 — a performed passage beside a hedged passage of the same code holds the code, naming both."""
+
+    def assertContested(self, item, positive, hedge):
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+        status = check_of(item, 'service.status')
+        self.assertEqual(status.status, 'warn')
+        self.assertIn(positive, status.detail)
+        self.assertIn(hedge, status.detail)
+        self.assertFalse(status.detail.startswith('No documentation establishes'), status.detail)
+        (asked,) = [c for c in item.clarifications if c.fact == 'performed_status']
+        self.assertIn(hedge, asked.reason)
+        self.assertIn(positive, asked.reason)
+        self.assertEqual(asked.question, 'Confirm whether Colonoscopy was performed on the date of service as coded: '
+                                         'one of its linked passages reads as uncertain.')
+
+    def test_the_claimed_input_in_either_order(self):
+        text = S13.format(findings='The colon was normal. No biopsies were obtained.')
+        for order in ((CECUM, PLAN_HEDGE), (PLAN_HEDGE, CECUM)):
+            with self.subTest(order=order):
+                proposals, _ = real(text, ('45380', *order))
+                self.assertContested(proposals['45380'], CECUM, PLAN_HEDGE)
+
+    def test_a_hedge_about_today_is_held(self):
+        for hedge in ('It is unclear whether biopsies were taken.', 'Possible biopsy of the ascending colon?'):
+            with self.subTest(hedge=hedge):
+                text = S13.format(findings=f'A 5 mm cecal lesion was seen. {hedge}')
+                proposals, _ = real(text, ('45380', CECUM, hedge))
+                self.assertContested(proposals['45380'], CECUM, hedge)
+
+    def test_control_a_negated_second_passage_is_flagged_not_held(self):
+        """Round 1's rule (a performed passage wins and a contrary linked passage is named) is unchanged."""
+        text = S13.format(findings='The colon was normal. No biopsies were obtained.')
+        proposals, _ = real(text, ('45380', CECUM, 'No biopsies were obtained.'))
+        item = proposals['45380']
+        self.assertEqual(item.status, 'ready')
+        status = check_of(item, 'service.status')
+        self.assertEqual(status.status, 'warn')
+        self.assertIn('Another linked passage reads as negated: “No biopsies were obtained.”', status.detail)
+
+    def test_control_a_single_performed_passage_is_ready(self):
+        proposals, _ = real(S13.format(findings='The colon was normal.'), ('45378', CECUM))
+        self.assertEqual(proposals['45378'].status, 'ready')
+
+
+class Status13ResolveStatusTests(SimpleTestCase):
+    def test_a_hedge_is_never_dropped_and_silence_is_not_a_hedge(self):
+        positive = checks.Reading('performed', ('performed: was advanced',), 'evidence', CECUM)
+        hedged = checks.Reading('uncertain', ('uncertain: if symptoms persist',), 'evidence', PLAN_HEDGE)
+        silent = checks.Reading('uncertain', (SILENT_CUE,), 'evidence', 'The colon was normal.')
+        routed = checks.Reading('performed', ('section: procedure (Procedure)',), 'routing', 'Colonoscopy')
+        for readings in ([positive, hedged, routed], [hedged, positive, routed]):
+            outcome = checks.resolve_status(readings, detectable=True)
+            self.assertEqual((outcome.state, outcome.reason, outcome.decisive, outcome.contrary),
+                             ('uncertain', 'contested', hedged, positive))
+        self.assertEqual(checks.resolve_status([positive, silent, routed], detectable=True).state, 'performed')
+        detail = checks.status_check(checks.resolve_status([positive, hedged, routed], detectable=True),
+                                     'Colonoscopy').detail
+        self.assertIn(f'“{CECUM}”', detail)
+        self.assertIn(f'“{PLAN_HEDGE}”', detail)
+
+
 # --- status:19: other GI services hold the E/M; coverage never claims more than routing covers ----------------
 
 BANDING = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal bleeding.\n'

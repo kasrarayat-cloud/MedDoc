@@ -140,3 +140,20 @@ class Status4ApiTests(MultiEvidenceApiCase, TestCase):
         self.assertEqual(self.decide(encounter_id, '43259', 'approve').status_code, 409)
 
 
+@override_settings(**LIVE)
+class Status13ApiTests(MultiEvidenceApiCase, TestCase):
+    """status:13 — one Corti code with a performed and a hedged evidence passage is not approvable."""
+
+    def test_status13_a_hedged_second_passage_is_not_approvable(self):
+        note = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\nProcedure: Colonoscopy\n'
+                'Findings: The colonoscope was advanced to the cecum. A 5 mm cecal lesion was seen. It is unclear '
+                'whether biopsies were taken.\n')
+        encounter_id = self.run_note(note, ('45380', 'The colonoscope was advanced to the cecum.',
+                                            'It is unclear whether biopsies were taken.'))
+        biopsy = self.proposal(encounter_id, '45380')
+        self.assertEqual((biopsy['status'], biopsy['allowed_actions']), ('needs_clarification', ['reject']))
+        status = next(c for c in biopsy['checks'] if c['id'] == 'service.status')
+        self.assertIn('It is unclear whether biopsies were taken.', status['detail'])
+        self.assertEqual(self.decide(encounter_id, '45380', 'approve').status_code, 409)
+
+
