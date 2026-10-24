@@ -382,7 +382,8 @@ technique, unheaded and other sections a mention that hedges or doubts (never a
 silent one); in assessment, impression, examination, MDM and time sections,
 which weigh a procedure as a plan does, one whose cues are not all routing's own
 hedge words (pending, an abort, anything validation does not read as a hedge),
-whose sentence says today, or that is a downgraded performance statement;
+whose sentence says today near it, or that is a downgraded performance
+statement;
 inside plan, history and indication / chief-complaint sections only an explicit
 performance statement that routing downgraded for its section; and an excluded procedural code whose own passage
 states the act although only the family's document-level reading makes it
