@@ -951,7 +951,7 @@ def _unchecked_option(an: Analysis, start: int, end: int) -> bool:
     if _box_state(an, start, end) == 'off':
         options = _box_denying_options(an, start, end)
         words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, start, end)]
-        return all(_box_option_state(an, start, end, option, words) == 'off' for option in options)
+        return all(state == 'off' for state in _box_option_states(an, start, end, options, words))
     if not _unchecked_state(an, start, end):
         return False
     fields = _form_fields(an)
@@ -981,34 +981,37 @@ _BOX_DONE_OPTION = re.compile(r'\b(?:complete[ds]?|performed|done|finished|accom
                               re.A | re.I)
 
 
-def _box_option_state(an: Analysis, lo: int, hi: int, option: tuple[int, int], words: list) -> Optional[str]:
-    """The state of the box(es) governing the status option at ``option``, one of the option words ``words`` of the
-    status line [lo, hi) (its denying and its completion options): the boxes lead when the line's first box comes before
-    its first option word ("☐ Completed ☒ Cancelled"), and trail when its last box comes after its last option word
-    ("Completed ☐ | Cancelled ☒"; "Procedure cancelled: [ ] Yes [x] No" is a yes/no pair after its one option word).
-    A line that can be read both ways is 'unknown'; None when the line has no box. The option words are what the
-    boxes mark, so a status line is never read by where an item would be."""
+def _box_option_states(an: Analysis, lo: int, hi: int, options: list, words: list) -> list:
+    """The state of the box(es) governing each status option of ``options``, among the option words ``words`` of the
+    status line [lo, hi) (its denying and its completion options): the boxes lead when the line's first box comes
+    before its first option word ("☐ Completed ☒ Cancelled"), and trail when its last box comes after its last option
+    word ("Completed ☐ | Cancelled ☒"; "Procedure cancelled: [ ] Yes [x] No" is a yes/no pair after its one option
+    word). A line that can be read both ways gives 'unknown'; a line with no box gives None. The option words are what
+    the boxes mark, so a status line is never read by where an item would be. One pass over the line's boxes."""
     text = an.text
     _, boxes = _box_tokens(an, lo, hi)
+    if not options:
+        return []
     if not boxes:
-        return None
-    words = _merged(list(words) + [option])
+        return [None] * len(options)
+    words = _merged(list(words) + list(options))
+    word_starts = [w[0] for w in words]
+    box_starts = [b[0] for b in boxes]
     if boxes[0][0] < words[0][0]:
-        before = [b for b in boxes if b[0] < option[1]]
-        if not before:
-            return None
-        run = [before[-1]]
-        for b in reversed(before[:-1]):
-            if not _BOX_RUN_GAP.fullmatch(text, b[1], run[0][0]):
-                break
-            run.insert(0, b)
-        return _run_state(run)
-    if boxes[-1][0] > words[-1][0]:
-        index = next(i for i, (s, e) in enumerate(words) if s <= option[0] < e)
+        found = []
+        for _, option_end in options:
+            index = bisect.bisect_left(box_starts, option_end)
+            found.append(_box_lead_state(text, boxes[max(0, index - BOX_RUN_LIMIT):index], option_end))
+        return found
+    if boxes[-1][0] <= words[-1][0]:
+        return ['unknown'] * len(options)
+    found = []
+    for option_start, _ in options:
+        index = bisect.bisect_right(word_starts, option_start) - 1
         after = words[index + 1][0] if index + 1 < len(words) else hi
-        group = [b for b in boxes if option[0] <= b[0] < after]
-        return _group_state(text, group) if group else None
-    return 'unknown'
+        group = boxes[bisect.bisect_left(box_starts, option_start):bisect.bisect_left(box_starts, after)]
+        found.append(_group_state(text, group) if group else None)
+    return found
 
 
 def _cancels(an: Analysis, start: int, end: int) -> bool:
@@ -1743,6 +1746,9 @@ _BOX_PAREN_ANSWER = re.compile(_BOX_SYMBOLS.BOX_PAREN_ANSWER_PATTERN)
 UNCHECKED = 'negated: an unchecked box'
 BOXES_DISAGREE = 'uncertain: the check boxes for this item disagree'
 BOX_UNREAD = 'uncertain: this item is marked with a box this reader cannot read'
+# An intervention with no box of its own, joined by "with", "w/", "plus" or ";" to a later item whose box is not checked
+# ("Polypectomy with cold snare | ☐"): that box may govern the whole label, so the item is held (structure:16).
+BOX_LATER = 'uncertain: a box later on its line may govern this item'
 # A status reference that a box or an answer keeps from being read as its status (_references): the checked or unread
 # box of another denying option on its line ("[ ] Completed [x] Cancelled [ ] Aborted"), and a status question answered
 # with a denial ("Procedure cancelled: No"). Each is held, never read as cancelled or incomplete.
@@ -1764,6 +1770,7 @@ _LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
 # Boxes written next to each other with only spaces between them ("☒ ☐ Biopsy") are one item's; boxes in cells of
 # their own ("Anoscopy | ☒ | ☐", a flattened "Done | Not done" table) are its options, and the first governs.
 _BOX_RUN_GAP = re.compile(r'[ \t\u00a0]*')
+BOX_RUN_LIMIT = 8  # boxes written next to each other for one item, read back at most (bounds the work per option)
 _CELL_GAP = re.compile(r'[ \t\u00a0|:]*')  # what may open a sentence before its first box ("| ☐")
 _LABEL_COLON = re.compile(r'[ \t\u00a0]*:[ \t\u00a0]*')  # between a label and the box after it ("Biopsy: ☐")
 
@@ -1782,7 +1789,8 @@ def _box_tokens(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
         boxes = [b for b in boxes if not (bisect.bisect_right(starts, b[0]) and
                                           b[1] <= unread[bisect.bisect_right(starts, b[0]) - 1][1])]
     marks = sorted(boxes + unread)
-    return items, sorted(marks + _box_option_marks(an, lo, hi, marks))
+    positional = _box_option_marks(an, lo, hi, marks)
+    return items, sorted(marks + positional) if positional else marks
 
 
 def _box_option_marks(an: Analysis, lo: int, hi: int, marks: list) -> list:
@@ -1792,21 +1800,26 @@ def _box_option_marks(an: Analysis, lo: int, hi: int, marks: list) -> list:
     Cold snare polypectomy"; never "\u25cf Biopsy", "\u25cf Biopsy \u2610" or "H. pylori (-)"). Marks inside brackets
     are the bracketed mark's."""
     text = an.text
+    radios = list(_BOX_RADIO.finditer(text, lo, hi))
+    answers = list(_BOX_PAREN_ANSWER.finditer(text, lo, hi)) if marks or radios else []
+    if not radios and not answers:
+        return []
+    starts = [s for s, _, _ in marks]
 
-    def bracketed(pos):
-        return any(s <= pos < e for s, e, _ in marks)
+    def bracketed(pos):  # inside a box or bracketed mark (marks are sorted and do not overlap)
+        index = bisect.bisect_right(starts, pos) - 1
+        return index >= 0 and pos < marks[index][1]
 
     def opens_its_line(pos):  # read back at most BOX_REACH characters: a line start further back is no opening
         newline = text.rfind('\n', max(0, pos - BOX_REACH), pos)
         return (newline >= 0 or pos <= BOX_REACH) and not text[newline + 1:pos].strip()
 
-    radios = [m for m in _BOX_RADIO.finditer(text, lo, hi) if not bracketed(m.start())]
+    radios = [m for m in radios if not bracketed(m.start())]
     if len(radios) < 2:
         radios = [m for m in radios if marks and not opens_its_line(m.start())]
     found = [(m.start(), m.end(), 'unread') for m in radios]
     if marks or found:
-        found += [(m.start(), m.end(), 'unread') for m in _BOX_PAREN_ANSWER.finditer(text, lo, hi)
-                  if not bracketed(m.start())]
+        found += [(m.start(), m.end(), 'unread') for m in answers if not bracketed(m.start())]
     return found
 
 
@@ -1853,7 +1866,10 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
     followed straight by an item, and no item after a box is the next box's label ("Colonoscopy: [ ] biopsy [x] cold
     snare", "Polypectomy: [ ] cold snare [x] hot snare").
     Otherwise they trail ("Biopsy | ☐ | Cold snare polypectomy | ☒"), and items written after the last box are
-    remarks that no box governs ("... | ☒ | clip placed after polypectomy")."""
+    remarks that no box governs ("... | ☒ | clip placed after polypectomy"). 'both' when the boxes would lead by that
+    rule but the first box does not come straight after the opening label's colon or a linking word, and every box
+    also comes straight after an item ("Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed"): either reading
+    fits, so _box_state holds the items they disagree about (structure:0)."""
     key = ('box-orientation', lo, hi, extra)
     if key not in an.memo:
         text = an.text
@@ -1888,8 +1904,34 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
                         text, _label_end(text, items, index), s):
                     labelled = True
                     break
-            an.memo[key] = 'lead' if followed and (by_service or by_label) and not labelled else 'trail'
+            lead = followed and (by_service or by_label) and not labelled
+            if lead and not _BOX_LEAD_GAP.fullmatch(text, label_end, boxes[0][0]) and _box_trails_fit(text, items, boxes):
+                an.memo[key] = 'both'  # an item the two readings disagree about is held (structure:0, _box_state)
+            else:
+                an.memo[key] = 'lead' if lead else 'trail'
     return an.memo[key]
+
+
+# Where boxes plainly lead the items after them: the first box comes straight after the opening label's colon or a
+# linking word ("Colonoscopy: [ ] biopsy [x] cold snare", "Colonoscopy with ☐ biopsy ☒ cold snare").
+_BOX_LEAD_GAP = re.compile(_BOX_RUN_GAP.pattern + r'(?::|with\b|w/|including\b)' + _BOX_RUN_GAP.pattern, re.I)
+# What may stand between an item and a box that trails it: spaces, a colon or a cell boundary ("Biopsy ☐", "Biopsy: ☐",
+# "Biopsy | ☐").
+_BOX_TRAIL_GAP = re.compile(_BOX_RUN_GAP.pattern + r'(?:[:|]' + _BOX_RUN_GAP.pattern + ')?')
+
+
+def _box_trails_fit(text: str, items: list, boxes: list) -> bool:
+    """Whether every box of a segment (the first of each run) comes straight after an item, so that the boxes may trail
+    their items as well as lead the next ones ("Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed",
+    "Colonoscopy - Biopsy ☐ ...", "Colonoscopy ☒ Biopsy ☐ ..."). Items are sorted and do not overlap."""
+    ends = [e for _, e in items]
+    for i, (s, _, _) in enumerate(boxes):
+        if i and _BOX_RUN_GAP.fullmatch(text, boxes[i - 1][1], s):
+            continue
+        index = bisect.bisect_right(ends, s) - 1
+        if index < 0 or not _BOX_TRAIL_GAP.fullmatch(text, ends[index], s):
+            return False
+    return True
 
 
 def _merged(spans: list) -> list:
@@ -1925,7 +1967,8 @@ def _run_state(run: list) -> str:
 
 def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
     """The state of the box(es) that govern the item at [start, end): 'off', 'on', 'mixed' (boxes for the item that
-    disagree), 'unknown' (a box this reader cannot read), or None when no box governs it. A box governs items on its
+    disagree), 'unknown' (a box this reader cannot read), 'unclear' (a box later on its line may govern it:
+    _box_trail_state), or None when no box governs it. A box governs items on its
     own line or cell (_box_segment), within BOX_REACH of it, before or after them (_box_orientation):
     - boxes lead ("[ ] Biopsy [x] Cold snare polypectomy", "( ) Biopsy", "Checklist: [ ] Biopsy.",
       "Colonoscopy: [ ] biopsy [x] cold snare"): the boxes nearest before the item (or inside the passage) govern it;
@@ -1950,24 +1993,66 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
             orientation = (_box_orientation(an, seg_lo, seg_hi) if is_item
                            else _box_orientation(an, lo, hi, (start, span_end)))
             if orientation == 'lead':
-                before = [b for b in boxes if b[0] < span_end]
-                if before:
-                    run = [before[-1]]
-                    for b in reversed(before[:-1]):
-                        if not _BOX_RUN_GAP.fullmatch(text, b[1], run[0][0]):
-                            break
-                        run.insert(0, b)
-                    result = _run_state(run)
-            else:
-                items = sorted(set(items) | {(start, end)})
-                index = items.index((start, end))
-                label_end = max(span_end, _label_end(text, items, index))
-                after = next((s for s, _ in items if s >= label_end), hi)
-                group = [b for b in boxes if start <= b[0] < after]
-                if group:
-                    result = _group_state(text, group)
+                result = _box_lead_state(text, boxes, span_end)
+            elif orientation == 'trail':
+                result = _box_trail_state(an, items, boxes, start, end, hi)
+            else:  # 'both' (structure:0): the readings agree, or the item is held as boxes that disagree
+                led, trailed = _box_lead_state(text, boxes, span_end), _box_trail_state(an, items, boxes, start, end, hi)
+                if led == trailed or (led in (None, 'on') and trailed in (None, 'on')):
+                    result = led or trailed
+                else:
+                    result = 'mixed'
         an.memo[key] = result
     return an.memo[key]
+
+
+def _box_lead_state(text: str, boxes: list, span_end: int) -> Optional[str]:
+    """Leading boxes: the state of the boxes nearest before the item (or inside the passage) ending at ``span_end``,
+    with the boxes written next to them."""
+    before = [b for b in boxes if b[0] < span_end]
+    if not before:
+        return None
+    run = [before[-1]]
+    for b in reversed(before[:-1]):
+        if not _BOX_RUN_GAP.fullmatch(text, b[1], run[0][0]):
+            break
+        run.insert(0, b)
+    return _run_state(run)
+
+
+# What joins an intervention to a later item of the same label without making them one label ("Polypectomy with cold
+# snare", "Biopsy; polypectomy", "Biopsy plus polypectomy"): a box after the later item may govern both (structure:16).
+_BOX_LINK = re.compile(r'[ \t]*(?:with\b|w/|plus\b|;)[ \t]*', re.I)
+
+
+def _box_trail_state(an: Analysis, items: list, boxes: list, start: int, end: int, hi: int) -> Optional[str]:
+    """Trailing boxes: the state of the boxes after the label of the item at [start, end), before the next item (a
+    yes/no pair read by the option it marks). An intervention with no box of its own, joined by _BOX_LINK words to a
+    later item whose own box is not checked, is 'unclear' (BOX_LATER): that box may govern the whole label. A service
+    name is described by its interventions ("Colonoscopy with biopsy ☐"), as round 3b pinned, so it is not held."""
+    text, span_end = an.text, max(end, start + 1)
+    items = sorted(set(items) | {(start, end)})
+    index = items.index((start, end))
+    label_end = max(span_end, _label_end(text, items, index))
+    after = next((s for s, _ in items if s >= label_end), hi)
+    group = [b for b in boxes if start <= b[0] < after]
+    if group:
+        return _group_state(text, group)
+    if an.services_in(start, span_end):
+        return None
+    item_starts = [s for s, _ in items]
+    first = bisect.bisect_left(item_starts, label_end)
+    for later in range(first, min(len(items), first + OTHER_BOX_ITEMS)):  # a label joins few items (bounds the work)
+        later_start = items[later][0]
+        if not _BOX_LINK.fullmatch(text, label_end, later_start):
+            return None
+        label_end = max(items[later][1], _label_end(text, items, later))
+        after_index = bisect.bisect_left(item_starts, label_end)
+        later_after = items[after_index][0] if after_index < len(items) else hi
+        later_group = [b for b in boxes if later_start <= b[0] < later_after]
+        if later_group:
+            return None if _group_state(text, later_group) in (None, 'on') else 'unclear'
+    return None
 
 
 def _unchecked_box(an: Analysis, start: int, end: int) -> bool:
@@ -2179,6 +2264,8 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     named = _within(fields.named, fields.named_starts, start, end) if an.text.find('\n', start, end) < 0 else None
     if state == 'unknown':
         return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
+    if state == 'unclear':
+        return Reading('uncertain', (BOX_LATER,), 'cue', doubt=True)
     if state == 'mixed' or (named is not None and (named.state == 'mixed' or state not in (None, named.state))):
         return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
     if state == 'off' or _unchecked_state(an, start, end):
@@ -2204,7 +2291,7 @@ def _names_an_item(an: Analysis, start: int, end: int) -> bool:
                                                                               end + OTHER_NAME_REACH))
 
 
-BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0])  # the cues of the holds above
+BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0], BOX_LATER)  # the cues of the holds above
 
 
 # The line above ends in a complete answer or refusal of its own: a field answered by a bare denial ("Schatzki ring
@@ -2244,7 +2331,7 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
     """A hold for the status option at [start, end) that its own box reading left unchecked ("[ ] Aborted") when its
     line selects a denying option, itself or another ("[ ] Completed [x] Cancelled [ ] Aborted", "Completed ☐ |
     Aborted ☒"): a checked, disagreeing or unread box on a denying option makes the line a statement (routing:0), held
-    and never read as that status (_box_option_state). None when every denying option of the line is unchecked. The
+    and never read as that status (_box_option_states). None when every denying option of the line is unchecked. The
     line is read within BOX_REACH of the option."""
     text = an.text
     lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
@@ -2252,9 +2339,8 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
     hi = min(len(text), end + BOX_REACH) if newline < 0 else newline
     options = _box_denying_options(an, lo, hi)
     words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
-    for option in options:
-        if _box_option_state(an, lo, hi, option, words) not in (None, 'off'):
-            return Reading('uncertain', (BOX_STATUS_OPTION.format(' '.join(text[lo:hi].split())),), 'cue', doubt=True)
+    if any(state not in (None, 'off') for state in _box_option_states(an, lo, hi, options, words)):
+        return Reading('uncertain', (BOX_STATUS_OPTION.format(' '.join(text[lo:hi].split())),), 'cue', doubt=True)
     return None
 
 

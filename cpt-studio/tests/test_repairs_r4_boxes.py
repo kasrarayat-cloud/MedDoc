@@ -255,6 +255,97 @@ class Structure15BothOptionsCheckedTests(BoxCase):
         self.assert_outcome(BOXED + 'Biopsy taken: ☐ Yes ☒ No\nCold snare polypectomy ☒\n', '45380', 'Biopsy', 'excluded')
 
 
+class Structure0RemarkAfterTheLastBoxTests(BoxCase):
+    """structure:0 (critical). Under a service or a label, a remark written after the last box made the boxes lead, so the
+    unchecked biopsy was ready and the checked polypectomy excluded. Where the boxes can be read both as leading and as
+    trailing their items, an item the two readings disagree about is held (BOXES_DISAGREE)."""
+    ROWS = ('Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed',
+            'colonoscopy: biopsy [ ] cold snare polypectomy [x] clip placed',
+            'Colonoscopy - Biopsy ☐ Cold snare polypectomy ☒ clip placed',
+            'Colonoscopy ☒ Biopsy ☐ Cold snare polypectomy ☒ clip placed',
+            'Colonoscopy\tBiopsy ☐\tCold snare polypectomy ☒\tclip placed',
+            'Colonoscopy: Biopsy ☐ Cold snare polypectomy [x] tattoo placed distal to the site',
+            'Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒  polypectomy site clipped',
+            'Colonoscopy with Biopsy ☐ Cold snare polypectomy ☒ clip placed')
+
+    def test_the_claimed_rows(self):
+        for row in self.ROWS:
+            with self.subTest(row=row):
+                text = S0_NOTE.format(row=row)
+                biopsy = 'biopsy' if 'biopsy [' in row else 'Biopsy'
+                snare = 'cold snare polypectomy' if 'cold snare' in row else 'Cold snare polypectomy'
+                self.assertNotEqual(read(text, biopsy)[0], 'performed')
+                self.assertNotEqual(read(text, snare)[0], 'negated')
+                self.assert_outcome(text, '45380', biopsy, ('held', 'excluded'))
+                self.assert_outcome(text, '45385', snare, ('held', 'ready'))
+
+    def test_items_both_readings_agree_on_are_not_held(self):
+        for row in ('Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed',
+                    'Colonoscopy ☒ Biopsy ☐ Cold snare polypectomy ☒ clip placed'):
+            with self.subTest(row=row):
+                text = S0_NOTE.format(row=row)
+                self.assertEqual(read(text, 'Colonoscopy', 1)[0], 'performed')
+                self.assertEqual(read(text, 'clip')[0], 'performed')
+
+    def test_the_egd_row(self):
+        text = S0_NOTE.format(row='EGD: Biopsy ☐ Balloon dilation ☒ dilation to 15 mm')
+        self.assertNotEqual(read(text, 'Biopsy')[0], 'performed')
+        self.assertNotEqual(read(text, 'Balloon dilation')[0], 'negated')
+
+    def test_rows_with_one_reading_are_unchanged(self):
+        for row, biopsy, snare in (('Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒', 'negated', 'performed'),
+                                   ('Colonoscopy: [ ] biopsy [x] cold snare', 'negated', 'performed'),
+                                   ('Colonoscopy with ☐ biopsy ☒ cold snare', 'negated', 'performed'),
+                                   ('Polypectomy: [ ] biopsy [x] cold snare', 'negated', 'performed'),
+                                   ('☐ Biopsy ☒ Cold snare polypectomy | clip placed', 'negated', 'performed'),
+                                   ('Biopsy | ☐ | Cold snare polypectomy | ☒ | clip placed', 'negated', 'performed'),
+                                   ('Biopsy: [ ] Cold snare polypectomy: [x] clip placed', 'negated', 'performed'),
+                                   ('Colonoscopy: ☐ biopsy: sigmoid ☒ cold snare', 'negated', 'performed'),
+                                   ('Colonoscopy, ☐ biopsy ☒ cold snare', 'negated', 'performed')):
+            with self.subTest(row=row):
+                text = S0_NOTE.format(row=row)
+                b = 'biopsy' if 'biopsy' in row and 'Biopsy' not in row else 'Biopsy'
+                s = 'cold snare' if 'cold snare' in row else 'Cold snare polypectomy'
+                self.assertEqual((read(text, b)[0], read(text, s)[0]), (biopsy, snare))
+
+
+class Structure16TrailingBoxAfterAJoinedLabelTests(BoxCase):
+    """structure:16 (critical). A trailing box after 'Polypectomy with cold snare' governed only 'cold snare', so the
+    polypectomy under the unchecked box was ready. An intervention with no box of its own, joined by 'with', 'w/', ';' or
+    'plus' to a later item whose box is not checked, is held (the box later on its line may govern it)."""
+    ROWS = (('Polypectomy with cold snare | ☐', 'Polypectomy', '45385'),
+            ('Cold snare polypectomy with clip placement | ☐', 'Cold snare polypectomy', '45385'),
+            ('Hot snare polypectomy with hemoclip: [ ]', 'Hot snare polypectomy', '45385'),
+            ('Polypectomy with cold snare: ☐', 'Polypectomy', '45385'),
+            ('Polypectomy with cold snare ☐', 'Polypectomy', '45385'),
+            ('Biopsy; polypectomy | ☐', 'Biopsy', '45380'),
+            ('Biopsy plus polypectomy: ☐', 'Biopsy', '45380'),
+            ('Polypectomy w/ cold snare | ☐', 'Polypectomy', '45385'))
+
+    def test_the_claimed_rows_never_ready_the_first_item(self):
+        for row, phrase, code in self.ROWS:
+            with self.subTest(row=row):
+                text = BOXED + row + '\n'
+                self.assertEqual(self.assert_held_reading(text, phrase), (detect.BOX_LATER,))
+                self.assert_outcome(text, code, phrase, 'held')
+
+    def test_a_checklist_of_joined_labels(self):
+        text = BOXED + 'Biopsy with cold forceps: ☐\nPolypectomy with cold snare: ☐\nNone: ☒\n'
+        self.assert_outcome(text, '45385', 'Polypectomy', 'held')
+        self.assert_outcome(text, '45380', 'Biopsy', ('held', 'excluded'))  # 'cold forceps' is no item: the box is its
+
+    def test_controls(self):
+        self.assert_outcome(BOXED + 'Polypectomy with cold snare | ☒\n', '45385', 'Polypectomy', 'ready')
+        self.assert_outcome(BOXED + 'Polypectomy | ☐\n', '45385', 'Polypectomy', 'excluded')
+        self.assert_outcome(BOXED + 'Polypectomy with cold snare\n', '45385', 'Polypectomy', 'ready')
+        # a service name opening the line is described with its intervention, as round 3b pinned
+        text = HEADER + 'Procedure: Colonoscopy with biopsy ☐\nFindings: The colonoscope was advanced to the cecum.\n'
+        self.assertEqual((read(text, 'Colonoscopy')[0], read(text, 'biopsy')[0]), ('performed', 'negated'))
+        for row in ('Biopsy | ☐ | Cold snare polypectomy | ☒ | clip placed', 'Colonoscopy: ☒ Biopsy: ☐'):
+            with self.subTest(row=row):
+                self.assertEqual(read(BOXED + row + '\n', 'Biopsy')[0], 'negated')
+
+
 # --- structure:10 / contract:6 -- a mark outside both lists is unread, never passed over --------------------------------
 
 class Structure10UnreadMarkTests(BoxCase):
