@@ -370,3 +370,50 @@ test('an agent reinstatement behind a human decision labels the reviewed export 
   doc.assessment.proposals[0].reinstated_by.reviewer_kind = 'human';
   assert.equal(app.hasAgentDecision(doc), false);
 });
+
+// --- round 4: a documentation check's exclusion is a recommendation the reviewer confirms or reverses ---
+
+function excludedDoc(overrides) {
+  const doc = fixture('encounter-ready.json');
+  const base = doc.assessment.proposals[0];
+  const excluded = { ...base, id: UUID, code: '45378', bucket: 'excluded', status: 'excluded', reinstatable: true,
+    exclusion_reason: 'Documented as planned, not as performed on the date of service.', decision: null,
+    decision_state: 'undecided', reinstated_by: null, allowed_actions: ['reinstate', 'confirm'], ...overrides };
+  return { ...doc, assessment: { ...doc.assessment, proposals: [...doc.assessment.proposals, excluded] } };
+}
+
+test('an undecided documentation exclusion offers confirm and reinstate and says it needs a decision', () => {
+  const html = render(excludedDoc({}));
+  assert.ok(html.includes(`data-decision="confirm" data-proposal="${UUID}"`), 'confirm offered');
+  assert.ok(html.includes(`data-decision="reinstate" data-proposal="${UUID}"`), 'reinstate offered');
+  assert.ok(html.includes('Needs your decision: confirm the exclusion or reinstate the code.'));
+});
+
+test('a reinstated exclusion can be approved or rejected in the candidate list', () => {
+  const html = render(excludedDoc({ decision_state: 'reinstated', allowed_actions: ['approve', 'reject', 'revoke'],
+    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' } }));
+  for (const action of ['approve', 'reject', 'revoke']) {
+    assert.ok(html.includes(`data-decision="${action}" data-proposal="${UUID}"`), action);
+  }
+  assert.ok(html.includes('Reinstated for review by Reviewer One; approve or reject it.'));
+});
+
+test('a confirmed exclusion names its reviewer and offers only undo', () => {
+  const proposal = { bucket: 'excluded', reinstatable: true, decision_state: 'exclusion_confirmed',
+    decision: { action: 'confirm', reviewer: 'Reviewer One', reviewer_kind: 'human' } };
+  assert.equal(app.candidateDecision(proposal), 'Exclusion confirmed by Reviewer One.');
+  const html = render(excludedDoc({ ...proposal, allowed_actions: ['revoke'] }));
+  assert.ok(html.includes(`data-decision="revoke" data-proposal="${UUID}"`));
+  assert.equal(html.includes(`data-decision="confirm" data-proposal="${UUID}"`), false);
+  assert.equal(app.candidateDecision({ bucket: 'excluded', reinstatable: false, decision_state: 'undecided' }), '');
+});
+
+test('the results page and the acknowledgement never claim that unrecognised wording is caught', () => {
+  const html = render(fixture('encounter-ready.json'));
+  assert.equal(html.includes('are not coded as performed'), false);
+  assert.ok(html.includes('they can miss wording they do not recognise'));
+  for (const text of [app.ACKNOWLEDGEMENTS.human, app.ACKNOWLEDGEMENTS.agent]) {
+    assert.ok(text.includes('I read the whole source document, not only the cited passages'), text);
+    assert.ok(text.includes('can miss wording they do not recognise'), text);
+  }
+});

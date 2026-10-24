@@ -550,7 +550,7 @@ function suggestionsPanel(doc, layout) {
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : ['<div class="check-list-card"><p class="card-empty">No CPT codes were proposed for this document.</p></div>'];
-  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {
@@ -1565,7 +1565,7 @@ if (typeof module === 'object' && module.exports) {
     passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
-    hasAgentDecision,
+    hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS,
   };
 }
 if (typeof document !== 'undefined') boot();
