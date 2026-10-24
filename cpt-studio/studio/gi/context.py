@@ -195,11 +195,22 @@ def is_current_statement(text: str, lay: Layout, start: int, end: int) -> bool:
 
 
 def _fact(name: str, found: list[tuple[str, Span]]) -> Fact:
-    # Overlapping readings of one value are one statement; the longest is kept.
+    # Overlapping readings of one value are one statement; the longest is kept. Readings are taken longest first, and
+    # one is kept unless a reading already kept for its value overlaps it. The kept readings of one value never
+    # overlap, so held sorted by start they are sorted by end as well, and the only one that can overlap [start, end)
+    # is the last one starting before end: one bisection per reading, never a scan of all of them (round 4,
+    # pipeline:3; the scan made 36,000 readings take 80 s). Nothing kept starts inside a reading that is kept, so that
+    # bisection is also where the reading goes. Readings are match spans, so start <= end.
     kept: list[tuple[str, Span]] = []
+    by_value: dict[str, tuple[list[int], list[int]]] = {}
     for value, span in sorted(found, key=lambda item: item[1].start - item[1].end):
-        if not any(v == value and s.start < span.end and span.start < s.end for v, s in kept):
-            kept.append((value, span))
+        starts, ends = by_value.setdefault(value, ([], []))
+        at = bisect.bisect_left(starts, span.end)
+        if at and ends[at - 1] > span.start:
+            continue
+        starts.insert(at, span.start)
+        ends.insert(at, span.end)
+        kept.append((value, span))
     found = sorted(kept, key=lambda item: item[1].start)
     values = list(dict.fromkeys(value for value, _ in found))
     evidence = tuple(sorted(dict.fromkeys(span for _, span in found), key=lambda s: (s.start, s.end)))
