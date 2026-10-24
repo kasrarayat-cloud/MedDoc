@@ -12,9 +12,10 @@ under it never inherits the previous section's reading: a plan or history
 section when the label says so ("Next procedures:", "Earlier work-up:"),
 otherwise an ``other`` section with no default. A label line without a colon
 ("Planned procedures", "Further management", a Word heading paragraph) opens a
-plan or history section when its words say so and it names a section of a
-note (procedures, plan, management, work-up ...), never a service, an
-intervention or a landmark.
+plan or history section when its words say so and it ends with the section of
+a note it names (procedures, plan, management, work-up ...), never a service,
+an intervention or a landmark; a list item ("3. Further workup recommended")
+is never such a label.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
@@ -85,6 +86,9 @@ HEADINGS: dict[str, str] = {
             'post procedure plan', 'post-procedure recommendations', 'postprocedure recommendations',
             'post-procedure care', 'disposition and plan', 'plan and disposition', 'management', 'management plan',
             'further management', 'planned procedures', 'future plan', 'future plans',
+            # orders, referrals and pending procedures name what is still to be done (a closed list)
+            'pending procedures', 'pending procedure', 'pending orders', 'orders', 'referrals', 'referral', 'to do',
+            'to-do',
             # discussion, counseling and education never document a procedure done at this encounter
             'discussion', 'discussions', 'counseling', 'counselling', 'patient counseling', 'patient counselling',
             'patient education', 'education', 'counseling and education', 'education and counseling',
@@ -118,12 +122,19 @@ def _bare_label(raw: str) -> bool:
 
 
 # A label line without a colon is a heading only when it names a section of a note, with no service,
-# intervention or landmark in it: "Planned procedures", "Further management", "Earlier endoscopic work-up";
-# never "Previous anastomosis" or "Prior polypectomy site", which are findings.
+# intervention or landmark in it, and ends with the section noun it names: "Planned procedures", "Further
+# management", "Earlier endoscopic work-up". Never a statement about one ("Further workup recommended",
+# "Previous treatments failed"), a finding that names one ("Prior radiation therapy changes", "History of AS"),
+# "Previous anastomosis" or "Prior polypectomy site"; a trailing aside in parentheses is set aside. A list item
+# ("3. Further workup recommended", "* Further evaluation") is content, never such a label; a known heading still
+# opens with a number ("2. Findings").
 _COLONLESS_HISTORY = re.compile(r'\b(?:history|historical|hx|prior|previous|past|earlier)\b', re.A | re.I)
 _SECTION_NOUN = re.compile(r'\b(?:plans?|procedures?|management|recommendations?|follow[- ]?up|instructions?|steps|'
                            r'disposition|history|work[- ]?ups?|studies|evaluations?|interventions?|appointments?|'
                            r'care|treatments?|therap(?:y|ies)|tests?|testing|imaging|records?)\b', re.A | re.I)
+_SECTION_NOUN_LAST = re.compile(r'(?:' + _SECTION_NOUN.pattern + r')[ \t]*$', re.A | re.I)
+_TRAILING_ASIDE = re.compile(r'[ \t]*\([^()\n]*\)[ \t]*$', re.A)
+_LIST_ITEM = re.compile(r'[ \t]*(?:(?:\d{1,2}|[A-Za-z])[.)]|\*(?!\*))[ \t]+', re.A)
 # A document title is never such a label: "Office follow-up visit - progress note", "Prior procedure report".
 _TITLE_WORDS = re.compile(r'\b(?:note|report|visit|consultation|encounter)\b', re.A | re.I)
 FORM_BLOCK = re.compile(r'\[PDF (?P<what>form fields|annotation text) on page \d+\]', re.A)
@@ -131,7 +142,8 @@ FORM_BLOCK = re.compile(r'\[PDF (?P<what>form fields|annotation text) on page \d
 
 def _colonless_label(line: str) -> Optional[str]:
     """'plan' or 'history' when a line without a colon is a label of that kind (see above)."""
-    if not _SECTION_NOUN.search(line) or _TITLE_WORDS.search(line) or _service_named(line) \
+    named = _TRAILING_ASIDE.sub('', line.strip().rstrip('*#').rstrip())  # "**Upcoming procedures**" names its noun
+    if not _SECTION_NOUN_LAST.search(named) or _TITLE_WORDS.search(line) or _service_named(line) \
             or _act_or_place_named(line):
         return None
     if _PLAN_LABEL.search(line):
@@ -195,7 +207,7 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
         kind = 'procedure'
     if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
         kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
-    if kind is None and colon < 0 and _bare_label(raw):
+    if kind is None and colon < 0 and _bare_label(raw) and not _LIST_ITEM.match(text, ls, le):
         kind = _colonless_label(raw)
     if kind is None or (kind == 'time' and _CLOCK.match(content)):
         return None

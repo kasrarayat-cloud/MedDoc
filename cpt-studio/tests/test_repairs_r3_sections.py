@@ -281,5 +281,151 @@ class Routing11WrapAfterAVerbTests(unittest.TestCase):
                 self.assertLess(time.monotonic() - started, 2)
 
 
+# --- routing:2 / routing:12: colon-less labels and plan headings ---------------------------------------------
+
+def word_document(paragraphs):
+    """A real .docx through the real extractor: paragraphs are (text, style or None)."""
+    import io
+
+    import docx
+    from studio.ingest import Limits
+    from studio.ingest import docx as docx_ingest
+    document = docx.Document()
+    for text, style in paragraphs:
+        if style and style.startswith('Heading'):
+            document.add_heading(text, level=int(style.split()[-1]))
+        else:
+            document.add_paragraph(text, style=style)
+    buffer = io.BytesIO()
+    document.save(buffer)
+    result = docx_ingest.extract_docx(buffer.getvalue(), Limits())
+    assert result.status == 'ok', result.messages
+    return result.text
+
+
+EMR_LINE = 'Colonoscopy with EMR of the ascending colon polyp at a tertiary center.'
+
+
+def emr_note(heading):
+    return (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally '
+            'spreading polyp in the ascending colon was tattooed and not removed.\n' + heading + '\n' + EMR_LINE + '\n')
+
+
+class Routing2ListItemsAndStatementsTests(unittest.TestCase):
+    """routing:2 (a regression from round 2b status:7) - a numbered findings item or a statement ("3. Further workup
+    recommended", "Previous treatments failed") is content, never a colon-less plan or history heading: the
+    performed polypectomy after it stays a findings sentence and 45385 is ready."""
+
+    POLYP_ITEM = '6 mm sigmoid polyp removed with cold snare.'
+
+    def numbered(self, item):
+        return (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings:\n1. The colonoscope was '
+                'advanced to the cecum.\n2. A 3 cm ascending colon mass, biopsied and tattooed.\n3. ' + item + '\n4. '
+                + self.POLYP_ITEM + '\n')
+
+    def prose(self, line):
+        return (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings: The colonoscope was '
+                'advanced to the cecum. A 3 cm mass in the ascending colon was biopsied.\n' + line + '\nA 6 mm sigmoid '
+                'polyp was removed with a cold snare.\n')
+
+    STATEMENTS = ('Further workup recommended', 'Further evaluation recommended', 'Surgical management recommended',
+                  'Further imaging recommended', 'Follow-up imaging advised', 'Previous treatments failed',
+                  'Prior therapy ineffective', 'Prior radiation therapy changes', 'Genetic testing recommended',
+                  'History of AS')
+
+    def test_the_claimed_numbered_item_and_its_variants(self):
+        for item in self.STATEMENTS + ('Further evaluation', 'Upcoming procedures'):
+            text = self.numbered(item)
+            with self.subTest(item=item):
+                self.assertEqual(layout(text).section_at(text.index(self.POLYP_ITEM)).kind, 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', self.POLYP_ITEM)])['45385']))
+
+    def test_the_claimed_prose_line_and_its_variants(self):
+        for line in self.STATEMENTS:
+            text = self.prose(line)
+            with self.subTest(line=line):
+                self.assertEqual(layout(text).section_at(text.index('A 6 mm sigmoid')).kind, 'findings')
+                self.assertTrue(ready(run_engine(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare.')])
+                                      ['45385']))
+
+    def test_a_word_numbered_list_whose_numbers_extraction_drops(self):
+        text = word_document([('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', None), ('Date of service: 2026-10-21', None),
+                              ('Procedure: Colonoscopy with biopsy and cold snare polypectomy.', None),
+                              ('Findings', 'Heading 2'),
+                              ('The colonoscope was advanced to the cecum', 'List Number'),
+                              ('A 3 cm ascending colon mass, biopsied and tattooed', 'List Number'),
+                              ('Surgical evaluation recommended', 'List Number'),
+                              ('A 6 mm sigmoid polyp removed with cold snare', 'List Number')])
+        self.assertIn('\nSurgical evaluation recommended\n', text)
+        self.assertEqual(layout(text).section_at(text.index('A 6 mm sigmoid')).kind, 'findings')
+        self.assertTrue(ready(run_engine(text, [('45385', 'A 6 mm sigmoid polyp removed with cold snare')])['45385']))
+
+    def test_an_impression_list(self):
+        text = (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings: The colonoscope was '
+                'advanced to the cecum. A 6 mm sigmoid polyp was removed with a cold snare.\nImpression:\n1. Ascending '
+                'colon mass, biopsied.\n2. Genetic testing recommended\n3. Sigmoid polyp, removed with cold snare\n')
+        self.assertEqual(layout(text).section_at(text.index('Sigmoid polyp')).kind, 'impression')
+        self.assertNotEqual(run_engine(text, [('45385', 'Sigmoid polyp, removed with cold snare')])['45385'].bucket,
+                            'excluded')
+
+    def test_headings_still_open(self):
+        """A known heading still opens with a number; an unnumbered label naming a section still opens one."""
+        for heading, kind in (('2. Plan', 'plan'), ('3. Recommendations', 'plan'), ('B. Further management', 'plan'),
+                              ('Upcoming procedures', 'plan'), ('## Upcoming procedures', 'plan'),
+                              ('**Upcoming procedures**', 'plan'), ('Upcoming procedures (pending authorization)', 'plan'),
+                              ('Recommended interventions', 'plan'), ('Summary and recommendations', 'plan'),
+                              ('Earlier endoscopic work-up', 'history'), ('Previous endoscopic studies', 'history')):
+            text = emr_note(heading)
+            with self.subTest(heading=heading):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, kind)
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+
+    def test_list_items_and_findings_lines_stay_content(self):
+        for heading in ('3. Upcoming procedures', 'b) Further evaluation', '* Upcoming procedures',
+                        'Previous anastomosis', 'Prior polypectomy site', 'Previous stent procedures'):
+            text = emr_note(heading)
+            with self.subTest(heading=heading):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'findings')
+
+
+class Routing12PlanHeadingTests(unittest.TestCase):
+    """routing:12 - colon-less plan headings outside the list ("Pending procedures", "Referrals", "Orders", "To do")
+    no longer continue the findings section: the planned EMR is excluded and no EMR fact is read."""
+
+    HEADINGS = ('Pending procedures', 'Pending procedure', 'Pending orders', 'Referrals', 'Referral', 'Orders', 'To do',
+                'To-do', 'TO DO', 'To do:', 'Referrals:', 'Orders:')
+
+    def assert_planned_emr_excluded(self, text):
+        self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'plan')
+        self.assertEqual(read(text, EMR_LINE)[0], 'planned')
+        self.assertNotIn('EMR', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+
+    def test_the_claimed_headings(self):
+        for heading in self.HEADINGS:
+            with self.subTest(heading=heading):
+                self.assert_planned_emr_excluded(emr_note(heading))
+        for heading in ('Orders:', 'To do:', 'Referral:'):  # with the planned line inline
+            with self.subTest(inline=heading):
+                self.assert_planned_emr_excluded(emr_note(heading).replace(heading + '\n', heading + ' '))
+
+    def test_a_word_heading_paragraph(self):
+        for heading in ('Pending procedures', 'To do'):
+            text = word_document([('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', None),
+                                  ('Date of service: 2026-10-21', None), ('Procedure: Colonoscopy', None),
+                                  ('Findings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading '
+                                   'polyp in the ascending colon was tattooed and not removed.', None),
+                                  (heading, 'Heading 2'), (EMR_LINE, None)])
+            with self.subTest(heading=heading):
+                self.assertIn('\n' + heading + '\n', text)
+                self.assert_planned_emr_excluded(text)
+
+    def test_content_that_mentions_the_words_is_not_a_heading(self):
+        for line in ('Referrals were sent to surgery.', 'Orders placed for CBC.', 'Things to do'):
+            text = emr_note(line)
+            with self.subTest(line=line):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'findings')
+
+
 if __name__ == '__main__':
     unittest.main()
