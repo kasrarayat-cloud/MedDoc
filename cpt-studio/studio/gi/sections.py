@@ -15,9 +15,12 @@ sentence that ends in a colon ("The following were noted:") and opens none,
 unless HEADINGS lists it ("Procedures performed today:"). A label line without
 a colon ("Planned procedures", "Further management", a Word heading paragraph)
 opens a plan or history section when its words say so and it ends with the
-section of a note it names (procedures, plan, management, work-up ...), never
-a service, an intervention or a landmark; a list item ("3. Further workup
-recommended") is never such a label.
+section of a note it names (procedures, plan, management, work-up ...), or
+starts with the plan or the procedures and a plan word ("Procedures planned",
+"Plan going forward"); never a service, an intervention or a landmark. A
+numbered or bulleted line is read the same way ("2. Upcoming procedures"), so a
+statement in a numbered list ("3. Further workup recommended") stays content
+because it does not end with its noun.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
@@ -140,14 +143,18 @@ def _bare_label(raw: str) -> bool:
 # intervention or landmark in it, and ends with the section noun it names: "Planned procedures", "Further
 # management", "Earlier endoscopic work-up". Never a statement about one ("Further workup recommended",
 # "Previous treatments failed"), a finding that names one ("Prior radiation therapy changes", "History of AS"),
-# "Previous anastomosis" or "Prior polypectomy site"; a trailing aside in parentheses is set aside. A list item
-# ("3. Further workup recommended", "* Further evaluation") is content, never such a label; a known heading still
-# opens with a number ("2. Findings").
+# "Previous anastomosis" or "Prior polypectomy site"; a trailing aside in parentheses is set aside. A numbered or
+# bulleted line is read as any line ("2. Upcoming procedures" opens a plan, as at R3B-BASE: round 4 structure:17 and
+# release:2 found that round 3b's list-item guard released the planned EMR under it), and a known heading opens
+# with a number ("2. Findings").
 _COLONLESS_HISTORY = re.compile(r'\b(?:history|historical|hx|prior|previous|past|earlier)\b', re.A | re.I)
 _SECTION_NOUN = re.compile(r'\b(?:plans?|procedures?|management|recommendations?|follow[- ]?up|instructions?|steps|'
                            r'disposition|history|work[- ]?ups?|studies|evaluations?|interventions?|appointments?|'
                            r'care|treatments?|therap(?:y|ies)|tests?|testing|imaging|records?)\b', re.A | re.I)
 _SECTION_NOUN_LAST = re.compile(r'(?:' + _SECTION_NOUN.pattern + r')[ \t]*$', re.A | re.I)
+# Or it starts with the noun of the plan or of the procedures, and a plan word says which: "Procedures planned",
+# "Plan going forward", "Procedures recommended" (round 4 release:2: these opened a plan at R3B-BASE).
+_SEC_PLAN_FIRST = re.compile(r'(?:plans?|procedures?)\b', re.A | re.I)
 _TRAILING_ASIDE = re.compile(r'[ \t]*\([^()\n]*\)[ \t]*$', re.A)
 _LIST_ITEM = re.compile(r'[ \t]*(?:(?:\d{1,2}|[A-Za-z])[.)]|\*(?!\*))[ \t]+', re.A)
 # A document title is never such a label: "Office follow-up visit - progress note", "Prior procedure report".
@@ -163,8 +170,11 @@ ADDENDUM_HEADER = re.compile(r'ADDENDUM \(revision \d+, added \d{4}-\d{2}-\d{2} 
 def _colonless_label(line: str) -> Optional[str]:
     """'plan' or 'history' when a line without a colon is a label of that kind (see above)."""
     named = _TRAILING_ASIDE.sub('', line.strip().rstrip('*#').rstrip())  # "**Upcoming procedures**" names its noun
-    if not _SECTION_NOUN_LAST.search(named) or _TITLE_WORDS.search(line) or _service_named(line) \
-            or _act_or_place_named(line):
+    if _TITLE_WORDS.search(line) or _service_named(line) or _act_or_place_named(line):
+        return None
+    if _SEC_PLAN_FIRST.match(named) and _PLAN_LABEL.search(named):
+        return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE)
+    if not _SECTION_NOUN_LAST.search(named):
         return None
     if _PLAN_LABEL.search(line):
         return 'plan'
@@ -227,7 +237,7 @@ def _heading(text: str, ls: int, le: int) -> Optional[tuple[str, str, Span]]:
         kind = 'procedure'
     if kind is None and colon >= 0 and not content.strip() and _bare_label(raw):
         kind = 'plan' if _PLAN_LABEL.search(raw) else 'history' if _HISTORY_LABEL.search(raw) else 'other'
-    if kind is None and colon < 0 and _bare_label(raw) and not _LIST_ITEM.match(text, ls, le):
+    if kind is None and colon < 0 and _bare_label(raw):
         kind = _colonless_label(raw)
     if kind is None or (kind == 'time' and _CLOCK.match(content)):
         return None

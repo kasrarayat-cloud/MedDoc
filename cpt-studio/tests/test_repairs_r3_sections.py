@@ -334,7 +334,9 @@ class Routing2ListItemsAndStatementsTests(unittest.TestCase):
                   'History of AS')
 
     def test_the_claimed_numbered_item_and_its_variants(self):
-        for item in self.STATEMENTS + ('Further evaluation', 'Upcoming procedures'):
+        # round 4 structure:17 / release:2: a numbered item that is itself a plan label ("3. Further evaluation",
+        # "3. Upcoming procedures") opens a plan again, as at R3B-BASE (tests/test_repairs_r4_sections.py)
+        for item in self.STATEMENTS:
             text = self.numbered(item)
             with self.subTest(item=item):
                 self.assertEqual(layout(text).section_at(text.index(self.POLYP_ITEM)).kind, 'findings')
@@ -381,8 +383,9 @@ class Routing2ListItemsAndStatementsTests(unittest.TestCase):
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
 
     def test_list_items_and_findings_lines_stay_content(self):
-        for heading in ('3. Upcoming procedures', 'b) Further evaluation', '* Upcoming procedures',
-                        'Previous anastomosis', 'Prior polypectomy site', 'Previous stent procedures'):
+        # round 4 structure:17 / release:2: "3. Upcoming procedures", "b) Further evaluation" and "* Upcoming
+        # procedures" open a plan again, as at R3B-BASE (tests/test_repairs_r4_sections.py)
+        for heading in ('Previous anastomosis', 'Prior polypectomy site', 'Previous stent procedures'):
             text = emr_note(heading)
             with self.subTest(heading=heading):
                 self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'findings')
