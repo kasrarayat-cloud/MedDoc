@@ -1905,7 +1905,8 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
                     labelled = True
                     break
             lead = followed and (by_service or by_label) and not labelled
-            if lead and not _BOX_LEAD_GAP.fullmatch(text, label_end, boxes[0][0]) and _box_trails_fit(text, items, boxes):
+            plain = _BOX_LEAD_GAP.fullmatch(text, label_end, boxes[0][0])
+            if lead and not plain and _box_trails_fit(text, items, boxes):
                 an.memo[key] = 'both'  # an item the two readings disagree about is held (structure:0, _box_state)
             else:
                 an.memo[key] = 'lead' if lead else 'trail'
@@ -1997,7 +1998,8 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
             elif orientation == 'trail':
                 result = _box_trail_state(an, items, boxes, start, end, hi)
             else:  # 'both' (structure:0): the readings agree, or the item is held as boxes that disagree
-                led, trailed = _box_lead_state(text, boxes, span_end), _box_trail_state(an, items, boxes, start, end, hi)
+                led = _box_lead_state(text, boxes, span_end)
+                trailed = _box_trail_state(an, items, boxes, start, end, hi)
                 if led == trailed or (led in (None, 'on') and trailed in (None, 'on')):
                     result = led or trailed
                 else:
@@ -2127,8 +2129,10 @@ def _unchecked_state(an: Analysis, start: int, end: int) -> bool:
 FORM_HEADER = re.compile(r'^[ \t]*\[PDF (form fields|annotation text) on page (\d+)\][ \t]*$', re.A | re.M)
 # A denying value is a box state, a selected denial ("No", "None", "Not done", "Not performed"), or a short answer this
 # reader cannot read as done or not done ("N", "0", "N/A"); _box_field_answer decides what each says of the label.
-_FIELD_DENIED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:(?P<box>not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected)'
-                           r'|(?P<answer>no|none|not[ \t]+done|not[ \t]+performed)|(?P<unclear>n/a|na|n|0))[ \t.]*', re.A | re.I)
+_FIELD_DENIED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:'
+                           r'(?P<box>not[ \t]+checked|unchecked|no[ \t]+option[ \t]+selected)'
+                           r'|(?P<answer>no|none|not[ \t]+done|not[ \t]+performed)|(?P<unclear>n/a|na|n|0))[ \t.]*',
+                           re.A | re.I)
 _FIELD_CHECKED = re.compile(r'(?P<label>[^\n]{1,120}?):[ \t]*(?:checked|yes)[ \t.]*', re.A | re.I)
 _BLANK_LINE = re.compile(r'\n[ \t]*\n')
 _LEADING_MARK = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?\d{1,3}[.)]|\(?[a-z][.)]'
@@ -2142,11 +2146,12 @@ FIELD_PAGE = ("uncertain: the form field '{}' says this item was not done, but t
 # only an item its label names or a field with a widget's default name; one whose label names the item among other
 # words ("Flexible sigmoidoscopy in the last 10 years: No"), and a short answer ("Biopsy (Y/N): N"), hold it; a status
 # field that gives no completion holds its page.
-BOX_FIELD_HELD = "uncertain: the form field '{}' answers for this item in a way this reader cannot read as done or not done"
-BOX_FIELD_HELD_UNTIED = ("uncertain: the form field '{}' answers for an item on its page in a way this reader cannot read "
-                         "as done or not done, and no printed line on its page names it")
-BOX_FIELD_ANSWER_UNTIED = ("uncertain: the form field '{}' may answer for an item on its page, and no printed line on its "
-                           "page names it")
+BOX_FIELD_HELD = ("uncertain: the form field '{}' answers for this item in a way this reader cannot read as done or "
+                  "not done")
+BOX_FIELD_HELD_UNTIED = ("uncertain: the form field '{}' answers for an item on its page in a way this reader "
+                         "cannot read as done or not done, and no printed line on its page names it")
+BOX_FIELD_ANSWER_UNTIED = ("uncertain: the form field '{}' may answer for an item on its page, and no printed line "
+                           "on its page names it")
 BOX_FIELD_STATUS = "uncertain: the form field '{}' gives the procedure on its page a status other than completed"
 
 
@@ -2212,7 +2217,8 @@ def _form_fields(an: Analysis) -> _Fields:
     held instead of negated. What a denying line says of its label is _box_field_answer's; a label names a printed line
     or cell that equals it, an option row it opens, or an item a printed row's boxes delimit (_box_label_candidates).
     A status field that gives the procedure no completion holds its page (contract:4); every denying or answering
-    line that names nothing printed is recorded for the separately identifiable E/M statement (_box_attestation_refused)."""
+    line that names nothing printed is recorded for the separately identifiable E/M statement
+    (_box_attestation_refused)."""
     key = ('form-fields',)
     if key not in an.memo:
         text = an.text
@@ -2238,7 +2244,8 @@ def _form_fields(an: Analysis) -> _Fields:
                     is_checked = None if denied else _FIELD_CHECKED.fullmatch(words)
                     if is_checked:
                         checked.append(_Named(at, at + len(words), 'on', exact, words.strip()))
-                        _box_label_state(labels, _label_key(is_checked.group('label')), 'on', words.strip(), FIELD_UNTIED)
+                        _box_label_state(labels, _label_key(is_checked.group('label')), 'on', words.strip(),
+                                         FIELD_UNTIED)
                     if not denied:
                         continue
                     label = _label_key(denied.group('label'))
@@ -2339,9 +2346,9 @@ def _box_label_kind(an: Analysis, start: int, end: int) -> str:
 
 
 # A form field that asks whether the procedure was done, answered with a denial ("Procedure performed: No").
-_BOX_DONE_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+(?:performed|completed|'
-                                r'done|attempted|started)[ \t]*[:?=][ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)'
-                                r'[ \t.]*', re.A | re.I)
+_BOX_DONE_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
+                                r'(?:performed|completed|done|attempted|started)[ \t]*[:?=][ \t]*'
+                                r'(?:no|none|n|not[ \t]+done|not[ \t]+performed)[ \t.]*', re.A | re.I)
 
 
 def _box_status_field(an: Analysis, start: int, end: int) -> bool:
@@ -2359,7 +2366,8 @@ def _box_status_field(an: Analysis, start: int, end: int) -> bool:
     value = _SEPARATOR.match(text, key.end(), end).end()
     if value >= end or _STATUS_DONE.match(text, value, end):
         return False
-    return bool(_STATUS_HOLD.match(text, value, end)) or _bare_denial(an, value, end) or _value_calls_off(an, value, end)
+    return (bool(_STATUS_HOLD.match(text, value, end)) or _bare_denial(an, value, end)
+            or _value_calls_off(an, value, end))
 
 
 # The option row a field's label opens on its printed page ("Complications: ☐ Yes ☒ No", "Biopsy taken: [ ] Yes [x]
@@ -2507,10 +2515,11 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
 # and the word for the procedure; then ':', '?', '=', '|', a dash, a tab or two spaces; then "No", "None", "N", "Not
 # done" or "Not performed" and nothing else ("Procedure cancelled: No", "Was the procedure cancelled? No", "Procedure
 # aborted  No", a table row "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.").
-_BOX_ANSWER_LEAD = re.compile(r'[ \t]*(?:[-*•][ \t]*|\d{1,2}[.)][ \t]*)?(?:(?:was|is|has|had)[ \t]+)?(?:(?:the|this)[ \t]+)?'
-                              r'(?:(?:procedure|exam|examination|study|endoscopy|case)[ \t]+)?', re.I)
-_BOX_ANSWER_TAIL = re.compile(r'[ \t]*(?:[:?=|–—-]|\t| {2,})[ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)[ \t.]*',
+_BOX_ANSWER_LEAD = re.compile(r'[ \t]*(?:[-*•][ \t]*|\d{1,2}[.)][ \t]*)?(?:(?:was|is|has|had)[ \t]+)?'
+                              r'(?:(?:the|this)[ \t]+)?(?:(?:procedure|exam|examination|study|endoscopy|case)[ \t]+)?',
                               re.I)
+_BOX_ANSWER_TAIL = re.compile(r'[ \t]*(?:[:?=|–—-]|\t| {2,})[ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)'
+                              r'[ \t.]*', re.I)
 BOX_ANSWER_REACH = 80  # how far a status question's lead or answer is read from its reference (bounds the work)
 
 
@@ -3503,8 +3512,8 @@ def _another_encounters_time(an: Analysis, start: int, end: int) -> bool:
 # The marks that keep a separately identifiable E/M statement from attesting unless each is a checked box: any box, an
 # unread mark, a bare radio glyph or cross, an answer in parentheses (the shared vocabulary).
 _BOX_CROSS = re.compile(_BOX_SYMBOLS.BOX_CROSS_PATTERN)
-_BOX_ANY_MARK = ('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern + '|' + _BOX_PAREN_ANSWER.pattern
-                 + '|' + _BOX_CROSS.pattern)
+_BOX_ANY_MARK = ('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern + '|'
+                 + _BOX_PAREN_ANSWER.pattern + '|' + _BOX_CROSS.pattern)
 # A line that answers a statement: an optional short label, then only marks and answer words ("☐ Yes ☒ No", "No",
 # "Answer: No", "☒", "Attested: ☐"; never "☐ Follow-up colonoscopy in 3 years" or "Plan: Follow up in 2 weeks.").
 _BOX_ANSWER_LINE = re.compile(r"[ \t]*(?:[A-Za-z][\w /'-]{0,30}:[ \t]*)?(?:(?:" + _BOX_ANY_MARK
@@ -3559,7 +3568,8 @@ def _box_marks_refuse(an: Analysis, lo: int, hi: int) -> bool:
         return True
     if any(not _BOX.fullmatch(text, *u.span()) for u in _BOX_UNREAD.finditer(text, lo, hi)):
         return True
-    return bool(_BOX_RADIO.search(text, lo, hi) or _BOX_PAREN_ANSWER.search(text, lo, hi) or _BOX_CROSS.search(text, lo, hi))
+    return bool(_BOX_RADIO.search(text, lo, hi) or _BOX_PAREN_ANSWER.search(text, lo, hi)
+                or _BOX_CROSS.search(text, lo, hi))
 
 
 def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
@@ -3571,7 +3581,8 @@ def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
             or _BOX_RADIO.search(text, start, end) or _BOX_PAREN_ANSWER.search(text, start, end)
             or _BOX_CROSS.search(text, start, end)):
         return False
-    boxes = [(b.start(), b.end(), 'off' if b.group('off') is not None else 'on') for b in _BOX.finditer(text, start, end)]
+    boxes = [(b.start(), b.end(), 'off' if b.group('off') is not None else 'on')
+             for b in _BOX.finditer(text, start, end)]
     if not boxes:
         return bool(_BOX_BARE_YES.fullmatch(text, start, end))
     if not _BOX_OPTION_WORD.search(text, start, end):
@@ -3608,9 +3619,10 @@ def _box_line_before(text: str, line_start: int) -> Optional[tuple[int, int]]:
 
 # Encounters and settings a statement may name after its "separately identifiable" words (routing:11). Fail-closed:
 # one that its own words do not make this encounter is another one.
-_BOX_ENCOUNTER = re.compile(r"\b(?:visits?|encounters?|consult(?:ation)?s?|appointments?|admissions?|hospitali[sz]ations?|"
-                            r"stays?|emergency\s+(?:department|room)|(?-i:ED|ER)|urgent\s+care|inpatient|hospital|"
-                            r"pre-?op(?:erative)?|pre-?procedur(?:e|al)|referrals?|tele-?health|televisits?)\b", re.I)
+_BOX_ENCOUNTER = re.compile(r"\b(?:visits?|encounters?|consult(?:ation)?s?|appointments?|admissions?|"
+                            r"hospitali[sz]ations?|stays?|emergency\s+(?:department|room)|(?-i:ED|ER)|urgent\s+care|"
+                            r"inpatient|hospital|pre-?op(?:erative)?|pre-?procedur(?:e|al)|referrals?|tele-?health|"
+                            r"televisits?)\b", re.I)
 _BOX_THIS_ENCOUNTER = re.compile(r"\b(?:this|today'?s?|current|same|present)\b", re.I)
 _BOX_EM_NOUN = re.compile(r'\b(?:E/?M|E&M|evaluation\s+and\s+management)\s+$', re.I)
 _BOX_TODAY_AFTER = re.compile(r'\s+today\b', re.I)
@@ -3655,7 +3667,8 @@ def _separate_em_fact(an: Analysis) -> Optional[Fact]:
         # An unchecked attestation is no statement: fail-closed on any box, mark, answer or form field that does not
         # check it (contract:5, contract:0, release:5, routing:11: _box_attestation_refused), and on another encounter
         # it names (routing:11: _box_names_another_encounter). Both only refuse: the E/M stays held.
-        if _box_attestation_refused(an, start, end, rest_end) or _box_names_another_encounter(an, match.end(), rest_end):
+        if _box_attestation_refused(an, start, end, rest_end) \
+                or _box_names_another_encounter(an, match.end(), rest_end):
             continue
         if _SEPARATE_EM_CONTRARY.search(text, start, end) or _SEPARATE_EM_CONTRARY.search(text, end, rest_end):
             continue
