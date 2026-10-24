@@ -495,6 +495,16 @@ NOT_REACHED_AFTER = rx(r'^[\s,]*(?:was|were|could)\s+not\s+(?:be\s+)?(?:reached|
                        r'seen|evaluated|inspected)\b')
 REACHED_BEYOND = rx(r'\b(?:beyond|past)\s+(?:the\s+)?(?:[\w-]+\s+){0,2}$')
 CENTIMETERS = rx(r'\b(?:to|at|of)\s+(?:approximately\s+|about\s+|~\s*)?(?P<cm>\d{1,3})\s*cm\b')
+# Shorthand extents: an extent label line ("Extent: cecum", "Extent reached: terminal ileum", "The furthest
+# extent reached was the cecum", "Depth of insertion: 30 cm"), and "to (the) <landmark | N cm>" straight after
+# the service name ("Colonoscopy to cecum", "EGD to D2", "Flexible sigmoidoscopy to 30 cm").
+_EXTENT_LABEL = (r'\b(?:(?:furthest|maximal|maximum|deepest)\s+)?(?:extent|depth)(?:\s+(?:reached|of\s+(?:the\s+)?'
+                 r'(?:exam(?:ination)?|insertion|intubation)))?\s*(?:[:=\u2013\u2014-]\s*|\s+(?:was|is)\s+)'
+                 r'(?:to\s+)?(?:the\s+)?(?:approximately\s+|about\s+)?')
+EXTENT_LABEL_BEFORE = rx(_EXTENT_LABEL + r'$')
+EXTENT_CM = rx(_EXTENT_LABEL + r'(?P<cm>\d{1,3})\s*cm\b')
+SERVICE_TO_GAP = rx(r'\s*(?:\(\s*[A-Z]{2,6}\s*\)\s*)?(?:to|into|through|up\s+to|as\s+far\s+as)\s+(?:the\s+)?'
+                    r'(?:level\s+of\s+the\s+)?')
 ADVANCED = rx(r'\b(?:advanced|passed|inserted|introduced|examined|reached)\b')
 
 # --- interventions ----------------------------------------------------------------

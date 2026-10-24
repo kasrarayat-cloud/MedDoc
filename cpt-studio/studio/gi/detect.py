@@ -1305,9 +1305,36 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
                             cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)):
                         blocked.append(hit)
                     elif status in ('performed', 'incomplete') and (
-                            cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)):
+                            cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
+                            or cues.EXTENT_LABEL_BEFORE.search(pre) or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
     return reached, blocked
+
+
+def _straight_after_service(an: Analysis, lo: int, pos: int) -> bool:
+    """Whether ``pos`` follows a service name read as performed with only "to (the)" between them, the
+    shorthand of an extent ("Colonoscopy to cecum", "Colonoscopy to TI", "EGD to D2")."""
+    named = an.services_in(lo, pos)
+    if not named:
+        return False
+    service = named[-1]
+    return bool(cues.SERVICE_TO_GAP.fullmatch(an.text, service.end, pos)) \
+        and _generic_reading(an, service.start, service.end).status == 'performed'
+
+
+# Between a flexible sigmoidoscopy and its "to 30 cm": nothing, an abbreviation, or "was performed".
+_CM_GAP = re.compile(r'\s*(?:\(\s*[A-Z]{2,6}\s*\)\s*)?(?:(?:was|were)\s+(?:performed|done|completed)\s*)?', re.A | re.I)
+
+
+def _cm_after_flex_sig(an: Analysis, lo: int, pos: int) -> bool:
+    """Whether the depth at ``pos`` ("to 30 cm") is the shorthand extent of a flexible sigmoidoscopy read as
+    performed and named just before it ("Flexible sigmoidoscopy to 30 cm", "FS was performed to 35 cm")."""
+    named = [m for m in an.services_in(lo, pos) if m.family == 'gi.flex_sig']
+    if not named:
+        return False
+    service = named[-1]
+    return bool(_CM_GAP.fullmatch(an.text, service.end, pos)) \
+        and _generic_reading(an, service.start, service.end).status == 'performed'
 
 
 _REFERENCE_PATTERNS = ((('cancelled', cues.PROCEDURE_CANCELLED), ('negated', cues.PROCEDURE_NOT_PERFORMED),
@@ -1445,9 +1472,11 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     found = []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
-            if not cues.ADVANCED.search(text, cs, ce):
-                continue
-            for m in cues.CENTIMETERS.finditer(text, cs, ce):
+            advanced = bool(cues.ADVANCED.search(text, cs, ce))
+            hits = [m for m in cues.CENTIMETERS.finditer(text, cs, ce)
+                    if advanced or _cm_after_flex_sig(an, cs, m.start())]
+            hits += list(cues.EXTENT_CM.finditer(text, cs, ce))  # "Depth of insertion: 30 cm"
+            for m in hits:
                 if _generic_reading(an, m.start(), m.end()).status in ('performed', 'incomplete') \
                         and not _about_another_procedure(an, m.start(), m.end()):
                     found.append((f"{int(m.group('cm'))} cm", _span(text, cs, ce)))

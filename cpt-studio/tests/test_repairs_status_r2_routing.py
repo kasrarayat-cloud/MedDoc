@@ -977,6 +977,55 @@ class Status15SubActTests(unittest.TestCase):
                 self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
 
 
+class Status18ShorthandExtentTests(unittest.TestCase):
+    """status:18 - shorthand extents ("to cecum", "to TI", "Extent: cecum", "to 30 cm", "to D2") are
+    read; a denied or planned extent never is."""
+
+    def test_the_claimed_inputs(self):
+        for body, slug, code, evidence, extent in (
+                ('Procedure: Colonoscopy to cecum with cold snare polypectomy.\nFindings: A 6 mm polyp was removed with a '
+                 'cold snare. Biopsies were taken.', 'gi.colonoscopy', '45385', 'A 6 mm polyp was removed with a cold snare.',
+                 'cecum'),
+                ('Procedure: Colonoscopy to TI with cold snare polypectomy.\nFindings: A 6 mm polyp was removed with a '
+                 'cold snare.', 'gi.colonoscopy', '45385', 'A 6 mm polyp was removed with a cold snare.', 'terminal ileum'),
+                ('Procedure: Colonoscopy with cold snare polypectomy.\nExtent: cecum\nFindings: A 6 mm polyp was removed '
+                 'with a cold snare.', 'gi.colonoscopy', '45385', 'A 6 mm polyp was removed with a cold snare.', 'cecum'),
+                ('Procedure: Colonoscopy with cold snare polypectomy.\nExtent reached: terminal ileum\nFindings: A 6 mm '
+                 'polyp was removed with a cold snare.', 'gi.colonoscopy', '45385',
+                 'A 6 mm polyp was removed with a cold snare.', 'terminal ileum'),
+                ('Procedure: Flexible sigmoidoscopy to 30 cm with biopsy.\nFindings: A biopsy was taken from the rectum.',
+                 'gi.flex_sig', '45331', 'A biopsy was taken from the rectum.', '30 cm'),
+                ('Procedure: EGD to D2 with biopsy.\nFindings: Biopsies were taken from the antrum.', 'gi.egd', '43239',
+                 'Biopsies were taken from the antrum.', 'second part of duodenum')):
+            text = HEADER + body + '\n'
+            with self.subTest(body=body):
+                self.assertEqual(fact_value(text, slug, 'extent'), extent)
+                self.assertTrue(ready(run_engine(text, [(code, evidence)])[0][code]))
+
+    def test_answers_and_other_shorthands(self):
+        for body, slug, extent in (
+                ('Procedure: Colonoscopy\nFindings: Furthest extent reached: cecum.', 'gi.colonoscopy', 'cecum'),
+                ('Procedure: Colonoscopy\nFindings: The furthest extent reached was the cecum.', 'gi.colonoscopy', 'cecum'),
+                ('Procedure: Colonoscopy to the terminal ileum.', 'gi.colonoscopy', 'terminal ileum'),
+                ('Procedure: Diagnostic colonoscopy (TI) to the terminal ileum.', 'gi.colonoscopy', 'terminal ileum'),
+                ('Procedure: Flexible sigmoidoscopy\nFindings: FS was performed to 35 cm.', 'gi.flex_sig', '35 cm'),
+                ('Procedure: Flexible sigmoidoscopy\nFindings: Depth of insertion: 30 cm.', 'gi.flex_sig', '30 cm')):
+            with self.subTest(body=body):
+                self.assertEqual(fact_value(HEADER + body + '\n', slug, 'extent'), extent)
+
+    def test_a_denied_or_planned_extent_is_not_read(self):
+        for body in ('Procedure: Colonoscopy to the cecum was not possible.', 'Procedure: Colonoscopy to the cecum is planned.',
+                     'Procedure: Colonoscopy\nFindings: Extent: cecum not reached.',
+                     'Procedure: Colonoscopy\nPlan: Colonoscopy to the cecum next month.',
+                     'Procedure: Colonoscopy\nFindings: No colonoscopy to the cecum was performed today.',
+                     'Procedure: EGD\nFindings: Possible colonoscopy to the cecum.'):
+            with self.subTest(body=body):
+                self.assertNotEqual(fact_value(HEADER + body + '\n', 'gi.colonoscopy', 'extent'), 'cecum')
+        text = HEADER + ('Procedure: Colonoscopy\nFindings: Extent reached: splenic flexure; the cecum could not be '
+                         'reached.\n')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'incomplete: splenic flexure')
+
+
 BOXED = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
          'was found.\nInterventions performed\n')
 
