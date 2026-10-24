@@ -296,7 +296,7 @@ def _masked_map(an: Analysis, start: int, end: int) -> tuple[str, list[int]]:
 # that far shares one reading of the member. A coordinated list made each of its N targets re-read all N members over
 # its whole window ('EUS, ' x 400 took 21 s).
 PRE_WORDS = 24
-_WORD = re.compile(r'[^\s,]+', re.A)
+_PRE_TOKEN = re.compile(r'[^\s,]+', re.A)  # a word as cues._pre separates them
 
 
 def _pre_start(an: Analysis, cs: int, ms: int) -> int:
@@ -306,7 +306,7 @@ def _pre_start(an: Analysis, cs: int, ms: int) -> int:
     if key not in an.memo:
         starts = an.memo.get(('word-starts',))
         if starts is None:
-            starts = an.memo[('word-starts',)] = [m.start() for m in _WORD.finditer(an.text)]
+            starts = an.memo[('word-starts',)] = [m.start() for m in _PRE_TOKEN.finditer(an.text)]
         pos = ms
         for _ in range(PRE_WORDS):
             index = bisect.bisect_left(starts, pos) - 1

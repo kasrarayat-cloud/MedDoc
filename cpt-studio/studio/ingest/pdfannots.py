@@ -80,13 +80,13 @@ FIELD_COMBO = 1 << 17
 MAX_PARENT_DEPTH = 32
 NOT_DRAWN = frozenset({'/Popup', '/Link'})  # a popup shows its parent's note; a link draws nothing of its own
 # Marks that change what the text under them says: struck through, or redacted (shown as its overlay).
-MARKS = frozenset({'/StrikeOut', '/Redact'})
+STRIKE_MARKS = frozenset({'/StrikeOut', '/Redact'})
 # Text markup viewers draw from /QuadPoints when there is no appearance.
 QUAD_MARKUP = frozenset({'/Highlight', '/Underline', '/Squiggly', '/StrikeOut', '/Redact'})
 FILLED_SHAPES = frozenset({'/Square', '/Circle'})  # drawn from /IC (their interior colour) without an appearance
 _WHITESPACE = re.compile(r'\s+')
 _TAGS = re.compile(r'<[^>]*>')
-MARKS = frozenset({'X', 'x', '\u2713', '\u2714'})  # what a typed or stamped mark over a printed box says
+BOX_MARKS = frozenset({'X', 'x', '\u2713', '\u2714'})  # what a typed or stamped mark over a printed box says
 MARKED = frozenset({'/FreeText', '/Stamp'})
 
 
@@ -187,7 +187,7 @@ class _Reader:
             self.free_text(annotation, shown)
         else:
             self.other(annotation, subtype, shown)
-        if subtype in MARKED and len(self.found.texts) == written + 1 and self.found.texts[-1].strip() in MARKS:
+        if subtype in MARKED and len(self.found.texts) == written + 1 and self.found.texts[-1].strip() in BOX_MARKS:
             rect = rect_of(annotation)
             if rect is not None:
                 self.found.marks.append(rect)
@@ -318,7 +318,7 @@ class _Reader:
         if self.appearance_hidden(annotation) and self.hidden_appearance_shows_text(annotation):
             self.found.hidden_text = True
         self.found.note_chars += non_space_count(note)
-        if subtype in MARKS:  # what the page now says of the text under it is not what that text reads
+        if subtype in STRIKE_MARKS:  # what the page now says of the text under it is not what that text reads
             self.found.marked += 1
         self.found.covers.extend(self.covers(annotation, subtype))
         if appearance is None:

@@ -44,3 +44,13 @@ class BoundedPreTriggerTests(SimpleTestCase):
     def test_the_bound_covers_the_longest_pre_trigger(self):
         # a trigger of at most six words and at most five fillers: PRE_WORDS keeps twice that
         self.assertGreaterEqual(detect.PRE_WORDS, 2 * (6 + 5))
+
+    def test_lone_separators_never_count_as_words(self):
+        # The bound counts words as cues._pre separates them ([^\s,]+): a run of lone commas is one separator run, so
+        # a trigger behind it still governs. (A later module-level '_WORD' once replaced this pattern with \S+ words,
+        # which counted every lone comma, and the bound stopped short of the trigger.)
+        sentence = 'No ' + ', ' * 30 + 'EGD.'  # no verb: only the pre-trigger can deny it
+        text = HEADER + 'Findings: The mucosa looked fine. ' + sentence + '\n'
+        start = text.index('EGD')
+        status, cues = status_for_span(text, start, start + 3, DOS)
+        self.assertEqual(status, 'negated', cues)
