@@ -414,7 +414,8 @@ routing reads in that section ("Follow-up office visit." under Plan), keeps
 its reading. A positive passage cannot establish a family that routing documents only as not
 performed, nor a recognisable family the document never names or names only
 as uncertain. A `gi.other` code's passage that reads performed by its section
-alone (no `performed:` cue) counts only where it names a procedure — a
+alone, or only as the office visit's own documentation (no other `performed:`
+cue), counts only where it names a procedure — a
 sentence of it opens with a procedure name by routing's `gi.other` form rule,
 it states a procedure's act by its participle ("were banded"), or a routed
 `gi.other` mention read as done lies in it; otherwise (`section_only`) the code

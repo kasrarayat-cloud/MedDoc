@@ -163,17 +163,19 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
 
 def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingResult,
                    day: Optional[date]) -> tuple[checks.Reading, ...]:
-    """A gi.other code's linked passages, each positive one that rests on its section alone marked ``unnamed`` unless
-    it names a procedure: a routed gi.other mention read as done lies in it, or it names one by routing's form rule
-    (checks.names_procedure). "Grade 2 internal hemorrhoids were seen on retroflexion." under Findings reads performed
-    only because of its section; it documents a finding, not a banding or an anoscopy, so it is no evidence that the
-    code's procedure was done. Routing's gi.other finding still never decides the code's status (it may be another
-    procedure): only a mention inside the code's own passage counts, and only as the name of a procedure."""
+    """A gi.other code's linked passages, each positive one that rests on its section alone (or on the office visit's
+    own documentation, checks.states_no_procedure) marked ``unnamed`` unless it names a procedure: a routed gi.other
+    mention read as done lies in it, or it names one by routing's form rule (checks.names_procedure). "Grade 2 internal
+    hemorrhoids were seen on retroflexion." under Findings reads performed only because of its section, and
+    "Established patient office visit." as E/M documentation; neither documents a banding or an anoscopy, so neither
+    is evidence that the code's procedure was done. Routing's gi.other finding still never decides the code's status
+    (it may be another procedure): only a mention inside the code's own passage counts, and only as the name of a
+    procedure."""
     other = routing.finding(OTHER_GI)
     done = [m.span for m in (other.mentions if other else ()) if m.status in checks.POSITIVE]
     marked = []
     for reading in own:
-        if (reading.status in checks.POSITIVE and checks.by_section_alone(reading)
+        if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
                 and not any(span.start < reading.end and reading.start < span.end for span in done)
                 and not checks.names_procedure(text, reading.start, reading.end, day)):
             reading = replace(reading, unnamed=True)

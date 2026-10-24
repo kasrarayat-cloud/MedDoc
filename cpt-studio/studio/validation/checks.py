@@ -264,10 +264,22 @@ def _silent(reading: Reading) -> bool:
     return silent(reading.status, reading.cues)
 
 
+# Routing's cue for a reading of the office visit's own documentation ("performed: office E/M documentation (visit
+# statement)"): it says the visit was documented, never that a procedure was done.
+EM_DOCUMENTATION_CUE_PREFIX = 'performed: office E/M documentation'
+
+
 def by_section_alone(reading: Reading) -> bool:
     """A reading that only its section decided: every cue is a 'section: <kind>' cue (routing's section default), so
     no wording in the passage says anything of a service."""
     return bool(reading.cues) and all(cue.startswith(SECTION_CUE_PREFIX) for cue in reading.cues)
+
+
+def states_no_procedure(reading: Reading) -> bool:
+    """A reading that only its section or the office visit's own documentation decided: every cue is a 'section:
+    <kind>' cue or routing's E/M documentation cue, so nothing in the passage states that a procedure was done."""
+    return bool(reading.cues) and all(cue.startswith((SECTION_CUE_PREFIX, EM_DOCUMENTATION_CUE_PREFIX))
+                                      for cue in reading.cues)
 
 
 def restated(reading: Reading) -> bool:
@@ -384,9 +396,10 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
                 f'{name} is not established as performed as coded on the date of service.')
     if outcome.reason == 'section_only' and outcome.decisive:
         # Only the linked passages are judged: the document may document the service in a passage not linked to it.
+        documented = any(cue.startswith(EM_DOCUMENTATION_CUE_PREFIX) for cue in outcome.decisive.cues)
+        basis = 'as E/M documentation' if documented else 'by its section'
         reason = (f'No linked passage establishes that {name} was performed on the date of service: the linked passage '
-                  f'reads as {outcome.decisive.status} only by its section ({cite(outcome.decisive)}) and names no '
-                  'procedure.')
+                  f'reads as {outcome.decisive.status} only {basis} ({cite(outcome.decisive)}) and names no procedure.')
         if outcome.contrary:
             reason += f' Another linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}.'
         return reason

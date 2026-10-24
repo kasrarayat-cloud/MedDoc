@@ -91,6 +91,7 @@ OFFICE_OTHER = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient o
                 'Total time: 32 minutes.\n')
 VISIT = 'Established patient office visit.'
 DECLINED = 'Procedure: Anoscopy - patient declined.'
+BANDED = 'Rubber band ligation x3 completed today.'
 FLEX_SIG = (HEAD + 'Procedure: Flexible sigmoidoscopy\nIndication: Rectal bleeding.\n'
             'Findings: The sigmoidoscope was advanced to 40 cm. Normal mucosa.\nPlan: Fiber supplementation.\n')
 GI03 = open('ops/verification/documents/gi-03-screening-colonoscopy-polypectomy-biopsy.txt', encoding='utf-8').read()
@@ -165,6 +166,19 @@ class Validation0SectionOnlyOtherCodeTests(Case):
                 proposals, _ = real(GI03, ('46221', passage))
                 self.assertHeldUnnamed(proposals['46221'], passage)
 
+    def test_the_office_visit_s_own_documentation_names_no_procedure(self):
+        """Routing reads the visit statement and the time statement performed as E/M documentation: that is no
+        evidence that a banding or an anoscopy was done."""
+        body = f'{DECLINED}\n{BANDED}'
+        for code, passage in (('46221', VISIT), ('46600', 'Total time: 32 minutes.')):
+            with self.subTest(code=code):
+                proposals, _ = real(OFFICE_OTHER.format(body=body), (code, passage))
+                self.assertHeldUnnamed(proposals[code], passage)
+                self.assertIn('only as E/M documentation', check_of(proposals[code], 'service.status').detail)
+        proposals, _ = real(OFFICE_OTHER.format(body=body), ('46221', VISIT, BANDED))
+        self.assertEqual(proposals['46221'].status, 'ready')
+        self.assertIn(f'Documented as performed: “{BANDED}”', check_of(proposals['46221'], 'service.status').detail)
+
     def test_a_cited_fragment_is_read_in_its_sentence(self):
         """A provider may cite part of a sentence: the sentence's own leading name decides, never the fragment's
         first word ("banding" cut out of "Grade 2 internal hemorrhoids, banding candidate.")."""
@@ -195,9 +209,10 @@ class Validation0SectionOnlyOtherCodeTests(Case):
              'Two internal hemorrhoids were banded today without complication.', '46221'),
             (f'{DECLINED}\nToday we banded two internal hemorrhoids.', 'Today we banded two internal hemorrhoids.',
              '46221'),
-            # an explicit performance cue
+            # an explicit performance cue, with or without a procedure name the form rule reads
             (f'{DECLINED}\nRubber band ligation x3 completed today.', 'Rubber band ligation x3 completed today.',
              '46221'),
+            (f'{DECLINED}\nBands were placed on three columns.', 'Bands were placed on three columns.', '46221'),
             # the routing:4 verifier's control G: the procedure named in its section
             (f'{DECLINED}\nRubber band ligation of a grade 2 internal hemorrhoid x1.',
              'Rubber band ligation of a grade 2 internal hemorrhoid x1.', '46221'),
