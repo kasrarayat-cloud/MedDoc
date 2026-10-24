@@ -521,3 +521,50 @@ class R23PurposeClauseTests(unittest.TestCase):
                 status, cues = read(text, 'Colonoscopy')
                 self.assertNotEqual(status, 'performed', cues)
                 self.assertFalse(any(c.startswith(SILENT) for c in cues), cues)
+
+
+# --- routing:25 -----------------------------------------------------------------------------------------------
+
+def intent_note(indication):
+    return (HEADER + f'Indication: {indication}\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+            'cecum. The colon was normal.\n')
+
+
+class R25HedgedIntentTests(unittest.TestCase):
+    """routing:25 - an intent stated as unconfirmed or presumed is no documented intent; a stated intent (also one
+    "per patient request", "per referral" or "confirmed with" someone) still is."""
+
+    def test_the_claimed_inputs(self):
+        for indication in ('Screening (to be confirmed with the referring office). The patient reports intermittent '
+                           'hematochezia.', 'Presumed screening.', 'Screening per patient, but unclear.'):
+            with self.subTest(indication=indication):
+                self.assertIsNone(fact_value(intent_note(indication), 'gi.colonoscopy', 'intent'))
+        proposals, _ = run_engine(intent_note('Presumed screening.'),
+                                  [('45378', 'The colonoscope was advanced to the cecum.')])
+        self.assertNotIn('screening', proposals['45378'].rationale)
+
+    def test_the_listed_variants(self):
+        for indication in ('Screening colonoscopy, unclear.', 'Suspected screening colonoscopy.',
+                           'Presumably screening colonoscopy.', 'Screening colonoscopy, not yet confirmed.',
+                           'Screening colonoscopy (TBD).', 'Likely screening colonoscopy.',
+                           'Screening colonoscopy, pending confirmation of the family history.',
+                           'Screening colonoscopy, though unconfirmed.', 'Surveillance colonoscopy, to be determined.'):
+            with self.subTest(indication=indication):
+                self.assertIsNone(fact_value(intent_note(indication), 'gi.colonoscopy', 'intent'))
+
+    def test_stated_intents_are_kept(self):
+        for indication, intent in (('Screening colonoscopy per patient request.', 'screening'),
+                                   ('Screening colonoscopy per referral.', 'screening'),
+                                   ('Screening colonoscopy, average risk; confirmed with the referring office.',
+                                    'screening'),
+                                   ('Screening.', 'screening'), ('Screening colonoscopy, average risk.', 'screening'),
+                                   ('Screening colonoscopy; family history unknown.', 'screening'),
+                                   ('Screening colonoscopy, family history unknown.', 'screening'),
+                                   ('Surveillance colonoscopy; prior colonoscopy in 2019 showed adenomas.',
+                                    'surveillance'),
+                                   ('Diagnostic colonoscopy for hematochezia, likely hemorrhoidal; anemia.',
+                                    'diagnostic'),
+                                   ('Screening colonoscopy, family history uncertain because adopted.', 'screening'),
+                                   ('Screening colonoscopy, average risk; prep adequacy unclear.', 'screening')):
+            with self.subTest(indication=indication):
+                self.assertEqual(fact_value(intent_note(indication), 'gi.colonoscopy', 'intent'), intent)

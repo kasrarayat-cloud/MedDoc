@@ -2152,14 +2152,16 @@ def _intent(an: Analysis, attributed: list[Optional[str]], only_family: bool, to
         if kind in skipped_sections:
             continue
         indication = kind == 'indication'
-        for cs, ce in _clauses_in(an, s, e):
+        clauses = _clauses_in(an, s, e)
+        for at, (cs, ce) in enumerate(clauses):
             for m in cues.INTENT.finditer(text, cs, ce):
                 reading = _generic_reading(an, m.start(), m.end())
-                # a question or a hedge ("Is this a screening colonoscopy?", "unclear whether") states no
-                # intent; the silent default of an indication does
+                # a question or a hedge ("Is this a screening colonoscopy?", "unclear whether", "Presumed
+                # screening", "Screening, to be confirmed") states no intent; the silent default of an indication does
                 hedged = reading.status == 'uncertain' and reading.basis == 'cue'
                 if reading.status in skipped or reading.doubt or hedged \
-                        or _INTENT_DENIED.search(text, max(cs, m.start() - 40), m.start()):
+                        or _INTENT_DENIED.search(text, max(cs, m.start() - 40), m.start()) \
+                        or _intent_hedged(an, m, (cs, ce), clauses[at + 1] if at + 1 < len(clauses) else None):
                     continue
                 services = an.services_in(cs, ce)
                 if services:
@@ -2172,6 +2174,37 @@ def _intent(an: Analysis, attributed: list[Optional[str]], only_family: bool, to
                 if ok:
                     found.append((m.group('intent').lower(), _span(text, m.start(), m.end())))
     return _fact('intent', found)
+
+
+# Hedges that keep an intent word from stating an intent (intent only: the shared uncertain vocabularies decide
+# service status and are not widened for it). A presumption right before the intent word ("Presumed screening",
+# "Suspected screening colonoscopy"); a confirmation still pending, anywhere in its clause ("Screening (to be
+# confirmed with the referring office)", "not yet confirmed", "TBD"); or a state of doubt that closes a clause
+# ("Screening colonoscopy, unclear.", "Screening per patient, but unclear."), never one that qualifies another word
+# ("likely hemorrhoidal", "family history uncertain because ..."). "per patient", "per referral" and "confirmed
+# with ..." are no hedges.
+_INTENT_PRESUMED = re.compile(r'\b(?:presum(?:ed|ably|ptive)|suspected|likely|probabl[ey]|possibl[ey]|perhaps|maybe|'
+                              r'questionabl[ey]|apparent(?:ly)?|tentative(?:ly)?)[\s,]+(?:(?:a|an|the)\s+)?$',
+                              re.A | re.I)
+_INTENT_PENDING = re.compile(r'\bto\s+be\s+(?:confirmed|determined|clarified|verified|decided|established)\b'
+                             r'|\bnot\s+(?:yet\s+)?(?:confirmed|established|clear|certain|sure)\b'
+                             r'|\bpending\s+(?:confirmation|clarification|verification)\b|\b(?:tbc|tbd|unconfirmed)\b',
+                             re.A | re.I)
+_INTENT_DOUBTED = re.compile(r'\b(?:unclear|uncertain|unsure|undetermined|undecided|questionable)\b'
+                             r'(?=\s*(?:[.;,!?)\]]|$|whether\b|if\b))', re.A | re.I)
+_CLAUSE_OPENS = re.compile(r'(?:but|however|though|although|whereas|yet)\b', re.A | re.I)
+
+
+def _intent_hedged(an: Analysis, m: re.Match, clause: tuple[int, int], following: Optional[tuple[int, int]]) -> bool:
+    """Whether the intent word at ``m`` is hedged (see _INTENT_PRESUMED): read in its clause (within CLAUSE_REACH)
+    and in the next clause of its sentence when that one only qualifies it ("..., but unclear.")."""
+    text = an.text
+    if _INTENT_PRESUMED.search(text, max(clause[0], m.start() - 40), m.start()):
+        return True
+    windows = [an.lay.window(clause, m.start(), m.end(), CLAUSE_REACH)]
+    if following is not None and _CLAUSE_OPENS.match(text, following[0], following[1]):
+        windows.append((following[0], min(following[1], following[0] + 120)))
+    return any(_INTENT_PENDING.search(text, lo, hi) or _INTENT_DOUBTED.search(text, lo, hi) for lo, hi in windows)
 
 
 def _prep_quality(an: Analysis, sentences) -> Optional[Fact]:
