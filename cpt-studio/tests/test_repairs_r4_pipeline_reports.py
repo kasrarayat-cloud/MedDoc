@@ -22,6 +22,7 @@ class RealOutputVerifierTests(RealOutputCase):
     def reviewed(self, note=''):
         self.s.decide('sel:0', 'approve', self.s.reviewer, note=note)  # 43239
         self.s.decide('sel:1', 'reject', self.s.reviewer)  # 45385
+        self.s.decide('exc:0', 'confirm', self.s.reviewer)  # 45378: a documentation exclusion needs a decision (5bbe19fed)
         return self.txt('reviewed'), self.detail()
 
     def check(self, body, detail, kind='reviewed'):

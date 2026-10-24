@@ -416,7 +416,8 @@ request changed is decided against the run in use, never the previous
 context. The run in use is the revision's newest request that finished,
 whether or not an assessment was made with it (a Stop during the send or a
 swept or expired assess cancels that assess); a reconciled unknown outcome no
-longer stands, so its one released attempt is made. Every member action that can queue a stage runs under the encounter
+longer stands, so its one released attempt is made, and neither does a reserved
+run the stale sweep settled as not sent (no started_at: it was never sent). Every member action that can queue a stage runs under the encounter
 row lock and is refused while a stage is queued or running. The predict stage
 sends only the current revision's text with that revision's current context;
 each run records the service date it was built with, and assessment refuses

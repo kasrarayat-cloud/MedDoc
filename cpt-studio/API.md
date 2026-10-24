@@ -152,14 +152,20 @@ running. The addendum revision carries the original's extraction limitations.
 ## POST /api/encounters/{id}/context
 
 `{"service_date": "YYYY-MM-DD|''", "setting": "office|hospital_outpatient|asc|inpatient|emergency|telehealth|''",
-"billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Empty string clears a
-user value. Re-assesses with the provider run in use only when that run answers
+"billing_context": "professional|facility|''"}` → `201 {"context_id": "uuid"}`. Each value is a JSON
+string: a listed choice, or null or `''` to clear the user value; any other type (a number, a
+boolean, a list, an object) answers 400. A service date is a string in `YYYY-MM-DD` form only
+(also on upload). Re-assesses with the provider run in use only when that run answers
 exactly the request the new context would send; otherwise re-predicts (an
 identical retained result is reused at no cost). The run in use is the current
 revision's newest finished request, also when a Stop or an expired stage
 cancelled the assess that would have used it; a reconciled unknown outcome is
-not, so the attempt the reconciliation released is still made. 409 while a stage is queued or
-running, or before the text is extracted.
+not, so the attempt the reconciliation released is still made, and neither is a
+reserved run the stale sweep settled as not sent (it was never sent). The
+document's own facts are read again inside this request under a
+`CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
+nothing is changed. 409 while a stage is queued or running, or before the text
+is extracted.
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 
