@@ -233,10 +233,19 @@ def _first(readings: Sequence[Reading], statuses: Sequence[str]) -> Optional[Rea
 # Routing's reading of a span that carries no status wording at all. Only this is "silent"; any other
 # 'uncertain' saw a hedge (a condition, a question, an unclear plan) and is the code's own answer.
 SILENT_CUE_PREFIX = 'uncertain: no performance evidence'
+# Routing's cue for an explicit performance statement ("was performed", "was advanced"). On a reading that is not
+# 'performed' it survives only where something else downgraded the statement: its plan or history section, or the
+# family's document-level judgement.
+PERFORMED_CUE_PREFIX = 'performed:'
+
+
+def silent(status: str, cues: Sequence[str]) -> bool:
+    """Whether a status reading carries no status wording at all (no cues reads the same way)."""
+    return status == 'uncertain' and all(cue.startswith(SILENT_CUE_PREFIX) for cue in cues)
 
 
 def _silent(reading: Reading) -> bool:
-    return reading.status == 'uncertain' and all(cue.startswith(SILENT_CUE_PREFIX) for cue in reading.cues)
+    return silent(reading.status, reading.cues)
 
 
 def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> StatusOutcome:

@@ -16,10 +16,10 @@ from studio.gi.profiles import DETECTED_FAMILIES, PROFILES, PROFILES_VERSION, Se
 from studio.reference.store import PFS, applied_sources
 from studio.types import (CONTEXT_FACTS, AssessmentResult, Check, ClarificationSpec, CodeReference, EvidenceSpan, Fact,
                           FamilyFinding, NormalizedResponse, PageSpan, ProposalAssessment, ProviderCode,
-                          ReferenceLookup, ReferenceSourceInfo, RoutingResult, sha256_json)
+                          ReferenceLookup, ReferenceSourceInfo, RoutingResult, ServiceMention, sha256_json)
 from studio.validation import checks, rationale
 
-ENGINE_VERSION = 'cpt-studio-validation@2'
+ENGINE_VERSION = 'cpt-studio-validation@3'
 PROVIDER_STATUSES = ('succeeded', 'not_run', 'failed', 'unknown')
 EXTRACTION_STATUSES = ('ok', 'partial', 'failed')
 NO_EVIDENCE = 'No exact source evidence'
@@ -147,16 +147,47 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
 
 # --- phase 2: checks that depend on the other proposals -----------------------------------
 
+# Sections that do not document today's service by default (ARCHITECTURE 5.3): a plan or recommendation reads as
+# planned, history as historical, and an indication or chief complaint says why the patient came.
+NOT_TODAY_SECTIONS = ('plan', 'history', 'indication')
+
+
+def _speaks_for_today(mention: ServiceMention) -> bool:
+    """Whether a routed mention can document its procedure as done on the date of service, read only from routing's
+    status, section and cues.
+
+    Outside plan, history and indication / chief-complaint sections, an 'uncertain' mention counts when routing saw
+    something in it (a hedge or a doubt), never when it is silent. Inside them a hedge is not a doubt about today's
+    service - a plan that discusses, weighs or conditions a procedure is planning it - so only an explicit performance
+    statement that routing downgraded for its section (a 'performed:' cue: "EGD was performed today" under Assessment
+    and plan) counts there.
+    """
+    if mention.status in checks.POSITIVE:
+        return True
+    if mention.status != 'uncertain':
+        return False
+    if any(cue.startswith(checks.PERFORMED_CUE_PREFIX) for cue in mention.cues):
+        return True
+    return mention.section not in NOT_TODAY_SECTIONS and not checks.silent(mention.status, mention.cues)
+
+
+def _same_day_family(finding: FamilyFinding) -> bool:
+    profile = PROFILES.get(finding.family)
+    return profile is not None and profile.procedure
+
+
 def _encounter(provider, context, routing, sources, date_state, selections) -> _Encounter:
     active = [s for s in selections if not s.excluded]
     pfs_source = applied_sources(sources, date_state.value).get(PFS)
     procedures = [s for s in active if _same_day_procedure(s)]
     possible = [s for s in active if _same_day_procedure(s, state='uncertain')]
-    labels = [PROFILES[f.family].label for f in routing.findings
-              if f.family in PROFILES and PROFILES[f.family].procedure and f.status in checks.POSITIVE]
+    same_day = [f for f in routing.findings if _same_day_family(f)]
+    labels = [PROFILES[f.family].label for f in same_day if f.status in checks.POSITIVE]
     labels += [checks.service_name(s.profile, s.code) for s in procedures]
-    possible_labels = [PROFILES[f.family].label for f in routing.findings
-                       if f.family in PROFILES and PROFILES[f.family].procedure and f.status == 'uncertain']
+    # A routed family whose performance is not established holds the E/M only through a mention that can speak for
+    # the date of service; a selected procedural code whose own status is uncertain always does.
+    possible_labels = [PROFILES[f.family].label for f in same_day
+                       if f.status == 'uncertain' and any(_speaks_for_today(m) for m in f.mentions)]
     possible_labels += [checks.service_name(s.profile, s.code) for s in possible]
     possible_labels = [label for label in dict.fromkeys(possible_labels) if label not in labels]
     rows = {s.code: s.evaluation.reference.pfs for s in active if s.evaluation and s.evaluation.reference.pfs}

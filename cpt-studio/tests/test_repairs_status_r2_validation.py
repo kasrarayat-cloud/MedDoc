@@ -1,0 +1,290 @@
+"""Regressions for refutation round 2 over validation: status resolution and the same-day E/M rules.
+
+Each class reproduces one confirmed finding (status:N or review:N in the round-2 triage). Where the exact input
+reproduces through today's routing, it runs the real router, the real span reader and the engine; where it depends on
+a routing defect repaired elsewhere, or on a routing feature not yet present (gi.other findings), the test states the
+routing readings explicitly. Every over-correction finding has positive controls: a document that still justifies
+the hold must keep it. Synthetic text only; pure functions.
+"""
+import json
+from datetime import date
+
+from django.test import SimpleTestCase
+
+from studio.gi.context import extract_context
+from studio.gi.detect import route
+from studio.gi.profiles import DETECTED_FAMILIES, PROFILES
+from studio.reference.store import InMemoryReferenceLookup
+from studio.types import (EvidenceSpan, Fact, FamilyFinding, NormalizedResponse, PageSpan, ProviderCode,
+                          RoutingResult, ServiceMention, Span, from_jsonable, to_jsonable)
+from studio.validation import checks
+from studio.validation.engine import ENGINE_VERSION, assess
+from tests.test_validation import (EGD, EGD_LABEL, EM, MUE_INFO, MUE_ROWS, PFS_INFO, PFS_ROWS, EngineCase, Note,
+                                   finding, pfs, selected, visit_context)
+
+DOS = date(2026, 10, 21)
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: 2026-10-21\n'
+SILENT_CUE = 'uncertain: no performance evidence in its sentence or section'
+REFERENCE = InMemoryReferenceLookup([PFS_INFO, MUE_INFO], {
+    PFS_INFO.key: {**PFS_ROWS, ('43259', ''): pfs(base='43235'), ('45331', ''): pfs(base='45330'),
+                   ('45330', ''): pfs(), ('91200', ''): pfs(days='XXX', mult='0')},
+    MUE_INFO.key: MUE_ROWS})
+
+
+def real(text, *picks):
+    """picks: (code, evidence phrase, ...). Real routing, JSON round-tripped as the assess stage stores it, the real
+    span reader and the engine. Returns (proposals by code, result)."""
+    routing = from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(route(text, DOS)))))
+    codes = []
+    for index, (code, *phrases) in enumerate(picks):
+        spans = tuple(EvidenceSpan(0, text.index(p), text.index(p) + len(p), p, True) for p in phrases)
+        codes.append(ProviderCode(role='selected', system='cpt', code=code, display='UNVERIFIED', evidence=spans,
+                                  index=index))
+    result = assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text), routing=routing,
+                    normalized=NormalizedResponse('corti', 'corti-coding@1', codes=tuple(codes)),
+                    reference=REFERENCE, service_date=DOS, provider_status='succeeded', extraction_status='ok')
+    return {p.code: p for p in result.proposals}, result
+
+
+def check_of(item, check_id):
+    found = [c for c in item.checks if c.id == check_id]
+    return found[0] if found else None
+
+
+def encounter_check(result, check_id):
+    (found,) = [c for c in result.encounter_checks if c.id == check_id]
+    return found
+
+
+def placed(note, family, status, phrase, section, *cues):
+    where = note.sentence(phrase)
+    return ServiceMention(family=family, status=status, span=where, sentence=where, section=section, cues=cues)
+
+
+class RealCase(SimpleTestCase):
+    maxDiff = None
+
+    def assertVisitReady(self, proposals, code='99214'):
+        visit = proposals[code]
+        self.assertEqual((visit.bucket, visit.status), ('selected', 'ready'), [c.detail for c in visit.checks])
+        self.assertIsNone(check_of(visit, 'em.same_day_procedure'))
+        self.assertNotIn('separate_em', [c.fact for c in visit.clarifications])
+
+    def assertVisitHeld(self, proposals, phrase, code='99214'):
+        visit = proposals[code]
+        self.assertEqual(visit.status, 'needs_clarification')
+        self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+        self.assertIn(phrase, check_of(visit, 'em.same_day_procedure').detail)
+
+
+# --- status:3 and review:1: a plan that only discusses a procedure is not a same-day procedure ---------------
+
+OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: {cc}\n'
+          'History of present illness: Intermittent heartburn for 8 weeks despite omeprazole. No dysphagia.\n'
+          'Assessment: Gastroesophageal reflux disease, not controlled.\nPlan: {plan}\n'
+          'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+VISIT_SENTENCE = 'Established patient office visit.'
+ASSESSMENT_AND_PLAN = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                       'Chief complaint: Abdominal pain.\nAssessment and plan: {plan}\nMedical decision making: moderate.\n'
+                       'Time: Total time on the date of the encounter was 32 minutes.\n')
+DISCUSSED = (
+    # review:1, the claimant's five
+    'Discussed colonoscopy; the patient will think about it.',
+    'EGD versus empiric PPI trial; the patient prefers the PPI trial.',
+    'Colonoscopy? Will decide after labs.',
+    'Possible Crohn disease. Colonoscopy vs. CT enterography; decision at follow-up.',
+    'Risks and benefits of colonoscopy were discussed.',
+    # review:1, the verifier's own
+    'Colonoscopy if needed.', 'Possible EGD.', 'Flexible sigmoidoscopy versus colonoscopy; the patient will call to decide.',
+    'Discussion of EGD; the patient prefers to wait.',
+    'Trial of fiber supplementation. Discussed colonoscopy for persistent symptoms.',
+    'Colonoscopy may be needed if cramping persists.', 'Upper endoscopy? Will reassess after the PPI trial.',
+    # status:3 breadth
+    'Possible colonoscopy.', 'Colonoscopy as needed.', 'EGD if needed.', 'Candidate for ERCP if cholangitis develops.',
+    'Discussed colonoscopy; patient will call to schedule.', 'Colonoscopy versus CT colonography; patient to decide.',
+    'Discussed colonoscopy today; the patient will think about it.',
+)
+
+
+class Status3PlanHedgeTests(RealCase):
+    """status:3 — a hedged plan item or a chief-complaint reference does not hold the office E/M."""
+
+    def test_the_claimed_input_is_ready(self):
+        text = OFFICE.format(cc='Heartburn.', plan='Increase omeprazole to 40 mg twice daily. Possible EGD if symptoms '
+                                                  'persist.')
+        self.assertEqual(route(text, DOS).finding(EGD).status, 'uncertain')  # the reading the hold misread
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE))
+        self.assertVisitReady(proposals)
+
+    def test_plan_variants_are_ready(self):
+        for plan in ('EGD as needed.', 'EGD if symptoms persist.', 'EGD pending insurance approval.',
+                     'Possible EGD if symptoms persist.'):
+            with self.subTest(plan=plan):
+                proposals, _ = real(OFFICE.format(cc='Heartburn.', plan=plan), ('99214', VISIT_SENTENCE))
+                self.assertVisitReady(proposals)
+
+    def test_chief_complaint_references_are_ready(self):
+        for cc in ('Follow-up after colonoscopy.', 'Here to discuss EGD results.', 'Colonoscopy results.',
+                   'Post-colonoscopy follow-up.'):
+            with self.subTest(cc=cc):
+                proposals, _ = real(OFFICE.format(cc=cc, plan='Return in 3 months.'), ('99214', VISIT_SENTENCE))
+                self.assertVisitReady(proposals)
+
+    def test_a_pure_office_visit_still_reports_an_unproposed_e_m(self):
+        """The second symptom: the same reading suppressed the possible-missed-E/M warning on a pure office visit."""
+        _, result = real(OFFICE.format(cc='Heartburn.', plan='Possible EGD if symptoms persist.'))
+        unproposed = encounter_check(result, 'services.unproposed')
+        self.assertEqual(unproposed.status, 'warn')
+        self.assertIn('Possible missed service: Office / outpatient evaluation and management', unproposed.detail)
+
+    def test_controls_scheduled_and_planned_wording_stay_ready(self):
+        for plan in ('Schedule EGD.', 'Consider EGD if no improvement.', 'EGD in 2024 was normal.'):
+            with self.subTest(plan=plan):
+                proposals, _ = real(OFFICE.format(cc='Heartburn.', plan=plan), ('99214', VISIT_SENTENCE))
+                self.assertVisitReady(proposals)
+
+
+class Review1PlanDiscussionTests(RealCase):
+    """review:1 — an office visit whose plan only discusses a procedure keeps its E/M approvable."""
+
+    def test_discussion_phrasings_are_ready(self):
+        for plan in DISCUSSED:
+            with self.subTest(plan=plan):
+                proposals, _ = real(ASSESSMENT_AND_PLAN.format(plan=plan), ('99214', VISIT_SENTENCE))
+                self.assertVisitReady(proposals)
+
+    def test_a_history_discussion_is_ready(self):
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'History of present illness: A colonoscopy was discussed at the prior visit and she preferred to wait.\n'
+                'Assessment and plan: Fiber supplementation.\nMedical decision making: moderate.\n'
+                'Time: Total time on the date of the encounter was 32 minutes.\n')
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE))
+        self.assertVisitReady(proposals)
+
+    def test_a_reinstated_e_m_is_not_gated_by_a_discussion(self):
+        text = ASSESSMENT_AND_PLAN.format(plan='Discussed colonoscopy; the patient will think about it. '
+                                               'Return in three months.')
+        proposals, _ = real(text, ('99214', 'Return in three months.'))
+        visit = proposals['99214']
+        self.assertEqual((visit.bucket, visit.reinstatable), ('excluded', True))
+        self.assertEqual(check_of(visit, 'review.reinstatement').status, 'pass')
+
+    def test_controls_a_performance_statement_in_the_plan_still_holds(self):
+        proposals, _ = real(ASSESSMENT_AND_PLAN.format(plan='EGD was performed today with biopsies of the antrum.'),
+                            ('99214', VISIT_SENTENCE))
+        self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
+
+    def test_controls_an_unheaded_hedge_outside_a_plan_still_holds(self):
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'Possible EGD if the stricture is confirmed.\nMedical decision making: moderate.\n')
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE))
+        self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
+
+    def test_controls_a_doubted_procedure_line_still_holds(self):
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'Procedure: Colonoscopy to evaluate iron deficiency anemia.\nMedical decision making: moderate.\n'
+                'Total time: 32 minutes.\n')
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE))
+        self.assertVisitHeld(proposals, 'Colonoscopy is possibly performed on the same date')
+
+    def test_controls_an_assessment_section_hedge_still_holds(self):
+        """Only plan, history and indication / chief-complaint sections are read as not today (ARCHITECTURE 5.3);
+        an assessment section has no such default, so a hedge there stays a doubt about the service."""
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                'Assessment: GERD; possible EGD if refractory.\nPlan: PPI.\nMedical decision making: moderate.\n')
+        proposals, _ = real(text, ('99214', VISIT_SENTENCE))
+        self.assertVisitHeld(proposals, f'{EGD_LABEL} is possibly performed on the same date')
+
+
+class SameDayMentionRuleTests(EngineCase):
+    """status:3 and review:1 at the validation layer: which routed mention of an 'uncertain' procedure family can
+    speak for the date of service, read from routing's section and cues alone."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Office visit: established patient seen for dysphagia.',
+                'Total time 32 minutes.', 'EGD line.')
+    VISIT, TIME, LINE = 'Office visit: established patient seen for dysphagia.', 'Total time 32 minutes.', 'EGD line.'
+
+    def visit_status(self, *mentions):
+        self.statuses = {self.TIME: None}
+        found = [finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                         facts={'em_basis': 'total time 32 minutes'}),
+                 FamilyFinding(EGD, 'uncertain', tuple(mentions))]
+        result = self.run_engine(self.NOTE, selected('99213', self.NOTE.span(self.TIME)), findings=found,
+                                 ctx=visit_context())
+        return self.proposal(result, '99213')
+
+    def mention(self, section, *cues):
+        return placed(self.NOTE, EGD, 'uncertain', self.LINE, section, *cues)
+
+    def test_the_rule(self):
+        downgrade = ('performed: was performed', 'section: plan (Assessment and plan)')
+        cases = (
+            ('plan', ('uncertain: Possible',), 'ready'),
+            ('plan', ('uncertain: Discussed',), 'ready'),
+            ('plan', downgrade, 'needs_clarification'),
+            ('history', ('uncertain: was discussed',), 'ready'),
+            ('history', ('performed: underwent', 'section: history (History of present illness)'),
+             'needs_clarification'),
+            ('indication', (SILENT_CUE,), 'ready'),
+            ('indication', ('uncertain: ?',), 'ready'),
+            ('other', (SILENT_CUE,), 'ready'),
+            ('other', (), 'ready'),
+            ('other', ('uncertain: Possible',), 'needs_clarification'),
+            ('procedure', ("uncertain: section silent: 'to evaluate' follows the service name",
+                           'section: procedure (Procedure)'), 'needs_clarification'),
+            ('findings', ("uncertain: unresolved negation 'not' in its clause",), 'needs_clarification'),
+            ('assessment', ('uncertain: possible',), 'needs_clarification'),
+            ('impression', ('uncertain: possible',), 'needs_clarification'),
+        )
+        for section, cues, expected in cases:
+            with self.subTest(section=section, cues=cues):
+                visit = self.visit_status(self.mention(section, *cues))
+                self.assertEqual(visit.status, expected, [c.detail for c in visit.checks])
+                if expected == 'needs_clarification':
+                    self.assertIn(f'{EGD_LABEL} is possibly performed on the same date',
+                                  self.check(visit, 'em.same_day_procedure').detail)
+
+    def test_any_mention_that_can_speak_for_today_holds(self):
+        visit = self.visit_status(self.mention('plan', 'uncertain: Possible'),
+                                  self.mention('other', 'uncertain: Possible'))
+        self.assertEqual(visit.status, 'needs_clarification')
+
+    def test_the_selected_code_arm_is_kept(self):
+        """A selected procedural code whose own passage hedges holds the E/M, whatever its section."""
+        self.statuses = {self.TIME: None, self.LINE: ('uncertain', ('uncertain: Possible',))}
+        found = [finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                         facts={'em_basis': 'total time 32 minutes'}),
+                 FamilyFinding(EGD, 'uncertain', (self.mention('plan', 'uncertain: Possible'),))]
+        result = self.run_engine(self.NOTE, selected('99213', self.NOTE.span(self.TIME)),
+                                 selected('43235', self.NOTE.span(self.LINE)), findings=found, ctx=visit_context())
+        self.assertEqual(self.proposal(result, '99213').status, 'needs_clarification')
+
+
+# --- status:4: a family routed only 'uncertain' is not established by another family's passage --------------
+
+EUS_NOTE = (HEAD + 'Indication: Dysphagia. {indication}\nProcedure: EGD\n'
+            'Findings: The endoscope was advanced to the second part of the duodenum. Normal EGD.\n{plan}')
+ADVANCED = 'The endoscope was advanced to the second part of the duodenum.'
+
+
+# --- status:13: a code's own hedged passage is never dropped by another of its passages ----------------------
+
+S13 = (HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. {findings}\n'
+       'Plan: Repeat colonoscopy with biopsies if symptoms persist.\n')
+CECUM = 'The colonoscope was advanced to the cecum.'
+PLAN_HEDGE = 'Repeat colonoscopy with biopsies if symptoms persist.'
+
+
+# --- status:19: other GI services hold the E/M; coverage never claims more than routing covers ----------------
+
+BANDING = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal bleeding.\n'
+           'Procedure: Rubber band ligation of an internal hemorrhoid was performed today without complication.\n'
+           'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+# --- review:0 at the validation layer: a reinstatable same-day procedure is named on the E/M ------------------
+
+
+class EngineVersionTests(SimpleTestCase):
+    def test_the_engine_version_is_bumped_once(self):
+        self.assertEqual(ENGINE_VERSION, 'cpt-studio-validation@3')
