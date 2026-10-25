@@ -3114,6 +3114,25 @@ def _SEC_answer_above(an: Analysis, ls: int, le: int) -> Optional[str]:
     return None
 
 
+def _S2_own_line_denies(an: Analysis, lo: int, hi: int) -> bool:
+    """Whether [lo, hi), the service's own line within CLAUSE_REACH of the span, holds a negation word that negates on
+    its own, as the cue reader negates (_clause_reading_cues): an anchored negation of a service or intervention named
+    next to it (_anchored_explains: "No biopsy was performed", "Biopsy not done", "Biopsies were not needed"), or a
+    negation that names no service and denies the act its words describe (_memberless_negations: "No tissue was
+    obtained", "The stricture was not dilated"); clause cues never negate. Only then does the line's own reading stand
+    (round 4d sections:3: the hold was skipped on any negation word, so the question's "No" above still excluded the
+    biopsy). A word a complication, qualifier or finding explains ("without difficulty", "with no bleeding", "no polyps
+    were seen") or that only doubts (", which was not ulcerated", "could not be completed") does not: the cross-line
+    negation is then what decides, and it holds. Bounded by the window; the negation readers are memoised."""
+    text = an.text
+    for token in cues.DOUBT_TOKEN.finditer(text, lo, hi):
+        span = (token.start(), token.end())
+        cs, ce = an.lay.window(an.lay.clauses_for(*span)[0], span[0], span[1], CLAUSE_REACH)
+        if _anchored_explains(an, cs, ce, span) or _covered(span, [where for _, where in _memberless_negations(an, cs, ce)]):
+            return True
+    return False
+
+
 def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[str]:
     """A cue when a negation reaches [start, end) only because its sentence was joined across a line break after a
     complete answer or refusal (_ANSWER_AT_LINE_END) on the line above, and the span's own line has no denial
@@ -3123,7 +3142,8 @@ def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[
     wrapped sentence and stays negated. Round 4c (sections:7, sections:8, declared:5): the line above is read whole,
     from its own start (a field question's "?" ends the question's sentence before its "No"), and its answer is read
     by sections' own readers too (_SEC_answer_above), so a line sections reads as answered never negates across the
-    break. Bounded by CLAUSE_REACH and WRAP_TAIL."""
+    break. Round 4d sections:3: "no denial" is a negation word nothing explains (_S2_own_line_denies), never any
+    negation word ("Biopsies were taken ... without difficulty." holds). Bounded by CLAUSE_REACH and WRAP_TAIL."""
     text = an.text
     ss, _ = an.lay.sentence_for(start, end)
     ls = text.rfind('\n', 0, start) + 1
@@ -3131,7 +3151,7 @@ def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[
         return None
     le = text.find('\n', end)
     le = len(text) if le < 0 else le
-    if cues.DOUBT_TOKEN.search(text, max(ls, start - CLAUSE_REACH), min(le, end + CLAUSE_REACH)):
+    if _S2_own_line_denies(an, max(ls, start - CLAUSE_REACH), min(le, end + CLAUSE_REACH)):
         return None
     above = text[max(text.rfind('\n', 0, ls - 1) + 1, ls - 1 - CLAUSE_REACH):ls - 1]
     answer = _ANSWER_AT_LINE_END.search(above)

@@ -436,9 +436,22 @@ class S2Sections3AnswerAboveExplainedNegationTests(HeldOrReadyAssertions, unitte
                 'advanced to the cecum.\nTattoo placed today: no\n' + line + '\n')
         self.assert_held_never_excluded(text, '45385', line)
 
+    def test_a_line_that_alone_only_doubts_or_reads_incomplete_holds_too(self):
+        """The verifier's weaker sub-variant: the line's own word doubts or reads incomplete, never negates; only the
+        question's "No" negated it."""
+        for line in ('Biopsies were taken from the gastric antrum, which was not ulcerated.',
+                     'Biopsies were taken; the mucosa was not friable.', 'Biopsy was attempted but could not be completed.',
+                     'Biopsy was taken; the patient did not tolerate further sampling.',
+                     'Biopsies were taken; no polyps were seen.', 'Biopsies were taken; no sedation was given.'):
+            text = s3_note(S3_QUESTION, line)
+            with self.subTest(line=line):
+                self.assert_held_never_excluded(text, '43239', line)
+
     def test_the_lines_own_denial_still_negates(self):
         for line in ('No biopsies were taken from the gastric antrum.', 'Biopsies were not taken from the gastric antrum.',
-                     'no biopsies were taken, without difficulty.'):
+                     'no biopsies were taken, without difficulty.', 'Biopsy not done.', 'Biopsy was declined.',
+                     'Biopsies: none.', 'Biopsies were not needed.', 'Biopsy of the antrum was not performed.',
+                     'No tissue was obtained.', 'The stricture was not dilated.', 'No sample was taken from the antrum.'):
             text = s3_note(S3_QUESTION, line)
             with self.subTest(line=line):
                 self.assertEqual(read(text, line)[0], 'negated')
