@@ -5,14 +5,18 @@ then routing for the document's own date and the real validation engine.
   tooltip asks it), answered No: extraction writes '<label>?: No', which the field done-question reader did not read,
   and the cancelled EUS was a ready 43242;
 - declared:1: the same for 'Procedure cancelled?' answered No, read as a cancellation, so the performed EUS was
-  excluded; also a text field typed 'No' beside its printed question standing alone.
+  excluded; also a text field typed 'No' beside its printed question standing alone;
+- declared:4: the separately identifiable E/M statement with its check box beside the printed label 'Attested' on the
+  line under it, left unchecked: the statement attested and 99214 was ready beside a same-day procedure.
 
 Synthetic documents only, built here from raw PDF syntax.
 """
 import unittest
 
 from tests.test_repairs_r3_forms_pdf import codes, extracted, text_line, widget_rect
-from tests.test_repairs_r4_boxes_pdf import EUS_LINE, EUS_LINES, page_form, row_y
+from tests.test_repairs_r4_boxes_pdf import ATTEST_OFFICE, ATTEST_PICKS, EUS_LINE, EUS_LINES, page_form, row_y
+from tests.test_repairs_r3_forms_routing import outcome
+from tests.test_repairs_status_r2_routing import clarified, routed, run_engine
 from tests.test_repairs_status_r2_routing import family
 
 
@@ -96,6 +100,54 @@ class Declared1CancelQuestionRadioTests(unittest.TestCase):
                 result = radio_form(question, 'Yes')
                 self.assertEqual(family(result.text, 'gi.eus'), 'cancelled')
                 self.assertIn(codes(result.text, ('43242', EUS_LINE))[0], ('excluded', 'held'))
+
+
+
+ATTEST_STATEMENT = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
+
+
+def separate_em(text):
+    return next((f for f in routed(text).finding('gi.office_em').facts if f.name == 'separate_em'), None)
+
+
+def attestation_box_pdf(name, checked, *, tu=None, left=True):
+    """ATTEST_OFFICE, the statement, then the line 'Attested' under it with a check box left or right of the label."""
+    lines = ATTEST_OFFICE + [ATTEST_STATEMENT]
+    form = page_form(lines)
+    y = row_y(lines, len(lines))
+    form.line(text_line(90, y, 'Attested'))
+    form.checkbox(name, (72, y - 3, 84, y + 9) if left else (150, y - 3, 162, y + 9), checked, tu=tu)
+    return extracted(form.build())
+
+
+class Declared4AttestationBoxInAPdfTests(unittest.TestCase):
+    """declared:4 (high): an unchecked attestation box beside its printed label under the statement refuses it."""
+
+    def assert_attested(self, result, attested):
+        self.assertEqual(result.status, 'ok', result.messages)
+        fact = separate_em(result.text)
+        proposals, _ = run_engine(result.text, ATTEST_PICKS)
+        if attested:
+            self.assertIsNotNone(fact, result.text[-300:])
+            self.assertNotIn('separate_em', clarified(proposals['99214']))
+        else:
+            self.assertIsNone(fact, result.text[-300:])
+            self.assertEqual(outcome(proposals['99214']), 'held')
+            self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_an_unchecked_box_beside_the_label_under_the_statement(self):
+        for name, tu in (('Attested', None), ('Check Box1', 'Attested')):
+            for left in (True, False):
+                with self.subTest(name=name, left=left):
+                    result = attestation_box_pdf(name, False, tu=tu, left=left)
+                    self.assertIn('Attested: not checked', result.text)
+                    self.assert_attested(result, False)
+
+    def test_the_checked_box_attests(self):
+        for name, tu in (('Attested', None), ('Check Box1', 'Attested')):
+            for left in (True, False):
+                with self.subTest(name=name, left=left):
+                    self.assert_attested(attestation_box_pdf(name, True, tu=tu, left=left), True)
 
 
 if __name__ == '__main__':

@@ -2471,12 +2471,16 @@ def _box_field_answer(an: Analysis, start: int, end: int, denied: re.Match) -> t
     return ('held', BOX_FIELD_HELD_UNTIED) if kind in ('item', 'qualified') else (None, None)
 
 
-# Field labels known to name no item, so their "No" or "None" says nothing of a service (round 5 regression:1). A closed
-# list, read whole: a label not on it fails closed. An optional "Any", "if any", a parenthesis ("(if any)", "(mL)") and
-# the label's own "?" may stand with it.
+# Field labels known to name no item, so their "No" or "None" says nothing of a service (round 5 regression:1), and
+# known to answer their own question, never the separately identifiable E/M statement above them (round 5
+# declared:12). A closed list, read whole: a label not on it fails closed. An optional "Any", a participle ("Sedation
+# given", "Teaching physician present"), "if any", a parenthesis ("(if any)", "(mL)") and the label's own "?" may
+# stand with it.
 _BOX_NO_ITEM_LABEL = re.compile(r'(?:any[ \t]+)?(?:complications?|adverse[ \t]+events?|ebl|estimated[ \t]+blood[ \t]+loss|'
-                                r'blood[ \t]+loss|sedation|anesthesia|anaesthesia|allerg(?:y|ies)|comments?|notes?|'
-                                r'remarks?)(?:[ \t]*(?:\([^()\n]{0,40}\)|if[ \t]+any))?[ \t]*\??', re.A | re.I)
+                                r'blood[ \t]+loss|bleeding|sedation|anesthesia|anaesthesia|allerg(?:y|ies)|comments?|notes?|'
+                                r'remarks?|interpreter|teaching[ \t]+physician|resident|disposition)'
+                                r'(?:[ \t]+(?:given|used|present|involvement|involved|needed|required|noted))?'
+                                r'(?:[ \t]*(?:\([^()\n]{0,40}\)|if[ \t]+any))?[ \t]*\??', re.A | re.I)
 
 
 def _box_names_no_item(an: Analysis, start: int, end: int) -> bool:
@@ -3729,10 +3733,16 @@ _BOX_ANY_MARK = ('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RAD
                  + _BOX_PAREN_ANSWER.pattern + '|' + _BOX_CROSS.pattern)
 # A line that answers a statement: an optional short label, then only marks and answer words ("☐ Yes ☒ No", "No",
 # "Answer: No", "☒", "Attested: ☐"; never "☐ Follow-up colonoscopy in 3 years" or "Plan: Follow up in 2 weeks.").
-_BOX_ANSWER_LINE = re.compile(r"[ \t]*(?:[A-Za-z][\w /'-]{0,30}:[ \t]*)?(?:(?:" + _BOX_ANY_MARK
+_BOX_ANSWER_LINE = re.compile(r"[ \t]*(?:(?P<label>[A-Za-z][\w /'-]{0,30}):[ \t]*)?(?:(?:" + _BOX_ANY_MARK
                               + r"|(?:yes|no|y|n|none|n/a|done|not[ \t]+done)\b)[ \t]*)+\.?[ \t]*", re.I)
 _BOX_BARE_YES = re.compile(r"[ \t]*(?:[A-Za-z][\w /'-]{0,30}:[ \t]*)?(?:yes|y)\.?[ \t]*", re.I)
 _BOX_OPTION_WORD = re.compile(r'\b' + _OPTION_WORDS + r'\b', re.A | re.I)
+# A line under the statement made of one mark and a short label of its own, before or after it ("☐ Attested",
+# "Attested ☐", "Attested | ☐", "☐ Yes, I attest"; round 5 declared:4): the statement's own box, unless its label
+# answers for something else (_box_answers_its_own_label).
+_BOX_LABELLED_MARK = re.compile(r"[ \t]*(?:(?:" + _BOX_ANY_MARK + r")[ \t]*(?:[|:][ \t]*)?(?P<after>[A-Za-z][\w /',.&-]{0,40}?)"
+                                r"|(?P<before>[A-Za-z][\w /',.&-]{0,40}?)[ \t]*(?:[|:][ \t]*)?(?:" + _BOX_ANY_MARK + r"))[ \t.]*",
+                                re.I)
 _BOX_LONE_MARKS = re.compile(r'[ \t]*(?:(?:' + _BOX_ANY_MARK + r')[ \t]*)+')
 BOX_ANSWER_LINE_CHARS = 120  # a line longer than this answers no statement (bounds the work)
 
@@ -3758,9 +3768,14 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
     if _box_marks_refuse(an, max(line_start or 0, start - BOX_REACH), min(rest_end, end + BOX_REACH)):
         return True
     answer = _box_line_after(text, rest_end)
-    if answer is not None and _BOX_ANSWER_LINE.fullmatch(text, *answer):
+    reply = _BOX_ANSWER_LINE.fullmatch(text, *answer) if answer is not None else None
+    if reply is not None and reply.group('label') and _box_answers_its_own_label(an, *reply.span('label')):
+        reply = None  # "Complications: None": a field answering its own label, not the statement (declared:12)
+    if reply is not None:
         if not _box_answer_affirms(an, *answer):
             return True
+    elif answer is not None and _box_own_box_refuses(an, *answer):
+        return True  # "☐ Attested": the statement's own box, on the line under it, is not checked (declared:4)
     elif not text[end:rest_end].strip() and text[start:end].rstrip().endswith(':'):
         return True  # it asks, and nothing under it answers yes
     above = _box_line_before(text, line_start) if line_start else None
@@ -3770,8 +3785,34 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
     named = _within(fields.named, fields.named_starts, start, end) if text.find('\n', start, end) < 0 else None
     if named is not None and named.state != 'on':
         return True
+    if answer is not None:  # a field tied to the printed line under it that is not checked: the statement's box
+        index = bisect.bisect_left(fields.named_starts, answer[0])
+        under = fields.named[index] if index < len(fields.named) else None
+        if (under is not None and under.start < answer[1] and under.state != 'on'
+                and not _box_answers_its_own_label(an, under.start, under.end)):
+            return True  # (declared:4: a PDF's unchecked box beside its printed label "Attested")
     index = bisect.bisect_right(fields.untied_starts, start) - 1
     return index >= 0 and start < fields.untied[index].end
+
+
+def _box_answers_its_own_label(an: Analysis, start: int, end: int) -> bool:
+    """Whether the label [start, end) of a line under the statement answers for something other than the statement:
+    it names an item (a service, an intervention or a procedure's word: "Biopsy: No", "☐ Follow-up colonoscopy in 3
+    years") or is a field known to answer its own question (_BOX_NO_ITEM_LABEL: "Complications: None", "Sedation
+    given: No"). Any other label is read as the statement's answer: fail-closed (round 5 declared:12, declared:4)."""
+    if an.services_in(start, end) or an.interventions_in(start, end) or _PROCEDURE_WORD.search(an.text, start, end):
+        return True
+    return bool(_BOX_NO_ITEM_LABEL.fullmatch(_label_key(an.text[start:end])))
+
+
+def _box_own_box_refuses(an: Analysis, start: int, end: int) -> bool:
+    """Whether the line [start, end) under the statement is its own box, with a short label, and that box is not
+    checked (_BOX_LABELLED_MARK, _box_marks_refuse; round 5 declared:4)."""
+    mark = _BOX_LABELLED_MARK.fullmatch(an.text, start, end)
+    if mark is None:
+        return False
+    label = 'after' if mark.group('after') is not None else 'before'
+    return not _box_answers_its_own_label(an, *mark.span(label)) and _box_marks_refuse(an, start, end)
 
 
 def _box_marks_refuse(an: Analysis, lo: int, hi: int) -> bool:

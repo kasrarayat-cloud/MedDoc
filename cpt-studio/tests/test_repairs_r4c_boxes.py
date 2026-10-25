@@ -486,6 +486,94 @@ class Declared8CheckedNotPerformedOptionTests(BoxCase):
                 self.assert_outcome(text, '43242', EUS_LINE, 'ready')
 
 
+
+# --- declared:4, declared:12 -- the separately identifiable E/M statement and the line under it ------------------------
+
+AT_NOTE = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit for rectal bleeding.\nMedical '
+           'decision making: Moderate.\nTotal time on the date of the encounter was 45 minutes.\nProcedure: Flexible '
+           'sigmoidoscopy with biopsy was performed. The sigmoidoscope was advanced to 40 cm.\n{tail}')
+AT_ST = 'A significant, separately identifiable E/M service was provided on the same day as the procedure.'
+AT_ST2 = 'I performed a significant, separately identifiable E/M service on the same day as the procedure.'
+AT_PICKS = [('99214', 'Total time on the date of the encounter was 45 minutes.'),
+            ('45331', 'Flexible sigmoidoscopy with biopsy was performed.')]
+
+
+class AttestationLineCase(BoxCase):
+    def separate_em(self, text):
+        finding = detect.route(text).finding('gi.office_em')
+        return next((f for f in finding.facts if f.name == 'separate_em'), None)
+
+    def assert_refused(self, tail):
+        text = AT_NOTE.format(tail=tail)
+        self.assertIsNone(self.separate_em(text), tail)
+        proposals, _ = run_engine(text, AT_PICKS)
+        self.assertEqual(outcome(proposals['99214']), 'held', tail)
+
+    def assert_documented(self, tail):
+        text = AT_NOTE.format(tail=tail)
+        self.assertIsNotNone(self.separate_em(text), tail)
+        proposals, _ = run_engine(text, AT_PICKS)
+        self.assertNotIn('separate_em', [c.fact for c in proposals['99214'].clarifications], tail)
+
+
+class Declared4AttestationBoxUnderItTests(AttestationLineCase):
+    """declared:4 (high). The statement's own unchecked box on the next line, with its label before or after it ('☐
+    Attested', 'Attested ☐', 'Attested | ☐'), was no answer: only a label with a colon then marks and answer words was,
+    so the separately identifiable E/M was documented and 99214 ready; a fillable PDF did the same. Such a line is the
+    statement's answer unless its label names an item or a field known to answer itself; it attests only checked."""
+    UNCHECKED = ('☐ Attested', '[ ] Attested', '☐ I attest', 'Attested ☐', 'Attested [ ]', 'Attested | ☐', '☐ Attest',
+                 '☐ Agree', '☐ Confirmed', '( ) Attested', '☐ Yes, I attest', '☐ I agree.', 'Attested: [ ]', '○ Attested',
+                 '[?] Attested', '☐ OK')
+
+    def test_an_unchecked_box_under_the_statement_refuses_it(self):
+        for line in self.UNCHECKED:
+            for blank in ('', '\n'):
+                with self.subTest(line=line, blank=bool(blank)):
+                    self.assert_refused(f'{AT_ST}\n{blank}{line}\n')
+
+    def test_a_checked_box_attests(self):
+        for line in ('☒ Attested', '[x] Attested', 'Attested ☒', 'Attested | ☒', '☑ I attest', '☒ Agree', '(x) Attested'):
+            with self.subTest(line=line):
+                self.assert_documented(f'{AT_ST}\n{line}\n')
+
+    def test_a_box_for_another_item_under_it_is_not_its_answer(self):
+        for line in ('☐ Follow-up colonoscopy in 3 years', '☐ Biopsy', '☐ Teaching physician present', '☐ Complications'):
+            with self.subTest(line=line):
+                self.assert_documented(f'{AT_ST}\n{line}\n')
+
+    def test_a_form_field_tied_to_the_line_under_it(self):
+        for printed, field in ((' ☐ Attested', 'Attested: not checked'), ('Attested', 'Attested: not checked'),
+                               ('Attested', 'Attested: No')):
+            with self.subTest(printed=printed, field=field):
+                self.assert_refused(f'{AT_ST}\n{printed}\n\n[PDF form fields on page 1]\n{field}')
+        self.assert_documented(f'{AT_ST}\n ☒ Attested\n\n[PDF form fields on page 1]\nAttested: checked')
+        self.assert_documented(f'{AT_ST}\nBiopsy\n\n[PDF form fields on page 1]\nBiopsy: checked')
+        self.assert_documented(f'{AT_ST}\nBiopsy\n\n[PDF form fields on page 1]\nBiopsy: not checked')  # the item's box
+
+
+class Declared12FieldUnderTheStatementTests(AttestationLineCase):
+    """declared:12 (medium, over-hold; attested at 4347acd). Any short labelled line under the statement was read as its
+    answer, so a field answering its own label ('Complications: None', 'Sedation given: No') refused a valid statement.
+    A labelled line whose label names an item or a field known to answer itself is not the statement's answer."""
+
+    def test_a_field_answering_its_own_label_does_not_refuse_it(self):
+        for tail in (AT_ST + '\nComplications: None.', AT_ST + '\nSedation given: No', '☒ ' + AT_ST + '\nComplications: ☐ Yes ☒ No',
+                     AT_ST + '\n\nComplications: None', AT_ST + '\nBleeding: none', AT_ST2 + '\nComplications: None.\nDisposition: '
+                     'Home.', AT_ST2 + '\nSedation: None', AT_ST2 + '\nResident involvement: None', AT_ST2 + '\nInterpreter: N/A',
+                     'Attestations:\n☒ ' + AT_ST + '\nTeaching physician present: ☐ Yes ☒ No', AT_ST + '\nBiopsy: No',
+                     AT_ST + '\nEBL: None'):
+            with self.subTest(tail=tail):
+                self.assert_documented(tail + '\n')
+
+    def test_an_answer_label_still_refuses_it(self):
+        for tail in (AT_ST + '\nAnswer: No', AT_ST + '\nSeparate E/M: No', AT_ST + '\nAttested: ☐', AT_ST + '\n☐ Yes ☒ No',
+                     AT_ST + '\nStatus: No', AT_ST + '\nResponse: [ ] Yes [x] No', AT_ST + '\nApplies: No',
+                     '● ' + AT_ST, '○ ' + AT_ST, AT_ST[:-1] + ':\nComplications: None',
+                     AT_ST + '\nRemarks on the E/M statement: No'):  # the closed list is read whole
+            with self.subTest(tail=tail):
+                self.assert_refused(tail + '\n')
+
+
 # --- bounded:3 and contract-r4c section 6 -- every changed reader is bounded per line ---------------------------------
 
 class Bounded3ScaleTests(unittest.TestCase):
