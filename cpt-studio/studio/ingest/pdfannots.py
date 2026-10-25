@@ -17,7 +17,9 @@ where that can be done exactly, and accounts for the rest:
   option word in the page text (pdf.py), as is the rectangle of a FreeText or
   stamp annotation that shows only a mark (X, ✓, ✔), which checks a printed box
   it covers, and the rectangle of every other displayed annotation but a widget
-  (a pen tick, a stamp drawn as paths, other typed text, a shape), which leaves
+  (a pen tick, a stamp drawn as paths, other typed text, a shape) and of every
+  displayed field but a check box or radio button that shows something (a text
+  or choice field's value, 'X' typed over a printed box included), which leaves
   a printed box it covers unread. Push buttons and fields without a value
   contribute the text their appearance draws. Password fields are not read.
 - The labelled block keeps one line per entry: blank lines inside an entry (a
@@ -118,7 +120,8 @@ class PageAnnotations:
     widgets: list = field(default_factory=list)  # Button of each displayed check box or radio button
     marks: list = field(default_factory=list)  # rect of each displayed FreeText or stamp that shows only a mark
     # rect of every other displayed annotation but a widget (an ink tick, a stamp drawn as paths, typed text other
-    # than a mark, a shape): over a printed box it is not read as a check, so the box is not read either (pdf.py)
+    # than a mark, a shape), and of every displayed field but a check box or radio button that shows something: over
+    # a printed box it is not read as a check, so the box is not read either (pdf.py)
     unread_marks: list = field(default_factory=list)
     placements: list = field(default_factory=list)  # (CTM, pixels) of images displayed appearances paint, page space
     images: list = field(default_factory=list)  # the image XObjects displayed appearances paint
@@ -270,6 +273,9 @@ class _Reader:
         if not shown:
             self.found.hidden += 1
             return
+        rect = rect_of(widget)
+        if rect is not None:  # what it shows ('X' typed over a printed box) is not read as a check: the box is unread
+            self.found.unread_marks.append(rect)
         self.add_line(info, line, replace=False)
 
     def group(self, info: _Field) -> tuple[bool, dict]:

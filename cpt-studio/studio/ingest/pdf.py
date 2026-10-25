@@ -76,7 +76,7 @@ from typing import TYPE_CHECKING
 import pypdf
 from pypdf import PasswordType
 from pypdf.errors import DependencyError
-from pypdf.generic import NullObject
+from pypdf.generic import DictionaryObject, NullObject, StreamObject
 
 from studio.types import ExtractionResult
 
@@ -85,8 +85,8 @@ from .pdfannots import PageAnnotations, read_annotations
 from .pdffonts import composite_glyph, composite_map, kind, symbol_glyphs, undecodable
 from .symbols import BOX_PRINTED_PATTERN, CHECKED_BOX, UNCHECKED_BOX
 from . import pdfcontent
-from .pdfcontent import (OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
-                         object_key, resolved, stream_damaged)
+from .pdfcontent import (IDENTITY, OptionalContent, PageContent, analyse_page, as_list, extraction_page, image_state,
+                         multiply, number, object_key, raw_entry, resolved, stream_damaged)
 from .text import (INGEST_VERSION, agree, canonicalize, failed, format_seconds, join_pages, non_space_count,
                    page_phrase, pdf_method, replace_surrogates)
 
@@ -432,8 +432,11 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
       within the widget's width, or up to a quarter of the widget's size left of it, give or take BOX_SLACK)
       replaces it with its own state, unless the printed box shows a mark the widget's state denies; a FreeText or
       stamp that shows only a mark (X, x, ✓, ✔) over one printed box checks it. Any other displayed annotation over
-      a printed box, a printed box whose position cannot be read under a widget or mark, two candidates for one
-      printed box and a widget or mark over several leave those printed boxes unread ('[?]');
+      a printed box (a field showing something included), a printed box whose position cannot be read under a widget
+      or mark, two candidates for one printed box and a widget or mark over several leave those printed boxes unread
+      ('[?]'). For the marks that are not checks, a printed box drawn inside a form XObject lies where the form places
+      it on the page (the form's /Matrix and the CTM at its Do, through nesting); only one whose place cannot be read
+      lies under any of them;
     - any other check box writes its glyph and a space before the piece of page text that starts nearest to its
       right on its baseline (within BOX_GAP; pieces on two lines compete, and then nothing is written), replacing a
       printed box that starts that piece (unread when the printed box shows a mark the box denies); a radio button
@@ -449,6 +452,11 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
     piece_offsets = [offset for offset, _ in layer.pieces]
     line_offsets = [offset for offset, _ in layer.lines]
     known, inside, lost = [], [], []  # printed boxes: starting a piece; inside a piece on a placed line; elsewhere
+    # Printed boxes drawn inside a form XObject are 'lost' to widgets and marks that check; marks that are not checks
+    # read where the form places them, as for known and inside boxes, and only the rest (unplaced) anywhere.
+    placed_starts = {offset: origin for offset, origin in layer.placed_pieces if origin[2]}
+    placed_line = dict(layer.placed_lines)
+    placed_known, placed_inside, unplaced = [], [], []
     for match in PRINTED_BOX.finditer(text):
         origin = starts.get(match.start())
         if origin is not None:
@@ -458,9 +466,20 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         line = layer.lines[index][1] if index >= 0 else None
         if line is not None and line[2]:
             inside.append((line[1], line[0], match.start(), match))
+            continue
+        lost.append(match)
+        at = placed_starts.get(match.start())
+        if at is not None:
+            placed_known.append((at[1], at[0], match.start(), match))
+            continue
+        at = placed_line.get(layer.lines[index][0]) if index >= 0 and line is None else None
+        if at is not None and at[2]:
+            placed_inside.append((at[1], at[0], match.start(), match))
         else:
-            lost.append(match)
+            unplaced.append(match)
     known, inside = _ING_Rows(known), _ING_Rows(inside)
+    placed_known, placed_inside = _ING_Rows(placed_known), _ING_Rows(placed_inside)
+    placed_hide: dict[int, int] = {}  # as hide, for placed_inside
     edits: dict[int, tuple[int, str]] = {}  # start -> (end, replacement)
     hide: dict[int, int] = {}  # row of ``inside`` -> how many of its boxes, from the left of their lines, are unread
     overlap = named = lose_all = everything = False
@@ -477,7 +496,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             glyph = _ING_UNREAD_BOX
         edits[match.start()] = (match.end(), glyph)
 
-    def lying_under(rect):
+    def lying_under(rect, known=known, inside=inside, lost=lost):
         """(the known printed boxes ``rect`` lies over, the unknown-position ones that may lie under it: (row of
         ``inside``, how many from the left), whether a box whose line's place is unknown may), or None when there is
         too much to read."""
@@ -545,10 +564,15 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             unsettled_boxes(boxes, hides, anywhere)
     for rect in annotations.unread_marks:  # a pen tick, a drawn stamp, other typed text: not read as a check
         found = lying_under(rect)
-        if found is None:
+        placed = lying_under(rect, placed_known, placed_inside, unplaced) if found and found[2] else None
+        if found is None or (found[2] and placed is None):
             everything = True
             continue
-        if any(found):
+        if placed is not None:  # boxes a form draws: those the mark may lie over, and every one whose place is unknown
+            found = (found[0] + placed[0], found[1], placed[2])
+            for row, count in placed[1]:
+                placed_hide[row] = max(placed_hide.get(row, 0), count)
+        if any(found) or (placed and placed[1]):
             named = True
             unsettled_boxes(*found)
     near: dict[int, int] = {}  # widget index -> offset of the piece nearest to its right, on one line
@@ -602,6 +626,9 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
     for row, count in hide.items():
         for position in range(count):
             unread(inside.rows[row][position][2])
+    for row, count in placed_hide.items():
+        for position in range(count):
+            unread(placed_inside.rows[row][position][2])
     if lose_all:
         for match in lost:
             unread(match)
@@ -846,6 +873,10 @@ class _Layer:
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
     pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
     ink: tuple = ()  # (baseline, start, end, font size) of each string the page's upright text draws (PageContent.ink)
+    # (offset, where it starts on the page) of each line and piece drawn inside a form XObject whose placement could
+    # be read; ``lines`` and ``pieces`` give those None, and only marks that are not checks read these
+    placed_lines: tuple = ()
+    placed_pieces: tuple = ()
 
 
 def _layer_text(page, content: PageContent) -> _Layer:
@@ -861,31 +892,73 @@ def _layer_text(page, content: PageContent) -> _Layer:
     if content.operations is None:
         return _Layer()
     pieces: list = []
-    depth = [0]  # form XObjects being read: their pieces are positioned in the form's own space
+    page_resources = [None]
+    # Form XObjects being read: their pieces are positioned in the form's own space, so each is kept with where the
+    # form's content lands on the page ([matrix, resources, whether its own content is being read]; None: unknown).
+    forms: list = []
 
     def before(operator, operands, cm, tm):
+        if forms and not forms[-1][2]:
+            forms[-1][2] = True  # an operator of the form's own content: text visited from now on is the form's
         if operator == b'Do':
-            depth[0] += 1
+            outer = forms[-1] if forms else [IDENTITY, page_resources[0], True]
+            forms.append([*_ING_form_space(operands, cm, outer[0], outer[1]), False])
 
     def after(operator, operands, cm, tm):
-        if operator == b'Do':
-            depth[0] -= 1
+        if operator == b'Do' and forms:
+            forms.pop()
 
     def visit(text, cm, tm, font, size):
         if text:
-            pieces.append((text, _origin(cm, tm) if depth[0] == 0 else None, font))
+            if not forms:
+                pieces.append((text, _origin(cm, tm), font, None))
+                return
+            matrix = forms[-1][0] if forms[-1][2] else None
+            pieces.append((text, None, font, _ING_placed(cm, tm, matrix) if matrix is not None else None))
 
     try:
-        raw = extraction_page(page, content).extract_text(visitor_operand_before=before, visitor_operand_after=after,
-                                                          visitor_text=visit)
+        copy = extraction_page(page, content)
+        with contextlib.suppress(Exception):
+            page_resources[0] = copy.get_inherited('/Resources', None)  # as pypdf reads the page's resources
+        raw = copy.extract_text(visitor_operand_before=before, visitor_operand_after=after, visitor_text=visit)
     except (DependencyError, MemoryError):
         raise
     except Exception:
         return _Layer()
     if ''.join(piece[0] for piece in pieces) != raw:
-        pieces = [(raw, None, None)]
+        pieces = [(raw, None, None, None)]
     ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
     return replace(_decoded(pieces), ink=ink)
+
+
+def _ING_form_space(operands, cm, outer, resources) -> tuple:
+    """(the matrix that places on the page what the form a 'Do' draws draws, the form's resources), or (None, None)
+    when that cannot be read: the form's /Matrix, times the CTM at the Do (in the space of the stream that draws it),
+    times that stream's own placement ``outer``. The form is found as pypdf finds it, in ``resources``."""
+    try:
+        if outer is None or not operands or not isinstance(resources, DictionaryObject):
+            return None, None
+        xobjects = resolved(resources.get('/XObject'))
+        xobject = resolved(raw_entry(xobjects, operands[0])) if isinstance(xobjects, DictionaryObject) else None
+        if not isinstance(xobject, StreamObject) or resolved(xobject.get('/Subtype')) != '/Form':
+            return None, None
+        values = [float(number(value)) for value in as_list(xobject.get('/Matrix'))]
+        own = tuple(values) if len(values) == 6 else IDENTITY
+        inner = resolved(xobject.get('/Resources'))
+        return (multiply(own, multiply(tuple(float(value) for value in cm), outer)),
+                inner if isinstance(inner, DictionaryObject) else None)
+    except (DependencyError, MemoryError):
+        raise
+    except Exception:
+        return None, None
+
+
+def _ING_placed(cm, tm, matrix) -> tuple[float, float, bool] | None:
+    """Where a piece of text drawn inside a form starts on the page (``matrix``: _ING_form_space's), as _origin."""
+    try:
+        return _origin(multiply(tuple(float(value) for value in cm), matrix), tm)
+    except (TypeError, ValueError):
+        return None
 
 
 def _origin(cm, tm) -> tuple[float, float, bool] | None:
@@ -904,8 +977,9 @@ def _origin(cm, tm) -> tuple[float, float, bool] | None:
 def _decoded(pieces) -> _Layer:
     out: list[str] = []
     size, dropped, lines, starting, firsts = 0, 0, [], True, []
+    placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
     decoders: dict[int, object] = {}
-    for text, origin, font in pieces:
+    for text, origin, font, placed in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
@@ -922,13 +996,18 @@ def _decoded(pieces) -> _Layer:
                 continue
             if starting:
                 lines.append((size, origin))
+                if origin is None and placed is not None:
+                    placed_lines.append((size, placed))
                 starting = False
             if first and not mapped.isspace():
                 firsts.append((size, origin))
+                if origin is None and placed is not None:
+                    placed_firsts.append((size, placed))
                 first = False
             out.append(mapped)
             size += len(mapped)
-    return _Layer(''.join(out), dropped, tuple(lines), tuple(firsts))
+    return _Layer(''.join(out), dropped, tuple(lines), tuple(firsts), placed_lines=tuple(placed_lines),
+                  placed_pieces=tuple(placed_firsts))
 
 
 def _decoder(font):
