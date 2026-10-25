@@ -3218,13 +3218,16 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
     return [span for span, f in zip(an.lay.sentences, attributed) if f == family]
 
 
-def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None) -> tuple[list, list]:
+def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
+               denied: Optional[list] = None) -> tuple[list, list]:
     """(reached, blocked) as (depth, label, clause span) for landmarks read as
     part of a performed or incomplete service. A landmark is reached only from a
     reading with no unresolved negation; a denied advancement ("it was not advanced
     to the cecum") is blocked, never reached. ``unread``, when given, collects the landmark of every extent label that
     would be reached but for its tail (_plain_tail: "Extent: Cecum | Scope: Olympus"): its extent is not read, and it
-    keeps a shallower landmark from reading the procedure incomplete (_P2_unread_reaches, round 4c-2 plan:B)."""
+    keeps a shallower landmark from reading the procedure incomplete (_P2_unread_reaches, round 4c-2 plan:B).
+    ``denied``, when given, collects every other landmark its reading denies or doubts (negated, cancelled, incomplete,
+    or an unresolved negation: "Cecum not reached."); with the blocked ones, they keep that rule from firing (plan:B2)."""
     text = an.text
     reached, blocked = [], []
     for s, e in sentences:
@@ -3253,11 +3256,16 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None) ->
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
                           and _plain_tail(an, m.end(), we)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
-                    elif unread is not None and (status in ('performed', 'incomplete')
-                                                 or _answers_silently(an, reading, m.start(), m.end())
-                                                 or _P2_doubted_by_a_next_field(an, reading, m.end(), ws, we)) \
-                            and _reached_label(an, ws, m.start()) and not _P2_tail_contrary(an, m.end()):
-                        unread.append(hit)  # a label reached but for its tail (round 4c-2 plan:B)
+                    elif unread is not None and _reached_label(an, ws, m.start()) \
+                            and not _P2_tail_contrary(an, m.end()) and (
+                                ((status in ('performed', 'incomplete') or _answers_silently(an, reading, m.start(), m.end()))
+                                 and _P2_neutral_tail(an, m.end()))
+                                or _P2_doubted_by_a_next_field(an, reading, m.end(), ws, we)):
+                        unread.append(hit)  # a label reached but for its neutral tail (round 4c-2 plan:B, plan:B2)
+                    elif denied is not None and (status in ('negated', 'cancelled', 'incomplete')
+                                                 or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
+                                                     and not _P2_doubt_is_a_finding(an, ws, we))):
+                        denied.append(hit)  # a landmark its reading denies or doubts (round 4c-2 plan:B2)
     return reached, blocked
 
 
@@ -3271,7 +3279,8 @@ def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: in
     text = an.text
     line_end = text.find('\n', end, we)
     cell = _SEC_NEXT_CELL.search(text, end, we if line_end < 0 else line_end)
-    return cell is not None and not any(t.start() < cell.start() for t in cues.DOUBT_TOKEN.finditer(text, ws, we))
+    return (cell is not None and _P2_neutral_region(text, end, cell.start(), need_cell=False)
+            and not any(t.start() < cell.start() for t in cues.DOUBT_TOKEN.finditer(text, ws, we)))
 
 
 # Words after an extent label's landmark that make it an aim or an attempt, not an unread statement of the extent reached
@@ -3306,6 +3315,62 @@ def _P2_unread_reaches(unread: list, expected: int) -> bool:
     for it. A label short of that depth agrees the procedure was incomplete, so the reading stays as it was. The label
     itself is still never read."""
     return any(hit[0] >= expected for hit in unread)
+
+
+# Round 4c-2 plan:B2: the only tails plan:B reads as neutral. The label's own value is plain (_P2_plain_value: nothing
+# but cues.EXTENT_TAIL words and punctuation), and what leaves it unread is a next cell that opens one of these fields,
+# none of which can speak of the extent reached: the instrument, the staff, the room. Any other word in the tail, an aim
+# no list names ("(ambition)") included, keeps the base reading: the shallower landmark still decides.
+_P2_CELL_BREAK = re.compile(r'[ \t]*\|[ \t]*|\t[ \t]*|[ ]{2,}')  # a table row's next cell, a tab or a column (as _SEC_NEXT_CELL)
+_P2_NEUTRAL_CELL = re.compile(r'(?:[ \t]*\|[ \t]*|\t[ \t]*|[ ]{2,})(?:scope|instrument|(?:colono|gastro|sigmoido|entero|'
+                              r'duodeno|echoendo|endo)scope|model|serial(?:[ \t]+(?:number|no\.?|#))?|endoscopist|'
+                              r'operator|proceduralist|attending|fellow|assistant|nurse|technician|room)[ \t]*:',
+                              re.A | re.I)
+
+
+def _P2_plain_value(text: str, start: int, end: int) -> bool:
+    """Whether [start, end), an extent label's value after its landmark, holds only cues.EXTENT_TAIL words."""
+    return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(text, start, end))
+
+
+def _P2_neutral_region(text: str, start: int, stop: int, need_cell: bool) -> bool:
+    """Whether [start, stop), after an extent label's landmark, is a plain value followed only by cells that open a
+    field of _P2_NEUTRAL_CELL (at least one when ``need_cell``)."""
+    first = _P2_CELL_BREAK.search(text, start, stop)
+    if first is None:
+        return not need_cell and _P2_plain_value(text, start, stop)
+    if not _P2_NEUTRAL_CELL.match(text, first.start(), stop) or not _P2_plain_value(text, start, first.start()):
+        return False
+    return all(_P2_NEUTRAL_CELL.match(text, cell.start(), stop) for cell in _P2_CELL_BREAK.finditer(text, first.end(), stop))
+
+
+def _P2_neutral_tail(an: Analysis, end: int) -> bool:
+    """Whether the tail after an extent label's landmark (which ends at ``end``) is neutral (round 4c-2 plan:B2): a plain
+    value, then only cells that open a field of _P2_NEUTRAL_CELL (one at least), read to the line's end, to a next cell
+    that opens a listed report field (_SEC_NEXT_CELL), or CLAUSE_REACH characters."""
+    text = an.text
+    line_end = text.find('\n', end, end + CLAUSE_REACH)
+    stop = min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end
+    listed = _SEC_NEXT_CELL.search(text, end, stop)
+    return _P2_neutral_region(text, end, listed.start() if listed else stop, need_cell=True)
+
+
+def _P2_doubt_is_a_finding(an: Analysis, ws: int, we: int) -> bool:
+    """Whether every negation word in a landmark's clause window [ws, we) belongs to a denied finding, another act or a
+    complication (cues.FINDING_NEGATION, OTHER_ACT_NEGATION, COMPLICATION_NEGATION: "No polyps in the cecum."): such a
+    doubt says what was or was not found there, never that the landmark was not reached (round 4c-2 plan:B2)."""
+    masked, where = _masked_map(an, ws, we)
+    spans = [(where[m.start()], where[m.end()])
+             for pattern in (*cues.FINDING_NEGATION, cues.OTHER_ACT_NEGATION, cues.COMPLICATION_NEGATION)
+             for m in pattern.finditer(masked)]
+    return all(_covered((t.start(), t.end()), spans) for t in cues.DOUBT_TOKEN.finditer(an.text, ws, we))
+
+
+def _P2_denied_beyond(hits: list, depth: int) -> bool:
+    """Whether the family's own text denies or doubts reaching a landmark deeper than ``depth``, the deepest one read as
+    reached (round 4c-2 plan:B2): "Cecum not reached.", "The cecum could not be reached.", "The transverse colon was not
+    reached." Then the document says the procedure fell short, and the shallower landmark's reading stands."""
+    return any(hit[0] > depth for hit in hits)
 
 
 def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> bool:
@@ -3530,13 +3595,13 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
 
 
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
-    unread = []
-    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread)
+    unread, denied = [], []
+    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < cues.CECUM_DEPTH:
-        if _P2_unread_reaches(unread, cues.CECUM_DEPTH):
+        if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
@@ -3564,12 +3629,13 @@ def _expected_upper_depth(an: Analysis) -> int:
 def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     """The deepest landmark reached; incomplete when the service is documented as incomplete
     or that landmark lies short of the depth the named procedure calls for."""
-    unread = []
-    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread)
+    unread, denied = [], []
+    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
-    if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)):
+    if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
+            and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
     if incomplete or depth < _expected_upper_depth(an):
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]

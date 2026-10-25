@@ -325,10 +325,11 @@ class PlanBUnreadExtentLabelTests(unittest.TestCase):
     is still never read ("| Scope:" stays outside the closed list), so nothing newly reads an extent."""
 
     CLAIMED = report('Colonoscopy', COLON_PROSE, 'Extent: Cecum | Scope: Olympus')
-    UNREAD = ('Extent: Cecum | Scope: Olympus CF-HQ190', 'Extent: Cecum, Olympus scope', 'Extent reached: Cecum | Instrument: Olympus',
+    UNREAD = ('Extent: Cecum | Scope: Olympus CF-HQ190', 'Extent: Cecum\tScope: Olympus', 'Extent reached: Cecum | Instrument: Olympus',
               'Extent: Terminal ileum | Scope: Olympus', 'Furthest extent reached: cecum | Scope: Olympus',
               'Extent: Cecum (photo documented) | Scope: Olympus', 'Extent: Cecum | Scope: Olympus | Prep: good',
-              'Extent: Cecum | Instrument: Olympus', '- Extent: Cecum | Scope: Olympus', 'Extent - cecum, adult scope',
+              'Extent: Cecum | Instrument: Olympus', '- Extent: Cecum | Scope: Olympus', 'Extent: Cecum  Endoscopist: Dr. Lee',
+              'Extent: Cecum | Model: CF-HQ190 | Room: 3',
               # a listed next field ends what is read for a denial, as it ends the value (round 4c declared:11): its
               # answer is its own, so it neither doubts the landmark nor makes the label a denial
               'Extent: Cecum | Scope: Olympus | Complications: None', 'Extent: Cecum | Complications: None',
@@ -355,7 +356,7 @@ class PlanBUnreadExtentLabelTests(unittest.TestCase):
 
     def test_the_upper_tract_sibling(self):
         for label in ('Extent: D2 | Scope: Olympus', 'Extent: Second part of the duodenum | Scope: Olympus GIF',
-                      'Extent reached: duodenum, adult gastroscope'):
+                      'Extent reached: duodenum | Endoscope: Olympus GIF'):
             with self.subTest(label=label):
                 self.assert_held_extent(report('EGD', UPPER_PROSE, label), 'gi.egd', '43235', 'Procedure: EGD')
 
@@ -429,6 +430,61 @@ class PlanBUnreadExtentLabelTests(unittest.TestCase):
         status, extent, missing = extent_of(text, 'gi.colonoscopy')
         self.assertEqual(status, 'incomplete')
         self.assertNotEqual(extent, 'incomplete: rectum')
+
+
+class PlanB2UnreadLabelNarrowingTests(unittest.TestCase):
+    """plan:B2 (the lead's narrowing of plan:B, its own weakest spot). plan:B withheld the extent beside a shallower
+    landmark whenever an unread label named the expected depth, also where the document itself says that depth was not
+    reached ("Extent: Cecum | Scope: Olympus" then "Cecum not reached.") or where the label's tail is a word no list
+    reads ("Extent: Cecum (ambition) | Scope: Olympus"): the family read performed with the extent withheld, where
+    51457929c read it incomplete, which the document says. The rule now fires only when no landmark beyond the one
+    reached is denied in the family's own text (blocked, negated, cancelled, incomplete, or doubted by an unresolved
+    negation), and only on a tail it can read as neutral: the label's own value is plain, and what leaves it unread is a
+    next cell that opens an equipment, staff or room field (a closed list), or a listed report field whose own answer is
+    a negation. Anything else keeps the base reading."""
+
+    DENIALS = ('Cecum not reached.', 'The cecum could not be reached.', 'The colonoscope failed to reach the cecum.',
+               'Cecal intubation was not achieved.', 'The transverse colon was not reached.',
+               'The appendiceal orifice was not visualized.', 'Unable to reach the cecum because of a tortuous colon.',
+               # a negated, cancelled or incomplete mention of the landmark
+               'Cecal intubation was not performed.', 'Cecal intubation: not done.', 'No cecal intubation.',
+               'Cecal intubation was aborted.', 'Cecal intubation was cancelled.')
+    UNLISTED = ('Extent: Cecum (ambition) | Scope: Olympus', 'Extent: Cecum, Olympus scope', 'Extent: Cecum (adult scope)',
+                'Extent - cecum, adult scope', 'Extent: Cecum | Ambition: cecum', 'Extent: Cecum | Comment: Olympus',
+                'Extent: Cecum (ambition) | Complications: None', 'Extent: Cecum | Scope: Olympus | Aim: TI',
+                'Extent: Cecum | Endoscopist: Dr.  Lee', 'Extent: Cecum | Scope: Olympus | Comment: cecum')
+    # ordinary findings that name the landmark deny nothing: the claimed input stays fixed beside them
+    FINDINGS = ('Findings: No polyps were seen in the cecum.', 'No polyps in the cecum.',
+                'Findings: Normal mucosa. No masses or polyps.')
+
+    def test_a_denial_in_the_familys_own_text_keeps_the_base_reading(self):
+        for line in self.DENIALS:
+            text = report('Colonoscopy', COLON_PROSE, 'Extent: Cecum | Scope: Olympus\n' + line)
+            with self.subTest(line=line):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+        text = report('EGD', UPPER_PROSE, 'Extent: D2 | Scope: Olympus\nThe second part of the duodenum was not reached.')
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('incomplete', 'incomplete: esophagus'))
+
+    def test_an_unlisted_word_in_the_tail_keeps_the_base_reading(self):
+        for label in self.UNLISTED:
+            text = report('Colonoscopy', COLON_PROSE, label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+
+    def test_only_a_denial_beyond_the_landmark_reached_keeps_it(self):
+        """A doubt about a landmark at or above the one reached says nothing of the depth reached beyond it."""
+        text = report('Colonoscopy', 'The colonoscope was advanced to the sigmoid colon.',
+                      'Extent: Cecum | Scope: Olympus\nThe rectum could not be examined on retroflexion.')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
+
+    def test_the_claimed_input_stays_fixed_beside_ordinary_findings(self):
+        for findings in self.FINDINGS:
+            text = report('Colonoscopy', COLON_PROSE, 'Extent: Cecum | Scope: Olympus', findings)
+            with self.subTest(findings=findings):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
+                proposal = real(text, ('45378', 'Procedure: Colonoscopy'))[0]['45378']
+                self.assertEqual(proposal.status, 'needs_clarification')
+                self.assertIn('extent', clarified(proposal))
 
 
 # --- plan:C: a line listed under a denying label is held whatever it names --------------------------------------------
