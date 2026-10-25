@@ -1875,6 +1875,18 @@ _P2_RESULT_GAP = re.compile(r'[ \t,()/&+]*', re.A)
 _P2_RESULT_JOINER = re.compile(r'(?:with|and|plus)\b|w/', re.A | re.I)
 
 
+def _P2_says_today(an: Analysis, start: int, end: int) -> bool:
+    """Whether a clause that [start, end) overlaps says today (cues.TODAY), as the plan arms of _cue_reading read it;
+    memoised per clause, so a long clause naming many services is searched once, never once per mention."""
+    for cs, ce in an.lay.clauses_for(start, end):
+        key = ('p2-says-today', cs, ce)
+        if key not in an.memo:
+            an.memo[key] = bool(cues.TODAY.search(an.text, cs, ce))
+        if an.memo[key]:
+            return True
+    return False
+
+
 def _P2_states_its_result(an: Analysis, start: int, end: int) -> bool:
     """Whether a service named in [start, end) is followed in its own clause by a reporting verb (_REPORTING:
     "showed", "revealed", "demonstrated", "found", "noted", ...) with nothing between them but further names
@@ -1897,6 +1909,17 @@ def _P2_states_its_result(an: Analysis, start: int, end: int) -> bool:
                 break
             pos = step
     return False
+
+
+# Round 4c-2 plan:A2: an explicit performance statement that a hedge or a doubt in its clause outranks ("Anoscopy was
+# performed and showed grade 2 internal hemorrhoids versus prolapse." under Assessment and plan) keeps only the hedge's
+# labels, so validation saw no 'performed:' cue there and released the E/M beside it, which the unhedged statement holds
+# (ARCHITECTURE 5.6). Where the unhedged statement would count for that hold (a plan section, an indication or chief
+# complaint, a history section whose clause says today), the reading now carries this hold cue as well: its prefix is
+# the stated-act prefix validation already counts in those sections (checks._VAL_OTHER_STATED_CUE, as OTHER_STATED is),
+# and the labels _cue_reading keeps, the hedge first, are unchanged.
+_P2_HEDGED_STATEMENT = ('uncertain: a procedure is stated by its act or its findings, and a hedge or doubt in its clause '
+                        'outranks the performance statement')
 
 
 def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
@@ -1941,12 +1964,16 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
         # ("Possible EGD today if symptoms persist.", "Discussed colonoscopy today") reads as before (round 3 validation:1,
         # round 2 review:1: its visit stays approvable).
         return Reading('uncertain', deciding + (PLAN_TODAY, _section_label(section)), 'cue', past, doubt)
-    if status == 'uncertain' and section.kind == 'plan' and not em \
-            and any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)) \
+    if status == 'uncertain' and section.kind == 'plan' and not em and _P2_says_today(an, start, end) \
             and _P2_states_its_result(an, start, end):
         # round 4c-2 plan:A: a plan clause that says today and states the procedure's result ("EGD today showed
         # esophagitis versus reflux.") holds as the unhedged clause does (PLAN_TODAY); the hedge is the finding's
         return Reading('uncertain', deciding + (PLAN_TODAY, _section_label(section)), 'cue', past, doubt)
+    if status == 'uncertain' and not em and any(f[0] == 'performed' for f in found) and (
+            section.kind in ('plan', 'indication') or (section.kind == 'history' and _P2_says_today(an, start, end))):
+        # round 4c-2 plan:A2: a performance statement a hedge outranks still counts for the E/M hold where the unhedged
+        # statement does (a plan section with no today word, an indication, a history clause that says today)
+        return Reading('uncertain', deciding + (_P2_HEDGED_STATEMENT, _section_label(section)), 'cue', past, doubt)
     if status == 'performed' and section.kind == 'indication' and not em \
             and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
         return Reading('uncertain', deciding + (_section_label(section),), 'cue')

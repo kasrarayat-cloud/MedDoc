@@ -144,6 +144,30 @@ class PlanAFindingsTodayTests(unittest.TestCase):
                     'gi.colonoscopy')
                 self.assertFalse(any(detect.PLAN_TODAY in m.cues for m in finding.mentions), plan)
 
+    def test_each_clause_is_read_for_its_own_today_word(self):
+        """Two plan sentences in one note, one saying today: only that one carries PLAN_TODAY, in either order."""
+        for plan, held_slug, free_slug in (
+                ('EGD showed esophagitis versus reflux. Colonoscopy today showed colitis versus ischemia.',
+                 'gi.colonoscopy', 'gi.egd'),
+                ('Colonoscopy today showed colitis versus ischemia. EGD showed esophagitis versus reflux.',
+                 'gi.colonoscopy', 'gi.egd')):
+            text = office(plan)
+            with self.subTest(plan=plan):
+                self.assertIn(detect.PLAN_TODAY, mention_cues(text, held_slug)[1])
+                self.assertNotIn(detect.PLAN_TODAY, mention_cues(text, free_slug)[1])
+
+    def test_a_cited_passage_is_read_over_all_its_clauses(self):
+        """As the plan arms read a cited passage: any of its clauses may say today ("...; reviewed with her today."), and
+        the hedged sentence then reads as its unhedged twin does; the mention, whose own clause says no today, is left."""
+        for plan in ('EGD showed esophagitis versus reflux; reviewed with her today.',
+                     'EGD showed esophagitis; reviewed with her today.'):
+            text = office(plan)
+            with self.subTest(plan=plan):
+                status, cues = read(text, plan)
+                self.assertEqual(status, 'uncertain')
+                self.assertIn(detect.PLAN_TODAY, cues)
+                self.assertNotIn(detect.PLAN_TODAY, mention_cues(text, 'gi.egd')[1])
+
     def test_an_e_m_mention_never_carries_it(self):
         """The rule is a procedure's, as round 4c's validation:3 arm is: an E/M documentation mention keeps its own
         reading even where its span quotes the procedure (an MDM line), while the procedure's mention is held."""
@@ -162,6 +186,117 @@ class PlanAFindingsTodayTests(unittest.TestCase):
             text = office('EGD today showed esophagitis versus reflux.', heading)
             with self.subTest(heading=heading):
                 self.assertNotIn(detect.PLAN_TODAY, mention_cues(text, 'gi.egd')[1])
+
+
+# --- plan:A2: an explicit performance statement with a diagnostic hedge, with no today word ---------------------------
+
+class PlanA2HedgedPerformanceTests(unittest.TestCase):
+    """plan:A2 (high, declared reading). ARCHITECTURE 5.3: in a plan section an explicit performance is held; 5.6: inside
+    plan, history and indication / chief-complaint sections an explicit performance statement that routing downgraded
+    for its section counts as a same-day procedure for the E/M hold. "Anoscopy was performed and showed grade 2 internal
+    hemorrhoids versus prolapse." under Assessment and plan released the E/M: the hedge outranks the performance cue in
+    _cue_reading, so validation's plan-section branch saw neither a 'performed:' cue nor PLAN_TODAY (with "today" round
+    4c's validation:3 arm adds PLAN_TODAY). Such a reading now carries a hold cue whose prefix validation already counts
+    there (checks._VAL_OTHER_STATED_CUE, the stated-act holds of 5.6) wherever the statement without its hedge would
+    count: a plan section (no today; with today PLAN_TODAY as before), an indication / chief-complaint section, and a
+    history section whose clause says today. The labels _cue_reading keeps are unchanged."""
+
+    CLAIMED = ('Anoscopy was performed and showed grade 2 internal hemorrhoids versus prolapse.',
+               'EGD was performed with biopsies, eosinophilic esophagitis versus reflux.',
+               'Flexible sigmoidoscopy was performed, proctitis versus infection.')
+    VARIANTS = (('Plan:', 'Anoscopy was performed and showed grade 2 internal hemorrhoids versus prolapse.'),
+                ('A/P:', 'EGD was performed with biopsies, eosinophilic esophagitis vs reflux.'),
+                ('Assessment and plan:', 'Colonoscopy was completed and showed colitis, ?ischemia.'),
+                ('Assessment and plan:', 'EGD was performed with biopsies, unclear whether eosinophilic esophagitis.'),
+                ('Assessment and plan:', 'Rubber band ligation was performed, ?fissure.'),
+                ('Assessment and plan:', '1. Flexible sigmoidoscopy was performed, proctitis versus infection.'),
+                # the same statement where its section, unhedged, also counts: an indication or chief complaint, and
+                # a history section whose clause says today
+                ('Indication:', 'Colonoscopy was performed and showed colitis versus ischemia.'),
+                ('Indication:', 'Colonoscopy was performed today and showed colitis versus ischemia.'),
+                ('Chief complaint:', 'Colonoscopy was performed and showed colitis versus ischemia.'),
+                ('History of present illness:', 'Colonoscopy was performed this morning and showed colitis versus ischemia.'),
+                ('History of present illness:', 'EGD was performed today, eosinophilic esophagitis versus reflux.'))
+    # a history section that does not say today reads historical without the hedge, which validation does not count
+    CONTROLS_READY = (('History of present illness:', 'Colonoscopy was performed and showed colitis versus ischemia.'),
+                      ('History of present illness:', 'EGD was performed with biopsies, eosinophilic esophagitis versus reflux.'),
+                      # the pinned releases: no performance statement
+                      ('Plan:', 'Possible EGD if symptoms persist.'),
+                      ('Assessment and plan:', 'EGD versus empiric PPI trial.'),
+                      ('Assessment and plan:', 'Possible EGD today if symptoms persist.'),
+                      ('Assessment and plan:', 'Discussed colonoscopy today; she will think about it.'),
+                      ('Assessment and plan:', 'Risks and benefits of colonoscopy were discussed.'))
+
+    def stated(self, text):
+        """The hold cues of every routed procedure mention that carry the stated-act prefix validation counts."""
+        from studio.validation import checks
+        result = detect.route(text, None)
+        return [c for f in result.findings if f.family != 'gi.office_em' for m in f.mentions for c in m.cues
+                if c.startswith(checks._VAL_OTHER_STATED_CUE)]
+
+    def test_the_claimed_lines_hold_the_visit(self):
+        for plan in self.CLAIMED:
+            text = office(plan)
+            with self.subTest(plan=plan):
+                self.assertTrue(held_for_a_same_day_procedure(visit_of(text)), plan)
+                self.assertEqual(self.stated(text), [detect._P2_HEDGED_STATEMENT])
+
+    def test_the_variants_and_the_sibling_sections_hold_the_visit(self):
+        for heading, plan in self.VARIANTS:
+            text = office(plan, heading)
+            with self.subTest(heading=heading, plan=plan):
+                self.assertTrue(held_for_a_same_day_procedure(visit_of(text)), plan)
+                self.assertEqual(self.stated(text), [detect._P2_HEDGED_STATEMENT])
+
+    def test_the_hedge_still_decides_and_is_the_first_cue(self):
+        """Hold-only: the reading stays uncertain, its first cue the hedge (never a 'performed:' cue, so checks.restated
+        and resolve_status read it as before), and no PLAN_TODAY where no clause says today (round 4c validation:3)."""
+        text = office(self.CLAIMED[0])
+        status, cues = read(text, self.CLAIMED[0])
+        self.assertEqual(status, 'uncertain')
+        self.assertEqual(cues[0], 'uncertain: versus')
+        self.assertFalse(any(c.startswith('performed:') for c in cues), cues)
+        self.assertNotIn(detect.PLAN_TODAY, cues)
+        self.assertEqual(cues[1:], (detect._P2_HEDGED_STATEMENT, 'section: plan (Assessment and plan)'))
+
+    def test_an_e_m_mention_never_carries_it(self):
+        """A visit statement is no procedure: its own reading under a plan heading keeps its hedge, as round 4c's
+        validation:3 test keeps it ("Plan: Established patient visit was performed today, ?IBS.")."""
+        text = office('Established patient visit was performed, ?IBS.', 'Plan:')
+        visit = [m for m in detect.route(text, None).finding('gi.office_em').mentions
+                 if m.span.text.startswith('Established patient visit')]
+        self.assertEqual(len(visit), 1)
+        self.assertNotIn(detect._P2_HEDGED_STATEMENT, visit[0].cues)
+
+    def test_a_code_citing_the_statement_stays_held(self):
+        for plan, code in zip(self.CLAIMED, ('46600', '43239', '45330')):
+            text = office(plan)
+            with self.subTest(plan=plan):
+                proposal = run_engine(text, [(code, plan)])[code]
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+    def test_the_cue_is_counted_by_its_prefix_and_states_no_today(self):
+        from studio.validation import checks
+        self.assertTrue(detect._P2_HEDGED_STATEMENT.startswith(checks._VAL_OTHER_STATED_CUE))
+        self.assertTrue(checks._VAL_routing_holds((detect._P2_HEDGED_STATEMENT,)))
+        self.assertFalse(checks.says_today_in_plan((detect._P2_HEDGED_STATEMENT,)))
+        self.assertNotIn('today', detect._P2_HEDGED_STATEMENT)
+
+    def test_the_controls_stay_ready(self):
+        for heading, plan in self.CONTROLS_READY:
+            text = office(plan, heading)
+            with self.subTest(heading=heading, plan=plan):
+                self.assertEqual(self.stated(text), [])
+                self.assertTrue(visit_ready(visit_of(text)), plan)
+
+    def test_outside_those_sections_nothing_is_added(self):
+        """Outside plan, history and indication sections a hedge already counts for the same-day check (round 4
+        validation:0), so the reading is left exactly as it was."""
+        for heading in ('Assessment:', 'Impression:'):
+            text = office(self.CLAIMED[0], heading)
+            with self.subTest(heading=heading):
+                self.assertEqual(self.stated(text), [])
+                self.assertTrue(held_for_a_same_day_procedure(visit_of(text)))
 
 
 if __name__ == '__main__':
