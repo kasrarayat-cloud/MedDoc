@@ -418,6 +418,16 @@ class Regression6CoordinatedServicesShareTheirTimeTests(Case):
                 self.assertNotEqual(proposals['45385'].bucket, 'excluded', proposals['45385'].exclusion_reason)
                 self.assertNotEqual(routed(text).finding('gi.colonoscopy').status, 'historical')
 
+    def test_controls_coordinated_services_on_today_s_procedure_line_still_hold(self):
+        # In today's procedure text a shared time stays unclear (HEAD's hold), never dating today's colonoscopy.
+        findings = 'Findings: The colonoscope was advanced to the cecum.\n'
+        for line in ('Colonoscopy, EGD last week was normal.', 'Colonoscopy and EGD last week.'):
+            text = HEAD + 'Procedure: ' + line + '\n' + findings
+            with self.subTest(line=line):
+                self.assertNotEqual(routed(text).finding('gi.colonoscopy').status, 'historical')
+                proposals, _ = real(text, ('45378', 'Procedure: ' + line))
+                self.assertNotEqual(proposals['45378'].bucket, 'excluded', proposals['45378'].exclusion_reason)
+
     def test_controls_coordinated_services_stated_today_are_never_dated(self):
         # a history section's performance statement that says today holds (as at HEAD); it is never historical
         text = R6_OFFICE.format(line='EGD and colonoscopy were performed today and were normal.')
@@ -478,6 +488,17 @@ class Validation2OwnProcedureReportOverHoldTests(Case):
         line = 'After informed consent we banded the right posterior column today.'
         proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', line))
         self.assertReady(proposals['46221'])
+
+    def test_an_introductory_phrase_telling_another_occasion_introduces_no_act(self):
+        for layout, line in ((V2_BANDING, 'During the last session we banded two columns.'),
+                             (V2_BANDING, 'After the first session we banded two columns.'),
+                             (V2_BANDING, 'At the prior session, we banded the right posterior column.'),
+                             (V2_BANDING, 'Before her surgery, we banded two columns.'),
+                             (FOLLOW_UP, 'During the last session we banded two columns and today they look healed.')):
+            with self.subTest(line=line):
+                text = layout.format(find=line) if layout is V2_BANDING else layout.format(line=line)
+                proposals, _ = real(text, ('46221', line))
+                self.assertEqual(proposals['46221'].status, 'needs_clarification')
 
     def test_a_report_that_denies_its_procedure_corroborates_nothing(self):
         # Routing still reads the procedure line done (it reads no mention in these denials), so the findings sentence

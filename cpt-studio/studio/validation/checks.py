@@ -1143,12 +1143,19 @@ _VAL_INTRO = re.compile(r'[ \t]*(?:after|under|using|with|following|during|upon|
 _VAL_OBJECT = re.compile(r'[ \t]+(?:the|a|an|one|two|three|four|five|six|both|all|each|\d+|it|them|internal|external|'
                          r'right|left|anterior|posterior|lateral|columns?|hemorrhoids?)\b', re.A | re.I)
 _VAL_INTRO_REACH = 100  # how long an introductory phrase before "we" / "I" may be (bounds the work per act)
+# An introductory phrase that tells another occasion ("During the last session we banded two columns.", "Before her
+# surgery, we banded ..."): its act is not stated as today's, whatever routing's time lists read.
+_VAL_INTRO_ELSEWHEN = re.compile(r'\b(?:last|prior|previous(?:ly)?|earlier|first|initial|index|recent(?:ly)?|before|'
+                                 r'ago|past|sessions?|visits?|surger(?:y|ies)|admissions?|appointments?|encounters?|'
+                                 r'weeks?|months?|years?)\b', re.A | re.I)
 
 
 def _VAL_introduced(text: str, start: int, m) -> bool:
-    """Whether "we" / "I" of the act ``m`` follows an introductory phrase that opens its clause at ``start`` and acts on
-    an object (_VAL_INTRO, _VAL_OBJECT)."""
+    """Whether "we" / "I" of the act ``m`` follows an introductory phrase that opens its clause at ``start``, tells no
+    other occasion (_VAL_INTRO_ELSEWHEN) and acts on an object (_VAL_INTRO, _VAL_OBJECT)."""
     if m.start() - start > _VAL_INTRO_REACH or not _VAL_OBJECT.match(text, m.end()):
+        return False
+    if _VAL_INTRO_ELSEWHEN.search(text, start, m.start()):
         return False
     return text[start:m.start()].rstrip().endswith(',') or bool(_VAL_INTRO.match(text, start, m.start()))
 
