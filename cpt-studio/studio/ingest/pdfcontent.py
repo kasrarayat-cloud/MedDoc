@@ -555,6 +555,35 @@ class _Grid:
                     yield item
 
 
+# Fill-in characters: an opaque area over them hides no text (a field laid on an underscore line). Dots, dashes and
+# middle dots are fill-in only as a rule of three or more (dot leaders, a dashed line), never one in a word or number.
+_ING_FILL = frozenset('_\u2017\uff3f')
+_ING_RULES = frozenset('.\u2026-\u2010\u2011\u2012\u2013\u2014\u2015\u00b7')
+
+
+def _ING_glyphs(font, string) -> list:
+    """(the character it shows, whether word spacing applies to it, its width in thousandths of an em) of each glyph
+    of ``string`` in the pypdf ``font``, as pypdf decodes and measures it (get_text_operands, get_display_str)."""
+    if isinstance(string, str):
+        text, raw = string, ''
+    elif isinstance(font.encoding, str):
+        try:
+            text = string.decode(font.encoding, 'surrogatepass')
+        except UnicodeDecodeError:
+            text = string.decode(font.encoding, 'surrogateescape')
+        raw = ''
+    else:
+        text = ''.join(font.encoding.get(code, chr(code)) for code in string)
+        raw = ''.join(chr(code) for code in string)
+    measured = raw or text
+    out = []
+    for index, char in enumerate(text):
+        key = measured[index] if index < len(measured) else char
+        width = font.space_width if key == font.space_char else font.get_text_width(key)
+        out.append((font.character_map.get(char, char), char == ' ', width))
+    return out
+
+
 @dataclass(frozen=True)
 class _Run:
     """The glyphs of one text-showing operator: where they lie, in text space and on the page."""
@@ -567,6 +596,56 @@ class _Run:
     size: float
     width: float  # COVER_WIDTH font sizes along the baseline, text space (horizontal scaling applied)
     spans: tuple = ()  # (start, end) along the baseline, text space, of each string the operator shows
+    font: object = field(default=None, compare=False)  # the pypdf Font that measures its strings (None: unknown)
+    strings: tuple = field(default=(), compare=False)  # (start along the baseline, string) of each string it shows
+    spacing: tuple = (0.0, 0.0, 1.0)  # character spacing, word spacing and horizontal scale it was shown with
+
+    @functools.cached_property
+    def letters(self) -> tuple | None:
+        """(start, end) along the baseline, text space, of each stretch of the run's glyphs that are not fill-in
+        characters (_ING_FILL, and rules of three or more _ING_RULES): what an opaque area must cover to hide text.
+        None when the run has no fill-in character, or cannot be read glyph by glyph: the whole run counts, as
+        before."""
+        if self.font is None or not self.strings:
+            return None
+        char_spacing, word_spacing, scale = self.spacing
+        glyphs = []  # (start, end, kind): kind 'fill', 'rule' or 'letter'
+        for start, string in self.strings:
+            try:
+                decoded = _ING_glyphs(self.font, string)
+            except Exception:
+                return None
+            x = start
+            for shown, spaced, width in decoded:
+                advance = (width / 1000 * self.size + char_spacing + (word_spacing if spaced else 0.0)) * scale
+                kind = ('fill' if shown in _ING_FILL or shown.isspace() else 'rule' if shown in _ING_RULES
+                        else 'letter')
+                glyphs.append((min(x, x + advance), max(x, x + advance), kind))
+                x += advance
+        kinds = [kind for _, _, kind in glyphs]
+        for index, kind in enumerate(kinds):  # a dot or a dash is a rule only among three or more
+            if kind == 'rule':
+                end = index
+                while end < len(kinds) and kinds[end] == 'rule':
+                    end += 1
+                if end - index < 3:
+                    kinds[index:end] = ['letter'] * (end - index)
+                else:
+                    kinds[index:end] = ['fill'] * (end - index)
+        if 'fill' not in kinds:
+            return None
+        stretches: list = []
+        previous = None
+        for (low, high, _), kind in zip(glyphs, kinds):
+            if kind != 'letter':
+                previous = None
+                continue
+            if previous is None:
+                stretches.append([low, high])
+                previous = stretches[-1]
+            else:
+                previous[0], previous[1] = min(previous[0], low), max(previous[1], high)
+        return tuple(tuple(stretch) for stretch in stretches)
 
     @property
     def core(self) -> tuple:
@@ -596,7 +675,9 @@ class _Run:
 
     def covered_by(self, rect) -> bool:
         """Whether the opaque page-space rectangle ``rect`` hides at least one glyph of the run: it covers the
-        band every glyph inks, over at least COVER_WIDTH font sizes along the baseline (or the whole run)."""
+        band every glyph inks, over at least COVER_WIDTH font sizes along the baseline (or the whole run). In a run
+        with fill-in characters (an underscore line, dot leaders) it must do so over the run's letters: a white field
+        laid on a fill-in line hides no text."""
         back = _inverse(self.place)
         if back is None or not rectilinear(self.place):
             core = self.page_core
@@ -606,7 +687,13 @@ class _Run:
         if y0 > bottom or y1 < top:
             return False
         overlap = min(x1, high) - max(x0, low)
-        return overlap > 0 and overlap >= min(high - low, self.width) - 1e-9
+        if not (overlap > 0 and overlap >= min(high - low, self.width) - 1e-9):
+            return False
+        letters = self.letters
+        if letters is None:
+            return True
+        return any(min(x1, end) > max(x0, start) and min(x1, end) - max(x0, start) >= min(end - start, self.width) - 1e-9
+                   for start, end in letters)
 
 
 class _Paint:
@@ -838,11 +925,12 @@ class _TextPlacement:
             items = list(operands[:1])
         start = self.matrix
         x = low = high = 0.0
-        spans = []
+        spans, strings = [], []
         for item in items:
             if isinstance(item, (bytes, str)):
                 before = x
                 x += self.advance(item)
+                strings.append((before, item))
                 if self.inked(item):  # a string of spaces draws nothing; the first is placed where the operator is
                     spans.append((before if spans else min(before, 0.0), x))
             else:  # a TJ adjustment, in thousandths of a text-space unit, moves the next glyph left
@@ -857,7 +945,8 @@ class _TextPlacement:
             return None
         box = transformed_box((low, state.rise - GLYPH_DESCENT * size, high, state.rise + GLYPH_ASCENT * size), place)
         return _Run(box, OUTSIDE_MARGIN * size * scale, place, low, high, state.rise, size,
-                    COVER_WIDTH * size * abs(state.scale), tuple(spans))
+                    COVER_WIDTH * size * abs(state.scale), tuple(spans), self.font(), tuple(strings),
+                    (state.char_spacing, state.word_spacing, state.scale))
 
     def advance(self, string) -> float:
         """How far ``string`` moves the text position, in text-space units (each string measured once per font: a

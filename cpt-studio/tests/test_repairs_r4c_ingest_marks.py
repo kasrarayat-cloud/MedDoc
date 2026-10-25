@@ -330,5 +330,160 @@ class Extraction7NoFormCheckBoxNoOverlapMessageTests(unittest.TestCase):
         self.assertNotIn(UNREAD_NOTE, result.messages)
 
 
+# --- extraction:4 -- a field's background, painted by the viewer ---------------------------------------------------
+
+COVERED = ('Page 1 has strike-out, redaction or cover-up marks added as PDF annotations; the text under them was read '
+           'as written, so check it against the original.')
+
+
+def field_report(*, appearance=None, need=True, background='[1]', value='', translucent=False, kind='/Tx',
+                 rect=None):
+    """The round-4 report with one field over 'A cold forceps biopsy was taken from the polyp.': ``appearance`` None
+    (none stored), 'empty' (one that draws nothing) or 'white' (one that paints its box white); NeedAppearances
+    ``need`` (None: absent); /MK /BG ``background`` (None: no /MK)."""
+    from tests.test_repairs_ingest_pdf import HELVETICA
+    from tests.test_repairs_r4_ingest_covers import RECT, REPORT
+    rect = rect or RECT
+    width, height = round(rect[2] - rect[0], 2), round(rect[3] - rect[1], 2)
+    content = '\n'.join(f'BT /F1 11 Tf {x} {y} Td ({esc(text)}) Tj ET' for x, y, text in REPORT)
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R /AcroForm 8 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               4: HELVETICA, 5: stream(content)}
+    parts = [f'/Type /Annot /Subtype /Widget /FT {kind} /T (Comments) /Rect [{" ".join(map(str, rect))}] /F 4 /P 3 0 R',
+             '/DA (/Helv 10 Tf 0 g)', f'/V ({esc(value)})' if value else '',
+             f'/MK << /BG {background} >>' if background is not None else '', '/CA 0.5' if translucent else '']
+    if kind == '/Ch':
+        parts.append(f'/Ff {1 << 17} /Opt [() ({esc(value)})]')
+    if appearance:
+        drawn = '/Tx BMC EMC' if appearance == 'empty' else f'q 1 g 0 0 {width} {height} re f Q /Tx BMC EMC'
+        objects[7] = stream(drawn, f'/Type /XObject /Subtype /Form /BBox [0 0 {width} {height}] /Resources << /Font << '
+                            '/Helv 4 0 R >> >>')
+        parts.append('/AP << /N 7 0 R >>')
+    objects[6] = ('<< ' + ' '.join(p for p in parts if p) + ' >>').encode()
+    flag = '' if need is None else f'/NeedAppearances {"true" if need else "false"} '
+    objects[8] = f'<< /Fields [6 0 R] {flag}/DR << /Font << /Helv 4 0 R >> >> >>'.encode()
+    objects[3] = (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                  b'/Contents 5 0 R /Annots [6 0 R] >>')
+    return serialise(objects)
+
+
+class Extraction4FieldBackgroundTests(unittest.TestCase):
+    def test_a_background_the_viewer_paints_over_text_is_named(self):
+        cases = {'empty, regenerated': dict(), 'filled, regenerated': dict(value='Biopsy deferred.'),
+                 'an RGB white': dict(background='[1 1 1]'), 'an appearance that draws nothing': dict(appearance='empty'),
+                 'no appearance, NeedAppearances absent': dict(need=None),
+                 'no appearance, NeedAppearances false': dict(need=False),
+                 'a combo box': dict(kind='/Ch', value='Deferred')}
+        for label, kwargs in cases.items():
+            with self.subTest(label):
+                result = extracted(field_report(**kwargs))
+                self.assertEqual(result.status, 'partial', result.messages)
+                self.assertIn(COVERED, result.messages)
+                self.assertIn('A cold forceps biopsy was taken from the polyp.', result.text)
+
+    def test_no_background_or_none_over_text_is_not_named(self):
+        cases = {'no background': dict(background=None), 'a transparent background': dict(background='[]'),
+                 'translucent': dict(translucent=True), 'away from the text': dict(rect=(70, 300, 308.94, 315)),
+                 'a stored appearance that draws nothing, not regenerated': dict(appearance='empty', need=False)}
+        for label, kwargs in cases.items():
+            with self.subTest(label):
+                result = extracted(field_report(**kwargs))
+                self.assertNotIn(COVERED, result.messages)
+                self.assertEqual(result.status, 'ok', result.messages)
+
+    def test_a_stored_white_appearance_is_named_as_before(self):
+        result = extracted(field_report(appearance='white', need=False, background=None))
+        self.assertIn(COVERED, result.messages)
+
+
+# --- extraction:10 -- white fields on fill-in lines ------------------------------------------------------------------
+
+def fill_in_form(line='_' * 30, *, geometry='low', one_run=False, under=None, regenerated=False, graze=0.0):
+    """'Indication:', 'Bowel preparation:' and 'Extent reached:', each followed by a fill-in ``line`` (or ``under``, a
+    printed word, as the positive control), with a filled text field whose appearance paints a white box laid on each
+    line: its bottom 3 pt under the baseline ('low', hiding the line's ink), 0.2 pt above it ('above'), or 1.2 pt under
+    it ('on'). ``one_run``: the label and its line in one text-showing operator; ``regenerated``: no appearance,
+    /NeedAppearances true, /MK /BG [1]."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    from tests.test_repairs_ingest_pdf import HELVETICA
+    rows = [('Indication:', 'Screening', 660), ('Bowel preparation:', 'Good', 640), ('Extent reached:', 'Cecum', 620)]
+    content = [f'BT /F1 11 Tf 72 {y} Td ({esc(t)}) Tj ET' for y, t in (
+        (740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'), (720, 'Colonoscopy procedure report'),
+        (700, 'Date of service: 2026-10-21'), (590, 'Findings: A 6 mm sigmoid polyp was removed by cold snare polypectomy.'))]
+    objects = {1: b'<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+               5: HELVETICA}
+    annots, number = [], 10
+    for label, value, y in rows:
+        printed = under or line
+        x = round(72 + stringWidth(label + (' ' if one_run else ''), 'Helvetica', 11) + (0 if one_run else 4), 2)
+        if one_run:
+            content.append(f'BT /F1 11 Tf 72 {y} Td ({esc(label + " " + printed)}) Tj ET')
+        else:
+            content.append(f'BT /F1 11 Tf 72 {y} Td ({esc(label)}) Tj ET')
+            content.append(f'BT /F1 11 Tf {x} {y} Td ({esc(printed)}) Tj ET')
+        w = round(stringWidth(printed, 'Helvetica', 11), 2)
+        bottom = {'low': y - 3, 'above': round(y + 0.2, 2), 'on': round(y - 1.2, 2)}[geometry]
+        rect = (round(x - graze, 2), bottom, round(x + w, 2), bottom + 14)
+        fw, fh = round(rect[2] - rect[0], 2), 14
+        parts = [f'/Type /Annot /Subtype /Widget /FT /Tx /T ({esc(label.rstrip(":"))}) /V ({esc(value)}) /MK << /BG [1] >>',
+                 f'/Rect [{" ".join(map(str, rect))}] /F 4 /P 3 0 R /DA (/Helv 10 Tf 0 g)']
+        if not regenerated:
+            objects[number + 1] = stream(f'q 1 g 0 0 {fw} {fh} re f Q /Tx BMC q BT /Helv 10 Tf 0 g 2 3.5 Td ({esc(value)}) Tj '
+                                         f'ET Q EMC', f'/Type /XObject /Subtype /Form /BBox [0 0 {fw} {fh}] /Resources '
+                                         '<< /Font << /Helv 5 0 R >> >>')
+            parts.append(f'/AP << /N {number + 1} 0 R >>')
+        objects[number] = ('<< ' + ' '.join(parts) + ' >>').encode()
+        annots.append(number)
+        number += 2
+    refs = ' '.join(f'{n} 0 R' for n in annots)
+    objects[4] = (f'<< /Fields [{refs}] /NeedAppearances {"true" if regenerated else "false"} '
+                  '/DR << /Font << /Helv 5 0 R >> >> >>').encode()
+    objects[6] = stream('\n'.join(content))
+    objects[3] = (f'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> '
+                  f'/Contents 6 0 R /Annots [{refs}] >>').encode()
+    return serialise(objects)
+
+
+class Extraction10FillInLinesTests(unittest.TestCase):
+    def test_a_white_field_on_a_fill_in_line_hides_no_text(self):
+        cases = {'on the line': dict(geometry='on'), 'above the line': dict(geometry='above'),
+                 'hiding the line': dict(geometry='low'), 'label and line in one run': dict(one_run=True),
+                 'one run, hiding the line': dict(one_run=True, geometry='low'), 'dot leaders': dict(line='.' * 40),
+                 'a dashed rule': dict(line='-' * 34), 'drawn by the viewer': dict(regenerated=True),
+                 'grazing the label (less than its letters must show)': dict(one_run=True, graze=4.0)}
+        for label, kwargs in cases.items():
+            with self.subTest(label):
+                result = extracted(fill_in_form(**kwargs))
+                self.assertEqual((result.status, result.messages), ('ok', (FIELDS_NOTE,)))
+
+    def test_a_decimal_point_drawn_alone_and_covered_is_named(self):
+        """'1', '.' and '5' drawn by three operators, a white box over the point only: what shows reads '15', so the
+        point is text, not a rule (a dot is a fill-in character only among three or more)."""
+        from tests.test_repairs_ingest_pdf import HELVETICA
+        content = '\n'.join([f'BT /F1 11 Tf 72 {y} Td ({esc(t)}) Tj ET' for y, t in (
+            (740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'), (720, 'Date of service: 2026-10-21'),
+            (700, 'Findings: A polyp was seen.'))] + ['BT /F1 11 Tf 72 680 Td (Size: ) Tj ET',
+                                                     'BT /F1 11 Tf 102.6 680 Td (1) Tj ET', 'BT /F1 11 Tf 108.7 680 Td (.) Tj ET',
+                                                     'BT /F1 11 Tf 111.8 680 Td (5 cm) Tj ET'])
+        objects = {1: b'<< /Type /Catalog /Pages 2 0 R >>', 2: b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+                   4: HELVETICA, 5: stream(content), 6: b'<< /Type /Annot /Subtype /Square /Rect [107.7 676 112.8 692] /F 4 '
+                   b'/IC [1 1 1] /C [1 1 1] >>'}
+        objects[3] = (b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> '
+                      b'/Contents 5 0 R /Annots [6 0 R] >>')
+        result = extracted(serialise(objects))
+        self.assertEqual(result.status, 'partial', result.messages)
+        self.assertIn(COVERED, result.messages)
+
+    def test_a_white_field_over_words_is_still_named(self):
+        cases = {'a word under the field': dict(under='Biopsy taken'),
+                 'a line ending in a word': dict(line='_' * 24 + ' mm'),
+                 'a word between rules': dict(line='___ Biopsy ___'),
+                 'one period': dict(line='1.5'), 'drawn by the viewer': dict(under='Biopsy taken', regenerated=True)}
+        for label, kwargs in cases.items():
+            with self.subTest(label):
+                result = extracted(fill_in_form(**kwargs))
+                self.assertEqual(result.status, 'partial', result.messages)
+                self.assertIn(COVERED, result.messages)
+
+
 if __name__ == '__main__':
     unittest.main()

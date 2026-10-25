@@ -43,9 +43,10 @@ where that can be done exactly, and accounts for the rest:
   annotation that draws without text (ink, a stamp, a shape, a highlight, a
   mark viewers draw from its /QuadPoints) is counted as a drawing. Strike-out
   and redaction marks are counted as marks, and the opaque rectangles an
-  annotation paints over the page (its appearance's fills and images, or a
-  Square / Circle's /IC interior) are kept, so that text they cover is named
-  (pdf.py). Any displayed annotation (an image field, a Square, ...) whose
+  annotation paints over the page (its appearance's fills and images, a
+  Square / Circle's /IC interior, or the /MK /BG background of a text or choice
+  field that viewers draw themselves: no appearance, or /NeedAppearances) are
+  kept, so that text they cover is named (pdf.py). Any displayed annotation (an image field, a Square, ...) whose
   appearance paints an image is counted as drawn; those images also count
   towards the page's image coverage, placed as viewers place the appearance
   (PDF 32000-1 12.5.5). Hidden annotations — the Hidden or NoView flag,
@@ -349,12 +350,18 @@ class _Reader:
 
     def covers(self, annotation, subtype) -> list:
         """The opaque page-space rectangles a displayed annotation paints over the page: the opaque fills and images
-        of its appearance (read by appearance_text, mapped as viewers place it), or the interior of a Square or
-        Circle drawn from /IC when it has no appearance. None when the annotation is translucent (/CA)."""
+        of its appearance (read by appearance_text, mapped as viewers place it), the interior of a Square or Circle
+        drawn from /IC when it has no appearance, or a text or choice field's background colour when viewers draw the
+        field themselves (it has no appearance, or /NeedAppearances asks for it to be redrawn). None when the
+        annotation is translucent (/CA)."""
         if number(annotation.get('/CA'), 1.0) < 1:
             return []
         rect = rect_of(annotation)
         stream = normal_appearance(annotation)
+        if subtype == '/Widget' and (stream is None or self.regenerated):
+            background = self.field_background(annotation, rect)
+            if background:  # viewers draw the field themselves, over its background colour
+                return background
         if stream is not None:
             if rect is None or self.painted is None or self.painted[0] is not stream:
                 return []  # an appearance in a hidden layer paints nothing
@@ -373,6 +380,23 @@ class _Reader:
         if subtype == '/Circle':  # the rectangle inscribed in the ellipse
             cx, cy, rx, ry = (x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2 * 0.7071, (y1 - y0) / 2 * 0.7071
             x0, y0, x1, y1 = cx - rx, cy - ry, cx + rx, cy + ry
+        return [(x0, y0, x1, y1)] if x1 > x0 and y1 > y0 else []
+
+    def field_background(self, annotation, rect) -> list:
+        """The rectangle a text or choice field's background colour (/MK /BG, a colour of any components) paints,
+        inset by its border width (/BS /W, default 1) as a Square's /IC interior is: [] for any other widget, a password
+        field or no background."""
+        if rect is None:
+            return []
+        info = field_of(annotation)
+        if info.kind not in ('/Tx', '/Ch') or (info.kind == '/Tx' and info.flags & FIELD_PASSWORD):
+            return []
+        characteristics = resolved(annotation.get('/MK'))
+        if not isinstance(characteristics, DictionaryObject) or not as_list(characteristics.get('/BG')):
+            return []
+        border = resolved(annotation.get('/BS'))
+        width = number(border.get('/W'), 1.0) if isinstance(border, DictionaryObject) else 1.0
+        x0, y0, x1, y1 = rect[0] + width, rect[1] + width, rect[2] - width, rect[3] - width
         return [(x0, y0, x1, y1)] if x1 > x0 and y1 > y0 else []
 
     def appearance_hidden(self, annotation) -> bool:
