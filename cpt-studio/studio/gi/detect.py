@@ -970,11 +970,22 @@ _BOX_DENIAL_ANSWER = re.compile(r':[ \t]*(?:no|none|not[ \t]+done|not[ \t]+perfo
 
 def _box_denying_options(an: Analysis, start: int, end: int) -> list[tuple[int, int]]:
     """The spans of [start, end) that would deny or hold the service if their option were selected: a cancelling,
-    deferring, doubting, historical or incomplete cue, an act denial ("Not performed", "Declined") or a rescheduling."""
+    deferring, doubting, historical or incomplete cue, an act denial ("Not performed", "Declined"), a rescheduling, or
+    a status value's own hold word (_STATUS_HOLD: "Pending", "TBD", "On hold"; round 5 regression:0)."""
     found = [(c.start, c.end) for c in an.cues_in(start, end)
              if c.status in ('cancelled', 'planned', 'uncertain', 'historical', 'incomplete')]
     found += [m.span() for m in _ACT_DENIAL.finditer(an.text, start, end)]
+    found += [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(an.text, start, end)]
+    found += [m.span() for m in _BOX_STATUS_HOLD_WORD.finditer(an.text, start, end)]
     return found + [m.span() for m in _RESCHEDULED.finditer(an.text, start, end)]
+
+
+# The status hold words (_STATUS_HOLD) wherever they stand in a boxed status value, not only where a value opens with one
+# ("Status: Completed ☐ Pending ☒"): each is an option, so a checked one holds (round 5 regression:0).
+_BOX_STATUS_HOLD_WORD = re.compile(r'\b' + _STATUS_HOLD.pattern, _STATUS_HOLD.flags)
+# A denial option written as two words ("Not performed", "Not done"): one option word, so the box after its participle
+# is its own ("Performed ☐ Not performed ☒"), never a box no option word reaches (round 5 declared:2).
+_BOX_NOT_DONE_OPTION = re.compile(r'\bnot[ \t]+(?:done|performed)\b', re.A | re.I)
 
 
 # The words of a status option that says the service was done ("☐ Completed ☒ Cancelled", "Completed ☐ | Cancelled
@@ -1012,8 +1023,26 @@ def _box_option_states(an: Analysis, lo: int, hi: int, options: list, words: lis
         index = bisect.bisect_right(word_starts, option_start) - 1
         after = words[index + 1][0] if index + 1 < len(words) else hi
         group = boxes[bisect.bisect_left(box_starts, option_start):bisect.bisect_left(box_starts, after)]
-        found.append(_group_state(text, group) if group else None)
+        found.append(_box_option_group_state(text, words[index], group) if group else None)
     return found
+
+
+def _box_option_group_state(text: str, word: tuple[int, int], group: list) -> Optional[str]:
+    """The state of the boxes ``group`` that trail the status option word ``word``: as _group_state reads an item's
+    (a yes/no pair after the option is read by the option it marks: "Procedure cancelled: [ ] Yes [x] No"), except that
+    when the yes/no word right before the first box is the option's own word ("Not done ☒", "Not performed ☐"), the
+    option's own box run decides: _group_state would read its "Not done" as the "No" of a pair, so a checked option as
+    unchecked and an unchecked one as unread (round 5 declared:2)."""
+    first = group[0]
+    before = _OPTION_BEFORE.search(text, max(0, first[0] - 20), first[0])
+    if before is None or before.start() >= word[1]:
+        return _group_state(text, group)
+    run = [first]
+    for b in group[1:]:
+        if not _BOX_RUN_GAP.fullmatch(text, run[-1][1], b[0]):
+            break
+        run.append(b)
+    return _run_state(run)
 
 
 def _cancels(an: Analysis, start: int, end: int) -> bool:
@@ -1025,14 +1054,15 @@ def _cancels(an: Analysis, start: int, end: int) -> bool:
 def _boxed_status_denies(an: Analysis, lo: int, hi: int) -> Optional[bool]:
     """For a status value with boxes ("[ ] Completed [x] Cancelled - patient ate breakfast", "Completed ☐ Cancelled ☒
     Postponed"; round 4, BOXES' residual): True when any denying option is not plainly unchecked (checked,
-    disagreeing, unread, or governed by no box), False when every one is unchecked, None when the value has no box
-    (it is read as text). The caller holds the service line; it never excludes."""
+    disagreeing, unread, or governed by no box), False when every one is unchecked, None when the value has no box or
+    no denying option (it is read as text, as before round 4b: round 5 regression:0). The caller holds the service
+    line; it never excludes."""
     _, boxes = _box_tokens(an, lo, hi)
     if not boxes:
         return None
     options = _box_denying_options(an, lo, hi)
     if not options:
-        return False
+        return None
     words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, lo, hi)]
     return any(state != 'off' for state in _box_option_states(an, lo, hi, options, words))
 
