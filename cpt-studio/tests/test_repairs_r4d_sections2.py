@@ -186,9 +186,12 @@ class S2Regression3CellCutDenialTests(unittest.TestCase):
     ends at a next report-field cell ("Extent: cecum | Prep quality: Good"), as R4B-BASE did; but beside "Cecum not
     reached." in the family's own text that label still read the cecum reached, a READY 45378 with no extent question
     and no incomplete check, where 9a9f40301 asked for the extent or read the procedure incomplete at the prose landmark.
-    A label read only because of the cell cut is no longer read as reached while the family's text outside its clause
-    denies a landmark deeper than the deepest one otherwise reached and no deeper than the label's own (plan:D2's guard):
-    9a9f40301's reading returns. A denial beyond the label's landmark ("TI not intubated.") decides nothing."""
+    A label read only because of the cell cut is now judged against the family's text: a denial of a landmark deeper
+    than the deepest one otherwise reached and no deeper than the label's own contradicts it (plan:D2's guard). A reach
+    denial of plan:D2's closed list naming that landmark ("Cecum not reached.", "failed to reach the cecum"), or a reading
+    of the landmark that denies it outright ("No cecal intubation."), drops the label and 9a9f40301's reading returns. A
+    doubt about how the landmark was seen ("The cecum was not well seen due to stool.", where 9a9f40301 read a false
+    'incomplete: rectum') and a denial beyond the label's landmark ("TI not intubated.") leave HEAD's reading."""
 
     def test_the_claimed_inputs_restore_r5(self):
         self.assertIsNone(fact_value(R3_A, 'gi.colonoscopy', 'extent'))
@@ -210,12 +213,55 @@ class S2Regression3CellCutDenialTests(unittest.TestCase):
                             self.assertNotEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
                             self.assertNotEqual(family(text, 'gi.colonoscopy'), None)
 
+    def test_an_outright_denial_in_other_words(self):
+        """A landmark whose own reading is negated or incomplete is denied outright, in words plan:D2's list need not read."""
+        for line in ('No cecal intubation.', 'Cecal intubation: not done.', 'Despite multiple attempts the cecum was not '
+                     'reached.', 'Incomplete colonoscopy; the cecum was not reached.'):
+            for prose, extent in (('', None), ('The colonoscope was inserted into the rectum and advanced.',
+                                               'incomplete: rectum')):
+                text = HEADER + 'Procedure: Colonoscopy\nExtent: cecum | Prep quality: Good\nFindings: ' + prose + ' ' + line + '\n'
+                with self.subTest(line=line, prose=prose):
+                    self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), extent)  # 9a9f40301's reading
+
+    def test_a_doubt_about_how_a_landmark_was_seen_keeps_the_label(self):
+        """Not a denial of reaching it: 9a9f40301 read a false 'incomplete: rectum' here, HEAD the cecum."""
+        for line in ('The cecum was not well seen due to stool.', 'The cecal base was not well visualized because of '
+                     'retained stool.', 'The ascending colon was not well seen.', 'The sigmoid colon could not be examined.',
+                     'The cecum could not be evaluated.'):
+            for prose in ('', 'The colonoscope was inserted into the rectum and advanced.'):
+                text = HEADER + 'Procedure: Colonoscopy\nExtent: cecum | Prep quality: Good\nFindings: ' + prose + ' ' + line + '\n'
+                with self.subTest(line=line, prose=prose):
+                    self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_a_denial_after_the_cell_on_the_labels_line(self):
+        """The label's own sentence ends at the cell (plan:D reads no further), so a denial after it is the family's."""
+        for rest in (', cecum not reached.', '; the cecum could not be reached.', ' - cecum not reached'):
+            text = HEADER + 'Procedure: Colonoscopy\nFindings:\nExtent: cecum | Prep quality: Good' + rest + '\n'
+            with self.subTest(rest=rest):
+                self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))
+
     def test_the_upper_tract(self):
-        for cell in ('Extent: D2 | Sedation: MAC', 'Extent: second part of the duodenum | Complications: none'):
-            for line in ('The second part of the duodenum was not reached.', 'D2 could not be reached.'):
-                text = HEADER + 'Procedure: EGD\n' + cell + '\nFindings: ' + line + '\n'
-                with self.subTest(cell=cell, line=line):
-                    self.assertNotEqual(fact_value(text, 'gi.egd', 'extent'), 'second part of duodenum')
+        for cell in ('Extent: D2 | Sedation: MAC', 'Extent: second part of the duodenum | Withdrawal time: 5 min'):
+            for line in ('D2 could not be reached.', 'The duodenum could not be reached.', 'Unable to reach the duodenum.',
+                         'The second part of the duodenum was not reached.'):
+                for prose, extent in (('', None), ('The gastroscope was passed into the esophagus.', 'incomplete: esophagus')):
+                    text = HEADER + 'Procedure: EGD\n' + cell + '\nFindings: ' + (prose + '\n' if prose else '') + line + '\n'
+                    with self.subTest(cell=cell, line=line, prose=prose):
+                        self.assertEqual(fact_value(text, 'gi.egd', 'extent'), extent)  # 9a9f40301's reading
+        text = HEADER + 'Procedure: EGD\nExtent: duodenum | Findings: see below\nFindings: D2 could not be reached.\n'
+        self.assertEqual(fact_value(text, 'gi.egd', 'extent'), 'incomplete: duodenum')  # a deeper denial: HEAD's reading
+
+    def test_the_flexible_sigmoidoscopy(self):
+        for cell in ('Extent: descending colon | Prep quality: fair', 'Extent: descending colon    Prep: fair'):
+            for prose, extent in (('', None), ('The sigmoidoscope was advanced to the sigmoid colon.', 'sigmoid colon')):
+                text = (HEADER + 'Procedure: Flexible sigmoidoscopy\n' + cell + '\nFindings: ' + (prose + '\n' if prose else '')
+                        + 'The descending colon was not reached.\n')
+                with self.subTest(cell=cell, prose=prose):
+                    self.assertEqual(fact_value(text, 'gi.flex_sig', 'extent'), extent)  # 9a9f40301's reading
+            text = (HEADER + 'Procedure: Flexible sigmoidoscopy\n' + cell + '\nFindings: The splenic flexure could not be '
+                    'reached.\n')
+            with self.subTest(cell=cell, deeper=True):
+                self.assertEqual(fact_value(text, 'gi.flex_sig', 'extent'), 'descending colon')
 
     def test_declared_11_still_reads_the_cell_cut_label(self):
         """No denial, a denial beyond the label, a denied finding, or a denial shallower than a deeper prose landmark:
@@ -230,6 +276,32 @@ class S2Regression3CellCutDenialTests(unittest.TestCase):
             text = r3_note(cell, 'The colonoscope was advanced to the transverse colon.',
                            'The sigmoid colon could not be examined.')
             with self.subTest(cell=cell, shallower=True):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_an_addendum_answer_read_by_the_cut(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: Cecum not reached.\n\nADDENDUM (revision 2, added 2026-10-22 '
+                '10:00 UTC)\nFurthest extent reached: cecum | Prep quality: Good\n')
+        self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))  # 9a9f40301's reading
+        text = text.replace('Findings: Cecum not reached.', 'Findings: Normal mucosa.')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_a_landmark_reached_by_another_cue_is_not_guarded(self):
+        text = HEADER + 'Procedure: Colonoscopy to cecum | Prep quality: Good\nFindings: Cecum not reached.\n'
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')  # HEAD's and 9a9f40301's reading
+
+    def test_a_denial_above_a_landmark_reached_otherwise_decides_nothing(self):
+        """plan:D2's guard: the scope passed it, so it says nothing of the label."""
+        for line in ('The sigmoid colon could not be reached.', 'Unable to reach the transverse colon.'):
+            text = (HEADER + 'Procedure: Colonoscopy\nExtent: cecum | Prep quality: Good\nFindings: The colonoscope was '
+                    'advanced to the hepatic flexure. ' + line + '\n')
+            with self.subTest(line=line):
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_a_reach_denial_in_another_segment_names_another_thing(self):
+        for rest in (', the guidewire was not advanced.', ' (scope not advanced).', ' - the scope was not advanced.'):
+            text = (HEADER + 'Procedure: Colonoscopy\nExtent: cecum | Prep quality: Good\nFindings: The cecum was not well '
+                    'seen' + rest + '\n')
+            with self.subTest(rest=rest):
                 self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
 
     def test_a_label_read_whole_is_unchanged(self):
