@@ -980,12 +980,14 @@ def _box_denying_options(an: Analysis, start: int, end: int) -> list[tuple[int, 
              if c.status in ('cancelled', 'planned', 'uncertain', 'historical', 'incomplete')]
     found += [m.span() for m in _ACT_DENIAL.finditer(an.text, start, end)]
     found += [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(an.text, start, end)]
-    found += [m.span() for m in _BOX_STATUS_HOLD_WORD.finditer(an.text, start, end)]
+    found += [m.span() for m in _BOX_STATUS_HOLD_WORD.finditer(an.text, start, end)
+              if _box_beside_a_mark(an.text, m.start(), m.end(), start, end)]
     return found + [m.span() for m in _RESCHEDULED.finditer(an.text, start, end)]
 
 
-# The status hold words (_STATUS_HOLD) wherever they stand in a boxed status value, not only where a value opens with one
-# ("Status: Completed ☐ Pending ☒"): each is an option, so a checked one holds (round 5 regression:0).
+# The status hold words (_STATUS_HOLD) of a boxed status value, wherever they stand, not only where a value opens with
+# one ("Status: Completed ☐ Pending ☒"): written beside a mark, each is an option, so a checked one holds (round 5
+# regression:0); one in a remark ("Completed ☒ (pathology pending)") is no option.
 _BOX_STATUS_HOLD_WORD = re.compile(r'\b' + _STATUS_HOLD.pattern, _STATUS_HOLD.flags)
 # A denial option written as two words ("Not performed", "Not done"): one option word, so the box after its participle
 # is its own ("Performed ☐ Not performed ☒"), never a box no option word reaches (round 5 declared:2).
@@ -1121,14 +1123,18 @@ def _box_selected_denial(an: Analysis, lo: int, hi: int) -> bool:
     text = an.text
     if _box_tokens(an, lo, hi)[0]:
         return False
-    spans = [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(text, lo, hi)
-             if _BOX_BESIDE_AFTER.match(text, m.end(), hi) or _BOX_BESIDE_BEFORE.search(text, max(lo, m.start() - 20),
-                                                                                       m.start())]
+    spans = [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(text, lo, hi) if _box_beside_a_mark(text, *m.span(), lo, hi)]
     if not spans:
         return False
     words = _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
     return any(state not in ('off', None) for state in _box_option_states(an, lo, hi, spans, words))
 
+
+
+def _box_beside_a_mark(text: str, start: int, end: int, lo: int, hi: int) -> bool:
+    """Whether the option word [start, end) is written beside a box or mark, in [lo, hi): right after or right before
+    it, with only spaces, a colon or a cell bar between (_BOX_BESIDE_AFTER, _BOX_BESIDE_BEFORE)."""
+    return bool(_BOX_BESIDE_AFTER.match(text, end, hi) or _BOX_BESIDE_BEFORE.search(text, max(lo, start - 20), start))
 
 
 # A rescheduling of today's service: "Rescheduled.", "Rebooked for next week", "Moved to next week", "The procedure
@@ -1903,10 +1909,11 @@ _BOX_TEXT = _BOX.pattern.replace('?P<off>', '?:').replace('?P<on>', '?:')
 _NO_OPTION = r'(?:no|none|not[ \t]+done|not[ \t]+performed)'
 _OPTION_LABEL = re.compile(r'(?:' + _BOX_TEXT + r')[ \t]*' + _NO_OPTION + r'\b|\b' + _NO_OPTION + r'[ \t]*(?:' + _BOX_TEXT
                            + r')', re.A | re.I)
-# A box or unread mark right after or right before an option word, with only spaces, a colon or a cell bar between
-# (_box_selected_denial: round 5 declared:8).
-_BOX_BESIDE_AFTER = re.compile(r'[ \t|:]*(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + ')')
-_BOX_BESIDE_BEFORE = re.compile(r'(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + r')[ \t|:]*$')
+# A box, an unread mark or a radio glyph right after or right before an option word, with only spaces, a colon or a
+# cell bar between (_box_beside_a_mark: round 5 declared:8, regression:0).
+_BOX_BESIDE_AFTER = re.compile(r'[ \t|:]*(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern + ')')
+_BOX_BESIDE_BEFORE = re.compile(r'(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern
+                                + r')[ \t|:]*$')
 # What joins the items of one label ("Biopsy/polypectomy", "biopsy or polypectomy", "Biopsy, polypectomy"): a box
 # after the label governs every item it names.
 _LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
@@ -2475,16 +2482,23 @@ def _box_field_answer(an: Analysis, start: int, end: int, denied: re.Match) -> t
     return ('held', BOX_FIELD_HELD_UNTIED) if kind in ('item', 'qualified') else (None, None)
 
 
-# Field labels known to name no item, so their "No" or "None" says nothing of a service (round 5 regression:1), and
-# known to answer their own question, never the separately identifiable E/M statement above them (round 5
-# declared:12). A closed list, read whole: a label not on it fails closed. An optional "Any", a participle ("Sedation
-# given", "Teaching physician present"), "if any", a parenthesis ("(if any)", "(mL)") and the label's own "?" may
-# stand with it.
-_BOX_NO_ITEM_LABEL = re.compile(r'(?:any[ \t]+)?(?:complications?|adverse[ \t]+events?|ebl|estimated[ \t]+blood[ \t]+loss|'
-                                r'blood[ \t]+loss|bleeding|sedation|anesthesia|anaesthesia|allerg(?:y|ies)|comments?|notes?|'
-                                r'remarks?|interpreter|teaching[ \t]+physician|resident|disposition)'
-                                r'(?:[ \t]+(?:given|used|present|involvement|involved|needed|required|noted))?'
-                                r'(?:[ \t]*(?:\([^()\n]{0,40}\)|if[ \t]+any))?[ \t]*\??', re.A | re.I)
+# Field labels known to name no item, so their "No" or "None" says nothing of a service (round 5 regression:1). A closed
+# list, read whole: a label not on it fails closed. An optional "Any", "if any", a parenthesis ("(if any)", "(mL)") and
+# the label's own "?" may stand with it.
+_BOX_NO_ITEM_WORDS = (r'complications?|adverse[ \t]+events?|ebl|estimated[ \t]+blood[ \t]+loss|blood[ \t]+loss|sedation|'
+                      r'anesthesia|anaesthesia|allerg(?:y|ies)|comments?|notes?|remarks?')
+_BOX_LABEL_AFFIX = r'(?:[ \t]*(?:\([^()\n]{0,40}\)|if[ \t]+any))?[ \t]*\??'
+_BOX_NO_ITEM_LABEL = re.compile(r'(?:any[ \t]+)?(?:' + _BOX_NO_ITEM_WORDS + ')' + _BOX_LABEL_AFFIX, re.A | re.I)
+# The fields a line under the separately identifiable E/M statement may answer instead of it (round 5 declared:12): those,
+# and the ordinary fields of a procedure report, with a participle ("Sedation given", "Teaching physician present").
+# Read whole; any other label is the statement's answer.
+_BOX_OWN_FIELD_LABEL = re.compile(r'(?:any[ \t]+)?(?:' + _BOX_NO_ITEM_WORDS + r'|bleeding|interpreter|teaching[ \t]+physician|'
+                                  r'resident|disposition)(?:[ \t]+(?:given|used|present|involvement|involved|needed|'
+                                  r'required|noted))?' + _BOX_LABEL_AFFIX, re.A | re.I)
+# The words that make a line under the statement its answer, whatever else it names ("☐ I attest the colonoscopy
+# note"): an attestation, agreement or confirmation, or the statement's own words.
+_BOX_ATTEST_WORD = re.compile(r'\b(?:attest\w*|agree\w*|confirm\w*|acknowledg\w*|separate\w*|e/?m|e&m|modifier|'
+                              r'significant\w*|identifiable)\b', re.A | re.I)
 
 
 def _box_names_no_item(an: Analysis, start: int, end: int) -> bool:
@@ -3814,11 +3828,14 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
 def _box_answers_its_own_label(an: Analysis, start: int, end: int) -> bool:
     """Whether the label [start, end) of a line under the statement answers for something other than the statement:
     it names an item (a service, an intervention or a procedure's word: "Biopsy: No", "☐ Follow-up colonoscopy in 3
-    years") or is a field known to answer its own question (_BOX_NO_ITEM_LABEL: "Complications: None", "Sedation
-    given: No"). Any other label is read as the statement's answer: fail-closed (round 5 declared:12, declared:4)."""
+    years") or is a field known to answer its own question (_BOX_OWN_FIELD_LABEL: "Complications: None", "Sedation
+    given: No"), and carries no attestation word (_BOX_ATTEST_WORD). Any other label is read as the statement's
+    answer: fail-closed (round 5 declared:12, declared:4)."""
+    if _BOX_ATTEST_WORD.search(an.text, start, end):
+        return False
     if an.services_in(start, end) or an.interventions_in(start, end) or _PROCEDURE_WORD.search(an.text, start, end):
         return True
-    return bool(_BOX_NO_ITEM_LABEL.fullmatch(_label_key(an.text[start:end])))
+    return bool(_BOX_OWN_FIELD_LABEL.fullmatch(_label_key(an.text[start:end])))
 
 
 def _box_own_box_refuses(an: Analysis, start: int, end: int) -> bool:

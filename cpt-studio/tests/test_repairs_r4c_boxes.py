@@ -63,6 +63,18 @@ class Regression0BoxedHoldWordTests(BoxCase):
                 self.assertEqual(family(text, 'gi.eus'), 'performed')
                 self.assert_outcome(text, '43242', R0_LINE, 'ready')
 
+    def test_a_hold_word_in_a_remark_is_no_option(self):
+        """Only a hold word written beside its own mark is an option; one in a remark is read as before."""
+        for row in ('Status: Completed ☒ (pathology pending)', 'Status: Completed ☒ - results pending',
+                    'Procedure status: Completed [x]; histology unknown at discharge'):
+            with self.subTest(row=row):
+                text = R0_NOTE.format(row=row)
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_outcome(text, '43242', R0_LINE, 'ready')
+        for row in ('Status: Pending ○ Completed ●', 'Status: Completed ☐ - Pending ☒', 'Status: Pending: [?] Completed: ☐'):
+            with self.subTest(row=row):  # beside a radio glyph, after a dash, beside an unread mark: still options
+                self.assert_outcome(R0_NOTE.format(row=row), '43242', R0_LINE, 'held')
+
     def test_a_boxed_value_with_no_option_is_read_as_text(self):
         """The text reading before 7207d3038: a completion holds nothing, a hold word without a box still holds."""
         for row, wanted in (('Status: Completed ☒', 'ready'), ('Status: ☒ Completed', 'ready'), ('Status: Pending', 'held'),
@@ -176,6 +188,9 @@ class Regression1UntiedFieldDenialTests(BoxCase):
                                  'Polyps removed: No\nCecum reached: Yes')):  # a field tied to the row it opens
             with self.subTest(fields=fields):
                 self.assert_outcome(FIELD_COLO.format(printed=printed, fields=fields), *COLO_PICK, 'ready')
+        for fields in ('Bleeding: No', 'Teaching physician present: No'):  # not on this list: fail closed
+            with self.subTest(fields=fields):
+                self.assert_outcome(FIELD_COLO.format(printed='', fields=fields), *COLO_PICK, 'held')
         for fields in ('Biopsies taken: No', 'Polypectomy: No'):  # labels naming the item: as before
             with self.subTest(fields=fields):
                 self.assert_outcome(FIELD_COLO.format(printed='', fields=fields), *COLO_PICK, 'held')
@@ -540,6 +555,9 @@ class Declared4AttestationBoxUnderItTests(AttestationLineCase):
         for line in ('☐ Follow-up colonoscopy in 3 years', '☐ Biopsy', '☐ Teaching physician present', '☐ Complications'):
             with self.subTest(line=line):
                 self.assert_documented(f'{AT_ST}\n{line}\n')
+        for line in ('☐ I attest the colonoscopy note', '☐ Agree, sigmoidoscopy and E/M', 'Biopsy attested: No'):
+            with self.subTest(line=line):  # an attestation word makes it the statement's answer, whatever else it names
+                self.assert_refused(f'{AT_ST}\n{line}\n')
 
     def test_a_form_field_tied_to_the_line_under_it(self):
         for printed, field in ((' ☐ Attested', 'Attested: not checked'), ('Attested', 'Attested: not checked'),
