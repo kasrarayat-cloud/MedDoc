@@ -3267,7 +3267,7 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
 
 
 def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
-               denied: Optional[list] = None) -> tuple[list, list]:
+               denied: Optional[list] = None, doubted: Optional[list] = None) -> tuple[list, list]:
     """(reached, blocked) as (depth, label, clause span) for landmarks read as
     part of a performed or incomplete service. A landmark is reached only from a
     reading with no unresolved negation; a denied advancement ("it was not advanced
@@ -3275,7 +3275,11 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     would be reached but for its tail (_plain_tail: "Extent: Cecum | Scope: Olympus"): its extent is not read, and it
     keeps a shallower landmark from reading the procedure incomplete (_P2_unread_reaches, round 4c-2 plan:B).
     ``denied``, when given, collects every other landmark its reading denies or doubts (negated, cancelled, incomplete,
-    or an unresolved negation: "Cecum not reached."); with the blocked ones, they keep that rule from firing (plan:B2)."""
+    or an unresolved negation: "Cecum not reached."); with the blocked ones, they keep that rule from firing (plan:B2).
+    ``doubted``, when given, collects every extent label plan:D refuses to read as reached (_P2_refused_label) whose own
+    sentence states no reach denial (_P2_reach_denied: "Extent: cecum; no biopsies taken"), with that sentence's span
+    after its landmark; such a label withholds the extent beside a shallower landmark (_P2_doubted_beyond, round 4c-2
+    plan:D2). A label refused for a reach denial ("Extent: cecum; not reached") is a denied one."""
     text = an.text
     reached, blocked = [], []
     for s, e in sentences:
@@ -3311,6 +3315,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                  and _P2_neutral_tail(an, m.end()))
                                 or _P2_doubted_by_a_next_field(an, reading, m.end(), ws, we)):
                         unread.append(hit)  # a label reached but for its neutral tail (round 4c-2 plan:B, plan:B2)
+                    elif doubted is not None and _P2_refused_label(an, reading, m.start(), m.end(), ws, we, depth, table) \
+                            and not _P2_reach_denied(an, m.end(), depth, table):
+                        doubted.append(hit + ((m.end(), _P2_label_rest(an, m.end(), depth, table)),))  # plan:D2
                     elif denied is not None and (status in ('negated', 'cancelled', 'incomplete')
                                                  or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
                                                      and not _P2_doubt_is_a_finding(an, ws, we))
@@ -3438,10 +3445,30 @@ def _P2_field_opens(text: str, pos: int) -> bool:
 
 def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
     """Whether the rest of an extent label's own sentence after its landmark (of ``depth`` in ``table``, ending at
-    ``end``) denies or doubts that landmark (round 4c-2 plan:D): a negation no finding, complication, other-act or
-    qualifier exception explains, a clause cue that is no performance cue, or an aim word (_P2_AIM_WORD). Read to the
-    line's end or CLAUSE_REACH characters, past ";" and ",", up to a full stop, a next field (_P2_field_opens, after a
-    cell break or a ";" or ","), a landmark of ``table`` deeper than ``depth``, or retroflexion."""
+    ``end``; _P2_label_rest) denies or doubts that landmark (round 4c-2 plan:D): a negation no finding, complication,
+    other-act or qualifier exception explains, a clause cue that is no performance cue, an aim word (_P2_AIM_WORD), or
+    a reach denial of the closed list (plan:D2: "; short of the cecum" carries no negation word)."""
+    text = an.text
+    stop = _P2_label_rest(an, end, depth, table)
+    if stop <= end:
+        return False
+    masked, where = _masked_map(an, end, stop)
+    explained = [(where[m.start()], where[m.end()])
+                 for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, cues.OTHER_ACT_NEGATION,
+                                 cues.OTHER_ACT_DENIED, *_P2_FINDING_DENIALS)
+                 for m in pattern.finditer(masked)]
+    explained = [(s, e) for s, e in explained if not _LANDMARK_AT.search(text, s, e)]
+    if any(not _covered((t.start(), t.end()), explained) for t in cues.DOUBT_TOKEN.finditer(text, end, stop)):
+        return True
+    return bool(_P2_AIM_WORD.search(text, end, stop) or any(c.status != 'performed' for c in an.cues_in(end, stop))
+                or _P2_reach_denied_in(an, end, stop, table))
+
+
+def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
+    """Where the rest of an extent label's own sentence after its landmark (of ``depth`` in ``table``, ending at
+    ``end``) stops (round 4c-2 plan:D): the line's end or CLAUSE_REACH characters, past ";" and ",", up to a full stop,
+    a next field (_P2_field_opens, after a cell break or a ";" or ","), a landmark of ``table`` deeper than ``depth``,
+    or retroflexion."""
     text = an.text
     stop = min(len(text), end + CLAUSE_REACH)
     line_end = text.find('\n', end, stop)
@@ -3458,17 +3485,128 @@ def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
             found = pattern.search(text, end, stop)
             if found:
                 stop = min(stop, found.start())
-    if stop <= end:
+    return stop
+
+
+# Round 4c-2 plan:D2: plan:D's refusal lets a shallower landmark read the procedure incomplete only when the label's own
+# sentence states that its landmark was not reached - a closed list of reach denials, whose subject and object are that
+# landmark (_P2_reach_names_the_landmark): "; not reached", "; could not be advanced", "; unable to intubate", "; failed
+# to reach", "; short of the cecum", "; reached: no", also with the reason first ("; due to poor prep not reached",
+# "; prep poor therefore not visualized"). Any other denial, doubt or aim ("; no biopsies taken", "; prep fair?",
+# "; consent not signed") withholds the extent instead, and the family's extent clarification asks for it.
+_P2_REACH_DENIAL = re.compile(
+    r"\b(?:(?:not|never)\s+(?:(?:yet|been|be)\s+)*(?:reached|visuali[sz]ed|intubated|achieved|advanced)"
+    r"|(?:could(?:\s+not|n['\u2019]t)|can(?:\s*not|['\u2019]t)|did(?:\s+not|n['\u2019]t)|would(?:\s+not|n['\u2019]t))\s+"
+    r"(?:be\s+)?(?:reach(?:ed)?|advanced?|intubated?|visuali[sz]ed?)"
+    r"|(?:unable|not\s+able|failed|failure)\s+to\s+(?:be\s+)?(?:reach(?:ed)?|advanced?|intubated?|visuali[sz]ed?|achieved?)"
+    r"|(?:(?:stopped|fell|came(?:\s+up)?|ended(?:\s+up)?)\s+)?(?:just\s+)?short\s+of"
+    r"|(?:reached|intubated|visuali[sz]ed|achieved)\s*[:=]\s*no)\b", re.A | re.I)
+# A reach denial's segment: between the separators of the label's sentence (never a field's colon: "; polyp: not
+# reached" speaks of the polyp).
+_P2_REACH_BREAK = re.compile(r'[;,|()\[\]]|\s[-\u2013\u2014]+\s', re.A)
+# A reason before the denial ("due to poor prep not reached"), or a word that draws the consequence ("prep poor
+# therefore not visualized"): the denial's own subject is then the landmark.
+_P2_REASON_LEAD = re.compile(r'[ \t]*(?:due\s+to|because(?:\s+of)?|secondary\s+to|owing\s+to|on\s+account\s+of|'
+                             r'as\s+a\s+result\s+of|in\s+view\s+of|given)\b', re.A | re.I)
+_P2_THEN = re.compile(r'\b(?:so|therefore|thus|hence|consequently)[ \t]+(?:(?:it|was|were|is|has|had|have|been)[ \t]+)*\Z',
+                      re.A | re.I)
+# A relative clause ("due to a lesion that could not be reached") or a hedge names no denial of the landmark.
+_P2_RELATIVE = re.compile(r'\b(?:that|which|who|whom|whose|where)[ \t]+'
+                          r'(?:(?:was|were|is|are|has|had|have|been|could|can|did|would)[ \t]+)*\Z', re.A | re.I)
+_P2_REACH_HEDGE = re.compile(r'\?|\b(?:possibl\w*|probabl\w*|likely|maybe|perhaps|presumabl\w*|apparently|may|might|'
+                             r'questionabl\w*|uncertain|unclear|unsure|suspected)\b', re.A | re.I)
+# The only words that may stand before a reach denial in its segment, besides the landmark itself: function words, a
+# word of intubation or visualization, and the instrument (whose advancement is the reach).
+_P2_INSTRUMENT = frozenset(('scope', 'instrument', 'colonoscope', 'endoscope', 'gastroscope', 'duodenoscope',
+                            'enteroscope', 'sigmoidoscope'))
+_P2_REACH_SUBJECT = frozenset(('the', 'a', 'and', 'but', 'however', 'it', 'was', 'were', 'is', 'are', 'has', 'have',
+                               'had', 'been', 'be', 'could', 'can', 'did', 'would', 'also', 'still', 'yet', 'intubation',
+                               'visualization', 'visualisation')) | _P2_INSTRUMENT
+# What may follow a reach denial in its segment: nothing, a reason, the landmark or the instrument, one of these words,
+# or a word of direction (_P2_REACH_TOWARD) that is followed by a landmark. Any other word is the denial's own object
+# ("unable to reach the lesion", "failed to advance the guidewire"): no denial of the landmark.
+_P2_REACH_ONWARD = frozenset(('further', 'farther', 'any', 'at', 'all', 'despite', 'after', 'again', 'yet', 'either',
+                              'even', 'completely', 'fully', 'today', 'during'))
+_P2_REACH_TOWARD = frozenset(('to', 'into', 'beyond', 'past', 'up', 'as', 'far'))
+
+
+def _P2_landmark_at(text: str, pos: int, table) -> bool:
+    return any(pattern.match(text, pos) for _, _, pattern in table)
+
+
+def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table) -> bool:
+    """Whether the reach denial ``hit`` (a _P2_REACH_DENIAL match) in the segment [lo, hi) of an extent label's own
+    sentence denies reaching the label's landmark (round 4c-2 plan:D2): no hedge or "?" in the segment; before it, a
+    reason ("due to poor prep"), a word of consequence ("so", "therefore"), or only landmarks and _P2_REACH_SUBJECT
+    words ("cecum was", "scope could"), never a relative clause; after it, nothing or what _P2_REACH_ONWARD,
+    _P2_REACH_TOWARD and a reason allow, and for "short of" a landmark."""
+    if _P2_REACH_HEDGE.search(text, lo, hi):
         return False
-    masked, where = _masked_map(an, end, stop)
-    explained = [(where[m.start()], where[m.end()])
-                 for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, cues.OTHER_ACT_NEGATION,
-                                 cues.OTHER_ACT_DENIED, *_P2_FINDING_DENIALS)
-                 for m in pattern.finditer(masked)]
-    explained = [(s, e) for s, e in explained if not _LANDMARK_AT.search(text, s, e)]
-    if any(not _covered((t.start(), t.end()), explained) for t in cues.DOUBT_TOKEN.finditer(text, end, stop)):
+    before = text[lo:hit.start()]
+    if _P2_RELATIVE.search(before):
+        return False
+    if not (_P2_REASON_LEAD.match(before) or _P2_THEN.search(before)):
+        masked = before
+        for _, _, pattern in table:
+            masked = pattern.sub(' ', masked)
+        if any(word.lower() not in _P2_REACH_SUBJECT for word in _EXTENT_TAIL_WORD.findall(masked)):
+            return False
+    words = [(w.start(), w.group(0).lower()) for w in _EXTENT_TAIL_WORD.finditer(text, hit.end(), hi)]
+    while words and words[0][1] in ('the', 'a'):
+        words.pop(0)
+    if 'short' in hit.group(0).lower():
+        return bool(words) and _P2_landmark_at(text, words[0][0], table)
+    if not words:
         return True
-    return bool(_P2_AIM_WORD.search(text, end, stop) or any(c.status != 'performed' for c in an.cues_in(end, stop)))
+    pos, first = words[0]
+    if first in _P2_REACH_ONWARD or first in _P2_INSTRUMENT or _P2_REASON_LEAD.match(text, pos) \
+            or _P2_landmark_at(text, pos, table):
+        return True
+    if first in _P2_REACH_TOWARD:
+        rest = [w for w in words[1:] if w[1] not in ('the', 'a', 'to', 'far', 'as')]
+        return bool(rest) and _P2_landmark_at(text, rest[0][0], table)
+    return False
+
+
+def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table) -> bool:
+    """Whether [end, stop), the rest of an extent label's own sentence, states that its landmark was not reached: a
+    reach denial of the closed list (_P2_REACH_DENIAL) whose segment speaks of that landmark (round 4c-2 plan:D2)."""
+    text = an.text
+    for hit in _P2_REACH_DENIAL.finditer(text, end, stop):
+        breaks = [b.end() for b in _P2_REACH_BREAK.finditer(text, end, hit.start())]
+        after = _P2_REACH_BREAK.search(text, hit.end(), stop)
+        if _P2_reach_names_the_landmark(text, breaks[-1] if breaks else end, hit, after.start() if after else stop, table):
+            return True
+    return False
+
+
+def _P2_reach_denied(an: Analysis, end: int, depth: int, table) -> bool:
+    """_P2_reach_denied_in over the rest of the extent label's own sentence (_P2_label_rest)."""
+    stop = _P2_label_rest(an, end, depth, table)
+    return stop > end and _P2_reach_denied_in(an, end, stop, table)
+
+
+def _P2_refused_label(an: Analysis, reading: Reading, start: int, end: int, ws: int, we: int, depth: int,
+                      table) -> bool:
+    """Whether the extent label whose landmark is at [start, end) (clause window [ws, we)) would be read as reached in
+    _landmarks - a performed or incomplete reading or a silent answer, a reached label and a plain tail - but for
+    plan:D's refusal (_P2_label_denied; round 4c-2 plan:D2)."""
+    return ((reading.status in ('performed', 'incomplete') or _answers_silently(an, reading, start, end))
+            and _reached_label(an, ws, start) and _plain_tail(an, end, we) and _P2_label_denied(an, end, depth, table))
+
+
+def _P2_doubted_beyond(doubted: list, depth: int) -> bool:
+    """Whether a label plan:D refuses for no reach denial names a landmark deeper than ``depth``, the deepest one read
+    as reached (round 4c-2 plan:D2): that shallower landmark then decides no extent, and none is read."""
+    return any(hit[0] > depth for hit in doubted)
+
+
+def _P2_outside(hits: list, doubted: list) -> list:
+    """The landmark hits whose clause does not start inside a doubted label's own sentence after its landmark (round
+    4c-2 plan:D2): that sentence is read by the closed list of reach denials alone ("Extent: cecum; no view of the cecum
+    due to poor prep" withholds), while a denial elsewhere in the family's text still decides (plan:B2's guard)."""
+    regions = [hit[3] for hit in doubted]
+    return [hit for hit in hits if not any(lo <= hit[2].start < hi for lo, hi in regions)]
 
 
 def _P2_denied_beyond(hits: list, depth: int) -> bool:
@@ -3937,14 +4075,16 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
 
 
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
-    unread, denied = [], []
-    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied)
+    unread, denied, doubted = [], [], []
+    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
+        if _P2_doubted_beyond(doubted, depth) and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
@@ -3971,14 +4111,17 @@ def _expected_upper_depth(an: Analysis) -> int:
 def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     """The deepest landmark reached; incomplete when the service is documented as incomplete
     or that landmark lies short of the depth the named procedure calls for."""
-    unread, denied = [], []
-    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied)
+    unread, denied, doubted = [], [], []
+    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied, doubted)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
+    if depth < _expected_upper_depth(an) and _P2_doubted_beyond(doubted, depth) \
+            and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+        return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
     if incomplete or depth < _expected_upper_depth(an):
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
@@ -3987,7 +4130,7 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
 
 def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     text = an.text
-    found = []
+    found, refused = [], []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
             advanced = bool(cues.ADVANCED.search(text, cs, ce))
@@ -3995,21 +4138,32 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
                     if advanced or _cm_after_flex_sig(an, cs, m.start())]
             # "Depth of insertion: 30 cm", never an aim ("Intended depth of insertion: 60 cm"); a label is also read
             # where it answers silently (_answers_silently: "Depth of insertion: 40 cm." in an addendum)
-            labels = [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
-                      if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())
-                      and not _P2_label_denied(an, m.end(), 0, cues.LOWER_LANDMARKS)]  # round 4c-2 plan:D
-            for m in hits + labels:
+            leads = [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
+                     if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())]
+            labels = [m for m in leads if not _P2_label_denied(an, m.end(), 0, cues.LOWER_LANDMARKS)]  # round 4c-2 plan:D
+            for m in hits + leads:
                 reading = _generic_reading(an, m.start(), m.end())
                 if (reading.status in ('performed', 'incomplete')
-                        or (m in labels and _answers_silently(an, reading, m.start(), m.end()))) \
+                        or (m in leads and _answers_silently(an, reading, m.start(), m.end()))) \
                         and not _about_another_procedure(an, m.start(), m.end()):
-                    found.append((f"{int(m.group('cm'))} cm", _span(text, cs, ce)))
+                    if m in leads and m not in labels:  # refused by plan:D (round 4c-2 plan:D2)
+                        refused.append((f"{int(m.group('cm'))} cm", _P2_reach_denied(an, m.end(), 0, cues.LOWER_LANDMARKS)))
+                    else:
+                        found.append((f"{int(m.group('cm'))} cm", _span(text, cs, ce)))
+    # round 4c-2 plan:D2: beside a depth label plan:D refuses, no other value decides (the base held their conflict),
+    # and with none, a landmark decides only after a reach denial
+    if refused and (any(value != label for value, _ in found for label, _ in refused)
+                    or (not found and not all(reach for _, reach in refused))):
+        return None
     if found:
         return _fact('extent', found)
-    reached, _ = _landmarks(an, sentences, cues.LOWER_LANDMARKS)
+    denied, doubted = [], []
+    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, None, denied, doubted)
     if not reached:
         return None
-    _, label, span = max(reached, key=lambda hit: hit[0])
+    depth, label, span = max(reached, key=lambda hit: hit[0])
+    if _P2_doubted_beyond(doubted, depth) and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+        return None  # round 4c-2 plan:D2: a landmark label refused for no reach denial lies deeper
     return Fact('extent', label, 'document', (span,))
 
 
