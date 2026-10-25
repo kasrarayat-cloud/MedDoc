@@ -227,12 +227,16 @@ class Structure4PhraseLinesTests(unittest.TestCase):
                 self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
 
     def test_the_cued_polyp_line(self):
+        """Round 4c (round 5 sections:0): a line with its own performance cue under a phrase line is held like the lines
+        without one, never performed (the past EMR under "Review of prior procedures" was a ready 45390). So this cued
+        polyp, which round 4b read ready, is held for the reviewer: an accepted over-hold (4347acd24 excluded it)."""
         polyp = 'A 6 mm sigmoid polyp was removed with a cold snare.'
         for line in ('Changes of prior radiation therapy', 'Specimens sent for further testing'):
             text = structure4_note(line, polyp)
             with self.subTest(line=line):
-                self.assertEqual(read(text, polyp)[0], 'performed')
-                self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+                self.assertEqual(read(text, polyp)[0], 'uncertain')
+                proposal = run_engine(text, [('45385', polyp)])['45385']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
 
     def test_a_word_bullet_list_whose_bullets_extraction_drops(self):
         for line in ('Changes of prior radiation therapy', 'Specimens sent for further testing'):

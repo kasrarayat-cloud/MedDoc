@@ -192,6 +192,13 @@ _SECTION_NOUN_LAST = re.compile(r'(?:' + _SECTION_NOUN.pattern + r')[ \t]*$', re
 # Or it starts with the noun of the plan or of the procedures, and a plan word says which: "Procedures planned",
 # "Plan going forward", "Procedures recommended" (round 4 release:2: these opened a plan at R3B-BASE).
 _SEC_PLAN_FIRST = re.compile(r'(?:plans?|procedures?)\b', re.A | re.I)
+# Round 4c sections:2: such a line is a plan label only when every word after the noun is a plan word or this closed tail
+# ("Plan going forward", "Plan from here"). A line that only starts with the words ("Procedure completed as planned",
+# "Procedure for further evaluation of anemia", "Procedures planned for next week") is held like a phrase line: it
+# opens an 'other' section inside a procedure, findings or technique section, never a plan (elsewhere it plans, as
+# before), so neither a statement's performed polypectomy is excluded nor a longer label's planned EMR released.
+_SEC_PLAN_FIRST_REST = re.compile(r'(?:(?:' + _PLAN_LABEL.pattern + r'|\b(?:going|moving|forward|from|here|onwards?|ahead)\b)'
+                                  r'[ \t]*)+', re.A | re.I)
 # A line that ends with its section noun but reads as a phrase is a finding or a statement, never such a label (round
 # 4 structure:4, a round-2b regression): a comma, a preposition, or an -ing word after its first word ("Changes of
 # prior radiation therapy", "Specimens sent for further testing", "Possible stricture, further imaging", "Retained
@@ -219,13 +226,20 @@ def _colonless_label(line: str, listed: bool = False) -> Optional[str]:
     named = _TRAILING_ASIDE.sub('', line.strip().rstrip('*#').rstrip())  # "**Upcoming procedures**" names its noun
     if _TITLE_WORDS.search(line) or _service_named(line) or _act_or_place_named(line):
         return None
-    if _SEC_PLAN_FIRST.match(named) and _PLAN_LABEL.search(named) and not cues.TODAY.search(named):
-        return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE); never today's
+    plan_first = bool(_SEC_PLAN_FIRST.match(named) and _PLAN_LABEL.search(named) and not cues.TODAY.search(named))
+    if plan_first:
+        rest = named.split(None, 1)
+        if len(rest) == 1 or _SEC_PLAN_FIRST_REST.fullmatch(rest[1]):
+            return 'plan'  # "Procedures planned", "Plan going forward" (release:2: as at R3B-BASE); never today's
     if not _SECTION_NOUN_LAST.search(named):
-        return None
+        return 'other' if plan_first else None  # round 4c sections:2: a statement or a longer line, held
     kind = 'plan' if _PLAN_LABEL.search(line) else 'history' if _COLONLESS_HISTORY.search(line) else None
     if kind and _sec_phrase(named):
         return None if listed else 'other'  # structure:4: a finding or a statement, never history or plan
+    if kind == 'history' and listed:
+        # round 4c sections:4: a numbered or bulleted item that names prior therapy ("2. Prior radiation therapy") is held
+        # like a phrase line, never a history section over the next item (see layout for a plan or history section)
+        return 'other'
     return kind
 
 
@@ -687,29 +701,40 @@ def layout(text: str) -> Layout:
     line_only = {label_line for _, label_line in line_ends} | set(held)
     # A phrase line (structure:4) and a held line (structure:11) only ever stand in for a procedure, findings or
     # technique section. In any other section the reading of 4347acd24 stands: a held line takes the section in force,
-    # and a phrase line opens the plan or history section it opened then.
+    # and a phrase line opens the plan or history section it opened then. The 'other' section such a line opens inside
+    # one of those sections stands in for it, so the next phrase or held line is read as inside it too (round 4c
+    # sections:6: the second of two phrase lines opened a plan or history section). The lines round 4c holds like a
+    # phrase line (a statement that starts with the plan or the procedures, a numbered history item: sections:2,
+    # sections:4) open the plan or history section of a phrase line only inside a plan or history section; elsewhere
+    # (an impression, an indication, the text before the first heading) they are held too, because 4347acd24 read them
+    # as content there, and a silent line there takes its family's reading.
     gated = {i for i, h in headings.items() if h and _sec_phrase_heading(text, h)} | set(held)
+    widened = {i for i in gated if headings.get(i) and (_SEC_PLAN_FIRST.match(headings[i][1])
+                                                        or _LIST_ITEM.match(text, *lines[i]))}
     opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
+    enclosed = False  # whether the 'other' section in force stands in for a procedure, findings or technique section
     for i, what, value in marks:
-        if what in (heading, held_open) and i in gated and current[0] not in POSITIVE_KINDS:
+        positive = current[0] in POSITIVE_KINDS or enclosed
+        if what in (heading, held_open) and i in gated and not positive:
             if what == held_open:
                 skipped.add(i)
                 continue
-            value = ('plan' if _PLAN_LABEL.search(value[1]) else 'history', value[1], value[2])
+            if i not in widened or current[0] in ('plan', 'history'):
+                value = ('plan' if _PLAN_LABEL.search(value[1]) else 'history', value[1], value[2])
         if what == line_end and value in skipped:
             continue
         if what in (heading, held_open):
             if what == heading and FORM_BLOCK.fullmatch(text[lines[i][0]:lines[i][1]].strip()):
-                before_block[i] = current
+                before_block[i] = (current, enclosed)
             if i in line_only:
-                before_line[i] = current
-            current = value
+                before_line[i] = (current, enclosed)
+            current, enclosed = value, i in gated and positive
         elif what == field_end:
-            current = headings[value]
+            current, enclosed = headings[value], False
         elif what == line_end:
-            current = before_line.get(value, current)
+            current, enclosed = before_line.get(value, (current, enclosed))
         else:
-            current = before_block.get(value, current)
+            current, enclosed = before_block.get(value, (current, enclosed))
         opened.append((i, current))
     sections: list[Section] = []
     first = lines[opened[0][0]][0] if opened else len(text)

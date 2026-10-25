@@ -1788,6 +1788,18 @@ def _section_label(section) -> str:
 PLAN_TODAY = 'uncertain: its clause says today, so its plan section does not make it planned'
 
 
+def _SEC_phrase_section(an: Analysis, section) -> bool:
+    """Whether ``section`` is the 'other' section a colon-less phrase line opened inside a procedure, findings or
+    technique section (sections, round 4 structure:4; round 4c sections:2, sections:4)."""
+    return (section.kind == 'other' and section.heading is not None
+            and gi_sections._sec_phrase_heading(an.text, (section.kind, section.label, section.heading)))
+
+
+def _SEC_listed_under(section) -> str:
+    return (f"uncertain: listed under '{section.heading.text.strip()[:80]}', a line that may tell another time or a "
+            'plan')
+
+
 def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
     """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
     a history section (uncertain if its clause says today), uncertain in a plan section (carrying PLAN_TODAY when a
@@ -1807,6 +1819,10 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     past = status == 'negated' and all(f[2] for f in found if f[0] == 'negated')
     doubt = status == 'uncertain' and any(f[3] for f in found if f[0] == 'uncertain')
     section = an.lay.section_at(start)
+    if status == 'performed' and not em and _SEC_phrase_section(an, section):
+        # round 4c sections:0: under a phrase line ("Review of prior procedures") a line with its own performance cue is
+        # held like the lines without one (it may tell another time or a plan), never performed
+        return Reading('uncertain', (_SEC_listed_under(section),) + deciding, 'cue')
     if status == 'performed' and section.kind == 'history':
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain' if today else 'historical', deciding + (_section_label(section),), 'cue')
@@ -1854,12 +1870,10 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind == 'other' and section.label == gi_sections._SEC_HELD_LABEL:
         # a service line after a line cut on a plan, cancellation or denial verb (sections, round 4 structure:11)
         return Reading('uncertain', (HELD_AFTER_A_CUT,), 'cue', doubt=True)
-    if (section.kind == 'other' and heading is not None
-            and gi_sections._sec_phrase_heading(an.text, (section.kind, section.label, heading))):
+    if _SEC_phrase_section(an, section):
         # under a colon-less phrase line inside findings (sections, round 4 structure:4): it may tell another time or
         # a plan ("Surgical opinion for further management"), so what is listed under it is held, never silent
-        return Reading('uncertain', (f"uncertain: listed under '{heading.text.strip()[:80]}', a line that may tell "
-                                     'another time or a plan',), 'cue')
+        return Reading('uncertain', (_SEC_listed_under(section),), 'cue')
     if (section.kind == 'other' and heading is not None and heading.end - heading.start <= 80
             and _DENYING_LABEL.fullmatch(an.text, heading.start, heading.end)):
         # "Cancelled procedures:" opens a section of its own: what is listed under it is not silent (round 4 release:9)
