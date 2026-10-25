@@ -197,6 +197,9 @@ class RoutingRun(ImmutableModel):
     version = models.CharField(max_length=40)
     result = models.JSONField()
     sha256 = models.CharField(max_length=64)
+    # The effective service date the revision was routed for (round 6 pipeline:0): nothing is sent to a provider for a
+    # date its revision was never routed for. Null for rows recorded before the field existed.
+    service_date = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

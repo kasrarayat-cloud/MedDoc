@@ -475,9 +475,9 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
             reference_sources=to_jsonable(result.reference_sources),
             encounter_checks=to_jsonable(result.encounter_checks), unsupported=to_jsonable(result.unsupported),
             summary=to_jsonable(result.summary), sha256=digest)
-        proposals = {}
-        for position, item in enumerate(result.proposals):
-            proposals[item.key] = Proposal.objects.create(
+        # One INSERT for every proposal (round 6 bounded:5): a row per query held the assess stage in the worker.
+        rows = Proposal.objects.bulk_create([
+            Proposal(
                 assessment=assessment, key=item.key, bucket=item.bucket, code=item.code, code_kind=item.code_kind,
                 family=item.family, profile_version=item.profile_version, status=item.status,
                 exclusion_reason=item.exclusion_reason, reinstatable=item.reinstatable,
@@ -485,6 +485,8 @@ def persist_assessment(*, encounter, revision, context, routing_run, provider_ru
                 rationale=item.rationale, checks=to_jsonable(item.checks),
                 modifier_considerations=list(item.modifier_considerations), units=item.units,
                 fingerprint=item.fingerprint, position=position)
+            for position, item in enumerate(result.proposals)])
+        proposals = {row.key: row for row in rows}
         raised = _create_clarifications(locked, assessment, result, proposals)
         withdrawn = _withdraw_superseded(locked, assessment, raised)
         carried, invalidated = _carry_decisions(previous, assessment, proposals, revision, context)

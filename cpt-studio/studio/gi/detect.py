@@ -220,6 +220,7 @@ class Analysis:
 
     def __post_init__(self):
         self._service_starts = [m.start for m in self.services]
+        self._longest_service = max((m.end - m.start for m in self.services), default=0)
         self._cue_starts = [c.start for c in self.clause_cues]
         self._date_starts = [d.start for d in self.dates]
         self._touchable = sorted([(m.start, m.end) for m in self.services]
@@ -3142,7 +3143,13 @@ def _adjusted(reading: Reading, adjustment: Optional[tuple[str, str]]) -> Readin
 
 
 def _family_of_span(an: Analysis, start: int, end: int) -> Optional[str]:
-    named = {m.family for m in an.services if _overlaps(m.start, m.end, start, max(end, start + 1))}
+    # Positional (round 6 bounded:1): services are sorted by start and never overlap, so only those starting within the
+    # longest service name before the span can reach it - the same overlap test as a scan of every service, which made
+    # each cited span cost O(services) and a long cited report quadratic.
+    stop = max(end, start + 1)
+    low = bisect.bisect_left(an._service_starts, start - an._longest_service)
+    high = bisect.bisect_left(an._service_starts, stop)
+    named = {m.family for m in an.services[low:high] if _overlaps(m.start, m.end, start, stop)}
     if named:
         return named.pop() if len(named) == 1 else None
     index = _sentence_index(an, start)

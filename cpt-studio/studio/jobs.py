@@ -147,14 +147,16 @@ def _record_context(encounter, revision, document_facts, *, created_by=None):
         created_by=created_by)
 
 
-def _record_routing(revision, data):
-    """Store a routing result (its JSON form) once per distinct result."""
+def _record_routing(revision, data, service_date):
+    """Store a routing result (its JSON form) once per distinct result and the service date it was routed for."""
     digest = sha256_json(data)
     version = data.get('version', '')
-    existing = models.RoutingRun.objects.filter(revision=revision, version=version, sha256=digest).first()
+    existing = models.RoutingRun.objects.filter(revision=revision, version=version, sha256=digest,
+                                                service_date=service_date).first()
     if existing:
         return existing
-    return models.RoutingRun.objects.create(revision=revision, version=version, result=data, sha256=digest)
+    return models.RoutingRun.objects.create(revision=revision, version=version, result=data, sha256=digest,
+                                            service_date=service_date)
 
 
 # --- the bounded children (round 5: bounded:0-2, pipeline:1-2, validation:0) ---------------------------------
@@ -170,6 +172,11 @@ def _analyze_child(text, user_values):
     document_facts = gi_context.extract_context(text)
     service_date = _service_date_of(_merged_facts(document_facts, user_values))
     return document_facts, service_date, to_jsonable(gi_detect.route(text, service_date))
+
+
+def _route_child(text, service_date):
+    """The routing for ``service_date`` alone: a date change routes the new date before anything is sent for it."""
+    return to_jsonable(gi_detect.route(text, service_date))
 
 
 def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
@@ -282,7 +289,7 @@ def stage_analyze(job):
     context = _record_context(encounter, revision, document_facts)
     if context_service_date(context) != service_date:  # the child read the same facts; never route another date
         raise StageFailure('The document was routed for another service date than its context; nothing was used.')
-    routing = _record_routing(revision, data)
+    routing = _record_routing(revision, data, service_date)
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
         if locked.current_revision_id == revision.pk:
@@ -330,6 +337,12 @@ def stage_predict(job):
     if provider is None:
         next_assess(None)
         return {'provider': 'disabled'}
+    if not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists():
+        # Nothing is sent for a date this revision was never routed for (round 6 pipeline:0): after a date change the
+        # new date is routed first, in one bounded child under the analyze deadline, so a document that cannot be read
+        # for that date fails here with the plain message and no request is built, reused or sent.
+        data = _bounded(_route_child, revision.text, service_date, seconds=settings.JOB_DEADLINE_SECONDS['analyze'])
+        _record_routing(revision, data, service_date)
     try:
         request = provider.build_request(revision.text, service_date)
     except ProviderUnavailable as exc:
@@ -435,11 +448,12 @@ def stage_assess(job):
                            'it was not used. Change the context again to request proposals for this date.')
     provider_status, normalized = _provider_inputs(run)
     reference = prefetched_lookup(selected_codes(normalized))
+    service_date = context_service_date(context)
     data, result = _bounded(
-        _assess_child, revision.text, context_service_date(context), tuple(PageSpan(**p) for p in revision.pages),
+        _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
         tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'])
-    routing_run = _record_routing(revision, data)
+    routing_run = _record_routing(revision, data, service_date)
     try:
         assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,
                                                routing_run=routing_run, provider_run=run, result=result)

@@ -30,6 +30,7 @@ NAME = 'corti'
 ADAPTER_VERSION = 'corti-coding-v2@cptstudio-1'
 SYSTEMS = ('icd10cm-outpatient', 'cpt')
 MAX_SELECTED = 64
+MAX_INFORMATIONAL = 256  # candidate and alternative codes one response may list (bounded:5)
 DEFAULT_MAX_REQUEST_BYTES = 512_000
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 USAGE_BASIS = 'provider_reported_credits_not_usd'
@@ -359,6 +360,15 @@ def normalize_coding_response(provider: str, request: ProviderRequest, response_
         return refused(*missing)
     if len(parsed['codes']) > MAX_SELECTED:
         return refused(f'it selects {len(parsed["codes"])} codes, more than the {MAX_SELECTED} this adapter accepts')
+    # Candidates and every nested alternative become informational proposals, persisted and served row by row: an
+    # uncapped list inside the 4 MiB response held the assess stage past its deadline in the worker (round 6
+    # bounded:5: 70,000 candidates, 68 s in persist_assessment). The retained responses list 14 to 16.
+    informational = len(parsed['candidates']) + sum(
+        len(entry['alternatives']) for entry in parsed['codes'] + parsed['candidates']
+        if isinstance(entry, dict) and isinstance(entry.get('alternatives'), list))
+    if informational > MAX_INFORMATIONAL:
+        return refused(f'it lists {informational} candidate and alternative codes, more than the '
+                       f'{MAX_INFORMATIONAL} this adapter accepts')
     reader = _ResponseReader(request.contexts)
     for role, key in (('selected', 'codes'), ('candidate', 'candidates')):
         for index, entry in enumerate(parsed[key]):
