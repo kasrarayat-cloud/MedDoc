@@ -115,5 +115,90 @@ class Declared2CheckedNotDoneOptionTests(BoxCase):
         self.assertEqual(set(detect._box_option_states(an, lo, hi, options, words)), {'on'})
 
 
+
+# --- regression:1 -- an untied form-field denial whose label names its item in other words -----------------------------
+
+FIELD_COLO = (HEADER + 'Endoscopy Center - Colonoscopy Report (fillable)\nProcedure: Colonoscopy with polypectomy\n'
+              '{printed}Findings: A 6 mm polyp in the ascending colon.\nThe colonoscope was advanced to the cecum.\n\n'
+              '[PDF form fields on page 1]\n{fields}')
+FIELD_EGD = (HEADER + 'Endoscopy Center - EGD Report (fillable)\nProcedure: EGD with biopsy\n{printed}Findings: The '
+             'endoscope was advanced to the second part of the duodenum. Mild gastritis in the antrum.\n\n[PDF form fields '
+             'on page 1]\n{fields}')
+FIELD_EUS = (HEADER + 'Endoscopy Center - EUS Report (fillable)\nProcedure: EUS with fine-needle aspiration of a pancreatic '
+             'cyst\n{printed}Findings: A 2 cm cyst in the pancreatic body.\n\n[PDF form fields on page 1]\n{fields}')
+COLO_PICK = ('45385', 'Colonoscopy with polypectomy')
+EGD_PICK = ('43239', 'EGD with biopsy')
+EUS_PICK = ('43242', 'EUS with fine-needle aspiration of a pancreatic cyst')
+
+
+class Regression1UntiedFieldDenialTests(BoxCase):
+    """regression:1 (critical, a regression of 0c7059c58 against 4347acd). A denying field line whose label names its
+    item in words the item reader does not know ('Polyps removed: No', 'Cecum reached: No', 'FNA performed: No') was
+    given 'a label naming no item holds nothing', so the untied page hold 4347acd gave it was gone and the polypectomy,
+    biopsy and FNA were ready. Such a label fails closed again (BOX_FIELD_ANSWER_UNTIED, a truthful cue), unless it is on
+    the closed list of labels known to name no item, or it is a status question the reference readers answer."""
+    UNTIED = ((FIELD_COLO, 'Were any polyps removed?   Yes   No\n', 'Polyps removed: No', COLO_PICK),
+              (FIELD_COLO, '', 'Polyps removed: No', COLO_PICK),
+              (FIELD_COLO, '', 'Polyps removed: Yes\nCecum reached: No', COLO_PICK),
+              (FIELD_COLO, '', 'Exam complete: No', COLO_PICK),
+              (FIELD_EGD, '', 'Specimens obtained: No', EGD_PICK),
+              (FIELD_EGD, '', 'Tissue sampling: No', EGD_PICK),
+              (FIELD_EUS, '', 'FNA performed: No', EUS_PICK),
+              (FIELD_EUS, '', 'Scope inserted: No', EUS_PICK),
+              (FIELD_EUS, '', 'Procedure done today: No', EUS_PICK),
+              (FIELD_EUS, '', 'Patient consented?: No', EUS_PICK),
+              (FIELD_EUS, '', 'Scope inserted: Not done', EUS_PICK),
+              (FIELD_EUS, '', 'Specimen obtained: None', EUS_PICK),
+              (FIELD_COLO, '', 'Remarks on cecal intubation: Not done', COLO_PICK))  # the closed list is read whole
+
+    def test_an_untied_denial_holds_its_page(self):
+        for template, printed, fields, (code, phrase) in self.UNTIED:
+            with self.subTest(fields=fields, printed=bool(printed)):
+                text = template.format(printed=printed, fields=fields)
+                cues = self.assert_held_reading(text, phrase)
+                self.assertNotIn('says its item was not done', ' '.join(cues))
+                self.assert_outcome(text, code, phrase, 'held')
+
+    def test_labels_known_to_name_no_item_hold_nothing(self):
+        for fields in ('Complications: None', 'Complications: No', 'Complications (if any): None', 'Complications?: No',
+                       'Any complications?: No', 'EBL: None', 'Estimated blood loss: None', 'Blood loss: None',
+                       'Adverse events: None', 'Sedation: None', 'Anesthesia: None', 'Allergies: None',
+                       'Comments: None', 'Notes: none', 'Remarks: No', 'EBL (mL): None'):
+            with self.subTest(fields=fields):
+                text = FIELD_COLO.format(printed='', fields=fields)
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assert_outcome(text, *COLO_PICK, 'ready')
+
+    def test_answers_and_tied_rows_are_unchanged(self):
+        for printed, fields in (('', 'Polyps removed: Yes\nCecum reached: Yes'),
+                                ('Polyps removed:  ☐ Yes  ☒ No\nCecum reached:  ☒ Yes  ☐ No\n',
+                                 'Polyps removed: No\nCecum reached: Yes')):  # a field tied to the row it opens
+            with self.subTest(fields=fields):
+                self.assert_outcome(FIELD_COLO.format(printed=printed, fields=fields), *COLO_PICK, 'ready')
+        for fields in ('Biopsies taken: No', 'Polypectomy: No'):  # labels naming the item: as before
+            with self.subTest(fields=fields):
+                self.assert_outcome(FIELD_COLO.format(printed='', fields=fields), *COLO_PICK, 'held')
+
+    def test_a_status_question_label_stays_with_the_reference_reader(self):
+        """'Procedure cancelled: No' is the status-answer rule's (structure:13): held as a doubt, never excluded."""
+        for fields in ('Procedure cancelled: No', 'Procedure aborted: No', 'Exam incomplete: No'):
+            with self.subTest(fields=fields):
+                text = FIELD_COLO.format(printed='', fields=fields)
+                self.assertNotIn(family(text, 'gi.colonoscopy'), ('cancelled', 'negated', 'incomplete', 'performed'))
+                self.assert_outcome(text, *COLO_PICK, 'held')
+        text = FIELD_COLO.format(printed='', fields='Procedure cancelled: Yes')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'cancelled')
+
+    def test_a_tied_status_question_beyond_the_further_denials_is_held(self):
+        """Read as a field that fails closed, the printed row and the field line would both be held with no doubt, and
+        the EUS nine lines above would be ready; the status-answer rule holds them as a doubt."""
+        text = (HEADER + 'Procedure: EUS with fine-needle biopsy of a pancreatic cyst.\nIndication: Pancreatic cyst on '
+                'CT.\nHistory reviewed.\nConsent obtained.\nASA class II.\nAirway assessed.\nAllergies: none known.\n'
+                'Anticoagulants: none.\nNPO since midnight.\nProcedure cancelled: ☐ Yes ☒ No\n\n[PDF form fields on page '
+                '1]\nProcedure cancelled: No')
+        self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+        self.assert_outcome(text, '43242', 'EUS with fine-needle biopsy of a pancreatic cyst.', 'held')
+
+
 if __name__ == '__main__':
     unittest.main()

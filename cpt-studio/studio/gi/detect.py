@@ -2387,14 +2387,36 @@ def _box_field_answer(an: Analysis, start: int, end: int, denied: re.Match) -> t
     widget's default name ("Check Box1", "Text7"), 'held' when it names an item among other words ("Flexible
     sigmoidoscopy in the last 10 years", "Colonoscopy complications", "Biopsy (Y/N)"), and nothing when it names
     none ("Complications: None", "EBL: None", "Procedure cancelled: No"); a short answer this reader cannot read ("N",
-    "0", "N/A") is 'held' when the label names an item, and nothing otherwise. (None, None): the line holds nothing."""
+    "0", "N/A") is 'held' when the label names an item, and nothing otherwise. (None, None): the line holds nothing.
+    A selected denial whose label names nothing this reader knows holds nothing only when the label is known to name
+    no item (_box_names_no_item); any other fails closed, 'held' (round 5 regression:1: "Polyps removed: No", "Cecum
+    reached: No" and "FNA performed: No" name their item in other words, and untied they hold the page again)."""
     if denied.group('box'):
         return 'off', FIELD_UNTIED
     kind = _box_label_kind(an, start, end)
     if denied.group('answer'):
+        if kind == 'other' and not _box_names_no_item(an, start, end):
+            return 'held', BOX_FIELD_ANSWER_UNTIED
         return {'item': ('off', FIELD_UNTIED), 'generic': ('off', BOX_FIELD_ANSWER_UNTIED),
                 'qualified': ('held', BOX_FIELD_HELD_UNTIED)}.get(kind, (None, None))
     return ('held', BOX_FIELD_HELD_UNTIED) if kind in ('item', 'qualified') else (None, None)
+
+
+# Field labels known to name no item, so their "No" or "None" says nothing of a service (round 5 regression:1). A closed
+# list, read whole: a label not on it fails closed. An optional "Any", "if any", a parenthesis ("(if any)", "(mL)") and
+# the label's own "?" may stand with it.
+_BOX_NO_ITEM_LABEL = re.compile(r'(?:any[ \t]+)?(?:complications?|adverse[ \t]+events?|ebl|estimated[ \t]+blood[ \t]+loss|'
+                                r'blood[ \t]+loss|sedation|anesthesia|anaesthesia|allerg(?:y|ies)|comments?|notes?|'
+                                r'remarks?)(?:[ \t]*(?:\([^()\n]{0,40}\)|if[ \t]+any))?[ \t]*\??', re.A | re.I)
+
+
+def _box_names_no_item(an: Analysis, start: int, end: int) -> bool:
+    """Whether the field label [start, end), which names no service, intervention or procedure word, is known to name
+    no item: a label on the closed list _BOX_NO_ITEM_LABEL ("Complications", "EBL", "Sedation"), or a status question
+    the reference readers answer ("Procedure cancelled: No" holds there as a status answer, never by its field)."""
+    if _BOX_NO_ITEM_LABEL.fullmatch(_label_key(an.text[start:end])):
+        return True
+    return any(pattern.search(an.text, start, end) for _, pattern in _REFERENCE_PATTERNS)
 
 
 # A field label that is a widget's default name, not a question: "Check Box1", "Text 7", "Field3", "Group1".
