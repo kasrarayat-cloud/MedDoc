@@ -107,6 +107,29 @@ class Extraction0TrailingBoxesTests(unittest.TestCase):
                 self.assertNotIn('☐', text.split('[PDF form fields')[0])
                 self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
 
+    def test_text_whose_widths_the_font_does_not_give_is_not_measured(self):
+        """The page's text in a TrueType font without /Widths, which pypdf measures with one default width: wide option
+        words ('MMMMMM') then look shorter than they are, and the box after the first would seem to sit before the
+        second. Text so measured gives no gaps, so the boxes are read as the label-left rule reads them."""
+        from tests.test_repairs_ingest_pdf import esc
+        form = Form(NOTE[:4])
+        form.objects[4] = (b'<< /Type /Font /Subtype /TrueType /BaseFont /Synthetic-NoWidths /Encoding '
+                           b'/WinAnsiEncoding >>')
+        x = 48.69
+        form.line(text_line(x, ROW, 'Sedation:'))
+        first = x + width('Sedation:') + 8
+        form.line(text_line(first, ROW, 'MMMMMM'))
+        box1 = first + width('MMMMMM') + 4
+        second = box1 + 12 + 8
+        form.line(text_line(second, ROW, 'WWWWWW'))
+        box2 = second + width('WWWWWW') + 4
+        form.line(f'BT /F1 11 Tf {box2 + 12 + 27.9} {ROW} Td ({esc(SENTENCE)}) Tj ET')
+        form.checkbox('Check Box1', (box1, ROW - 3, box1 + 12, ROW + 9), False)
+        form.checkbox('Check Box2', (box2, ROW - 3, box2 + 12, ROW + 9), True)
+        row = next(line for line in text_of(form.build()).split('\n') if line.startswith('Sedation'))
+        self.assertNotIn('☐', row)
+        self.assertIn(f'MMMMMM {UNREAD} WWWWWW', row)
+
     def test_every_box_checked_stays_ready(self):
         text = text_of(trailing_row(True, True))
         self.assertIn('Moderate ☒ MAC ☒ Cold snare', text)

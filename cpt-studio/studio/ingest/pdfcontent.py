@@ -562,6 +562,13 @@ _ING_FILL = frozenset('_\u2017\uff3f')
 _ING_RULES = frozenset('.\u2026-\u2010\u2011\u2012\u2013\u2014\u2015\u00b7')
 
 
+def _ING_widths_known(font) -> bool:
+    """Whether the pypdf ``font`` measures its glyphs from the font itself (/Widths, a standard font's metrics, a CID
+    font's /W): not a simple font without /Widths, which pypdf measures with one default width, nor a Type3 font,
+    whose widths its own font matrix scales."""
+    return font is not None and font.sub_type != 'Type3' and any(key != 'default' for key in font.character_widths)
+
+
 def _ING_glyphs(font, string) -> list:
     """(the character it shows, whether word spacing applies to it, its width in thousandths of an em) of each glyph
     of ``string`` in the pypdf ``font``, as pypdf decodes and measures it (get_text_operands, get_display_str)."""
@@ -607,7 +614,7 @@ class _Run:
         _ING_RULES), what an opaque area must cover to hide text, as (where each starts, (start, end) along the
         baseline in text space, sorted, the longest's length). None when the run has no fill-in character, or cannot
         be read glyph by glyph: the whole run counts, as before."""
-        if self.font is None or not self.strings:
+        if not self.strings or not _ING_widths_known(self.font):
             return None
         char_spacing, word_spacing, scale = self.spacing
         glyphs = []  # (start, end, kind): kind 'fill', 'rule' or 'letter'
@@ -1171,7 +1178,8 @@ class _Walker:
 
     def shown(self, run: _Run, graphics: _Graphics, verdict: str) -> None:
         a, b, c, d, e, f = run.place
-        if a > 0 and d > 0 and abs(b) <= 0.01 * a and abs(c) <= 0.01 * d:  # upright, as pdf._origin reads pieces
+        if a > 0 and d > 0 and abs(b) <= 0.01 * a and abs(c) <= 0.01 * d and _ING_widths_known(run.font):
+            # upright, as pdf._origin reads pieces, and measured by the font's own widths
             self.content.ink.extend((f, e + start * a, e + end * a, run.size * d) for start, end in run.spans)
         mode = graphics.text.mode
         if verdict == 'unknown':

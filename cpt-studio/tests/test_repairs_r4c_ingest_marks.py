@@ -17,8 +17,6 @@ from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FIELDS_NOTE, FONTS, SNA
                                              extracted, text_line, widget_rect)
 from tests.test_repairs_r4_ingest import UNREAD, UNREAD_NOTE, held_unread
 
-ANNOTATION_NOTE = ('Page 1 has text added as PDF annotations; it was read and added after the page text, labelled as '
-                   'annotation text.')
 TICK = 'q 0 0 1 RG 1.5 w 2 7 m 6 3 l 13 13 l S Q'
 
 
