@@ -213,8 +213,8 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
                 doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
                 counted = not doubted and (routed_done or checks._VAL_opens_with(
                     text, reading.start, reading.end, code, opening_names, day))
-            if not counted:
-                reading = replace(reading, unnamed=True)
+            if not counted:  # round 4d validation:4: and which procedure's judgement made it incomplete, if any
+                reading = replace(reading, unnamed=True, judged_by=checks._V2_judged_by(text, reading, day))
         marked.append(reading)
     return tuple(marked)
 

@@ -180,6 +180,10 @@ class Reading:
     # Set by the engine on a linked passage that hedges another service than the code's (see engine._other_service):
     # "Possible EGD if symptoms persist." cited for an E/M. It holds the code alone, but never contests it.
     other_service: bool = False
+    # Set by the engine on an ``unnamed`` passage that reads incomplete only through a detected family's document-level
+    # judgement and names no routed service (round 4d validation:4): the label of the family routing attributes it to,
+    # or '' when routing attributes it to none. None: the passage names the procedure whose judgement it takes.
+    judged_by: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -356,6 +360,29 @@ def _VAL_states_no_procedure_of_its_own(text: str, reading: Reading, service_dat
                                                                                      cues=own[1]))
 
 
+_V2_NAME_REACH = 120  # how far around a passage a routed service name that overlaps it is looked for (bounds the work)
+
+
+def _V2_judged_by(text: str, reading: Reading, service_date: Optional[date] = None) -> Optional[str]:
+    """For a passage that _VAL_states_no_procedure_of_its_own reads incomplete only through a detected family's
+    document-level judgement (round 4d validation:4): None when a routed service name lies in it ("Procedure:
+    Colonoscopy": the judgement of the procedure it names), else the label of the family routing attributes it to
+    (the family the span reader takes the judgement of; '' when none). So the hold's reason never says that "Grade 2
+    internal hemorrhoids were seen on retroflexion." names a procedure. Read only for held passages: two bisections."""
+    if states_no_procedure(reading) or reading.start is None or reading.end is None or reading.start >= reading.end:
+        return None
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    start, end = reading.start, reading.end
+    if any(m.start < end and start < m.end
+           for m in an.services_in(max(0, start - _V2_NAME_REACH), end + _V2_NAME_REACH)):
+        return None
+    # detect._family_of_span's answer for a span that names no service, without its scan of every routed service
+    index = detect._sentence_index(an, start)
+    family = an.attributed[index] if index >= 0 and an.attributed else None
+    return PROFILES[family].label if family in PROFILES else ''
+
+
 def restated(reading: Reading) -> bool:
     """An explicit performance statement that only its section downgraded ("Colonoscopy with cold snare polypectomy
     was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else but
@@ -483,9 +510,13 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         basis = 'as E/M documentation' if documented else 'by its section'
         if states_no_procedure(outcome.decisive):
             reading = f'reads as {outcome.decisive.status} only {basis}'
-        else:  # incomplete through its family's judgement (_VAL_states_no_procedure_of_its_own)
+        elif outcome.decisive.judged_by is None:  # incomplete through the judgement of the procedure it names
             reading = (f'reads as performed only {basis}, and as incomplete only through what the document says of '
                        'the procedure it names')
+        else:  # round 4d validation:4: through the judgement of a procedure it does not name (_V2_judged_by)
+            judged = f'{outcome.decisive.judged_by}, ' if outcome.decisive.judged_by else ''
+            reading = (f'reads as performed only {basis}, and as incomplete only through what the document says of '
+                       f'{judged}the procedure routing attributes it to')
         reason = (f'No linked passage establishes that {name} was performed on the date of service: the linked passage '
                   f'{reading} ({cite(outcome.decisive)}), and it is not read as documenting that service as done on '
                   'that date.')

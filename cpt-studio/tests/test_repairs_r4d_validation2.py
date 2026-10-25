@@ -181,3 +181,50 @@ class Validation6MentionByMentionTests(EngineCase):
             with self.subTest(section=mention.section):
                 visit = self.visit_for(mention)
                 self.assertEqual(visit.status, 'ready', [c.detail for c in visit.checks])
+
+
+# --- validation:4: the incomplete-family reason names what decided it, never a procedure the passage does not name -----
+
+COLONOSCOPY_SHORT = (HEAD + 'Procedure: Colonoscopy\nIndication: Rectal bleeding.\nFindings: The colonoscope was advanced '
+                     'to the splenic flexure. The visualized colon was normal. Grade 2 internal hemorrhoids were seen on '
+                     'retroflexion.\nImpression: Internal hemorrhoids.\n')
+EGD_SHORT = (HEAD + 'Procedure: EGD\nFindings: The gastroscope could not be advanced beyond the mid esophagus. A tight '
+             'stricture was seen.\nImpression: Stricture.\n')
+NAMES_WORDING = 'as incomplete only through what the document says of the procedure it names'
+
+
+class Validation4IncompleteFamilyReasonTests(Case):
+    """validation:4 (high, new defect). A gi.other code citing a sentence that names no procedure, read incomplete only
+    through a detected family's document-level judgement ("Grade 2 internal hemorrhoids were seen on retroflexion."
+    beside a colonoscopy that stopped at the splenic flexure), was held with the reason "... as incomplete only through
+    what the document says of the procedure it names": it names none. The reason now names the family routing
+    attributes the passage to; a passage that names the procedure keeps the pinned wording (hold unchanged)."""
+
+    def assertWorded(self, item, family_label):
+        texts = [check_of(item, 'service.status').detail] + [c.reason for c in item.clarifications
+                                                             if c.fact == 'performed_status']
+        self.assertEqual(item.status, 'needs_clarification')
+        for text in texts:
+            self.assertNotIn('procedure it names', text)
+            self.assertIn(f'as incomplete only through what the document says of {family_label}, the procedure '
+                          'routing attributes it to', text)
+
+    def test_a_passage_naming_no_procedure_names_the_family_it_is_attributed_to(self):
+        labels = _labels()
+        for text, code, passage, family in (
+                (COLONOSCOPY_SHORT, '46221', 'Grade 2 internal hemorrhoids were seen on retroflexion.', 'gi.colonoscopy'),
+                (COLONOSCOPY_SHORT, '46221', 'The visualized colon was normal.', 'gi.colonoscopy'),
+                (COLONOSCOPY_SHORT, '46600', 'Grade 2 internal hemorrhoids were seen on retroflexion.', 'gi.colonoscopy'),
+                (EGD_SHORT, '43450', 'A tight stricture was seen.', 'gi.egd')):
+            with self.subTest(code=code, passage=passage):
+                proposals, _ = real(text, (code, passage))
+                self.assertWorded(proposals[code], labels[family])
+
+    def test_controls_a_procedure_line_that_names_its_procedure_keeps_the_pinned_wording(self):
+        for text, code, passage in ((COLONOSCOPY_SHORT, '46221', 'Procedure: Colonoscopy'),
+                                    (EGD_SHORT, '43450', 'Procedure: EGD')):
+            with self.subTest(code=code, passage=passage):
+                item = real(text, (code, passage))[0][code]
+                self.assertEqual(item.status, 'needs_clarification')
+                self.assertIn(NAMES_WORDING, check_of(item, 'service.status').detail)
+                self.assertNotIn('routing attributes it to', check_of(item, 'service.status').detail)
