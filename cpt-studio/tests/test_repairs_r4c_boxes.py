@@ -574,6 +574,49 @@ class Declared12FieldUnderTheStatementTests(AttestationLineCase):
                 self.assert_refused(tail + '\n')
 
 
+
+# --- extraction:8 -- the unread mark's question mark is no hedge ---------------------------------------------------------
+
+X8_NOTE = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp was '
+           'found.\n{row}\n')
+
+
+class Extraction8UnreadMarkIsNoHedgeTests(BoxCase):
+    """extraction:8 (medium, over-hold). The '?' of the unread mark extraction writes ('[?]') was read as a question-mark
+    hedge (cues.UNCERTAIN_CLAUSE), so the plainly checked item beside it on the line was held ('uncertain: ?'). The item
+    the mark governs is still held as unread (BOX_UNREAD); its neighbours are not doubted by it."""
+
+    def test_the_checked_neighbour_is_unaffected(self):
+        for row, held, ready in (('[?] Biopsy ☒ Cold snare polypectomy', ('45380', 'Biopsy'), ('45385', 'Cold snare polypectomy')),
+                                 ('☒ Biopsy [?] Cold snare polypectomy', ('45385', 'Cold snare polypectomy'), ('45380', 'Biopsy')),
+                                 ('Biopsy [?] | Cold snare polypectomy ☒', ('45380', 'Biopsy'), ('45385', 'Cold snare polypectomy'))):
+            with self.subTest(row=row):
+                text = X8_NOTE.format(row=row)
+                self.assertEqual(read(text, held[1])[1], (detect.BOX_UNREAD,))
+                self.assert_outcome(text, *held, 'held')
+                self.assertNotIn('uncertain: ?', read(text, ready[1])[1])
+                self.assert_outcome(text, *ready, 'ready')
+
+    def test_a_passage_naming_the_unread_item_is_held(self):
+        """Cited whole, the row still names the item the mark governs: held as unread, never read by its first box."""
+        for row, cited in (('☑ Cold snare polypectomy [?] Biopsy', '☑ Cold snare polypectomy [?] Biopsy'),
+                           ('[?] Biopsy ☒ Cold snare polypectomy', 'Biopsy ☒ Cold snare polypectomy'),
+                           ('☒ Cold snare polypectomy [?] Biopsy', 'Cold snare polypectomy [?] Biopsy')):
+            for code in ('45380', '45385'):
+                with self.subTest(row=row, code=code):
+                    self.assert_outcome(X8_NOTE.format(row=row), code, cited, 'held')
+
+    def test_a_typed_question_mark_is_still_a_hedge(self):
+        for row, code, phrase in (('Biopsy? ☒ Cold snare polypectomy', '45380', 'Biopsy'),
+                                  ('Cold snare polypectomy (?)', '45385', 'Cold snare polypectomy'),
+                                  ('Cold snare polypectomy?', '45385', 'Cold snare polypectomy')):
+            with self.subTest(row=row):
+                self.assert_outcome(X8_NOTE.format(row=row), code, phrase, 'held')
+        for row, item in (('Polypectomy done ?', 'Polypectomy'), ('Biopsy taken (? adequate)', 'Biopsy')):
+            with self.subTest(row=row):  # held by the clause's question mark alone
+                self.assertIn('uncertain: ?', self.assert_held_reading(X8_NOTE.format(row=row), item))
+
+
 # --- bounded:3 and contract-r4c section 6 -- every changed reader is bounded per line ---------------------------------
 
 class Bounded3ScaleTests(unittest.TestCase):

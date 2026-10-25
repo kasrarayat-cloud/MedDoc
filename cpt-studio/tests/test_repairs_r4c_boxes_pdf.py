@@ -7,13 +7,17 @@ then routing for the document's own date and the real validation engine.
 - declared:1: the same for 'Procedure cancelled?' answered No, read as a cancellation, so the performed EUS was
   excluded; also a text field typed 'No' beside its printed question standing alone;
 - declared:4: the separately identifiable E/M statement with its check box beside the printed label 'Attested' on the
-  line under it, left unchecked: the statement attested and 99214 was ready beside a same-day procedure.
+  line under it, left unchecked: the statement attested and 99214 was ready beside a same-day procedure;
+- extraction:8: a printed one-row checklist with an Ink tick over one box only: extraction writes that box unread
+  ('[?]'), whose question mark held the plainly checked item beside it on the line.
 
 Synthetic documents only, built here from raw PDF syntax.
 """
 import unittest
 
-from tests.test_repairs_r3_forms_pdf import codes, extracted, text_line, widget_rect
+from studio.gi import detect
+from tests.test_repairs_ingest_pdf import stream
+from tests.test_repairs_r3_forms_pdf import BIOPSY_ROW, Form, boxed_line, codes, extracted, text_line, widget_rect
 from tests.test_repairs_r4_boxes_pdf import ATTEST_OFFICE, ATTEST_PICKS, EUS_LINE, EUS_LINES, page_form, row_y
 from tests.test_repairs_r3_forms_routing import outcome
 from tests.test_repairs_status_r2_routing import clarified, routed, run_engine
@@ -148,6 +152,35 @@ class Declared4AttestationBoxInAPdfTests(unittest.TestCase):
             for left in (True, False):
                 with self.subTest(name=name, left=left):
                     self.assert_attested(attestation_box_pdf(name, True, tu=tu, left=left), True)
+
+
+
+def inked_row(ink_over_biopsy=True):
+    """'☐ Biopsy' and '☒ Cold snare polypectomy' printed on one row in Wingdings, with an Ink tick over one box."""
+    form = Form()
+    form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy')).line(boxed_line(250, BIOPSY_ROW, 'Cold snare polypectomy',
+                                                                      checked=True))
+    x = 70 if ink_over_biopsy else 248
+    ap = form.add(stream('q 0 0 1 RG 1.5 w 2 7 m 6 3 l 13 13 l S Q',
+                         '/Type /XObject /Subtype /Form /BBox [0 0 15 15]').decode('latin-1'))
+    form.annots.append(form.add(f'<< /Type /Annot /Subtype /Ink /Rect [{x} {BIOPSY_ROW - 4} {x + 15} {BIOPSY_ROW + 11}] '
+                                f'/F 4 /InkList [[{x + 2} 603 {x + 6} 599 {x + 13} 609]] /AP << /N {ap} 0 R >> >>'))
+    return extracted(form.build())
+
+
+class Extraction8UnreadMarkInAPdfTests(unittest.TestCase):
+    """extraction:8 (medium): the unread mark's '?' holds only the item it marks, never the checked item beside it."""
+
+    def test_the_checked_neighbour_of_an_inked_box_is_ready(self):
+        result = inked_row()
+        self.assertIn('[?] Biopsy', result.text)
+        self.assertEqual(detect.status_for_span(result.text, *self.span(result.text, 'Biopsy'))[1], (detect.BOX_UNREAD,))
+        self.assertEqual(codes(result.text, ('45380', 'Biopsy'), ('45385', 'Cold snare polypectomy')), ('held', 'ready'))
+
+    @staticmethod
+    def span(text, phrase):
+        start = text.index(phrase)
+        return start, start + len(phrase)
 
 
 if __name__ == '__main__':

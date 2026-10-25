@@ -165,13 +165,17 @@ def _em_mentions(text: str, lay: Layout) -> tuple[Mention, ...]:
 
 
 def _clause_cues(text: str) -> tuple[Cue, ...]:
-    """Every clause-scope cue in the text, matched once over the whole text."""
+    """Every clause-scope cue in the text, matched once over the whole text. The "?" of the unread mark extraction
+    writes ("[?]", symbols.BOX_UNREAD_MARK) is no question-mark hedge: the item it marks is held as unread (BOX_UNREAD),
+    and its neighbours on the line are not doubted by it (round 5 extraction:8)."""
     found = []
     for status, entries in (('cancelled', cues.CANCELLED_CLAUSE), ('incomplete', cues.INCOMPLETE_CLAUSE),
                             ('historical', cues.HISTORICAL_CLAUSE), ('planned', cues.PLANNED_CLAUSE),
                             ('uncertain', cues.UNCERTAIN_CLAUSE), ('performed', cues.PERFORMED_CLAUSE)):
         for name, pattern in entries:
-            found.extend(Cue(m.start(), m.end(), status, name, m.group(0)) for m in pattern.finditer(text))
+            found.extend(Cue(m.start(), m.end(), status, name, m.group(0)) for m in pattern.finditer(text)
+                         if not (name == 'question mark'
+                                 and text.startswith(_BOX_SYMBOLS.BOX_UNREAD_MARK, max(0, m.start() - 1))))
     return tuple(sorted(found, key=lambda c: (c.start, c.end)))
 
 
@@ -2604,7 +2608,7 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     fields = _form_fields(an)
     one_line = an.text.find('\n', start, end) < 0
     named = _within(fields.named, fields.named_starts, start, end) if one_line else None
-    if state == 'unknown':
+    if state == 'unknown' or _box_names_an_unread_item(an, start, end):
         return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
     if state == 'unclear':
         return Reading('uncertain', (BOX_LATER,), 'cue', doubt=True)
@@ -2634,6 +2638,18 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     if cue is not None or _default_reading(an, start, end).status not in ('performed', 'uncertain'):
         return None
     return Reading('uncertain', (pages[index].cue.format(pages[index].unmatched),), 'cue', doubt=True)
+
+
+def _box_names_an_unread_item(an: Analysis, start: int, end: int) -> bool:
+    """Whether the passage [start, end) names, besides itself, an item whose own box cannot be read ("☑ Cold snare
+    polypectomy [?] Biopsy" cited whole): such a passage is held as unread. The unread mark's question mark is no
+    hedge (_clause_cues), so a passage read by its first box would otherwise vouch for the item the mark governs
+    (round 5 extraction:8). Read only where an unread mark is near."""
+    text = an.text
+    if not _BOX_UNREAD.search(text, max(0, start - BOX_REACH), min(len(text), end + BOX_REACH)):
+        return False
+    items = _box_tokens(an, start, max(end, start + 1))[0]
+    return any(_box_state(an, s, e) == 'unknown' for s, e in items if (s, e) != (start, end))
 
 
 def _names_an_item(an: Analysis, start: int, end: int) -> bool:
