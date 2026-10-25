@@ -476,5 +476,92 @@ class Sections5PlanLabelOverProseTests(HeldOrReadyAssertions, unittest.TestCase)
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
 
 
+
+# --- sections:1: a performed-today label whose answer is none in words -----------------------------------------------
+
+S1_ITEM = '2. Upper endoscopy to D2 with balloon dilation at the hospital endoscopy unit.'
+S1_VISIT = 'Established patient office visit for dysphagia.'
+
+
+def s1_note(line, item=S1_ITEM):
+    return (HEADER + 'Place of service: Office (POS 11)\n' + S1_VISIT + '\nChief complaint: Dysphagia.\nAssessment and '
+            'plan:\n1. Dysphagia, likely peptic stricture.\n' + line + '\n' + item + '\n3. Continue omeprazole.\nMedical '
+            'decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Sections1TodayLabelAnsweredNoneInWordsTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:1 (critical, a round-3b regression left in place for every answer but the exact no-answer values) -
+    "Procedures performed today: None today" (and "none performed", "No procedures performed", ...) opened a procedure
+    section over the plan, so the planned EGD after it was a READY 43249. Under a procedure section that one of round
+    3b's performed-today labels opens over a plan or history section, a line after the label's own line that only that
+    section would read as performed is held, never performed (R3B-BASE excluded it as planned; the hold is the
+    verifier's general form, so no list of ways to say none is needed). A line with its own performance cue or a box
+    keeps its reading (round 3 contract:8's checked list under the bare label)."""
+
+    CLAIMED = ('Procedures performed today: None today', 'Procedures performed today: none performed',
+               'Procedures performed today: No procedures performed', 'Procedures performed today: None were performed',
+               'Procedures performed today: none (scheduled at the hospital)', 'Interventions performed: none today',
+               'Procedures done today: no procedures', 'Procedures performed today:\nNo procedures',
+               'Procedures performed today:\nNone today')
+    EXTRA = ('Procedures performed today: None; EGD with dilation to be scheduled.',
+             'Procedures performed today: None. EGD to be scheduled at the hospital.',
+             'Procedures performed today: None at this visit', 'Procedures performed today: Nothing',
+             'Procedure performed today: none - EGD to be arranged')
+
+    def test_the_claimed_and_extra_answers(self):
+        for line in self.CLAIMED + self.EXTRA:
+            text = s1_note(line)
+            with self.subTest(line=line):
+                self.assertNotIn(read(text, S1_ITEM)[0], POSITIVE)
+                self.assertNotIn(family(text, 'gi.egd'), POSITIVE)
+                proposal = run_engine(text, [('43249', S1_ITEM), ('99214', S1_VISIT)])['43249']
+                self.assertFalse(ready(proposal), (proposal.bucket, proposal.status))
+
+    def test_under_a_history_section(self):
+        item = 'Upper endoscopy with balloon dilation of a peptic stricture'
+        text = (HEADER + 'Place of service: Office (POS 11)\n' + S1_VISIT + '\nInterval history:\nDysphagia for 3 months.\n'
+                'Procedures performed today: None today\n' + item + '\nTotal time: 32 minutes.\n')
+        self.assertNotIn(read(text, item)[0], POSITIVE)
+        self.assert_never_ready(text, '43249', item)
+
+    def test_the_label_at_the_top_of_the_plan(self):
+        item = '1. Dysphagia, likely peptic stricture - upper endoscopy to the duodenum with balloon dilation.'
+        text = (HEADER + 'Place of service: Office (POS 11)\n' + S1_VISIT + '\nChief complaint: Dysphagia.\nAssessment and '
+                'plan:\nProcedures performed today: None today\n' + item + '\nTotal time: 32 minutes.\n')
+        self.assertNotIn(read(text, item)[0], POSITIVE)
+        self.assert_never_ready(text, '43249', item)
+
+    def test_the_labels_own_line_and_checked_items_keep_their_reading(self):
+        office = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: Rectal '
+                  'bleeding.\nMedical decision making: Moderate.\nAssessment and plan: Grade II internal hemorrhoids.\n')
+        for line in ('Procedures performed today: flexible sigmoidoscopy to 30 cm',
+                     'Procedures performed today:\n\u2612 Flexible sigmoidoscopy to 30 cm',
+                     'Procedures performed today: no sedation; flexible sigmoidoscopy to 30 cm',
+                     'Procedures performed today:\nFlexible sigmoidoscopy to 30 cm was performed.'):
+            text = office + line + '\n'
+            with self.subTest(line=line):
+                self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
+                self.assertTrue(ready(run_engine(text, [('45330', 'lexible sigmoidoscopy to 30 cm')])['45330']))
+
+    def test_an_unboxed_item_under_the_bare_label_is_held_not_excluded(self):
+        """The accepted cost of the general form: an unchecked, unverbed item under the bare label in a plan is held
+        (HEAD read it performed, R3B-BASE excluded it), never excluded."""
+        text = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nAssessment and plan: Grade II '
+                'internal hemorrhoids.\nProcedures performed today:\nFlexible sigmoidoscopy to 30 cm\n')
+        self.assert_held_never_excluded(text, '45330', 'Flexible sigmoidoscopy to 30 cm')
+
+    def test_outside_a_plan_or_history_section_the_label_reads_as_before(self):
+        polyp = 'Cold snare polypectomy of a 6 mm sigmoid polyp'
+        for before in ('Findings: The colonoscope was advanced to the cecum.\n', 'Sedation: Monitored anesthesia care.\n'):
+            text = (HEADER + 'Procedure: Colonoscopy\n' + before + 'Procedures performed today: colonoscopy with '
+                    'polypectomy\n' + polyp + '\nFindings: The colonoscope was advanced to the cecum.\n')
+            with self.subTest(before=before):
+                self.assertEqual(read(text, polyp)[0], 'performed')
+                self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+        text = s1_note('Procedures performed today: none')  # an exact no-answer value: no heading, as at R3B-BASE
+        self.assertEqual(run_engine(text, [('43249', S1_ITEM)])['43249'].bucket, 'excluded')
+        self.assertTrue(ready(run_engine(text, [('99214', S1_VISIT)])['99214']))
+
+
 if __name__ == '__main__':
     unittest.main()
