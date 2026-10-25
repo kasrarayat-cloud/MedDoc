@@ -3459,6 +3459,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     reached, blocked = [], []
     for s, e in sentences:
         for cs, ce in _clauses_in(an, s, e):
+            clause = None  # round 4d bounded:3: one Span of the clause, shared by every hit of it (memory linear in the text)
             for label, depth, pattern in table:
                 for m in pattern.finditer(text, cs, ce):
                     if _about_another_procedure(an, m.start(), m.end()):
@@ -3469,7 +3470,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                     base = 'performed' if reading.cues[0].startswith((DOUBT_PREFIX, SILENT_SECTION_PREFIX)) else status
                     ws, we = an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)
                     pre, post = text[ws:m.start()], text[m.end():we]
-                    hit = (depth, label, _span(text, cs, ce))
+                    if clause is None:
+                        clause = _span(text, cs, ce)
+                    hit = (depth, label, clause)
                     if status in ('performed', 'incomplete') and cues.REACHED_BEYOND.search(pre):
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (

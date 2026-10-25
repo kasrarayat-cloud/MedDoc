@@ -600,5 +600,57 @@ class S2Declared7LongerDenyingLabelTests(HeldOrReadyAssertions, unittest.TestCas
                 self.assertTrue(ready(run_engine(text, [('45385', D_POLYP)])['45385']))
 
 
+# --- bounded:3: one clause copy per landmark hit ----------------------------------------------------------------------
+
+MIB = 1024 * 1024
+B3_HEADER = HEADER + 'Procedure: Colonoscopy\nFindings: '
+
+
+def b3_line(unit, chars):
+    return B3_HEADER + unit * ((chars - len(B3_HEADER)) // len(unit))
+
+
+class S2Bounded3LandmarkClauseCopiesTests(unittest.TestCase):
+    """bounded:3 (high, a cost regression from 9a9f40301) - _landmarks kept its own copy of the whole clause for every
+    landmark hit, and round 4c-2's unread, denied and doubted lists retained them, so a one-line note of a repeated denial
+    ("\u2610 Completed - aborted at the splenic flexure ", 115,000 characters) exhausted the analyze child's 512 MiB
+    allowance where 9a9f40301 routed it in 58 MiB. One Span per clause is now shared by every hit of the clause, so memory
+    stays linear in the text; the readings are unchanged."""
+
+    SHAPES = (('\u2610 Completed - aborted at the splenic flexure ', 150000), ('Extent: Cecum (attempted) ', 130000),
+              ('\u2612 Rescheduled \u2610 Completed - aborted at the splenic flexure ', 150000),
+              ('The scope was advanced to the splenic flexure ', 170000))
+
+    def test_the_claimed_lines_route_inside_the_analyze_allowance(self):
+        from datetime import date
+
+        from studio import bounded
+        from studio.gi import detect
+        for unit, chars in self.SHAPES:
+            text = b3_line(unit, chars)
+            with self.subTest(unit=unit, chars=len(text)):
+                routed_child = bounded.run_bounded(detect.route, text, date(2026, 10, 21), seconds=60,
+                                                   memory_bytes=512 * MIB)
+                self.assertTrue(routed_child.findings)
+
+    def test_each_hit_keeps_its_own_clause_as_evidence(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the hepatic flexure. The cecum '
+                'could not be reached; the transverse colon was tortuous.\n')
+        finding = routed(text).finding('gi.colonoscopy')
+        extent = next(f for f in finding.facts if f.name == 'extent')
+        self.assertEqual(extent.value, 'incomplete: hepatic flexure')
+        self.assertEqual([e.text for e in extent.evidence],
+                         ['The colonoscope was advanced to the hepatic flexure.', 'The cecum could not be reached;'])
+
+    def test_the_hits_of_one_clause_share_one_span(self):
+        from studio.gi import cues, detect
+        text = b3_line('\u2610 Completed - aborted at the splenic flexure ', 5000)
+        an, _ = detect._analysis(text)
+        denied = []
+        detect._landmarks(an, an.lay.sentences, cues.LOWER_LANDMARKS, None, denied, None)
+        self.assertGreater(len(denied), 50)
+        self.assertEqual(len({id(hit[2]) for hit in denied}), len({(hit[2].start, hit[2].end) for hit in denied}))
+
+
 if __name__ == '__main__':
     unittest.main()
