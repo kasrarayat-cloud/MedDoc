@@ -625,3 +625,18 @@ class Validation5OneProcedureNamedTwiceTests(Case):
                     else self.unproposed(text, pick)
                 self.assertEqual(check.status, 'warn', check.detail)
                 self.assertIn(missed, check.detail)
+
+    def test_a_second_mention_naming_another_procedure_too_is_still_named(self):
+        # one routed name holding the code's procedure and another (an uncoded banding, an anoscopy, a biopsy): the
+        # selected code never speaks for the other, as at HEAD
+        for text, pick, missed in (
+                (HEAD + 'Procedure: Anoscopy\nFindings: Anoscopy with rubber band ligation of two internal hemorrhoids '
+                        'was performed.\n', ('46600', 'Procedure: Anoscopy'), 'rubber band ligation'),
+                (HEAD + 'Procedure: Hemorrhoid banding\nFindings: Anoscopy with banding of two columns was performed.\n',
+                 ('46221', 'Procedure: Hemorrhoid banding'), 'Anoscopy with banding'),
+                (HEAD + 'Procedure: Anoscopy\nFindings: Anoscopy with biopsy of an anal lesion was performed.\n',
+                 ('46600', 'Procedure: Anoscopy'), 'biopsy of an anal lesion')):
+            with self.subTest(missed=missed):
+                check = self.unproposed(text, pick)
+                self.assertEqual(check.status, 'warn', check.detail)
+                self.assertIn(missed, check.detail)

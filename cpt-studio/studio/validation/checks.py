@@ -1215,10 +1215,14 @@ def _VAL_one_procedure_words(code: str):
 
 
 def _VAL_in_class(code: str, name: str) -> bool:
-    """Whether a routed procedure name is in the code's one-procedure class and is no range sibling (a
-    hemorrhoidectomy)."""
+    """Whether a routed procedure name is in the code's one-procedure class and names nothing else: no range sibling (a
+    hemorrhoidectomy), and every procedure word routing reads in it (detect._PROCEDURE_WORD) a word of that class - so
+    "Anoscopy with rubber band ligation of two internal hemorrhoids" is never 46600's anoscopy alone, nor "Anoscopy
+    with banding" 46221's banding alone."""
+    from studio.gi import detect
     words = _VAL_one_procedure_words(code)
-    return bool(words and words.search(name) and not _VAL_SIBLING.search(name))
+    return bool(words and words.search(name) and not _VAL_SIBLING.search(name)
+                and all(words.search(m.group(0)) for m in detect._PROCEDURE_WORD.finditer(name)))
 
 
 def _VAL_same_procedure(code: str, one: str, other: str) -> bool:
