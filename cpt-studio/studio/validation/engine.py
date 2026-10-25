@@ -187,7 +187,7 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     Fail-closed: an unnamed passage holds the code (section_only), never excludes it. Routing's gi.other finding still
     never decides the code's status (it may be another procedure). Indexed once per code: each passage costs a few
     bisections."""
-    if not any(r.status in checks.POSITIVE and checks.states_no_procedure(r) for r in own):
+    if not any(r.status in checks.POSITIVE and checks._VAL_states_no_procedure_of_its_own(text, r, day) for r in own):
         return own
     other = routing.finding(OTHER_GI)
     done = [m for m in (other.mentions if other else ())
@@ -205,7 +205,7 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     doubted = None
     marked = []
     for reading in own:
-        if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
+        if (reading.status in checks.POSITIVE and checks._VAL_states_no_procedure_of_its_own(text, reading, day)
                 and not checks.names_procedure(text, reading.start, reading.end, code, day)):
             routed_done = names(reading.start, reading.end) or opened(reading.start, reading.end)
             counted = False

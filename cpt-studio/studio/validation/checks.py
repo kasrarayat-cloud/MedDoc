@@ -341,6 +341,21 @@ def states_no_procedure(reading: Reading) -> bool:
     return bool(reading.cues) and all(cue.startswith(allowed) for cue in reading.cues)
 
 
+def _VAL_states_no_procedure_of_its_own(text: str, reading: Reading, service_date: Optional[date] = None) -> bool:
+    """states_no_procedure, also for a reading its detected family's document-level judgement made incomplete: the
+    passage's own reading before that judgement (detect.own_status_for_span) is performed and states no procedure.
+    "Procedure: Colonoscopy" reads incomplete when the colonoscopy stopped at the splenic flexure, which states no
+    procedure of a gi.other code (46221 was ready as "Documented as incomplete"; round 4c, lead)."""
+    if states_no_procedure(reading):
+        return True
+    if reading.status != 'incomplete' or reading.start is None or reading.end is None or reading.start >= reading.end:
+        return False
+    from studio.gi.detect import own_status_for_span
+    own = normalise_span_status(own_status_for_span(text, reading.start, reading.end, service_date))
+    return own is not None and own[0] == 'performed' and states_no_procedure(replace(reading, status=own[0],
+                                                                                     cues=own[1]))
+
+
 def restated(reading: Reading) -> bool:
     """An explicit performance statement that only its section downgraded ("Colonoscopy with cold snare polypectomy
     was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else but
@@ -466,9 +481,14 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
         # a procedure, even the code's own, without being read as documenting it done (round 5 validation:1).
         documented = any(cue.startswith(EM_DOCUMENTATION_CUE_PREFIX) for cue in outcome.decisive.cues)
         basis = 'as E/M documentation' if documented else 'by its section'
+        if states_no_procedure(outcome.decisive):
+            reading = f'reads as {outcome.decisive.status} only {basis}'
+        else:  # incomplete through its family's judgement (_VAL_states_no_procedure_of_its_own)
+            reading = (f'reads as performed only {basis}, and as incomplete only through what the document says of '
+                       'the procedure it names')
         reason = (f'No linked passage establishes that {name} was performed on the date of service: the linked passage '
-                  f'reads as {outcome.decisive.status} only {basis} ({cite(outcome.decisive)}), and it is not read as '
-                  'documenting that service as done on that date.')
+                  f'{reading} ({cite(outcome.decisive)}), and it is not read as documenting that service as done on '
+                  'that date.')
         if outcome.contrary:
             reason += f' Another linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}.'
         return reason

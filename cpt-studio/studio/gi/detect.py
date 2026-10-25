@@ -3054,17 +3054,18 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     return an.memo[key]
 
 
-def _read_span(an: Analysis, start: int, end: int) -> Reading:
+def _read_span(an: Analysis, start: int, end: int, adjust: bool = True) -> Reading:
     """The reading of [start, end). A span with no service name in it that covers
-    an E/M documentation mention or a procedure reference reads as that mention."""
+    an E/M documentation mention or a procedure reference reads as that mention.
+    ``adjust=False``: before its family's document-level judgement (own_status_for_span)."""
     if not an.touches_service(start, end):
         for mentions, readings in ((an.references, an.references), (an.em, an.em_readings)):
             for m in mentions:
                 if _overlaps(m.start, m.end, start, max(end, start + 1)):
                     return readings[m]
     reading = _generic_reading(an, start, end)
-    if reading.status == 'performed' and (an.touches_service(start, end)
-                                          or an.lay.section_at(start).kind in POSITIVE_SECTIONS):
+    if adjust and reading.status == 'performed' and (an.touches_service(start, end)
+                                                     or an.lay.section_at(start).kind in POSITIVE_SECTIONS):
         return _adjusted(reading, an.adjustments.get(_family_of_span(an, start, end)))
     if reading.status in NOT_TODAY and an.touches_service(start, end) and any(
             m.kind == 'em-visit' and _overlaps(m.start, m.end, start, max(end, start + 1)) for m in an.em):
@@ -4921,4 +4922,19 @@ def status_for_span(text: str, start: int, end: int,
     if not (0 <= start < end <= len(text)):
         raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
     reading = _read_span(_analysis(text, _checked_date(service_date, 'status_for_span()'))[0], start, end)
+    return reading.status, reading.cues
+
+
+def own_status_for_span(text: str, start: int, end: int,
+                        service_date: Optional[date] = None) -> tuple[str, tuple[str, ...]]:
+    """status_for_span before the family's document-level judgement (_adjusted): what the passage's own clause,
+    sentence and section say. For a code routing does not read the passage's family for (validation's gi.other
+    hold, round 4c lead): "Procedure: Colonoscopy" reads incomplete when the colonoscopy stopped short, which says
+    nothing of a hemorrhoid banding."""
+    if not isinstance(text, str):
+        raise TypeError('own_status_for_span() needs the canonical text as str.')
+    if not (0 <= start < end <= len(text)):
+        raise ValueError(f'span [{start}, {end}) is not a non-empty range inside the text (length {len(text)}).')
+    reading = _read_span(_analysis(text, _checked_date(service_date, 'own_status_for_span()'))[0], start, end,
+                         adjust=False)
     return reading.status, reading.cues
