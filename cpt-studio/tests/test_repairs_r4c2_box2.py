@@ -235,5 +235,104 @@ class Box2ECoordinatedProcedureTests(unittest.TestCase):
         self.assertEqual([m[0] for m in others(text)], ['anoscopy'])
 
 
+
+# --- box2:F -- a refusal in the line under the separately identifiable E/M statement ---------------------------------
+
+F_STATEMENT = 'A significant, separately identifiable E/M service was performed.'
+F_OFFICE = OFFICE.format(cc='Dysphagia.', hpi='Dysphagia.', plan='EGD with dilation was performed today.')
+
+
+def separate_em(text):
+    finding = detect.route(text, D).finding('gi.office_em')
+    fact = next((f for f in finding.facts if f.name == 'separate_em'), None)
+    return fact.value if fact else None
+
+
+class Box2FAttestationLineTests(unittest.TestCase):
+    """box2:F (high, declared reading; ARCHITECTURE 5.3, round 4c dc478f567 / fa8b3dbe1). "Notes: Not attested" under the
+    statement still attested it: the answer reader reads only marks and answer words, and the attestation-word rule only
+    the label, which "Notes" (a field on the closed own-field list) never carries. The line under the statement now reads
+    the statement's own contrary words when it speaks of the attestation, and a field or marked line whose value carries
+    an attestation word is the statement's answer, which only a checked box or a bare Yes affirms. Refusal only."""
+
+    def assert_refused(self, line, statement=F_STATEMENT):
+        text = F_OFFICE + statement + '\n' + line + '\n'
+        self.assertIsNone(separate_em(text), line)
+        proposals, _ = real(text, ('99214', VISIT))
+        visit = proposals['99214']
+        self.assertEqual(visit.status, 'needs_clarification', (line, [c.detail for c in visit.checks]))
+        self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+
+    def assert_documented(self, line, statement=F_STATEMENT):
+        text = F_OFFICE + statement + '\n' + line + '\n'
+        self.assertEqual(separate_em(text), 'documented', line)
+        proposals, _ = real(text, ('99214', VISIT))
+        self.assertNotIn('separate_em', [c.fact for c in proposals['99214'].clarifications], line)
+
+    def test_the_claimed_line_refuses_the_statement(self):
+        self.assert_refused('Notes: Not attested')
+        self.assert_documented('')  # without it, the statement attests, as before
+
+    def test_every_spelling_of_the_refusal(self):
+        for line in ('Notes: Not attested.', 'NOTES: NOT ATTESTED', 'notes: not attested', 'Notes - Not attested',
+                     'Notes \u2013 Not attested', 'Notes | Not attested', 'Notes\tNot attested', 'Notes  Not attested',
+                     'Notes = Not attested', 'Notes? Not attested', 'Notes?: Not attested', '- Notes: Not attested',
+                     '\u2022 Notes: Not attested', '1. Notes: Not attested', '(1) Notes: Not attested',
+                     '   Notes: Not attested', 'Note: Not attested', 'Comments: Not attested', 'Remarks: not attested',
+                     'Status: Not attested', 'Attestation: Not attested', 'Biopsy: Not attested', 'Not attested',
+                     'Not attested.', '\nNotes: Not attested'):
+            with self.subTest(line=line):
+                self.assert_refused(line)
+
+    def test_other_refusals_that_name_the_attestation(self):
+        for line in ('Notes: Attestation declined', 'Notes: E/M not separately identifiable', 'Notes: I do not attest',
+                     'Notes: Not agreed', 'Notes: Attestation pending', 'Notes: Not confirmed', 'Notes: no attestation',
+                     'Attestation: pending', 'Attested - No', 'Attested | No', 'Attested = No', 'Attested\tNo',
+                     'I attest that I did not perform a separate E/M service.', 'Separate E/M not documented.',
+                     'Attested?', 'Unattested', 'Notes: Unattested', '☒ Unattested', 'Notes: Disagree',
+                     'Unconfirmed.', 'Attestation: non-attested'):
+            with self.subTest(line=line):
+                self.assert_refused(line)
+
+    def test_boxes_on_the_line_under_it(self):
+        for line in ('Notes: \u2610 Attested', 'Notes: [ ] Attested', 'Notes: \u2612 Not attested', '\u2612 Not attested',
+                     'Not attested \u2612', '[x] Not attested', '\u2611 I do not attest', '\u2612 Attested (pending)',
+                     'Notes: [?] Attested'):
+            with self.subTest(line=line):
+                self.assert_refused(line)
+        for line in ('Notes: \u2612 Attested', '\u2612 Attested', '[x] Attested', 'Attested \u2612', '\u2611 I attest',
+                     '\u2612 Yes, I attest', 'Yes, I attest: \U0001f5f9 Yes \u2610 No', 'I attest: \u2612 Yes \u2610 No'):
+            with self.subTest(line=line):  # a checked box of its own or a checked Yes, nothing contrary: as before
+                self.assert_documented(line)
+        for line in ('Yes, I attest: \u2610 Yes \u2612 No', 'I attest: \u2610 Yes \u2610 No', 'I attest: [?] Yes [?] No',
+                     '\u2612 Agree \u2610 Disagree'):
+            with self.subTest(line=line):  # the denial option is checked, no option is, or a pair it cannot read: refused
+                self.assert_refused(line)
+
+    def test_an_affirmative_answer_that_is_no_checked_box_or_bare_yes_refuses(self):
+        """The lead's controls: "Notes: Attested" and "Notes: Agree" never newly attest anything; as answers that are no
+        checked box and no bare Yes they refuse, as the rule says. A statement that asks, or whose own box is unchecked,
+        is still refused whatever is under it."""
+        for line in ('Notes: Attested', 'Notes: Agree', 'Comments: Confirmed', 'Notes: Attested - Yes'):
+            with self.subTest(line=line):
+                self.assert_refused(line)
+        for statement in (F_STATEMENT[:-1] + ':', '\u2610 ' + F_STATEMENT):
+            for line in ('Notes: Attested', 'Notes: Agree', 'Attested - Yes', 'Notes: patient tolerated the visit'):
+                with self.subTest(statement=statement, line=line):
+                    self.assert_refused(line, statement)
+
+    def test_lines_that_do_not_refuse_read_as_before(self):
+        for line in ('Notes: patient tolerated the visit', 'Notes: No', 'Notes: None', 'Complications: None',
+                     'Attested: Yes', 'Attested - Yes', 'Attested | Yes', 'Attested = Yes', 'Attested? Yes',
+                     'Patient agrees with the plan.', 'Modifier 25 appended.',
+                     'The E/M addressed new dysphagia, separate from the EGD.', 'E/M level: 99214', 'Modifier: 25',
+                     'Attested by: Dr. Smith', 'Attested.', 'Same-day E/M documented separately.',
+                     'Follow-up in 2 weeks; patient agrees.',
+                     'I attest that the above E/M service was significant and separately identifiable.',
+                     'Plan: Follow up in 2 weeks.', 'Procedure: Flexible sigmoidoscopy'):
+            with self.subTest(line=line):
+                self.assert_documented(line)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -4112,6 +4112,8 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
             return True
     elif answer is not None and _box_own_box_refuses(an, *answer):
         return True  # "☐ Attested": the statement's own box, on the line under it, is not checked (declared:4)
+    elif answer is not None and _B2_attestation_line_refuses(an, *answer):
+        return True  # "Notes: Not attested", "Notes: Attested": an answer about the attestation that refuses (box2:F)
     elif not text[end:rest_end].strip() and text[start:end].rstrip().endswith(':'):
         return True  # it asks, and nothing under it answers yes
     above = _box_line_before(text, line_start) if line_start else None
@@ -4181,6 +4183,56 @@ def _box_answer_affirms(an: Analysis, start: int, end: int) -> bool:
     if not _BOX_OPTION_WORD.search(text, start, end):
         return all(state == 'on' for _, _, state in boxes)
     return _group_state(text, boxes) == 'on'
+
+
+# --- round 4c-2 box2:F: a refusal in the line under the separately identifiable E/M statement ---------------------------
+# A field line under the statement: a list marker, a short label and the shared separator (_BOX_Q_LEAD, _BOX_Q_SEP: one
+# grammar with the status lines), except that a word's own hyphen ("Same-day", "Follow-up") separates nothing.
+_B2_FIELD = re.compile(_BOX_Q_LEAD + r"(?P<label>[A-Za-z][\w /'-]{0,30}?)(?!(?<=[A-Za-z0-9])[-\u2013\u2014][A-Za-z0-9])"
+                       + _BOX_Q_SEP + r"(?=\S)", re.I)  # a value follows: "Attested?" alone is no field
+_B2_MARK = re.compile(_BOX_ANY_MARK)
+# An attestation word negated in itself ("Unattested", "Disagree", "Unconfirmed"): an attestation word and a word the
+# statement's own line would refuse at once.
+_B2_DENIED = re.compile(r'\b(?:un|non-?|dis)(?:attest|agree|confirm|acknowledg)\w*', re.A | re.I)
+
+
+def _B2_attestation_line_refuses(an: Analysis, start: int, end: int) -> bool:
+    """Whether the line [start, end) under the separately identifiable E/M statement refuses it as an answer about the
+    attestation (box2:F). Only lines that carry an attestation word (_BOX_ATTEST_WORD) are asked, and only to refuse:
+    - one that carries a word the statement's own line would refuse (_SEPARATE_EM_CONTRARY: "Not attested", "Notes: E/M
+      not separately identifiable", "☒ Not attested", "Attestation: pending") refuses, read the way the rest of the
+      statement's own line is; the separator of a field line is no part of it (a label's own "?" is no hedge);
+    - a field line or a marked line whose value carries the attestation word ("Notes: Attested", "Notes: Agree", "Notes: ☐
+      Attested") is the statement's answer whatever its label, and refuses unless it affirms as an answer may: checked
+      boxes alone or a checked Yes (_box_answer_affirms).
+    Prose with no contrary word ("Modifier 25 appended.", "Patient agrees with the plan.") and a field whose label alone
+    names the attestation ("Attested - Yes", "E/M level: 99214") are left as they were."""
+    text = an.text
+    if not (_BOX_ATTEST_WORD.search(text, start, end) or _B2_DENIED.search(text, start, end)):
+        return False
+    field = _B2_FIELD.match(text, start, end)
+    if field is None:
+        if _B2_contrary(text, start, end):
+            return True
+        if not _B2_MARK.search(text, start, end):
+            return False
+        value = start
+    else:
+        value = field.end()
+        if _B2_contrary(text, *field.span('label')) or _B2_contrary(text, value, end):
+            return True
+    return bool(_BOX_ATTEST_WORD.search(text, value, end)) and not _box_answer_affirms(an, start, end)
+
+
+def _B2_contrary(text: str, start: int, end: int) -> bool:
+    """Whether [start, end) holds a word the statement's own line would refuse (_SEPARATE_EM_CONTRARY), not counting a
+    denial option that labels a box ("☒ Yes ☐ No": _OPTION_LABEL, an option that explains itself), or an attestation
+    word negated in itself (_B2_DENIED)."""
+    if _B2_DENIED.search(text, start, end):
+        return True
+    options = [m.span() for m in _OPTION_LABEL.finditer(text, start, end)]
+    return any(not any(s <= c.start() and c.end() <= e for s, e in options)
+               for c in _SEPARATE_EM_CONTRARY.finditer(text, start, end))
 
 
 def _box_line_after(text: str, pos: int) -> Optional[tuple[int, int]]:
