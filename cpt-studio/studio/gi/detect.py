@@ -3162,11 +3162,13 @@ def _family_sentences(an: Analysis, attributed: list[Optional[str]], family: str
     return [span for span, f in zip(an.lay.sentences, attributed) if f == family]
 
 
-def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
+def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None) -> tuple[list, list]:
     """(reached, blocked) as (depth, label, clause span) for landmarks read as
     part of a performed or incomplete service. A landmark is reached only from a
     reading with no unresolved negation; a denied advancement ("it was not advanced
-    to the cecum") is blocked, never reached."""
+    to the cecum") is blocked, never reached. ``unread``, when given, collects the landmark of every extent label that
+    would be reached but for its tail (_plain_tail: "Extent: Cecum | Scope: Olympus"): its extent is not read, and it
+    keeps a shallower landmark from reading the procedure incomplete (_P2_unread_reaches, round 4c-2 plan:B)."""
     text = an.text
     reached, blocked = [], []
     for s, e in sentences:
@@ -3195,7 +3197,59 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
                           and _plain_tail(an, m.end(), we)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
+                    elif unread is not None and (status in ('performed', 'incomplete')
+                                                 or _answers_silently(an, reading, m.start(), m.end())
+                                                 or _P2_doubted_by_a_next_field(an, reading, m.end(), ws, we)) \
+                            and _reached_label(an, ws, m.start()) and not _P2_tail_contrary(an, m.end()):
+                        unread.append(hit)  # a label reached but for its tail (round 4c-2 plan:B)
     return reached, blocked
+
+
+def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: int, we: int) -> bool:
+    """Whether the only doubt of an extent label's landmark (which ends at ``end``; its clause window [ws, we)) is a
+    negation word inside a next cell that opens a listed report field on the label's line ("Extent: Cecum |
+    Complications: None"): round 4c declared:11 ends the label's value at that cell, so the answer is the field's own.
+    The label is still never read; it only counts as unread (round 4c-2 plan:B)."""
+    if reading.status != 'uncertain' or not reading.cues or not reading.cues[0].startswith(DOUBT_PREFIX):
+        return False
+    text = an.text
+    line_end = text.find('\n', end, we)
+    cell = _SEC_NEXT_CELL.search(text, end, we if line_end < 0 else line_end)
+    return cell is not None and not any(t.start() < cell.start() for t in cues.DOUBT_TOKEN.finditer(text, ws, we))
+
+
+# Words after an extent label's landmark that make it an aim or an attempt, not an unread statement of the extent reached
+# ("Extent: cecum (intended).", "cecum was the goal", "Extent: Cecum (attempted)"): round 4 routing:9 and release:3 read
+# such a label as no extent, and its shallower prose landmark still decides (round 4c-2 plan:B keeps that reading).
+_P2_AIM_WORD = re.compile(r'\b(?:intend\w*|intent\w*|goals?|targets?|targeted|aim\w*|expect\w*|attempt\w*|objectives?|'
+                          r'desir\w*|anticipat\w*|tried|try|trying|incomplet\w*|partial\w*|abandon\w*|unsuccessful|'
+                          r'fail\w*)\b', re.A | re.I)
+
+
+def _P2_tail_contrary(an: Analysis, end: int) -> bool:
+    """Whether the rest of an extent label's line after its landmark (which ends at ``end``) denies, doubts, plans or
+    calls off the landmark, or names it an aim: a negation word (cues.DOUBT_TOKEN), a clause cue that is no performance
+    cue (cancelled, incomplete, historical, planned, uncertain, "?"), or an aim word (_P2_AIM_WORD). Read to the line's
+    end, to a next cell that opens a listed report field (_SEC_NEXT_CELL), or CLAUSE_REACH characters, whichever comes
+    first, across a ";" or a "." ("Extent: cecum (intended; not reached)", "Extent: cecum | Reached: No"). Such a label
+    is no unread statement of the extent reached, so it never withholds an extent (round 4c-2 plan:B)."""
+    text = an.text
+    line_end = text.find('\n', end, end + CLAUSE_REACH)
+    stop = min(len(text), end + CLAUSE_REACH) if line_end < 0 else line_end
+    cell = _SEC_NEXT_CELL.search(text, end, stop)
+    stop = cell.start() if cell else stop
+    return bool(cues.DOUBT_TOKEN.search(text, end, stop) or _P2_AIM_WORD.search(text, end, stop)
+                or any(c.status != 'performed' for c in an.cues_in(end, stop)))
+
+
+def _P2_unread_reaches(unread: list, expected: int) -> bool:
+    """Whether an extent label left unread for its tail names a landmark at or beyond ``expected``, the depth the
+    procedure calls for, beside a deepest landmark read as reached that lies short of it (round 4c-2 plan:B): that
+    shallower landmark then reads no incomplete extent ("The colonoscope was inserted into the rectum" beside "Extent:
+    Cecum | Scope: Olympus" is no "incomplete: rectum"); no extent is read and the family's extent clarification asks
+    for it. A label short of that depth agrees the procedure was incomplete, so the reading stays as it was. The label
+    itself is still never read."""
+    return any(hit[0] >= expected for hit in unread)
 
 
 def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> bool:
@@ -3420,11 +3474,14 @@ def _interventions(an: Analysis, attributed: list[Optional[str]], family: str) -
 
 
 def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
-    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS)
+    unread = []
+    reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < cues.CECUM_DEPTH:
+        if _P2_unread_reaches(unread, cues.CECUM_DEPTH):
+            return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
@@ -3451,10 +3508,13 @@ def _expected_upper_depth(an: Analysis) -> int:
 def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     """The deepest landmark reached; incomplete when the service is documented as incomplete
     or that landmark lies short of the depth the named procedure calls for."""
-    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS)
+    unread = []
+    reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread)
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
+    if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)):
+        return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
     if incomplete or depth < _expected_upper_depth(an):
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))

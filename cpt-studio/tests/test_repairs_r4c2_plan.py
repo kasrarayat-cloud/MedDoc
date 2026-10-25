@@ -299,5 +299,135 @@ class PlanA2HedgedPerformanceTests(unittest.TestCase):
                 self.assertTrue(held_for_a_same_day_procedure(visit_of(text)))
 
 
+# --- plan:B: an unread extent label never lets a shallower prose landmark read the procedure incomplete --------------
+
+def report(procedure, prose, label, findings='Findings: Normal.'):
+    return HEADER + f'Procedure: {procedure}\n{prose}\n{label}\n{findings}\n'
+
+
+COLON_PROSE = 'The colonoscope was inserted into the rectum and advanced.'
+UPPER_PROSE = 'The endoscope was passed into the esophagus.'
+
+
+def extent_of(text, slug):
+    finding = detect.route(text, None).finding(slug)
+    return finding.status, next((f.value for f in finding.facts if f.name == 'extent'), None), finding.missing
+
+
+class PlanBUnreadExtentLabelTests(unittest.TestCase):
+    """plan:B (high, declared misread; reported by the round-4c SECTIONS agent). ARCHITECTURE 5.3: an extent label
+    ("Extent: cecum") is read only when what follows its landmark is punctuation, a cues.EXTENT_TAIL word, or (round 4c
+    declared:11) a next cell that opens a listed report field. "Extent: Cecum | Scope: Olympus" is therefore unread, and
+    the extent fell back to the shallower prose landmark ("inserted into the rectum"): a false "incomplete: rectum", the
+    family incomplete and 45378 ready with an incomplete-procedure warning. An unread label that names a landmark deeper
+    than every landmark read as reached now keeps that shallower landmark from reading the procedure incomplete: no
+    extent is read (the family's extent clarification), for a colonoscopy and an upper endoscopy alike. The label's tail
+    is still never read ("| Scope:" stays outside the closed list), so nothing newly reads an extent."""
+
+    CLAIMED = report('Colonoscopy', COLON_PROSE, 'Extent: Cecum | Scope: Olympus')
+    UNREAD = ('Extent: Cecum | Scope: Olympus CF-HQ190', 'Extent: Cecum, Olympus scope', 'Extent reached: Cecum | Instrument: Olympus',
+              'Extent: Terminal ileum | Scope: Olympus', 'Furthest extent reached: cecum | Scope: Olympus',
+              'Extent: Cecum (photo documented) | Scope: Olympus', 'Extent: Cecum | Scope: Olympus | Prep: good',
+              'Extent: Cecum | Instrument: Olympus', '- Extent: Cecum | Scope: Olympus', 'Extent - cecum, adult scope',
+              # a listed next field ends what is read for a denial, as it ends the value (round 4c declared:11): its
+              # answer is its own, so it neither doubts the landmark nor makes the label a denial
+              'Extent: Cecum | Scope: Olympus | Complications: None', 'Extent: Cecum | Complications: None',
+              'Extent: Cecum | Prep quality: Good | Complications: None', 'Extent: Cecum    Complications: none')
+
+    def assert_held_extent(self, text, slug, code, cite):
+        status, extent, missing = extent_of(text, slug)
+        self.assertNotEqual(status, 'incomplete')
+        self.assertIsNone(extent)
+        self.assertIn('extent', missing)
+        proposal = real(text, (code, cite))[0][code]
+        self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+        self.assertIn('extent', clarified(proposal))
+        self.assertFalse(any(c.id == 'service.incomplete' for c in proposal.checks))
+
+    def test_the_claimed_input_holds_the_extent(self):
+        self.assert_held_extent(self.CLAIMED, 'gi.colonoscopy', '45378', 'Procedure: Colonoscopy')
+
+    def test_other_unread_labels_hold_the_extent(self):
+        for label in self.UNREAD:
+            with self.subTest(label=label):
+                self.assert_held_extent(report('Colonoscopy', COLON_PROSE, label), 'gi.colonoscopy', '45378',
+                                        'Procedure: Colonoscopy')
+
+    def test_the_upper_tract_sibling(self):
+        for label in ('Extent: D2 | Scope: Olympus', 'Extent: Second part of the duodenum | Scope: Olympus GIF',
+                      'Extent reached: duodenum, adult gastroscope'):
+            with self.subTest(label=label):
+                self.assert_held_extent(report('EGD', UPPER_PROSE, label), 'gi.egd', '43235', 'Procedure: EGD')
+
+    def test_a_read_label_and_the_declared_unread_controls_are_unchanged(self):
+        # a label read whole decides as before
+        for label, extent in (('Extent: Cecum (photo documented) | Prep: good', 'cecum'), ('Extent: Cecum', 'cecum'),
+                              ('Extent: Cecum; Scope: Olympus', 'cecum')):
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(report('Colonoscopy', COLON_PROSE, label), 'gi.colonoscopy')[:2],
+                                 ('performed', extent))
+        # a label whose own words deny or doubt the landmark, or name an aim, is no unread extent: the prose decides as
+        # before (round 4 routing:9, release:3)
+        for label in ('Extent: Cecum not reached | Scope: Olympus', 'Intended extent: Cecum | Scope: Olympus',
+                      'Extent: cecum (intended; not reached)', 'Extent: Cecum (intended) | Prep: good',
+                      'Extent: cecum was the goal', 'Extent: Cecum | Reached: No', 'Extent: Cecum (attempted) | Scope: Olympus',
+                      'Extent: Cecum? | Scope: Olympus', 'Extent: Cecum | Scope: Olympus; not reached',
+                      'Extent: Cecum | Scope: Olympus, cecum not reached', 'Extent: Cecum | Scope: Olympus, aborted',
+                      'Extent: Cecum, no photos | Complications: None'):
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(report('Colonoscopy', COLON_PROSE, label), 'gi.colonoscopy')[:2],
+                                 ('incomplete', 'incomplete: rectum'))
+        self.assertEqual(extent_of(report('EGD', UPPER_PROSE, 'Extent: D2'), 'gi.egd')[:2],
+                         ('performed', 'second part of duodenum'))
+
+    def test_a_prose_landmark_that_reaches_the_expected_depth_still_decides(self):
+        """Only an incomplete reading is withheld: a prose extent at the cecum stays the extent beside a deeper unread
+        label, and a label shallower than the prose landmark changes nothing."""
+        text = report('Colonoscopy', 'The colonoscope was advanced to the cecum.', 'Extent: Terminal ileum | Scope: Olympus')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', 'cecum'))
+        text = report('Colonoscopy', 'The colonoscope was advanced to the transverse colon.',
+                      'Extent: Rectum | Scope: Olympus')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
+        text = report('EGD', 'The endoscope was advanced to the duodenal bulb.', 'Extent: D2 | Scope: Olympus')
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('performed', 'duodenal bulb'))
+        # an unread label short of the depth the procedure calls for agrees it was incomplete: the reading stays as it
+        # was (an accepted residual: the shallower prose landmark names the extent)
+        for procedure, prose, label, expected in (
+                ('Colonoscopy', COLON_PROSE, 'Extent: Splenic flexure | Scope: Olympus', 'incomplete: rectum'),
+                ('Colonoscopy', COLON_PROSE, 'Extent: Hepatic flexure | Scope: Olympus', 'incomplete: rectum'),
+                ('EGD', UPPER_PROSE, 'Extent: stomach | Scope: Olympus', 'incomplete: esophagus')):
+            text = report(procedure, prose, label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(text, 'gi.egd' if procedure == 'EGD' else 'gi.colonoscopy')[:2],
+                                 ('incomplete', expected))
+
+    def test_only_a_label_that_speaks_for_this_report_withholds_it(self):
+        """An unread label answered in the product's addendum speaks for this report, so it withholds the shallower
+        landmark's incomplete reading; one in another facility's record never does (round 4c declared:3)."""
+        parent = report('Colonoscopy', COLON_PROSE, 'Impression: Normal.')
+        text = parent + '\n\nADDENDUM (revision 2, added 2026-10-22 10:00 UTC)\nFurthest extent reached: Cecum | Scope: Olympus\n'
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
+        for label in ('Extent: Cecum | Scope: Olympus', 'Extent: Cecum | Complications: None'):
+            text = report('Colonoscopy', 'The colonoscope was advanced to the splenic flexure.',
+                          'Outside records:\n' + label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: splenic flexure'))
+
+    def test_a_negation_earlier_in_the_labels_clause_keeps_the_base_reading(self):
+        """Only a negation that sits inside the listed next field is that field's own; one earlier in the label's clause
+        may speak of the extent ("Not reached, extent: Cecum | Complications: None"), so the label is not counted unread
+        and the reading is the base's."""
+        text = report('Colonoscopy', COLON_PROSE, 'Not reached, extent: Cecum | Complications: None')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+
+    def test_a_documented_incompleteness_stays_incomplete(self):
+        """An incompleteness stated in words is read as before; only the landmark that would name it is withheld."""
+        text = report('Colonoscopy', 'The colonoscope was inserted into the rectum. The procedure was aborted because of '
+                      'poor preparation.', 'Extent: Cecum | Scope: Olympus')
+        status, extent, missing = extent_of(text, 'gi.colonoscopy')
+        self.assertEqual(status, 'incomplete')
+        self.assertNotEqual(extent, 'incomplete: rectum')
+
+
 if __name__ == '__main__':
     unittest.main()
