@@ -567,6 +567,99 @@ class PlanDDeniedExtentLabelTests(unittest.TestCase):
         self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
 
 
+# --- plan:E: a held performance statement outranks another encounter's mention in the family aggregate ---------------
+
+def e_office(lines):
+    return (HEADER + 'Place of service: Office (POS 11)\n' + VISIT + '\nChief complaint: Heartburn.\nHistory of present '
+            'illness: Heartburn for 8 weeks.\n' + lines + '\nMedical decision making: moderate.\n')
+
+
+class PlanEHeldStatementRankingTests(unittest.TestCase):
+    """plan:E (high, declared ranking). ARCHITECTURE 5.3: a family's status ranks what its mentions say of today's
+    service (incomplete, cancelled, negated today, uncertain) before what they say of other encounters (never before,
+    historical, planned). "Assessment and plan: EGD was performed with biopsies. Repeat EGD in 3 months." read gi.egd
+    PLANNED and 99214 ready, although without the repeat sentence gi.egd is uncertain and the E/M held: both plan
+    mentions say no today, so both were 'away', and _aggregate's last step ranked the elsewhere statuses (planned,
+    historical, negated) with nothing left to outrank them. An explicit performance statement held by its section (an
+    uncertain reading carrying a 'performed:' cue other than the E/M documentation's, or plan:A2's hedged-statement hold)
+    is today's possible service (5.6 counts it for the E/M hold), so it now ranks before those other-encounter statuses
+    in a procedure family's aggregate: uncertain, exactly as without the other mention. The E/M family is not read so."""
+
+    HELD = ('Assessment and plan: EGD was performed with biopsies. Repeat EGD in 3 months.',
+            'Plan: EGD was performed with biopsies. Repeat EGD in 3 months.',
+            'Assessment and plan: Repeat EGD in 3 months. EGD was performed with biopsies.',
+            'Assessment and plan: EGD was performed with biopsies. EGD in 3 months to reassess.',
+            'Assessment and plan: EGD was performed with biopsies. Prior EGD in 2019 was normal.',
+            'Assessment and plan: EGD was performed with biopsies, eosinophilic esophagitis versus reflux. Repeat EGD in 3 '
+            'months.',
+            'Indication: EGD was performed and showed a stricture.\nAssessment and plan: Repeat EGD in 3 months.')
+    READY = ('Assessment and plan: Repeat EGD in 3 months.', 'Assessment and plan: Discussed EGD; will schedule.',
+             'Assessment and plan: EGD in 2024 was normal. Repeat EGD in 3 months.',
+             'Assessment and plan: Prior EGD was performed and showed Barrett esophagus. Repeat EGD in 3 years.',
+             'Assessment and plan: EGD was performed in 2024 and showed Barrett esophagus. Repeat EGD in 3 years.',
+             'Assessment and plan: Possible EGD if symptoms persist. Repeat EGD in 3 months.',
+             'Past medical history: EGD was performed and showed Barrett esophagus.\nAssessment and plan: Repeat EGD in 3 '
+             'years.',
+             'Assessment and plan: Possible EGD today if symptoms persist. Repeat EGD in 3 months.',
+             'Assessment and plan: Discussed colonoscopy today; she will think about it. Colonoscopy in 3 years.')
+
+    def test_the_claimed_input_reads_as_without_the_repeat(self):
+        with_repeat = e_office(self.HELD[0])
+        without = e_office('Assessment and plan: EGD was performed with biopsies.')
+        self.assertEqual(family(with_repeat, 'gi.egd'), 'uncertain')
+        self.assertEqual(family(without, 'gi.egd'), 'uncertain')
+        self.assertTrue(held_for_a_same_day_procedure(visit_of(with_repeat)))
+        self.assertTrue(held_for_a_same_day_procedure(visit_of(without)))
+
+    def test_the_variants_hold_the_visit(self):
+        for plan in self.HELD:
+            text = e_office(plan)
+            with self.subTest(plan=plan):
+                self.assertEqual(family(text, 'gi.egd'), 'uncertain')
+                self.assertTrue(held_for_a_same_day_procedure(visit_of(text)), plan)
+
+    def test_other_sections_and_other_other_encounter_mentions(self):
+        text = e_office('History of present illness: Colonoscopy was performed this morning and showed polyps. Prior '
+                        'colonoscopy in 2019 showed polyps.\nAssessment and plan: Fiber.')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'uncertain')
+        self.assertTrue(held_for_a_same_day_procedure(visit_of(text)))
+        text = e_office('Assessment and plan: Colonoscopy was completed. No further colonoscopy is needed.')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'uncertain')
+        self.assertTrue(held_for_a_same_day_procedure(visit_of(text)))
+
+    def test_the_controls_and_the_pinned_releases_stay_ready(self):
+        for plan in self.READY:
+            text = e_office(plan)
+            with self.subTest(plan=plan):
+                self.assertTrue(visit_ready(visit_of(text)), plan)
+
+    def test_the_controls_keep_their_family_reading(self):
+        """With no held performance statement, the aggregate ranks as before; a denial of today's service still wins."""
+        for plan, expected in (('Assessment and plan: Repeat EGD in 3 months.', 'planned'),
+                               ('Assessment and plan: Possible EGD if symptoms persist. Repeat EGD in 3 months.', 'planned'),
+                               ('Assessment and plan: Discussed EGD; will schedule.', 'uncertain'),
+                               ('Assessment and plan: Prior EGD was performed and showed Barrett esophagus. Repeat EGD in 3 '
+                                'years.', 'historical'),
+                               ('Assessment and plan: EGD was performed with biopsies. No EGD was done today.', 'negated'),
+                               # a history section's statement reads historical, its performance cue kept: not held
+                               ('Past medical history: EGD was performed and showed Barrett esophagus.\nAssessment and plan: '
+                                'Repeat EGD in 3 years.', 'historical')):
+            with self.subTest(plan=plan):
+                self.assertEqual(family(e_office(plan), 'gi.egd'), expected)
+
+    def test_the_e_m_family_is_not_ranked_so(self):
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nPlan: Office visit was '
+                'performed. Follow-up office visit in 3 months.\n')
+        self.assertEqual(family(text, 'gi.office_em'), 'planned')
+
+    def test_the_repeat_itself_stays_planned_and_its_code_excluded(self):
+        text = e_office(self.HELD[0])
+        self.assertEqual(read(text, 'Repeat EGD in 3 months.')[0], 'planned')
+        self.assertEqual(run_engine(text, [('43235', 'Repeat EGD in 3 months.')])['43235'].bucket, 'excluded')
+        proposal = run_engine(text, [('43239', 'EGD was performed with biopsies.')])['43239']
+        self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+
 # --- plan:C: a line listed under a denying label is held whatever it names --------------------------------------------
 
 C_FINDINGS = 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n'

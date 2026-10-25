@@ -4099,14 +4099,16 @@ def _today_doubt(reading: Reading, kind: str) -> bool:
 
 
 def _aggregate(readings: list[Reading], section_suffices: bool = True, kinds: tuple = (),
-               away: tuple = ()) -> str:
+               away: tuple = (), held_statements: bool = False) -> str:
     """Performed on explicit evidence, or on section evidence that no reading about this encounter
     contradicts; else incomplete; else what the readings say of today's service: cancelled, negated,
     or uncertain when a doubt or a hedge about it (or section evidence that is contradicted or does
     not suffice) leaves it open. Only then what they say of other encounters (ELSEWHERE_ORDER):
     doubt never cascades into a plan, a history or a negation of earlier encounters ("no prior
     colonoscopy"). ``kinds``: each reading's section kind; ``away``: whether it speaks of another
-    encounter (_elsewhere). Both default to "about this encounter, section unknown"."""
+    encounter (_elsewhere). Both default to "about this encounter, section unknown". ``held_statements``: a procedure
+    family's aggregate, where an explicit performance statement its section held (_P2_held_statement) is today's
+    possible service and so ranks before what the readings say of other encounters (round 4c-2 plan:E)."""
     kinds = tuple(kinds) or ('',) * len(readings)
     away = tuple(away) or (False,) * len(readings)
     here = [(r, k) for r, k, elsewhere in zip(readings, kinds, away) if not elsewhere]
@@ -4123,7 +4125,18 @@ def _aggregate(readings: list[Reading], section_suffices: bool = True, kinds: tu
         return 'negated'
     if section or any(_today_doubt(r, k) for r, k in here):
         return 'uncertain'
+    if held_statements and any(_P2_held_statement(r) for r in readings):
+        return 'uncertain'  # round 4c-2 plan:E: a held performance statement outranks another encounter's mention
     return next((s for s in ELSEWHERE_ORDER if s in statuses), 'uncertain')
+
+
+def _P2_held_statement(reading: Reading) -> bool:
+    """Whether ``reading`` is an explicit performance statement its section or another hold kept from reading performed
+    (round 4c-2 plan:E): uncertain, with a 'performed:' cue ("EGD was performed with biopsies." under Assessment and
+    plan), or with plan:A2's hedged-statement hold. 5.6 counts such a statement as a possible same-day procedure, so in a
+    procedure family's aggregate it is what the mentions say of today."""
+    return reading.status == 'uncertain' and any(cue.startswith('performed:') or cue == _P2_HEDGED_STATEMENT
+                                                 for cue in reading.cues)
 
 
 def _procedure_facts(an: Analysis, family: str, attributed, only_family: bool,
@@ -4977,7 +4990,8 @@ def _route(an: Analysis) -> RoutingResult:
         family_readings = [readings[m] for m in mentions]
         kinds = tuple(an.lay.section_at(m.start).kind for m in mentions)
         away = tuple(_elsewhere(an, m) for m in mentions)
-        status = _aggregate(family_readings, section_suffices=evidenced or not has_basis, kinds=kinds, away=away)
+        status = _aggregate(family_readings, section_suffices=evidenced or not has_basis, kinds=kinds, away=away,
+                            held_statements=True)  # round 4c-2 plan:E
         if status not in ('performed', 'incomplete'):
             facts = [f for f in facts if f.origin != 'missing']  # "no sampling documented" speaks only of a done EUS
             if family == 'gi.colonoscopy':  # the intent of a colonoscopy that is only planned may be in the plan
