@@ -48,8 +48,13 @@ and text boxes. Rules:
   checked box too (a checklist); when none of them is a checked box, a
   box-shaped bullet may be a bullet or an empty box, so it is written as the
   unread mark '[?]' (routing holds the item) and counted in a note: a checked
-  box in another list says nothing of it. Other bullets and numbering are not
-  written.
+  box in another list says nothing of it. Any other paragraph ends a list, and
+  so do a table cell's boundary and a text box's (its paragraphs are lists of
+  their own; the anchoring paragraph's list resumes after them). A paragraph
+  whose mark is hidden belongs to no list and never makes one a checklist: Word
+  does not show its bullet as its own, so with no text shown nothing is
+  written, and where its text shows a box bullet is written unread. Other
+  bullets and numbering are not written.
 - Text boxes are read after the paragraph that anchors them.
 - Header, footer, footnote, endnote and comment text is not extracted; when
   present its size is reported. Content that has no text here (images,
@@ -534,6 +539,7 @@ class _Walker:
         self.unread_bullets = 0  # unchecked box bullets written unread (no checked box bullet in their list)
         self._style_numbering: dict = {}  # paragraph style -> (numId, ilvl) its chain gives
         self._ING_list = 0  # the list being read: a run of consecutive paragraphs whose bullets are boxes
+        self._I2_lists = 0  # list ids handed out (_I2_end_list): a list that ends never resumes under another's id
         self._ING_checked_lists: set = set()  # the lists whose bullets show a checked box
         self._ING_behind: dict = {}  # element -> whether something may be painted behind the text inside it
 
@@ -545,8 +551,9 @@ class _Walker:
 
     def bulleted(self, text: str) -> str:
         """``text`` with each unchecked box bullet written: ☐ when the bullets of its own list (a run of consecutive
-        box-bulleted paragraphs) show a checked box too (a checklist), else the unread mark, counted: a box-shaped
-        bullet on its own may be a bullet or an empty box, and a checked box in another list says nothing of it."""
+        box-bulleted paragraphs in one table cell, one text box or the body) show a checked box too (a checklist), else
+        the unread mark, counted: a box-shaped bullet on its own may be a bullet or an empty box, and a checked box in
+        another list says nothing of it."""
         if _ING_BULLET not in text:
             return text
 
@@ -646,9 +653,13 @@ class _Walker:
         style = self.styles.style_id(paragraph.find(f'{PPR}/{PSTYLE}'), 'paragraph')
         parts: list[str] = []
         boxes: list[str] = []
-        self._inline(paragraph, parts, boxes, _Context(table_style=table_style, paragraph_style=style))
+        context = _Context(table_style=table_style, paragraph_style=style)
+        self._inline(paragraph, parts, boxes, context)
         line = ''.join(parts)
-        bullet = self._box_bullet(paragraph, style)
+        if self._I2_mark_hidden(paragraph, context):
+            bullet = self._I2_hidden_mark_bullet(paragraph, style, bool(line.strip()))
+        else:
+            bullet = self._box_bullet(paragraph, style)
         if bullet:  # a checklist drawn with box bullets: Word shows the box before the item
             line = bullet + (' ' + line if line else '')
         return [line, *boxes]
@@ -686,7 +697,12 @@ class _Walker:
                 elif child.find(DROP_DOWN) is not None:
                     self.skipped['form_field'] += 1
             elif tag == TXBX_CONTENT:
+                # A text box's paragraphs are lists of their own: they neither join nor check the list of the paragraph
+                # that anchors the box (read before the anchor's own bullet), which resumes after them.
+                outer = self._ING_list
+                self._I2_end_list()
                 boxes.extend(self.blocks(child))
+                self._ING_list = outer
             elif tag == SDT and check_box_control(child) is not None:
                 parts.append(self._check_box(child, context))
             elif tag in (SDT, CUSTOM_XML, INS, MOVE_TO, ALTERNATE_CONTENT):
@@ -711,7 +727,8 @@ class _Walker:
 
     def _box_bullet(self, paragraph, style: str | None) -> str:
         """☒, or the placeholder of an unchecked box tagged with its list (written by bulleted), when the paragraph's
-        numbering level is a bullet that draws a box, else '': any other paragraph ends the list of box bullets."""
+        numbering level is a bullet that draws a box, else '': any other paragraph ends the list of box bullets (as do
+        a table cell's and a text box's boundaries, _cell and _inline)."""
         glyph = self._ING_bullet_box(paragraph, style)
         if glyph == CHECKED_BOX:
             self.checked_bullets += 1
@@ -719,8 +736,38 @@ class _Walker:
             return CHECKED_BOX
         if glyph == UNCHECKED_BOX:
             return f'{_ING_BULLET}{self._ING_list}{_ING_BULLET}'
-        self._ING_list += 1
+        self._I2_end_list()
         return ''
+
+    def _I2_hidden_mark_bullet(self, paragraph, style: str | None, shown: bool) -> str:
+        """The bullet of a paragraph whose mark is hidden. Word does not show the bullet as the paragraph's own: with
+        no text shown it does not show the paragraph at all; text that shows runs on into the next paragraph. Its box
+        never makes a list a checklist and it belongs to no list: where its text shows, a box bullet is the unread mark
+        (the placeholder of a list of its own, which shows no checked box); else nothing is written."""
+        glyph = self._ING_bullet_box(paragraph, style)
+        self._I2_end_list()
+        placeholder = f'{_ING_BULLET}{self._ING_list}{_ING_BULLET}' if glyph and shown else ''
+        self._I2_end_list()
+        return placeholder
+
+    def _I2_end_list(self) -> None:
+        """End the list of box bullets being read: what follows starts a list of its own, under an id never used."""
+        self._I2_lists += 1
+        self._ING_list = self._I2_lists
+
+    def _I2_mark_hidden(self, paragraph, context: _Context) -> bool:
+        """Whether a paragraph's mark is hidden: w:vanish in its pPr/rPr, else from its character style, its paragraph
+        or table style or the document defaults (resolved as for a run, _run_hidden). The mark formats the bullet."""
+        properties = paragraph.find(PPR)
+        mark = properties.find(RPR) if properties is not None else None
+        direct = is_on(mark.find(VANISH)) if mark is not None else None
+        if direct is not None:
+            return direct
+        styles = self.styles
+        character = styles.style_id(mark.find(RSTYLE) if mark is not None else None, 'character')
+        levels = (styles.document_vanish(), styles.vanish(context.table_style), styles.vanish(context.paragraph_style),
+                  styles.vanish(character))
+        return any(level is True for level in levels)
 
     def _ING_bullet_box(self, paragraph, style: str | None) -> str:
         """☐ or ☒ when the paragraph's numbering level is a bullet that draws a box, else ''."""
@@ -918,4 +965,7 @@ class _Walker:
                     yield from self._children(content, tag)
 
     def _cell(self, cell, table_style: str | None) -> str:
-        return ' '.join(line.replace('\n', ' ') for line in self.blocks(cell, table_style) if line.strip())
+        self._I2_end_list()  # a list of box bullets never runs across a cell's boundary, into or out of it
+        lines = self.blocks(cell, table_style)
+        self._I2_end_list()
+        return ' '.join(line.replace('\n', ' ') for line in lines if line.strip())
