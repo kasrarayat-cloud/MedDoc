@@ -331,3 +331,31 @@ owner said, and so any of them can be overruled.
    regressions, and misreadings of what the code declares it reads. This is a
    change of the session's own stopping rule, recorded so it can be
    overruled.
+
+## Owner decision, 2026-10-25 — how the refutation rounds finish
+
+Asked after refutation round 6 (63 findings, 59 confirmed, 40 critical/high and
+not residual, against round 5's 48), verbatim:
+
+> Round 6 found 40 blocking defects (48 last round). How should we finish?
+> — Fix + one more check (Recommended): Repair all 40 now, making checkbox rows
+> strict (unusual rows go to the reviewer as a question). Then run one more
+> attack round. Fix anything it finds in the must-fix areas (data sent to Corti,
+> time/memory limits, reports, approvals, security), record other misreadings as
+> known limits, and ship. About 1.5 days.
+
+The owner's answer: **"Fix + one more check (Recommended)"**.
+
+What it changes, so a later session does not re-derive it:
+- Repair round 4d repairs all 40 blocking round-6 findings. Check-box and status
+  rows become strict: a box is trusted only on a row the reader can read
+  unambiguously; any other row holds (a question for the reviewer), never ready
+  and never newly excluded.
+- Refutation round 7 attacks round 4d's head. After it, only the must-fix
+  classes block the merge: a request sent to Corti that should not be sent; stage
+  time or memory limits; a report or export that misstates persisted state; a
+  code approved or removed from the decision set without a reviewer's decision;
+  data loss; security. Every other confirmed misreading is recorded as a known
+  limit (`cpt-studio/ACCURACY-RESIDUALS.md` and the PR body) and does not block.
+- This supersedes interpretation 6's stopping rule for the end of this PR only;
+  the hold-only rule and every gate stay as they are.
