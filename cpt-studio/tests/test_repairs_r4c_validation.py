@@ -423,3 +423,128 @@ class Regression6CoordinatedServicesShareTheirTimeTests(Case):
         text = R6_OFFICE.format(line='EGD and colonoscopy were performed today and were normal.')
         routing = routed(text)
         self.assertEqual([routing.finding(f).status for f in ('gi.egd', 'gi.colonoscopy')], ['uncertain', 'uncertain'])
+
+
+# --- validation:2: a findings sentence of the report's own procedure, and "we" after an introductory phrase ----------
+
+V2_REPORT = HEAD + 'Procedure: {proc}\nIndication: {ind}\nFindings: {find}\nImpression: Findings as described.\n'
+V2_BANDING = HEAD + 'Procedure: Hemorrhoid banding\nIndication: Bleeding internal hemorrhoids.\nFindings: {find}\n'
+
+
+class Validation2OwnProcedureReportOverHoldTests(Case):
+    """validation:2 (medium over-hold, from 998d826 and 7dcec928). In a procedure report (no E/M) a findings sentence
+    naming the code's own procedure ("Anoscopy revealed grade 2 internal hemorrhoids.", "Paracentesis yielded 4
+    liters ...") and a banding stated by "we" after an introductory phrase ("Under anoscopic guidance we banded the right
+    posterior column.") were held, approve refused, although both reference commits read them ready. Such a sentence
+    counts now when it opens with the code's own procedure as the report's procedure line - read done by routing - names
+    it, and "we" may follow an introductory phrase when it acts on an object."""
+
+    FINDINGS = (('Anoscopy', 'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+                ('Diagnostic anoscopy', 'Anoscopy showed a small posterior anal fissure.', '46600'),
+                ('Esophageal manometry', 'Esophageal manometry showed normal peristalsis.', '91010'),
+                ('Anorectal manometry', 'Anorectal manometry showed dyssynergic defecation.', '91122'),
+                ('Paracentesis', 'Paracentesis yielded 4 liters of straw-colored fluid.', '49083'),
+                ('Rubber band ligation of internal hemorrhoids', 'Rubber band ligation of the right posterior column.',
+                 '46221'),
+                ('Anoscopy', '- Anoscopy showed grade 2 internal hemorrhoids.', '46600'),
+                ('Anoscopy', '1. Anoscopy showed grade 2 internal hemorrhoids.', '46600'))
+    WE = ('Under anoscopic guidance we banded the right posterior column.',
+          'Using the McGivney ligator we banded two columns.',
+          'After informed consent we banded the right posterior column.',
+          'With the patient in the left lateral position we banded the left lateral column.',
+          'After informed consent, we banded the right posterior column.',
+          'Using the McGivney ligator, we banded three columns.',
+          'Under direct anoscopic visualization, we banded the left lateral column.',
+          'In the left lateral position, we banded the right posterior column.')
+
+    def test_a_findings_sentence_opening_with_the_report_s_own_procedure_counts(self):
+        for proc, line, code in self.FINDINGS:
+            with self.subTest(line=line, code=code):
+                text = V2_REPORT.format(proc=proc, ind='Symptoms.', find=line)
+                proposals, _ = real(text, (code, line))
+                self.assertReady(proposals[code])
+                self.assertIn(f'Documented as performed: “{line}”', check_of(proposals[code], 'service.status').detail)
+        # a cited fragment is read in its sentence
+        text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Anoscopy revealed grade 2 internal hemorrhoids.')
+        proposals, _ = real(text, ('46600', 'grade 2 internal hemorrhoids'))
+        self.assertReady(proposals['46600'])
+
+    def test_we_after_an_introductory_phrase_states_the_act(self):
+        for line in self.WE:
+            with self.subTest(line=line):
+                proposals, _ = real(V2_BANDING.format(find=line), ('46221', line))
+                self.assertReady(proposals['46221'])
+        # in an office note the act stated today counts too (as "Today we banded ..." already did)
+        line = 'After informed consent we banded the right posterior column today.'
+        proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', line))
+        self.assertReady(proposals['46221'])
+
+    def test_each_sentence_s_lead_is_read_once_however_many_passages_cite_it(self):
+        from unittest import mock
+        from studio.gi import detect
+        from studio.types import EvidenceSpan, NormalizedResponse, PageSpan, ProviderCode
+        from studio.reference.store import InMemoryReferenceLookup
+        from studio.gi.context import extract_context
+        body = ('Anoscopy revealed grade 2 internal hemorrhoids ' * 400).strip() + '.'
+        text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find=body)
+        routing = routed(text)
+        first = text.index(body)
+        spans = tuple(EvidenceSpan(0, first + k, first + k + 8, text[first + k:first + k + 8], True)
+                      for k in range(0, len(body) - 10, 9) if text[first + k:first + k + 8].strip())
+        original, calls = detect._procedure_name, []
+
+        def counting(*args, **kwargs):
+            calls.append(args[1])
+            return original(*args, **kwargs)
+
+        with mock.patch.object(detect, '_procedure_name', counting):
+            result = engine.assess(text=text, pages=(PageSpan(1, 0, len(text)),), context=extract_context(text),
+                                   routing=routing, reference=InMemoryReferenceLookup((), {}), service_date=DAY,
+                                   normalized=NormalizedResponse('corti', 'corti-coding@1', codes=(
+                                       ProviderCode('selected', 'cpt', '46600', 'U', spans, index=0),)),
+                                   provider_status='succeeded', extraction_status='ok')
+        self.assertGreater(len(spans), 1000)
+        self.assertEqual(result.proposals[0].status, 'ready')
+        self.assertLessEqual(len(calls), 2)  # one read of the sentence's lead, not one per cited passage
+
+    def test_controls_these_stay_held(self):
+        cases = (
+            # an office note's procedure heading is only uncertain: nothing corroborates the findings sentence
+            (OFFICE_NOTE.format(body='Procedure: Anoscopy.\nFindings: Anoscopy revealed grade 2 internal hemorrhoids.'),
+             'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+            # the report's procedure line is not done
+            (V2_REPORT.format(proc='Anoscopy was deferred', ind='Symptoms.',
+                              find='Anoscopy revealed grade 2 internal hemorrhoids.'),
+             'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+            # a history lead, a time or condition lead, another procedure of the same number range, a sibling
+            (V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Prior anoscopy showed a fissure.'),
+             'Prior anoscopy showed a fissure.', '46600'),
+            (V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Before anoscopy, the patient was positioned.'),
+             'Before anoscopy, the patient was positioned.', '46600'),
+            (V2_REPORT.format(proc='Esophageal manometry', ind='Symptoms.',
+                              find='Anorectal manometry showed dyssynergia.'),
+             'Anorectal manometry showed dyssynergia.', '91122'),
+            (V2_REPORT.format(proc='Rubber band ligation of internal hemorrhoids', ind='Symptoms.',
+                              find='Hemorrhoidectomy scar noted.'), 'Hemorrhoidectomy scar noted.', '46250'),
+            (V2_REPORT.format(proc='Anoscopy', ind='Symptoms.',
+                              find='Anoscopy showed grade 3 internal hemorrhoids. Banding was deferred.'),
+             'Anoscopy showed grade 3 internal hemorrhoids.', '46221'),
+            # acts only told of: a noun subject before "we", or no object after the act
+            (V2_BANDING.format(find='The internal hemorrhoids we banded have resolved.'),
+             'The internal hemorrhoids we banded have resolved.', '46221'),
+            (FOLLOW_UP.format(line='With the hemorrhoids we banded healed, no treatment was needed today.'),
+             'With the hemorrhoids we banded healed, no treatment was needed today.', '46221'),
+            (FOLLOW_UP.format(line='Hemorrhoids we banded last month look healed today.'),
+             'Hemorrhoids we banded last month look healed today.', '46221'),
+            # routing's own act mention in a banding report, with an introductory phrase but no object after the act
+            (V2_BANDING.format(find='With the hemorrhoids we banded healed, the patient was discharged.'),
+             'With the hemorrhoids we banded healed, the patient was discharged.', '46221'),
+            # a sentence opening with the procedure's name that only tells of an earlier act
+            (V2_REPORT.format(proc='Rubber band ligation of internal hemorrhoids', ind='Symptoms.',
+                              find='Rubber band ligation sites that were banded at the first session have healed.'),
+             'Rubber band ligation sites that were banded at the first session have healed.', '46221'),
+        )
+        for text, passage, code in cases:
+            with self.subTest(passage=passage, code=code):
+                proposals, _ = real(text, (code, passage))
+                self.assertNotEqual(proposals[code].status, 'ready', [c.detail for c in proposals[code].checks])

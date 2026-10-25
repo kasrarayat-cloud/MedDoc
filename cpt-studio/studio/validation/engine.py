@@ -194,12 +194,18 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
             if m.status in checks.POSITIVE and checks._VAL_owns(code, m.span.text)
             and not checks._VAL_told_act(text, m.span.start, m.span.end, day)]
     names = _VAL_overlap_test([(m.span.start, m.span.end) for m in done])
-    opened = _VAL_overlap_test([sentence for sentence in checks._VAL_opening_sentences(text, day) if names(*sentence)])
+    openings = [sentence for sentence in checks._VAL_opening_sentences(text, day) if names(*sentence)]
+    opened = _VAL_overlap_test(openings)
+    # the code's own procedure as a procedure section's first sentence documents it done: what a later sentence of the
+    # report may open with, read by its section alone (round 5 validation:2)
+    opening_names = [m.span.text for m in done if opened(m.span.start, m.span.end)]
     marked = []
     for reading in own:
         if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
                 and not names(reading.start, reading.end) and not opened(reading.start, reading.end)
-                and not checks.names_procedure(text, reading.start, reading.end, code, day)):
+                and not checks.names_procedure(text, reading.start, reading.end, code, day)
+                and not (checks.by_section_alone(reading)
+                         and checks._VAL_opens_with(text, reading.start, reading.end, code, opening_names, day))):
             reading = replace(reading, unnamed=True)
         marked.append(reading)
     return tuple(marked)

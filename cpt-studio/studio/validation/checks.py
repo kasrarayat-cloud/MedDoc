@@ -1134,6 +1134,23 @@ _VAL_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who|whom|whose)\s+(?:(?:has|
                                   r'not|never|originally|initially|subsequently|successfully)\s+){0,3}$', re.A | re.I)
 _VAL_RELATIVE_REACH = 80  # how far back from the act the relative pronoun is looked for (bounds the work per act)
 _VAL_WE_LEAD = 40  # how far back "we" / "I" may follow its clause's start, by at most one word ("Today we banded ...")
+# "we" / "I" after an introductory phrase - one that ends in a comma, or opens with a preposition or an adverb of time -
+# acting on an object (round 5 validation:2: "After informed consent, we banded the right posterior column.", "Using
+# the McGivney ligator we banded two columns."): the act the sentence states. A noun subject before "we" with no such
+# lead ("The internal hemorrhoids we banded have resolved."), or no object after the act, still only tells of it.
+_VAL_INTRO = re.compile(r'[ \t]*(?:after|under|using|with|following|during|upon|through|via|this|then|subsequently)\b',
+                        re.A | re.I)
+_VAL_OBJECT = re.compile(r'[ \t]+(?:the|a|an|one|two|three|four|five|six|both|all|each|\d+|it|them|internal|external|'
+                         r'right|left|anterior|posterior|lateral|columns?|hemorrhoids?)\b', re.A | re.I)
+_VAL_INTRO_REACH = 100  # how long an introductory phrase before "we" / "I" may be (bounds the work per act)
+
+
+def _VAL_introduced(text: str, start: int, m) -> bool:
+    """Whether "we" / "I" of the act ``m`` follows an introductory phrase that opens its clause at ``start`` and acts on
+    an object (_VAL_INTRO, _VAL_OBJECT)."""
+    if m.start() - start > _VAL_INTRO_REACH or not _VAL_OBJECT.match(text, m.end()):
+        return False
+    return text[start:m.start()].rstrip().endswith(',') or bool(_VAL_INTRO.match(text, start, m.start()))
 
 
 def _VAL_stated(an, text: str, m) -> bool:
@@ -1147,7 +1164,8 @@ def _VAL_stated(an, text: str, m) -> bool:
         return False
     if m.group(0).split()[0].lower() in ('we', 'i'):
         clause = detect._clause_at(an, m.start())
-        if clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1:
+        if ((clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1)
+                and not _VAL_introduced(text, clause[0], m)):
             return False
     return True
 
@@ -1171,6 +1189,33 @@ def _VAL_told_act(text: str, start: int, end: int, service_date: Optional[date] 
 def _VAL_own_procedure(code: str):
     """The _VAL_OWN_PROCEDURES entry whose number range holds the code, or None."""
     return next((entry for entry in _VAL_OWN_PROCEDURES if entry[0] <= code <= entry[1]), None)
+
+
+# The codes whose number range is ONE procedure, with that procedure's words (round 5 validation:2 and validation:5):
+# two routed names of it are the same procedure whatever else they say. Never a range sibling: a hemorrhoidectomy is
+# not 46221's banding, and the 91010-91299 manometries are different procedures (no class: only equal names match).
+_VAL_ONE_PROCEDURE = (
+    ('46221', '46221', re.compile(r'\b(?:band(?:s|ed|ing)?|ligat(?:ion|ions|ed)|RBL)\b', re.A | re.I)),
+    ('46600', '46615', re.compile(r'\banoscop(?:y|ies)\b', re.A | re.I)),
+)
+_VAL_SIBLING = re.compile(r'hemorrhoidectom', re.A | re.I)
+_VAL_NAME_LEAD = re.compile(r'(?:(?:and|then|also|the|an?)\s+)+', re.A | re.I)
+
+
+def _VAL_name(text: str) -> str:
+    """A routed procedure name compared as words: case-folded, single-spaced, without a leading 'and' / 'the' / 'a'."""
+    flat = ' '.join(text.split()).casefold()
+    return flat[_VAL_NAME_LEAD.match(flat).end():] if _VAL_NAME_LEAD.match(flat) else flat
+
+
+def _VAL_same_procedure(code: str, one: str, other: str) -> bool:
+    """Whether two routed procedure names are the same single procedure for the code: equal as words, or both in the
+    code's own one-procedure class (_VAL_ONE_PROCEDURE) and neither a range sibling (a hemorrhoidectomy)."""
+    if _VAL_name(one) == _VAL_name(other):
+        return True
+    words = next((pattern for low, high, pattern in _VAL_ONE_PROCEDURE if low <= code <= high), None)
+    return bool(words and words.search(one) and words.search(other)
+                and not _VAL_SIBLING.search(one) and not _VAL_SIBLING.search(other))
 
 
 def _VAL_owns(code: str, name: str) -> bool:
@@ -1234,6 +1279,76 @@ def _VAL_text_index(text: str, service_date: Optional[date]):
 def _VAL_opening_sentences(text: str, service_date: Optional[date] = None) -> tuple[tuple[int, int], ...]:
     """The first sentence of each procedure section, found as routing's gi.other rule finds it (_VAL_text_index)."""
     return _VAL_text_index(text, service_date)[2]
+
+
+# What may open a sentence before its procedure's name: a list marker ("2)", "(2)", "2.", "-", "*", a bullet). A
+# sentence opened by a time or a condition ("Before banding, ...", "If anoscopy ...") names no procedure done by its lead.
+_VAL_LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[-*\u2022])[ \t]+', re.A)
+_VAL_TEMPORAL_LEAD = re.compile(r'[ \t]*(?:after|before|once|when|while|following|until|if|unless|since)\b', re.A | re.I)
+
+
+@functools.lru_cache(maxsize=4)
+def _VAL_sentence_leads(text: str, service_date: Optional[date]) -> dict:
+    """Per text, filled lazily by _VAL_lead_name: {sentence index: its leading procedure name or ''}. Each sentence is
+    read once, however many passages a provider cites in it (round 5's bounded:3 lesson)."""
+    return {}
+
+
+def _VAL_lead_name(an, text: str, index: int, service_date: Optional[date]) -> str:
+    """The procedure name the sentence ``index`` opens with, after a list marker (routing's _procedure_name), or '':
+    never one led by a time or a condition ("Before anoscopy, ..."), a history word ("Prior anoscopy showed ..."), a
+    negation or a plan, nor an examination or a person, a name about a detected family's procedure, nor any name of a
+    sentence that only tells of an act (_VAL_told_act). Memoised per text and sentence (_VAL_sentence_leads)."""
+    from studio.gi import detect
+    memo = _VAL_sentence_leads(text, service_date)
+    if index in memo:
+        return memo[index]
+    if 'detected' not in memo:
+        memo['detected'] = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
+    s, e = an.lay.sentences[index]
+    name = ''
+    marker = _VAL_LIST_MARKER.match(text, s, e)
+    lead = marker.end() if marker else s
+    if not _VAL_TEMPORAL_LEAD.match(text, lead, e):
+        lead = detect._NAME_LEAD.match(text, lead, e).end()
+        span = None if detect._HISTORY_LEAD.match(text, lead, e) else detect._procedure_name(an, lead, e)
+        found = text[span[0]:span[1]] if span else ''
+        if (found and detect._PROCEDURE_WORD.search(found) and not detect._NOT_A_PROCEDURE.search(found)
+                and not detect._NOT_DONE_LED.match(found)):
+            scope = (max(s, span[0] - detect.CLAUSE_REACH), min(e, span[1] + detect.CLAUSE_REACH))
+            if not detect._about_a_detected_family(an, *scope, memo['detected']) \
+                    and not _VAL_told_act(text, s, e, service_date):
+                name = found
+    memo[index] = name
+    return name
+
+
+def _VAL_opens_with(text: str, start: int, end: int, code: str, names: Sequence[str],
+                    service_date: Optional[date] = None) -> bool:
+    """Whether a sentence the passage [start, end) overlaps opens with the code's own procedure named as one of the
+    routed ``names`` (round 5 validation:2): "Anoscopy revealed grade 2 internal hemorrhoids." under the Findings of a
+    report whose "Procedure: Anoscopy" routing reads done. The sentence's leading name (_VAL_lead_name) must be the
+    code's own procedure (_VAL_owns) and start with one of those names as words, or be the same single procedure
+    (_VAL_same_procedure). ``names``: routed gi.other mentions of the code's own procedure read done in the first
+    sentence of a procedure section - the corroboration, so a passage's wording alone never releases a held code.
+    Bounded: each sentence's lead is read once per text; a passage costs one bisection and a look per sentence it
+    overlaps."""
+    from studio.gi import detect
+    if not names or start >= end:
+        return False
+    an = detect._analysis(text, service_date)[0]
+    sentences = an.lay.sentences
+    index = max(bisect.bisect_right(sentences, (start, 1 << 62)) - 1, 0)
+    while index < len(sentences) and sentences[index][0] < end:
+        if sentences[index][1] > start:
+            name = _VAL_lead_name(an, text, index, service_date)
+            if name and _VAL_owns(code, name):
+                said = _VAL_name(name)
+                if any(said == _VAL_name(other) or said.startswith(_VAL_name(other) + ' ')
+                       or _VAL_same_procedure(code, other, name) for other in names):
+                    return True
+        index += 1
+    return False
 
 
 def names_intervention(text: str, start: int, end: int, family: str) -> bool:
