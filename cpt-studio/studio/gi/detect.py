@@ -1446,10 +1446,17 @@ def _time_owner(an: Analysis, start: int, end: int, members: list[tuple[int, int
 
 def _another_familys_anchor(an: Analysis, members: list[tuple[int, int]], anchor: int) -> bool:
     """Whether the member ending at ``anchor`` is a service of another family than the first service of ``members``
-    (round 4 routing:5). Then a time after it may be that service's, so it holds the target rather than dating it."""
+    (round 4 routing:5), named apart from it: then a time after it may be that service's, so it holds the target rather
+    than dating it ("Colonoscopy ... after a normal EGD performed last week"). A service coordinated with the first one
+    by _CONNECTOR alone ("EGD and colonoscopy last month were unremarkable.") shares its time, as at R4B-BASE (round 5
+    regression:6)."""
     services = [m for s, e in sorted(members) for m in an.services_in(s, e) if m.kind == 'service']
     at_anchor = [m for m in services if m.end == anchor]
-    return bool(services and at_anchor) and at_anchor[-1].family != services[0].family
+    if not (services and at_anchor) or at_anchor[-1].family == services[0].family:
+        return False
+    first, last = (services[0].start, services[0].end), (at_anchor[-1].start, at_anchor[-1].end)
+    return not any(first in group and last in group
+                   for group in _merge_groups(an.text, sorted({(m.start, m.end) for m in services})))
 
 
 def _owned_time_cue(an: Analysis, cue: Cue, members: list[tuple[int, int]], window: tuple[int, int], em: bool,

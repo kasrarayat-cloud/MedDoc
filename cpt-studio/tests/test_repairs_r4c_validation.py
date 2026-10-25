@@ -373,3 +373,53 @@ class Declared7MayLikeEveryOtherMonthTests(Case):
         text = eus_line('2026-10-21', 'and three nodes. The last may be benign.')
         proposals, _ = real(text, ('43242', text.splitlines()[2]))
         self.assertReady(proposals['43242'])
+
+
+# --- regression:6: services coordinated with the first one share its time --------------------------------------------
+
+R6_OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: abdominal '
+             'pain.\nHistory of present illness: {line}\nExam: Abdomen soft, nontender.\nAssessment and plan: IBS. Fiber '
+             'and follow-up in 3 months.\nMedical decision making: moderate.\n')
+
+
+class Regression6CoordinatedServicesShareTheirTimeTests(Case):
+    """regression:6 (medium over-hold; a regression from 68191f219). _another_familys_anchor made a time 'unclear'
+    whenever the nearest member before it was another family than the passage's first service, so in "EGD and
+    colonoscopy last month were unremarkable." neither service was dated (both uncertain) and 99214 was held for a
+    possible same-day procedure; at R4B-BASE both were historical and 99214 ready. A service coordinated with the
+    first one by connectors alone shares its time again; one named apart still holds (round 4 routing:5)."""
+
+    CLAIMED = (('EGD and colonoscopy last month were unremarkable.', ('gi.egd', 'gi.colonoscopy')),
+               ('Colonoscopy and EGD were performed last week at an outside facility and were normal.',
+                ('gi.egd', 'gi.colonoscopy')),
+               ('Seen after an EGD and colonoscopy performed 3 weeks ago.', ('gi.egd', 'gi.colonoscopy')),
+               ('She underwent EGD and colonoscopy last month.', ('gi.egd', 'gi.colonoscopy')),
+               ('EUS and ERCP last week showed choledocholithiasis, now cleared.', ('gi.eus', 'gi.ercp')),
+               ('EGD, colonoscopy and EUS last year were normal.', ('gi.egd', 'gi.colonoscopy', 'gi.eus')))
+
+    def test_the_claimed_lines_read_historical_and_the_visit_is_ready(self):
+        for line, families in self.CLAIMED:
+            text = R6_OFFICE.format(line=line)
+            with self.subTest(line=line):
+                routing = routed(text)
+                self.assertEqual([routing.finding(f).status for f in families], ['historical'] * len(families))
+                proposals, _ = real(text, ('99214', 'Established patient office visit.'))
+                self.assertVisitReady(proposals)
+
+    def test_controls_a_service_named_apart_from_the_first_still_holds_its_line(self):
+        findings = 'Findings: The colonoscope was advanced to the cecum. A 6 mm polyp was removed with a cold snare.\n'
+        for line in ('Colonoscopy with cold snare polypectomy for iron deficiency anemia after a normal EGD performed '
+                     'last week.', 'Colonoscopy with cold snare polypectomy after an EGD last week.',
+                     'Colonoscopy for anemia after a normal EGD and flexible sigmoidoscopy performed last month.',
+                     'Colonoscopy with cold snare polypectomy for anemia after normal EGD/EUS last week.'):
+            text = HEAD + 'Procedure: ' + line + '\nFindings' + findings[len('Findings'):]
+            with self.subTest(line=line):
+                proposals, _ = real(text, ('45385', 'Procedure: ' + line))
+                self.assertNotEqual(proposals['45385'].bucket, 'excluded', proposals['45385'].exclusion_reason)
+                self.assertNotEqual(routed(text).finding('gi.colonoscopy').status, 'historical')
+
+    def test_controls_coordinated_services_stated_today_are_never_dated(self):
+        # a history section's performance statement that says today holds (as at HEAD); it is never historical
+        text = R6_OFFICE.format(line='EGD and colonoscopy were performed today and were normal.')
+        routing = routed(text)
+        self.assertEqual([routing.finding(f).status for f in ('gi.egd', 'gi.colonoscopy')], ['uncertain', 'uncertain'])
