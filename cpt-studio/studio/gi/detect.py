@@ -1095,6 +1095,8 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
             return False
         return (bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
                 or _value_calls_off(an, value, ne))
+    if _box_selected_denial(an, body, ne):
+        return True  # "☒ Not performed": a selected denial option on a line naming no item holds (round 5 declared:8)
     if bare and _bare_denial(an, body, ne):
         return True
     if len(text[body:ne].split()) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)
@@ -1103,6 +1105,26 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     if not _REFERRING_SUBJECT.match(text, body, ne):
         return False
     return _cancels(an, ns, ne) or bool(_denying_word(an, ns, ne)) or _reschedules(an, ns, ne)
+
+
+def _box_selected_denial(an: Analysis, lo: int, hi: int) -> bool:
+    """Whether the line [lo, hi), naming no item, selects a "Not performed" or "Not done" option: one written beside a
+    box, with only spaces, a colon or a cell bar between (where _OPTION_LABEL explains its own "not" as an option's
+    label, whatever the box's state), whose own box (_box_option_states) is checked, unread or disagrees (round 5
+    declared:8: "☒ Not performed", "Performed ☐ Not performed ☒", "Completed | ☐ | Not done | ☒"). An item's own
+    denial ("Biopsy: [x] Not performed") and another act's ("☒ Retroflexion not performed": no option beside its box)
+    are read as before."""
+    text = an.text
+    if _box_tokens(an, lo, hi)[0]:
+        return False
+    spans = [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(text, lo, hi)
+             if _BOX_BESIDE_AFTER.match(text, m.end(), hi) or _BOX_BESIDE_BEFORE.search(text, max(lo, m.start() - 20),
+                                                                                       m.start())]
+    if not spans:
+        return False
+    words = _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
+    return any(state not in ('off', None) for state in _box_option_states(an, lo, hi, spans, words))
+
 
 
 # A rescheduling of today's service: "Rescheduled.", "Rebooked for next week", "Moved to next week", "The procedure
@@ -1142,10 +1164,13 @@ def _status_line(an: Analysis, start: int, end: int) -> bool:
 
 def _procedure_called_off(an: Analysis, start: int, end: int) -> bool:
     """Whether [start, end) says the procedure was cancelled, postponed, rescheduled or not performed ("The procedure
-    was cancelled because the patient had eaten breakfast."), and not of an earlier encounter."""
+    was cancelled because the patient had eaten breakfast."), and not of an earlier encounter. A status option whose
+    own box is unchecked says nothing ("Procedure completed ☒ | Procedure cancelled ☐": _box_own_option_off, round 5
+    regression:4)."""
     key = ('called-off', start, end)
     if key not in an.memo:
         an.memo[key] = any(_generic_reading(an, m.start(), m.end()).status != 'historical'
+                           and not _box_own_option_off(an, m.start(), m.end())
                            for pattern in (cues.PROCEDURE_CANCELLED, cues.PROCEDURE_NOT_PERFORMED)
                            for m in pattern.finditer(an.text, start, end))
     return an.memo[key]
@@ -1859,6 +1884,11 @@ BOX_LATER = 'uncertain: a box later on its line may govern this item'
 # with a denial ("Procedure cancelled: No"). Each is held, never read as cancelled or incomplete.
 BOX_STATUS_OPTION = "uncertain: a status option on the line '{}' is checked or cannot be read"
 BOX_STATUS_ANSWER = "uncertain: the status question '{}' is answered no, which is held and never read as that status"
+# A passage naming no item on a status row every denying option of which has its own unchecked box ("Status: Completed ☒
+# Aborted ☐ Cancelled ☐" cited whole): the row says nothing against the service, so its unchecked options' words are
+# never read as a cancellation; held (round 5 regression:4).
+BOX_STATUS_UNSELECTED = ("uncertain: the line '{}' is a status row whose denying options are all unchecked; it is not "
+                         "read as that status")
 BOX_REACH = 200  # a box governs only an item within this many characters of it, on its line (bounds the work per span)
 # The option a box marks in a yes/no pair ("Biopsy taken: [x] Yes [ ] No", "Biopsy taken: Yes [ ] No [x]").
 _OPTION_WORDS = r'(?:(?P<yes>yes|done|performed)|(?P<no>no|not[ \t]+done|not[ \t]+performed|none))'
@@ -1869,6 +1899,10 @@ _BOX_TEXT = _BOX.pattern.replace('?P<off>', '?:').replace('?P<on>', '?:')
 _NO_OPTION = r'(?:no|none|not[ \t]+done|not[ \t]+performed)'
 _OPTION_LABEL = re.compile(r'(?:' + _BOX_TEXT + r')[ \t]*' + _NO_OPTION + r'\b|\b' + _NO_OPTION + r'[ \t]*(?:' + _BOX_TEXT
                            + r')', re.A | re.I)
+# A box or unread mark right after or right before an option word, with only spaces, a colon or a cell bar between
+# (_box_selected_denial: round 5 declared:8).
+_BOX_BESIDE_AFTER = re.compile(r'[ \t|:]*(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + ')')
+_BOX_BESIDE_BEFORE = re.compile(r'(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + r')[ \t|:]*$')
 # What joins the items of one label ("Biopsy/polypectomy", "biopsy or polypectomy", "Biopsy, polypectomy"): a box
 # after the label governs every item it names.
 _LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
@@ -2581,6 +2615,11 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         return Reading('uncertain', (BOX_FIELD_HELD.format(held.line),), 'cue')
     if named is not None and named.state == 'off':
         return Reading('uncertain', (FIELD_PAGE.format(named.line),), 'cue', doubt=True)
+    if one_line and not _box_tokens(an, start, max(end, start + 1))[0] and _box_own_option_off(an, start, end):
+        line_start = an.text.rfind('\n', 0, start) + 1
+        line_end = an.text.find('\n', end)
+        shown = ' '.join(an.text[line_start:len(an.text) if line_end < 0 else line_end].split())[:160]
+        return Reading('uncertain', (BOX_STATUS_UNSELECTED.format(shown),), 'cue', doubt=True)
     if state == 'on' or (one_line and _within(fields.checked, fields.checked_starts, start, end) is not None):
         return None
     pages = fields.pages
@@ -3042,6 +3081,27 @@ def _only_a_sub_act(an: Analysis, attributed: list[Optional[str]], family: str, 
     return _reached_expected_depth(an, attributed, family)
 
 
+def _box_own_option_off(an: Analysis, start: int, end: int) -> bool:
+    """Whether the status reference [start, end) is a denying option of a line with boxes whose own box, read by the
+    line's option words (_box_option_states, as _unchecked_option and _box_checked_option read them), is unchecked:
+    "Aborted" of "Status: Completed ☒ Aborted ☐ Cancelled ☐". Such an option states nothing (round 5 regression:4:
+    read where an item would be, the box before it, Completed's ☒, was taken for its own). The line is read within
+    BOX_REACH of the reference."""
+    text = an.text
+    lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
+    newline = text.find('\n', end, end + BOX_REACH)
+    hi = min(len(text), end + BOX_REACH) if newline < 0 else newline
+    if not _box_tokens(an, lo, hi)[1]:
+        return False
+    options = _box_denying_options(an, lo, hi)
+    own = [i for i, (s, e) in enumerate(options) if _overlaps(s, e, start, end)]
+    if not own:
+        return False
+    words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
+    states = _box_option_states(an, lo, hi, options, words)
+    return all(states[i] == 'off' for i in own)
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -3068,6 +3128,11 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                     if context.cues and context.cues[0].startswith(BOX_HOLDS):
                         found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = context
                         continue  # its box or form field cannot be read: held, never cancelled
+                    if _box_own_option_off(an, m.start(), m.end()):  # "Completed ☒ Aborted ☐": its own box is off
+                        selected = _box_checked_option(an, m.start(), m.end())
+                        if selected is not None:  # ... on a line that selects another denying option: held
+                            found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = selected
+                        continue  # ... is otherwise not a statement (round 5 regression:4)
                     answered = _box_status_answer(an, m.start(), m.end())
                     if answered is not None:  # "Procedure cancelled: No": held, never cancelled (structure:13)
                         found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = answered

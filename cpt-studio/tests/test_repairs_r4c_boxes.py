@@ -379,6 +379,113 @@ class OneStatusQuestionGrammarTests(unittest.TestCase):
 
 
 
+
+# --- regression:4 -- a status reference on an option whose own box is unchecked ----------------------------------------
+
+R4_COLON = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\n{row}\nThe colonoscope was advanced to the cecum. A '
+            '6 mm polyp was removed with a cold snare.\n')
+R4_EUS = (HEADER + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass\n{row}\nThe echoendoscope was advanced '
+          'to the duodenum. FNB of the pancreatic head mass was performed.\n')
+R4_COLON_LINE = 'Colonoscopy with cold snare polypectomy'
+R4_EUS_LINE = 'EUS with fine-needle biopsy of the pancreatic head mass'
+
+
+class Regression4OwnOptionBoxTests(BoxCase):
+    """regression:4 (high, declared misreading). _references read the bare 'Aborted' of 'Status: Completed ☒ Aborted ☐
+    Cancelled ☐' by its item orientation: the boxes lead, so the box before it, Completed's ☒, was its own, and the
+    unchecked 'Cancelled' option's cue decided: the completed colonoscopy was cancelled and 45385 excluded. A status
+    reference whose own option box (read by the line's option words) is unchecked states nothing."""
+    ROWS = ('Status: Completed ☒ Aborted ☐ Cancelled ☐', 'Procedure status: Completed [x] Aborted [ ] Cancelled [ ]',
+            'Status: Completed: ☒ Aborted: ☐ Cancelled: ☐', 'Status: Completed ☒ | Aborted ☐ | Cancelled ☐',
+            'Status: Completed (x) Aborted ( ) Cancelled ( )', 'Status: Completed ☒ Aborted ☐ Terminated ☐',
+            'Status: Done ☒ Aborted ☐ Cancelled ☐', 'Status: Completed ☒ Aborted ☐ Postponed ☐',
+            'Procedure completed ☒ | Procedure cancelled ☐', 'Procedure completed: ☒ Procedure cancelled: ☐',
+            'Status: Completed ☒ Aborted ☐ Cancelled ☐ Rescheduled ☐', 'Status: | Completed ☒ | Aborted ☐ | Cancelled ☐',
+            'Status: | Completed | ☒ | Aborted | ☐ | Cancelled | ☐', 'Status: Completed ☑ Aborted ❑ Cancelled ❑')
+
+    def test_an_unchecked_option_never_cancels_or_aborts(self):
+        for template, line, code, slug in ((R4_COLON, R4_COLON_LINE, '45385', 'gi.colonoscopy'),
+                                           (R4_EUS, R4_EUS_LINE, '43242', 'gi.eus')):
+            for row in self.ROWS:
+                with self.subTest(row=row, slug=slug):
+                    text = template.format(row=row)
+                    if row == 'Procedure completed: ☒ Procedure cancelled: ☐':
+                        # at worst held (the finding's own bound): the short-line test still reads its six words
+                        self.assertNotIn(family(text, slug), NOT_TODAY + ('incomplete',))
+                        self.assert_outcome(text, code, line, ('ready', 'held'))
+                        continue
+                    self.assertEqual(family(text, slug), 'performed')
+                    self.assert_outcome(text, code, line, 'ready')
+
+    def test_a_checked_denying_option_still_holds(self):
+        for row in ('Status: Completed ☐ Aborted ☒ Cancelled ☐', 'Status: Completed ☐ Aborted ☐ Cancelled ☒',
+                    'Status: Completed ☐ Aborted ☐ Terminated ☒', 'Procedure completed ☐ | Procedure cancelled ☒',
+                    'Status: Completed ☒ Aborted ☒ Cancelled ☐', 'Status: Completed ☒ Aborted [?] Cancelled ☐'):
+            with self.subTest(row=row):
+                text = R4_COLON.format(row=row)
+                self.assertNotEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assert_outcome(text, '45385', R4_COLON_LINE, ('held', 'excluded'))
+
+    def test_the_status_row_cited_as_evidence_is_never_a_cancellation(self):
+        """A code citing the row itself reads a hold, never the unchecked options' words as a cancellation."""
+        for row in ('Status: Performed | ☑ | Procedure aborted | ❏ | Procedure cancelled | ( )',
+                    'Completed ☒ | Procedure aborted [ ] | Postponed [ ]', 'Status: Completed ☒ Aborted ☐ Cancelled ☐'):
+            with self.subTest(row=row):
+                text = R4_COLON.format(row=row)
+                status, cues = read(text, row)
+                self.assertNotIn(status, NOT_TODAY + ('incomplete',), cues)
+                self.assert_outcome(text, '45385', row, ('held', 'ready'))
+
+    def test_an_option_with_no_box_of_its_own_is_read_as_written(self):
+        """Only an option's own unchecked box makes it state nothing; a denial with no box is a statement (5.3: a
+        denying option that has no box holds), here past the six sentences, where only the reference reader sees it."""
+        for row in ('Procedure cancelled, Completed ☒', 'Procedure aborted; Completed ☒',
+                    'Procedure cancelled (patient ate) | Completed ☒'):
+            with self.subTest(row=row):
+                text = FIELD_PAGE.split('{printed}')[0] + row + '\n'
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+
+    def test_leading_rows_and_an_abort_without_its_own_box(self):
+        for row in ('Status: ☒ Completed ☐ Aborted ☐ Cancelled', 'Status: Completed ☒ Cancelled ☐ Aborted ☐'):
+            with self.subTest(row=row):
+                self.assert_outcome(R4_COLON.format(row=row), '45385', R4_COLON_LINE, 'ready')
+        # an abort with no box of its own is read as before
+        text = R4_COLON.format(row='Procedure aborted due to poor preparation.')
+        self.assertNotEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+
+
+# --- declared:8 -- a checked 'Not performed' option on a line naming no item ---------------------------------------------
+
+class Declared8CheckedNotPerformedOptionTests(BoxCase):
+    """declared:8 (high). _OPTION_LABEL explains the 'not' of any 'Not performed' written beside a box, whatever the
+    box's state, so '☒ Not performed' under the procedure line denied nothing and the EUS was a ready 43242 (no cue
+    covers 'not performed', unlike 'not done'). On a line naming no item, a 'Not performed' or 'Not done' option whose own
+    box is checked, unread or disagrees holds the service above it."""
+    CHECKED = ('☒ Not performed', '[x] Not performed', '☐ Performed ☒ Not performed', '[ ] Performed [x] Not performed',
+               'Performed ☐ Not performed ☒', 'Not performed ☒', '☑ Not performed', '[X] Not performed.',
+               '☒ Not performed - patient ate breakfast', '(x) Not performed', 'Not performed: ☒', 'Not performed | ☒',
+               '☒ Performed ☒ Not performed', '[?] Not performed', 'Completed | ☐ | Not done | ☒')
+
+    def test_a_selected_denial_option_holds(self):
+        for row in self.CHECKED:
+            with self.subTest(row=row):
+                text = EUS_NOTE.format(row=row)
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_held_reading(text, EUS_LINE)
+                self.assert_outcome(text, '43242', EUS_LINE, 'held')
+
+    def test_an_unselected_option_and_another_acts_denial_state_nothing(self):
+        for row in ('☐ Not performed', '☒ Performed ☐ Not performed', 'Performed ☒ Not performed ☐',
+                    '[x] Performed [ ] Not performed', 'Completed | ☒ | Not done | ☐',
+                    '☒ Retroflexion not performed', '☒ Sedation not given', '☒ Patient declined anesthesia',
+                    'Biopsy: [x] Not performed', '☒ Photos not taken'):
+            with self.subTest(row=row):
+                text = EUS_NOTE.format(row=row)
+                self.assertEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_outcome(text, '43242', EUS_LINE, 'ready')
+
+
 # --- bounded:3 and contract-r4c section 6 -- every changed reader is bounded per line ---------------------------------
 
 class Bounded3ScaleTests(unittest.TestCase):
