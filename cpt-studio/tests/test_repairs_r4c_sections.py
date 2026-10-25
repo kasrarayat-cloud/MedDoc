@@ -191,7 +191,11 @@ class Sections4NumberedHistoryItemTests(HeldOrReadyAssertions, unittest.TestCase
     def test_the_unnumbered_line_and_other_items_are_unchanged(self):
         text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: The colonoscope was advanced to the '
                 'cecum.\nPrior radiation therapy\n6 mm sigmoid polyp removed with cold snare\n')
-        self.assertEqual(kind_at(text, '6 mm sigmoid polyp'), 'history')  # all three bases read it so
+        # round 4d sections:5: all three bases read it as history, but a Word list writes its items bare, so the bare item
+        # is held as the numbered one is (an accepted over-hold for a real colon-less history label inside findings)
+        self.assertEqual(kind_at(text, '6 mm sigmoid polyp'), 'other')
+        self.assertNotEqual(run_engine(text, [('45385', '6 mm sigmoid polyp removed with cold snare')])['45385'].bucket,
+                            'excluded')
         for item in ('Small internal hemorrhoids', 'Prior radiation therapy changes', 'Genetic testing recommended'):
             text = s4_note(item)
             with self.subTest(item=item):
@@ -250,11 +254,19 @@ class Sections0CuedLineUnderAPhraseLineTests(HeldOrReadyAssertions, unittest.Tes
         self.assert_never_ready(text, '45390', emr)
 
     def test_history_labels_and_no_heading_are_unchanged(self):
-        for line in ('Prior procedures', 'History of prior procedures', 'Previous procedures'):
+        for line in ('Prior procedures', 'Previous procedures'):
             text = s0_under_procedure(line)
             with self.subTest(line=line):
                 self.assertEqual(kind_at(text, S0_EMR), 'history')
                 self.assertEqual(run_engine(text, [('45390', S0_EMR)])['45390'].bucket, 'excluded')
+        # round 4d sections:5 (accepted over-hold): an unknown colon-less history label under the procedure line opens
+        # the held 'other' section whatever its marker (a Word list writes none), so the cued EMR under it is held,
+        # never ready and never excluded; known headings ("Prior procedures") still open history
+        text = s0_under_procedure('History of prior procedures')
+        self.assertEqual(kind_at(text, S0_EMR), 'other')
+        self.assertEqual(read(text, S0_EMR)[0], 'uncertain')
+        proposal = run_engine(text, [('45390', S0_EMR)])['45390']
+        self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
         text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\n' + S0_EMR + '\nIndication: Surveillance.\n'
                 'Findings: The colonoscope was advanced to the cecum. ' + S0_POLYP + '\n')
         self.assertTrue(ready(run_engine(text, [('45390', S0_EMR)])['45390']))

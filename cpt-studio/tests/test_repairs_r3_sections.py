@@ -383,11 +383,23 @@ class Routing2ListItemsAndStatementsTests(unittest.TestCase):
         for heading, kind in (('2. Plan', 'plan'), ('3. Recommendations', 'plan'), ('B. Further management', 'plan'),
                               ('Upcoming procedures', 'plan'), ('## Upcoming procedures', 'plan'),
                               ('**Upcoming procedures**', 'plan'), ('Upcoming procedures (pending authorization)', 'plan'),
-                              ('Recommended interventions', 'plan'), ('Summary and recommendations', 'plan'),
-                              ('Earlier endoscopic work-up', 'history'), ('Previous endoscopic studies', 'history')):
+                              ('Recommended interventions', 'plan'), ('Summary and recommendations', 'plan')):
             text = emr_note(heading)
             with self.subTest(heading=heading):
                 self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, kind)
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        # round 4d sections:5 (accepted over-hold): an unknown colon-less history label right after a findings section
+        # is held whatever its marker (a Word list writes none): the planned EMR is held, never ready, never excluded;
+        # after an indication the label still opens history
+        for heading in ('Earlier endoscopic work-up', 'Previous endoscopic studies'):
+            text = emr_note(heading)
+            with self.subTest(heading=heading, inside='findings'):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'other')
+                proposal = run_engine(text, [('45390', EMR_LINE)])['45390']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+            text = emr_note('Indication: Surveillance.\n' + heading)
+            with self.subTest(heading=heading, inside='indication'):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'history')
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
 
     def test_list_items_and_findings_lines_stay_content(self):

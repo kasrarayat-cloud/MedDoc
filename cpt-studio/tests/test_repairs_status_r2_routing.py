@@ -546,10 +546,20 @@ class Status7ColonlessHeadingTests(unittest.TestCase):
     def test_unknown_plan_and_history_labels_without_a_colon(self):
         for heading, kind in (('Upcoming procedures', 'plan'), ('Recommended interventions', 'plan'),
                               ('Endoscopic management', 'plan'), ('Further evaluation', 'plan'),
-                              ('Summary and recommendations', 'plan'), ('Next appointments', 'plan'),
-                              ('Earlier endoscopic work-up', 'history'), ('Previous endoscopic studies', 'history')):
+                              ('Summary and recommendations', 'plan'), ('Next appointments', 'plan')):
             with self.subTest(heading=heading):
                 self.assert_planned_emr_excluded(emr_note(heading), kind)
+        # round 4d sections:5 (accepted over-hold): an unknown colon-less history label right after a findings section
+        # is held whatever its marker (a Word list writes none): the planned EMR is held, never ready, never excluded;
+        # after an indication the label still opens history and the EMR is excluded
+        for heading in ('Earlier endoscopic work-up', 'Previous endoscopic studies'):
+            text = emr_note(heading)
+            with self.subTest(heading=heading, inside='findings'):
+                self.assertEqual(layout(text).section_at(text.index(EMR_LINE)).kind, 'other')
+                proposals, _ = run_engine(text, [('45390', EMR_LINE)])
+                self.assertEqual((proposals['45390'].bucket, proposals['45390'].status), ('selected', 'needs_clarification'))
+            with self.subTest(heading=heading, inside='indication'):
+                self.assert_planned_emr_excluded(emr_note('Indication: Surveillance.\n' + heading), 'history')
 
     def test_round1_case_a_with_the_colon_removed(self):
         for heading in ('Summary and recommendations', 'Planned procedures', 'Next appointments'):

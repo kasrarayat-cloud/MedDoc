@@ -279,9 +279,13 @@ def _colonless_label(line: str, listed: bool = False) -> Optional[str]:
     kind = 'plan' if _PLAN_LABEL.search(line) else 'history' if _COLONLESS_HISTORY.search(line) else None
     if kind and _sec_phrase(named):
         return None if listed else 'other'  # structure:4: a finding or a statement, never history or plan
-    if kind == 'history' and listed:
+    if kind == 'history':
         # round 4c sections:4: a numbered or bulleted item that names prior therapy ("2. Prior radiation therapy") is held
-        # like a phrase line, never a history section over the next item (see layout for a plan or history section)
+        # like a phrase line, never a history section over the next item (see layout for a plan or history section).
+        # Round 4d sections:5: whatever its marker - DOCX extraction writes none for a Word list ("List Number", "List
+        # Bullet"), so the same item came through bare and opened a history section over the next item's polypectomy.
+        # A bare line is held only inside a procedure, findings or technique section; elsewhere layout reads it as the
+        # history section it opened before (it is no list item there: see the gate's ``widened``).
         return 'other'
     return kind
 

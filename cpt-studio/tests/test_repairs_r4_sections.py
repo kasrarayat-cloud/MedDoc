@@ -262,15 +262,28 @@ class Structure4PhraseLinesTests(unittest.TestCase):
         """A label that starts with a section's own name, or whose comma parts all name sections, still opens its plan or
         history section, so the planned EMR under it is still excluded."""
         for label, kind in (('Recommendations for follow-up', 'plan'), ('Instructions for follow-up', 'plan'),
-                            ('History of prior procedures', 'history'), ('Summary of recommendations', 'plan'),
+                            ('Summary of recommendations', 'plan'),
                             ('Discussion of future management', 'plan'), ('Impression, plan', 'plan'),
                             ('Findings, recommendations', 'plan'), ('Previously scheduled procedures', 'plan'),
                             ('Plan for further management', 'plan'), ('Upcoming procedures (pending authorization)', 'plan'),
-                            ('Further management', 'plan'), ('Earlier endoscopic work-up', 'history'),
+                            ('Further management', 'plan'),
                             ('Appointments for follow-up', 'plan'), ('Imaging for further evaluation', 'plan')):
             text = emr_note(label)
             with self.subTest(label=label):
                 self.assertEqual(kind_at(text, EMR_LINE), kind)
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        # round 4d sections:5 (accepted over-hold): an unknown colon-less history label right after a findings section
+        # is held whatever its marker (a Word list writes none), so the planned EMR under it is held, never ready and
+        # never excluded; after an indication it still opens its history section
+        for label in ('History of prior procedures', 'Earlier endoscopic work-up'):
+            text = emr_note(label)
+            with self.subTest(label=label, inside='findings'):
+                self.assertEqual(kind_at(text, EMR_LINE), 'other')
+                proposal = run_engine(text, [('45390', EMR_LINE)])['45390']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+            text = emr_note('Indication: Surveillance.\n' + label)
+            with self.subTest(label=label, inside='indication'):
+                self.assertEqual(kind_at(text, EMR_LINE), 'history')
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
 
     def test_a_phrase_line_in_a_plan_or_history_section_keeps_it(self):
