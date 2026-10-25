@@ -58,6 +58,7 @@ Importable without Django (the extraction child imports it).
 """
 from __future__ import annotations
 
+import bisect
 import dataclasses
 import functools
 import math
@@ -602,10 +603,10 @@ class _Run:
 
     @functools.cached_property
     def letters(self) -> tuple | None:
-        """(start, end) along the baseline, text space, of each stretch of the run's glyphs that are not fill-in
-        characters (_ING_FILL, and rules of three or more _ING_RULES): what an opaque area must cover to hide text.
-        None when the run has no fill-in character, or cannot be read glyph by glyph: the whole run counts, as
-        before."""
+        """The stretches of the run's glyphs that are not fill-in characters (_ING_FILL, and rules of three or more
+        _ING_RULES), what an opaque area must cover to hide text, as (where each starts, (start, end) along the
+        baseline in text space, sorted, the longest's length). None when the run has no fill-in character, or cannot
+        be read glyph by glyph: the whole run counts, as before."""
         if self.font is None or not self.strings:
             return None
         char_spacing, word_spacing, scale = self.spacing
@@ -645,7 +646,20 @@ class _Run:
                 previous = stretches[-1]
             else:
                 previous[0], previous[1] = min(previous[0], low), max(previous[1], high)
-        return tuple(tuple(stretch) for stretch in stretches)
+        stretches.sort()
+        longest = max((high - low for low, high in stretches), default=0.0)
+        return [low for low, _ in stretches], [tuple(stretch) for stretch in stretches], longest
+
+    def hides_letters(self, x0: float, x1: float) -> bool:
+        """Whether [x0, x1] along the baseline (text space) covers a stretch of the run's letters over COVER_WIDTH font
+        sizes, or the whole stretch (letters: the stretches indexed by where they start)."""
+        starts, stretches, longest = self.letters
+        for index in range(bisect.bisect_left(starts, x0 - longest), bisect.bisect_left(starts, x1)):
+            start, end = stretches[index]
+            covered = min(x1, end) - max(x0, start)
+            if covered > 0 and covered >= min(end - start, self.width) - 1e-9:
+                return True
+        return False
 
     @property
     def core(self) -> tuple:
@@ -689,11 +703,7 @@ class _Run:
         overlap = min(x1, high) - max(x0, low)
         if not (overlap > 0 and overlap >= min(high - low, self.width) - 1e-9):
             return False
-        letters = self.letters
-        if letters is None:
-            return True
-        return any(min(x1, end) > max(x0, start) and min(x1, end) - max(x0, start) >= min(end - start, self.width) - 1e-9
-                   for start, end in letters)
+        return self.letters is None or self.hides_letters(x0, x1)
 
 
 class _Paint:

@@ -477,7 +477,8 @@ class Extraction10FillInLinesTests(unittest.TestCase):
         cases = {'a word under the field': dict(under='Biopsy taken'),
                  'a line ending in a word': dict(line='_' * 24 + ' mm'),
                  'a word between rules': dict(line='___ Biopsy ___'),
-                 'one period': dict(line='1.5'), 'drawn by the viewer': dict(under='Biopsy taken', regenerated=True)}
+                 'one period': dict(line='1.5'), 'drawn by the viewer': dict(under='Biopsy taken', regenerated=True),
+                 'reaching into the label': dict(one_run=True, graze=20.0)}
         for label, kwargs in cases.items():
             with self.subTest(label):
                 result = extracted(fill_in_form(**kwargs))
