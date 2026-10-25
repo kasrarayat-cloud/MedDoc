@@ -3059,8 +3059,8 @@ def _landmarks(an: Analysis, sentences, table) -> tuple[list, list]:
 
 def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> bool:
     """Whether the value of an extent label at [start, end) states the extent reached although its section does not
-    speak for it: its section is an 'other' one (the product's addendum block, an unrecognised label, a form block,
-    the preparation or complications), its reading is the silent default (no cue at all: nothing hedged, planned,
+    speak for it: its section is the product's addendum block or a PDF form-field or annotation block
+    (_ANSWERING_SECTIONS), its reading is the silent default (no cue at all: nothing hedged, planned,
     historical or denied), and no unresolved negation is in its clause (the doubt a positive section would find:
     "Extent: cecum not reached."). An addendum answering "confirm the furthest extent reached" is read so; the label
     itself still has to pass _reached_label (an aim never does). An indication, an assessment or an impression can
@@ -3070,12 +3070,12 @@ def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> b
             and section.label in _ANSWERING_SECTIONS and not _doubt(an, start, end))
 
 
-# The 'other' sections that speak for this report's own procedure (round 4 routing:2): the product's addendum block,
-# the PDF form-field and annotation blocks, and the report's own preparation and complications. Any other unrecognised
-# label ("Outside records:", "Referral information:") may tell another facility's procedure, so a label answered there
-# is never read as today's extent.
-_ANSWERING_SECTIONS = frozenset(('addendum', 'pdf form fields', 'pdf annotation text', 'bowel preparation',
-                                 'bowel prep', 'preparation', 'prep', 'quality of preparation', 'complications'))
+# The 'other' sections that speak for this report's own procedure (round 4 routing:2): the product's addendum block
+# and the PDF form-field and annotation blocks. Any other 'other' section may tell another facility's procedure
+# ("Outside records:", "Referral information:", and round 4c declared:3: a "Prep:", "Bowel preparation:" or
+# "Complications:" line inside such a block made an outside report's "Extent: cecum" today's extent), so a label
+# answered there is never read as today's extent (reverted to the R3B-BASE reading, as the verifier asked).
+_ANSWERING_SECTIONS = frozenset(('addendum', 'pdf form fields', 'pdf annotation text'))
 _EXTENT_TAIL_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*|\d+", re.A)
 _VALUE_END = re.compile(r'[.;\n]')
 

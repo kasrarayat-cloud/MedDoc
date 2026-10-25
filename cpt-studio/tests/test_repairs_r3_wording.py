@@ -764,9 +764,12 @@ class X1AddendumExtentLabelAnswerTests(unittest.TestCase):
                 if extent == 'cecum':
                     proposals, _ = run_engine(text, [('45385', SNARED)])
                     self.assertTrue(ready(proposals['45385']), proposals['45385'].clarifications)
-        # an 'other' section of the report itself, such as its preparation, reads the same
+        # Round 4c (round 5 declared:3): the report's own preparation section no longer answers silently. Its "Prep:" or
+        # "Bowel preparation:" line inside an outside report made that report's "Extent: cecum" today's extent (an
+        # incomplete colonoscopy read complete), and no reader tells the two blocks apart, so this reads as at R3B-BASE:
+        # the extent is not read (an extent hold, the accepted over-hold).
         text = SNARE_PARENT + 'Bowel preparation: adequate. Furthest extent reached: cecum.\n'
-        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))
 
     def test_a_depth_label_answer_for_a_flexible_sigmoidoscopy(self):
         parent = (HEADER + 'Procedure: Flexible sigmoidoscopy with biopsy.\nFindings: A biopsy was taken from the rectum.\n'

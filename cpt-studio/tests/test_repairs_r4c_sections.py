@@ -563,5 +563,53 @@ class Sections1TodayLabelAnsweredNoneInWordsTests(HeldOrReadyAssertions, unittes
         self.assertTrue(ready(run_engine(text, [('99214', S1_VISIT)])['99214']))
 
 
+
+# --- declared:3: an outside report's preparation line made its extent today's ----------------------------------------
+
+D3_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+D3_TODAY = ('Procedure: Colonoscopy with cold snare polypectomy.\nFindings: The colonoscope was advanced to the hepatic '
+            'flexure. ' + D3_POLYP + '\nImpression: Sigmoid polyp.\n')
+
+
+class Declared3AnsweringSectionsTests(unittest.TestCase):
+    """declared:3 (critical, a regression against R3B-BASE) - an outside report's own "Prep:", "Bowel preparation:" or
+    "Complications:" line opened an 'other' section that round 4b counted as this report's own, so its "Extent: cecum"
+    made an incomplete colonoscopy complete (R3B-BASE: incomplete at the hepatic flexure, with the service.incomplete
+    check). Reverted, as the verifier asked: an extent label answers silently only in the product's addendum block and
+    the PDF form-field and annotation blocks. The report's own "Bowel preparation: adequate. Furthest extent reached:
+    cecum." goes back to its R3B-BASE reading too (the extent is not read: an extent hold, the accepted over-hold)."""
+
+    BLOCKS = ('Prior colonoscopy (outside facility, 2021):\nPrep: adequate\nExtent: cecum\nFindings: two tubular adenomas\n',
+              'Outside records: Colonoscopy at another facility in 2021.\nBowel preparation: good. Extent: cecum.\n',
+              'Referral information: colonoscopy in 2021 elsewhere.\nComplications: none. Extent: cecum.\n',
+              'Last colonoscopy (2021, outside):\nBowel preparation: good\nExtent: cecum\n',
+              'Outside records:\nColonoscopy at another facility in 2021.\nPrep: good. Extent: cecum.\n',
+              'History:\nColonoscopy in 2021 elsewhere.\nQuality of preparation: fair. Extent reached: cecum.\n')
+
+    def test_the_claimed_and_listed_blocks(self):
+        for block in self.BLOCKS:
+            text = HEADER + block + D3_TODAY
+            with self.subTest(block=block):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'incomplete')
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'incomplete: hepatic flexure')
+                proposal = run_engine(text, [('45385', D3_POLYP)])['45385']
+                self.assertIn('service.incomplete', {c.id for c in proposal.checks if c.status in ('warn', 'fail')})
+
+    def test_the_flexible_sigmoidoscopy_depth(self):
+        text = (HEADER + 'Outside records:\nFlexible sigmoidoscopy at another facility in 2021.\nPrep: good. Depth of '
+                'insertion: 60 cm.\nProcedure: Flexible sigmoidoscopy with biopsy.\nFindings: A biopsy was taken from the '
+                'rectum.\n')
+        self.assertIsNone(fact_value(text, 'gi.flex_sig', 'extent'))
+        self.assertFalse(ready(run_engine(text, [('45331', 'A biopsy was taken from the rectum.')])['45331']))
+
+    def test_the_addendum_block_still_answers(self):
+        from tests.test_repairs_r3_wording import addendum_text
+        parent = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: ' + D3_POLYP + '\nNotes:\nThe '
+                  'patient tolerated the procedure.\n')
+        text = addendum_text(parent, 'Furthest extent reached: cecum.')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(text, [('45385', D3_POLYP)])['45385']))
+
+
 if __name__ == '__main__':
     unittest.main()
