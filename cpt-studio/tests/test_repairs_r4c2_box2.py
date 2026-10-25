@@ -697,6 +697,36 @@ class Box2IUnselectedOptionTests(unittest.TestCase):
                 proposals, _ = real(text, ('45385', 'Cold snare polypectomy'))
                 self.assertEqual(outcome(proposals['45385']), 'held')
 
+    def test_a_remark_in_an_unchecked_option_holds(self):
+        """Self-review of box2:I: every denying word of a boxed line is an option word to _box_denying_options, so a
+        remark after an unchecked option ("☐ Cancelled - aborted at the splenic flexure") took the option's box and was
+        dropped, and the colonoscopy read PERFORMED (cancelled or incomplete at int2: 45378 ready). An unchecked option
+        whose text holds more than one run of denying words is held, never dropped; one run reads as the option."""
+        bare = HEAD + 'Procedure note\n{row}\nThe patient tolerated it well.\n'
+        for frame, row in ((bare, 'Colonoscopy: \u2612 Completed \u2610 Cancelled - aborted at the splenic flexure'),
+                           (bare, 'Colonoscopy: \u2612 Completed \u2610 Cancelled; patient declined further sedation'),
+                           (I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 Incomplete - unable to reach the cecum'),
+                           (I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 Cancelled (aborted)'),
+                           (I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 Cancelled, scope could not pass the sigmoid'),
+                # the remark after an unchecked completion: a hold keeps the rank of the abort it stands for, so the
+                # checked rescheduling alone never reads it planned (incomplete at int2)
+                (I_REPORT, 'Colonoscopy: \u2612 Rescheduled \u2610 Completed - aborted at the splenic flexure'),
+                # a status label whose unchecked option may hold a remark is held, not read by its options
+                (I_REPORT, 'Colonoscopy: \u2610 Incomplete - patient declined further sedation \u2612 Completed')):
+            with self.subTest(row=row):
+                text = frame.format(row=row)
+                status, cues = self.read(text, 'Colonoscopy', within=row)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertNotEqual(family_status(text), 'performed')
+                proposals, _ = real(text, ('45378', 'Colonoscopy:'))
+                self.assertNotEqual(outcome(proposals['45378']), 'ready')
+        for row in ('Colonoscopy: \u2612 Completed \u2610 Cancelled (patient preference)',
+                    'Colonoscopy: \u2612 Completed \u2610 Repeat colonoscopy in 5 years',
+                    'Colonoscopy: \u2612 Completed \u2610 Not done today'):
+            with self.subTest(control=row):  # one run of denying words: the option's own, read as box2:I reads it
+                text = I_REPORT.format(row=row)
+                self.assertEqual(self.read(text, 'Colonoscopy', within=row)[0], 'performed')
+
     def test_an_unchecked_hold_or_hedge_option_holds_nothing(self):
         """An unselected option neither denies nor holds (_unchecked_option): an unchecked hold word, hedge or abort with
         no start statement held the service at every tree ("☐ Pending" by ending its section's reach; "☐ If needed",

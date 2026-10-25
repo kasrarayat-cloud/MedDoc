@@ -1739,7 +1739,7 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             continue  # "was performed today as scheduled": the booking it kept, not a future
         if _attached(spans, index, cue.start, cue.end):
             if status in _B2_DENYING_STATUSES:  # round 4c-2 box2:I: an option's own words, read by its own box
-                read = _B2_option_words(an, cue.start, cue.end, ts, te, cue.text)
+                read = _B2_option_words(an, cue.start, cue.end, ts, te, cue.text, status)
                 if read is not None:
                     found += read
                     continue
@@ -1778,7 +1778,7 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
         post = _masked_post(an, me, ce)
         negations, _ = _member_negations(an, cs, ce, ms, me, post)
         for label, past, (ns, ne) in negations:  # round 4c-2 box2:I: "Colonoscopy: Not performed ☐ | Performed ☒"
-            read = _B2_option_words(an, ns, ne, ts, te, label.split(': ', 1)[-1])
+            read = _B2_option_words(an, ns, ne, ts, te, label.split(': ', 1)[-1], 'negated')
             found += [('negated', label, past, False)] if read is None else read
         pre_cues, had = _pre_cues(an, _pre_start(an, cs, ms), ms)
         found += pre_cues
@@ -1789,7 +1789,7 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 m = pattern.search(post)
                 if m:
                     where = _masked_map(an, me, ce)[1]  # round 4c-2 box2:I: "Colonoscopy: Incomplete ☐ | Completed ☒"
-                    read = _B2_option_words(an, where[m.start()], where[m.end()], ts, te, _said(m))
+                    read = _B2_option_words(an, where[m.start()], where[m.end()], ts, te, _said(m), status)
                     found += [(status, f'{status}: {_said(m)}', False, name == 'pending')] if read is None else read
     return found
 
@@ -1950,6 +1950,9 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     if not found:
         return None
     status = next(s for s in STATUS_PRECEDENCE if any(f[0] == s for f in found))
+    held = [STATUS_PRECEDENCE.index(f[4]) for f in found if len(f) > 4 and f[4] in STATUS_PRECEDENCE]
+    if held and STATUS_PRECEDENCE.index(status) > min(held):
+        status = 'uncertain'  # round 4c-2 box2:I: a hold keeps the rank of the option's words it stands for
     deciding = tuple(dict.fromkeys(f[1] for f in sorted((f for f in found if f[0] == status), key=lambda f: not f[3])))
     past = status == 'negated' and all(f[2] for f in found if f[0] == 'negated')
     doubt = status == 'uncertain' and any(f[3] for f in found if f[0] == 'uncertain')
@@ -3637,6 +3640,8 @@ _B2_DENYING_STATUSES = ('cancelled', 'planned', 'uncertain', 'historical', 'inco
 _B2_OPTION_UNREAD = "uncertain: '{}' is an option on its line whose own box cannot be read"
 _B2_OPTION_ACROSS = "uncertain: the passage runs across the option '{}', whose own box is unchecked, and other words"
 _B2_OPTION_BLANK = "uncertain: '{}' is an unchecked option on a line that selects nothing"
+_B2_OPTION_REMARK = ("uncertain: '{}' stands in the text of an unchecked option with other option words, so whether it "
+                     'is the option or a remark about the service cannot be told')
 _B2_OPTION_BOX = ('uncertain: the unchecked box it is read by may be the box of an option beside it: read by its '
                   "line's option words, its own box is checked, or the line can be read both ways")
 _B2_OTHER_BOX = ('uncertain: the checked box it is read by may be the box of another entry on its line: read by its '
@@ -3645,17 +3650,22 @@ _B2_ROW_ACROSS = ("uncertain: the passage runs from its status line's label acro
                   'options are unchecked')
 
 
-def _B2_option_words(an: Analysis, start: int, end: int, ts: int, te: int, shown: str) -> Optional[list]:
+def _B2_option_words(an: Analysis, start: int, end: int, ts: int, te: int, shown: str,
+                     status: str) -> Optional[list]:
     """How a clause reader reads the words [start, end) for the target [ts, te) when they may be a status option's own
     words (_B2_unselected_option): None to read them as before, [] when the option's own box is unchecked and the
     target lies outside its words (they state nothing about it), or the hold to read instead when its box cannot be
-    read, when its line selects nothing, or when the target runs across the option and other words."""
+    read, when its line selects nothing, when its text may hold a remark, or when the target runs across the option
+    and other words. A hold carries ``status``, what the words would have said, so it keeps their rank among the
+    clause's cues (_cue_reading): "☒ Rescheduled ☐ Completed - aborted at the splenic flexure" is held, never read by
+    the rescheduling alone (planned, while the family read performed)."""
     unselected = _B2_unselected_option(an, start, end, ts, te)
     if unselected == 'off':
         return []
-    if unselected in ('unknown', 'across', 'blank'):
-        label = {'unknown': _B2_OPTION_UNREAD, 'across': _B2_OPTION_ACROSS, 'blank': _B2_OPTION_BLANK}[unselected]
-        return [('uncertain', label.format(' '.join(shown.split())[:80]), False, True)]
+    if unselected in ('unknown', 'across', 'blank', 'remark'):
+        label = {'unknown': _B2_OPTION_UNREAD, 'across': _B2_OPTION_ACROSS, 'blank': _B2_OPTION_BLANK,
+                 'remark': _B2_OPTION_REMARK}[unselected]
+        return [('uncertain', label.format(' '.join(shown.split())[:80]), False, True, status)]
     return None
 
 
@@ -3665,6 +3675,7 @@ def _B2_unselected_option(an: Analysis, start: int, end: int, ts: int, te: int) 
     years") that says nothing of the target [ts, te): 'off' when that option's own box is unchecked and the target lies
     outside the option's own words (from its box to the next box, or from the box before it, or the line's label, to
     its own box, as the line's boxes lead or trail), 'blank' when it is unchecked on a line that selects nothing,
+    'remark' when it is unchecked but its text may hold a remark,
     'unknown' when its box cannot be read or disagrees, 'across' when the target runs across the unchecked option and
     other words, else None. A target inside the option's words ("☐
     Repeat colonoscopy in 3 years") and prose after a single box ("☐ Biopsy. Repeat colonoscopy in 3 years.") read as
@@ -3759,26 +3770,57 @@ def _B2_status_line(an: Analysis, lo: int, hi: int) -> Optional[tuple]:
 def _B2_option_reading(an: Analysis, start: int, end: int) -> Optional[tuple]:
     """(state, text start, text end) of the denying option the words [start, end) belong to on a status line
     (_B2_status_line), or None when they are none or its own box is checked: 'off' (unchecked), 'blank' (unchecked, on
-    a line that selects nothing: "Colonoscopy: ☐ Not done ☐ Completed" says nothing either way, so it is held) or
+    a line that selects nothing: "Colonoscopy: ☐ Not done ☐ Completed" says nothing either way, so it is held),
+    'remark' (unchecked, but its text holds more than one run of option words, denying or completing: "☐ Cancelled -
+    aborted at the splenic flexure", "☐ Completed - aborted at the splenic flexure", where the later words may be a
+    remark about the service and not the option's own, so it is held) or
     'unknown' (unread, disagreeing, or a line its boxes can be read both ways). Its words run between the boxes around
     it, and never into the line's label."""
     lo, hi = _B2_line_window(an, start, end)
     line = _B2_status_line(an, lo, hi)
     if line is None:
         return None
-    label_end, options, states, _, _, boxes, _, selected, _ = line
+    label_end, options, states, done, _, boxes, _, selected, _ = line
     own = [i for i, (s, e) in enumerate(options) if _overlaps(s, e, start, end)]
     if not own:
         return None
     found = {states[i] for i in own}
-    option_start, option_end = min(options[i][0] for i in own), max(options[i][1] for i in own)
-    text_lo = max([b[1] for b in boxes if b[1] <= option_start] + [label_end])
-    text_hi = min((b[0] for b in boxes if b[0] >= option_end), default=hi)
+    text_lo, text_hi = _B2_option_text(line, min(options[i][0] for i in own), max(options[i][1] for i in own), hi)
     if found & {'unknown', 'mixed', 'unclear'}:
         return 'unknown', text_lo, text_hi
     if found == {'off'}:
+        if _B2_has_remark(an.text, line, text_lo, text_hi):
+            return 'remark', text_lo, text_hi
         return ('off' if selected else 'blank'), text_lo, text_hi
     return None
+
+
+def _B2_option_text(line: tuple, option_start: int, option_end: int, hi: int) -> tuple[int, int]:
+    """[start, end) of the text of the option at [option_start, option_end) on the status line ``line``: from the box
+    before it (or the line's label) to the box after it (or the end of the window ``hi``)."""
+    label_end, boxes = line[0], line[5]
+    return (max([b[1] for b in boxes if b[1] <= option_start] + [label_end]),
+            min((b[0] for b in boxes if b[0] >= option_end), default=hi))
+
+
+def _B2_has_remark(text: str, line: tuple, text_lo: int, text_hi: int) -> bool:
+    """Whether the option text [text_lo, text_hi) of the status line ``line`` holds more than one run of option
+    words, denying or completing (_B2_option_clusters): the later run may be a remark about the service."""
+    return _B2_option_clusters(text, [o for o in line[1] + line[3] if text_lo <= o[0] and o[1] <= text_hi]) > 1
+
+
+def _B2_option_clusters(text: str, spans: list) -> int:
+    """How many runs the option words ``spans`` of one option's text form: words next to each other, or overlapping,
+    with nothing but spaces between them are one ("Not done", "Repeat colonoscopy in 5 years"); anything else between
+    them starts another ("Cancelled - aborted at the splenic flexure", "Planned for next visit")."""
+    runs, last = 0, None
+    for start, end in sorted(set(spans)):
+        if last is None or (start > last and text[last:start].strip()):
+            runs += 1
+            last = end
+        else:
+            last = max(last, end)
+    return runs
 
 
 def _B2_label_state(an: Analysis, start: int, end: int) -> Optional[str]:
@@ -3787,16 +3829,20 @@ def _B2_label_state(an: Analysis, start: int, end: int) -> Optional[str]:
     the first box after the label, an option's. When every denying option's own box is unchecked and a completion
     option's is checked, the line says it was done: 'on' for a passage within the label (read as a checked box's
     passage; the option's words state nothing about it), 'across' for one that runs on into the options (held, as a
-    passage across an unchecked option and other words is). 'unknown' when an option's box cannot be read or the line
-    can be read both ways; else None (read as before: "Colonoscopy: ☐ Completed ☒ Cancelled" stays denied)."""
+    passage across an unchecked option and other words is). 'unknown' when an option's box cannot be read, the line
+    can be read both ways, or an unchecked option's text may hold a remark (_B2_has_remark: "Colonoscopy: ☐ Incomplete
+    - patient declined further sedation ☒ Completed"); else None (read as before: "Colonoscopy: ☐ Completed ☒
+    Cancelled" stays denied)."""
     if an.text.find('\n', start, end) >= 0:
         return None
     lo, hi = _B2_line_window(an, start, end)
     line = _B2_status_line(an, lo, hi)
     if line is None or start >= line[0]:
         return None
-    label_end, _, states, _, done_states, _, _, _, _ = line
-    if any(state in ('unknown', 'mixed', 'unclear') for state in states + done_states):
+    label_end, options, states, _, done_states, _, _, _, _ = line
+    if any(state in ('unknown', 'mixed', 'unclear') for state in states + done_states) or any(
+            _B2_has_remark(an.text, line, *_B2_option_text(line, s, e, hi))
+            for (s, e), state in zip(options, states) if state == 'off'):
         return 'unknown'
     if all(state == 'off' for state in states) and 'on' in done_states:
         return 'on' if max(end, start + 1) <= label_end else 'across'
