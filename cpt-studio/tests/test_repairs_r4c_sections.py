@@ -795,5 +795,52 @@ class CutVerbHoldTests(HeldOrReadyAssertions, unittest.TestCase):
                 self.assert_held_never_excluded(text, '45385', S10_POLYP)
 
 
+
+# --- declared:6: a denying label in other spellings -------------------------------------------------------------------
+
+D6_EGD = 'EGD with balloon dilation.'
+
+
+def d6_note(label):
+    return (HEADER + 'Procedures performed: EGD with biopsy.\nIndication: Dysphagia.\nFindings: The endoscope was advanced to '
+            'the second part of the duodenum. Mild esophagitis; biopsies were taken.\n' + label + '\n' + D6_EGD + '\nPlan: '
+            'PPI twice daily.\n')
+
+
+class Declared6DenyingLabelSpellingsTests(HeldOrReadyAssertions, unittest.TestCase):
+    """declared:6 (high) - a label that denies performance ("Procedures not performed:", "Cancelled procedures:") held
+    the service listed under it only in one spelling: a numbered, lettered or bulleted label ("1. Procedures not
+    performed:", "• Cancelled procedures:") or one with parentheses ("Procedure(s) not performed:", "Cancelled
+    procedures (patient request):") left the cancelled EGD with dilation a ready 43249. The label is read with the list
+    markers the other readers strip (detect._LEADING_MARK's) and with parentheses in its words. Colon-less denying lines
+    stay a recorded residual (the label rule is a line that ends with a colon)."""
+
+    LABELS = ('1. Procedures not performed:', '2) Procedures not performed:', 'b. Procedures not performed:',
+              '(1) Procedures not performed:', '\u2022 Procedures not performed:', '\u2022 Cancelled procedures:',
+              '\u00b7 Procedures not performed:', 'Procedure(s) not performed:', 'Procedures not performed (see note):',
+              'Cancelled procedures (patient request):', 'Procedure(s) cancelled:', '1. Cancelled procedures:',
+              'Procedures not performed:', '- Procedures not performed:', '* Cancelled procedures:')
+
+    def test_every_spelling_holds(self):
+        for label in self.LABELS:
+            text = d6_note(label)
+            with self.subTest(label=label):
+                self.assertNotIn(read(text, D6_EGD)[0], POSITIVE)
+                proposal = run_engine(text, [('43249', D6_EGD)])['43249']
+                self.assertTrue(held(proposal), (proposal.bucket, proposal.status))
+
+    def test_a_numbered_outline_report(self):
+        text = (HEADER + '1. Procedures performed: EGD with biopsy.\n2. Indication: Dysphagia.\n3. Findings: The endoscope was '
+                'advanced to the second part of the duodenum. Mild esophagitis; biopsies were taken.\n4. Procedures not '
+                'performed:\n' + D6_EGD + '\n')
+        self.assertTrue(held(run_engine(text, [('43249', D6_EGD)])['43249']))
+
+    def test_other_labels_are_unchanged(self):
+        for label in ('Additional procedures:', '1. Additional procedures:', 'Procedures (all performed):'):
+            text = d6_note(label)
+            with self.subTest(label=label):
+                self.assertTrue(ready(run_engine(text, [('43249', D6_EGD)])['43249']))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -1283,8 +1283,12 @@ def _called_off_further(an: Analysis, index: int) -> Optional[str]:
 # A label line whose own words deny performance: "Procedures not performed:", "Not done:", "Procedures not performed
 # today:". With its verb it is no heading (sections keep it content), so the lines under it take the section before
 # it. ("Cancelled procedures:", with no verb, is a heading of its own: the lines under it read its silent default.)
-_DENYING_LABEL = re.compile(r'[ \t]*(?:[-*][ \t]*)?(?:[A-Za-z][\w/-]*[ \t]+){0,3}?(?:not[ \t]+(?:performed|done)|cancell?ed|'
-                            r'deferred|declined)(?:[ \t]+[\w/-]+){0,5}[ \t]*:[ \t]*', re.A | re.I)
+# Round 4c declared:6: after any list marker the other readers strip (_LEADING_MARK's bullets, "1.", "2)", "(1)",
+# "b."), and with parentheses in its words ("Procedure(s) not performed:", "Cancelled procedures (patient request):").
+_SEC_LABEL_MARK = (r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014][ \t]*|\(?\d{1,3}[.)][ \t]*'
+                   r'|\(?[A-Za-z][.)][ \t]+)')
+_DENYING_LABEL = re.compile(r'[ \t]*' + _SEC_LABEL_MARK + r'?(?:[A-Za-z][\w/()-]*[ \t]+){0,3}?(?:not[ \t]+(?:performed|done)|'
+                            r'cancell?ed|deferred|declined)(?:[ \t]+[\w/()-]+){0,5}[ \t]*:[ \t]*', re.A | re.I)
 LABEL_ITEMS = 12  # item lines read back to their label (bounds the work per span)
 
 
