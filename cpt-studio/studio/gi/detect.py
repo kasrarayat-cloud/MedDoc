@@ -3299,7 +3299,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                         reached.append(hit)
                     elif base in ('performed', 'incomplete', 'negated') and (
                             cues.NOT_REACHED_BEFORE.search(pre) or cues.NOT_REACHED_AFTER.search(post)):
-                        blocked.append(hit)
+                        blocked.append(_P2_beyond_the_valve(an, m, hit))  # round 4c-2 plan:D2
                     elif status in ('performed', 'incomplete') and (
                             cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
                             or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we)
@@ -3323,7 +3323,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                                                      and not _P2_doubt_is_a_finding(an, ws, we))
                                                  or (_reached_label(an, ws, m.start())
                                                      and _P2_label_denied(an, m.end(), depth, table))):
-                        denied.append(hit)  # a landmark its reading denies or doubts (round 4c-2 plan:B2)
+                        denied.append(_P2_beyond_the_valve(an, m, hit))  # a landmark its reading denies or doubts (plan:B2)
     return reached, blocked
 
 
@@ -3499,6 +3499,19 @@ _P2_TI_PASSAGE = re.compile(
     r"(?:ileo-?cecal|IC)\s+valve\b"
     r"|\b(?:ileo-?cecal|IC)\s+valve\s+(?:(?:was|were|is|could|can|did|not|be|been|unable|to|cannot|"
     r"(?:could|can|did|was|were)n['\u2019]t)\s+)*(?:intubat|travers|cannulat|pass|enter|negotiat|cross)\w*", re.A | re.I)
+
+
+def _P2_beyond_the_valve(an: Analysis, m, hit: tuple) -> tuple:
+    """``hit`` (depth, label, clause span) of a blocked or denied landmark match ``m``, at the terminal ileum's depth
+    when a passage of the ileocecal valve covers ``m`` ("Unable to intubate the ileocecal valve.", "The ileocecal valve
+    could not be traversed.", _P2_TI_PASSAGE: only the valve lies inside one): the scope stood at the valve, and what
+    it denies is the terminal ileum (round 4c-2 plan:D2). Only plan:D2's guard reads the difference
+    (_P2_doubted_withholds reads denials up to the doubted label's depth); every other reader of these hits compares
+    them with a depth short of the cecum."""
+    for passage in _P2_TI_PASSAGE.finditer(an.text, max(0, m.start() - 60), m.end() + 80):
+        if passage.start() <= m.start() and m.end() <= passage.end():
+            return (_P2_TI_DEPTH,) + hit[1:]
+    return hit
 
 
 def _P2_segment_start(text: str, lo: int, pos: int) -> int:

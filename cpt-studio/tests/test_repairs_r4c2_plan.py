@@ -747,13 +747,18 @@ class PlanD2ReachDenialTests(unittest.TestCase):
         the cecum was not reached."""
         for prose, label in ((COLON_PROSE, 'Extent: cecum; no biopsies taken\nTI not intubated.'),
                              (COLON_PROSE, 'Extent: cecum; no biopsies taken; TI not intubated'),
-                             (COLON_PROSE, 'Extent: cecum; prep fair?\nThe terminal ileum was not intubated.')):
+                             (COLON_PROSE, 'Extent: cecum; prep fair?\nThe terminal ileum was not intubated.'),
+                             # the scope stood at the valve: a passage of it denied is the terminal ileum's
+                             (COLON_PROSE, 'Extent: cecum; prep fair?\nUnable to intubate the ileocecal valve.'),
+                             (D_PROSE, 'Extent: cecum; no biopsies taken\nThe ileocecal valve could not be traversed.')):
             with self.subTest(label=label):
                 text = report('Colonoscopy', prose, label)
                 self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
                 self.assertTrue(held_for_the_extent(text, '45378', 'Procedure: Colonoscopy'))
-        text = report('Colonoscopy', COLON_PROSE, 'Extent: cecum; prep fair?\nThe cecum was not reached.')
-        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+        for denial in ('The cecum was not reached.', 'The ileocecal valve was not reached; unable to intubate the IC valve.'):
+            with self.subTest(denial=denial):
+                text = report('Colonoscopy', COLON_PROSE, 'Extent: cecum; prep fair?\n' + denial)
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
         # a denial of a landmark no deeper than the one reached says nothing of the label's: the extent is withheld (the
         # family's status is the base's own reading of that sentence)
         text = report('Colonoscopy', D_PROSE + '\nThe sigmoid colon was not reached on the first pass.',
