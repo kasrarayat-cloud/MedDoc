@@ -321,7 +321,11 @@ detected family (an intervention word written in a procedure, findings or
 technique section belongs to one only when that family is named, by a service
 name or its instrument, outside the history and plan sections: "EGD in 2020 was
 normal." in the HPI never takes today's hemorrhoid banding), is an
-examination, test, sedation, consent or person, opens
+examination, test, sedation, consent or person (a name that coordinates a
+procedure with such a word, split only at the connectors routing defines,
+gives that procedure as a held `gi.other` mention, never a performed one:
+"Office visit and anoscopy were performed today." holds the E/M for a possible
+same-day anoscopy), opens
 with a negation, condition or plan word, or is told as history (a history
 qualifier before it, or a time or visit that is not today's). Each mention is
 read on its own; the family reads performed, then incomplete, then uncertain if
@@ -365,10 +369,22 @@ where a rule restores what an ordinary note read before round 3b.
   performance cue under Indication reads uncertain unless its clause says
   today.
 - In a plan section an explicit performance is held, and the plan default
-  reads planned, except that any clause that says today holds (`PLAN_TODAY`),
-  whatever hedge, condition or future word is in it ("EGD this morning revealed
-  a Schatzki ring, likely the cause"; also "Repeat colonoscopy today if
-  bleeding recurs.", an accepted over-hold). Round 3b's release of a past-tense
+  reads planned, except that a clause that says today holds (`PLAN_TODAY`):
+  the plan default's own reading; a performance statement a hedge outranked
+  ("Anoscopy was performed today and showed grade 2 hemorrhoids versus
+  prolapse."); and a statement of the procedure's result (a reporting verb
+  after the service name, with only names, "with", "and" or a today phrase
+  between: "EGD today showed esophagitis versus reflux.", "EGD this morning
+  revealed a Schatzki ring, likely the cause"), whatever hedge outranks it;
+  also "Repeat colonoscopy today if bleeding recurs.", an accepted over-hold. A
+  hedge, condition or discussion that states neither a performance nor a
+  result keeps the visit approvable even when it says today ("Possible EGD
+  today if symptoms persist.", "Discussed colonoscopy today; she will think
+  about it.": the round 2 and 3 contract). A performance statement a hedge
+  outranks with no today word in a plan section, in an indication or
+  chief-complaint section, or in a history clause that says today, carries the
+  stated-act hold (`_P2_HEDGED_STATEMENT`, read by validation as OTHER_STATED),
+  so the E/M beside it is held as it is beside the unhedged statement. Round 3b's release of a past-tense
   performance that says today as performed was withdrawn in round 4: it fired
   on another thing's past tense ("the MRI that was done this morning"). A held
   plan passage that says today is a doubt about today's service, so another
@@ -391,11 +407,14 @@ where a rule restores what an ordinary note read before round 3b.
   word in a remark, "Completed ☒ (pathology pending)", is none); a boxed value
   with no option is read as text; when the yes/no word right before the first
   box is the option's own word ("Not done ☒") that box decides, and "Not
-  performed" / "Not done" is one option word. A service listed under a label
-  that denies performance ("Procedures not performed:", after any list marker
-  the other readers strip and with parentheses in its words: "1. Procedure(s)
-  not performed:"), or under a verbless denying heading ("Cancelled
-  procedures:"), is held; a colon-less denying line is no label. The lines
+  performed" / "Not done" is one option word. A line listed under a label that
+  denies performance ("Procedures not performed:", after any list marker the
+  other readers strip, with parentheses in its words, or led by one box of any
+  state: "1. Procedure(s) not performed:", "☐ Procedures not performed:"), or
+  under a verbless denying heading ("Cancelled procedures:"), is held whatever
+  it names (an intervention line too: "Cold snare polypectomy of the 6 mm
+  sigmoid polyp." under "Procedures not performed:"), never newly negated; a
+  colon-less denying line is no label. The lines
   that ask whether the procedure was done, cancelled or called off are read by
   one grammar shared by the typed reader, the form-field block, the status
   question and its answer: a lead (an indent, a list marker, "was/is/has/had",
@@ -438,7 +457,15 @@ where a rule restores what an ordinary note read before round 3b.
   one of a closed list of other report fields (preparation or its quality,
   BBPS, withdrawal or insertion time, sedation, complications, findings,
   retroflexion: "Extent: Cecum | Prep quality: Good"), and any other next cell
-  stays in the tail. A label in an unrecognised section counts only in the
+  stays in the tail. An extent label that names the expected depth (the
+  cecum, terminal ileum or appendiceal orifice; the EGD's duodenal depth) but
+  is unread for its tail never lets a shallower prose landmark read the
+  procedure incomplete ("Extent: Cecum | Scope: Olympus" beside "inserted into
+  the rectum"): the extent is withheld and asked, unless something contrary
+  sits on the label's line (a negation word, an aim word such as intended,
+  goal, attempted or hoped, or a cue other than a performance cue); a label
+  short of the expected depth agrees the procedure was incomplete and keeps
+  that reading. A label in an unrecognised section counts only in the
   product's addendum block and the PDF form-field and annotation blocks (never
   a preparation or complications line, which may be an outside report's: "Prior
   colonoscopy (outside facility, 2021):" + "Prep: adequate" + "Extent: cecum"
@@ -519,7 +546,11 @@ where a rule restores what an ordinary note read before round 3b.
   modifier, significant, identifiable) always makes it the answer; one mark
   with a short label of its own on that line ("☐ Attested", "Attested | ☐") is
   the statement's own box and attests only when checked, and a form field tied
-  to that line that is not checked refuses it.
+  to that line that is not checked refuses it. A line under it that carries an
+  attestation word, or a word negated in itself (unattested, disagree,
+  unconfirmed), refuses it when that line carries a contrary word, or is a
+  field or a marked line whose value does not affirm ("Notes: Not attested";
+  also "Notes: Attested", an accepted over-hold).
 - Check boxes (the contract with 5.1; pasted text is read the same way; the
   spellings are defined once in `studio/ingest/symbols.py`): unchecked ☐ □ ◻ ◽
   ❏ ❐ ❑ ❒, `[ ]` and `( )` with any inner whitespace, `[_]`; checked ☑ ☒ ✓ ✔
@@ -533,7 +564,10 @@ where a rule restores what an ordinary note read before round 3b.
   `< >` forms, the other white squares (U+25A2, U+2B1C, U+1F78E-U+1F793:
   typed, they are a bullet as often as a box), and on a line that marks
   options bare radio glyphs and answers in parentheses; boxes for one item that
-  disagree, a yes/no pair with both options checked, and a row whose boxes can
+  disagree, a yes/no pair with both options checked, a passage across items
+  whose boxes differ ("☑ Cold snare polypectomy ☐ Biopsy" cited whole: the item
+  it speaks for cannot be told from it, so it is never read by its first box
+  and never negated), and a row whose boxes can
   be read as leading or trailing (the items the readings disagree on) hold too,
   as does an intervention joined by "with", "plus" or ";" to a later item
   whose own box is not checked (`BOX_LATER`). A box governs the item(s) on its own line or cell within
@@ -720,7 +754,8 @@ the clarification names both passages) when the hedge is about the code's own
 service. Beside a performed passage, a hedge about another service (for an E/M
 code one that touches no E/M documentation routing reads; for another code one
 that names only another family's service and none of the code family's
-interventions) leaves the code ready with a warn
+interventions; a held coordinated `gi.other` mention is never such another
+service) leaves the code ready with a warn
 naming it, and a performance statement that only its section downgraded
 supports the code; a hedge that names no service is the code's own for a
 procedure code (fail-closed). Routing decides only when the
@@ -757,9 +792,19 @@ cue), counts only where it names the code's OWN procedure done (by the
   procedure (by name, as "the procedure", "the exam", "the study" or "it", or
   by its act verb; a plan or history mention is no such doubt), because
   routing's `gi.other` finding never reads such a denial ("Anoscopy was not
-  performed; the patient declined." names no mention).
+  performed; the patient declined." names no mention). A sentence's
+  own-procedure words are read on their own for this too, since routing reads
+  the clause after a `gi.other` name only for the name ("Anoscopy was
+  incomplete because of pain." reads performed as a sentence and incomplete at
+  "Anoscopy").
+A passage that reads incomplete only through its detected family's
+document-level judgement ("Procedure: Colonoscopy" when the colonoscopy stopped
+at the splenic flexure) is judged by its own reading before that judgement
+(`detect.own_status_for_span`): it states no procedure of a `gi.other` code.
 Otherwise (`section_only`) the code is held, never excluded, with the reason
-that the passage is not read as documenting that service as done on that date.
+that the passage is not read as documenting that service as done on that date
+(worded from what decided it: "reads as performed only by its section, and as
+incomplete only through what the document says of the procedure it names").
 Each of these questions is indexed once per code (the routed families' mention
 spans for the other-service question, each sentence's leading name, the
 own-procedure sentence readings), never rescanned per passage. An exclusion never presents the code's own passage as the
@@ -775,7 +820,9 @@ procedure's) and routing's PLAN_TODAY cue (`uncertain: its clause says today,
 so its plan section does not make it planned`): such a plan mention can speak
 for the date of service, and for an E/M code's own passage it is a section
 default like any other. It also reads routing's OTHER_STATED and ANOTHER_TIME
-holds by their prefixes (the stated-act and another-time cues of 5.3). A passage
+holds by their prefixes (the stated-act and another-time cues of 5.3; the
+stated-act hold of a hedged performance statement, `_P2_HEDGED_STATEMENT`,
+shares OTHER_STATED's prefix, and a test pins that). A passage
 that states the act but is held because of its section is reported as
 "stated as performed under <section>; confirm it was performed on the date of
 service", citing the section cue, never as "no documentation establishes".
