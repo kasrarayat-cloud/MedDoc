@@ -532,5 +532,240 @@ class Box2HOptionLabelAcrossALineTests(unittest.TestCase):
                 self.assertEqual(found is not None, at == 'match', (text, found))
 
 
+
+# --- box2:I -- an unchecked option's own words state nothing about the service or the item beside it ---------------
+
+I_REPORT = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n{row}\n'
+
+
+def family_status(text, slug='gi.colonoscopy'):
+    finding = detect.route(text, D).finding(slug)
+    return finding.status if finding else None
+
+
+class Box2IUnselectedOptionTests(unittest.TestCase):
+    """box2:I (high, a declared misread at every tree; ARCHITECTURE 5.3, round 4c regression:4: an option every denying
+    option of which has its own unchecked box states nothing, in every reader of the line). _box_own_option_off reached
+    the status references and the called-off reader, not the clause cues a service or an item is read by: "Colonoscopy:
+    ☒ Completed ☐ Cancelled" read CANCELLED (family, mention, row; 45378 excluded), and "☑ Cold snare polypectomy ☐
+    Repeat in 3 years" read PLANNED, the checked polypectomy cited alone too (45385 excluded). A denying or plan option
+    whose own box is unchecked now states nothing about a target outside its own words; one whose box cannot be read or
+    disagrees holds it. Never newly negated or excluded. The mirrored rows read so too: a status line's label is read by
+    its options, not by the first box after it (an option's), the words of an unchecked option right after the label
+    deny nothing, and an item an option's box was taken for is held; a line that selects nothing holds."""
+
+    def read(self, text, phrase, within=None):
+        start = text.index(phrase) if within is None else text.index(within) + within.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def test_an_unchecked_status_option_cancels_nothing(self):
+        for row in ('Colonoscopy: \u2612 Completed \u2610 Cancelled', 'Colonoscopy: Completed \u2612 | Cancelled \u2610',
+                    'Colonoscopy: \u2612 Completed \u2610 Deferred', 'Colonoscopy: \u2612 Completed \u2610 Postponed',
+                    'Colonoscopy: \u2612 Completed \u2610 Not done', 'Colonoscopy: \u2612 Completed \u2610 Rescheduled',
+                    'Colonoscopy: \u2612 Completed \u2610 Aborted \u2610 Cancelled', '- Colonoscopy: [x] Completed [ ] Cancelled',
+                    'Colonoscopy | \u2612 Completed | \u2610 Cancelled', 'Colonoscopy: \u2612 Completed \u2610 Incomplete \u2610 Aborted',
+                    'Colonoscopy status: \u2612 Completed \u2610 Aborted', 'Colonoscopy: \u2612 Completed \u2610 Pending'):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                self.assertEqual(family_status(text), 'performed')  # read as the rest of the report reads it
+                label = row.lstrip('- ')
+                status, cues = self.read(text, 'Colonoscopy', within=label)  # the row's own label, not the heading's
+                self.assertEqual(status, 'performed', cues)
+                status, cues = self.read(text, label)  # the row cited whole runs across the unchecked option: held
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('45378', label))
+                self.assertEqual(outcome(proposals['45378']), 'held')
+                proposals, _ = real(text, ('45378', 'The colonoscope was advanced to the cecum.'))
+                self.assertEqual(outcome(proposals['45378']), 'ready')
+
+    def test_an_unchecked_plan_option_plans_nothing_beside_it(self):
+        for row, item, wanted in (('\u2611 Cold snare polypectomy \u2610 Repeat in 3 years', '\u2611 Cold snare polypectomy', 'ready'),
+                                  ('\u2611 Biopsy \u2610 Not done', '\u2611 Biopsy', 'ready'),
+                                  # a row opening with an item, its boxes trailing: read by its entries, not its options
+                                  ('Cold snare polypectomy \u2612 | Repeat in 3 years \u2610', 'Cold snare polypectomy \u2612',
+                                   'ready'),
+                                  # held, never planned: "next visit" is a time another reader holds
+                                  ('\u2611 Cold snare polypectomy \u2610 Planned for next visit', '\u2611 Cold snare polypectomy',
+                                   ('ready', 'held'))):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                status, cues = self.read(text, item)
+                self.assertEqual(status, 'performed', cues) if wanted == 'ready' else self.assertIn(
+                    status, ('performed', 'uncertain'), cues)
+                code = '45380' if 'Biopsy' in item else '45385'
+                proposals, _ = real(text, (code, item))
+                if wanted == 'ready':
+                    self.assertEqual(outcome(proposals[code]), 'ready', [c.detail for c in proposals[code].checks])
+                else:
+                    self.assertIn(outcome(proposals[code]), wanted)
+                status, cues = self.read(text, row)  # the row cited whole: held, never planned or cancelled
+                self.assertEqual(status, 'uncertain', cues)
+
+    def test_an_option_whose_box_cannot_be_read_holds(self):
+        for row in ('Colonoscopy: \u2612 Completed [?] Cancelled', 'Colonoscopy: \u2612 Completed \u2612\u2610 Cancelled',
+                    'Colonoscopy: \u2612 Completed (\u2022) Cancelled'):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                status, cues = self.read(text, 'Colonoscopy:')
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertNotEqual(family_status(text), 'cancelled')
+                proposals, _ = real(text, ('45378', row))
+                self.assertEqual(outcome(proposals['45378']), 'held')
+
+    def test_the_mirrored_status_row_reads_by_its_options(self):
+        """The denying option first: the label was read by the first box after it, the option's, NEGATED at every tree
+        (int2, 4347acd, d05326ef); an act denial right after the label ("Not performed ☐") denied it as a member's."""
+        for row, label in (('Colonoscopy: \u2610 Cancelled \u2612 Completed', 'Colonoscopy:'),
+                           ('Colonoscopy: Cancelled \u2610 | Completed \u2612', 'Colonoscopy:'),
+                           ('Colonoscopy status: \u2610 Aborted \u2612 Completed', 'Colonoscopy status:'),
+                           ('Colonoscopy | \u2610 Incomplete | \u2612 Completed', 'Colonoscopy |'),
+                           ('Colonoscopy: Not performed \u2610 | Performed \u2612', 'Colonoscopy:'),
+                           ('Colonoscopy: Incomplete \u2610 | Completed \u2612', 'Colonoscopy:'),
+                           ('Colonoscopy: [ ] Postponed [x] Done', 'Colonoscopy:'),
+                           ('Colonoscopy: \u2610 Pending \u2612 Completed', 'Colonoscopy:'),
+                           ('Colonoscopy: \u2610 Aborted \u2610 Cancelled \u2612 Completed', 'Colonoscopy:')):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                self.assertEqual(family_status(text), 'performed')
+                status, cues = self.read(text, 'Colonoscopy', within=row)
+                self.assertEqual(status, 'performed', cues)
+                status, cues = self.read(text, row)  # the row cited whole runs from the label across the options: held
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('45378', label))
+                self.assertEqual(outcome(proposals['45378']), 'ready', [c.detail for c in proposals['45378'].checks])
+                proposals, _ = real(text, ('45378', row))
+                self.assertEqual(outcome(proposals['45378']), 'held')
+        text = I_REPORT.format(row='Cold snare polypectomy: \u2610 Planned \u2612 Done')  # an item's label
+        self.assertEqual(self.read(text, 'Cold snare polypectomy')[0], 'performed')
+        proposals, _ = real(text, ('45385', 'Cold snare polypectomy:'))
+        self.assertEqual(outcome(proposals['45385']), 'ready', [c.detail for c in proposals['45385'].checks])
+
+    def test_an_item_read_by_an_options_box_holds(self):
+        """The box reader sees no option word: "Repeat in 3 years ☐ | Cold snare polypectomy ☒" looks as if its boxes
+        lead, so the polypectomy was read by the option's ☐ (NEGATED, 45385 excluded). Read by the line's entries, its
+        own box is checked: the readers disagree, so it is held (never ready by this rule). A line that can be read
+        both ways, or a label whose option cannot be read, holds too."""
+        for row, item, whole in (('Repeat in 3 years \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy', 'held'),
+                                 ('Planned \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy', 'held'),
+                                 # the row cited whole reads performed at every tree (no reader takes its "Not")
+                                 ('Not performed [ ] | Cold snare polypectomy [x]', 'Cold snare polypectomy', 'ready'),
+                                 ('Colonoscopy \u2610 Cancelled \u2612 Completed', 'Colonoscopy', 'held'),
+                                 ('Colonoscopy: \u2610 Cancelled [?] Completed', 'Colonoscopy', 'held')):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                status, cues = self.read(text, item, within=row)
+                self.assertEqual(status, 'uncertain', cues)
+                status, cues = self.read(text, row)
+                self.assertEqual(status, 'uncertain' if whole == 'held' else 'performed', cues)
+                code = '45385' if 'polypectomy' in item else '45378'
+                proposals, _ = real(text, (code, row))
+                self.assertEqual(outcome(proposals[code]), whole, [c.detail for c in proposals[code].checks])
+        for row in ('\u2610 Repeat in 3 years \u2611 Cold snare polypectomy', '\u2610 Planned \u2611 Cold snare polypectomy'):
+            with self.subTest(row=row):  # its boxes lead: the polypectomy's own box is checked and read so
+                text = I_REPORT.format(row=row)
+                self.assertEqual(self.read(text, 'Cold snare polypectomy')[0], 'performed')
+
+    def test_an_unchecked_option_never_releases_an_item_not_itself_checked(self):
+        """The option's words are dropped only for a target whose own items are checked: the box reader, which sees no
+        option word, reads "Planned ☐ | Biopsy ☒ | Cold snare polypectomy ☐" as if its boxes lead, so the unchecked
+        polypectomy took the biopsy's ☒, and only the "Planned" cue kept it from reading performed (planned at the
+        base). It is held, never performed and never ready."""
+        for row in ('Planned \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610',
+                    'Repeat in 3 years \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610',
+                    'Rescheduled [ ] | Biopsy [x] | Cold snare polypectomy [ ]'):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                status, cues = self.read(text, 'Cold snare polypectomy', within=row)
+                self.assertNotEqual(status, 'performed', cues)
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('45385', 'Cold snare polypectomy'))
+                self.assertNotEqual(outcome(proposals['45385']), 'ready')
+                self.assertEqual(outcome(proposals['45385']), 'held')
+
+    def test_an_item_read_by_another_entrys_checked_box_holds(self):
+        """The false-ready direction of the same misreading: on a status line the box reader, which sees no option word,
+        gave the unchecked polypectomy of "Not performed ☐ Biopsy ☒ Cold snare polypectomy ☐" the biopsy's ☒ (PERFORMED
+        at int2 and 4347acd, 45385 ready; negated at d05326ef). Read by the line's entries, its own box is unchecked: it
+        is held, never ready."""
+        for row in ('Not performed \u2610 Biopsy \u2612 Cold snare polypectomy \u2610',
+                    'Not performed [ ] | Biopsy [x] | Cold snare polypectomy [ ]',
+                    'Repeat in 3 years \u2612 | Cold snare polypectomy \u2610'):
+            with self.subTest(row=row):
+                text = I_REPORT.format(row=row)
+                status, cues = self.read(text, 'Cold snare polypectomy', within=row)
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('45385', 'Cold snare polypectomy'))
+                self.assertEqual(outcome(proposals['45385']), 'held')
+
+    def test_an_unchecked_hold_or_hedge_option_holds_nothing(self):
+        """An unselected option neither denies nor holds (_unchecked_option): an unchecked hold word, hedge or abort with
+        no start statement held the service at every tree ("☐ Pending" by ending its section's reach; "☐ If needed",
+        "☐ Aborted" as clause cues). A blank frame shows the abort case: nothing there says the scope went in."""
+        bare = HEAD + 'Procedure note\n{row}\nThe patient tolerated it well.\n'
+        for frame, row in ((I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 Pending'),
+                           (I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 On hold'),
+                           (I_REPORT, 'Colonoscopy: \u2612 Completed \u2610 If needed'),
+                           (I_REPORT, 'Colonoscopy: Pending \u2610 | Completed \u2612'),
+                           (bare, 'Colonoscopy: \u2612 Completed \u2610 Aborted'),
+                           (bare, 'Colonoscopy: \u2612 Completed \u2610 If needed')):
+            with self.subTest(row=row, bare=frame is bare):
+                text = frame.format(row=row)
+                self.assertEqual(family_status(text), 'performed')
+                status, cues = self.read(text, 'Colonoscopy', within=row)
+                self.assertEqual(status, 'performed', cues)
+        for row, status in (('Colonoscopy: \u2612 Completed. Repeat if needed.', 'uncertain'),  # prose: no option
+                            ('Colonoscopy: \u2612 Completed \u2612 Pending', 'uncertain'),     # a checked hold holds
+                            ('Colonoscopy: \u2612 Completed \u2610 Declined', 'uncertain')):   # a negation doubt stays
+            with self.subTest(control=row):
+                cited = 'Repeat if needed.' if 'Repeat' in row else 'Colonoscopy'
+                self.assertEqual(self.read(I_REPORT.format(row=row), cited, within=row)[0], status)
+
+    def test_a_line_that_selects_nothing_holds(self):
+        """Both boxes unchecked: the line says nothing either way, so an unchecked option's words are held, never
+        dropped ("Colonoscopy: ☐ Not done ☐ Completed" read CANCELLED at the base). The label read by its own unchecked
+        box stays denied, as at the base."""
+        text = I_REPORT.format(row='Colonoscopy: \u2610 Not done \u2610 Completed')
+        self.assertEqual(family_status(text), 'uncertain')
+        status, cues = self.read(text, 'Colonoscopy', within='Colonoscopy: \u2610 Not done')
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertIn("uncertain: 'Not done' is an unchecked option on a line that selects nothing", cues)
+        text = I_REPORT.format(row='Colonoscopy: \u2610 Cancelled \u2610 Completed')
+        self.assertEqual(family_status(text), 'negated')
+
+    def test_controls_read_as_before(self):
+        """A checked denying option, prose after a box, an option whose own words hold the target, and a hold."""
+        for row in ('Colonoscopy: \u2612 Cancelled \u2610 Completed', 'Colonoscopy: Cancelled \u2612 | Completed \u2610',
+                    'Colonoscopy | \u2612 Cancelled | \u2610 Completed'):
+            with self.subTest(row=row):  # a checked cancellation still cancels, whichever way its boxes are written
+                text = I_REPORT.format(row=row)
+                self.assertEqual(family_status(text), 'cancelled')
+                self.assertEqual(self.read(text, row)[0], 'cancelled')
+        text = I_REPORT.format(row='Colonoscopy: \u2610 Completed \u2612 Cancelled')
+        self.assertEqual(family_status(text), 'negated')
+        self.assertEqual(self.read(text, 'Colonoscopy: \u2610 Completed \u2612 Cancelled')[0], 'negated')
+        text = I_REPORT.format(row='\u2610 Cold snare polypectomy \u2612 Repeat in 3 years')
+        self.assertEqual(self.read(text, '\u2610 Cold snare polypectomy')[0], 'negated')
+        for row, cited, status in (('\u2610 Cold snare polypectomy. Repeat colonoscopy in 3 years.', 'Repeat colonoscopy in 3 years.',
+                                    'planned'),
+                                   ('\u2611 Cold snare polypectomy \u2610 Biopsy. Repeat colonoscopy in 3 years.',
+                                    'Repeat colonoscopy in 3 years.', 'planned'),
+                                   ('\u2611 Cold snare polypectomy. Repeat colonoscopy in 3 years.', 'Repeat colonoscopy in 3 years.',
+                                    'planned'),
+                                   ('\u2610 Repeat colonoscopy in 3 years', '\u2610 Repeat colonoscopy in 3 years', 'negated'),
+                                   ('Colonoscopy: \u2612 Done \u2610 Declined', 'Colonoscopy:', 'uncertain')):
+            with self.subTest(row=row):
+                self.assertEqual(self.read(I_REPORT.format(row=row), cited)[0], status)
+        text = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nPlan: Repeat colonoscopy in 3 years.\n'
+        self.assertEqual(self.read(text, 'Repeat colonoscopy in 3 years.')[0], 'planned')
+        for row, cited, status in (('Colonoscopy attempted?: \u2610 Yes \u2612 No', 'Colonoscopy', 'negated'),
+                                   ('Colonoscopy completed? \u2610 Yes \u2611 No', 'Colonoscopy', 'negated'),
+                                   ('Follow-up colonoscopy in 3 years ( )', 'colonoscopy', 'negated'),
+                                   ('Colonoscopy cancelled: [ ] Yes [x] No', 'Colonoscopy', 'negated'),
+                                   ('Cold snare polypectomy \u2610 | Repeat in 3 years \u2612', 'Cold snare polypectomy', 'negated'),
+                                   ('Colonoscopy: \u2612 Cancelled \u2610 Completed', 'Colonoscopy', 'cancelled')):
+            with self.subTest(control=row):  # yes / no questions, a plan line, an item's own unchecked box
+                self.assertEqual(self.read(I_REPORT.format(row=row), cited, within=row)[0], status)
+
+
 if __name__ == '__main__':
     unittest.main()

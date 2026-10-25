@@ -854,13 +854,16 @@ def _stop_word(an: Analysis, word: re.Match, limit: int, first: bool, procedure:
     return None
 
 
-def _continuation(an: Analysis, pos: int, limit: int, clause_end: int, procedure: bool) -> Optional[str]:
+def _continuation(an: Analysis, pos: int, limit: int, clause_end: int, procedure: bool,
+                  target: Optional[tuple[int, int]] = None) -> Optional[str]:
     """The words after ``pos`` (up to ``limit``, the end of the name's sentence) that keep a section
     from speaking for the service named before ``pos``, or None when they describe the procedure or
     what it found (see above). The first word is read even where a clause word opens it
     ("Colonoscopy, however, was not."); later words only up to ``clause_end``, the end of the name's
     own clause. ``procedure``: under a procedure heading, where a "to" may open the procedure's
-    purpose."""
+    purpose. ``target``: what is read (the service's name, or a passage naming it); a word of an option whose own box is
+    unchecked states nothing about a target beside it (round 4c-2 box2:I: "Colonoscopy: ☒ Completed ☐ Cancelled"), and
+    a passage across the option keeps it (_B2_unselected_option)."""
     text = an.text
     limit = min(limit, pos + CONTINUATION_REACH)
     first, previous = True, ''
@@ -884,7 +887,8 @@ def _continuation(an: Analysis, pos: int, limit: int, clause_end: int, procedure
         if lowered in _REPORTING or (not first and lowered in _RELATIVES):
             return None
         stop = _stop_word(an, word, limit, first, procedure, previous)
-        if stop is not None:
+        if stop is not None and not (target is not None
+                                     and _B2_unselected_option(an, word.start(), word.end(), *target) == 'off'):
             return stop
         pos, first, previous = word.end(), False, word.group(0).lower()
 
@@ -1386,7 +1390,7 @@ def _silent_section(an: Analysis, ts: int, te: int) -> Optional[str]:
         for m in named:
             end = _group_end(an, m, e)
             word = _continuation(an, end, e, _clause_end(an, m.start, e),
-                                 procedure=an.lay.section_at(m.start).kind == 'procedure')
+                                 procedure=an.lay.section_at(m.start).kind == 'procedure', target=(ts, te))
             if word is not None:
                 an.memo[key] = f"{SILENT_SECTION_PREFIX} '{word}' follows the service name, so its section does not make it performed"
                 break
@@ -1734,6 +1738,11 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
                 and cues.AS_BOOKED_BEFORE.search(text, max(cs, cue.start - 30), cue.start):
             continue  # "was performed today as scheduled": the booking it kept, not a future
         if _attached(spans, index, cue.start, cue.end):
+            if status in _B2_DENYING_STATUSES:  # round 4c-2 box2:I: an option's own words, read by its own box
+                read = _B2_option_words(an, cue.start, cue.end, ts, te, cue.text)
+                if read is not None:
+                    found += read
+                    continue
             if cue.name in _OWNED_TIME_CUES:
                 owned = _owned_time_cue(an, cue, named, (cs, ce), em, today, history)
                 if owned is not None:
@@ -1768,7 +1777,9 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
     for ms, me in members:
         post = _masked_post(an, me, ce)
         negations, _ = _member_negations(an, cs, ce, ms, me, post)
-        found += [('negated', label, past, False) for label, past, _ in negations]
+        for label, past, (ns, ne) in negations:  # round 4c-2 box2:I: "Colonoscopy: Not performed ☐ | Performed ☒"
+            read = _B2_option_words(an, ns, ne, ts, te, label.split(': ', 1)[-1])
+            found += [('negated', label, past, False)] if read is None else read
         pre_cues, had = _pre_cues(an, _pre_start(an, cs, ms), ms)
         found += pre_cues
         if had is not None and not today:
@@ -1777,7 +1788,9 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
             for name, pattern in entries:
                 m = pattern.search(post)
                 if m:
-                    found.append((status, f'{status}: {_said(m)}', False, name == 'pending'))
+                    where = _masked_map(an, me, ce)[1]  # round 4c-2 box2:I: "Colonoscopy: Incomplete ☐ | Completed ☒"
+                    read = _B2_option_words(an, where[m.start()], where[m.end()], ts, te, _said(m))
+                    found += [(status, f'{status}: {_said(m)}', False, name == 'pending')] if read is None else read
     return found
 
 
@@ -2095,7 +2108,16 @@ _LABEL_COLON = re.compile(r'[ \t\u00a0]*:[ \t\u00a0]*')  # between a label and t
 def _box_tokens(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
     """The items and the boxes wholly inside [lo, hi). Items: (start, end) of service names, interventions and
     other procedures' names, overlapping ones merged. Boxes: (start, end, state), state 'off', 'on' or 'unread'. A bare
-    radio glyph or an answer in parentheses is an unread mark only where [lo, hi) marks options (_box_option_marks)."""
+    radio glyph or an answer in parentheses is an unread mark only where [lo, hi) marks options (_box_option_marks).
+    Memoised per window (round 4c-2 box2:I: the status-line readers read each window twice), and apart before and after
+    routing names the other procedures (an.other_names); callers never change the lists."""
+    key = ('box-tokens', lo, hi, bool(an.other_names))
+    if key not in an.memo:
+        an.memo[key] = _box_tokens_read(an, lo, hi)
+    return an.memo[key]
+
+
+def _box_tokens_read(an: Analysis, lo: int, hi: int) -> tuple[list, list]:
     items = _merged(list({(m.start, m.end) for m in an.services_in(lo, hi)}
                          | {(iv.start, iv.end) for iv in an.interventions_in(lo, hi)} | set(_other_names_in(an, lo, hi))))
     unread = [(u.start(), u.end(), 'unread') for u in _BOX_UNREAD.finditer(an.text, lo, hi)
@@ -2799,6 +2821,19 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
     if _B2_items_differ(an, start, end, state):  # round 4c-2 box2:G: a row of items in different box states, read whole
         return Reading('uncertain', (_B2_ITEMS_DIFFER,), 'cue', doubt=True)
+    if state == 'off':  # round 4c-2 box2:I: the unchecked box it is read by may be an option's, not its own
+        label = _B2_label_state(an, start, end)
+        if label == 'on':
+            state = 'on'  # "Colonoscopy" of "Colonoscopy: ☐ Cancelled ☒ Completed": read as its line's options say
+        elif label == 'unknown':
+            return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
+        elif label == 'across':
+            return Reading('uncertain', (_B2_ROW_ACROSS,), 'cue', doubt=True)
+        elif _B2_item_box_differs(an, start, end):
+            return Reading('uncertain', (_B2_OPTION_BOX,), 'cue', doubt=True)
+    elif state == 'on' and _B2_item_box_differs(an, start, end, 'off'):
+        # "Not performed ☐ Biopsy ☒ Cold snare polypectomy ☐": read by the biopsy's ☒, its own box unchecked
+        return Reading('uncertain', (_B2_OTHER_BOX,), 'cue', doubt=True)
     if state == 'off' and _box_selected_denial(an, start, end):
         # round 4c-2 box2:H: a passage naming no item that selects a "Not performed" or "Not done" option ("☒ Not
         # performed") is held, as round 5 declared:8 holds the service it follows: it names nothing it could deny
@@ -3593,6 +3628,200 @@ def _box_own_option_off(an: Analysis, start: int, end: int) -> bool:
     words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
     states = _box_option_states(an, lo, hi, options, words)
     return all(states[i] == 'off' for i in own)
+
+
+# --- round 4c-2 box2:I: an unchecked option's own words state nothing about the service or the item beside it ---------
+# The statuses a denying or plan option's own words carry (_box_denying_options: a cancelling, planning, doubting,
+# historical or incomplete cue, an act denial): an unselected option neither denies nor holds (_unchecked_option).
+_B2_DENYING_STATUSES = ('cancelled', 'planned', 'uncertain', 'historical', 'incomplete', 'negated')
+_B2_OPTION_UNREAD = "uncertain: '{}' is an option on its line whose own box cannot be read"
+_B2_OPTION_ACROSS = "uncertain: the passage runs across the option '{}', whose own box is unchecked, and other words"
+_B2_OPTION_BLANK = "uncertain: '{}' is an unchecked option on a line that selects nothing"
+_B2_OPTION_BOX = ('uncertain: the unchecked box it is read by may be the box of an option beside it: read by its '
+                  "line's option words, its own box is checked, or the line can be read both ways")
+_B2_OTHER_BOX = ('uncertain: the checked box it is read by may be the box of another entry on its line: read by its '
+                 "line's option words, its own box is unchecked")
+_B2_ROW_ACROSS = ("uncertain: the passage runs from its status line's label across the line's options, whose denying "
+                  'options are unchecked')
+
+
+def _B2_option_words(an: Analysis, start: int, end: int, ts: int, te: int, shown: str) -> Optional[list]:
+    """How a clause reader reads the words [start, end) for the target [ts, te) when they may be a status option's own
+    words (_B2_unselected_option): None to read them as before, [] when the option's own box is unchecked and the
+    target lies outside its words (they state nothing about it), or the hold to read instead when its box cannot be
+    read, when its line selects nothing, or when the target runs across the option and other words."""
+    unselected = _B2_unselected_option(an, start, end, ts, te)
+    if unselected == 'off':
+        return []
+    if unselected in ('unknown', 'across', 'blank'):
+        label = {'unknown': _B2_OPTION_UNREAD, 'across': _B2_OPTION_ACROSS, 'blank': _B2_OPTION_BLANK}[unselected]
+        return [('uncertain', label.format(' '.join(shown.split())[:80]), False, True)]
+    return None
+
+
+def _B2_unselected_option(an: Analysis, start: int, end: int, ts: int, te: int) -> Optional[str]:
+    """Whether the words [start, end) are those of a denying or plan option of a line with boxes (_B2_status_line:
+    "Cancelled" of "Colonoscopy: ☒ Completed ☐ Cancelled", "in 3 years" of "☑ Cold snare polypectomy ☐ Repeat in 3
+    years") that says nothing of the target [ts, te): 'off' when that option's own box is unchecked and the target lies
+    outside the option's own words (from its box to the next box, or from the box before it, or the line's label, to
+    its own box, as the line's boxes lead or trail), 'blank' when it is unchecked on a line that selects nothing,
+    'unknown' when its box cannot be read or disagrees, 'across' when the target runs across the unchecked option and
+    other words, else None. A target inside the option's words ("☐
+    Repeat colonoscopy in 3 years") and prose after a single box ("☐ Biopsy. Repeat colonoscopy in 3 years.") read as
+    before. Round 5 regression:4 (ARCHITECTURE 5.3), carried from the status references to the clause readers a
+    service or an item is read by. The option is read once per span (memoised)."""
+    key = ('b2-unselected', start, end)
+    if key not in an.memo:
+        an.memo[key] = _B2_option_reading(an, start, end)
+    found = an.memo[key]
+    if found is None:
+        return None
+    state, text_lo, text_hi = found
+    end_ = max(te, ts + 1)
+    if text_lo <= ts and end_ <= text_hi:
+        return None  # the target is the option's own words: its own box reads it
+    if end_ <= text_lo or ts >= text_hi:  # a target beside the option
+        if state == 'off' and not _B2_target_selected(an, start, end, ts, te):
+            return 'unknown'  # an item it names is not itself checked: what reads it then cannot be told
+        return state
+    # a passage across the option and other words ("☑ Cold snare polypectomy ☐ Repeat in 3 years" cited whole): held
+    return 'across' if state == 'off' else state
+
+
+def _B2_target_selected(an: Analysis, start: int, end: int, ts: int, te: int) -> bool:
+    """Whether every item the target [ts, te) names on the status line of the option words [start, end), after its
+    label, has its own box checked, read by the line's entries (_B2_status_line); True when it names none there (the
+    label, or a target off the line). The option's words then state nothing about it, and it is read by its own box.
+    An item that is not itself checked keeps the hold: the box reader, which sees no option word, may give it another
+    item's box ("Planned ☐ | Biopsy ☒ | Cold snare polypectomy ☐" reads as if its boxes lead, so the unchecked
+    polypectomy takes the biopsy's ☒), and dropping the option's words would read it performed."""
+    line = _B2_status_line(an, *_B2_line_window(an, start, end))
+    return line is None or all(state == 'on' for state in _B2_listed_states(line, ts, te))
+
+
+def _B2_listed_states(line: tuple, start: int, end: int) -> list:
+    """The states of the status line's items (after its label, _B2_item_runs) that the passage [start, end) names."""
+    return [state for (s, e), state in line[8] if _overlaps(s, e, start, max(end, start + 1))]
+
+
+def _B2_item_runs(text: str, items: list) -> list:
+    """The items, those written next to each other with nothing but spaces between them joined into one entry ("Cold
+    snare" and "polypectomy" of "Cold snare polypectomy ☒"): one name, which the box after it governs whole."""
+    runs = []
+    for start, end in items:
+        if runs and not text[runs[-1][1]:start].strip(' \t'):
+            runs[-1] = (runs[-1][0], end)
+        else:
+            runs.append((start, end))
+    return runs
+
+
+def _B2_line_window(an: Analysis, start: int, end: int) -> tuple[int, int]:
+    """The line of [start, end) within BOX_REACH of it, as _box_own_option_off reads a status line."""
+    text = an.text
+    lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
+    newline = text.find('\n', end, end + BOX_REACH)
+    return lo, min(len(text), end + BOX_REACH) if newline < 0 else newline
+
+
+def _B2_status_line(an: Analysis, lo: int, hi: int) -> Optional[tuple]:
+    """The status line [lo, hi) read option by option: (label end, its denying options (_box_denying_options) and their
+    states, its completion options (_BOX_DONE_OPTION; one inside a denying option, "Not performed", is merged into it
+    and has its state) and their states, its boxes, its entries, whether any entry's own box is checked, and its items
+    with their states), or None when it has no box or no denying option. The states are read by the line's entries as _box_own_option_off reads them
+    (_box_option_states: the boxes lead when the first box comes before the first entry, trail when the last box comes
+    after the last; 'unknown' when the line can be read both ways). The entries are the option words and the line's
+    box-marked items (_B2_item_runs), but not its label: what opens the line before its first box and its first option
+    word and ends in ":" or "|" ("Colonoscopy:" of "Colonoscopy: ☒ Completed ☐ Cancelled" or of "Colonoscopy:
+    Cancelled ☐ | Completed ☒", "Colonoscopy status:"), which is what its options are about. So "Cold snare
+    polypectomy ☒ | Repeat in 3 years ☐", which the option words alone would read as leading, trails. Memoised per
+    line."""
+    key = ('b2-status-line', lo, hi)
+    if key not in an.memo:
+        text = an.text
+        items, boxes = _box_tokens(an, lo, hi)
+        options = _box_denying_options(an, lo, hi) if boxes else []
+        result = None
+        if options:
+            done = [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
+            cut = min([boxes[0][0]] + [s for s, _ in options + done])
+            head = text[lo:cut].rstrip(' \t')
+            label_end = lo + len(head) if head.endswith((':', '|')) else lo
+            listed = _B2_item_runs(text, [item for item in items if item[0] >= label_end])
+            entries = options + done + listed
+            states = _box_option_states(an, lo, hi, entries, entries)
+            result = (label_end, options, states[:len(options)], done, states[len(options):len(options) + len(done)],
+                      boxes, entries, 'on' in states, tuple(zip(listed, states[len(options) + len(done):])))
+        an.memo[key] = result
+    return an.memo[key]
+
+
+def _B2_option_reading(an: Analysis, start: int, end: int) -> Optional[tuple]:
+    """(state, text start, text end) of the denying option the words [start, end) belong to on a status line
+    (_B2_status_line), or None when they are none or its own box is checked: 'off' (unchecked), 'blank' (unchecked, on
+    a line that selects nothing: "Colonoscopy: ☐ Not done ☐ Completed" says nothing either way, so it is held) or
+    'unknown' (unread, disagreeing, or a line its boxes can be read both ways). Its words run between the boxes around
+    it, and never into the line's label."""
+    lo, hi = _B2_line_window(an, start, end)
+    line = _B2_status_line(an, lo, hi)
+    if line is None:
+        return None
+    label_end, options, states, _, _, boxes, _, selected, _ = line
+    own = [i for i, (s, e) in enumerate(options) if _overlaps(s, e, start, end)]
+    if not own:
+        return None
+    found = {states[i] for i in own}
+    option_start, option_end = min(options[i][0] for i in own), max(options[i][1] for i in own)
+    text_lo = max([b[1] for b in boxes if b[1] <= option_start] + [label_end])
+    text_hi = min((b[0] for b in boxes if b[0] >= option_end), default=hi)
+    if found & {'unknown', 'mixed', 'unclear'}:
+        return 'unknown', text_lo, text_hi
+    if found == {'off'}:
+        return ('off' if selected else 'blank'), text_lo, text_hi
+    return None
+
+
+def _B2_label_state(an: Analysis, start: int, end: int) -> Optional[str]:
+    """What its status line says of a passage that opens in the line's label (_B2_status_line: "Colonoscopy" of
+    "Colonoscopy: ☐ Cancelled ☒ Completed" or of "Colonoscopy: Cancelled ☐ | Completed ☒"), which the box reader reads by
+    the first box after the label, an option's. When every denying option's own box is unchecked and a completion
+    option's is checked, the line says it was done: 'on' for a passage within the label (read as a checked box's
+    passage; the option's words state nothing about it), 'across' for one that runs on into the options (held, as a
+    passage across an unchecked option and other words is). 'unknown' when an option's box cannot be read or the line
+    can be read both ways; else None (read as before: "Colonoscopy: ☐ Completed ☒ Cancelled" stays denied)."""
+    if an.text.find('\n', start, end) >= 0:
+        return None
+    lo, hi = _B2_line_window(an, start, end)
+    line = _B2_status_line(an, lo, hi)
+    if line is None or start >= line[0]:
+        return None
+    label_end, _, states, _, done_states, _, _, _, _ = line
+    if any(state in ('unknown', 'mixed', 'unclear') for state in states + done_states):
+        return 'unknown'
+    if all(state == 'off' for state in states) and 'on' in done_states:
+        return 'on' if max(end, start + 1) <= label_end else 'across'
+    return None
+
+
+def _B2_item_box_differs(an: Analysis, start: int, end: int, against: str = 'on') -> bool:
+    """Whether the items the passage [start, end) names after its status line's label (_B2_status_line), read by the
+    line's entries, are not all unchecked, where the box reader, which sees no option word, reads the passage by an
+    unchecked box: an item's own box is checked ("Repeat in 3 years ☐ | Cold snare polypectomy ☒": the option is no
+    item, so the boxes look as if they lead and the reader takes ☐ for the polypectomy's; the item alone and the row
+    cited whole), or the line can be read both ways ("Colonoscopy ☐ Cancelled ☒ Completed"). The passage is then held.
+    ``against`` 'off': for a passage the box reader reads by a checked box, whether an item it names has its own box
+    unchecked ("Not performed ☐ Biopsy ☒ Cold snare polypectomy ☐": the polypectomy took the biopsy's ☒).
+    An item the entries give no box of its own is not read so: a question's "?" ("Endoscopy attempted?: ☐ Yes ☒ No")
+    and a plan option's words ("Follow-up colonoscopy in 3 years ( )") are option words to them."""
+    if an.text.find('\n', start, end) >= 0:
+        return False
+    line = _B2_status_line(an, *_B2_line_window(an, start, end))
+    if line is None:
+        return False
+    states = _B2_listed_states(line, start, end)
+    if against == 'off':
+        return 'off' in states
+    return 'on' in states or any(state in ('unknown', 'mixed', 'unclear') for state in states)
 
 
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
