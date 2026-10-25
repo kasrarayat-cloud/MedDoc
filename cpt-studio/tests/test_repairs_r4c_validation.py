@@ -10,7 +10,7 @@ from datetime import date
 from studio.gi.detect import route
 from studio.types import EvidenceSpan, RoutingResult, from_jsonable, to_jsonable
 from studio.validation import checks, engine
-from tests.test_repairs_r3_validation_b import HEAD, Case
+from tests.test_repairs_r3_validation_b import HEAD, Case, check_of, real
 from tests.test_repairs_r4_validation import assess_timed
 
 DAY = date(2026, 10, 21)
@@ -75,3 +75,92 @@ class Bounded4OtherServiceIndexTests(Case):
             return 'gi.office_em' not in named
         return bool(named) and family not in named and not checks.names_intervention(text, reading.start, reading.end,
                                                                                       family)
+
+
+# --- validation:4: an act counts as stated today only when its clause tells no other time ---------------------------
+
+FOLLOW_UP = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+             'Chief complaint: follow-up after hemorrhoid banding.\nFindings: {line}\nMedical decision making: moderate.\n'
+             'Total time: 32 minutes.\n')
+ANOSCOPY_REPORT = HEAD + 'Procedure: Anoscopy\nIndication: Follow-up after hemorrhoid banding.\nFindings: {line}\n'
+BANDING_REPORT = HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: {line}\n'
+
+
+class Validation4AnotherTimeInTheActsClauseTests(Case):
+    """validation:4 (high). names_procedure took any "today" in a stated act's clause as the act's own time, and its
+    relative-pronoun guard missed an auxiliary after the pronoun: 46221 was ready ("Documented as performed") for a
+    banding done at an earlier visit ("Two columns were banded at her last visit and look healed today.", "The columns
+    which have been banded look healed today."). An act whose clause tells another time (routing's own time reader, a
+    history cue, a date that is not the date of service), or that follows a relative pronoun and its auxiliaries, is no
+    act stated today - and in a procedure report routing's own act mention, read done because its clause says today,
+    no longer counts either. Both only hold (section_only), never exclude."""
+
+    HELD = ('Two columns were banded at her last visit and look healed today.',
+            'Two columns were banded on 10/07 and look healed today.',
+            'Two columns were banded on October 7 and look healed today.',
+            'Two columns were banded on Monday and look healed today.',  # 2026-10-21 is a Wednesday
+            'Two columns were banded in September and look healed today.',
+            'Two columns were banded on 11/07 and look healed today.',
+            'The hemorrhoids that had been banded at her last visit look healed today.',
+            'The columns which have been banded look healed today.',
+            # variants: a history cue of time or place, and further auxiliaries after the pronoun
+            'Two columns were banded 3 weeks ago and look healed today.',
+            'Two columns were banded last month and look healed today.',
+            'Two columns were banded at an outside hospital and look healed today.',
+            'The columns which had previously been banded look healed today.',
+            'The columns that have already been banded look healed today.')
+
+    def assertHeld(self, item, passage):
+        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'),
+                         [c.detail for c in item.checks])
+        self.assertIn('performed_status', [c.fact for c in item.clarifications])
+        status = check_of(item, 'service.status')
+        self.assertNotIn('Documented as performed', status.detail)
+        self.assertIn(f'“{passage}”', status.detail)
+
+    def test_the_claimed_follow_up_findings_hold_46221(self):
+        for line in self.HELD:
+            with self.subTest(line=line):
+                proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', line))
+                self.assertHeld(proposals['46221'], line)
+
+    def test_the_e_m_beside_it_reads_the_banding_as_possibly_performed(self):
+        line = self.HELD[0]
+        proposals, _ = real(FOLLOW_UP.format(line=line), ('99213', 'Total time: 32 minutes.'), ('46221', line))
+        self.assertHeld(proposals['46221'], line)
+        detail = check_of(proposals['99213'], 'em.same_day_procedure').detail
+        self.assertIn('the service reported as 46221 are possibly performed on the same date', detail)
+        self.assertNotIn('documented as performed on the same date', detail)
+
+    def test_routing_s_act_mention_in_a_procedure_report_counts_only_without_another_time(self):
+        for line in self.HELD[:8]:
+            for layout in (ANOSCOPY_REPORT, BANDING_REPORT):
+                with self.subTest(line=line, layout=layout[len(HEAD):len(HEAD) + 20]):
+                    proposals, _ = real(layout.format(line=line), ('46221', line))
+                    self.assertHeld(proposals['46221'], line)
+
+    def test_a_date_in_the_act_s_clause_too_far_for_routing_to_attach_holds(self):
+        # A cited fragment: routing attaches no date this far from it, so its section reads it performed; the act's
+        # clause still names another date.
+        line = ('Two columns were banded, as described in the referral letter that she brought to the visit dated '
+                '2026-09-01, and look healed today.')
+        proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', 'Two columns were banded'))
+        self.assertHeld(proposals['46221'], 'Two columns were banded')
+
+    def test_controls_an_act_stated_today_stays_ready(self):
+        cases = [(FOLLOW_UP, line) for line in ('Two columns were banded today and look healthy.',
+                                                'Two columns were banded today on 2026-10-21.',
+                                                'Two columns were banded today, on Wednesday.',
+                                                'Two columns were banded this morning.',
+                                                'Today we banded two internal hemorrhoids.')]
+        cases += [(ANOSCOPY_REPORT, 'Two columns were banded today and look healthy.'),
+                  (BANDING_REPORT, 'Two columns were banded today and look healthy.')]
+        for layout, line in cases:
+            with self.subTest(line=line, layout=layout[len(HEAD):len(HEAD) + 20]):
+                proposals, _ = real(layout.format(line=line), ('46221', line))
+                self.assertReady(proposals['46221'])
+                self.assertIn('Documented as performed', check_of(proposals['46221'], 'service.status').detail)
+        # the banding report's own procedure line still counts beside a findings line about an earlier banding
+        text = BANDING_REPORT.format(line=self.HELD[0])
+        proposals, _ = real(text, ('46221', 'Rubber band ligation of internal hemorrhoids'))
+        self.assertReady(proposals['46221'])

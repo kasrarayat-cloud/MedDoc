@@ -1121,19 +1121,24 @@ _VAL_OWN_PROCEDURES = tuple(
         ('49082', '49084', (r'\bparacentes[ie]s\b',), ''),
         ('91010', '91299', (r'\b(?:manometr(?:y|ies)|capsule\s+endoscop(?:y|ies))\b',), ''),
     ))
-# A relative pronoun right before a stated act: the act is told of something else's subject ("The hemorrhoids that were
-# banded at the first session have resolved."), never stated as this sentence's own.
-_VAL_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who|whom|whose)\s+$', re.A | re.I)
+# A relative pronoun right before a stated act, or before up to three auxiliaries or adverbs that lead it (round 5
+# validation:4: "that had been banded", "which have already been banded"): the act is told of something else's subject
+# ("The hemorrhoids that were banded at the first session have resolved."), never stated as this sentence's own.
+_VAL_RELATIVE_BEFORE = re.compile(r'\b(?:that|which|who|whom|whose)\s+(?:(?:has|have|had|is|are|was|were|be|being|been|'
+                                  r'already|previously|recently|also|then|since|just|all|both|each|once|ever|only|'
+                                  r'not|never|originally|initially|subsequently|successfully)\s+){0,3}$', re.A | re.I)
+_VAL_RELATIVE_REACH = 80  # how far back from the act the relative pronoun is looked for (bounds the work per act)
 _VAL_WE_LEAD = 40  # how far back "we" / "I" may follow its clause's start, by at most one word ("Today we banded ...")
 
 
 def _VAL_stated(an, text: str, m) -> bool:
-    """Whether an _ACT_STATED match ``m`` is the act its sentence states rather than one it tells of: not right after a
-    relative pronoun ("The hemorrhoids that were banded at the first session have resolved."), and "we" / "I" opening
-    its clause or following one word ("Today we banded ...", never "The internal hemorrhoids we banded have
-    resolved."). ``an``: routing's analysis of ``text``. Bounded: a window of a few words before the match."""
+    """Whether an _ACT_STATED match ``m`` is the act its sentence states rather than one it tells of: not after a
+    relative pronoun and the auxiliaries that lead the act ("The hemorrhoids that were banded at the first session have
+    resolved.", "The columns which have been banded look healed today."), and "we" / "I" opening its clause or following
+    one word ("Today we banded ...", never "The internal hemorrhoids we banded have resolved."). ``an``: routing's
+    analysis of ``text``. Bounded: a window of a few words before the match."""
     from studio.gi import detect
-    if _VAL_RELATIVE_BEFORE.search(text, max(0, m.start() - 12), m.start()):
+    if _VAL_RELATIVE_BEFORE.search(text, max(0, m.start() - _VAL_RELATIVE_REACH), m.start()):
         return False
     if m.group(0).split()[0].lower() in ('we', 'i'):
         clause = detect._clause_at(an, m.start())
@@ -1144,10 +1149,18 @@ def _VAL_stated(an, text: str, m) -> bool:
 
 def _VAL_told_act(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
     """Whether the routed name at [start, end) holds an act its sentence only tells of (_VAL_stated): routing's stated-
-    act mention "hemorrhoids that were banded", read done by a findings section, names no banding done today."""
+    act mention "hemorrhoids that were banded", read done by a findings section, names no banding done today; nor does
+    a stated act whose clause tells another time (_VAL_another_time, round 5 validation:4: "Two columns were banded at
+    her last visit and look healed today.", read done because its clause says today)."""
     from studio.gi import detect
     an = detect._analysis(text, service_date)[0]
-    return any(not _VAL_stated(an, text, m) for m in _ACT_STATED.finditer(text, max(0, start - 12), end))
+    for m in _ACT_STATED.finditer(text, max(0, start - 12), end):
+        if not _VAL_stated(an, text, m):
+            return True
+        lo, hi = an.lay.window(detect._clause_at(an, m.start()), m.start(), m.end(), detect.CLAUSE_REACH)
+        if _VAL_another_time(an, lo, hi):
+            return True
+    return False
 
 
 def _VAL_own_procedure(code: str):
@@ -1160,6 +1173,21 @@ def _VAL_owns(code: str, name: str) -> bool:
     46600's and never 46221's. False for a code whose range lists no procedure (fail-closed)."""
     entry = _VAL_own_procedure(code)
     return entry is not None and all(pattern.search(name) for pattern in entry[2])
+
+
+def _VAL_another_time(an, lo: int, hi: int) -> bool:
+    """Whether an act's clause window [lo, hi) also tells a time that may not be the date of service (round 5
+    validation:4), so its "today" may be another predicate's ("Two columns were banded at her last visit and look
+    healed today."): routing's own reader of such a time (detect._another_encounters_time: a history cue of time or
+    place, an unlisted time that may not be the date of service, a month and day with no year that are not its own),
+    or a date that is not the date of service (any date when that is unknown). Used only to hold: such an act is not
+    counted as stated today."""
+    from studio.gi import context as gi_context
+    from studio.gi import detect
+    if detect._another_encounters_time(an, lo, hi):
+        return True
+    day = an.service_date
+    return any(day is None or gi_context.compare_to_service(d, day) != 0 for d in an.dates_in(lo, hi))
 
 
 @functools.lru_cache(maxsize=4)
@@ -1191,7 +1219,8 @@ def _VAL_text_index(text: str, service_date: Optional[date]):
         lo, hi = an.lay.window(detect._clause_at(an, m.start()), m.start(), m.end(), detect.CLAUSE_REACH)
         sentence = sentences[index]
         scope = (max(sentence[0], m.start() - detect.CLAUSE_REACH), min(sentence[1], m.end() + detect.CLAUSE_REACH))
-        if words.TODAY.search(text, lo, hi) and not detect._about_a_detected_family(an, *scope, detected):
+        if (words.TODAY.search(text, lo, hi) and not _VAL_another_time(an, lo, hi)
+                and not detect._about_a_detected_family(an, *scope, detected)):
             acts.setdefault(participle, []).append(index)
     return (tuple(s for s, _ in sentences), sentences, tuple(opening),
             {participle: tuple(sorted(set(found))) for participle, found in acts.items()})
