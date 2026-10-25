@@ -429,5 +429,115 @@ class PlanBUnreadExtentLabelTests(unittest.TestCase):
         self.assertNotEqual(extent, 'incomplete: rectum')
 
 
+# --- plan:C: a line listed under a denying label is held whatever it names --------------------------------------------
+
+C_FINDINGS = 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n'
+C_POLYP = 'Cold snare polypectomy of the 6 mm sigmoid polyp.'
+LISTED_UNDER = 'uncertain: listed under '
+
+
+def c_note(lines):
+    return HEADER + C_FINDINGS + lines + '\n'
+
+
+class PlanCDenyingLabelTests(unittest.TestCase):
+    """plan:C (high, declared misread). ARCHITECTURE 5.3: a service listed under a label that denies performance
+    ("Procedures not performed:"), or under a verbless denying heading ("Cancelled procedures:"), is held. The label was
+    read (detect._denying_label_above) only for a SERVICE mention, through _later_denial; a line that names an
+    intervention ("Cold snare polypectomy of the 6 mm sigmoid polyp.") was read by its section default, performed, and
+    45385 citing it was ready. Every performed reading of a line under a denying label - read exactly as
+    _denying_label_above reads it - is now held (uncertain, "listed under '<label>', a label that denies performance",
+    a doubt), whatever it names; a service mention keeps its denial reading; nothing is newly negated or excluded. A
+    denying label led by a box of any state ("[ ] Procedures not performed:") is read as one too, for every reader of
+    the label: an unchecked one may be an unselected option, so holding what is listed under it is the safe reading."""
+
+    HELD = (('Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('Procedures not performed:\n- ' + C_POLYP, C_POLYP, '45385'),
+            ('Not done:\n' + C_POLYP, C_POLYP, '45385'),
+            ('Procedure(s) not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('1. Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('Procedures not performed today:\n' + C_POLYP, C_POLYP, '45385'),
+            ('Procedures not performed:\nBiopsy of the antrum.', 'Biopsy of the antrum.', '45380'),
+            ('Procedures not performed:\nBiopsy.\n' + C_POLYP, C_POLYP, '45385'),
+            ('Procedures not performed:\n' + C_POLYP + '\nImpression: Sigmoid polyp.', C_POLYP, '45385'),
+            ('Procedures not performed:\nCold snare polypectomy was performed.', 'Cold snare polypectomy was performed.',
+             '45385'),
+            ('Cancelled procedures:\nCold snare polypectomy was performed.', 'Cold snare polypectomy was performed.',
+             '45385'),
+            ('Procedures not performed:\n☑ ' + C_POLYP, C_POLYP, '45385'),
+            ('☐ Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('☒ Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('[ ] Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'),
+            ('[x] Procedures not performed:\n- ' + C_POLYP, C_POLYP, '45385'),
+            ('[?] Procedures not performed:\n' + C_POLYP, C_POLYP, '45385'))
+
+    def assert_held(self, text, cite, code):
+        status, cues = read(text, cite)
+        self.assertEqual(status, 'uncertain', cues)
+        self.assertTrue(cues[0].startswith(LISTED_UNDER), cues)
+        self.assertFalse(any(c.startswith('uncertain: no performance evidence') for c in cues), cues)
+        proposal = run_engine(text, [(code, cite)])[code]
+        self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
+
+    def test_the_claimed_line_and_its_variants_are_held(self):
+        for lines, cite, code in self.HELD:
+            with self.subTest(lines=lines):
+                self.assert_held(c_note(lines), cite, code)
+
+    def test_a_service_under_the_label_keeps_its_denial_reading(self):
+        text = c_note('Procedures not performed:\nEGD.')
+        status, cues = read(text, 'EGD.')
+        self.assertEqual(status, 'uncertain')
+        self.assertTrue(cues[0].startswith('uncertain: section silent:'), cues)
+        # and with its own performance cue, or under a box-led label, it is held too, never performed
+        for lines in ('Procedures not performed:\nEGD was performed.', '☐ Procedures not performed:\nEGD.'):
+            text = c_note(lines)
+            with self.subTest(lines=lines):
+                self.assertEqual(read(text, 'EGD')[0], 'uncertain')
+                self.assertNotIn(family(text, 'gi.egd'), ('performed', 'incomplete') + NOT_TODAY)
+
+    def test_never_newly_negated_or_excluded(self):
+        """An unchecked item under the label stays negated (the box contract), as at the base; nothing else is."""
+        text = c_note('Procedures not performed:\n☐ ' + C_POLYP)
+        self.assertEqual(read(text, C_POLYP)[0], 'negated')
+        for lines, cite, code in self.HELD:
+            text = c_note(lines)
+            with self.subTest(lines=lines):
+                self.assertNotEqual(run_engine(text, [(code, cite)])[code].bucket, 'excluded')
+
+    def test_the_list_ends_where_the_label_reader_ends_it(self):
+        """A blank line, another label or another section ends what is listed under the label; a line on the label's
+        own line, a non-denying label and an unlabelled line read as before."""
+        for lines in ('Procedures not performed:\n\n' + C_POLYP, 'Procedures not performed:\nBiopsy.\nInterventions:\n' + C_POLYP,
+                      'Procedures not performed:\nBiopsy.\nImpression: ' + C_POLYP, 'Interventions:\n' + C_POLYP, C_POLYP,
+                      'Procedures performed:\n' + C_POLYP):
+            text = c_note(lines)
+            with self.subTest(lines=lines):
+                self.assertFalse(read(text, C_POLYP)[1][0].startswith(LISTED_UNDER), read(text, C_POLYP))
+        text = c_note('Procedures not performed: ' + C_POLYP)
+        self.assertEqual(read(text, C_POLYP)[0], 'uncertain')  # its own clause's negation, as at the base
+
+    def test_the_hold_is_a_doubt_that_the_section_evidence_cannot_outrank(self):
+        """A service stated performed under the label contradicts the family's section evidence elsewhere: the family is
+        never performed through the heading alone (round 4b's lesson: a hold that replaces a denial counts as doubt)."""
+        text = HEADER + 'Procedure: EGD\nFindings: Normal.\nProcedures not performed:\nEGD was performed.\n'
+        status, cues = read(text, 'EGD was performed.')
+        self.assertEqual(status, 'uncertain')
+        self.assertTrue(cues[0].startswith(LISTED_UNDER), cues)
+        self.assertNotIn(family(text, 'gi.egd'), ('performed', 'incomplete'))
+
+    def test_an_e_m_documentation_line_is_never_held_by_it(self):
+        text = (HEADER + 'Place of service: Office (POS 11)\n' + VISIT + '\nMedical decision making:\nNot performed:\n'
+                'Moderate complexity.\n')
+        status, cues = read(text, 'Moderate complexity.')
+        self.assertEqual(status, 'performed', cues)
+
+    def test_the_family_and_its_other_lines_are_unchanged(self):
+        text = c_note('Procedures not performed:\n' + C_POLYP)
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+        self.assertEqual(read(text, 'The colonoscope was advanced to the cecum.')[0], 'performed')
+        self.assertTrue(ready(run_engine(text, [('45378', 'The colonoscope was advanced to the cecum.')])['45378']))
+
+
 if __name__ == '__main__':
     unittest.main()

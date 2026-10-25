@@ -1311,7 +1311,7 @@ def _denying_label_above(an: Analysis, s: int) -> Optional[str]:
             if not words or an.lay.section_at(ls) is not section:
                 break
             if words.endswith(':'):
-                if len(words) <= 80 and _DENYING_LABEL.fullmatch(text, ls, le):
+                if len(words) <= 80 and (_DENYING_LABEL.fullmatch(text, ls, le) or _P2_boxed_denying_label(text, ls, le)):
                     an.memo[key] = words
                 break
     return an.memo[key]
@@ -2968,6 +2968,35 @@ def _box_status_answer(an: Analysis, start: int, end: int) -> Optional[Reading]:
     return Reading('uncertain', (BOX_STATUS_ANSWER.format(text[newline + 1:stop].strip()),), 'cue', doubt=True)
 
 
+# Round 4c-2 plan:C: a performed reading of a line listed under a label that denies performance ("Procedures not
+# performed:", "Not done:"; "Cancelled procedures:" over a line with a performance cue of its own) is held, whatever the
+# line names. The label was read (_denying_label_above) only for a service mention, through _later_denial, so a line
+# naming an intervention ("Cold snare polypectomy of the 6 mm sigmoid polyp.") read performed by its section. The label
+# is read exactly as that reader reads it (LABEL_ITEMS lines back, in the same section, stopping at a blank line or at
+# another label line), and the hold is a doubt, as the verbless denying heading's own default is (round 4 release:9).
+_P2_LEADING_BOX = re.compile(r'[ \t]*(?:' + _BOX_MARK.pattern + r')[ \t]*')
+
+
+def _P2_boxed_denying_label(text: str, ls: int, le: int) -> bool:
+    """Whether the label line [ls, le) is a denying label led by one box of any state ("[ ] Procedures not performed:",
+    "[x] Not done:", "[?] Cancelled procedures:"): one box, then the label as _DENYING_LABEL reads it. An unchecked box
+    may be an unselected option, so what is listed under it is held, never read performed (round 4c-2 plan:C)."""
+    lead = _P2_LEADING_BOX.match(text, ls, le)
+    return bool(lead) and bool(_DENYING_LABEL.fullmatch(text, lead.end(), le))
+
+
+def _P2_listed_under_a_denial(an: Analysis, start: int, reading: Reading) -> Reading:
+    """``reading`` of the passage at ``start``, held when it reads performed (not as E/M documentation) and its line is
+    listed under a denying label (_denying_label_above): uncertain, a doubt, never negated (round 4c-2 plan:C)."""
+    if reading.status != 'performed' or (reading.cues and reading.cues[0].endswith(EM_DOCUMENTATION)):
+        return reading
+    label = _denying_label_above(an, start)
+    if label is None:
+        return reading
+    return Reading('uncertain', (f"uncertain: listed under '{label}', a label that denies performance",) + reading.cues,
+                   reading.basis, doubt=True)
+
+
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
     """The reading of [start, end) from its clause cues or its section. A performed reading
     of a procedure (not of E/M documentation) becomes an uncertain doubt when an unresolved
@@ -2995,7 +3024,7 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
             doubt = (reading.basis == 'section' and _silent_section(an, start, end)) or _doubt(an, start, end)
             if doubt:
                 reading = Reading('uncertain', (doubt,) + reading.cues, reading.basis, doubt=True)
-        an.memo[key] = reading
+        an.memo[key] = _P2_listed_under_a_denial(an, start, reading)  # round 4c-2 plan:C
     return an.memo[key]
 
 
