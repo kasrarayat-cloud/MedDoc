@@ -1000,5 +1000,69 @@ class Box2KNonItemFirstWordTests(unittest.TestCase):
                 self.assertEqual(outcome(proposals['99214']), 'held')
 
 
+
+# --- box2:L -- a service-labelled status row with a hold word checked -------------------------------------------------
+
+class Box2LHoldWordLabelTests(unittest.TestCase):
+    """box2:L (high, a declared misread at every tree). "Colonoscopy: ☒ Incomplete ☐ Completed" and "Colonoscopy: ☒
+    Incomplete" read PERFORMED (the row cited whole, the name, the family: 45378 ready) where "Status: ☒ Incomplete ☐
+    Completed" is held; so did a checked "Unknown", "Unclear" or "Requested" in some layouts, and "Colonoscopy status:"
+    as the label. A status line's hold words are options beside their own mark (round 4c regression:0) and its label is
+    read by its options (box2:I): a checked hold word holds the service the label names, as under "Status:". Never
+    performed; a reading that is not performed (the row's own "Incomplete" read incomplete) stays."""
+
+    def read(self, text, phrase, within):
+        start = text.index(within) + within.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def test_a_checked_hold_word_holds_the_labelled_service(self):
+        for word in ('Incomplete', 'Unknown', 'Unclear', 'Requested', 'Pending', 'On hold', 'TBD', 'TBA'):
+            for row in (f'Colonoscopy: \u2612 {word} \u2610 Completed', f'Colonoscopy: \u2612 {word}',
+                        f'Colonoscopy status: \u2612 {word} \u2610 Completed', f'Colonoscopy: {word} \u2612 | Completed \u2610',
+                        f'Colonoscopy: [x] {word} [ ] Completed'):
+                with self.subTest(row=row):
+                    text = I_REPORT.format(row=row)
+                    whole = self.read(text, row, row)[0]
+                    self.assertIn(whole, ('uncertain', 'incomplete'))  # held; an incompleteness read as such stays
+                    self.assertIn(self.read(text, 'Colonoscopy', row)[0], ('uncertain', 'incomplete'))
+                    self.assertIn(family_status(text), ('uncertain', 'incomplete'))
+                    proposals, _ = real(text, ('45378', row))
+                    self.assertNotEqual(outcome(proposals['45378']), 'excluded')
+                    if whole == 'uncertain':
+                        self.assertEqual(outcome(proposals['45378']), 'held')
+
+    def test_the_hold_names_the_option(self):
+        text = I_REPORT.format(row='Colonoscopy: \u2612 Incomplete \u2610 Completed')
+        status, cues = self.read(text, 'Colonoscopy', 'Colonoscopy: \u2612 Incomplete')
+        self.assertEqual(status, 'uncertain')
+        self.assertTrue(any("'Incomplete'" in c for c in cues), cues)
+
+    def test_a_visit_statement_as_the_label_is_held(self):
+        """The visit statement's reader (box2:J) reads its status line's hold words too: "Established patient office
+        visit: ☒ Incomplete ☐ Completed" read performed (99214 ready)."""
+        for line in ('Established patient office visit: \u2612 Incomplete \u2610 Completed', 'Established patient office visit: \u2612 Unknown'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                status, cues = self.read(text, 'Established patient office visit', line)
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('99214', 'Established patient office visit'))
+                self.assertEqual(outcome(proposals['99214']), 'held')
+
+    def test_unchecked_hold_words_and_status_lines_read_as_before(self):
+        for row, status in (('Colonoscopy: \u2610 Incomplete \u2612 Completed', 'performed'),
+                            ('Colonoscopy: \u2612 Completed \u2610 Incomplete', 'performed'),
+                            ('Colonoscopy: \u2612 Completed \u2610 Unknown', 'performed'),
+                            ('Colonoscopy: Incomplete \u2612 | Completed \u2610', 'incomplete')):
+            with self.subTest(row=row):
+                self.assertEqual(self.read(I_REPORT.format(row=row), 'Colonoscopy', row)[0], status)
+        # only a passage in the line's label: an item with a checked hold word beside it reads as before
+        row = '\u2611 Cold snare polypectomy \u2612 Pending pathology'
+        self.assertEqual(self.read(I_REPORT.format(row=row), 'Cold snare polypectomy', row)[0], 'performed')
+        line = 'Status: \u2612 Incomplete \u2610 Completed'
+        text = I_REPORT.format(row=line)
+        self.assertEqual(self.read(text, line, line)[0], 'uncertain')
+        self.assertEqual(family_status(text), 'uncertain')
+
+
 if __name__ == '__main__':
     unittest.main()

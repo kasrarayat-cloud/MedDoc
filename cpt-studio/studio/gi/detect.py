@@ -3100,6 +3100,10 @@ def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
             doubt = (reading.basis == 'section' and _silent_section(an, start, end)) or _doubt(an, start, end)
             if doubt:
                 reading = Reading('uncertain', (doubt,) + reading.cues, reading.basis, doubt=True)
+        if reading.status == 'performed':
+            hold = _B2_label_hold(an, start, end)  # round 4c-2 box2:L: "Colonoscopy: ☒ Incomplete ☐ Completed"
+            if hold:
+                reading = Reading('uncertain', (hold,) + reading.cues, 'cue', doubt=True)
         an.memo[key] = _P2_listed_under_a_denial(an, start, reading)  # round 4c-2 plan:C
     return an.memo[key]
 
@@ -4109,6 +4113,28 @@ def _B2_runs_disagree(an: Analysis, start: int, end: int, state: Optional[str], 
     return other in ('on', 'off') and other != state
 
 
+# --- round 4c-2 box2:L: a service-labelled status row with a hold word checked -------------------------------------
+_B2_LABEL_HOLD = "uncertain: its status line checks '{}', which holds it"
+
+
+def _B2_label_hold(an: Analysis, start: int, end: int) -> Optional[str]:
+    """The hold of a passage that opens in a status line's label (_B2_status_line: "Colonoscopy" of "Colonoscopy: ☒
+    Incomplete ☐ Completed", the row cited whole, "Colonoscopy status: ...") when a hold word of the line (an option
+    beside its own mark, _BOX_STATUS_HOLD_WORD: pending, incomplete, on hold, TBD, TBA, unknown, unclear, requested,
+    ...; round 4c regression:0) has its own box checked: the cue naming it, else None. As under "Status:", where the
+    line's hold words hold the service; a service's name as the label read it performed (45378 ready). The callers
+    read it only where the passage would otherwise read performed."""
+    if an.text.find('\n', start, end) >= 0:
+        return None
+    line = _B2_status_line(an, *_B2_line_window(an, start, end))
+    if line is None or start >= line[0]:
+        return None
+    for (option_start, option_end), state in zip(line[1], line[2]):
+        if state == 'on' and _BOX_STATUS_HOLD_WORD.fullmatch(an.text, option_start, option_end):
+            return _B2_LABEL_HOLD.format(an.text[option_start:option_end])
+    return None
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -4739,7 +4765,11 @@ def _B2_visit_box(an: Analysis, start: int, end: int) -> Optional[Reading]:
     so in an option row ("Visit type: ☐ New patient visit ☒ Established patient visit") the unchecked option of
     another visit type never holds the checked one; as a status line's label it is read by the line's options
     (_B2_label_state). Held, never negated: an unchecked visit statement is no statement that the visit did not
-    happen. A row its boxes can be read for both ways holds it (box2:K)."""
+    happen. A checked hold word of its status line holds it (box2:L), and so does a row its boxes can be read for both
+    ways (box2:K)."""
+    hold = _B2_label_hold(an, start, end)
+    if hold:
+        return Reading('uncertain', (hold,), 'cue', doubt=True)
     _, _, lo, hi = _box_segment(an, start, end)
     if _B2_VISITS_KEY not in an.memo:
         an.memo[_B2_VISITS_KEY] = sorted((v.start, v.end) for v in an.em if v.kind == 'em-visit')
