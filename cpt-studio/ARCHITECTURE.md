@@ -340,7 +340,11 @@ where a rule restores what an ordinary note read before round 3b.
 - A family's status ranks what its mentions say of today's service
   (incomplete, cancelled, negated today, uncertain) before what they say of
   other encounters (never before, historical, planned); a plan or history
-  mention never contradicts today's service unless its clause says today. A
+  mention never contradicts today's service unless its clause says today; in
+  a procedure family's aggregate a held performance statement (an uncertain
+  reading with a `performed:` cue or the hedged-statement hold) outranks every
+  mention of another encounter ("Assessment and plan: EGD was performed with
+  biopsies. Repeat EGD in 3 months." reads uncertain, never planned). A
   family's reading reaches its explicitly performed passages only as
   cancelled, incomplete or uncertain, never as planned, historical or negated.
 - A service's whole clause is read for qualifiers (a later or outside date,
@@ -432,11 +436,22 @@ where a rule restores what an ordinary note read before round 3b.
   used.") never denies the service. An option every denying option of which
   has its own unchecked box ("Procedure cancelled | ☐", "Completed ☒ Aborted ☐
   Cancelled ☐") states nothing, in every reader of the line (the status
-  references and the called-off reader alike); a status row cited whole that
-  names no item is held (`BOX_STATUS_UNSELECTED`), never read as a
-  cancellation from its unchecked options' words; on a line naming no item, a
-  selected "Not performed" / "Not done" option holds the service above it; a
-  line with no denying option is no such option.
+  references, the called-off reader, the clause cues of every status an option
+  carries, member negations and the section-silent stop alike: "Colonoscopy:
+  ☒ Completed ☐ Cancelled" is not cancelled, and "☑ Cold snare polypectomy ☐
+  Repeat in 3 years" does not plan the polypectomy); a status line's label is
+  read by its options, never by the first box after it ("Colonoscopy: ☐
+  Cancelled ☒ Completed" reads performed); an item the box reader gave another
+  entry's box is held; and held rather than released are an unread or
+  disagreeing option box, a passage across the option and other words, a line
+  that selects nothing, a target item that is not itself checked, and option
+  text with more than one run of option words (a remark: "☐ Cancelled - aborted
+  at the splenic flexure"), each hold keeping the rank of the cue it replaces.
+  A status row cited whole that names no item is held (`BOX_STATUS_UNSELECTED`),
+  never read as a cancellation from its unchecked options' words; on a line
+  naming no item, a selected "Not performed" / "Not done" option holds the
+  service above it, and a passage that names no item but selects such an option
+  is held; a line with no denying option is no such option.
 - Hedges and hypotheticals hold: a hedge after the name ("Biopsies may have
   been taken", "were possibly obtained"), counterfactual and conditional
   wording ("Had there been a stricture, it would have been dilated", "If
@@ -461,11 +476,14 @@ where a rule restores what an ordinary note read before round 3b.
   cecum, terminal ileum or appendiceal orifice; the EGD's duodenal depth) but
   is unread for its tail never lets a shallower prose landmark read the
   procedure incomplete ("Extent: Cecum | Scope: Olympus" beside "inserted into
-  the rectum"): the extent is withheld and asked, unless something contrary
-  sits on the label's line (a negation word, an aim word such as intended,
-  goal, attempted or hoped, or a cue other than a performance cue); a label
-  short of the expected depth agrees the procedure was incomplete and keeps
-  that reading. A label in an unrecognised section counts only in the
+  the rectum"): the extent is withheld and asked, but only when the tail is
+  neutral (a plain value, or a listed instrument, staff or room cell or field;
+  any word no list reads, a negation word, an aim word such as intended, goal,
+  attempted or hoped, or a cue other than a performance cue keeps the reading
+  the prose gives) and the family's own text never denies reaching that
+  landmark or a deeper one ("Cecum not reached." on the next line keeps the
+  incomplete); a label short of the expected depth agrees the procedure was
+  incomplete and keeps that reading. A label in an unrecognised section counts only in the
   product's addendum block and the PDF form-field and annotation blocks (never
   a preparation or complications line, which may be an outside report's: "Prior
   colonoscopy (outside facility, 2021):" + "Prep: adequate" + "Extent: cecum"
@@ -572,10 +590,16 @@ where a rule restores what an ordinary note read before round 3b.
   as does an intervention joined by "with", "plus" or ";" to a later item
   whose own box is not checked (`BOX_LATER`). A box governs the item(s) on its own line or cell within
   `BOX_REACH`, before it (`☐ Biopsy`) or after it (`Biopsy | ☐`,
-  `Biopsy: ☐`); remarks after the last box do not change that, a label that
+  `Biopsy: ☐`), and its option label is read on that line only, never from
+  the line above ("Complications: none" then "☒ Cold snare polypectomy": the
+  checked box is the polypectomy's own, never a "none" option); remarks after the last box do not change that, a label that
   names several items (`Biopsy/polypectomy | ☐`) is governed as a whole, a
   cell ending in a period stays one cell, and a yes/no pair is read by the
-  option marked. The `[PDF form fields on page N]` and `[PDF annotation text
+  option marked. An E/M visit statement a box governs is read by it too: held
+  when its own box is unread, unchecked or disagreeing, or its form line is
+  "not checked" ("[?] Established patient office visit.", "☐ Established
+  patient office visit."), never negated; a checked box or no box reads as
+  before, and visit-type option rows are read option by option. The `[PDF form fields on page N]` and `[PDF annotation text
   on page N]` blocks are section boundaries of kind `other` with no default
   (a field labelled with a procedure, findings or technique heading reads its
   value as that printed line would). `<label>: not checked`, `unchecked`, `no
