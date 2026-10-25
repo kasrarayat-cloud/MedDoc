@@ -896,5 +896,66 @@ class Declared11ExtentTailTests(unittest.TestCase):
                 self.assertFalse(ready(run_engine(text, [('45385', D11_POLYP)])['45385']))
 
 
+
+# --- validation:3: a hedged same-day procedure under Assessment and plan ----------------------------------------------
+
+V3_VISIT = 'Established patient office visit.'
+
+
+def v3_note(line):
+    return (HEADER + 'Place of service: Office (POS 11)\n' + V3_VISIT + '\nChief complaint: rectal bleeding.\nHistory of '
+            'present illness: Intermittent bright red blood per rectum for three weeks.\n' + line + '\nMedical decision '
+            'making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Validation3PlanHedgeTodayTests(unittest.TestCase):
+    """validation:3 (high) - a same-day procedure stated under "Assessment and plan" whose sentence also hedges the
+    diagnosis ("Anoscopy was performed today and showed grade 2 internal hemorrhoids versus prolapse.") kept only the
+    hedge cue, so routing dropped PLAN_TODAY with the performance cue and the office E/M was approved without the
+    same-day hold. ARCHITECTURE 5.3: in a plan section any clause that says today holds (PLAN_TODAY), whatever hedge is
+    in it; routing now carries PLAN_TODAY on such an uncertain reading too, and validation holds the E/M beside it."""
+
+    HELD = ('Assessment and plan: Anoscopy was performed today and showed grade 2 internal hemorrhoids versus prolapse.',
+            'Assessment and plan: Rubber band ligation x3 was performed today, ?fissure.',
+            'A/P: Flexible sigmoidoscopy was performed today with biopsies, proctitis versus infection.',
+            'Assessment and plan: EGD was performed today with biopsies, eosinophilic esophagitis versus reflux.',
+            'Impression and plan: Anoscopy was performed today and showed grade 2 internal hemorrhoids vs prolapse.',
+            'Assessment and plan: EGD today showed eosinophilic esophagitis versus reflux.',
+            'Plan: Anoscopy was performed today and showed grade 2 internal hemorrhoids versus prolapse.',
+            'Assessment and plan: EGD was performed today with biopsies, ?eosinophilic esophagitis.')
+    READY = ('Plan: Possible EGD if symptoms persist.', 'Assessment and plan: EGD versus empiric PPI trial.',
+             'Plan: GERD. Possible EGD if symptoms persist.',
+             'Assessment and plan: Discussed colonoscopy; patient will call to schedule.')
+
+    def test_the_claimed_lines_hold_the_visit(self):
+        for line in self.HELD:
+            text = v3_note(line)
+            with self.subTest(line=line):
+                proposal = run_engine(text, [('99214', V3_VISIT)])['99214']
+                self.assertEqual(proposal.status, 'needs_clarification')
+                self.assertIn('separate_em', clarified(proposal))
+
+    def test_only_a_procedure_clause_in_a_plan_section_carries_it(self):
+        """The rule is the plan arm's: an E/M documentation mention keeps its own reading, and outside a plan section a
+        hedge already counts for the same-day check (round 4 validation:0), so no PLAN_TODAY is added there."""
+        from studio.gi.detect import PLAN_TODAY
+        text = v3_note('Plan: Established patient visit today, ?IBS.')
+        status, cues = read(text, 'Established patient visit')
+        self.assertEqual(status, 'uncertain')
+        self.assertNotIn(PLAN_TODAY, cues)
+        text = v3_note('Assessment: EGD today showed esophagitis versus reflux.')
+        status, cues = read(text, 'EGD today showed esophagitis versus reflux.')
+        self.assertEqual(status, 'uncertain')
+        self.assertNotIn(PLAN_TODAY, cues)
+        text = v3_note('Assessment and plan: EGD today showed esophagitis versus reflux.')
+        self.assertIn(PLAN_TODAY, read(text, 'EGD today showed esophagitis versus reflux.')[1])
+
+    def test_the_accepted_plan_releases_stay_ready(self):
+        for line in self.READY:
+            text = v3_note(line)
+            with self.subTest(line=line):
+                self.assertTrue(ready(run_engine(text, [('99214', V3_VISIT)])['99214']))
+
+
 if __name__ == '__main__':
     unittest.main()
