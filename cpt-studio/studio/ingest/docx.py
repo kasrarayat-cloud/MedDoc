@@ -535,6 +535,7 @@ class _Walker:
         self._style_numbering: dict = {}  # paragraph style -> (numId, ilvl) its chain gives
         self._ING_list = 0  # the list being read: a run of consecutive paragraphs whose bullets are boxes
         self._ING_checked_lists: set = set()  # the lists whose bullets show a checked box
+        self._ING_behind: dict = {}  # element -> whether something may be painted behind the text inside it
 
     @property
     def unread(self) -> bool:
@@ -803,14 +804,33 @@ class _Walker:
             return False
         if styles.shaded(character) or styles.shaded(context.paragraph_style) or styles.shaded(context.table_style):
             return False
-        for node in run.iterancestors():
-            if node.tag == TXBX_CONTENT:
-                return False
-            holder = {P: PPR, TC: _ING_TC_PR, TBL: TBL_PR}.get(node.tag)
-            found = node.find(holder) if holder else None
-            if found is not None and any(_ING_paints(shading) for shading in found if shading.tag == _ING_SHD):
-                return False
-        return True
+        return not self._ING_painted(run.getparent())
+
+    def _ING_painted(self, node) -> bool:
+        """Whether something may be painted behind the text inside ``node``: it or an ancestor is a text box, or a
+        paragraph, table cell or table whose own shading paints. Each element's verdict is read once and kept, keyed
+        by the element itself (the cache holds it, so lxml keeps its identity; never id(), which lxml reuses), so a
+        white run costs a lookup, not a walk over its ancestors."""
+        chain = []
+        verdict = False
+        while node is not None:
+            known = self._ING_behind.get(node)
+            if known is not None:
+                verdict = known
+                break
+            chain.append(node)
+            node = node.getparent()
+        for element in reversed(chain):  # from the outermost not yet read down to ``node``
+            if not verdict:
+                if element.tag == TXBX_CONTENT:
+                    verdict = True
+                else:
+                    holder = {P: PPR, TC: _ING_TC_PR, TBL: TBL_PR}.get(element.tag)
+                    found = element.find(holder) if holder else None
+                    verdict = found is not None and any(_ING_paints(shading) for shading in found
+                                                        if shading.tag == _ING_SHD)
+            self._ING_behind[element] = verdict
+        return verdict
 
     # Symbol fonts ------------------------------------------------------------------
     def _run_context(self, run, context: _Context) -> _Context:

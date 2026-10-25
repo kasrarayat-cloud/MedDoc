@@ -89,5 +89,55 @@ class Extraction2BoxBulletsPerListTests(unittest.TestCase):
         self.assertEqual(codes(result.text, ('45385', SNARE), ('45380', FORCEPS)), ('ready', 'ready'))
 
 
+# --- extraction:5 -- the white-text check on deeply nested text ------------------------------------------------------
+
+WHITE = '<w:rPr><w:color w:val="FFFFFF"/></w:rPr>'
+SHADING = '<w:shd w:val="clear" w:color="auto" w:fill="1F3864"/>'
+
+
+def nested(depth, runs, *, run_properties=WHITE, outer_cell='', inner_paragraph='', box=False):
+    """``runs`` runs of 'a ' (50 to a paragraph) in a table nested ``depth`` deep, as Word writes nested tables."""
+    run = f'<w:r>{run_properties}<w:t xml:space="preserve">a </w:t></w:r>'
+    ppr = f'<w:pPr>{inner_paragraph}</w:pPr>' if inner_paragraph else ''
+    inner = ''.join(f'<w:p>{ppr}' + run * 50 + '</w:p>' for _ in range(runs // 50))
+    if box:
+        inner = ('<w:p><w:r><w:pict><v:shape xmlns:v="urn:schemas-microsoft-com:vml"><v:textbox><w:txbxContent>'
+                 + inner + '</w:txbxContent></v:textbox></v:shape></w:pict></w:r></w:p>')
+    for level_ in range(depth):
+        tcpr = f'<w:tcPr>{outer_cell}</w:tcPr>' if outer_cell and level_ == depth - 1 else '<w:tcPr/>'
+        inner = (f'<w:tbl><w:tblPr/><w:tblGrid><w:gridCol w:w="5000"/></w:tblGrid><w:tr><w:tc>{tcpr}{inner}<w:p/>'
+                 '</w:tc></w:tr></w:tbl>')
+    body = note_paragraphs(NOTE_LINES[:2]) + inner
+    return docgen.make_docx_from_body(body)
+
+
+def in_process(data):
+    from studio.ingest.docx import extract_docx
+    from studio.ingest.extract import Limits
+    started = time.monotonic()
+    result = extract_docx(data, Limits())
+    return time.monotonic() - started, result
+
+
+class Extraction5WhiteTextCostTests(unittest.TestCase):
+    def test_white_runs_deep_in_tables_cost_what_black_runs_cost(self):
+        black_time, black = in_process(nested(80, 10_000, run_properties=''))
+        white_time, white = in_process(nested(80, 10_000))
+        self.assertEqual(black.text, white.text)
+        self.assertEqual(white.status, 'partial')
+        self.assertIn('white text with nothing shaded behind it, 10000 runs', ' '.join(white.messages))
+        self.assertLess(white_time, 3 * black_time + 1.0, (white_time, black_time))
+
+    def test_what_is_painted_behind_is_read_through_every_level(self):
+        """The verdict read once per element is the walk's: shading on the outermost cell or on the innermost paragraph,
+        or a text box, anywhere above the runs, keeps white text ok; none leaves it named."""
+        for label, kwargs, status in (('the outermost cell shaded', dict(outer_cell=SHADING), 'ok'),
+                                      ('the paragraph shaded', dict(inner_paragraph=SHADING), 'ok'),
+                                      ('in a text box', dict(box=True), 'ok'), ('nothing behind', {}, 'partial')):
+            with self.subTest(label):
+                _, result = in_process(nested(6, 100, **kwargs))
+                self.assertEqual(result.status, status, result.messages)
+
+
 if __name__ == '__main__':
     unittest.main()
