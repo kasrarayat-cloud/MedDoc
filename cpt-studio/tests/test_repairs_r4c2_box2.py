@@ -334,5 +334,101 @@ class Box2FAttestationLineTests(unittest.TestCase):
                 self.assert_documented(line)
 
 
+
+# --- box2:G -- a row of items in different box states, cited whole -----------------------------------------------------
+
+G_REPORT = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n{row}\n'
+G_ROW = 'Interventions: \u2611 Cold snare polypectomy \u2610 Biopsy'
+
+
+class Box2GRowCitedWholeTests(unittest.TestCase):
+    """box2:G (high, declared box reading; ARCHITECTURE 5.3, 5.6). A cited passage holding two or more box-governed items
+    whose boxes differ was read by one box: "Interventions: ☑ Cold snare polypectomy ☐ Biopsy" cited whole left 45380
+    and 45385 READY, and "Cold snare polypectomy ☐ Biopsy" read negated by its last box. Such a passage is held
+    (_B2_ITEMS_DIFFER, a doubt), never ready and never negated: the code's own item cannot be told from it (no CPT
+    descriptor knowledge is used). Accepted over-hold: 45385 citing the same whole row."""
+
+    def read(self, text, phrase):
+        start = text.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def assert_held(self, text, phrase):
+        status, cues = self.read(text, phrase)
+        self.assertEqual(status, 'uncertain', (phrase, cues))
+        self.assertEqual(cues[0], getattr(detect, '_B2_ITEMS_DIFFER', None), (phrase, cues))
+
+    def test_the_claimed_row_holds_both_codes(self):
+        text = G_REPORT.format(row=G_ROW)
+        self.assert_held(text, G_ROW)
+        for code in ('45380', '45385'):
+            with self.subTest(code=code):
+                proposals, _ = real(text, (code, G_ROW))
+                self.assertEqual(outcome(proposals[code]), 'held', [c.detail for c in proposals[code].checks])
+
+    def test_a_passage_across_differing_items_is_never_ready_or_negated(self):
+        for row, cited in ((G_ROW, 'Cold snare polypectomy \u2610 Biopsy'),
+                           (G_ROW, '\u2611 Cold snare polypectomy \u2610 Biopsy'),
+                           ('Interventions: \u2610 Biopsy \u2611 Cold snare polypectomy', 'Biopsy \u2611 Cold snare polypectomy'),
+                           ('Interventions: [x] Cold snare polypectomy [ ] Biopsy', 'Interventions: [x] Cold snare polypectomy [ ] Biopsy'),
+                           ('Interventions: Cold snare polypectomy \u2612 | Biopsy \u2610', 'Interventions: Cold snare polypectomy \u2612 | Biopsy \u2610'),
+                           ('Interventions: Cold snare polypectomy: \u2612 Biopsy: \u2610', 'Cold snare polypectomy: \u2612 Biopsy: \u2610'),
+                           ('Biopsy: \u2612 Yes \u2610 No  Cold snare polypectomy: \u2610 Yes \u2612 No',
+                            'Biopsy: \u2612 Yes \u2610 No  Cold snare polypectomy: \u2610 Yes \u2612 No'),
+                           ('- \u2611 Cold snare polypectomy \u2610 Biopsy \u2610 Hot snare', '\u2611 Cold snare polypectomy \u2610 Biopsy \u2610 Hot snare'),
+                           ('Interventions: \u2611 Cold snare polypectomy \u2611 Hot snare \u2610 Biopsy',
+                            'Interventions: \u2611 Cold snare polypectomy \u2611 Hot snare \u2610 Biopsy'),
+                           # an item whose own boxes disagree, or one a later unchecked box may govern (BOX_LATER),
+                           # beside another item's box: as doubtful as an unread one
+                           ('\u2612\u2610 Biopsy \u2611 Cold snare polypectomy', 'Biopsy \u2611 Cold snare polypectomy'),
+                           ('Polypectomy with cold snare: \u2610', 'Polypectomy with cold snare: \u2610')):
+            with self.subTest(row=row, cited=cited):
+                text = G_REPORT.format(row=row)
+                self.assert_held(text, cited)
+                for code in ('45380', '45385'):
+                    proposals, _ = real(text, (code, cited))
+                    self.assertEqual(outcome(proposals[code]), 'held', (code, [c.detail for c in proposals[code].checks]))
+
+    def test_each_item_cited_alone_keeps_its_reading(self):
+        text = G_REPORT.format(row=G_ROW)
+        self.assertEqual(self.read(text, '\u2611 Cold snare polypectomy')[0], 'performed')
+        self.assertEqual(self.read(text, 'Cold snare polypectomy')[0], 'performed')
+        self.assertEqual(self.read(text, '\u2610 Biopsy'), ('negated', (detect.UNCHECKED,)))
+        self.assertEqual(self.read(text, 'Biopsy'), ('negated', (detect.UNCHECKED,)))
+        proposals, _ = real(text, ('45385', '\u2611 Cold snare polypectomy'), ('45380', '\u2610 Biopsy'))
+        self.assertEqual((outcome(proposals['45385']), outcome(proposals['45380'])), ('ready', 'excluded'))
+
+    def test_rows_whose_items_agree_read_as_before(self):
+        for row in ('Interventions: \u2611 Cold snare polypectomy \u2611 Biopsy', 'Interventions: \u2610 Hot snare \u2610 Biopsy',
+                    'Interventions: \u2611 Cold snare polypectomy', 'Interventions: Cold snare polypectomy, biopsy.',
+                    'Procedure status: \u2612 Completed \u2610 Cancelled', 'Biopsy taken: \u2612 Yes \u2610 No',
+                    # an item no box governs counts for nothing beside a checked one
+                    'Colonoscopy with biopsy: \u2612', 'Hot snare \u2611 then Biopsy'):
+            with self.subTest(row=row):
+                text = G_REPORT.format(row=row)
+                status, cues = self.read(text, row)
+                self.assertNotIn(getattr(detect, '_B2_ITEMS_DIFFER', 'absent'), cues)
+        text = G_REPORT.format(row='Interventions: \u2611 Cold snare polypectomy \u2611 Biopsy')
+        proposals, _ = real(text, ('45385', 'Interventions: \u2611 Cold snare polypectomy \u2611 Biopsy'))
+        self.assertEqual(outcome(proposals['45385']), 'ready')
+        text = G_REPORT.format(row='Interventions: \u2610 Hot snare \u2610 Biopsy')
+        proposals, _ = real(text, ('45380', 'Interventions: \u2610 Hot snare \u2610 Biopsy'))
+        self.assertEqual(outcome(proposals['45380']), 'excluded')
+
+    def test_the_hold_is_a_doubt(self):
+        """It replaces a denial ("Cold snare polypectomy ☐ Biopsy" read negated), so it counts as doubt (contract-r4c 1)."""
+        text = G_REPORT.format(row=G_ROW)
+        an = detect._analysis(text, D)[0]
+        for cited in (G_ROW, 'Cold snare polypectomy \u2610 Biopsy'):
+            start = text.index(cited)
+            reading = detect._generic_reading(an, start, start + len(cited))
+            self.assertEqual((reading.status, reading.doubt), ('uncertain', True), cited)
+
+    def test_routing_reads_the_row_as_before(self):
+        """Routing's own readings (the family, its facts, each item) are unchanged: only a passage read whole moves."""
+        route = detect.route(G_REPORT.format(row=G_ROW), D).finding('gi.colonoscopy')
+        self.assertEqual(route.status, 'performed')
+        self.assertEqual(dict((f.name, f.value) for f in route.facts)['interventions'], 'cold snare')
+
+
 if __name__ == '__main__':
     unittest.main()
