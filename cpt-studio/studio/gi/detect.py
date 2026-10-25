@@ -3892,12 +3892,37 @@ OTHER_STATED = 'uncertain: a procedure is stated by its act or its findings, wit
 
 def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[str]) -> bool:
     """Whether [start, end) speaks of a detected family's procedure: it names one of those services, an
-    instrument of one ("the colonoscope", "fine-needle"), or one of their interventions ("polypectomy")."""
+    instrument of one ("the colonoscope", "fine-needle"), or one of their interventions ("polypectomy"). An intervention
+    written in a procedure, findings or technique section is a detected family's only when that family is named
+    somewhere other than a history or plan section (_VAL_named_beyond_history: "Procedure: EGD ... Band ligation of
+    three columns was performed."): a family named only in the history or the plan ("History of present illness: EGD
+    in 2020 was normal.", "Plan: EGD next month.") does not take an office note's "Procedure: Anoscopy with rubber band
+    ligation ... was performed today." (round 5 regression:5)."""
     if an.services_in(start, end):
         return True
     if any(p.search(an.text, start, end) for family, p in cues.INSTRUMENTS if family in detected):
         return True
-    return any(set(iv.families) & set(detected) for iv in an.interventions_in(start, end))
+    named = _VAL_named_beyond_history(an)
+    return any(family in detected and (family in named or an.lay.section_at(iv.start).kind not in POSITIVE_SECTIONS)
+               for iv in an.interventions_in(start, end) for family in iv.families)
+
+
+_VAL_ELSEWHERE_KINDS = ('history', 'plan')  # sections that tell a service of another encounter (round 5 regression:5)
+
+
+def _VAL_named_beyond_history(an: Analysis) -> frozenset:
+    """The families named, by a service name or an instrument, in a section that is not a history or a plan section
+    (_VAL_ELSEWHERE_KINDS): those whose interventions an unnamed procedure may be. Read once per text: one pass over
+    the service mentions and one search per instrument pattern."""
+    key = ('val-named-beyond-history',)
+    if key not in an.memo:
+        found = {m.family for m in an.services if an.lay.section_at(m.start).kind not in _VAL_ELSEWHERE_KINDS}
+        for family, pattern in cues.INSTRUMENTS:
+            if family not in found and any(an.lay.section_at(m.start()).kind not in _VAL_ELSEWHERE_KINDS
+                                           for m in pattern.finditer(an.text)):
+                found.add(family)
+        an.memo[key] = frozenset(found)
+    return an.memo[key]
 
 
 def _procedure_name(an: Analysis, start: int, limit: int) -> Optional[tuple[int, int]]:

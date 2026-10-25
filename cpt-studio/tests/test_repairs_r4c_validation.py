@@ -233,3 +233,93 @@ class Validation1SectionOnlyReasonWordingTests(Case):
             with self.subTest(code=code, passage=passage):
                 proposals, _ = real(text, *picks)
                 self.assertNeverNamesNoProcedure(proposals)
+
+
+# --- regression:5: a family named only in the history or the plan never takes a same-day procedure ------------------
+
+R5_OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal '
+             'bleeding.\n{elsewhere}\nExam: Abdomen soft.\n{procedure}\nAssessment and plan: Internal hemorrhoids. Fiber. '
+             'Return in 6 weeks.\nMedical decision making: moderate.\n')
+R5_BAND = 'Procedure: Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.'
+R5_VISIT = 'Established patient office visit.'
+
+
+class Regression5HistoricalFamilyKeepsTheProcedureTests(Case):
+    """regression:5 (high, declared misread; the same at R4B-BASE and R3B-BASE). An office note's same-day banding
+    ("Procedure: Anoscopy with rubber band ligation ... was performed today.") was no gi.other procedure whenever an EGD
+    was named anywhere ("History of present illness: EGD in 2020 was normal."): 'band ligation' is an EGD intervention,
+    so the historical EGD took it, the office E/M selected alone was ready and services.unproposed passed. An
+    intervention in a procedure section is a detected family's now only when that family is named outside the history
+    and the plan."""
+
+    ELSEWHERE = ('History of present illness: EGD in 2020 was normal.',
+                 'History of present illness: Prior EGD for reflux was normal.',
+                 'Plan: EGD next month for dyspepsia.', 'Past medical history: GERD; EGD 2019 normal.',
+                 'History of present illness: Colonoscopy in 2020 was normal.',
+                 'History of present illness: EUS last year was unremarkable.')
+    PROCEDURES = (R5_BAND, 'Procedure: Hemorrhoid banding was performed today.',
+                  'Procedure: Anoscopy with biopsy of an anal lesion was performed today.',
+                  'Procedure:\n- Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.')
+
+    def test_the_e_m_selected_alone_is_held_and_the_procedure_is_named_as_missed(self):
+        from tests.test_repairs_r3_validation_b import encounter_check
+        for elsewhere in self.ELSEWHERE:
+            for procedure in self.PROCEDURES:
+                text = R5_OFFICE.format(elsewhere=elsewhere, procedure=procedure)
+                with self.subTest(elsewhere=elsewhere, procedure=procedure):
+                    other = routed(text).finding('gi.other')
+                    self.assertIsNotNone(other)
+                    self.assertEqual(other.status, 'performed')
+                    proposals, result = real(text, ('99214', R5_VISIT))
+                    self.assertVisitHeld(proposals, 'Other GI service is documented as performed on the same date')
+                    self.assertEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_a_deferred_banding_reads_as_its_no_history_control_reads(self):
+        procedure = 'Procedure: Hemorrhoid banding was deferred today.'
+        control = routed(R5_OFFICE.format(elsewhere='History of present illness: Two weeks of bleeding.',
+                                          procedure=procedure)).finding('gi.other')
+        found = routed(R5_OFFICE.format(elsewhere=self.ELSEWHERE[0], procedure=procedure)).finding('gi.other')
+        self.assertEqual((found.status, [m.status for m in found.mentions]),
+                         (control.status, [m.status for m in control.mentions]))
+        self.assertNotIn(found.status, ('performed', 'incomplete'))
+
+    def test_controls_a_family_s_own_procedure_text_still_takes_its_intervention(self):
+        bare = HEAD
+        reports = (
+            bare + 'Procedure: EGD\nIndication: Esophageal varices.\nFindings: The gastroscope was advanced to the second '
+                   'part of the duodenum. Large esophageal varices.\nBand ligation of three columns was performed.\n',
+            bare + 'Procedure: EGD with band ligation of esophageal varices.\nFindings: Large varices.\n',
+            # the findings name neither the EGD nor its instrument near the banding: the EGD is still this report's own
+            bare + 'Procedure: EGD\nIndication: Varices.\nFindings: Large esophageal varices in the distal esophagus.\n'
+                   'Band ligation of three columns was performed.\n',
+            # no headings at all
+            bare + 'EGD was performed with the gastroscope to the duodenum. Large esophageal varices were seen. Band '
+                   'ligation of three columns was performed.\n',
+            bare + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nBiopsies of the '
+                   'sigmoid colon were taken.\n')
+        for text in reports:
+            with self.subTest(text=text[len(HEAD):len(HEAD) + 40]):
+                self.assertIsNone(routed(text).finding('gi.other'))
+        text = reports[0]
+        proposals, _ = real(text, ('43244', 'Band ligation of three columns was performed.'))
+        self.assertReady(proposals['43244'])
+
+    def test_controls_outside_a_procedure_section_a_name_is_read_as_before(self):
+        # The rule moves only interventions written in a procedure, findings or technique section: a history line's
+        # banding stays the historical EGD's (no gi.other appears, as at HEAD).
+        text = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal '
+                'bleeding.\nHistory of present illness: EGD in 2020 was normal; rubber band ligation was done in 2021.\n'
+                'Medical decision making: moderate.\n')
+        self.assertIsNone(routed(text).finding('gi.other'))
+
+    def test_controls_an_instrument_outside_the_history_names_the_family_s_own_text(self):
+        text = (HEAD + 'History of present illness: EGD 2019.\nFindings: The gastroscope was advanced to the duodenum. '
+                'Large esophageal varices.\nBand ligation of three columns was performed.\n')
+        self.assertIsNone(routed(text).finding('gi.other'))
+
+    def test_controls_a_lower_tract_family_in_the_history_never_took_a_banding(self):
+        text = R5_OFFICE.format(elsewhere='History of present illness: Colonoscopy in 2020 was normal.',
+                                procedure=R5_BAND)
+        self.assertEqual(routed(text).finding('gi.other').status, 'performed')
+        proposals, _ = real(text, ('99214', R5_VISIT))
+        self.assertVisitHeld(proposals, 'Other GI service is documented as performed on the same date')
