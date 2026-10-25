@@ -611,5 +611,108 @@ class Declared3AnsweringSectionsTests(unittest.TestCase):
         self.assertTrue(ready(run_engine(text, [('45385', D3_POLYP)])['45385']))
 
 
+
+# --- sections:7 / sections:8 / declared:5: a negation that reaches a service only across an answer on the line above --
+
+S7_BIOPSY = 'Biopsies were taken from the gastric antrum to evaluate for Helicobacter pylori.'
+D5_BIOPSY = 'biopsies were taken from the mid esophagus to evaluate for eosinophilic esophagitis.'
+S8_POLYP = 'Cold snare polypectomy of a 6 mm sigmoid polyp was performed.'
+
+
+def s7_note(question, line=S7_BIOPSY):
+    return (HEADER + 'Procedure: EGD with biopsy.\nIndication: Dyspepsia.\nPre-procedure assessment:\n' + question + '\n'
+            + line + '\nThe gastroscope was advanced to the second part of the duodenum.\n')
+
+
+def d5_note(answer):
+    return HEADER + 'Procedure: EGD with biopsy.\nIndication: Dysphagia.\nFindings:\n' + answer + '\n' + D5_BIOPSY + '\n'
+
+
+def s8_note(line):
+    return (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nTechnique: The colonoscope was advanced to the '
+            'cecum.\n' + line + '\n' + S8_POLYP + '\nImpression: Sigmoid polyp.\n')
+
+
+class AnswerOnTheLineAboveTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:7, sections:8 and declared:5 (high) - a line that ends in an answer of its own was joined to the service
+    line under it, and its "No" negated that service (43239 / 45385 excluded): a field question longer than 60
+    characters ("Has the patient had a prior adverse reaction to sedation or anesthesia? No"), a spoken answer written
+    with a comma ("the patient said, no"), and a dash, column or option-row answer before a lower-case line
+    ("Schatzki ring present - no", "Schatzki ring present      no", "Hiatal hernia [box] Yes [box] No"). The join itself
+    stays (every base excluded these, so ending the sentence would release); the cross-line negation HOLDS instead
+    (a doubt), read from the whole line above with sections' own answer readers, so the two never disagree."""
+
+    QUESTIONS = ('Has the patient had a prior adverse reaction to sedation or anesthesia? No',
+                 'Did the patient stop clopidogrel at least 5 days before the procedure? No',
+                 'Any anticoagulant or antiplatelet medication taken in the past 7 days? no',
+                 'History of an adverse reaction to sedation or to anesthesia in the past - no',
+                 "Was there any evidence of Barrett's esophagus at the GE junction? No",
+                 'Prior adverse reaction to sedation? no')
+
+    def test_a_long_question_answered_no(self):
+        lower = S7_BIOPSY[0].lower() + S7_BIOPSY[1:]
+        for question in self.QUESTIONS:
+            for line in (S7_BIOPSY, lower):
+                text = s7_note(question, line)
+                with self.subTest(question=question, line=line[:10]):
+                    if line == S7_BIOPSY and len(question) < 60:
+                        # sections reads a short question as answered: the capitalised line is never joined, performed
+                        self.assertEqual(read(text, line)[0], 'performed')
+                    else:
+                        self.assert_held_never_excluded(text, '43239', line)
+
+    def test_the_short_controls_still_read(self):
+        for question in ('Did the patient stop clopidogrel 5 days before the procedure? No', 'Schatzki ring present: no'):
+            text = s7_note(question)
+            with self.subTest(question=question):
+                self.assertTrue(ready(run_engine(text, [('43239', S7_BIOPSY)])['43239']))
+
+    def test_a_spoken_answer_with_a_comma(self):
+        for line in ('When asked about a biopsy of the hemorrhoid, the patient said, no',
+                     'When asked about a biopsy of the hemorrhoid, she said, No',
+                     'When asked about a biopsy of the hemorrhoid, the patient answered, no',
+                     'When asked about a biopsy of the hemorrhoid, the patient replied, no',
+                     'When asked about a biopsy of the hemorrhoid, the patient said , no',
+                     'When asked about a biopsy of the hemorrhoid, the patient said: no'):
+            text = s8_note(line)
+            with self.subTest(line=line):
+                self.assertNotIn(read(text, S8_POLYP)[0], NOT_TODAY)
+                self.assertNotEqual(run_engine(text, [('45385', S8_POLYP)])['45385'].bucket, 'excluded')
+
+    def test_cut_prose_still_negates(self):
+        """Cut prose is a wrapped sentence, not an answer: it stays negated (round 2 status:16)."""
+        text = (HEADER + 'Procedure: EUS.\nFindings: Comment: because of time constraints, no\nEUS of the pancreatic cyst was '
+                'performed today.\n')
+        self.assertEqual(read(text, 'EUS of the pancreatic cyst was performed today.')[0], 'negated')
+        text = s8_note('When asked about a biopsy, the patient said, no')
+        text = text.replace(S8_POLYP, 'EUS of the pancreatic cyst.')  # a verbless next line runs on, as before
+        self.assertEqual(read(text, 'EUS of the pancreatic cyst.')[0], 'negated')
+        text = HEADER + 'Procedure: EGD.\nFindings: Colonoscopy was performed - no\nbiopsies were taken from the antrum.\n'
+        self.assertEqual(read(text, 'biopsies were taken from the antrum.')[0], 'negated')
+
+    def test_answers_above_a_lower_case_line(self):
+        for answer in ('Schatzki ring present: no', 'Schatzki ring present - no', 'Schatzki ring present \u2013 no',
+                       'Schatzki ring present      no', 'Schatzki ring present\tno', 'Schatzki ring present [ ] Yes [x] No',
+                       'Schatzki ring: \u2610 Yes \u2612 No', 'Hiatal hernia \u2610 Yes \u2612 No',
+                       'Hiatal hernia \u2612 Yes \u2610 No'):
+            text = d5_note(answer)
+            with self.subTest(answer=answer):
+                self.assert_held_never_excluded(text, '43239', D5_BIOPSY)
+        text = d5_note('Mucosa: normal, hiatal hernia: no')  # read performed before, and still never negated
+        self.assertNotIn(read(text, D5_BIOPSY)[0], NOT_TODAY)
+
+    def test_an_answer_after_a_heading_label_on_its_line(self):
+        """Read the way sections reads it, from after the heading label on that line."""
+        text = (HEADER + 'Procedure: EGD with biopsy.\nIndication: Dysphagia.\nFindings: Schatzki ring present      no\n'
+                + D5_BIOPSY + '\n')
+        self.assert_held_never_excluded(text, '43239', D5_BIOPSY)
+
+    def test_an_upper_case_line_and_a_denial_on_its_own_line(self):
+        text = d5_note('Schatzki ring present - no').replace(D5_BIOPSY, D5_BIOPSY[0].upper() + D5_BIOPSY[1:])
+        self.assertEqual(read(text, D5_BIOPSY[0].upper() + D5_BIOPSY[1:])[0], 'performed')
+        text = d5_note('Schatzki ring present - no').replace(D5_BIOPSY, 'no biopsies were taken.')
+        self.assertEqual(read(text, 'no biopsies were taken.')[0], 'negated')
+
+
 if __name__ == '__main__':
     unittest.main()

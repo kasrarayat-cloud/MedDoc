@@ -401,8 +401,11 @@ _DENIALS = frozenset(('declined', 'declines', 'refused', 'refuses', 'denied', 'd
 # was then performed", "she was asked about a biopsy and answered no\nA 6 mm polyp was removed" (a closed list of
 # verbs of saying or choosing; round 4 structure:3, restoring 57b4b3747). Cut prose still runs on ("because of time
 # constraints, no\nEUS of the pancreatic cyst was performed today").
-_SEC_SPOKEN_ANSWER = re.compile(r'\b(?:said|says|answered|answers|replied|replies|responded|responds|chose|chooses)'
-                                r'[ \t]+(?:no|neither|never|not)$', re.A | re.I)
+_SEC_SPOKEN_VERB = r'\b(?:said|says|answered|answers|replied|replies|responded|responds|chose|chooses)'
+_SEC_SPOKEN_ANSWER = re.compile(_SEC_SPOKEN_VERB + r'[ \t]+(?:no|neither|never|not)$', re.A | re.I)
+# The same answer with a comma or a colon after the verb ("the patient said, no"; round 4c sections:8): the join stays
+# (every base negated it), and routing holds the negation it carries across the line break (detect, the line above).
+_SEC_SPOKEN_ANSWER_PUNCT = re.compile(_SEC_SPOKEN_VERB + r'[ \t]*[,:]?[ \t]+(?:no|neither|never|not)$', re.A | re.I)
 # The option-row guard reads every box spelling of the shared vocabulary (studio.ingest.symbols), its unread marks,
 # bare radio glyphs and an empty pair of parentheses: a line that ends on 'No' after any of them marks an option.
 from studio.ingest import symbols as _BOX_SYMBOLS  # noqa: E402 (Django-free; read for _OPTION_ROW only)

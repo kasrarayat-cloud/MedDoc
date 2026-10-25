@@ -2745,6 +2745,44 @@ BOX_HOLDS = (BOXES_DISAGREE, BOX_UNREAD, FIELD_UNTIED.split("'")[0], BOX_LATER) 
 # present: no", "Tattoo placed today: no") or a refusal verb with nothing after it ("the patient declined").
 _ANSWER_AT_LINE_END = re.compile(r'(?:[:?=|][ \t]*(?:no|none|n|not[ \t]+(?:done|performed))'
                                  r'|\b(?:declined|declines|refused|refuses))[ \t.]*$', re.A | re.I)
+# Or a field answered after a spaced dash, of any length, whose label is no clause ("History of an adverse reaction to
+# sedation or to anesthesia in the past - no"; round 4c sections:7: sections' _FIELD_ANSWER reads labels of up to 60
+# characters, so a longer one still joins the next line); the label is read from the last separator before the dash.
+_SEC_DASH_ANSWER = re.compile(r'[ \t][-\u2013\u2014][ \t]*(?:no|none|n|not[ \t]+(?:done|performed))[ \t.]*$', re.A | re.I)
+_SEC_LABEL_START = re.compile(r'.*(?:[.;,:?=|]|\t|[ ]{2})', re.A | re.S)
+
+
+def _SEC_answer_above(an: Analysis, ls: int, le: int) -> Optional[str]:
+    """The answer the line before line [ls, le) ends in, read the way sections reads it when it decides whether that
+    line runs on (round 4c declared:5): from its content (after any heading label on it), right-stripped, its last
+    WRAP_TAIL characters; a field, column or last-field answer (sections._answered), an option row
+    (sections._OPTION_ROW), a dash answer of any length (_SEC_DASH_ANSWER), or a spoken answer after a comma or a
+    colon ("the patient said, no": sections._SEC_SPOKEN_ANSWER_PUNCT, round 4c sections:8) when line [ls, le) opens a
+    clause of its own. None otherwise. Reads at most 4 * WRAP_TAIL characters of the line above."""
+    text, tail_size = an.text, gi_sections.WRAP_TAIL
+    above_start, above_end = text.rfind('\n', 0, ls - 1) + 1, ls - 1
+    section = an.lay.section_at(above_start)
+    content = (section.heading.end if section.heading is not None and section.start == above_start
+               and section.heading.end <= above_end else above_start)
+    lo = max(content, above_end - 4 * tail_size)
+    before = text[lo:above_end].rstrip()
+    if not before:
+        return None
+    tail = before[-tail_size:]
+    probe = before if lo == content and len(before) <= tail_size else tail
+    said = tail.split()[-1].strip(' :?=|.,')
+    if gi_sections._answered(probe) or gi_sections._OPTION_ROW.search(tail):
+        return said
+    dash = _SEC_DASH_ANSWER.search(tail)
+    if dash:
+        label = before[:len(before) - len(tail) + dash.start()]
+        lead = _SEC_LABEL_START.match(label)
+        if not gi_sections._LABEL_CLAUSE.search(label[lead.end():] if lead else label):
+            return said
+    if gi_sections._SEC_SPOKEN_ANSWER_PUNCT.search(tail) \
+            and gi_sections._own_clause(text[ls:min(le, ls + 2 * gi_sections.OWN_CLAUSE_REACH)].lstrip()):
+        return said
+    return None
 
 
 def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[str]:
@@ -2753,7 +2791,10 @@ def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[
     ("Schatzki ring present: no" then "biopsies were taken ...", "the patient declined" then "Colonoscopy with cold
     snare polypectomy ..."; round 4 structure:2 and structure:3). Whose answer it is cannot be read, so it holds rather
     than negates. Cut prose ("Comment: because of time constraints, no" then "EUS ... was performed today.") is a
-    wrapped sentence and stays negated. Bounded by CLAUSE_REACH."""
+    wrapped sentence and stays negated. Round 4c (sections:7, sections:8, declared:5): the line above is read whole,
+    from its own start (a field question's "?" ends the question's sentence before its "No"), and its answer is read
+    by sections' own readers too (_SEC_answer_above), so a line sections reads as answered never negates across the
+    break. Bounded by CLAUSE_REACH and WRAP_TAIL."""
     text = an.text
     ss, _ = an.lay.sentence_for(start, end)
     ls = text.rfind('\n', 0, start) + 1
@@ -2763,11 +2804,12 @@ def _denied_from_the_line_above(an: Analysis, start: int, end: int) -> Optional[
     le = len(text) if le < 0 else le
     if cues.DOUBT_TOKEN.search(text, max(ls, start - CLAUSE_REACH), min(le, end + CLAUSE_REACH)):
         return None
-    above = text[max(ss, ls - 1 - CLAUSE_REACH):ls - 1]
+    above = text[max(text.rfind('\n', 0, ls - 1) + 1, ls - 1 - CLAUSE_REACH):ls - 1]
     answer = _ANSWER_AT_LINE_END.search(above)
-    if answer is None:
+    said = answer.group(0).strip(' :?=|.') if answer else _SEC_answer_above(an, ls, le)
+    if said is None:
         return None
-    return f"uncertain: the line above it ends in an answer of its own ('{answer.group(0).strip(' :?=|.')}')"
+    return f"uncertain: the line above it ends in an answer of its own ('{said}')"
 
 
 _DEFERRAL_CUE = re.compile(r"'(?:defer|defers|deferring|deferral|postpone|postpones|postponing)' in its clause$",
