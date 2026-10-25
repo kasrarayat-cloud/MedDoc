@@ -225,7 +225,10 @@ def _VAL_family_index(routing: RoutingResult) -> dict:
     scan of every routed mention for every hedged passage (20,000 hedged lines took 82 s in assess())."""
     spans: dict[str, list[tuple[int, int]]] = {}
     for finding in routing.findings:
-        spans.setdefault(finding.family, []).extend((m.span.start, m.span.end) for m in finding.mentions)
+        # round 4c-2 box2:E: a part routing holds as coordinated with the visit is no other service (hold-only)
+        spans.setdefault(finding.family, []).extend(
+            (m.span.start, m.span.end) for m in finding.mentions
+            if not any(cue.startswith(checks._B2_COORDINATED_CUE) for cue in m.cues))
     return {family: _VAL_overlap_test(found) for family, found in spans.items()}
 
 

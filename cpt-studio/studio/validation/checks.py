@@ -286,6 +286,10 @@ def says_today_in_plan(cues: Sequence[str]) -> bool:
 # ago.").
 _VAL_OTHER_STATED_CUE = 'uncertain: a procedure is stated by its act or its findings'
 _VAL_ANOTHER_TIME_CUE = 'uncertain: another time'
+# Routing's hold of a procedure named together with the visit or another non-procedure in one name (studio.gi.detect
+# _B2_COORDINATED, round 4c-2 box2:E). It holds a same-day E/M like any held procedure, but it is no other service a
+# code's hedge could be about (engine._VAL_family_index): that would release a code beside its own performed passage.
+_B2_COORDINATED_CUE = 'uncertain: the procedure is named together with a visit'
 
 
 # Validation's hold of an E/M code's own negative reading that is about another service its passage names (round 4

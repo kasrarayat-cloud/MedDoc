@@ -4515,18 +4515,27 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
     Never a phrase that speaks of a detected family within CLAUSE_REACH (_about_a_detected_family), an
     E/M service, an examination, sedation, consent, a test or a person (_NOT_A_PROCEDURE), nor a name led
     by a negation, a condition or a plan (_NOT_DONE_LED). Each one's status comes from the ordinary
-    readings, so a planned or denied procedure reads planned or negated."""
+    readings, so a planned or denied procedure reads planned or negated. A procedure coordinated with such a word in
+    one name ("Office visit and anoscopy were performed today") is read alone and held (round 4c-2 box2:E:
+    _B2_coordinated_parts, _B2_held)."""
     text, found = an.text, {}
+    plain, coordinated = set(), set()  # round 4c-2 box2:E: the names read whole, and the parts read from a name
 
-    def consider(span, clause, form=''):
+    def consider(span, clause, form='', whole=None):
         """``form``: 'act' (a stated act: its participle is the procedure's word) or 'label' (a findings label), the
-        routing:22 forms, whose mentions carry it as their value (see _other_finding)."""
+        routing:22 forms, whose mentions carry it as their value (see _other_finding). ``whole``: the name a part was
+        read from (box2:E), None for a name read whole."""
         if span is None:
             return
         s, e = span
         name = text[s:e]
-        if (form != 'act' and not _PROCEDURE_WORD.search(name)) or _NOT_A_PROCEDURE.search(name) \
-                or _NOT_DONE_LED.match(name):
+        act = form == 'act' and (whole is None or _B2_ACT.search(name) is not None)  # the part that holds the act
+        if (not act and not _PROCEDURE_WORD.search(name)) or _NOT_DONE_LED.match(name):
+            return
+        if _NOT_A_PROCEDURE.search(name):
+            if whole is None:  # box2:E: each procedure coordinated with the visit or another non-procedure is held
+                for ps, pe in _B2_coordinated_parts(name):
+                    consider((s + ps, s + pe), clause, form, span)
             return
         scope = (max(clause[0], s - CLAUSE_REACH), min(clause[1], e + CLAUSE_REACH))
         if _about_a_detected_family(an, *scope, detected) or _lower_tract_banding(an, s, e, detected):
@@ -4534,6 +4543,7 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
         if form and _in_a_detected_procedures_text(an, s, e, detected):
             return
         found[(s, e)] = Mention(OTHER_FAMILY, s, e, 'service', name, form)
+        (plain if whole is None else coordinated).add((s, e))
 
     def told_done(span, clause, form=''):
         """An explicit performed clause names no same-day procedure when it is told at an earlier time of its own
@@ -4615,7 +4625,59 @@ def _other_mentions(an: Analysis, detected: list[str]) -> list[Mention]:
             label = _SCOPY_LABEL.match(text, s, e)
             if label:
                 told_done(label.span('name'), (s, e), 'label')
+    an.memo[_B2_COORDINATED_KEY] = frozenset(coordinated - plain)
     return sorted(found.values(), key=lambda mention: mention.start)
+
+
+# --- round 4c-2 box2:E: a procedure coordinated with the visit or another non-procedure in one name --------------------
+# What coordinates two parts of one name, in _CONNECTOR's own words (each match is a _CONNECTOR match): a connector word
+# between spaces, an article after it ("Office visit and anoscopy", "Physical exam and the banding"), or "&", "+" or "/"
+# between spaces. A bare "&", "+" or "/" coordinates only where it touches a non-procedure word ("Office visit/anoscopy";
+# never "E/M" or "I&D"). A name never holds a comma: _SUBJECT_BREAK and _NP_END end it there.
+_B2_PART_BREAK = re.compile(r'\s+(?:(?:and/or|and|or|nor|plus|then|followed\s+by|as\s+well\s+as)'
+                            r'(?:\s+(?:the|a|an|her|his|their))?|[&+/])\s+', re.A | re.I)
+_B2_BARE_BREAK = re.compile(r'[&+/]', re.A)
+# The participle of a stated act (routing:22), which opens a "we banded ..." name and closes a "... were banded" one: of a
+# coordinated act's parts, only the one that holds it is the act.
+_B2_ACT = re.compile(r'\b' + _ACT_PARTICIPLE + r'\b', re.A | re.I)
+_B2_COORDINATED = ('uncertain: the procedure is named together with a visit, an examination or another service that is '
+                   'not a procedure, so it is not read as performed')
+_B2_COORDINATED_KEY = ('b2-coordinated',)  # an.memo: the (start, end) of each part read only from a coordinated name
+
+
+def _B2_coordinated_parts(name: str) -> list[tuple[int, int]]:
+    """The parts of a name _NOT_A_PROCEDURE refuses ("Office visit and anoscopy", "Physical exam and banding"), as
+    offsets into ``name``: split where _B2_PART_BREAK, or a bare "&", "+" or "/" touching a non-procedure word,
+    coordinates them, never inside a procedure's word ("Office visit and I & D"), each part trimmed of _NAME_LEAD and
+    _HISTORY_LEAD as _procedure_name trims a whole name ("and prior anoscopy" reads "anoscopy", after its history word).
+    [] when nothing coordinates two parts. Read on the name alone, as the whole-name tests read it."""
+    words = [m.span() for m in _PROCEDURE_WORD.finditer(name)]
+    refused = [m.span() for m in _NOT_A_PROCEDURE.finditer(name)]
+    breaks = [b.span() for b in _B2_PART_BREAK.finditer(name)]
+    breaks += [b.span() for b in _B2_BARE_BREAK.finditer(name) if any(e == b.start() or s == b.end() for s, e in refused)]
+    parts, at = [], 0
+    for start, end in sorted(breaks):
+        if start >= at and not any(s < end and start < e for s, e in words):
+            parts.append((at, start))
+            at = end
+    parts.append((at, len(name)))
+    trimmed = []
+    for start, end in parts:
+        start = _NAME_LEAD.match(name, start, end).end()
+        lead = _HISTORY_LEAD.match(name, start, end)
+        span = _trimmed_span(name, lead.end() if lead else start, end)
+        if span:
+            trimmed.append(span)
+    return trimmed if len(trimmed) > 1 else []
+
+
+def _B2_held(an: Analysis, reading: Reading, m: Mention) -> Reading:
+    """A part read only from a coordinated name (box2:E): uncertain with _B2_COORDINATED first, its own cues after it
+    (without silence), never performed; every other mention's reading as it is."""
+    if (m.start, m.end) not in an.memo.get(_B2_COORDINATED_KEY, ()):
+        return reading
+    return Reading('uncertain', (_B2_COORDINATED,) + tuple(c for c in reading.cues if c != SILENT), 'cue',
+                   doubt=reading.doubt)
 
 
 def _in_a_detected_procedures_text(an: Analysis, s: int, e: int, detected: list[str]) -> bool:
@@ -4659,7 +4721,7 @@ def _other_finding(an: Analysis, others: list[Mention], has_basis: bool) -> Fami
     never adjusts another's passage. The family is performed, incomplete or uncertain when any of its
     procedures is (in that order: one procedure's denial does not make the family read "negated" while
     another may have been done); else the usual aggregate of all of them."""
-    raw = [_stated(_generic_reading(an, m.start, m.end), m) for m in others]
+    raw = [_B2_held(an, _stated(_generic_reading(an, m.start, m.end), m), m) for m in others]
     kinds = tuple(an.lay.section_at(m.start).kind for m in others)
     away = tuple(_elsewhere(an, m) for m in others)
     statuses, readings = [], []
@@ -4685,7 +4747,13 @@ def _stated(reading: Reading, m: Mention) -> Reading:
 def _route(an: Analysis) -> RoutingResult:
     detected = [f for f in PROCEDURE_FAMILIES if any(m.family == f for m in an.services)]
     others = _other_mentions(an, detected)
-    an.other_names = tuple((m.start, m.end) for m in others)
+    # round 4c-2 box2:E: a part read from a coordinated name is no item of a box line, and one that reads planned,
+    # historical, cancelled or negated documents nothing, as before (the plain name reads that way alone)
+    parts = an.memo[_B2_COORDINATED_KEY]
+    an.other_names = tuple((m.start, m.end) for m in others if (m.start, m.end) not in parts)
+    if parts:
+        others = [m for m in others if (m.start, m.end) not in parts
+                  or _generic_reading(an, m.start, m.end).status not in NOT_TODAY]
     readings = {m: _generic_reading(an, m.start, m.end) for m in an.services}
     attributed = an.attributed = _attribute_sentences(an, detected)
     an.references = _references(an, attributed)
