@@ -16,12 +16,12 @@ import unittest
 from studio.gi import detect
 from tests.support import docgen
 from tests.test_repairs_r3_forms_docx import _escape, docx_result, level, note_paragraphs, numbering
-from tests.test_repairs_r3_forms_pdf import codes
+from tests.test_repairs_r3_forms_pdf import (BIOPSY_ROW, FIELDS_NOTE, SNARE_ROW, Form, boxed_line, codes, extracted,
+                                             text_line, widget_rect)
+from tests.test_repairs_r4_ingest import OVERLAP, UNREAD, UNREAD_NOTE, held_unread
 from tests.test_repairs_r4_ingest_docx import FORCEPS, IMPRESSION, NOTE_LINES, SNARE, unread_note
 from tests.test_repairs_r4c_ingest_docx import CHECKED, SHADOWED, unread_in_lists
 from tests.test_repairs_status_r2_routing import read
-
-UNREAD = '[?]'
 
 
 # --- extraction:1 -- Word box bullets: a list ends at a cell or text-box boundary --------------------------------------
@@ -234,6 +234,77 @@ class Extraction1WordListBoundaryTests(unittest.TestCase):
                 self.assertIn(f'☐ {SNARE}', result.text)
                 self.assertIn(f'☐ {FORCEPS}', result.text)
                 self.assertEqual(codes(result.text, ('45385', SNARE))[0], 'excluded')
+
+
+# --- extraction:4 -- the page note names what is true about boxes under form check boxes -----------------------------
+
+def _overlap_page(case, printed='wingdings'):
+    """A checklist whose printed boxes each start a piece of page text (their positions are read), with form check
+    boxes over them as ``case`` says."""
+    form = Form()
+    if case == 'one over a row of two':
+        form.line(text_line(72, BIOPSY_ROW, 'Biopsy taken:'))
+        for x, word in ((150, 'Yes'), (190, 'No')):
+            form.line(boxed_line(x, BIOPSY_ROW, word, printed, gap=14))
+        form.checkbox('Check Box1', (148, BIOPSY_ROW - 3, 215, BIOPSY_ROW + 9), True)
+        form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy', printed, checked=True))
+        return form.build()
+    form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy', printed)).line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy',
+                                                                             printed))
+    if case == 'two over one':
+        form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), True)
+        form.checkbox('Check Box2', widget_rect(BIOPSY_ROW, 72), False)
+    elif case == 'two over one, one field twice':
+        form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), True)
+        form.checkbox('Check Box1 copy', widget_rect(BIOPSY_ROW), True)
+    elif case == 'one over two rows':
+        form.checkbox('Check Box1', (71, SNARE_ROW - 3, 83, BIOPSY_ROW + 9), True)
+    form.checkbox('Check Box9', widget_rect(SNARE_ROW - 40), True)  # an unrelated check box elsewhere on the page
+    return form.build()
+
+
+class Extraction4OverlapWordingTests(unittest.TestCase):
+    """Two form check boxes over one printed box, or one over several, leave those boxes unread (the declared hold)
+    and name the page with the unread-box note: every position was read, so the page is never told a position could
+    not be read."""
+
+    def test_positions_read_are_never_reported_unread(self):
+        for case in ('two over one', 'two over one, one field twice', 'one over a row of two', 'one over two rows'):
+            for printed in ('wingdings', 'text font'):
+                with self.subTest(case=case, printed=printed):
+                    result = extracted(_overlap_page(case, printed))
+                    self.assertEqual(result.status, 'partial', result.messages)
+                    self.assertNotIn(OVERLAP, result.messages)
+                    self.assertIn(UNREAD_NOTE, result.messages)
+                    self.assertIn(UNREAD, result.text)
+                    if case == 'one over a row of two':
+                        self.assertIn(f'Biopsy taken: {UNREAD} Yes', result.text)
+                        self.assertEqual(codes(result.text, ('45380', 'Biopsy'))[0], 'held')
+                    else:
+                        held_unread(self, result.text, 'Biopsy')
+
+    def test_a_position_not_read_still_names_the_overlap(self):
+        """Controls: a check box over a box inside its line ('Biopsy [ ]') keeps OVERLAP, and one check box over one
+        box at a known place says nothing."""
+        form = Form()
+        form.line(text_line(90, BIOPSY_ROW, 'Biopsy [ ]'))
+        form.checkbox('Check Box1', (124, BIOPSY_ROW - 3, 136, BIOPSY_ROW + 9), False)
+        result = extracted(form.build())
+        self.assertIn(OVERLAP, result.messages)
+        self.assertNotIn(UNREAD_NOTE, result.messages)
+        form = Form(wrap=True)  # the page drawn through a form XObject: a check box reads no box's position there
+        form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy')).line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), True)
+        result = extracted(form.build())
+        self.assertIn(OVERLAP, result.messages)
+        self.assertIn(f'{UNREAD} Biopsy', result.text)
+        form = Form()
+        form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy')).line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), False)
+        form.checkbox('Check Box2', widget_rect(SNARE_ROW), True)
+        result = extracted(form.build())
+        self.assertEqual((result.status, result.messages), ('ok', (FIELDS_NOTE,)))
+        self.assertIn('☐ Biopsy\n☒ Cold snare polypectomy', result.text)
 
 
 if __name__ == '__main__':

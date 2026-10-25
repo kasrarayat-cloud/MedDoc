@@ -187,7 +187,8 @@ class _Page:
     limited: bool = False  # pypdf stopped reading form XObjects at its invocation limit
     undecodable: int = 0  # glyphs of the text layer that name no character, dropped
     placed: int = 0  # check-box glyphs written into the layer (not read from it)
-    overlap: bool = False  # a check box lies over a printed box whose position could not be read
+    overlap: bool = False  # a check box may lie over a printed box whose position could not be read (or had too
+    # much under it to read); two check boxes over one known box, or one over several, are named as unread_box
     unverified: bool = False  # read with OCR, and an image's encoding could not be checked to its end
     unread_box: bool = False  # a printed box was written unread: a widget or mark disagrees with it or is not a check
 
@@ -425,9 +426,10 @@ def _read_page(page, reader, optional, acroform, number: int) -> _Page:
 
 def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int, bool, bool]:
     """The layer text with the page's displayed check boxes written in; how many characters that added (glyphs
-    inserted, and what an unread mark adds over the box it replaces); whether a check box lies over a printed box
-    whose position could not be read, over several printed boxes, or shares one with another (the page is then
-    partial); and whether a printed box was written unread for any other reason (named, partial):
+    inserted, and what an unread mark adds over the box it replaces); whether a check box may lie over a printed box
+    whose position could not be read, or had too much under it to read (OVERLAP; the page is then partial); and
+    whether a printed box was written unread for any other reason, two check boxes over one printed box and one
+    over several among them (named, partial):
     - a check box or radio button over a printed box (its baseline within the box's height, the glyph's origin
       within the widget's width, or up to a quarter of the widget's size left of it, give or take BOX_SLACK)
       replaces it with its own state, unless the printed box shows a mark the widget's state denies; a FreeText or
@@ -537,7 +539,10 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             if len(boxes) == 1 and not hides and not anywhere:
                 claims.setdefault(boxes[0].start(), []).append((i, boxes[0]))
             else:
-                overlap = True
+                # Named by what is true: a box whose position could not be read may lie under it (OVERLAP); a check box
+                # over several boxes at known places leaves them unread (the unread note).
+                overlap = overlap or bool(hides or anywhere)
+                named = named or len(boxes) > 1
                 unsettled_boxes(boxes, hides, anywhere)
     replaced = set()
     for owners in claims.values():
@@ -550,7 +555,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
                 write(match, CHECKED_BOX if widgets[i].on else UNCHECKED_BOX)
             replaced.add(i)
         else:
-            overlap = True  # two check boxes over one printed box
+            named = True  # two check boxes over one printed box at a known place: unread, its position was read
             unread(owners[0][1])
     for rect in annotations.marks:
         found = lying_under(rect)
