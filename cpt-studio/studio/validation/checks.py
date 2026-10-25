@@ -1171,17 +1171,37 @@ _VAL_INTRO_REACH = 100  # how long an introductory phrase before "we" / "I" may 
 # surgery, we banded ..."): its act is not stated as today's, whatever routing's time lists read.
 _VAL_INTRO_ELSEWHEN = re.compile(r'\b(?:last|prior|previous(?:ly)?|earlier|first|initial|index|recent(?:ly)?|before|'
                                  r'ago|past|sessions?|visits?|surger(?:y|ies)|admissions?|appointments?|encounters?|'
-                                 r'weeks?|months?|years?)\b', re.A | re.I)
+                                 r'weeks?|months?|years?|'
+                                 # round 4d validation:3: an occasion named by its event ("During her consultation, we
+                                 # banded ...")
+                                 r'consult(?:ation)?s?|referrals?|presentations?|hospitali[sz]ations?|stays?)\b',
+                                 re.A | re.I)
+# Round 4d validation:3: a lead that is a clause of its own tells its own occasion, so it introduces no act of today
+# ("When she presented with bleeding, we banded two columns, and today they look healed."): one holding a time or
+# condition conjunction anywhere ("Then once the bleeding started we banded ..."; _VAL_TEMPORAL_LEAD's words, less
+# "after" and "following", which _VAL_INTRO reads, and "before", which _VAL_INTRO_ELSEWHEN reads), or a subject pronoun
+# or an auxiliary ("After she presented ...").
+_V2_TIME_WORD = re.compile(r'\b(?:when|whenever|while|whilst|once|until|till|if|unless|since|as[ \t]+soon[ \t]+as|'
+                           r'as[ \t]+long[ \t]+as)\b', re.A | re.I)
+_V2_LEAD_CLAUSE = re.compile(r'\b(?:she|he|they|you|i|was|were|is|are|had|has|have|did|does|do)\b', re.A | re.I)
+# ... and a comma-ended phrase introduces the act only when it opens with a listed introductory word (_VAL_INTRO) or
+# "in" ("In the left lateral position, we banded ..."): "At that time,", "Back then,", "On referral," introduce nothing.
+_V2_IN_LEAD = re.compile(r'[ \t]*in\b', re.A | re.I)
 
 
 def _VAL_introduced(text: str, start: int, m) -> bool:
     """Whether "we" / "I" of the act ``m`` follows an introductory phrase that opens its clause at ``start``, tells no
-    other occasion (_VAL_INTRO_ELSEWHEN) and acts on an object (_VAL_INTRO, _VAL_OBJECT)."""
+    other occasion (_VAL_INTRO_ELSEWHEN), is no clause of its own (_V2_TIME_WORD, _V2_LEAD_CLAUSE: round 4d
+    validation:3) and acts on an object (_VAL_INTRO, or a comma-ended phrase opening with "in"; _VAL_OBJECT)."""
     if m.start() - start > _VAL_INTRO_REACH or not _VAL_OBJECT.match(text, m.end()):
         return False
     if _VAL_INTRO_ELSEWHEN.search(text, start, m.start()):
         return False
-    return text[start:m.start()].rstrip().endswith(',') or bool(_VAL_INTRO.match(text, start, m.start()))
+    if _V2_TIME_WORD.search(text, start, m.start()) or _V2_LEAD_CLAUSE.search(text, start, m.start()):
+        return False
+    if _VAL_INTRO.match(text, start, m.start()):
+        return True
+    return text[start:m.start()].rstrip().endswith(',') and bool(_V2_IN_LEAD.match(text, start, m.start()))
 
 
 def _VAL_stated(an, text: str, m) -> bool:
