@@ -624,14 +624,18 @@ class PlanD2ReachDenialTests(unittest.TestCase):
     NOT_A_REACH_DENIAL_INCOMPLETE = ('aborted', 'unable to reach the lesion', 'the cecal lesion could not be reached',
                                      'lesion could not be reached', 'due to a lesion that could not be reached',
                                      'unable to reach the polyp for resection', 'failed to advance the guidewire',
-                                     'unable to advance to the lesion')
+                                     'unable to advance to the lesion',
+                                     # round 4d sections:1 (moved from REACH_DENIAL): an onward word denies going past
+                                     # the label's landmark, never reaching it; the extent is withheld, never
+                                     # 'incomplete: <prose landmark>' (all three bases read the label's cecum)
+                                     'unable to advance further')
     # the closed list: plan:D's reading stands, incomplete at the shallower prose landmark
     REACH_DENIAL = ('not reached', 'not visualized', 'not visualised', 'not intubated', 'not achieved',
                     'could not be advanced', 'could not be reached', 'unable to advance', 'unable to reach',
                     'unable to intubate', 'failed to reach', 'failed to advance', 'never reached', 'was not visualized',
                     'reached: no', 'did not reach the cecum', 'cannot be reached', 'has not been reached',
                     "couldn't be reached", 'cecal intubation not achieved', 'scope could not be advanced',
-                    'cecum was not reached', 'unable to advance further', 'not reached at all',
+                    'cecum was not reached', 'not reached at all',
                     'not reached despite position changes', 'owing to looping not reached', 'short of the cecum',
                     'stopped short of the cecum', 'unable to advance the scope', 'cecum: not reached',
                     'could not be advanced beyond the transverse colon', 'unable to advance past the hepatic flexure',

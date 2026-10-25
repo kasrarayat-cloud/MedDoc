@@ -3648,7 +3648,7 @@ def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
     if any(not _covered((t.start(), t.end()), explained) for t in cues.DOUBT_TOKEN.finditer(text, end, stop)):
         return True
     return bool(_P2_AIM_WORD.search(text, end, stop) or any(c.status != 'performed' for c in an.cues_in(end, stop))
-                or _P2_reach_denied_in(an, end, stop, table))
+                or _P2_reach_denied_in(an, end, stop, table, depth))
 
 
 def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
@@ -3747,18 +3747,32 @@ _P2_REACH_SUBJECT = frozenset(('the', 'a', 'and', 'but', 'however', 'it', 'was',
 _P2_REACH_ONWARD = frozenset(('further', 'farther', 'any', 'at', 'all', 'despite', 'after', 'again', 'yet', 'either',
                               'even', 'completely', 'fully', 'today', 'during'))
 _P2_REACH_TOWARD = frozenset(('to', 'into', 'beyond', 'past', 'up', 'as', 'far'))
+# Round 4d sections:1: "not advanced further", "could not be advanced any further", "not advanced farther due to looping"
+# say the scope went no further than the label's landmark, never that it did not reach it (all three bases read the
+# label so); "further" or "farther" then "than" reads as "beyond". And "beyond" or "past" denies reaching the label's
+# landmark only before a landmark shallower than it ("not advanced beyond the transverse colon" after "Extent: cecum"),
+# never before the label's own or one as deep ("not advanced beyond the cecum", "past the ileocecal valve").
+_S2_ONWARD_ONLY = frozenset(('further', 'farther', 'any'))
+_S2_BEYOND = frozenset(('beyond', 'past'))
 
 
 def _P2_landmark_at(text: str, pos: int, table) -> bool:
     return any(pattern.match(text, pos) for _, _, pattern in table)
 
 
-def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table) -> bool:
+def _S2_landmark_depth_at(text: str, pos: int, table) -> Optional[int]:
+    """The depth of the first landmark of ``table`` that starts at ``pos``, or None."""
+    return next((depth for _, depth, pattern in table if pattern.match(text, pos)), None)
+
+
+def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table, depth: int) -> bool:
     """Whether the reach denial ``hit`` (a _P2_REACH_DENIAL match) in the segment [lo, hi) of an extent label's own
-    sentence denies reaching the label's landmark (round 4c-2 plan:D2): no hedge or "?" in the segment; before it, a
-    reason ("due to poor prep"), a word of consequence ("so", "therefore"), or only landmarks and _P2_REACH_SUBJECT
-    words ("cecum was", "scope could"), never a relative clause; after it, nothing or what _P2_REACH_ONWARD,
-    _P2_REACH_TOWARD and a reason allow, and for "short of" a landmark."""
+    sentence denies reaching the label's landmark, of ``depth`` in ``table`` (round 4c-2 plan:D2): no hedge or "?" in the
+    segment; before it, a reason ("due to poor prep"), a word of consequence ("so", "therefore"), or only landmarks and
+    _P2_REACH_SUBJECT words ("cecum was", "scope could"), never a relative clause; after it, nothing or what
+    _P2_REACH_ONWARD, _P2_REACH_TOWARD and a reason allow, and for "short of" a landmark. Round 4d sections:1: never an
+    onward word ("further", "any further"), and "beyond" or "past" only before a landmark shallower than ``depth``
+    ("further than" reads as "beyond")."""
     if _P2_REACH_HEDGE.search(text, lo, hi):
         return False
     before = text[lo:hit.start()]
@@ -3778,23 +3792,35 @@ def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table) -> boo
     if not words:
         return True
     pos, first = words[0]
-    if first in _P2_REACH_ONWARD or first in _P2_INSTRUMENT or _P2_REASON_LEAD.match(text, pos) \
+    if first in _S2_ONWARD_ONLY:  # round 4d sections:1
+        rest = [w for w in words[1:] if w[1] not in ('the', 'a')]
+        if first == 'any':
+            if not rest or rest[0][1] not in ('further', 'farther'):
+                return False
+            rest = rest[1:]
+        if not rest or rest[0][1] != 'than':
+            return False
+        first, words = 'beyond', rest  # "further than the sigmoid colon" reads as "beyond the sigmoid colon"
+    elif first in _P2_REACH_ONWARD or first in _P2_INSTRUMENT or _P2_REASON_LEAD.match(text, pos) \
             or _P2_landmark_at(text, pos, table):
         return True
     if first in _P2_REACH_TOWARD:
         rest = [w for w in words[1:] if w[1] not in ('the', 'a', 'to', 'far', 'as')]
-        return bool(rest) and _P2_landmark_at(text, rest[0][0], table)
+        landmark = _S2_landmark_depth_at(text, rest[0][0], table) if rest else None
+        return landmark is not None and (first not in _S2_BEYOND or landmark < depth)  # round 4d sections:1
     return False
 
 
-def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table) -> bool:
-    """Whether [end, stop), the rest of an extent label's own sentence, states that its landmark was not reached: a
-    reach denial of the closed list (_P2_REACH_DENIAL) whose segment speaks of that landmark (round 4c-2 plan:D2)."""
+def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table, depth: int) -> bool:
+    """Whether [end, stop), the rest of an extent label's own sentence, states that its landmark (of ``depth``) was not
+    reached: a reach denial of the closed list (_P2_REACH_DENIAL) whose segment speaks of that landmark (round 4c-2
+    plan:D2)."""
     text = an.text
     for hit in _P2_REACH_DENIAL.finditer(text, end, stop):
         breaks = [b.end() for b in _P2_REACH_BREAK.finditer(text, end, hit.start())]
         after = _P2_REACH_BREAK.search(text, hit.end(), stop)
-        if _P2_reach_names_the_landmark(text, breaks[-1] if breaks else end, hit, after.start() if after else stop, table):
+        if _P2_reach_names_the_landmark(text, breaks[-1] if breaks else end, hit, after.start() if after else stop, table,
+                                        depth):
             return True
     return False
 
@@ -3802,7 +3828,7 @@ def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table) -> bool:
 def _P2_reach_denied(an: Analysis, end: int, depth: int, table) -> bool:
     """_P2_reach_denied_in over the rest of the extent label's own sentence (_P2_label_rest)."""
     stop = _P2_label_rest(an, end, depth, table)
-    return stop > end and _P2_reach_denied_in(an, end, stop, table)
+    return stop > end and _P2_reach_denied_in(an, end, stop, table, depth)
 
 
 def _P2_refused_label(an: Analysis, reading: Reading, start: int, end: int, ws: int, we: int, depth: int,
@@ -3891,7 +3917,7 @@ def _S2_read_by_the_cut(an: Analysis, end: int, we: int) -> bool:
                    for word in _EXTENT_TAIL_WORD.finditer(an.text, end, stop.start() if stop else we))
 
 
-def _S2_reach_denial_of(an: Analysis, ms: int, me: int, ws: int, we: int, table) -> bool:
+def _S2_reach_denial_of(an: Analysis, ms: int, me: int, ws: int, we: int, depth: int, table) -> bool:
     """Whether the landmark match [ms, me) (its clause window [ws, we)) is the subject or the object of a reach denial
     of plan:D2's closed list in its own segment (_P2_REACH_DENIAL, read by _P2_reach_names_the_landmark): "Cecum not
     reached.", "The colonoscope failed to reach the cecum.", "The appendiceal orifice was not visualized." Reads the
@@ -3901,7 +3927,7 @@ def _S2_reach_denial_of(an: Analysis, ms: int, me: int, ws: int, we: int, table)
         lo = _P2_segment_start(text, ws, denial.start())
         after = _P2_REACH_BREAK.search(text, denial.end(), we)
         hi = after.start() if after else we
-        if lo <= ms and me <= hi and _P2_reach_names_the_landmark(text, lo, denial, hi, table):
+        if lo <= ms and me <= hi and _P2_reach_names_the_landmark(text, lo, denial, hi, table, depth):
             return True
     return False
 
@@ -3925,7 +3951,8 @@ def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, ta
     denied = set()
     for other, ms, me, ws, we, explicit in cut_denials:
         level = other[0]
-        if depth < level <= top and level not in denied and (explicit or _S2_reach_denial_of(an, ms, me, ws, we, table)):
+        if depth < level <= top and level not in denied and (explicit or _S2_reach_denial_of(an, ms, me, ws, we, level,
+                                                                                             table)):
             denied.add(level)
     dropped = {id(hit) for hit in cut if any(depth < level <= hit[0] for level in denied)}
     return [hit for hit in reached if id(hit) not in dropped] if dropped else reached

@@ -377,6 +377,7 @@ class S2Sections1ReachOnwardTests(unittest.TestCase):
                      'could not be advanced to the cecum', 'not advanced beyond the transverse colon',
                      'unable to advance past the hepatic flexure', 'could not be advanced beyond the transverse colon',
                      'not advanced further than the sigmoid colon', 'scope could not be advanced farther than the rectum',
+                     'could not be advanced any further than the sigmoid colon',
                      'not visualized', 'unable to intubate'):
             text = s1_note('Extent: cecum; ' + rest)
             with self.subTest(rest=rest):
