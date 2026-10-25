@@ -228,3 +228,62 @@ class Validation4IncompleteFamilyReasonTests(Case):
                 self.assertEqual(item.status, 'needs_clarification')
                 self.assertIn(NAMES_WORDING, check_of(item, 'service.status').detail)
                 self.assertNotIn('routing attributes it to', check_of(item, 'service.status').detail)
+
+
+# --- validation:5: 46221's one-procedure class needs a band word; another ligation stays a possible missed service -----
+
+BAND_REPORT = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Rubber band ligation of the right '
+               'anterior column was performed. {second}\n')
+BAND_OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal '
+               'bleeding.\nAssessment: Rubber band ligation x2 was performed today. {second}\n'
+               'Medical decision making: moderate.\n')
+
+
+class Validation5LigationIsNotBandingTests(Case):
+    """validation:5 (high, false green). 46221's one-procedure class took any 'ligation', so a selected banding
+    covered an uncoded suture ligation (46945/46946), a hemorrhoidal artery ligation (46948) or a variceal band
+    ligation, and services.unproposed PASSed ('Every performed service that routing detected ... has a selected
+    proposal'), where 9a9f403 named it. The class now needs a band word (band, bands, banded, banding, RBL), and a
+    suture, artery, Doppler, dearterialization or variceal / esophageal name is a sibling, never the banding."""
+
+    SECOND = ('Suture ligation of the left lateral column was performed.',
+              'Doppler-guided hemorrhoidal artery ligation was performed.',
+              'Hemorrhoidal artery ligation with Doppler guidance was performed.',
+              # a ligation with no band word: not named as the banding (fail-closed: named, a reviewer decides)
+              'Ligation of the left lateral column was performed.')
+    OFFICE_SECOND = ('Suture ligation of a bleeding hemorrhoid was performed today.',
+                     'Transanal hemorrhoidal artery ligation was performed today.',
+                     'Band ligation of esophageal varices was performed today.')
+
+    def assertNamedMissed(self, result, name):
+        check = encounter_check(result, 'services.unproposed')
+        self.assertEqual(check.status, 'warn', check.detail)
+        self.assertIn(name, check.detail)
+        self.assertNotIn('Rubber band ligation', check.detail)
+
+    def test_another_ligation_in_a_banding_report_is_named(self):
+        for second in self.SECOND:
+            with self.subTest(second=second):
+                proposals, result = real(BAND_REPORT.format(second=second),
+                                         ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
+                self.assertReady(proposals['46221'])
+                self.assertNamedMissed(result, second.split(' was ')[0])
+
+    def test_another_ligation_beside_an_office_banding_is_named(self):
+        for second in self.OFFICE_SECOND:
+            with self.subTest(second=second):
+                proposals, result = real(BAND_OFFICE.format(second=second),
+                                         ('46221', 'Rubber band ligation x2 was performed today.'))
+                self.assertNamedMissed(result, second.split(' was ')[0])
+
+    def test_controls_the_banding_named_twice_is_covered_and_a_hemorrhoidectomy_is_not(self):
+        for second in ('Rubber band ligation of the left lateral column was performed.',
+                       'Banding of the left lateral column was performed.', 'RBL of a third column was performed.'):
+            with self.subTest(second=second):
+                proposals, result = real(BAND_REPORT.format(second=second),
+                                         ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
+                self.assertReady(proposals['46221'])
+                self.assertEqual(encounter_check(result, 'services.unproposed').status, 'pass')
+        proposals, result = real(BAND_REPORT.format(second='Excisional hemorrhoidectomy was performed.'),
+                                 ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
+        self.assertNamedMissed(result, 'Excisional hemorrhoidectomy')

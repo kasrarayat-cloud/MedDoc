@@ -1281,6 +1281,12 @@ _VAL_ONE_PROCEDURE = (
     ('46600', '46615', re.compile(r'\banoscop(?:y|ies)\b', re.A | re.I)),
 )
 _VAL_SIBLING = re.compile(r'hemorrhoidectom', re.A | re.I)
+# Round 4d validation:5: a name is in 46221's class only with a band word ("Rubber band ligation", "Banding", "RBL"): a
+# ligation alone ("Suture ligation of the left lateral column", 46945/46946; "hemorrhoidal artery ligation", 46948) is
+# another procedure, as is any suture, artery, Doppler, dearterialization or variceal / esophageal name (_V2_SIBLING).
+_V2_CLASS_NEEDS = (('46221', '46221', re.compile(r'\b(?:band(?:s|ed|ing)?|RBL)\b', re.A | re.I)),)
+_V2_SIBLING = re.compile(r'\b(?:sutur\w*|arter(?:y|ies|ial)|dearteriali[sz]\w*|doppler|HAL|THD|varic\w*|esophag\w*)\b',
+                         re.A | re.I)
 _VAL_NAME_LEAD = re.compile(r'(?:(?:and|then|also|the|an?)\s+)+', re.A | re.I)
 
 
@@ -1300,10 +1306,13 @@ def _VAL_in_class(code: str, name: str) -> bool:
     """Whether a routed procedure name is in the code's one-procedure class and names nothing else: no range sibling (a
     hemorrhoidectomy), and every procedure word routing reads in it (detect._PROCEDURE_WORD) a word of that class - so
     "Anoscopy with rubber band ligation of two internal hemorrhoids" is never 46600's anoscopy alone, nor "Anoscopy
-    with banding" 46221's banding alone."""
+    with banding" 46221's banding alone. 46221's class also needs a band word and no other ligation's name
+    (_V2_CLASS_NEEDS, _V2_SIBLING: round 4d validation:5)."""
     from studio.gi import detect
     words = _VAL_one_procedure_words(code)
+    needs = next((pattern for low, high, pattern in _V2_CLASS_NEEDS if low <= code <= high), None)
     return bool(words and words.search(name) and not _VAL_SIBLING.search(name)
+                and (needs is None or (needs.search(name) and not _V2_SIBLING.search(name)))
                 and all(words.search(m.group(0)) for m in detect._PROCEDURE_WORD.finditer(name)))
 
 
