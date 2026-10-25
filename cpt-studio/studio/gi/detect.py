@@ -2837,6 +2837,8 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     elif state == 'on' and _B2_item_box_differs(an, start, end, 'off'):
         # "Not performed ☐ Biopsy ☒ Cold snare polypectomy ☐": read by the biopsy's ☒, its own box unchecked
         return Reading('uncertain', (_B2_OTHER_BOX,), 'cue', doubt=True)
+    if _B2_runs_disagree(an, start, end, state):  # round 4c-2 box2:K: "Photos ☐ | Biopsy ☒ | Cold snare polypectomy ☐"
+        return Reading('uncertain', (_B2_ROW_READINGS,), 'cue', doubt=True)
     if state == 'off' and _box_selected_denial(an, start, end):
         # round 4c-2 box2:H: a passage naming no item that selects a "Not performed" or "Not done" option ("☒ Not
         # performed") is held, as round 5 declared:8 holds the service it follows: it names nothing it could deny
@@ -4046,6 +4048,67 @@ def _B2_item_box_differs(an: Analysis, start: int, end: int, against: str = 'on'
     return 'on' in states or any(state in ('unknown', 'mixed', 'unclear') for state in states)
 
 
+# --- round 4c-2 box2:K: a row whose first word is neither an item nor an option --------------------------------------
+_B2_ROW_READINGS = ('uncertain: its line can be read with the boxes leading or trailing, and the two readings give it '
+                    'different boxes')
+
+
+def _B2_entry_runs(text: str, lo: int, hi: int, boxes: list) -> list:
+    """The word runs of the line part [lo, hi) between its boxes, each trimmed of spaces and cell bars: every entry the
+    boxes may mark, item or not ("Photos", "Biopsy", "Cold snare polypectomy" of "Photos ☐ | Biopsy ☒ | Cold snare
+    polypectomy ☐"). The first run's text up to its last ":" is the line's label, which its boxes do not mark
+    ("Colonoscopy:" of "Colonoscopy: ☐ biopsy ☒ cold snare" or of "Colonoscopy: Pending ☐ | Completed ☒")."""
+    edges = [lo] + [edge for box in boxes for edge in (box[0], box[1])] + [hi]
+    runs = []
+    for index in range(0, len(edges) - 1, 2):
+        run_lo, run_hi = edges[index], edges[index + 1]
+        if index == 0:
+            colon = text.rfind(':', run_lo, run_hi)
+            run_lo = colon + 1 if colon >= 0 else run_lo
+        part = text[run_lo:run_hi]
+        left, right = len(part) - len(part.lstrip(' \t|')), len(part.rstrip(' \t|'))
+        if right > left and _B2_WORD.search(part, left, right):
+            runs.append((run_lo + left, run_lo + right))
+    return runs
+
+
+_B2_WORD = re.compile(r'\w')
+
+
+def _B2_runs_disagree(an: Analysis, start: int, end: int, state: Optional[str], item: bool = True) -> bool:
+    """Whether the passage [start, end), which the box reader reads by a checked or an unchecked box, takes the other
+    state when its line is read with every word run between the boxes as an entry (_B2_entry_runs, read as
+    _box_option_states reads a status line's entries: the boxes lead when the first box comes before the first run,
+    trail when the last box comes after the last). The box reader orients a row by its items only, so a first word
+    that is neither an item nor an option ("Photos ☐ | Biopsy ☒ | Cold snare polypectomy ☐") makes it lead, and each
+    item takes the box of the entry before it: the unchecked polypectomy read performed, the checked biopsy negated
+    (d05326ef read each by its own box). ARCHITECTURE 5.3: a row whose boxes can be read as leading or trailing holds
+    the items the readings disagree on. Only a passage inside one run, and only a definite disagreement, checked or
+    unchecked: a line the runs leave unread either way, one whose boxes answer yes or no, or one whose entries are
+    labelled with a colon before their box (_box_orientation reads those), reads as before. ``item``: only a passage
+    that names an item (a service, an intervention, a gi.other name; the visit statement's reader passes False for
+    itself), so a status reference ("Procedure cancelled" of "Procedure completed ☐ | Procedure cancelled ☒") is read
+    as before."""
+    if state not in ('on', 'off') or an.text.find('\n', start, end) >= 0:
+        return False
+    if item and not _box_tokens(an, start, max(end, start + 1))[0]:
+        return False
+    _, _, lo, hi = _box_segment(an, start, end)
+    boxes = _box_tokens(an, lo, hi)[1]
+    text = an.text
+    if not boxes or any(_OPTION_BEFORE.search(text, max(lo, b[0] - 20), b[0]) or _OPTION_AFTER.match(text, b[1], hi)
+                        for b in boxes):
+        return False  # yes / no answers are read by the option they mark (_group_state), not as entries
+    runs = _B2_entry_runs(text, lo, hi, boxes)
+    if any(text[run[1] - 1] == ':' for run in runs):
+        return False  # entries labelled "X:" before their box are round 4c's ("Colonoscopy: ☐ EGD: ☒ dilation")
+    own = [run for run in runs if run[0] <= start and max(end, start + 1) <= run[1]]
+    if len(own) != 1:
+        return False
+    other = _box_option_states(an, lo, hi, own, runs)[0]
+    return other in ('on', 'off') and other != state
+
+
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
     """Clauses that refer to a family's service without naming it ("the procedure
     was cancelled", "unable to advance beyond the splenic flexure"). Only these
@@ -4676,7 +4739,7 @@ def _B2_visit_box(an: Analysis, start: int, end: int) -> Optional[Reading]:
     so in an option row ("Visit type: ☐ New patient visit ☒ Established patient visit") the unchecked option of
     another visit type never holds the checked one; as a status line's label it is read by the line's options
     (_B2_label_state). Held, never negated: an unchecked visit statement is no statement that the visit did not
-    happen."""
+    happen. A row its boxes can be read for both ways holds it (box2:K)."""
     _, _, lo, hi = _box_segment(an, start, end)
     if _B2_VISITS_KEY not in an.memo:
         an.memo[_B2_VISITS_KEY] = sorted((v.start, v.end) for v in an.em if v.kind == 'em-visit')
@@ -4688,6 +4751,8 @@ def _B2_visit_box(an: Analysis, start: int, end: int) -> Optional[Reading]:
         state = _box_option_states(an, lo, hi, [(start, end)], entries)[0]
     else:
         state = _box_state(an, start, end)
+        if _B2_runs_disagree(an, start, end, state, item=False):
+            return Reading('uncertain', (_B2_ROW_READINGS,), 'cue', doubt=True)
     if state == 'off':
         label = _B2_label_state(an, start, end)
         if label == 'on':

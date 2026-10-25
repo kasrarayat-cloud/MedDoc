@@ -916,5 +916,89 @@ class Box2JVisitStatementBoxTests(unittest.TestCase):
         self.assertEqual(self.read(text, 'Established patient office visit')[0], 'cancelled')
 
 
+
+# --- box2:K -- a row whose first word is neither an item nor an option -------------------------------------------------
+
+K_REPORT = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n{row}\n'
+
+
+class Box2KNonItemFirstWordTests(unittest.TestCase):
+    """box2:K (critical, a regression against d05326ef). The box reader orients a row by its items: a first word that
+    is neither an item nor an option ("Photos ☐ | Biopsy ☒ | Cold snare polypectomy ☐") puts the first box before the
+    first item, so the row read as leading and every item took the box of the entry before it: the unchecked
+    polypectomy read PERFORMED (45385 ready), the checked biopsy negated; d05326ef read each by its own box. Read with
+    every word run between the boxes as an entry, the row trails; where that reading and the box reader's give an item
+    different boxes (ARCHITECTURE 5.3: a row whose boxes can be read as leading or trailing holds the items the
+    readings disagree on), the item is held: never performed, never newly negated."""
+
+    def read(self, text, phrase, within):
+        start = text.index(within) + within.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def test_the_claimed_rows_never_read_the_unchecked_item_performed(self):
+        for row in ('Photos \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610', 'Photos \u2610 Biopsy \u2612 Cold snare polypectomy \u2610',
+                    'Retroflexion \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610',
+                    'Photos taken [ ] | Biopsy [x] | Cold snare polypectomy [ ]', 'Photos \u2612 | Cold snare polypectomy \u2610'):
+            with self.subTest(row=row):
+                text = K_REPORT.format(row=row)
+                status, cues = self.read(text, 'Cold snare polypectomy', row)
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('45385', 'Cold snare polypectomy'))
+                self.assertEqual(outcome(proposals['45385']), 'held')
+
+    def test_the_checked_item_is_held_never_negated(self):
+        for row, item in (('Photos \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610', 'Biopsy'),
+                          ('Photos \u2610 | Biopsy \u2612', 'Biopsy'),
+                          ('Photos \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy'),
+                          ('Photos \u2612 | Biopsy \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy')):
+            with self.subTest(row=row):
+                text = K_REPORT.format(row=row)
+                status, cues = self.read(text, item, row)
+                self.assertEqual(status, 'uncertain', cues)
+        text = K_REPORT.format(row='Photos \u2612 | Biopsy \u2610 | Cold snare polypectomy \u2612')
+        self.assertEqual(self.read(text, 'Biopsy', 'Photos \u2612 | Biopsy')[0], 'uncertain')  # the false ready: held
+
+    def test_rows_both_readings_agree_on_read_as_before(self):
+        for row, item, status in (('Tattoo \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610', 'Cold snare polypectomy', 'negated'),
+                                  ('Tattoo \u2610 | Biopsy \u2612 | Cold snare polypectomy \u2610', 'Biopsy', 'performed'),
+                                  ('Biopsy \u2612 | Cold snare polypectomy \u2610', 'Cold snare polypectomy', 'negated'),
+                                  ('\u2610 Photos \u2612 Biopsy \u2610 Cold snare polypectomy', 'Cold snare polypectomy', 'negated'),
+                                  ('\u2610 Photos \u2612 Biopsy \u2610 Cold snare polypectomy', 'Biopsy', 'performed'),
+                                  ('Biopsy | \u2610 | Cold snare polypectomy | \u2612', 'Cold snare polypectomy', 'performed'),
+                                  ('Biopsy | \u2610 | Cold snare polypectomy | \u2612', 'Biopsy', 'negated'),
+                                  ('Colonoscopy: \u2610 biopsy \u2612 cold snare polypectomy', 'cold snare polypectomy', 'performed'),
+                                  ('Colonoscopy: \u2610 biopsy \u2612 cold snare polypectomy', 'biopsy', 'negated'),
+                                  # one box fewer than the entries: the readings cannot be told apart, read as at d05326ef
+                                  ('Photos \u2610 Biopsy \u2612 Cold snare polypectomy', 'Cold snare polypectomy', 'performed'),
+                                  ('\u2611 Cold snare polypectomy \u2610 Biopsy', 'Cold snare polypectomy', 'performed'),
+                                  # a yes / no answer is read by the option it marks; entries labelled "X:" are round 4c's
+                                  ('Biopsy No \u2612', 'Biopsy', 'negated'),
+                                  ('Colonoscopy: \u2610 EGD: \u2612 dilation to 15 mm', 'EGD', 'performed')):
+            with self.subTest(row=row, item=item):
+                self.assertEqual(self.read(K_REPORT.format(row=row), item, row)[0], status)
+
+    def test_a_status_reference_reads_as_before(self):
+        """Only a passage that names an item is read so: a status reference keeps its reading (round 4's
+        Routing0CheckedCancelOptionTests: "Procedure cancelled" of "Procedure completed ☐ | Procedure cancelled ☒" is
+        held, the code citing the EUS line held, not excluded)."""
+        text = (HEAD + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nIndication: Pancreatic head mass '
+                'on CT.\nHistory reviewed.\nConsent obtained.\nASA class II.\nAirway assessed.\nAllergies: none known.\n'
+                'Anticoagulants: none.\nNPO since midnight.\nProcedure completed \u2610 | Procedure cancelled \u2612\n')
+        self.assertEqual(family_status(text, 'gi.eus'), 'uncertain')
+        proposals, _ = real(text, ('43242', 'EUS with fine-needle biopsy of the pancreatic head mass.'))
+        self.assertEqual(outcome(proposals['43242']), 'held')
+
+    def test_a_visit_statement_in_such_a_row_is_held(self):
+        """The E/M visit statement is read by its own box too (box2:J): in such a row it took the box of the entry
+        before it ("Photos ☒ | Established patient office visit ☐" read performed, 99214 ready)."""
+        for line in ('Photos \u2612 | Established patient office visit \u2610', 'Photos \u2612 Established patient office visit \u2610'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                status, cues = self.read(text, 'Established patient office visit', line)
+                self.assertEqual(status, 'uncertain', cues)
+                proposals, _ = real(text, ('99214', 'Established patient office visit'))
+                self.assertEqual(outcome(proposals['99214']), 'held')
+
+
 if __name__ == '__main__':
     unittest.main()
