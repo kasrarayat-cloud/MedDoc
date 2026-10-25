@@ -15,7 +15,7 @@ measured instead of chased one phrasing at a time (round 4, 2026-10-24):
   directive calls for (independently adjudicated cases, withheld from development), where its real frequency decides
   whether it earns a rule.
 
-"Effect now" is the behaviour on the repair branch when the entry was recorded (round 4 or round 5). *Held* means needs_clarification; *ready* means approvable
+"Effect now" is the behaviour on the repair branch when the entry was recorded (round 4, round 5 or round 4c). *Held* means needs_clarification; *ready* means approvable
 with the whole-document acknowledgement; *excluded* means a recommendation the reviewer must confirm or reinstate.
 
 | id (round 4) | example input | effect now | why it is not a rule yet |
@@ -38,6 +38,13 @@ with the whole-document acknowledgement; *excluded* means a recommendation the r
 | round 5 regression:8 | "Surveillance colonoscopy deferred pending pathology." / "Repeat colonoscopy deferred to primary care." under Impression, Assessment or Disposition | 45385 excluded (reviewer confirms or reinstates) | a cancellation verb on a service named as a future exam, with no declared other-encounter marker |
 | round 5 declared:13 | "Procedure status:" with its options one per line ("☐ Completed" / "☒ Cancelled", also a Word form with one check box per paragraph) | 43242 ready | the status readers read a label's own line; a value on later lines is a layout outside the declared ones |
 | round 5 sections:11 | "When asked about a biopsy of the hemorrhoid the patient stated no" / "...and the answer was no" before "Cold snare polypectomy ... was performed." | 45385 excluded (reviewer confirms or reinstates) | spoken answers outside the closed verb list (said, answered, replied, responded, chose) join the next clause |
+| round 5 validation:4 (rest) | "Two columns were banded at the prior session and look healed today." in a follow-up office note | 46221 ready | other-occasion nouns ("session", "appointment", "admission") are open; `cues.OTHER_TIME` lists times, not occasions |
+| round 5 validation:4 (rest) | "Two columns were banded and look healed today." | 46221 ready | which predicate a "today" belongs to is not parsed: a today in the act's clause counts for the act |
+| round 5 declared:7 (rest) | "last may" / "this past may" in lower case | 43242 ready (no time read) | lower-case "may" after last or past is the modal verb as often ("The last may be benign.") |
+| round 5 validation:3 (rest) | "Assessment and plan: EGD showed esophagitis versus reflux." (no today word, no performance verb) | 99214 ready | a result verb in a plan clause with no today word; hedged plan clauses are released by design (round 2 and 3) |
+| round 5 declared:11 (rest) | "Extent: Cecum - complete." | extent unread (45378 held for the extent) | "complete" after the landmark is in no declared tail list (`cues.EXTENT_TAIL`) |
+| round 5 declared:6 (rest) | "Procedures not performed" without a colon, then "EGD with esophageal dilation." under Findings | the EGD reads performed (43249 held only for its missing extent; ready once an extent is documented) | the label rule reads a line that ends in a colon; a colon-less heading is open wording |
+| round 5 sections:10 | "Procedure completed as planned" (no closing punctuation) before "Cold snare polypectomy of a 6 mm sigmoid polyp." | 45385 held (over-hold) | the reader cannot tell that line from a planned verbless service line after the same words ("EMR of the ascending colon lesion at a tertiary center.") |
 
 How an entry leaves this list: the accuracy evaluation shows the phrasing occurs in real adjudicated documents, and a
 rule is written for it under the hold-only rule (it may hold; it never newly excludes or releases), with a corpus
