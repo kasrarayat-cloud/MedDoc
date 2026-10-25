@@ -524,10 +524,11 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         lose_all = lose_all or anywhere
 
     over_a_box, claims = set(), {}
+    by_widget = False  # a check box, not a mark, had too much under it to read (the page is then named as overlap)
     for i, w in enumerate(widgets):
         found = lying_under(w.rect)
         if found is None:
-            everything = True
+            everything = by_widget = True
             over_a_box.add(i)
             continue
         boxes, hides, anywhere = found
@@ -560,7 +561,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         if len(boxes) == 1 and not hides and not anywhere:
             write(boxes[0], CHECKED_BOX)
         elif boxes or hides or anywhere:
-            overlap = True
+            named = True  # a mark over several boxes, or where a box's place cannot be read: no form check box
             unsettled_boxes(boxes, hides, anywhere)
     for rect in annotations.unread_marks:  # a pen tick, a drawn stamp, other typed text: not read as a check
         found = lying_under(rect)
@@ -618,8 +619,9 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
                 named = True
             else:
                 edits[offset] = (box.end(), glyph)
-    if everything:  # too much to read: no printed box on the page is read as decided
-        overlap = True
+    if everything:  # too much to read: no printed box on the page is read as decided, named by what had too much
+        overlap = overlap or by_widget
+        named = named or not by_widget
         for match in [item[2] for row in known.rows for item in row] + [item[2] for row in inside.rows for item in row]:
             unread(match)
         lose_all = True

@@ -642,7 +642,8 @@ class Extraction8CrowdedRowCostTests(unittest.TestCase):
                 best = elapsed if best is None else min(best, elapsed)
             timings.append(best)
             self.assertEqual(text.count(UNREAD), 4000)
-            self.assertEqual((overlap, named), (True, False) if wide else (False, True))
+            # Ink marks, not form check boxes: named as unread boxes either way (round 5 extraction:7)
+            self.assertEqual((overlap, named), (False, True))
         self.assertLess(timings[0], 3 * timings[1] + 0.1, timings)
 
     def test_placement_on_a_crowded_row_is_near_linear(self):

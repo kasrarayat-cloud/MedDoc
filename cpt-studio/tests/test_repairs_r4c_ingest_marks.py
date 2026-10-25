@@ -273,5 +273,62 @@ class Extraction3FieldOverAPrintedBoxTests(unittest.TestCase):
         self.assertIn('☐ Biopsy\n☐ Cold snare polypectomy', result.text)
 
 
+# --- extraction:7 -- which message names a page whose boxes are unread ----------------------------------------------
+
+OVERLAP = ('Page 1 has a form check box over a printed box whose position could not be read, so the box may show a '
+           'different state than the text; check the original.')
+
+
+def framed_checklist(rows):
+    """A flat printed checklist of ``rows`` rows ('☒ Cold snare polypectomy' first), no form field, and one unfilled
+    review frame (/Square, a red border, no /IC) drawn around it."""
+    form = Form()
+    form.line(boxed_line(72, 640, 'Cold snare polypectomy', checked=True))
+    for n in range(1, rows):
+        form.line(boxed_line(72, 640 - 13 * n, f'Checklist item {n}'))
+    bottom = 640 - 13 * rows
+    form.annots.append(form.add(f'<< /Type /Annot /Subtype /Square /Rect [60 {bottom} 400 655] /F 4 /C [1 0 0] '
+                                '/BS << /W 1.5 >> /Contents (Reviewed) >>'))
+    return form.build()
+
+
+class Extraction7NoFormCheckBoxNoOverlapMessageTests(unittest.TestCase):
+    def test_a_frame_around_a_long_flat_checklist_is_named_as_unread(self):
+        """Past the rows one mark may read, every box is unread (the declared hold); the message names unread boxes,
+        never a form check box the page does not have."""
+        for rows in (36, 10):
+            with self.subTest(rows=rows):
+                result = extracted(framed_checklist(rows))
+                self.assertEqual(result.status, 'partial', result.messages)
+                self.assertNotIn(OVERLAP, result.messages)
+                self.assertIn(UNREAD_NOTE, result.messages)
+                self.assertIn('[?] Cold snare polypectomy', result.text)
+                self.assertEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'held')
+
+    def test_a_typed_x_across_two_boxes_is_named_as_unread(self):
+        form = Form()
+        form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy')).line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.freetext((70, SNARE_ROW - 4, 84, BIOPSY_ROW + 10), 'X')
+        result = extracted(form.build())
+        self.assertNotIn(OVERLAP, result.messages)
+        self.assertIn(UNREAD_NOTE, result.messages)
+        self.assertIn('[?] Biopsy\n[?] Cold snare polypectomy', result.text)
+
+    def test_a_form_check_box_still_names_the_overlap(self):
+        """Controls: a check box over a box whose position cannot be read, and more rows than one check box may read."""
+        form = Form()
+        form.line(text_line(90, BIOPSY_ROW, 'Biopsy [ ]'))
+        form.checkbox('Check Box1', (124, BIOPSY_ROW - 3, 136, BIOPSY_ROW + 9), False)
+        self.assertIn(OVERLAP, extracted(form.build()).messages)
+        form = Form()
+        for n in range(40):
+            form.line(f'BT /WD 11 Tf 72 {SNARE_ROW + n * 0.05:.2f} Td <A8> Tj ET')
+        form.line(text_line(90, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', widget_rect(SNARE_ROW), True, tu='Cold snare polypectomy')
+        result = extracted(form.build())
+        self.assertIn(OVERLAP, result.messages)
+        self.assertNotIn(UNREAD_NOTE, result.messages)
+
+
 if __name__ == '__main__':
     unittest.main()
