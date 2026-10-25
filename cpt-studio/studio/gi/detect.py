@@ -4409,9 +4409,61 @@ def _em_base_reading(an: Analysis, m: Mention) -> Reading:
     if cue and cue.status != 'performed':
         return cue
     if m.kind == 'em-visit' and cue is None and an.lay.section_at(m.start).kind in ('plan', 'history'):
-        return _default_reading(an, m.start, m.end)
-    label = 'visit statement' if m.kind == 'em-visit' else m.label
-    return Reading('performed', (cue.cues if cue else ()) + (f'performed: office E/M documentation ({label})',), 'cue')
+        reading = _default_reading(an, m.start, m.end)
+    else:
+        label = 'visit statement' if m.kind == 'em-visit' else m.label
+        reading = Reading('performed', (cue.cues if cue else ()) + (f'performed: office E/M documentation ({label})',),
+                          'cue')
+    if m.kind == 'em-visit' and reading.status == 'performed':
+        held = _B2_visit_box(an, m.start, m.end)  # round 4c-2 box2:J
+        if held is not None:
+            return held
+    return reading
+
+
+# --- round 4c-2 box2:J: an E/M visit statement governed by an unread mark or an unchecked box ----------------------
+_B2_VISIT_UNREAD = 'uncertain: the visit statement is marked with a box this reader cannot read'
+_B2_VISIT_UNCHECKED = 'uncertain: the visit statement is marked with an unchecked box, so it is not read as documented'
+_B2_VISIT_DISAGREE = ('uncertain: the boxes that mark the visit statement disagree, or a later box on its line may '
+                      'govern it')
+_B2_VISITS_KEY = ('b2-visit-statements',)  # the visit statements, sorted (read per segment by bisection)
+
+
+def _B2_visit_box(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """The hold of an E/M visit statement at [start, end) that a box governs (_box_state, as any passage is read:
+    its own line or cell, before or after it, within BOX_REACH) when that box is unread, unchecked or disagreeing,
+    or that a form line marks off (_unchecked_state); None when a checked box governs it, or none. The box reader's
+    items are services, interventions and gi.other names, and a visit statement is none of them, so nothing read
+    its box: "[?] Established patient office visit." read performed once the unread mark's "?" was no hedge (round
+    4c extraction:8), and "☐ Established patient office visit." at every tree. Each statement is read by its own box,
+    so in an option row ("Visit type: ☐ New patient visit ☒ Established patient visit") the unchecked option of
+    another visit type never holds the checked one; as a status line's label it is read by the line's options
+    (_B2_label_state). Held, never negated: an unchecked visit statement is no statement that the visit did not
+    happen."""
+    _, _, lo, hi = _box_segment(an, start, end)
+    if _B2_VISITS_KEY not in an.memo:
+        an.memo[_B2_VISITS_KEY] = sorted((v.start, v.end) for v in an.em if v.kind == 'em-visit')
+    visits = an.memo[_B2_VISITS_KEY]
+    others = [v for v in visits[bisect.bisect_left(visits, (lo, -1)):bisect.bisect_left(visits, (hi + 1, -1))]
+              if v[1] <= hi and v != (start, end)]
+    if others:  # an option row of visit statements: every statement an entry, each read by its own box
+        entries = _merged(others + [(start, end)] + list(_box_tokens(an, lo, hi)[0]))
+        state = _box_option_states(an, lo, hi, [(start, end)], entries)[0]
+    else:
+        state = _box_state(an, start, end)
+    if state == 'off':
+        label = _B2_label_state(an, start, end)
+        if label == 'on':
+            return None  # "Established patient office visit: ☐ Cancelled ☒ Completed"
+        return Reading('uncertain', (_B2_VISIT_UNREAD if label in ('unknown', 'across') else _B2_VISIT_UNCHECKED,),
+                       'cue', doubt=True)
+    if state == 'unknown':
+        return Reading('uncertain', (_B2_VISIT_UNREAD,), 'cue', doubt=True)
+    if state in ('mixed', 'unclear'):
+        return Reading('uncertain', (_B2_VISIT_DISAGREE,), 'cue', doubt=True)
+    if state is None and _unchecked_state(an, start, end):
+        return Reading('uncertain', (_B2_VISIT_UNCHECKED,), 'cue', doubt=True)
+    return None
 
 
 # The clinician's own statement that a same-day E/M was significant and separately

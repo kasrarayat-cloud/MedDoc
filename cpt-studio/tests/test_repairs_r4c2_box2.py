@@ -767,5 +767,124 @@ class Box2IUnselectedOptionTests(unittest.TestCase):
                 self.assertEqual(self.read(I_REPORT.format(row=row), cited, within=row)[0], status)
 
 
+
+# --- box2:J -- an E/M visit statement governed by an unread mark or an unchecked box ---------------------------------
+
+J_OFFICE = HEAD + ('Place of service: Office (POS 11)\n{line}\nChief complaint: Heartburn.\nAssessment and plan: PPI.\n'
+                   'Medical decision making: moderate.\n')
+
+
+def em_mentions(text):
+    finding = detect.route(text, D).finding('gi.office_em')
+    return [(m.span.text, m.status, m.cues) for m in (finding.mentions if finding else ())]
+
+
+class Box2JVisitStatementBoxTests(unittest.TestCase):
+    """box2:J (critical, a regression against 9a9f403 and 4347acd from round 4c's extraction:8). The "?" of an unread
+    mark is no hedge any more, and the item the mark governs is held, but only for the box reader's items: an E/M
+    visit statement is none, so "[?] Established patient office visit." read PERFORMED (the span and the office-visit
+    mention), and 99214 citing it was READY (held at both bases, by the old "?" hedge). "☐ Established patient office
+    visit." read performed at every tree (a declared box-vocabulary misread). A visit statement a box governs (its own
+    line or cell, before or after it, as any passage is read) is held when that box is unread, unchecked or
+    disagreeing; a checked box, or none, reads as before. Never excluded."""
+
+    def read(self, text, phrase, within=None):
+        start = text.index(phrase) if within is None else text.index(within) + within.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def test_an_unread_mark_holds_the_visit_statement(self):
+        for line in ('[?] Established patient office visit.', 'Established patient office visit [?]',
+                     '\u25a2 Established patient office visit.', 'Established patient office visit | [?]',
+                     '[?] Office visit'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                status, cues = self.read(text, line)
+                self.assertEqual(status, 'uncertain', cues)
+                self.assertTrue(any('visit statement' in c for c in cues), cues)
+                visit = [m for m in em_mentions(text) if 'visit' in m[0].lower()]
+                self.assertTrue(visit and all(m[1] == 'uncertain' for m in visit), visit)
+                proposals, _ = real(text, ('99214', line))
+                self.assertEqual(outcome(proposals['99214']), 'held')
+
+    def test_an_unchecked_box_holds_the_visit_statement(self):
+        for line in ('\u2610 Established patient office visit.', '[ ] Established patient office visit',
+                     'Established patient office visit | \u2610', 'Established patient office visit: \u2610 Yes \u2612 No',
+                     '\u2612 Anoscopy \u2610 Established patient office visit', 'Established patient office visit \u2610 Anoscopy \u2612',
+                     # boxes of the statement that disagree; a form line that marks it off
+                     '\u2612\u2610 Established patient office visit.', 'Established patient office visit \u2612 \u2610',
+                     'Established patient office visit: not checked'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                visit = 'Established patient office visit'
+                status, cues = self.read(text, visit, within=line)
+                self.assertEqual(status, 'uncertain', cues)  # held, never negated
+                proposals, _ = real(text, ('99214', visit))
+                self.assertEqual(outcome(proposals['99214']), 'held')
+                self.assertEqual(detect.route(text, D).finding('gi.office_em').status, 'performed')  # by its other mentions
+
+    def test_a_checked_box_or_none_reads_as_before(self):
+        for line in ('\u2612 Established patient office visit.', '[x] Established patient office visit',
+                     'Established patient office visit: \u2612 Yes \u2610 No', 'Established patient office visit | \u2611',
+                     'Established patient office visit.', '\u2610 Anoscopy. Established patient office visit.',
+                     '\u2610 Anoscopy \u2612 Established patient office visit'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                phrase = 'Established patient office visit'
+                status, cues = self.read(text, phrase, within=line)
+                self.assertEqual(status, 'performed', cues)
+                proposals, _ = real(text, ('99214', phrase))
+                self.assertEqual(outcome(proposals['99214']), 'ready', [c.detail for c in proposals['99214'].checks])
+
+    def test_a_status_label_reads_by_its_options(self):
+        """The visit statement as a status line's label is read by the line's options (box2:I): an unchecked
+        cancellation states nothing (it read CANCELLED at the base), and the label is not read by the option's box.
+        ("Office visit" alone lacks the patient-status fact, which holds 99214 by itself.)"""
+        for line in ('Established patient office visit: \u2612 Completed \u2610 Cancelled',
+                     'Established patient office visit: \u2610 Cancelled \u2612 Completed'):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                status, cues = self.read(text, 'Established patient office visit', within=line)
+                self.assertEqual(status, 'performed', cues)
+                proposals, _ = real(text, ('99214', 'Established patient office visit'))
+                self.assertEqual(outcome(proposals['99214']), 'ready', [c.detail for c in proposals['99214'].checks])
+        text = J_OFFICE.format(line='Established patient office visit: \u2610 Cancelled [?] Completed')
+        self.assertEqual(self.read(text, 'Established patient office visit')[0], 'uncertain')
+
+    def test_option_rows_read_option_by_option(self):
+        """The unchecked option of another visit type never holds the checked one: each statement is read by its own
+        box, also where the boxes trail. (99214 stays held there by the context facts, which read the unchecked
+        option's "New patient" as documented too: "conflicting values", at every tree; the visit statement itself
+        documents the visit, as the service.status check says.)"""
+        for line, checked, unchecked in (
+                ('Visit type: \u2610 New patient visit \u2612 Established patient visit', 'Established patient visit',
+                 'New patient visit'),
+                ('Visit type: New patient visit \u2610 | Established patient visit \u2612', 'Established patient visit',
+                 'New patient visit'),
+                ('Visit type: \u2612 New patient visit \u2610 Established patient visit', 'New patient visit',
+                 'Established patient visit')):
+            with self.subTest(line=line):
+                text = J_OFFICE.format(line=line)
+                self.assertEqual(self.read(text, checked, within=line)[0], 'performed')
+                self.assertEqual(self.read(text, unchecked, within=line)[0], 'uncertain')
+                proposals, _ = real(text, ('99214', checked))
+                self.assertTrue(check_of(proposals['99214'], 'service.status').detail.startswith('Documented as performed'))
+                self.assertNotEqual(outcome(proposals['99214']), 'excluded')
+                proposals, _ = real(text, ('99214', unchecked))
+                self.assertFalse(check_of(proposals['99214'], 'service.status').detail.startswith('Documented as performed'))
+                self.assertEqual(outcome(proposals['99214']), 'held')
+
+    def test_controls_read_as_before(self):
+        """A denial in the statement's own words stays; a plan visit stays planned; the visit and a procedure in one
+        name is box2:E's; a status label whose cancellation is checked stays cancelled."""
+        text = J_OFFICE.format(line='Office visit: \u2610 Completed \u2612 Cancelled')
+        self.assertEqual(self.read(text, 'Office visit')[0], 'cancelled')
+        for line in ('Plan: \u2610 Follow-up office visit in 3 months.', 'Plan: \u2610 Follow-up office visit.'):
+            with self.subTest(line=line):  # a visit the plan section reads planned is not held by its box
+                text = J_OFFICE.format(line=line)
+                self.assertEqual(self.read(text, 'Follow-up office visit')[0], 'planned')
+        text = J_OFFICE.format(line='Established patient office visit was cancelled.')
+        self.assertEqual(self.read(text, 'Established patient office visit')[0], 'cancelled')
+
+
 if __name__ == '__main__':
     unittest.main()
