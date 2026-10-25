@@ -111,7 +111,7 @@ row and refuse `delete()`; corrections are new rows.
 | `SourceFile` | `encounter`, `original_name`, `media_type`, `size`, `sha256`, `storage_name`, `uploaded_by` | **immutable**; bytes stored 0600, never overwritten |
 | `SourceRevision` | `encounter`, `number`, `kind` ∈ {upload, paste, addendum}, `source_file`, `parent`, `addendum_text`, `answers_clarification`, `synthetic_attested_by/_at`, extraction fields (`extraction_status` ∈ {pending, ok, partial, failed}, `extraction_method`, `text`, `text_sha256`, `pages` JSON, `messages` JSON, `engine` JSON, `extracted_at`) | extraction fields are write-once (pending → final) |
 | `EncounterContext` | `encounter`, `revision`, `facts` JSON (name → {value, origin, evidence, note}), `user_values` JSON, `sha256`, `created_by` | **immutable** snapshot; `current_context` points at the latest |
-| `RoutingRun` | `revision`, `version`, `result` JSON, `sha256` | deterministic, recomputable |
+| `RoutingRun` | `revision`, `version`, `result` JSON, `sha256`, `service_date` (the effective date it was routed for; null on rows recorded before migration 0005) | deterministic, recomputable |
 | `ProviderRun` | `encounter`, `revision`, `provider`, `adapter_version`, `request_sha256`, `request_body` JSON, `contexts` JSON, `state` ∈ {reserved, sending, succeeded, failed, unknown, not_sent, cancelled}, `sent`, `http_status`, `provider_request_id`, `response_sha256`, `response_bytes` (raw bytes as received), `latency_ms`, `usage` JSON, `usage_basis`, `error`, `run_identity`, `authorization_ref`, `reused_from`, `reconciled_by/_at/_note`, `service_date` (the date the request was built with) | one row per send attempt; never resent automatically |
 | `Assessment` | `encounter`, `revision`, `context`, `routing`, `provider_run`, `profiles_version`, `engine_version`, `reference_sources` JSON, `encounter_checks` JSON, `unsupported` JSON, `sha256` | **immutable** |
 | `Proposal` | `assessment`, `key`, `bucket` ∈ {selected, alternative, excluded}, `code`, `code_kind`, `family`, `profile_version`, `status` ∈ {ready, needs_clarification, excluded, informational}, `exclusion_reason`, `reinstatable`, `provider_display`, `evidence` JSON, `rationale`, `checks` JSON, `modifier_considerations` JSON, `units`, `fingerprint` | **immutable** |
@@ -652,7 +652,10 @@ where a rule restores what an ordinary note read before round 3b.
   sentence, and a member's pre-triggers are read once from its own bounded
   start, so a long coordinated list stays linear. Clause lookups take only the
   first or last few clauses they need (by bisection), and a line's done-question
-  answer is read once per line. Every stage reads the
+  answer is read once per line. A span's family is found positionally — the
+  services are sorted and never overlap, so only those starting within the
+  longest service name before the span are tested — so a provider citing a long
+  report span by span stays linear (round 6 bounded:1). Every stage reads the
   document in ONE forked child under the stage's own wall clock
   (`JOB_DEADLINE_SECONDS`) and a memory allowance (`BOUNDED_MEMORY_BYTES`,
   `studio/bounded.py`): analyze extracts the context and routes in one child,
@@ -664,8 +667,13 @@ where a rule restores what an ordinary note read before round 3b.
   read stays cached in the worker (`jobs.release_routing_caches` after every
   stage is the backstop). A member's context change re-reads the document's
   facts in a child under `CONTEXT_REQUEST_SECONDS`, and is refused for a
-  revision whose analysis never finished, so nothing is ever sent for a
-  document the service could not read.
+  revision whose analysis overran or failed, so nothing is ever sent for a
+  document the service could not read; a stopped, swept or expired analysis is
+  resumable and is not refused (round 6 pipeline:1). Nothing is sent for a date
+  the revision was never routed for: when it has no `RoutingRun` for the
+  context's date, the predict stage routes that date first in one child under
+  the analyze deadline, and an overrun fails the stage before any request is
+  built, reused or sent (round 6 pipeline:0).
 
 ### 5.4 `studio/providers` — proposal adapters
 
@@ -691,7 +699,10 @@ dotenv file named by `CPT_STUDIO_CORTI_CREDENTIALS_FILE`
 `CORTI_TENANT_NAME`), parsed as data, never logged. `requests.Session`
 with `trust_env=False`, `max_retries=0`, `allow_redirects=False`, connect
 10 s / read 120 s, request ≤ 512,000 bytes (refused, never truncated),
-response ≤ 4 MiB. Usage = `usageInfo.creditsConsumed`, basis
+response ≤ 4 MiB. A response listing more than 64 selected codes
+(`MAX_SELECTED`) or more than 256 candidate and alternative codes
+(`MAX_INFORMATIONAL`) is not used, and says so by count; an assessment's
+proposals are written in one INSERT (round 6 bounded:5). Usage = `usageInfo.creditsConsumed`, basis
 `provider_reported_credits_not_usd`.
 
 `ReplayProvider` (tests/dev only): returns recorded bytes for a known request
@@ -886,7 +897,7 @@ Actions: `approve` (only `ready` proposals on the current assessment, with
 an acknowledgement that the reviewer read the whole document and it supports
 the code: exactly the current attestation text for the reviewer's actor kind,
 `review.ACKNOWLEDGEMENTS`, which `/api/session` serves to the page; any other
-text is refused), `reject` (any selected proposal), `reinstate` (a reinstatable
+text, or none, is refused as invalid input — `AttestationRefused`, 400), `reject` (any selected proposal), `reinstate` (a reinstatable
 excluded proposal → becomes reviewable, recorded), `confirm` (agree with a
 reinstatable exclusion: it stays excluded, now with a named reviewer), `revoke`
 (undo the reviewer's current decision). A reinstatable exclusion is a
@@ -909,7 +920,11 @@ E/M is still on its way to an approval (selected and undecided, reinstated, or
 approved first) the reviewed report is blocked ("<E/M> needs a separately
 identifiable E/M: <code> was reinstated as a same-day procedure"); rejecting
 the E/M, confirming its exclusion, or rejecting or revoking the reinstatement
-releases it.
+releases it. Every proposal carries `approve_withheld_by`, the same for every
+member: on a reinstated exclusion, the check that withholds approve
+(`review.reinstatement` while it does not pass, `em.same_day_if_reinstated`
+while the same-day hold applies), else null — so the page never reads a code's
+state from one member's action list (round 6 bypass:3).
 
 ### 5.8 `studio/reports` — exports
 
