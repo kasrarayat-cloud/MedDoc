@@ -550,14 +550,31 @@ class Sections1TodayLabelAnsweredNoneInWordsTests(HeldOrReadyAssertions, unittes
                 'internal hemorrhoids.\nProcedures performed today:\nFlexible sigmoidoscopy to 30 cm\n')
         self.assert_held_never_excluded(text, '45330', 'Flexible sigmoidoscopy to 30 cm')
 
-    def test_outside_a_plan_or_history_section_the_label_reads_as_before(self):
-        polyp = 'Cold snare polypectomy of a 6 mm sigmoid polyp'
-        for before in ('Findings: The colonoscope was advanced to the cecum.\n', 'Sedation: Monitored anesthesia care.\n'):
-            text = (HEADER + 'Procedure: Colonoscopy\n' + before + 'Procedures performed today: colonoscopy with '
-                    'polypectomy\n' + polyp + '\nFindings: The colonoscope was advanced to the cecum.\n')
+    def test_over_any_section_but_a_positive_one(self):
+        """After an examination, an impression, a chief complaint, an 'other' heading or at the top, R3B-BASE held the
+        item (it read in that silent section) and HEAD read it a READY 43249: held too."""
+        visit = 'Established patient office visit for dysphagia.'
+        for before in ('Physical examination: Abdomen soft.\n', 'Impression: Peptic stricture.\n',
+                       'Chief complaint: Dysphagia.\n', 'Sedation: none.\n', ''):
+            text = (HEADER + 'Place of service: Office (POS 11)\n' + visit + '\n' + before + 'Procedures performed today: '
+                    'None today\n' + S1_ITEM + '\nTotal time: 32 minutes.\n')
             with self.subTest(before=before):
-                self.assertEqual(read(text, polyp)[0], 'performed')
-                self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+                self.assertNotIn(read(text, S1_ITEM)[0], POSITIVE)
+                self.assert_never_ready(text, '43249', S1_ITEM)
+        text = 'Procedures performed today: None today\n' + S1_ITEM + '\n'  # nothing before the label at all
+        self.assertNotIn(read(text, S1_ITEM)[0], POSITIVE)
+
+    def test_after_a_positive_section_the_label_reads_as_before(self):
+        polyp = 'Cold snare polypectomy of a 6 mm sigmoid polyp'
+        text = (HEADER + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\nProcedures performed '
+                'today: colonoscopy with polypectomy\n' + polyp + '\n')
+        self.assertEqual(read(text, polyp)[0], 'performed')
+        self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+        # under an 'other' heading the next line is held, as R3B-BASE held it (an accepted over-hold against HEAD)
+        text = (HEADER + 'Procedure: Colonoscopy\nSedation: Monitored anesthesia care.\nProcedures performed today: '
+                'colonoscopy with polypectomy\n' + polyp + '\nFindings: The colonoscope was advanced to the cecum.\n')
+        self.assertEqual(read(text, polyp)[0], 'uncertain')
+        self.assertEqual(read(text, 'colonoscopy with polypectomy')[0], 'performed')  # the label's own line
         text = s1_note('Procedures performed today: none')  # an exact no-answer value: no heading, as at R3B-BASE
         self.assertEqual(run_engine(text, [('43249', S1_ITEM)])['43249'].bucket, 'excluded')
         self.assertTrue(ready(run_engine(text, [('99214', S1_VISIT)])['99214']))

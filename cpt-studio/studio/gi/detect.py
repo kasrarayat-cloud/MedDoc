@@ -1819,16 +1819,18 @@ def _SEC_hold_cue(an: Analysis, section) -> Optional[str]:
 
 def _SEC_today_label_hold(an: Analysis, section, start: int, end: int) -> Optional[str]:
     """A cue holding [start, end) when only its procedure section would read it performed, and that section was opened
-    by one of round 3b's performed-today labels ("Procedures performed today:") over a plan or history section, below
-    the label's own line (round 4c sections:1). The label may answer none in any words ("None today", "No procedures
-    performed", "None. EGD to be scheduled"), and then the plan item after it is planned (R3B-BASE), never performed;
-    no word list tells, so the line is held. The label's own line and its sentence keep their reading, and so does an
+    by one of round 3b's performed-today labels ("Procedures performed today:") over any section but a procedure,
+    findings or technique one (a plan, a history, an examination, an impression, an indication, an 'other' heading, the
+    text before the first heading), below the label's own line (round 4c sections:1). The label may answer none in any
+    words ("None today", "No procedures performed", "None. EGD to be scheduled"), and then the item after it is planned
+    or silent (R3B-BASE: excluded under a plan, held elsewhere), never performed; no word list tells, so the line is
+    held. The label's own line and its sentence keep their reading, and so does an
     item its checked box governs (round 3 contract:8: "Procedures performed today:" then "[x] Flexible
     sigmoidoscopy to 30 cm"), read through the box vocabulary's own reader (_box_state)."""
     if section.kind != 'procedure' or section.label not in gi_sections._SEC_TODAY_LABELS or section.heading is None:
         return None
     index = bisect.bisect_right(an.lay.section_starts, section.start) - 1
-    if index <= 0 or an.lay.sections[index - 1].kind not in ELSEWHERE_SECTIONS:
+    if index > 0 and an.lay.sections[index - 1].kind in POSITIVE_SECTIONS:
         return None
     line_end = an.text.find('\n', section.heading.end)
     if an.lay.sentence_for(start, end)[0] < (len(an.text) if line_end < 0 else line_end) \
