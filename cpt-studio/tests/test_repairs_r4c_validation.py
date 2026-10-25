@@ -496,11 +496,20 @@ class Validation2OwnProcedureReportOverHoldTests(Case):
             with self.subTest(text=text[len(HEAD):]):
                 proposals, _ = real(text, (code, line))
                 self.assertEqual(proposals[code].status, 'needs_clarification')
-        # a plan to repeat it is no doubt about today's
-        text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Anoscopy revealed grade 2 internal hemorrhoids.') \
-            + 'Plan: Repeat anoscopy in 6 months.\n'
-        proposals, _ = real(text, ('46600', 'Anoscopy revealed grade 2 internal hemorrhoids.'))
-        self.assertReady(proposals['46600'])
+        # the procedure denied by reference or by its act, without its name
+        line = 'Anoscopy revealed grade 2 internal hemorrhoids.'
+        for denial in ('The procedure was aborted before insertion.', 'The study was cancelled.',
+                       'It was not performed.', 'The exam was terminated early due to pain.'):
+            with self.subTest(denial=denial):
+                text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find=f'{line} {denial}')
+                self.assertEqual(real(text, ('46600', line))[0]['46600'].status, 'needs_clarification')
+        # no doubt about today's anoscopy: a plan to repeat it, a biopsy not taken, a finding denied, another
+        # procedure's denial
+        for other in ('Plan: Repeat anoscopy in 6 months.', 'No biopsies were taken.', 'No fissure or mass.',
+                      'Banding was deferred because she takes apixaban.'):
+            with self.subTest(other=other):
+                text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find=line) + other + '\n'
+                self.assertReady(real(text, ('46600', line))[0]['46600'])
 
     def test_each_sentence_s_lead_is_read_once_however_many_passages_cite_it(self):
         from unittest import mock

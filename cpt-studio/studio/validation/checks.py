@@ -1339,20 +1339,26 @@ def _VAL_lead_name(an, text: str, index: int, service_date: Optional[date]) -> s
     return name
 
 
-# Any word of a gi.other code's own procedure (_VAL_OWN_PROCEDURES): the sentences worth reading for a doubt about it.
+# Any word of a gi.other code's own procedure (_VAL_OWN_PROCEDURES), the procedure named by reference, or its act: the
+# sentences worth reading for a doubt about the procedure a report's procedure line names.
 _VAL_ANY_OWN = re.compile('|'.join(pattern.pattern for _, _, patterns, _ in _VAL_OWN_PROCEDURES for pattern in patterns),
                           re.A | re.I)
+_VAL_REFERENCE = re.compile(r'\b(?:procedures?|exam(?:ination)?s?|stud(?:y|ies)|it)\b', re.A | re.I)
+_VAL_ACT_VERB = re.compile(r'\b(?:perform\w*|done|complet\w*|abort\w*|cancel\w*|terminat\w*|stopp?\w*|defer\w*|'
+                           r'attempt\w*|postpon\w*|declin\w*|refus\w*)\b', re.A | re.I)
+_VAL_DOUBT_STATUSES = ('negated', 'cancelled', 'incomplete')
 
 
 @functools.lru_cache(maxsize=4)
 def _VAL_own_sentence_readings(text: str, service_date: Optional[date]) -> tuple:
     """Per text: (start, end, status, cues) of every layout sentence holding a word of some gi.other code's own
-    procedure, as routing reads it (span_status). Read once per text."""
+    procedure, a procedure named by reference ("the procedure", "the exam", "it") or a procedure's act verb, as routing
+    reads it (span_status). Read once per text."""
     from studio.gi import detect
     an = detect._analysis(text, service_date)[0]
     found = []
     for s, e in an.lay.sentences:
-        if _VAL_ANY_OWN.search(text, s, e):
+        if _VAL_ANY_OWN.search(text, s, e) or _VAL_REFERENCE.search(text, s, e) or _VAL_ACT_VERB.search(text, s, e):
             parsed = normalise_span_status(span_status(text, s, e, service_date))
             if parsed is not None:
                 found.append((s, e) + parsed)
@@ -1360,13 +1366,23 @@ def _VAL_own_sentence_readings(text: str, service_date: Optional[date]) -> tuple
 
 
 def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> bool:
-    """Whether a sentence of the document naming the code's own procedure reads it negated, cancelled, or uncertain
-    with a cue ("No banding was performed today.", "Banding was deferred.", "Anoscopy was not performed; the patient
-    declined."): then a findings sentence is never counted by the report's procedure line alone (_VAL_opens_with), which
-    routing still reads done. A plan or history mention ("Repeat anoscopy in 6 months.") is no doubt about today's."""
-    return any(_VAL_owns(code, text[s:e]) and (status in ('negated', 'cancelled')
-                                               or (status == 'uncertain' and not silent(status, cues)))
-               for s, e, status, cues in _VAL_own_sentence_readings(text, service_date))
+    """Whether a sentence of the document reads negated, cancelled, incomplete, or uncertain with a cue and is about the
+    code's own procedure: it names that procedure ("No banding was performed today.", "Banding was deferred.",
+    "Anoscopy was not performed; the patient declined."), or it names no gi.other code's own procedure and speaks of a
+    procedure by reference or by its act ("The procedure was aborted before insertion.", "It was not performed."). Then
+    a findings sentence is never counted by the report's procedure line alone (_VAL_opens_with), which routing still
+    reads done. A plan or history mention ("Repeat anoscopy in 6 months.") is no doubt about today's, and another
+    procedure's denial ("Banding was deferred." for 46600) none about this one's."""
+    for s, e, status, cues in _VAL_own_sentence_readings(text, service_date):
+        if status not in _VAL_DOUBT_STATUSES and (status != 'uncertain' or silent(status, cues)):
+            continue
+        sentence = text[s:e]
+        if _VAL_owns(code, sentence):
+            return True
+        named = any(all(p.search(sentence) for p in entry[2]) for entry in _VAL_OWN_PROCEDURES)
+        if not named and (_VAL_REFERENCE.search(sentence) or _VAL_ACT_VERB.search(sentence)):
+            return True
+    return False
 
 
 def _VAL_opens_with(text: str, start: int, end: int, code: str, names: Sequence[str],
