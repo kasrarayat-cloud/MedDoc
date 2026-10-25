@@ -2794,7 +2794,7 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         return Reading('uncertain', (BOX_FIELD_HELD.format(named.line),), 'cue')
     if state == 'mixed' or (named is not None and (named.state == 'mixed' or state not in (None, named.state))):
         return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
-    if _B2_items_differ(an, start, end):  # round 4c-2 box2:G: a row of items in different box states, read whole
+    if _B2_items_differ(an, start, end, state):  # round 4c-2 box2:G: a row of items in different box states, read whole
         return Reading('uncertain', (_B2_ITEMS_DIFFER,), 'cue', doubt=True)
     if state == 'off' or _unchecked_state(an, start, end):
         return Reading('negated', (UNCHECKED,), 'cue')
@@ -2837,20 +2837,21 @@ _B2_ITEMS_DIFFER = ('uncertain: the passage names items whose check boxes differ
                     'told from it')
 
 
-def _B2_items_differ(an: Analysis, start: int, end: int) -> bool:
-    """Whether the passage [start, end) names two or more items governed by boxes in different states (_box_state:
-    checked, unchecked, disagreeing or one a later box may govern): "Interventions: ☑ Cold snare polypectomy ☐ Biopsy"
-    cited whole, or "Cold snare polypectomy ☐ Biopsy". Read by one box, such a passage vouches for, or denies, an item
-    another box governs, and which item is the code's own cannot be told from it (box2:G): it is held, never ready and
-    never negated. An item no box governs counts for nothing; an unread one is _box_names_an_unread_item's. Read only
-    where a box is near; each item's state is _box_state's, memoised."""
+def _B2_items_differ(an: Analysis, start: int, end: int, state: Optional[str]) -> bool:
+    """Whether the box states in the passage [start, end) differ: those of the items it names (_box_state: checked,
+    unchecked, disagreeing or one a later box may govern) and ``state``, the box the passage itself is read by.
+    "Interventions: ☑ Cold snare polypectomy ☐ Biopsy" cited whole, "Cold snare polypectomy ☐ Biopsy", or "☐ Photos ☑
+    Cold snare polypectomy" (read by the box of an entry that is no item): read by one box, such a passage vouches for,
+    or denies, an item another box governs, and which item is the code's own cannot be told from it (box2:G). It is
+    held, never ready and never negated. An item no box governs counts for nothing; an unread one is
+    _box_names_an_unread_item's. Read only where a box is near; each item's state is _box_state's, memoised."""
     text, span_end = an.text, max(end, start + 1)
     if not _BOX.search(text, max(0, start - BOX_REACH), min(len(text), span_end + BOX_REACH)):
         return False
     items = _box_tokens(an, start, span_end)[0]
-    if len(items) < 2:
+    if not items:
         return False
-    states = {_box_state(an, s, e) for s, e in items}
+    states = {_box_state(an, s, e) for s, e in items} | {state}
     states.discard(None)
     return len(states) > 1
 

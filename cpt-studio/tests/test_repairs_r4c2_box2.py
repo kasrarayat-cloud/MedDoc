@@ -380,7 +380,11 @@ class Box2GRowCitedWholeTests(unittest.TestCase):
                            # an item whose own boxes disagree, or one a later unchecked box may govern (BOX_LATER),
                            # beside another item's box: as doubtful as an unread one
                            ('\u2612\u2610 Biopsy \u2611 Cold snare polypectomy', 'Biopsy \u2611 Cold snare polypectomy'),
-                           ('Polypectomy with cold snare: \u2610', 'Polypectomy with cold snare: \u2610')):
+                           ('Polypectomy with cold snare: \u2610', 'Polypectomy with cold snare: \u2610'),
+                           # read by the box of an entry that is no item ("Photos"): that box is no item's of the passage
+                           ('Interventions: \u2610 Photos \u2611 Cold snare polypectomy',
+                            'Interventions: \u2610 Photos \u2611 Cold snare polypectomy'),
+                           ('Interventions: \u2610 Photos \u2611 Biopsy', 'Interventions: \u2610 Photos \u2611 Biopsy')):
             with self.subTest(row=row, cited=cited):
                 text = G_REPORT.format(row=row)
                 self.assert_held(text, cited)
@@ -401,8 +405,10 @@ class Box2GRowCitedWholeTests(unittest.TestCase):
         for row in ('Interventions: \u2611 Cold snare polypectomy \u2611 Biopsy', 'Interventions: \u2610 Hot snare \u2610 Biopsy',
                     'Interventions: \u2611 Cold snare polypectomy', 'Interventions: Cold snare polypectomy, biopsy.',
                     'Procedure status: \u2612 Completed \u2610 Cancelled', 'Biopsy taken: \u2612 Yes \u2610 No',
-                    # an item no box governs counts for nothing beside a checked one
-                    'Colonoscopy with biopsy: \u2612', 'Hot snare \u2611 then Biopsy'):
+                    # an item no box governs counts for nothing beside a checked one; an entry that is no item, read
+                    # after the item, leaves the item's own box reading it
+                    'Colonoscopy with biopsy: \u2612', 'Hot snare \u2611 then Biopsy',
+                    'Interventions: \u2611 Cold snare polypectomy \u2610 Photos', 'Biopsy: \u2610 Yes \u2612 No'):
             with self.subTest(row=row):
                 text = G_REPORT.format(row=row)
                 status, cues = self.read(text, row)
