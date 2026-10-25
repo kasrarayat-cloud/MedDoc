@@ -236,6 +236,139 @@ class Extraction1WordListBoundaryTests(unittest.TestCase):
                 self.assertEqual(codes(result.text, ('45385', SNARE))[0], 'excluded')
 
 
+# --- extraction:0 -- an unchecked box before a line that runs on into another column ----------------------------------
+
+SENTENCE = 'Cold snare polypectomy of the 6 mm sigmoid polyp was performed.'
+ROW = 640
+NO_WIDTHS = b'<< /Type /Font /Subtype /TrueType /BaseFont /SyntheticSans-NoWidths /Encoding /WinAnsiEncoding >>'
+COURIER = b'<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>'
+
+
+def _width(text, size=11, font='Helvetica'):
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    return stringWidth(text, font, size)
+
+
+def column_row(mac_on=False, *, dy=0.0, right=None, pad='', lead='', font='F1', left_size=11, gap=30.0, one_bt=False,
+               right_first=False, right_x=None, row_x=48.69, moderate_on=True):
+    """'Sedation:  [box] Moderate  [box] MAC' (each check box 4 pt before its word; Moderate checked) in a left
+    column, and the next column's ``right`` lines ([(dy, text)], default the sentence at ``dy``) starting ``gap`` pt
+    after 'MAC' ends. ``pad``/``lead``: spaces drawn after 'MAC' / before the next column's text in the same string;
+    ``font``: the next column's font (MG: a TrueType font without /Widths); ``one_bt``: 'MAC' and the next column's
+    first line drawn in one text object; ``right_first``: the next column drawn before the left one; ``right_x``: where
+    the next column starts instead; ``row_x``: where the row of options starts."""
+    from tests.test_repairs_ingest_pdf import esc
+    form = Form(NOTE_HEAD)
+    form.objects[23] = NO_WIDTHS
+    x = row_x
+    left = [text_line(x, ROW, 'Sedation:', size=left_size)]
+    first = x + _width('Sedation:', left_size) + 8
+    form.checkbox('Check Box1', (first, ROW - 3, first + 12, ROW + 9), moderate_on)
+    left.append(text_line(first + 16, ROW, 'Moderate', size=left_size))
+    second = first + 16 + _width('Moderate', left_size) + 10
+    form.checkbox('Check Box2', (second, ROW - 3, second + 12, ROW + 9), mac_on)
+    mac = second + 16
+    start = mac + _width('MAC', left_size) + gap if right_x is None else right_x
+    lines = right if right is not None else [(dy, SENTENCE)]
+    ops = [f'BT /{font} 11 Tf {start} {ROW + d} Td ({esc(lead + t)}) Tj ET' for d, t in lines]
+    if one_bt:
+        d0, t0 = lines[0]
+        left.append(f'BT /F1 {left_size} Tf {mac} {ROW} Td ({esc("MAC" + pad)}) Tj {start - mac} {d0} Td '
+                    f'({esc(lead + t0)}) Tj ET')
+        ops = ops[1:]
+    else:
+        left.append(f'BT /F1 {left_size} Tf {mac} {ROW} Td ({esc("MAC" + pad)}) Tj ET')
+    for op in (ops + left if right_first else left + ops):
+        form.line(op)
+    form.line(text_line(48.69, ROW - 40, 'Tattoo:')).line(text_line(start, ROW - 40, 'Retrieval was complete.'))
+    return form.build()
+
+
+NOTE_HEAD = [(72, 740, 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR BILLING'),
+             (72, 720, 'Date of service: 2026-10-21'),
+             (72, 700, 'Procedure: Colonoscopy. The colonoscope was advanced to the cecum.'),
+             (72, 680, 'Findings: A 6 mm sigmoid polyp was seen.')]
+
+
+def column_variants() -> dict:
+    """Round 6's extraction:0 inputs and their neighbours: the next column on another baseline (as pypdf joins up to
+    0.8 font sizes off, and a middle-aligned row between a wrapped cell's two lines), padded with spaces on either
+    side, in a font that gives no widths, in one text object with the option, or drawn first."""
+    v = {f'next column {dy:+} pt': dict(dy=dy) for dy in (-8.0, -5.0, -3.0, -2.0, -1.5, 1.5, 2.0, 3.0, 5.0, 8.0)}
+    v.update({
+        'middle-aligned row, wrapped cell': dict(right=[(6.5, 'Cold snare polypectomy of the 6 mm sigmoid'),
+                                                        (-6.5, 'polyp was performed.')]),
+        'wrapped cell drawn first': dict(right=[(6.5, 'Cold snare polypectomy of the 6 mm sigmoid'),
+                                                (-6.5, 'polyp was performed.')], right_first=True),
+        'left column in 9 pt, top-aligned': dict(left_size=9, dy=1.25),
+        'MAC padded with 8 spaces': dict(pad=' ' * 8),
+        'MAC padded with 3 spaces': dict(pad=' ' * 3, gap=12.0),
+        'next column padded with 8 spaces': dict(lead=' ' * 8, gap=4.0),
+        'next column in a font without widths': dict(font='MG'),
+        'next column without widths, 2 pt lower': dict(font='MG', dy=-2.0),
+        'one text object across baselines': dict(one_bt=True, dy=-2.0),
+        'one text object, padded': dict(one_bt=True, pad=' ' * 8),
+        # the options in the right column, drawn first; the sentence in the left column, drawn after them
+        'next column drawn left of the option, after it': dict(row_x=400.0, right_x=48.69),
+    })
+    return v
+
+
+class Extraction0ColumnOnAnotherBaselineTests(unittest.TestCase):
+    """An unchecked box before a text line that runs on into another column writes '[?]', whatever baseline the next
+    column sits on, however its gap is padded, and whether or not its font gives widths: never '☐'."""
+
+    def test_the_next_column_is_never_negated(self):
+        import re
+        for name, arguments in column_variants().items():
+            with self.subTest(name):
+                result = extracted(column_row(**arguments))
+                self.assertIsNone(re.search(r'☐ MAC[^\n]', result.text), result.text)  # nothing it does not govern
+                if name != 'wrapped cell drawn first':  # there pypdf ends the line at 'MAC': '☐ MAC' governs MAC alone
+                    self.assertIn(f'{UNREAD} MAC', result.text)
+                self.assertIn('☒ Moderate', result.text)
+                self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_a_checked_last_option_keeps_its_glyph(self):
+        for name in ('next column -2.0 pt', 'middle-aligned row, wrapped cell', 'MAC padded with 8 spaces',
+                     'next column in a font without widths'):
+            with self.subTest(name):
+                text = extracted(column_row(True, **column_variants()[name])).text
+                self.assertIn('☒ MAC', text)
+                self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_controls_keep_their_glyphs(self):
+        """The option alone on its line, the next column on a line of its own (beyond pypdf's join), and an option
+        written word by word (a trailing space each, in Helvetica and in Courier) keep '☐'."""
+        from tests.test_repairs_ingest_pdf import esc
+        text = extracted(column_row(right=[])).text
+        self.assertIn('Sedation: ☒ Moderate ☐ MAC', text)
+        for name in ('next column -2.0 pt', 'middle-aligned row, wrapped cell', 'MAC padded with 8 spaces',
+                     'next column in a font without widths', 'one text object across baselines'):
+            with self.subTest(name):  # an unchecked first option: its line goes on with the next option's box
+                text = extracted(column_row(**column_variants()[name], moderate_on=False)).text
+                self.assertIn(f'Sedation: ☐ Moderate {UNREAD} MAC', text)
+        text = extracted(column_row(dy=-14.0)).text  # (held by routing's own rule for a generic unchecked field)
+        self.assertIn('Sedation: ☒ Moderate ☐ MAC\n', text)
+        self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+        for font, name in (('F1', 'Helvetica'), ('ZA', 'Courier')):
+            with self.subTest(font):
+                form = Form(NOTE_HEAD)
+                form.objects[6] = COURIER
+                form.line(text_line(72, ROW, 'Interventions:'))
+                box = 72 + _width('Interventions:') + 8
+                form.checkbox('Check Box1', (box, ROW - 3, box + 12, ROW + 9), True)
+                form.line(text_line(box + 16, ROW, 'Biopsy'))
+                second = box + 16 + _width('Biopsy') + 10
+                form.checkbox('Check Box2', (second, ROW - 3, second + 12, ROW + 9), False)
+                words = ['Cold ', 'snare ', 'polypectomy']
+                strings = ' '.join(f'({esc(word)}) Tj' for word in words)
+                form.line(f'BT /{font} 11 Tf {second + 16} {ROW} Td {strings} ET')
+                text = extracted(form.build()).text
+                self.assertIn('☐ Cold snare polypectomy', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+
 # --- extraction:4 -- the page note names what is true about boxes under form check boxes -----------------------------
 
 def _overlap_page(case, printed='wingdings'):

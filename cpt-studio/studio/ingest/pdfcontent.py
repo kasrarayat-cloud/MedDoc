@@ -603,7 +603,10 @@ class _Run:
     rise: float
     size: float
     width: float  # COVER_WIDTH font sizes along the baseline, text space (horizontal scaling applied)
-    spans: tuple = ()  # (start, end) along the baseline, text space, of each string the operator shows
+    # (start, end) along the baseline, text space, of each string the operator shows; then where its first and its last
+    # glyph that is not whitespace start and end, and one whitespace glyph's advance among those it opens or closes
+    # with (0 when none, or when it cannot be read glyph by glyph: then the two equal start and end)
+    spans: tuple = ()
     font: object = field(default=None, compare=False)  # the pypdf Font that measures its strings (None: unknown)
     strings: tuple = field(default=(), compare=False)  # (start along the baseline, string) of each string it shows
     spacing: tuple = (0.0, 0.0, 1.0)  # character spacing, word spacing and horizontal scale it was shown with
@@ -818,8 +821,10 @@ class PageContent:
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
     struck_text: bool = False  # text kept that a line painted over it strikes through
     paint: _Paint | None = field(default=None, repr=False, compare=False)
-    # (baseline, start, end, font size) in page space of each string an upright text operator the page shows draws,
-    # in drawing order: where text ends, which the text layer does not say (pdf.py reads the gaps around check boxes)
+    # (baseline, start, end, font size, where its first and last glyphs that draw something start and end, one
+    # whitespace glyph's advance among those it opens or closes with) in page space of each string an upright text
+    # operator the page shows draws, in drawing order: where text ends, which the text layer does not say (pdf.py reads
+    # the gaps around check boxes, and where printed boxes are drawn)
     ink: list = field(default_factory=list, repr=False, compare=False)
 
     @property
@@ -877,11 +882,13 @@ class _TextState:
 class _TextPlacement:
     """Where a content stream draws its text (PDF 32000-1 9.3-9.4), in page space."""
 
-    def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None):
+    def __init__(self, resources, fonts: dict, graphics: _Graphics, measured: dict | None = None,
+                 trims: dict | None = None):
         table = resolved(resources.get('/Font'))
         self.table = table if isinstance(table, DictionaryObject) else DictionaryObject()
         self.fonts = fonts  # id(font dict) -> pypdf Font, or None when it cannot be read
         self.measured = {} if measured is None else measured  # (id(font dict), string) -> (glyphs, spaces, widths)
+        self.trims = {} if trims is None else trims  # (id(font dict), string) -> its whitespace ends (_I2_trim)
         self.graphics = graphics
         self.matrix = self.line = IDENTITY
         self.nothing = False  # the last run drew nothing: a zero font size, or a matrix that flattens it
@@ -949,7 +956,9 @@ class _TextPlacement:
                 x += self.advance(item)
                 strings.append((before, item))
                 if self.inked(item):  # a string of spaces draws nothing; the first is placed where the operator is
-                    spans.append((before if spans else min(before, 0.0), x))
+                    lead, trail, space = self._I2_trim(item)
+                    spans.append((before if spans else min(before, 0.0), x, before + lead if lead else
+                                  (before if spans else min(before, 0.0)), x - trail, space))
             else:  # a TJ adjustment, in thousandths of a text-space unit, moves the next glyph left
                 x -= number(item) / 1000 * state.size * state.scale
             low, high = min(low, x), max(high, x)
@@ -983,6 +992,34 @@ class _TextPlacement:
         glyphs, spaces, widths = self.measured[key]
         return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
 
+    def _I2_trim(self, string) -> tuple[float, float, float]:
+        """(the advance of the whitespace glyphs ``string`` opens with, of those it closes with, and of one of them),
+        in text space as advance measures it: where its first and last glyphs that draw something lie, so a gap padded
+        with spaces is read as the gap it shows. (0, 0, 0) when its font gives no widths, when it cannot be read glyph
+        by glyph, or when every glyph is whitespace. Read once per font and string (only the ends are kept)."""
+        state = self.state
+        key = (id(state.font), bytes(string) if isinstance(string, bytes) else string)
+        if key not in self.trims:
+            ends = None
+            font = self.font()
+            if _ING_widths_known(font):
+                try:
+                    glyphs = _ING_glyphs(font, string)
+                except Exception:
+                    glyphs = []
+                first = next((k for k, glyph in enumerate(glyphs) if not glyph[0].isspace()), None)
+                if first is not None:
+                    last = next(k for k in range(len(glyphs) - 1, -1, -1) if not glyphs[k][0].isspace())
+                    ends = (tuple((width, spaced) for _, spaced, width in glyphs[:first]),
+                            tuple((width, spaced) for _, spaced, width in glyphs[last + 1:]))
+            self.trims[key] = ends if ends and (ends[0] or ends[1]) else None
+        ends = self.trims[key]
+        if ends is None:
+            return 0.0, 0.0, 0.0
+        advances = [[(width / 1000 * state.size + state.char_spacing + (state.word_spacing if spaced else 0.0))
+                     * state.scale for width, spaced in end] for end in ends]
+        return sum(advances[0]), sum(advances[1]), max(advances[0] + advances[1])
+
     def inked(self, string) -> bool:
         """Whether ``string`` (measured by advance) shows anything but spaces."""
         glyphs, spaces, _ = self.measured[(id(self.state.font), bytes(string) if isinstance(string, bytes) else string)]
@@ -1012,6 +1049,7 @@ class _Walker:
         self.content.paint = self.paint
         self.text_fonts: dict = {}  # id(font dict) -> pypdf Font, for measuring text
         self.measured: dict = {}  # (id(font dict), string) -> its measure (_TextPlacement.advance)
+        self._I2_trims: dict = {}  # (id(font dict), string) -> its whitespace ends (_TextPlacement._I2_trim)
         self.shape_checks = 0  # clipping-path edges tested (MAX_SHAPE_CHECKS)
         self.forms: dict[tuple, _Form] = {}  # own-space walks: each form once; its images are re-placed per use
         self.parsed: dict[int, list] = {}  # id(form) -> its operations, parsed once
@@ -1063,7 +1101,7 @@ class _Walker:
         marked: list[bool] = []  # per open BMC/BDC: whether it hides what it encloses
         properties = resolved(resources.get('/Properties'))
         xobjects = resolved(resources.get('/XObject'))
-        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured)
+        text = _TextPlacement(resources, self.text_fonts, graphics, self.measured, self._I2_trims)
         path, pending = _Path(), None
         for index, (operands, operator) in enumerate(operations):
             hidden = any(marked)
@@ -1180,7 +1218,8 @@ class _Walker:
         a, b, c, d, e, f = run.place
         if a > 0 and d > 0 and abs(b) <= 0.01 * a and abs(c) <= 0.01 * d and _ING_widths_known(run.font):
             # upright, as pdf._origin reads pieces, and measured by the font's own widths
-            self.content.ink.extend((f, e + start * a, e + end * a, run.size * d) for start, end in run.spans)
+            self.content.ink.extend((f, e + start * a, e + end * a, run.size * d, e + low * a, e + high * a, space * a)
+                                    for start, end, low, high, space in run.spans)
         mode = graphics.text.mode
         if verdict == 'unknown':
             self.paint.obscured = True

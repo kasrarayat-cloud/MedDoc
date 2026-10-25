@@ -42,7 +42,10 @@ What a page shows is read, or the result says what was not read:
   row of options read before their words, "Biopsy taken: ☐ Yes ☒ No", is
   written as it shows, and boxes after their words, "Moderate [x] MAC [ ]", are
   not written as the next word's), and where the text line it is tied to runs
-  on past a gap into another column. A
+  on into another column: past a gap between the glyphs drawn (padding spaces
+  draw nothing), or with text pypdf joined into the line from another baseline
+  or from left of it, or that the layer cannot place or the page does not
+  measure. A
   radio button is written the same way before its own option word ("Biopsy
   taken: ☐ Yes ☒ No") when every button of its group can be. Notes,
   drawings and hidden annotations are counted; a field whose appearance
@@ -136,6 +139,8 @@ _ING_MAX_SCAN = 64
 # A gap in a line of page text wider than this many font sizes (about two word spaces) after the piece a box is tied
 # to, with no box before it, is a gap between columns: the box does not govern the text after it (_ING_Ink.runs_on).
 _ING_COLUMN_GAP = 0.6
+# The operators that show text (PDF 32000-1 9.4.3): where each draws is kept with the piece pypdf joins it into.
+_I2_SHOWS = frozenset({b'Tj', b'TJ', b"'", b'"'})
 # Page text left of a box that is only a list marker ('1.', '2)', '(a)', a bullet) is not a label for the box.
 _ING_LIST_MARKER = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?[0-9]{1,3}[.)]|'
                               r'\(?[A-Za-z][.)])')
@@ -593,7 +598,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             near[i] = tie
         if w.radio:
             groups.setdefault(w.group, []).append(i)
-    ink = _ING_Ink(layer.ink, starts, near, widgets) if near else None
+    ink = _ING_Ink(layer.ink, starts, near, widgets, layer) if near else None
     labelled = _ING_labelled(text, pieces, piece_offsets, widgets, near, starts, ink)
     ties = dict(near)
     for members in groups.values():  # a radio group is placed whole or not at all
@@ -606,6 +611,8 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
     ties = {i: offset for i, offset in ties.items() if len(owners[offset]) == 1}
     settled = set(ties) | replaced
     unsettled = _Rows(w.rect for j, w in enumerate(widgets) if j not in settled)
+    if ink is not None:  # the pieces a box is written before: a line that reaches one goes on with the next option
+        ink.stops = {offset for offset in ties.values() if not unsettled.holds(starts[offset][1])}
     for i, offset in ties.items():
         if unsettled.holds(starts[offset][1]):
             continue  # a row holding a button that is not tied gets no glyph
@@ -615,7 +622,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         if box is None:
             # A box with a label to its left may be the label's: unchecked, it holds what it sits beside. An unchecked
             # box before a text line that runs on into another column holds that column's text too.
-            unsure = not on and (i in labelled or ink.runs_on(starts[offset]))
+            unsure = not on and (i in labelled or ink.runs_on(offset, starts[offset]))
             edits[offset] = (offset, (_ING_UNREAD_BOX if unsure else glyph) + ' ')
         elif offset not in edits:  # a printed box starts the piece: never write two glyphs
             printed = _ING_printed_on(box)
@@ -764,13 +771,19 @@ def _ING_labelled(text: str, pieces: '_ING_Rows', piece_offsets: list, widgets: 
 class _ING_Ink:
     """The page's upright text as drawn (_Layer.ink) by row and x, to measure the gaps around tied boxes."""
 
-    def __init__(self, ink, starts: dict, near: dict, widgets: list):
-        self.rows = _ING_Rows(ink)
+    def __init__(self, ink, starts: dict, near: dict, widgets: list, layer: '_Layer | None' = None):
+        # each string: (baseline, start, end, (font size, where its first and last glyphs that draw start and end, one
+        # whitespace glyph's advance among those it opens or closes with)), as PageContent.ink records it
+        self.rows = _ING_Rows((y, x, end, rest) for y, x, end, *rest in ink)
         tied: dict[float, list] = {}  # baseline of a tied piece -> where the boxes tied on it start
         for i, offset in near.items():
             tied.setdefault(starts[offset][1], []).append(widgets[i].rect[0])
         self.tied = sorted((y, sorted(xs)) for y, xs in tied.items())
         self.tied_baselines = [y for y, _ in self.tied]
+        self.layer = layer
+        self.offsets = [offset for offset, _ in layer.pieces] if layer is not None else []
+        self.origins = [origin for _, origin in layer.pieces] if layer is not None else []
+        self.stops: set = set()  # offsets of the pieces a box is written before (set by _placed_boxes)
 
     def left_gap(self, w, baseline: float) -> float | None:
         """How far right of the end of the text nearest to its left, on the row at ``baseline``, the box starts; None
@@ -787,12 +800,16 @@ class _ING_Ink:
             return None
         return x0 - nearest[1]
 
-    def runs_on(self, origin: tuple) -> bool:
-        """Whether the text line a box is tied to (the piece at ``origin``) runs on past a gap wider than
-        _ING_COLUMN_GAP font sizes before the next box tied on its row: it reaches into another column, which the box
-        does not govern. True when that cannot be read (the piece's text is not where the layer puts it, or there is
-        more on the row than _ING_MAX_SCAN strings before an answer)."""
+    def runs_on(self, offset: int, origin: tuple) -> bool:
+        """Whether the text line a box is tied to (the piece at ``offset``, drawn at ``origin``) runs on into text the
+        box does not govern, before the next box of the line: text pypdf joined into the line from another baseline
+        or from left of the piece, or that the layer cannot place or the page does not measure (_I2_joins); or a gap
+        wider than _ING_COLUMN_GAP font sizes on its row, between the glyphs drawn (padding spaces draw nothing; one
+        whitespace glyph between two words is a word space). True when that cannot be read (the piece's text is not
+        where the layer puts it, or more than _ING_MAX_SCAN strings or operators before an answer)."""
         x, y, _ = origin
+        if self.layer is not None and self._I2_joins(offset, x, y):
+            return True
         rows = self.rows.around(y, y)
         if rows is None:
             return True
@@ -804,8 +821,9 @@ class _ING_Ink:
         low = bisect_left(self.tied_baselines, y - 2 * BOX_SLACK)
         high = bisect_right(self.tied_baselines, y + 2 * BOX_SLACK)
         rows_of_boxes = [boxes for _, boxes in self.tied[low:high]]
-        end, size = first[1], first[2]
-        for count, (start, stop, next_size) in enumerate(found):
+        end, (size, _, drawn_end, space) = first[1], first[2]
+        trailing = space if drawn_end < end - 1e-9 else 0.0  # whitespace follows the last glyph drawn so far
+        for count, (start, stop, (next_size, next_low, next_high, next_space)) in enumerate(found):
             if count >= _ING_MAX_SCAN:
                 return True
             for boxes in rows_of_boxes:  # the next box of the row starts first: the line goes on with the next option
@@ -814,8 +832,49 @@ class _ING_Ink:
                     return False
             if start - end > _ING_COLUMN_GAP * size:
                 return True
+            word_space = max(trailing, next_space if next_low > start + 1e-9 else 0.0)
+            if next_low - drawn_end - word_space > _ING_COLUMN_GAP * size:
+                return True  # the gap the glyphs show, padded with spaces
             if stop > end:
                 end, size = stop, next_size
+            if next_high > drawn_end:
+                drawn_end, trailing = next_high, (next_space if next_high < stop - 1e-9 else 0.0)
+        return False
+
+    def _I2_joins(self, offset: int, x: float, y: float) -> bool:
+        """Whether pypdf joined into the text line of the box's piece (at ``offset``, drawn at (x, y)), after it and
+        before the next piece a box is written before or that a printed box starts, text that is not that piece's
+        continuation: drawn on another baseline (another column's line, or a wrapped cell's), left of the piece,
+        where the layer cannot place it, not upright, or (a piece) where the page text is not measured (a font that
+        gives no widths). Each operator pypdf joined in is read where it draws (_Layer.drawn)."""
+        layer, text = self.layer, self.layer.text
+        newline = text.find('\n', offset)
+        end = len(text) if newline < 0 else newline
+        scanned = 0
+
+        def strays(positions) -> bool:
+            nonlocal scanned
+            for position in positions:
+                scanned += 1
+                if scanned > _ING_MAX_SCAN or position is None or not position[2]:
+                    return True
+                if abs(position[1] - y) > BOX_SLACK or position[0] < x - BOX_SLACK:
+                    return True
+            return False
+
+        if strays(layer.drawn.get(offset, ((),))[0][1:]):
+            return True
+        for index in range(bisect_right(self.offsets, offset), len(self.offsets)):
+            start = self.offsets[index]
+            if start >= end or start in self.stops or PRINTED_BOX.match(text, start):
+                return False
+            origin = self.origins[index]
+            if origin is None or strays([origin, *layer.drawn.get(start, ((),))[0]]):
+                return True
+            rows = self.rows.around(origin[1], origin[1])
+            if rows is None or not any(len(self.rows.span(row, origin[0] - BOX_SLACK, origin[0] + BOX_SLACK))
+                                       for row in rows):
+                return True  # no measured text where the piece starts
         return False
 
     def _from(self, row: int, position: int):
@@ -879,11 +938,15 @@ class _Layer:
     undecodable: int = 0  # glyphs that name no character, dropped
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
     pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
-    ink: tuple = ()  # (baseline, start, end, font size) of each string the page's upright text draws (PageContent.ink)
+    ink: tuple = ()  # each string the page's upright text draws, as PageContent.ink records it
     # (offset, where it starts on the page) of each line and piece drawn inside a form XObject whose placement could
     # be read; ``lines`` and ``pieces`` give those None, and only marks that are not checks read these
     placed_lines: tuple = ()
     placed_pieces: tuple = ()
+    # offset of each piece's first character (not a space) -> (where on the page each text-showing operator pypdf joined
+    # into the piece draws, None where that is unknown; whether whitespace opens the piece; its font; one em along
+    # its baseline, page space, or None): what a piece is drawn from, read by _ING_Ink and _placed_boxes
+    drawn: dict = field(default_factory=dict)
 
 
 def _layer_text(page, content: PageContent) -> _Layer:
@@ -903,6 +966,15 @@ def _layer_text(page, content: PageContent) -> _Layer:
     # Form XObjects being read: their pieces are positioned in the form's own space, so each is kept with where the
     # form's content lands on the page ([matrix, resources, whether its own content is being read]; None: unknown).
     forms: list = []
+    # Where each text-showing operator not yet flushed into a piece draws, on the page (None: unknown). pypdf moves
+    # its text matrix only with the positioning operators, so this is where the operator's line or move put it.
+    shows: list = []
+
+    def placement():
+        """The matrix that places what is drawn now on the page (IDENTITY on the page itself), or None."""
+        if not forms:
+            return IDENTITY
+        return forms[-1][0] if forms[-1][2] else None
 
     def before(operator, operands, cm, tm):
         if forms and not forms[-1][2]:
@@ -914,14 +986,19 @@ def _layer_text(page, content: PageContent) -> _Layer:
     def after(operator, operands, cm, tm):
         if operator == b'Do' and forms:
             forms.pop()
+        elif operator in _I2_SHOWS:
+            matrix = placement()
+            shows.append(_ING_placed(cm, tm, matrix) if matrix is not None else None)
 
     def visit(text, cm, tm, font, size):
         if text:
+            drawn = (tuple(shows), _I2_em(cm, tm, size, placement()))
             if not forms:
-                pieces.append((text, _origin(cm, tm), font, None))
-                return
-            matrix = forms[-1][0] if forms[-1][2] else None
-            pieces.append((text, None, font, _ING_placed(cm, tm, matrix) if matrix is not None else None))
+                pieces.append((text, _origin(cm, tm), font, None, drawn))
+            else:
+                matrix = forms[-1][0] if forms[-1][2] else None
+                pieces.append((text, None, font, _ING_placed(cm, tm, matrix) if matrix is not None else None, drawn))
+        shows.clear()
 
     try:
         copy = extraction_page(page, content)
@@ -933,7 +1010,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
     except Exception:
         return _Layer()
     if ''.join(piece[0] for piece in pieces) != raw:
-        pieces = [(raw, None, None, None)]
+        pieces = [(raw, None, None, None, ((), None))]
     ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
     return replace(_decoded(pieces), ink=ink)
 
@@ -958,6 +1035,21 @@ def _ING_form_space(operands, cm, outer, resources) -> tuple:
         raise
     except Exception:
         return None, None
+
+
+def _I2_em(cm, tm, size, matrix) -> float | None:
+    """One em along the baseline, on the page, of text drawn at font size ``size`` with (cm, tm) (``matrix``: what
+    places it on the page, as for _ING_placed); None when that cannot be read or the text is not upright."""
+    if matrix is None:
+        return None
+    try:
+        place = multiply(tuple(float(value) for value in cm), matrix)
+        a, b, c, d = (float(value) for value in tm[:4])
+        horizontal, vertical = a * place[0] + b * place[2], c * place[1] + d * place[3]
+        em = float(size) * horizontal
+    except (TypeError, ValueError, IndexError):
+        return None
+    return em if horizontal > 0 and vertical > 0 and em > 0 else None
 
 
 def _ING_placed(cm, tm, matrix) -> tuple[float, float, bool] | None:
@@ -985,12 +1077,14 @@ def _decoded(pieces) -> _Layer:
     out: list[str] = []
     size, dropped, lines, starting, firsts = 0, 0, [], True, []
     placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
+    drawn: dict = {}  # as _Layer.drawn
     decoders: dict[int, object] = {}
-    for text, origin, font, placed in pieces:
+    for text, origin, font, placed, (shows, em) in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
         first = True  # the piece's first character drawn (not a space) is drawn at its origin
+        lead = False  # whitespace opens the piece (drawn, or pypdf's own between pieces)
         for index, char in enumerate(text):
             mapped = decode(char, index == len(text) - 1)
             if mapped is None:
@@ -1010,11 +1104,14 @@ def _decoded(pieces) -> _Layer:
                 firsts.append((size, origin))
                 if origin is None and placed is not None:
                     placed_firsts.append((size, placed))
+                drawn[size] = (shows, lead, font, em)
                 first = False
+            elif first:
+                lead = True
             out.append(mapped)
             size += len(mapped)
     return _Layer(''.join(out), dropped, tuple(lines), tuple(firsts), placed_lines=tuple(placed_lines),
-                  placed_pieces=tuple(placed_firsts))
+                  placed_pieces=tuple(placed_firsts), drawn=drawn)
 
 
 def _decoder(font):
