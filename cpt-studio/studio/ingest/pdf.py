@@ -36,8 +36,13 @@ What a page shows is read, or the result says what was not read:
   Otherwise a displayed check box is written as ☐ / ☒ before the piece of page
   text it sits beside, when it can be tied to exactly one: its baseline lies
   within the box's height and it starts just right of the box, and every other
-  button on that row is tied too (the shared box contract); an unchecked one
-  with page text to its left on its row that may be its label writes '[?]'. A
+  button on that row is tied too (the shared box contract). An unchecked one
+  writes '[?]' instead where it may be the label's to its left (page text there
+  that is not a list marker; measured by where the text on each side ends, a
+  row of options read before their words, "Biopsy taken: ☐ Yes ☒ No", is
+  written as it shows, and boxes after their words, "Moderate [x] MAC [ ]", are
+  not written as the next word's), and where the text line it is tied to runs
+  on past a gap into another column. A
   radio button is written the same way before its own option word ("Biopsy
   taken: ☐ Yes ☒ No") when every button of its group can be. Notes,
   drawings and hidden annotations are counted; a field whose appearance
@@ -58,13 +63,14 @@ whole document.
 from __future__ import annotations
 
 import contextlib
+import heapq
 import io
 import logging
 import os
 import re
 import time
 from bisect import bisect_left, bisect_right
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 import pypdf
@@ -127,6 +133,9 @@ _ING_MAX_REACH = 4.0
 # them a box is not tied to text, and a widget or mark over printed boxes leaves every printed box on the page unread.
 _ING_MAX_ROWS = 32
 _ING_MAX_SCAN = 64
+# A gap in a line of page text wider than this many font sizes (about two word spaces) after the piece a box is tied
+# to, with no box before it, is a gap between columns: the box does not govern the text after it (_ING_Ink.runs_on).
+_ING_COLUMN_GAP = 0.6
 # Page text left of a box that is only a list marker ('1.', '2)', '(a)', a bullet) is not a label for the box.
 _ING_LIST_MARKER = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?[0-9]{1,3}[.)]|'
                               r'\(?[A-Za-z][.)])')
@@ -428,10 +437,10 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
     - any other check box writes its glyph and a space before the piece of page text that starts nearest to its
       right on its baseline (within BOX_GAP; pieces on two lines compete, and then nothing is written), replacing a
       printed box that starts that piece (unread when the printed box shows a mark the box denies); a radio button
-      before the piece that starts with its own option word, when every button of its group can be. A box with page
-      text to its left on its row (a label, not a list marker, a printed box or another box's label) may be that
-      label's: unchecked, it writes '[?]' instead of '☐'. Nothing is written on a row holding a button that is not
-      tied, and a piece two buttons claim gets neither: ambiguity is never resolved by guessing.
+      before the piece that starts with its own option word, when every button of its group can be. A box that may
+      be the label's to its left (_ING_labelled) writes '[?]' instead of '☐', as does an unchecked box before a text
+      line that runs on into another column (_ING_Ink.runs_on). Nothing is written on a row holding a button that is
+      not tied, and a piece two buttons claim gets neither: ambiguity is never resolved by guessing.
     Pieces and printed boxes are indexed by row and by x within each row, so a button reads only what lies beside or
     under it."""
     text, widgets = layer.text, annotations.widgets
@@ -554,10 +563,8 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
             near[i] = tie
         if w.radio:
             groups.setdefault(w.group, []).append(i)
-    claimed = set(near.values())
-    labelled = {i for i, offset in near.items()
-                if not (widgets[i].option and _starts_with_word(text, offset, widgets[i].option))
-                and _ING_label_left(text, pieces, piece_offsets, widgets[i], claimed)}
+    ink = _ING_Ink(layer.ink, starts, near, widgets) if near else None
+    labelled = _ING_labelled(text, pieces, piece_offsets, widgets, near, starts, ink)
     ties = dict(near)
     for members in groups.values():  # a radio group is placed whole or not at all
         if not all(i in ties for i in members):
@@ -576,8 +583,10 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         glyph = CHECKED_BOX if on else UNCHECKED_BOX
         box = PRINTED_BOX.match(text, offset)
         if box is None:
-            # A box with a label to its left may be the label's: unchecked, it holds what it sits beside.
-            edits[offset] = (offset, (_ING_UNREAD_BOX if i in labelled and not on else glyph) + ' ')
+            # A box with a label to its left may be the label's: unchecked, it holds what it sits beside. An unchecked
+            # box before a text line that runs on into another column holds that column's text too.
+            unsure = not on and (i in labelled or ink.runs_on(starts[offset]))
+            edits[offset] = (offset, (_ING_UNREAD_BOX if unsure else glyph) + ' ')
         elif offset not in edits:  # a printed box starts the piece: never write two glyphs
             printed = _ING_printed_on(box)
             if printed != on and (printed or i in labelled):
@@ -651,9 +660,9 @@ def _ING_beside(text: str, pieces: '_ING_Rows', w, low: float, high: float) -> i
     return best[2]
 
 
-def _ING_label_left(text: str, pieces: '_ING_Rows', piece_offsets: list, w, claimed: set) -> bool:
-    """Whether page text lies to the box's left on its rows that may be the box's own label: the piece nearest to its
-    left is neither a list marker, nor a printed box, nor the piece another box is tied to."""
+def _ING_left_label(text: str, pieces: '_ING_Rows', piece_offsets: list, w) -> int | None:
+    """The offset of the piece of page text nearest to the box's left on its rows when it may be the box's own label:
+    neither a list marker nor a printed box; else None."""
     x0, y0, x1, y1 = w.rect
     rows = pieces.around(y0, y1)
     left = None
@@ -662,14 +671,123 @@ def _ING_label_left(text: str, pieces: '_ING_Rows', piece_offsets: list, w, clai
         if position >= 0:
             x, offset, _ = pieces.rows[row][position]
             left = max(left, (x, offset)) if left is not None else (x, offset)
-    if left is None or left[1] in claimed:
-        return False
-    offset = left[1]
+    if left is None:
+        return None
+    word = _ING_piece_text(text, piece_offsets, left[1])
+    return None if _ING_LIST_MARKER.fullmatch(word) or PRINTED_BOX.fullmatch(word) else left[1]
+
+
+def _ING_piece_text(text: str, piece_offsets: list, offset: int) -> str:
+    """The text of the piece starting at ``offset``, up to the next piece or line break, stripped."""
     after = bisect_right(piece_offsets, offset)
     end = piece_offsets[after] if after < len(piece_offsets) else len(text)
     newline = text.find('\n', offset, end)
-    word = text[offset:end if newline < 0 else newline].strip()
-    return not (_ING_LIST_MARKER.fullmatch(word) or PRINTED_BOX.fullmatch(word))
+    return text[offset:end if newline < 0 else newline].strip()
+
+
+def _ING_labelled(text: str, pieces: '_ING_Rows', piece_offsets: list, widgets: list, near: dict, starts: dict,
+                  ink: '_ING_Ink | None') -> set:
+    """The tied boxes that may be the label's to their left rather than the piece's they are tied to (unchecked, they
+    write the unread mark). Each has a piece on its left that may be a label (_ING_left_label), and the piece it is
+    tied to does not start with its own option word; then:
+    - a box whose left piece no other box is tied to may be that label's (a box after its label), unless it is the
+      first of a row of options read before their words: another box's left piece is the piece it is tied to, that
+      piece does not end with a colon (which labels the next box), and the box sits closer to that piece than to the
+      text on its left, by at least BOX_SLACK;
+    - a box whose left piece another box is tied to (the next box of a row of options) may be that label's when it
+      sits no closer to the piece on its right than to the text on its left (boxes after their option words, 'Moderate
+      [x] MAC [ ]'); where the text on its left cannot be measured, when a box tied to its left piece may be its own
+      label's."""
+    left = {i: _ING_left_label(text, pieces, piece_offsets, widgets[i]) for i, offset in near.items()
+            if not (widgets[i].option and _starts_with_word(text, offset, widgets[i].option))}
+    claimers: dict[int, list] = {}  # piece offset -> boxes tied to it
+    for i, offset in near.items():
+        claimers.setdefault(offset, []).append(i)
+    labels: dict[int, list] = {}  # piece offset -> boxes whose left label it is
+    for i, offset in left.items():
+        if offset is not None:
+            labels.setdefault(offset, []).append(i)
+    labelled: set = set()
+    for i in sorted(left, key=lambda j: (widgets[j].rect[0], j)):  # a box's left neighbours first
+        offset = left[i]
+        if offset is None:
+            continue
+        tied = near[i]
+        gap = ink.left_gap(widgets[i], starts[tied][1]) if ink is not None else None
+        leading = gap is not None and gap - (starts[tied][0] - widgets[i].rect[2]) >= BOX_SLACK
+        if offset not in claimers:
+            first_of_options = any(j != i for j in labels.get(tied, ()))
+            if not (first_of_options and leading and not _ING_piece_text(text, piece_offsets, tied).endswith(':')):
+                labelled.add(i)
+        elif gap is not None:
+            if not leading:
+                labelled.add(i)
+        elif any(j in labelled for j in claimers[offset]):
+            labelled.add(i)
+    return labelled
+
+
+class _ING_Ink:
+    """The page's upright text as drawn (_Layer.ink) by row and x, to measure the gaps around tied boxes."""
+
+    def __init__(self, ink, starts: dict, near: dict, widgets: list):
+        self.rows = _ING_Rows(ink)
+        tied: dict[float, list] = {}  # baseline of a tied piece -> where the boxes tied on it start
+        for i, offset in near.items():
+            tied.setdefault(starts[offset][1], []).append(widgets[i].rect[0])
+        self.tied = sorted((y, sorted(xs)) for y, xs in tied.items())
+        self.tied_baselines = [y for y, _ in self.tied]
+
+    def left_gap(self, w, baseline: float) -> float | None:
+        """How far right of the end of the text nearest to its left, on the row at ``baseline``, the box starts; None
+        when there is none there, when that text runs into the box, or when there is too much to read."""
+        x0, y0, x1, y1 = w.rect
+        rows = self.rows.around(baseline, baseline)
+        nearest = None
+        for row in rows if rows is not None else ():
+            position = bisect_left(self.rows.xs[row], x1 - (x1 - x0) / 2) - 1
+            if position >= 0:
+                start, end, _ = self.rows.rows[row][position]
+                nearest = max(nearest, (start, end)) if nearest is not None else (start, end)
+        if nearest is None or nearest[1] > x0 + BOX_SLACK:
+            return None
+        return x0 - nearest[1]
+
+    def runs_on(self, origin: tuple) -> bool:
+        """Whether the text line a box is tied to (the piece at ``origin``) runs on past a gap wider than
+        _ING_COLUMN_GAP font sizes before the next box tied on its row: it reaches into another column, which the box
+        does not govern. True when that cannot be read (the piece's text is not where the layer puts it, or there is
+        more on the row than _ING_MAX_SCAN strings before an answer)."""
+        x, y, _ = origin
+        rows = self.rows.around(y, y)
+        if rows is None:
+            return True
+        found = [self._from(row, bisect_left(self.rows.xs[row], x - BOX_SLACK)) for row in rows]
+        found = found[0] if len(found) == 1 else heapq.merge(*found)
+        first = next(found, None)
+        if first is None or first[0] > x + BOX_SLACK:
+            return True  # the piece's text is not where the layer puts it
+        low = bisect_left(self.tied_baselines, y - 2 * BOX_SLACK)
+        high = bisect_right(self.tied_baselines, y + 2 * BOX_SLACK)
+        rows_of_boxes = [boxes for _, boxes in self.tied[low:high]]
+        end, size = first[1], first[2]
+        for count, (start, stop, next_size) in enumerate(found):
+            if count >= _ING_MAX_SCAN:
+                return True
+            for boxes in rows_of_boxes:  # the next box of the row starts first: the line goes on with the next option
+                before = bisect_right(boxes, start + BOX_SLACK)
+                if before and x < boxes[before - 1] and boxes[before - 1] >= end - BOX_SLACK:
+                    return False
+            if start - end > _ING_COLUMN_GAP * size:
+                return True
+            if stop > end:
+                end, size = stop, next_size
+        return False
+
+    def _from(self, row: int, position: int):
+        """The ink of ``row`` from ``position`` on, in x order."""
+        items = self.rows.rows[row]
+        return (items[k] for k in range(position, len(items)))
 
 
 class _ING_Rows:
@@ -727,6 +845,7 @@ class _Layer:
     undecodable: int = 0  # glyphs that name no character, dropped
     lines: tuple = ()  # (offset in text, origin) of each line; origin (x, y, upright) when drawn by the page itself
     pieces: tuple = ()  # (offset, origin) of the first character (not a space) of each piece of text, as for lines
+    ink: tuple = ()  # (baseline, start, end, font size) of each string the page's upright text draws (PageContent.ink)
 
 
 def _layer_text(page, content: PageContent) -> _Layer:
@@ -765,7 +884,8 @@ def _layer_text(page, content: PageContent) -> _Layer:
         return _Layer()
     if ''.join(piece[0] for piece in pieces) != raw:
         pieces = [(raw, None, None)]
-    return _decoded(pieces)
+    ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
+    return replace(_decoded(pieces), ink=ink)
 
 
 def _origin(cm, tm) -> tuple[float, float, bool] | None:

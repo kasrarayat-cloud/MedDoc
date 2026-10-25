@@ -566,6 +566,7 @@ class _Run:
     rise: float
     size: float
     width: float  # COVER_WIDTH font sizes along the baseline, text space (horizontal scaling applied)
+    spans: tuple = ()  # (start, end) along the baseline, text space, of each string the operator shows
 
     @property
     def core(self) -> tuple:
@@ -713,6 +714,9 @@ class PageContent:
     obscured_text: bool = False  # text kept that a viewer may not show (see _Paint, and paths not followed)
     struck_text: bool = False  # text kept that a line painted over it strikes through
     paint: _Paint | None = field(default=None, repr=False, compare=False)
+    # (baseline, start, end, font size) in page space of each string an upright text operator the page shows draws,
+    # in drawing order: where text ends, which the text layer does not say (pdf.py reads the gaps around check boxes)
+    ink: list = field(default_factory=list, repr=False, compare=False)
 
     @property
     def largest_image_pixels(self) -> int:
@@ -834,9 +838,13 @@ class _TextPlacement:
             items = list(operands[:1])
         start = self.matrix
         x = low = high = 0.0
+        spans = []
         for item in items:
             if isinstance(item, (bytes, str)):
+                before = x
                 x += self.advance(item)
+                if self.inked(item):  # a string of spaces draws nothing; the first is placed where the operator is
+                    spans.append((before if spans else min(before, 0.0), x))
             else:  # a TJ adjustment, in thousandths of a text-space unit, moves the next glyph left
                 x -= number(item) / 1000 * state.size * state.scale
             low, high = min(low, x), max(high, x)
@@ -849,7 +857,7 @@ class _TextPlacement:
             return None
         box = transformed_box((low, state.rise - GLYPH_DESCENT * size, high, state.rise + GLYPH_ASCENT * size), place)
         return _Run(box, OUTSIDE_MARGIN * size * scale, place, low, high, state.rise, size,
-                    COVER_WIDTH * size * abs(state.scale))
+                    COVER_WIDTH * size * abs(state.scale), tuple(spans))
 
     def advance(self, string) -> float:
         """How far ``string`` moves the text position, in text-space units (each string measured once per font: a
@@ -868,6 +876,11 @@ class _TextPlacement:
                 self.measured[key] = (max(len(text), 1 if string else 0), text.count(' '), widths)
         glyphs, spaces, widths = self.measured[key]
         return (widths / 1000 * state.size + glyphs * state.char_spacing + spaces * state.word_spacing) * state.scale
+
+    def inked(self, string) -> bool:
+        """Whether ``string`` (measured by advance) shows anything but spaces."""
+        glyphs, spaces, _ = self.measured[(id(self.state.font), bytes(string) if isinstance(string, bytes) else string)]
+        return glyphs > spaces
 
     def font(self):
         font = self.state.font
@@ -1058,6 +1071,9 @@ class _Walker:
         return 'unknown' if undecided else 'shown'
 
     def shown(self, run: _Run, graphics: _Graphics, verdict: str) -> None:
+        a, b, c, d, e, f = run.place
+        if a > 0 and d > 0 and abs(b) <= 0.01 * a and abs(c) <= 0.01 * d:  # upright, as pdf._origin reads pieces
+            self.content.ink.extend((f, e + start * a, e + end * a, run.size * d) for start, end in run.spans)
         mode = graphics.text.mode
         if verdict == 'unknown':
             self.paint.obscured = True
