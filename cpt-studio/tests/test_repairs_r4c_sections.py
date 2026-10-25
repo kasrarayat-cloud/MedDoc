@@ -714,5 +714,86 @@ class AnswerOnTheLineAboveTests(HeldOrReadyAssertions, unittest.TestCase):
         self.assertEqual(read(text, 'no biopsies were taken.')[0], 'negated')
 
 
+
+# --- sections:9 / sections:10: the line after a line cut on a plan, cancellation or denial verb -----------------------
+
+S9_EUS = 'EUS with fine-needle aspiration of the pancreatic head mass'
+
+
+def s9_note(cut, line):
+    return (HEADER + 'Procedure: EGD.\nIndication: Dysphagia; pancreatic head mass on CT.\nFindings: The gastroscope was '
+            'advanced to the second portion of the duodenum. The esophagus was normal. ' + cut + '\n' + line + '\n')
+
+
+S10_POLYP = 'Cold snare polypectomy of a 6 mm sigmoid polyp.'
+
+
+def s10_note(line):
+    return (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nTechnique: After informed consent was obtained, the '
+            'colonoscope was advanced to the cecum. ' + line + '\n' + S10_POLYP + '\nImpression: Sigmoid polyp.\n')
+
+
+class CutVerbHoldTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:9 (high, an under-correction of structure:11) - the hold of a service line after a line cut on a plan,
+    cancellation or denial verb ("Dr. Smith recommended") skipped a bulleted or numbered service line, so "- EUS with
+    FNA ..." was a READY 43242; the hold now reads the line without its list marker (a field or a table row stays
+    exempt). sections:10 (medium) - it fired after a complete sentence that ends in a kept booking ("The procedure was
+    performed as planned", "as ordered", "as scheduled"), holding an ordinary polypectomy; a plan word the kept-booking
+    "as" introduces is no cut verb (the declared cue reader skips it the same way), as at 4347acd24 and R3B-BASE."""
+
+    def test_a_marked_service_line_is_held(self):
+        for cut in ('Dr. Smith recommended', 'The endoscopist deferred', 'The family declined to authorize'):
+            for mark in ('- ', '* ', '1. ', '1) ', '  - ', 'A. ', '(1) ', '\u2022 ', ''):
+                line = mark + S9_EUS
+                text = s9_note(cut, line)
+                with self.subTest(cut=cut, mark=mark):
+                    self.assert_held_never_excluded(text, '43242', S9_EUS)
+            # a lower-case letter marker joins the cut line, as at HEAD: the cut verb's own cue reads the service
+            text = s9_note(cut, 'a) ' + S9_EUS)
+            with self.subTest(cut=cut, mark='a) '):
+                self.assert_never_ready(text, '43242', S9_EUS)
+        text = s9_note('Dr. Smith recommended', '- ' + S9_EUS + '.')
+        self.assert_held_never_excluded(text, '43242', S9_EUS + '.')
+        text = s9_note('Dr. Smith recommended', '- eus with fine-needle aspiration of the pancreatic head mass')
+        self.assert_never_ready(text, '43242', 'eus with fine-needle aspiration of the pancreatic head mass')
+
+    def test_a_list_item_after_a_cut_list_item_is_held_too(self):
+        """Dropping the list-item exemption holds more, the safe direction (an accepted over-hold)."""
+        text = (HEADER + 'Procedure: EGD.\nFindings:\n1. The esophagus was normal.\n2. Genetic testing recommended\n3. '
+                + S9_EUS + '\n')
+        self.assert_held_never_excluded(text, '43242', S9_EUS)
+
+    def test_the_controls(self):
+        text = s9_note('Dr. Smith recommended ' + S9_EUS[0].lower() + S9_EUS[1:] + '.', 'Biopsies were not taken.')
+        self.assertEqual(run_engine(text, [('43242', S9_EUS[0].lower() + S9_EUS[1:])])['43242'].bucket, 'excluded')
+        for line in ('Referring physician: Dr. B. Synthetic', 'EUS | FNA | pancreatic head mass'):
+            text = s9_note('Dr. Smith recommended', line)
+            with self.subTest(line=line):
+                self.assertNotEqual(kind_at(text, line), 'other')
+        polyp = '4. 6 mm sigmoid polyp removed with cold snare.'  # round 3 routing:2: an item with a clause of its own
+        text = (HEADER + 'Procedure: Colonoscopy with biopsy and cold snare polypectomy.\nFindings:\n1. The colonoscope was '
+                'advanced to the cecum.\n2. A 3 cm ascending colon mass, biopsied and tattooed.\n3. Further workup '
+                'recommended\n' + polyp + '\n')
+        self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
+
+    def test_a_kept_booking_ends_its_sentence(self):
+        for line in ('The procedure was performed as planned', 'The patient completed the bowel preparation as ordered',
+                     'The patient arrived for the procedure as scheduled', 'Moderate sedation was given as planned',
+                     'The patient arrived as arranged', 'The procedure was performed as recommended',
+                     'The procedure was performed as previously scheduled', 'Moderate sedation given as planned'):
+            text = s10_note(line)
+            with self.subTest(line=line):
+                self.assertEqual(read(text, S10_POLYP)[0], 'performed')
+                self.assertTrue(ready(run_engine(text, [('45385', S10_POLYP)])['45385']))
+
+    def test_a_cut_plan_verb_still_holds(self):
+        for line in ('Dr. Smith recommended', 'The procedure was planned', 'Dr. Smith ordered',
+                     'The procedure will be done as scheduled', 'The procedure was postponed as planned',
+                     'Procedure scheduled as planned', 'The second study was put off, as deferred'):
+            text = s10_note(line)
+            with self.subTest(line=line):
+                self.assert_held_never_excluded(text, '45385', S10_POLYP)
+
+
 if __name__ == '__main__':
     unittest.main()
