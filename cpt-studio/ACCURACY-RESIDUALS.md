@@ -45,6 +45,13 @@ with the whole-document acknowledgement; *excluded* means a recommendation the r
 | round 5 declared:11 (rest) | "Extent: Cecum - complete." | extent unread (45378 held for the extent) | "complete" after the landmark is in no declared tail list (`cues.EXTENT_TAIL`) |
 | round 5 declared:6 (rest) | "Procedures not performed" without a colon, then "EGD with esophageal dilation." under Findings | the EGD reads performed (43249 held only for its missing extent; ready once an extent is documented) | the label rule reads a line that ends in a colon; a colon-less heading is open wording |
 | round 5 sections:10 | "Procedure completed as planned" (no closing punctuation) before "Cold snare polypectomy of a 6 mm sigmoid polyp." | 45385 held (over-hold) | the reader cannot tell that line from a planned verbless service line after the same words ("EMR of the ascending colon lesion at a tertiary center.") |
+| round 4c-2 box2:E (rest) | "Office visit with anoscopy was performed today." (also "after", "including") in an office note | 99214 ready, no same-day check | a coordinated subject splits only at the connectors routing defines (and, or, a comma, a slash, &, plus, then, as well as) |
+| round 4c-2 box2:F (rest) | "Attestation: withheld" / "Unable to attest." on the line under the separate-E/M statement | 99214 ready (the statement attests) | refusal words outside the statement's contrary-word list |
+| round 4c-2 plan:A (rest) | "Assessment and plan: EGD today: esophagitis versus reflux." (also "showing", "earlier today", "which showed") | 99214 ready | a result written without a reporting verb right after the service name |
+| round 4c-2 plan:C (rest) | "Procedures not attempted:" / "Omitted procedures:" above "Cold snare polypectomy of the 6 mm sigmoid polyp." | 45385 ready | denying labels outside the declared list (not performed, cancelled, deferred, declined) |
+| round 4c-2 plan:D (rest) | "Extent: cecum. Not reached." (the denial in the next sentence or on the next line) | 45378 ready, the cecum read as reached | an extent label is read within its own sentence; a denial in another sentence is not tied to it |
+| round 4c-2 box2:L (rest) | "Colonoscopy: ☒ Completed (partial) ☐ Cancelled" | 45378 ready, read as complete | "partial" / "partially completed" are in no declared list |
+| round 4c-2 lead | "The anoscopy was stopped early because of pain." | 46600 ready | routing's "stopped" cue takes at, short, due, because or before right after the word; "stopped early" is outside it |
 
 How an entry leaves this list: the accuracy evaluation shows the phrasing occurs in real adjudicated documents, and a
 rule is written for it under the hold-only rule (it may hold; it never newly excludes or releases), with a corpus

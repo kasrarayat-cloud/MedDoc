@@ -408,7 +408,11 @@ where a rule restores what an ordinary note read before round 3b.
   whose own box is checked, disagrees, is unread or has no box holds. The
   status line's hold words (pending, incomplete, on hold, TBD, TBA, unknown,
   unclear, requested) are options too, but only beside their own mark (a hold
-  word in a remark, "Completed ☒ (pathology pending)", is none); a boxed value
+  word in a remark, "Completed ☒ (pathology pending)", is none), and a passage
+  opening in a status line's label, a service's or a visit statement's label
+  included, is held when a hold-word option's own box is checked ("Colonoscopy:
+  ☒ Incomplete ☐ Completed"; "Colonoscopy: Incomplete ☒ | Completed ☐" reads
+  incomplete); a boxed value
   with no option is read as text; when the yes/no word right before the first
   box is the option's own word ("Not done ☒") that box decides, and "Not
   performed" / "Not done" is one option word. A line listed under a label that
@@ -598,7 +602,10 @@ where a rule restores what an ordinary note read before round 3b.
   whose boxes differ ("☑ Cold snare polypectomy ☐ Biopsy" cited whole: the item
   it speaks for cannot be told from it, so it is never read by its first box
   and never negated), and a row whose boxes can
-  be read as leading or trailing (the items the readings disagree on) hold too,
+  be read as leading or trailing (the items the readings disagree on; also an
+  item that, with every word run between the boxes read as an entry, takes the
+  other state: "Photos ☐ | Biopsy ☒ | Cold snare polypectomy ☐", where a first
+  word that is no item must not turn the row) hold too,
   as does an intervention joined by "with", "plus" or ";" to a later item
   whose own box is not checked (`BOX_LATER`). A box governs the item(s) on its own line or cell within
   `BOX_REACH`, before it (`☐ Biopsy`) or after it (`Biopsy | ☐`,
