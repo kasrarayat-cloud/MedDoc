@@ -199,18 +199,20 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     # the code's own procedure as a procedure section's first sentence documents it done: what a later sentence of the
     # report may open with, read by its section alone (round 5 validation:2)
     opening_names = [m.span.text for m in done if opened(m.span.start, m.span.end)]
-    # ... unless the document reads the code's own procedure denied, called off or doubted somewhere (fail-closed)
+    # ... unless the document reads the code's own procedure denied, called off or doubted somewhere (fail-closed).
+    # Routing's gi.other finding never reads such a denial ("Anoscopy was not performed; the patient declined." names
+    # no mention), so the same doubt also withdraws the routed mention and the procedure line themselves (round 4c).
     doubted = None
     marked = []
     for reading in own:
         if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
-                and not names(reading.start, reading.end) and not opened(reading.start, reading.end)
                 and not checks.names_procedure(text, reading.start, reading.end, code, day)):
+            routed_done = names(reading.start, reading.end) or opened(reading.start, reading.end)
             counted = False
-            if opening_names and checks.by_section_alone(reading):
+            if routed_done or (opening_names and checks.by_section_alone(reading)):
                 doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
-                counted = not doubted and checks._VAL_opens_with(text, reading.start, reading.end, code, opening_names,
-                                                                 day)
+                counted = not doubted and (routed_done or checks._VAL_opens_with(
+                    text, reading.start, reading.end, code, opening_names, day))
             if not counted:
                 reading = replace(reading, unnamed=True)
         marked.append(reading)
