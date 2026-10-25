@@ -730,7 +730,8 @@ def change_context(encounter, user, values):
 
     Re-assesses with the run already in use only when that run answers exactly the
     request the new context would send; otherwise re-predicts (an identical retained
-    result is still reused for free by the predict stage).
+    result is still reused for free by the predict stage, and a date the revision was
+    never routed for is routed first).
     """
     with transaction.atomic():
         encounter = _locked(encounter)
@@ -740,9 +741,13 @@ def change_context(encounter, user, values):
             raise Refused('Context can be set once the document text has been extracted.')
         if busy(encounter):
             raise Refused('Wait for processing to finish (or stop it) before changing context.')
-        if not models.RoutingRun.objects.filter(revision=revision).exists():
-            # Its analysis never finished (an overrun or a failure), so nothing may be sent for it, whatever the
-            # context says: the request would answer a document the service could not read (round 5, pipeline:0).
+        if not models.RoutingRun.objects.filter(revision=revision).exists() and not review.can_resume(encounter):
+            # Its analysis overran or failed, so nothing may be sent for it, whatever the context says: the request
+            # would answer a document the service could not read (round 5, pipeline:0). A stage that was only stopped
+            # - a Stop, the stale-stage sweep or a queue expiry, the rule resume uses - is not refused (round 6
+            # pipeline:1): its document is readable, and the predict below routes the new date before anything is
+            # sent (round 6 pipeline:0), so the one request is for the member's date and never first for the
+            # document's own.
             raise Refused('This document could not be read to the end, so its context cannot be changed and nothing '
                           'is sent for it. Upload it again, shorter or split.')
         merged = dict(encounter.user_values or {})

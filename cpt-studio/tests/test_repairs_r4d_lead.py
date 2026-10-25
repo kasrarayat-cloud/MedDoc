@@ -209,3 +209,114 @@ class DateChangeRoutesBeforeSendingTests(TestCase):
         dates = set(models.RoutingRun.objects.filter(revision__encounter_id=encounter_id)
                     .values_list('service_date', flat=True))
         self.assertEqual(dates, {date(2026, 10, 20), NEW_DATE})
+
+
+# --- pipeline:1 and pipeline:2: a stopped analysis versus one that overran ------------------------------------------
+
+from datetime import timedelta  # noqa: E402
+
+from django.conf import settings  # noqa: E402
+from django.utils import timezone  # noqa: E402
+
+DOCUMENT_DATE = date(2026, 10, 20)
+
+
+@override_settings(**LIVE)
+class StoppedOrOverranAnalysisTests(DateChangeRoutesBeforeSendingTests):
+    def post(self, path, data):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(path, data=json.dumps(data), content_type='application/json')
+
+    def extracted_only(self, text=OFFICE_NOTE):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
+        self.assertEqual(response.status_code, 201, response.content)
+        encounter_id = response.json()['id']
+        extract = jobs.claim_next()
+        self.assertEqual(extract.kind, models.Job.EXTRACT)
+        jobs.run_job(extract)
+        return encounter_id, models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.ANALYZE)
+
+    def cancel(self, encounter_id, analyze, cause):
+        if cause == 'stop':
+            self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop', {}).status_code, 200)
+        elif cause == 'sweep':
+            self.assertEqual(jobs.claim_next().pk, analyze.pk)
+            models.Job.objects.filter(pk=analyze.pk).update(
+                started_at=timezone.now() - timedelta(seconds=settings.STALE_RUNNING_SECONDS + 60))
+            jobs.mark_stale()
+        else:
+            models.Job.objects.filter(pk=analyze.pk).update(deadline_at=timezone.now() - timedelta(seconds=1))
+            jobs.claim_next()
+        analyze.refresh_from_db()
+        self.assertEqual(analyze.state, models.Job.CANCELLED, cause)
+        self.assertFalse(models.RoutingRun.objects.filter(revision__encounter_id=encounter_id).exists())
+
+    def test_a_context_change_after_a_stopped_analysis_sends_once_and_only_for_the_members_date(self):
+        for cause in ('stop', 'sweep', 'expiry'):
+            with self.subTest(cause=cause):
+                # a distinct document per cause: an identical request in one workspace is reused, never re-sent
+                encounter_id, analyze = self.extracted_only(OFFICE_NOTE + f'\nReference: {cause}.\n')
+                self.cancel(encounter_id, analyze, cause)
+                sent_before = len(self.provider.sent)
+                response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': NEW_DATE.isoformat()})
+                self.assertEqual(response.status_code, 201, response.content)
+                drain()
+                self.assertEqual(len(self.provider.sent), sent_before + 1)
+                run = models.ProviderRun.objects.get(encounter_id=encounter_id)
+                self.assertEqual((run.service_date, run.sent), (NEW_DATE, True))
+                self.assertIn(f'Date of service: {NEW_DATE.isoformat()}', run.contexts)
+                self.assertFalse(models.RoutingRun.objects.filter(revision__encounter_id=encounter_id,
+                                                                  service_date=DOCUMENT_DATE).exists(),
+                                 'the document was analysed for its own date first')
+                assess = models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.ASSESS).get()
+                self.assertEqual(assess.state, models.Job.SUCCEEDED, assess.error)
+
+    def test_a_stopped_analysis_whose_new_date_cannot_be_read_in_time_sends_nothing(self):
+        encounter_id, analyze = self.extracted_only()
+        self.cancel(encounter_id, analyze, 'stop')
+
+        def slow_for_the_new_date(text, service_date=None):
+            if service_date == NEW_DATE:
+                time.sleep(30)
+            return _ROUTE(text, service_date)
+
+        with override_settings(JOB_DEADLINE_SECONDS=dict(DEADLINES, analyze=1)), \
+                mock.patch.object(detect, 'route', slow_for_the_new_date):
+            response = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': NEW_DATE.isoformat()})
+            self.assertEqual(response.status_code, 201, response.content)
+            drain()
+        predict = models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.PREDICT)
+        self.assertEqual(predict.state, models.Job.FAILED)
+        self.assertIn('took longer than 1 seconds and was stopped', predict.error)
+        self.assertEqual(self.provider.sent, [])
+        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id).exists())
+
+    def test_an_addendum_whose_analysis_overran_refuses_a_context_change_and_sends_nothing(self):
+        encounter_id = self.finished_encounter()
+
+        def slow_for_the_addendum(text, service_date=None):
+            if 'ADDENDUM (revision' in text:
+                time.sleep(30)
+            return _ROUTE(text, service_date)
+
+        with override_settings(JOB_DEADLINE_SECONDS=dict(DEADLINES, analyze=1)), \
+                mock.patch.object(detect, 'route', slow_for_the_addendum):
+            response = self.post(f'/api/encounters/{encounter_id}/addenda',
+                                 {'text': 'Setting confirmed as office.', 'synthetic_attestation': 'yes'})
+            self.assertEqual(response.status_code, 201, response.content)
+            drain()
+        revision = models.Encounter.objects.get(pk=encounter_id).current_revision
+        self.assertEqual(revision.number, 2)
+        self.assertEqual(models.Job.objects.get(revision=revision, kind=models.Job.ANALYZE).state, models.Job.FAILED)
+        for values in ({'setting': 'office'}, {'service_date': NEW_DATE.isoformat()}):
+            with self.subTest(values=values):
+                response = self.post(f'/api/encounters/{encounter_id}/context', values)
+                self.assertEqual(response.status_code, 409, response.content)
+                self.assertIn('could not be read to the end', response.json()['error'])
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)
+        self.assertFalse(models.Job.objects.filter(revision=revision, kind=models.Job.PREDICT).exists())
+        self.assertFalse(models.ProviderRun.objects.filter(revision=revision).exists())
+
+    # the inherited date-change tests run here too; they need nothing else
