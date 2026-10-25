@@ -1151,26 +1151,52 @@ def _procedure_called_off(an: Analysis, start: int, end: int) -> bool:
     return an.memo[key]
 
 
+# --- One grammar for the lines that ask whether the procedure was done or called off (round 5 declared:0, 1, 9, 10) ---
+# The typed done-question (_PERFORMED_ANSWERED_NO), its boxed form (_PERFORMED_QUESTION), the form field's
+# (_BOX_DONE_QUESTION) and the status question answered with a denial (_BOX_ANSWER_LEAD, _BOX_ANSWER_TAIL) are built
+# from these pieces, so a spelling one of them accepts every one accepts. Each only holds.
+# The lead: an indent, a list marker ("- ", "* ", "• ", "1. ", "2) ", "(1) ", "a. "), "was", "is", "has" or "had", and
+# "the" or "this" ("Was the procedure performed?").
+_BOX_Q_LEAD = (r'[ \t]*(?:(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?\d{1,3}[.)]|\(?[a-z][.)](?=[ \t]))'
+               r'[ \t]*)?(?:(?:was|is|has|had)[ \t]+)?(?:(?:the|this)[ \t]+)?')
+# The procedure's own word, the done-question's verb, and an optional "today" after either question.
+_BOX_Q_NOUN = r'(?:procedure|exam|examination|study|endoscopy|case)'
+_BOX_Q_DONE = r'(?:performed|completed|done|attempted|started)'
+_BOX_Q_TODAY = r'(?:[ \t]+today)?'
+# The separator: ':', '?', '=', '|', a dash, a tab or two spaces, after the label's own '?' or ':' (a form block's
+# "<label>: <value>" for a label that asks: "Procedure performed?: No").
+_BOX_Q_SEP = r'[ \t]*(?:[?:][ \t]*)?(?:[:?=|\u2013\u2014-]|\t| {2,})[ \t]*'
+# The answers that say no, or that this reader cannot read as done: "No", "None", "N", "Not done", "Not performed",
+# "Not completed", "N/A", "NA", "Not applicable".
+_BOX_Q_DENIAL = r'(?:no|none|n|not\s+(?:done|performed|completed)|n/a|na|not\s+applicable)'
+
+
 # A typed answer that the procedure was not performed: "Procedure performed: No (patient refused).", "Exam
-# completed? no" (round 4 release:8). Only these label words, then a separator, then a denial that opens the value.
-_PERFORMED_ANSWERED_NO = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
-                                    r'(?:performed|done|completed)[ \t]*[:?=|\u2013\u2014-][ \t]*'
-                                    r'(?:no|n|not\s+(?:done|performed|completed))\b', re.A | re.I)
+# completed? no" (round 4 release:8), "- Procedure performed: No", "Was the procedure performed? No", "Procedure
+# performed<tab>No". The grammar's lead and the procedure's word, a done verb, a separator, then a denial that opens the
+# value, whatever follows it.
+_PERFORMED_ANSWERED_NO = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY + _BOX_Q_SEP
+                                    + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])', re.I)
 
 
 # The question whether the procedure was done, answered with boxes: "Procedure completed: ☐ Yes ☒ No".
-_PERFORMED_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
-                                 r'(?:performed|done|completed)[ \t]*[:?=|\u2013\u2014-]?', re.A | re.I)
+_PERFORMED_QUESTION = re.compile(_BOX_Q_LEAD + _BOX_Q_NOUN + r'[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
+                                 + r'(?:' + _BOX_Q_SEP + r')?', re.I)
 
 
 def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
     """Whether the line [ls, le) asks whether the procedure was done and its boxes answer anything but a plain Yes
-    (No checked, Yes unchecked, both, or an unread mark: _group_state). Round 4, BOXES' residual."""
-    question = _PERFORMED_QUESTION.match(an.text, ls, le)
-    if question is None:
-        return False
-    _, boxes = _box_tokens(an, question.end(), le)
-    return bool(boxes) and _group_state(an.text, boxes) != 'on'
+    (No checked, Yes unchecked, both, or an unread mark: _group_state). Round 4, BOXES' residual. Read once per line
+    (round 5 bounded:3: every sentence of a long line asked it again, and each read the whole line's boxes)."""
+    key = ('performed-answer', ls, le)
+    if key not in an.memo:
+        question = _PERFORMED_QUESTION.match(an.text, ls, le)
+        if question is None:
+            an.memo[key] = False
+        else:
+            _, boxes = _box_tokens(an, question.end(), le)
+            an.memo[key] = bool(boxes) and _group_state(an.text, boxes) != 'on'
+    return an.memo[key]
 
 
 def _calls_off(an: Analysis, ks: int, ke: int) -> bool:
@@ -2265,6 +2291,8 @@ class _Fields:
     checked_starts: tuple = ()
     untied: tuple = ()  # _FieldPage of each block with any denying or answering line that names nothing printed
     untied_starts: tuple = ()
+    answers: tuple = ()  # _Named printed questions a status-question field answers with a denial (declared:1), sorted
+    answer_starts: tuple = ()
 
 
 def _label_key(raw: str) -> str:
@@ -2302,7 +2330,7 @@ def _form_fields(an: Analysis) -> _Fields:
     if key not in an.memo:
         text = an.text
         headers = list(FORM_HEADER.finditer(text))
-        denying, held, checked, named, pages, untied = [], [], [], [], [], []
+        denying, held, checked, named, pages, untied, answers = [], [], [], [], [], [], []
         previous_end, previous_page = 0, 0
         for i, header in enumerate(headers):
             limit = headers[i + 1].start() if i + 1 < len(headers) else len(text)
@@ -2313,6 +2341,7 @@ def _form_fields(an: Analysis) -> _Fields:
                 exact = page == previous_page + 1
                 labels: dict = {}  # label key -> (state, its first line, the hold its page takes when it names nothing)
                 answered: dict = {}  # label key -> its first denying or answering line, whatever its label names
+                questions: dict = {}  # label key -> its first line, for a status question answered with a denial
                 status = ''  # the first status field that gives the procedure no completion
                 for line in re.finditer(r'[^\n]+', text[header.end():block_end]):
                     words = line.group(0)
@@ -2330,6 +2359,8 @@ def _form_fields(an: Analysis) -> _Fields:
                     label = _label_key(denied.group('label'))
                     answered.setdefault(label, words.strip())
                     state, template = _box_field_answer(an, at, at + len(denied.group('label')), denied)
+                    if not denied.group('box') and _box_status_question(an, at, at + len(denied.group('label'))):
+                        questions.setdefault(label, words.strip())
                     if state is not None:
                         (denying if state == 'off' else held).append(_Named(at, at + len(words), state, exact,
                                                                              words.strip()))
@@ -2348,6 +2379,9 @@ def _form_fields(an: Analysis) -> _Fields:
                                     if label in labels:
                                         named.append(_Named(begin, begin + len(part), labels[label][0], exact,
                                                             labels[label][1]))
+                                    if label in questions:
+                                        answers.append(_Named(begin, begin + len(part), 'answer', exact,
+                                                              questions[label]))
                                     found.add(label)
                                 if matches:
                                     break
@@ -2362,12 +2396,13 @@ def _form_fields(an: Analysis) -> _Fields:
                 if untied_line:
                     untied.append(_FieldPage(previous_end, block_end, untied_line))
             previous_end, previous_page = block_end, page
-        for spans in (denying, held, checked, named):
+        for spans in (denying, held, checked, named, answers):
             spans.sort(key=lambda n: n.start)
         an.memo[key] = _Fields(tuple(denying), tuple(named), tuple(pages), tuple(n.start for n in denying),
                                tuple(n.start for n in named), tuple(p.start for p in pages), tuple(held),
                                tuple(n.start for n in held), tuple(checked), tuple(n.start for n in checked),
-                               tuple(untied), tuple(p.start for p in untied))
+                               tuple(untied), tuple(p.start for p in untied), tuple(answers),
+                               tuple(n.start for n in answers))
     return an.memo[key]
 
 
@@ -2416,6 +2451,12 @@ def _box_names_no_item(an: Analysis, start: int, end: int) -> bool:
     the reference readers answer ("Procedure cancelled: No" holds there as a status answer, never by its field)."""
     if _BOX_NO_ITEM_LABEL.fullmatch(_label_key(an.text[start:end])):
         return True
+    return _box_status_question(an, start, end)
+
+
+def _box_status_question(an: Analysis, start: int, end: int) -> bool:
+    """Whether the field label [start, end) asks after the procedure's status: it carries a status reference
+    (_REFERENCE_PATTERNS: "Procedure cancelled", "Was the procedure aborted?"), which the reference readers read."""
     return any(pattern.search(an.text, start, end) for _, pattern in _REFERENCE_PATTERNS)
 
 
@@ -2446,10 +2487,10 @@ def _box_label_kind(an: Analysis, start: int, end: int) -> str:
     return 'item' if all(word in _BOX_ITEM_WORDS for word in rest) else 'qualified'
 
 
-# A form field that asks whether the procedure was done, answered with a denial ("Procedure performed: No").
-_BOX_DONE_QUESTION = re.compile(r'[ \t]*(?:procedure|exam|examination|study|endoscopy|case)[ \t]+'
-                                r'(?:performed|completed|done|attempted|started)[ \t]*[:?=][ \t]*'
-                                r'(?:no|none|n|not[ \t]+done|not[ \t]+performed)[ \t.]*', re.A | re.I)
+# A form field that asks whether the procedure was done, answered with a denial ("Procedure performed: No",
+# "Procedure performed?: No", "Was the procedure performed?: No"): the typed done-question's own grammar (round 5
+# declared:0), read from the field line's start.
+_BOX_DONE_QUESTION = _PERFORMED_ANSWERED_NO
 
 
 def _box_status_field(an: Analysis, start: int, end: int) -> bool:
@@ -2459,7 +2500,7 @@ def _box_status_field(an: Analysis, start: int, end: int) -> bool:
     procedure was done answered with a denial (contract:4). Its page's services are then held, wherever the field
     stands: extraction writes every field after its page's text, beyond the status readers' reach."""
     text = an.text
-    if _BOX_DONE_QUESTION.fullmatch(text, start, end):
+    if _BOX_DONE_QUESTION.match(text, start, end):
         return True
     key = _STATUS_KEY.match(text, start, end)
     if key is None:
@@ -2612,34 +2653,40 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
     return None
 
 
-# A status question answered with a denial, on its own line: the reference, after an optional list marker, "was the"
-# and the word for the procedure; then ':', '?', '=', '|', a dash, a tab or two spaces; then "No", "None", "N", "Not
-# done" or "Not performed" and nothing else ("Procedure cancelled: No", "Was the procedure cancelled? No", "Procedure
-# aborted  No", a table row "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.").
-_BOX_ANSWER_LEAD = re.compile(r'[ \t]*(?:[-*•][ \t]*|\d{1,2}[.)][ \t]*)?(?:(?:was|is|has|had)[ \t]+)?'
-                              r'(?:(?:the|this)[ \t]+)?(?:(?:procedure|exam|examination|study|endoscopy|case)[ \t]+)?',
-                              re.I)
-_BOX_ANSWER_TAIL = re.compile(r'[ \t]*(?:[:?=|–—-]|\t| {2,})[ \t]*(?:no|none|n|not[ \t]+done|not[ \t]+performed)'
-                              r'[ \t.]*', re.I)
+# A status question answered with a denial, on its own line, in the shared grammar (_BOX_Q_LEAD ..): the reference,
+# after the grammar's lead and the word for the procedure; an optional "today"; the separator, after the label's own
+# '?' or ':'; then a denial; then nothing, or a punctuated remark ("Procedure cancelled: No", "Was the procedure
+# cancelled? No, it was completed.", "Procedure cancelled?: No" in a form block, "Procedure cancelled: N/A", a table row
+# "Procedure cancelled | No"; never "Procedure cancelled, no sedation given.", "Procedure cancelled: no driver
+# available." or "Procedure cancelled: No-show", where "no" opens the reason).
+_BOX_ANSWER_LEAD = re.compile(_BOX_Q_LEAD + r'(?:' + _BOX_Q_NOUN + r'[ \t]+)?', re.I)
+_BOX_ANSWER_TAIL = re.compile(_BOX_Q_TODAY + _BOX_Q_SEP + _BOX_Q_DENIAL
+                              + r'(?:[ \t]*[,;(]|[ \t]+[–—-]|\.[ \t]+|[ \t.]*$)', re.I)
 BOX_ANSWER_REACH = 80  # how far a status question's lead or answer is read from its reference (bounds the work)
 
 
 def _box_status_answer(an: Analysis, start: int, end: int) -> Optional[Reading]:
     """A hold for the status reference at [start, end) when its own line is a status question answered with a denial
     (structure:13): "Procedure cancelled: No" says the procedure was not cancelled, so it is never read as a
-    cancellation; whatever else it means is left for review."""
+    cancellation; whatever else it means is left for review. The answer is read within BOX_ANSWER_REACH of the
+    reference; a remark after it may run on. So is a printed question standing alone whose answer is the form field
+    tied to it ("Procedure cancelled?" over "[PDF form fields on page 1] / Procedure cancelled?: No", round 5
+    declared:1)."""
     text = an.text
+    fields = _form_fields(an)
+    tied = _within(fields.answers, fields.answer_starts, start, end)
+    if tied is not None:
+        return Reading('uncertain', (BOX_STATUS_ANSWER.format(tied.line),), 'cue', doubt=True)
     newline = text.rfind('\n', max(0, start - BOX_ANSWER_REACH), start)
     if newline < 0 and start > BOX_ANSWER_REACH:
         return None
-    line_end = text.find('\n', end, end + BOX_ANSWER_REACH + 1)
-    if line_end < 0:
-        if end + BOX_ANSWER_REACH < len(text):
-            return None
-        line_end = len(text)
-    if not (_BOX_ANSWER_LEAD.fullmatch(text, newline + 1, start) and _BOX_ANSWER_TAIL.fullmatch(text, end, line_end)):
+    if not _BOX_ANSWER_LEAD.fullmatch(text, newline + 1, start):
         return None
-    return Reading('uncertain', (BOX_STATUS_ANSWER.format(text[newline + 1:line_end].strip()),), 'cue', doubt=True)
+    line_end = text.find('\n', end, end + BOX_ANSWER_REACH + 1)
+    stop = line_end if line_end >= 0 else min(len(text), end + BOX_ANSWER_REACH + 1)
+    if not _BOX_ANSWER_TAIL.match(text, end, stop):
+        return None
+    return Reading('uncertain', (BOX_STATUS_ANSWER.format(text[newline + 1:stop].strip()),), 'cue', doubt=True)
 
 
 def _generic_reading(an: Analysis, start: int, end: int) -> Reading:
