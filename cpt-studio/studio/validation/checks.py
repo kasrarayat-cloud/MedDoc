@@ -1335,6 +1335,36 @@ def _VAL_lead_name(an, text: str, index: int, service_date: Optional[date]) -> s
     return name
 
 
+# Any word of a gi.other code's own procedure (_VAL_OWN_PROCEDURES): the sentences worth reading for a doubt about it.
+_VAL_ANY_OWN = re.compile('|'.join(pattern.pattern for _, _, patterns, _ in _VAL_OWN_PROCEDURES for pattern in patterns),
+                          re.A | re.I)
+
+
+@functools.lru_cache(maxsize=4)
+def _VAL_own_sentence_readings(text: str, service_date: Optional[date]) -> tuple:
+    """Per text: (start, end, status, cues) of every layout sentence holding a word of some gi.other code's own
+    procedure, as routing reads it (span_status). Read once per text."""
+    from studio.gi import detect
+    an = detect._analysis(text, service_date)[0]
+    found = []
+    for s, e in an.lay.sentences:
+        if _VAL_ANY_OWN.search(text, s, e):
+            parsed = normalise_span_status(span_status(text, s, e, service_date))
+            if parsed is not None:
+                found.append((s, e) + parsed)
+    return tuple(found)
+
+
+def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> bool:
+    """Whether a sentence of the document naming the code's own procedure reads it negated, cancelled, or uncertain
+    with a cue ("No banding was performed today.", "Banding was deferred.", "Anoscopy was not performed; the patient
+    declined."): then a findings sentence is never counted by the report's procedure line alone (_VAL_opens_with), which
+    routing still reads done. A plan or history mention ("Repeat anoscopy in 6 months.") is no doubt about today's."""
+    return any(_VAL_owns(code, text[s:e]) and (status in ('negated', 'cancelled')
+                                               or (status == 'uncertain' and not silent(status, cues)))
+               for s, e, status, cues in _VAL_own_sentence_readings(text, service_date))
+
+
 def _VAL_opens_with(text: str, start: int, end: int, code: str, names: Sequence[str],
                     service_date: Optional[date] = None) -> bool:
     """Whether a sentence the passage [start, end) overlaps opens with the code's own procedure named as one of the

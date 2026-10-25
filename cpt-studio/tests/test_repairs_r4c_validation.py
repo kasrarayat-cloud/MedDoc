@@ -479,6 +479,29 @@ class Validation2OwnProcedureReportOverHoldTests(Case):
         proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', line))
         self.assertReady(proposals['46221'])
 
+    def test_a_report_that_denies_its_procedure_corroborates_nothing(self):
+        # Routing still reads the procedure line done (it reads no mention in these denials), so the findings sentence
+        # stays held, as at HEAD.
+        for text, code, line in (
+                (V2_REPORT.format(proc='Rubber band ligation of internal hemorrhoids', ind='Symptoms.',
+                                  find='Banding sites well healed. No banding was performed today.'),
+                 '46221', 'Banding sites well healed.'),
+                (V2_REPORT.format(proc='Rubber band ligation of internal hemorrhoids', ind='Symptoms.',
+                                  find='Banding sites well healed.').replace('Impression: Findings as described.',
+                                                                            'Impression: Banding was deferred.'),
+                 '46221', 'Banding sites well healed.'),
+                (V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Anoscopy revealed grade 2 internal hemorrhoids.')
+                 + 'Addendum: Anoscopy was not performed; the patient declined.\n',
+                 '46600', 'Anoscopy revealed grade 2 internal hemorrhoids.')):
+            with self.subTest(text=text[len(HEAD):]):
+                proposals, _ = real(text, (code, line))
+                self.assertEqual(proposals[code].status, 'needs_clarification')
+        # a plan to repeat it is no doubt about today's
+        text = V2_REPORT.format(proc='Anoscopy', ind='Symptoms.', find='Anoscopy revealed grade 2 internal hemorrhoids.') \
+            + 'Plan: Repeat anoscopy in 6 months.\n'
+        proposals, _ = real(text, ('46600', 'Anoscopy revealed grade 2 internal hemorrhoids.'))
+        self.assertReady(proposals['46600'])
+
     def test_each_sentence_s_lead_is_read_once_however_many_passages_cite_it(self):
         from unittest import mock
         from studio.gi import detect

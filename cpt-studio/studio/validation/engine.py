@@ -199,14 +199,20 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     # the code's own procedure as a procedure section's first sentence documents it done: what a later sentence of the
     # report may open with, read by its section alone (round 5 validation:2)
     opening_names = [m.span.text for m in done if opened(m.span.start, m.span.end)]
+    # ... unless the document reads the code's own procedure denied, called off or doubted somewhere (fail-closed)
+    doubted = None
     marked = []
     for reading in own:
         if (reading.status in checks.POSITIVE and checks.states_no_procedure(reading)
                 and not names(reading.start, reading.end) and not opened(reading.start, reading.end)
-                and not checks.names_procedure(text, reading.start, reading.end, code, day)
-                and not (checks.by_section_alone(reading)
-                         and checks._VAL_opens_with(text, reading.start, reading.end, code, opening_names, day))):
-            reading = replace(reading, unnamed=True)
+                and not checks.names_procedure(text, reading.start, reading.end, code, day)):
+            counted = False
+            if opening_names and checks.by_section_alone(reading):
+                doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
+                counted = not doubted and checks._VAL_opens_with(text, reading.start, reading.end, code, opening_names,
+                                                                 day)
+            if not counted:
+                reading = replace(reading, unnamed=True)
         marked.append(reading)
     return tuple(marked)
 
