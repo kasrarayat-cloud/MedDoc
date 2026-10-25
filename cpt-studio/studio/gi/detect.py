@@ -1879,11 +1879,13 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     if status == 'performed' and section.kind == 'plan':
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain', deciding + ((PLAN_TODAY,) if today else ()) + (_section_label(section),), 'cue')
-    if status == 'uncertain' and section.kind == 'plan' and not em \
+    if status == 'uncertain' and section.kind == 'plan' and not em and any(f[0] == 'performed' for f in found) \
             and any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
-        # round 4c validation:3: a hedge outranks the performance cue ("Anoscopy was performed today and showed grade 2
-        # internal hemorrhoids versus prolapse."), so the clause that says today carries PLAN_TODAY too (ARCHITECTURE 5.3:
-        # whatever hedge is in it), and validation holds the E/M beside it
+        # round 4c validation:3: a hedge outranked the performance statement ("Anoscopy was performed today and showed
+        # grade 2 internal hemorrhoids versus prolapse."), so the clause that says today carries PLAN_TODAY as the
+        # performed arm above does, and validation holds the E/M beside it. A plan clause with no performance statement
+        # ("Possible EGD today if symptoms persist.", "Discussed colonoscopy today") reads as before (round 3 validation:1,
+        # round 2 review:1: its visit stays approvable).
         return Reading('uncertain', deciding + (PLAN_TODAY, _section_label(section)), 'cue', past, doubt)
     if status == 'performed' and section.kind == 'indication' and not em \
             and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):

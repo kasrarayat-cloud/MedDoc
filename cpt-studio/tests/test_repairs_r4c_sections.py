@@ -920,12 +920,16 @@ class Validation3PlanHedgeTodayTests(unittest.TestCase):
             'A/P: Flexible sigmoidoscopy was performed today with biopsies, proctitis versus infection.',
             'Assessment and plan: EGD was performed today with biopsies, eosinophilic esophagitis versus reflux.',
             'Impression and plan: Anoscopy was performed today and showed grade 2 internal hemorrhoids vs prolapse.',
-            'Assessment and plan: EGD today showed eosinophilic esophagitis versus reflux.',
             'Plan: Anoscopy was performed today and showed grade 2 internal hemorrhoids versus prolapse.',
             'Assessment and plan: EGD was performed today with biopsies, ?eosinophilic esophagitis.')
     READY = ('Plan: Possible EGD if symptoms persist.', 'Assessment and plan: EGD versus empiric PPI trial.',
              'Plan: GERD. Possible EGD if symptoms persist.',
-             'Assessment and plan: Discussed colonoscopy; patient will call to schedule.')
+             'Assessment and plan: Discussed colonoscopy; patient will call to schedule.',
+             # round 3 validation:1 and round 2 review:1: a plan clause that hedges, conditions or discusses a
+             # procedure and says today, with no performance statement, keeps the visit approvable
+             'Assessment and plan: Possible EGD today if symptoms persist.',
+             'Assessment and plan: Discussed colonoscopy today; she will think about it.',
+             'Assessment and plan: Colonoscopy? Will decide today after labs.')
 
     def test_the_claimed_lines_hold_the_visit(self):
         for line in self.HELD:
@@ -939,16 +943,19 @@ class Validation3PlanHedgeTodayTests(unittest.TestCase):
         """The rule is the plan arm's: an E/M documentation mention keeps its own reading, and outside a plan section a
         hedge already counts for the same-day check (round 4 validation:0), so no PLAN_TODAY is added there."""
         from studio.gi.detect import PLAN_TODAY
-        text = v3_note('Plan: Established patient visit today, ?IBS.')
+        text = v3_note('Plan: Established patient visit was performed today, ?IBS.')
         status, cues = read(text, 'Established patient visit')
         self.assertEqual(status, 'uncertain')
         self.assertNotIn(PLAN_TODAY, cues)
-        text = v3_note('Assessment: EGD today showed esophagitis versus reflux.')
-        status, cues = read(text, 'EGD today showed esophagitis versus reflux.')
+        text = v3_note('Assessment: EGD was performed today, esophagitis versus reflux.')
+        status, cues = read(text, 'EGD was performed today, esophagitis versus reflux.')
         self.assertEqual(status, 'uncertain')
         self.assertNotIn(PLAN_TODAY, cues)
-        text = v3_note('Assessment and plan: EGD today showed esophagitis versus reflux.')
-        self.assertIn(PLAN_TODAY, read(text, 'EGD today showed esophagitis versus reflux.')[1])
+        text = v3_note('Assessment and plan: EGD was performed today, esophagitis versus reflux.')
+        self.assertIn(PLAN_TODAY, read(text, 'EGD was performed today, esophagitis versus reflux.')[1])
+        # and never on a clause that does not say today: the cue would state something false
+        text = v3_note('Assessment and plan: Anoscopy was performed and showed grade 2 internal hemorrhoids versus prolapse.')
+        self.assertNotIn(PLAN_TODAY, read(text, 'Anoscopy was performed and showed')[1])
 
     def test_the_accepted_plan_releases_stay_ready(self):
         for line in self.READY:

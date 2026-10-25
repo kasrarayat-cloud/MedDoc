@@ -514,8 +514,9 @@ def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
 # no plan or cancellation is read into it either: a layout rule may only hold.
 _SEC_HELD_LABEL = 'line after an unfinished clause'
 _SEC_CLAUSE_EDGE = re.compile(r'[;,]', re.A)
-# Round 4c sections:9: the next line is read without its list marker ("- EUS with FNA ...", "1. EUS ...", "a) EUS ...");
-# only a field ("Date of service: ...") or a table row stays exempt.
+# Round 4c sections:9: the next line is read without its list marker ("- EUS with FNA ...", "1. EUS ...", "A. EUS ...");
+# only a field ("Date of service: ...") or a table row stays exempt. (A lower-case letter marker, "a) EUS ...", joins the
+# cut line instead, so the cut verb's own cue reads the service.)
 _SEC_LIST_MARK = re.compile(r'[ \t]*(?:[-*\u2022]|\(?\d{1,2}[.)]|\(?[A-Za-z][.)])[ \t]+', re.A)
 _SEC_FIELD_START = re.compile(r'[^:\n|]{1,40}:[ \t]*\S', re.A)
 # Round 4c sections:10: a plan word the kept-booking "as" introduces ("The procedure was performed as planned", "as
