@@ -483,7 +483,19 @@ where a rule restores what an ordinary note read before round 3b.
   the prose gives) and the family's own text never denies reaching that
   landmark or a deeper one ("Cecum not reached." on the next line keeps the
   incomplete); a label short of the expected depth agrees the procedure was
-  incomplete and keeps that reading. A label in an unrecognised section counts only in the
+  incomplete and keeps that reading. An extent label whose own sentence denies
+  or doubts its landmark (read past ";" and ",", up to a full stop, the next
+  field, a deeper landmark or a retroflexion, each of which owns its segment) is
+  never read as reached ("Extent: cecum; not reached"). A shallower prose
+  landmark then reads the procedure incomplete only when that sentence denies
+  reaching the landmark itself (a closed list: not reached, visualized,
+  intubated, achieved or advanced; could or did not reach; unable or failed to
+  reach, advance, intubate or visualize; short of; "reached: no"; also after a
+  reason, "due to poor prep not reached"); any other denial, doubt or aim word
+  ("Extent: cecum; no biopsies taken") withholds the extent, which is asked,
+  never read incomplete. A denial elsewhere in the family's text decides only
+  for a landmark between the deepest one reached and the label's own, and no
+  other value decides beside a refused depth label. A label in an unrecognised section counts only in the
   product's addendum block and the PDF form-field and annotation blocks (never
   a preparation or complications line, which may be an outside report's: "Prior
   colonoscopy (outside facility, 2021):" + "Prep: adequate" + "Extent: cecum"
