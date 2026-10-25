@@ -508,7 +508,16 @@ class PlanDDeniedExtentLabelTests(unittest.TestCase):
               'Extent: cecum; ?', 'Extent: cecum; intended', 'Extent: cecum; was not visualized',
               'Extent: cecum; no appendiceal orifice seen', 'Extent: cecum; reached: no', 'Extent reached: cecum; not reached',
               '- Extent: cecum; NOT REACHED', 'Extent: terminal ileum; not intubated', 'Extent: cecum; aborted',
-              'Extent: cecum; appendiceal orifice not seen', 'Extent: cecum; was not seen')
+              'Extent: cecum; appendiceal orifice not seen', 'Extent: cecum; was not seen',
+              # a reach denial with its reason, before or after it
+              'Extent: cecum; not reached due to poor prep', 'Extent: cecum; not reached, prep poor',
+              'Extent: cecum; prep poor, not reached', 'Extent: cecum; prep inadequate, cecum not visualized',
+              'Extent: cecum; not reached (poor prep)', 'Extent: cecum; no view of the cecum due to poor prep',
+              'Extent: cecum; reached: no, biopsies taken',
+              # the reason first, with no separator before the denial
+              'Extent: cecum; due to poor prep not reached', 'Extent: cecum; poor prep so not reached',
+              'Extent: cecum; prep poor therefore not visualized', 'Extent: cecum; patient discomfort, so not reached',
+              'Extent: cecum; because of the prep, never reached')
     # read before this item already (the value runs on past these separators), and still not read
     ALREADY = ('Extent: cecum, not reached', 'Extent: cecum - not reached', 'Extent: cecum | not reached',
                'Extent: cecum (not reached)', 'Extent: cecum, aborted')
