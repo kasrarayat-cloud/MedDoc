@@ -3250,11 +3250,12 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                         blocked.append(hit)
                     elif status in ('performed', 'incomplete') and (
                             cues.REACHED_BEFORE.search(pre) or cues.REACHED_AFTER.search(post)
-                            or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we))
+                            or (_reached_label(an, ws, m.start()) and _plain_tail(an, m.end(), we)
+                                and not _P2_label_denied(an, m.end(), depth, table))  # round 4c-2 plan:D
                             or _straight_after_service(an, ws, m.start())):
                         reached.append(hit)
                     elif (_answers_silently(an, reading, m.start(), m.end()) and _reached_label(an, ws, m.start())
-                          and _plain_tail(an, m.end(), we)):
+                          and _plain_tail(an, m.end(), we) and not _P2_label_denied(an, m.end(), depth, table)):
                         reached.append(hit)  # "Furthest extent reached: cecum." answered in an addendum
                     elif unread is not None and _reached_label(an, ws, m.start()) \
                             and not _P2_tail_contrary(an, m.end()) and (
@@ -3264,7 +3265,9 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
                         unread.append(hit)  # a label reached but for its neutral tail (round 4c-2 plan:B, plan:B2)
                     elif denied is not None and (status in ('negated', 'cancelled', 'incomplete')
                                                  or (reading.cues and reading.cues[0].startswith(DOUBT_PREFIX)
-                                                     and not _P2_doubt_is_a_finding(an, ws, we))):
+                                                     and not _P2_doubt_is_a_finding(an, ws, we))
+                                                 or (_reached_label(an, ws, m.start())
+                                                     and _P2_label_denied(an, m.end(), depth, table))):
                         denied.append(hit)  # a landmark its reading denies or doubts (round 4c-2 plan:B2)
     return reached, blocked
 
@@ -3364,6 +3367,60 @@ def _P2_doubt_is_a_finding(an: Analysis, ws: int, we: int) -> bool:
              for pattern in (*cues.FINDING_NEGATION, cues.OTHER_ACT_NEGATION, cues.COMPLICATION_NEGATION)
              for m in pattern.finditer(masked)]
     return all(_covered((t.start(), t.end()), spans) for t in cues.DOUBT_TOKEN.finditer(an.text, ws, we))
+
+
+# Round 4c-2 plan:D: "Extent: cecum; not reached" was read as the cecum reached - the ";" ends both the label's value
+# (_plain_tail) and the landmark's clause, so the denial after it was never seen. The rest of the label's own sentence is
+# now read too, past ";" and ",": a denial there keeps the label from being read as reached. A negation that a denied
+# finding, complication, other act or qualifier explains denies nothing ("; no polyps"), unless the denied words name a
+# landmark ("; no appendiceal orifice seen"); a denied "was not seen" is never such a finding here (it is how a landmark
+# is said not to be reached). The sentence ends at a full stop, at a next report or equipment field, and at a deeper
+# landmark or retroflexion, whose own denial is theirs ("Extent: cecum; TI not intubated").
+_P2_SENTENCE_STOP = re.compile(r'\.(?=\s|$)')
+_P2_FIELD_SEPARATOR = re.compile(r'[ \t]*[;,][ \t]*')
+_P2_FINDING_DENIALS = tuple(p for p in cues.FINDING_NEGATION if not p.search('was not seen'))
+
+
+def _P2_field_opens(text: str, pos: int) -> bool:
+    """Whether a listed report field (_SEC_NEXT_CELL) or an equipment, staff or room field (_P2_NEUTRAL_CELL) opens at
+    ``pos``, read as the cell after a separator would be."""
+    probe = ' | ' + text[pos:pos + 80]
+    return bool(_SEC_NEXT_CELL.match(probe) or _P2_NEUTRAL_CELL.match(probe))
+
+
+def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
+    """Whether the rest of an extent label's own sentence after its landmark (of ``depth`` in ``table``, ending at
+    ``end``) denies or doubts that landmark (round 4c-2 plan:D): a negation no finding, complication, other-act or
+    qualifier exception explains, a clause cue that is no performance cue, or an aim word (_P2_AIM_WORD). Read to the
+    line's end or CLAUSE_REACH characters, past ";" and ",", up to a full stop, a next field (_P2_field_opens, after a
+    cell break or a ";" or ","), a landmark of ``table`` deeper than ``depth``, or retroflexion."""
+    text = an.text
+    stop = min(len(text), end + CLAUSE_REACH)
+    line_end = text.find('\n', end, stop)
+    stop = line_end if line_end >= 0 else stop
+    for found in (_P2_SENTENCE_STOP.search(text, end, stop), _SEC_NEXT_CELL.search(text, end, stop),
+                  _P2_NEUTRAL_CELL.search(text, end, stop), _RETROFLEXION.search(text, end, stop)):
+        if found:
+            stop = min(stop, found.start())
+    field = next((sep for sep in _P2_FIELD_SEPARATOR.finditer(text, end, stop) if _P2_field_opens(text, sep.end())), None)
+    if field:
+        stop = field.start()
+    for _, deeper, pattern in table:
+        if deeper > depth:
+            found = pattern.search(text, end, stop)
+            if found:
+                stop = min(stop, found.start())
+    if stop <= end:
+        return False
+    masked, where = _masked_map(an, end, stop)
+    explained = [(where[m.start()], where[m.end()])
+                 for pattern in (cues.COMPLICATION_NEGATION, cues.QUALIFIER_NEGATION, cues.OTHER_ACT_NEGATION,
+                                 cues.OTHER_ACT_DENIED, *_P2_FINDING_DENIALS)
+                 for m in pattern.finditer(masked)]
+    explained = [(s, e) for s, e in explained if not _LANDMARK_AT.search(text, s, e)]
+    if any(not _covered((t.start(), t.end()), explained) for t in cues.DOUBT_TOKEN.finditer(text, end, stop)):
+        return True
+    return bool(_P2_AIM_WORD.search(text, end, stop) or any(c.status != 'performed' for c in an.cues_in(end, stop)))
 
 
 def _P2_denied_beyond(hits: list, depth: int) -> bool:
@@ -3654,7 +3711,8 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
             # "Depth of insertion: 30 cm", never an aim ("Intended depth of insertion: 60 cm"); a label is also read
             # where it answers silently (_answers_silently: "Depth of insertion: 40 cm." in an addendum)
             labels = [m for m in cues.EXTENT_CM.finditer(text, cs, ce)
-                      if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())]
+                      if _label_lead_plain(an, an.lay.window((cs, ce), m.start(), m.end(), CLAUSE_REACH)[0], m.start())
+                      and not _P2_label_denied(an, m.end(), 0, cues.LOWER_LANDMARKS)]  # round 4c-2 plan:D
             for m in hits + labels:
                 reading = _generic_reading(an, m.start(), m.end())
                 if (reading.status in ('performed', 'incomplete')

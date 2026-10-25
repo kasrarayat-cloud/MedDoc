@@ -487,6 +487,86 @@ class PlanB2UnreadLabelNarrowingTests(unittest.TestCase):
                 self.assertIn('extent', clarified(proposal))
 
 
+# --- plan:D: an extent label whose own sentence denies its landmark is never read as reached ------------------------
+
+D_PROSE = 'The colonoscope was advanced to the transverse colon.'
+
+
+class PlanDDeniedExtentLabelTests(unittest.TestCase):
+    """plan:D (high, declared extent label misread, at the base and on plan:B's head). ARCHITECTURE 5.3 reads an extent
+    label only when what follows its landmark is plain. "Extent: cecum; not reached" was read as the cecum reached
+    (gi.colonoscopy performed, extent 'cecum', 45378 ready with no extent or incomplete check): the ";" ends both the
+    label's value (_plain_tail) and the landmark's clause, so the denial after it is never seen. A label whose own
+    sentence, past ";" or "," too, denies or doubts its landmark (a negation no finding, complication, other-act or
+    qualifier exception explains, a clause cue that is no performance cue, an aim word) is no longer read as reached:
+    the shallower prose landmark reads the procedure incomplete, as the line says, or no extent is read. A denial that
+    names a deeper landmark or retroflexion ("; TI not intubated") is that one's; a finding denied there ("; no polyps")
+    denies nothing; and a full stop or a next report field ends what is read."""
+
+    DENIED = ('Extent: cecum; not reached', 'Extent: cecum; not visualized', 'Extent: cecum; not intubated',
+              'Extent: cecum; not achieved', 'Extent: cecum; never reached', 'Extent: cecum; unable to intubate',
+              'Extent: cecum; ?', 'Extent: cecum; intended', 'Extent: cecum; was not visualized',
+              'Extent: cecum; no appendiceal orifice seen', 'Extent: cecum; reached: no', 'Extent reached: cecum; not reached',
+              '- Extent: cecum; NOT REACHED', 'Extent: terminal ileum; not intubated', 'Extent: cecum; aborted',
+              'Extent: cecum; appendiceal orifice not seen', 'Extent: cecum; was not seen')
+    # read before this item already (the value runs on past these separators), and still not read
+    ALREADY = ('Extent: cecum, not reached', 'Extent: cecum - not reached', 'Extent: cecum | not reached',
+               'Extent: cecum (not reached)', 'Extent: cecum, aborted')
+    # a positive or unrelated rest of the sentence: read as the base reads it
+    READ = ('Extent: cecum; photo documented.', 'Extent: cecum; no polyps', 'Extent: cecum; no complications',
+            'Extent: cecum; TI not intubated', 'Extent: cecum; retroflexion not performed', 'Extent: cecum. No polyps.',
+            'Extent: cecum; complications: none', 'Extent: cecum; was reached easily',
+            'Extent: cecum. Repeat colonoscopy in 3 years.', 'Extent: cecum; retroflexion was not possible',
+            'Extent: cecum | Prep quality: fair; repeat in 1 year')
+
+    def test_the_claimed_input_is_no_complete_extent(self):
+        text = report('Colonoscopy', D_PROSE, 'Extent: cecum; not reached')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
+        proposal = real(text, ('45378', 'Procedure: Colonoscopy'))[0]['45378']
+        self.assertEqual({c.id: c.status for c in proposal.checks}.get('service.incomplete'), 'warn')
+        # with no prose landmark, no extent is read: the family's extent clarification asks for it
+        text = report('Colonoscopy', '', 'Extent: cecum; not reached').replace('Colonoscopy\n\n', 'Colonoscopy\n')
+        self.assertIsNone(extent_of(text, 'gi.colonoscopy')[1])
+        self.assertIn('extent', clarified(real(text, ('45378', 'Procedure: Colonoscopy'))[0]['45378']))
+
+    def test_every_denial_after_the_separator(self):
+        for label in self.DENIED + self.ALREADY:
+            text = report('Colonoscopy', D_PROSE, label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
+
+    def test_the_upper_tract_and_a_depth_label(self):
+        text = report('EGD', UPPER_PROSE, 'Extent: D2; not reached')
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('incomplete', 'incomplete: esophagus'))
+        text = report('EGD', UPPER_PROSE, 'Extent: D2; duodenum not intubated')  # a shallower landmark denied
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('incomplete', 'incomplete: esophagus'))
+        text = report('EGD', UPPER_PROSE, 'Extent: D2; D3 not reached')  # a deeper one: D2 stands
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('performed', 'second part of duodenum'))
+        text = HEADER + 'Procedure: Flexible sigmoidoscopy\nDepth of insertion: 40 cm; not reached\nFindings: Normal.\n'
+        self.assertIsNone(extent_of(text, 'gi.flex_sig')[1])
+        text = HEADER + 'Procedure: Flexible sigmoidoscopy\nDepth of insertion: 40 cm; photo documented.\nFindings: Normal.\n'
+        self.assertEqual(extent_of(text, 'gi.flex_sig')[1], '40 cm')
+
+    def test_a_positive_or_unrelated_rest_reads_as_the_base_reads_it(self):
+        for label in self.READ:
+            text = report('Colonoscopy', D_PROSE, label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', 'cecum'))
+        text = report('Colonoscopy', D_PROSE, 'Extent: Cecum | Prep quality: Good | Withdrawal time: 9 min')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', 'cecum'))  # round 4c declared:11
+
+    def test_an_addendum_answer_is_read_the_same_way(self):
+        parent = (HEADER + 'Procedure: Colonoscopy\nIndication: Positive FIT.\nFindings: A 6 mm sigmoid polyp was removed with '
+                  'a cold snare.\nPlan: Repeat colonoscopy in 5 years.\n\n\nADDENDUM (revision 2, added 2026-10-22 10:00 UTC)\n')
+        self.assertIsNone(extent_of(parent + 'Furthest extent reached: cecum; not reached.\n', 'gi.colonoscopy')[1])
+        self.assertEqual(extent_of(parent + 'Furthest extent reached: cecum.\n', 'gi.colonoscopy')[1], 'cecum')
+
+    def test_a_denying_label_also_denies_for_the_unread_label_rule(self):
+        """plan:B2: a second label that denies the cecum in its own sentence keeps the base reading."""
+        text = report('Colonoscopy', COLON_PROSE, 'Extent: Cecum | Scope: Olympus\nExtent: cecum; not reached')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+
+
 # --- plan:C: a line listed under a denying label is held whatever it names --------------------------------------------
 
 C_FINDINGS = 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n'
