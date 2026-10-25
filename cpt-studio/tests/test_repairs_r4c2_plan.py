@@ -717,6 +717,52 @@ class PlanD2ReachDenialTests(unittest.TestCase):
                 self.assertEqual(extent_of(report('Colonoscopy', prose, label), 'gi.colonoscopy')[:2],
                                  ('incomplete', 'incomplete: rectum'))
 
+    # a denial in the segment that names a deeper landmark, retroflexion or a passage of the ileocecal valve is that
+    # one's: the label is read as the base reads it (the cecum reached; the family's status is the base's own reading)
+    THEIRS = ('unable to intubate the TI', 'never reached the TI', 'could not intubate the terminal ileum',
+              'failed to intubate the TI due to looping', 'no TI intubation', 'unable to retroflex',
+              'unable to perform retroflexion', 'unable to intubate the ileocecal valve', 'could not pass the IC valve',
+              "ileocecal valve couldn't be traversed", 'IC valve not intubated', 'prep poor, unable to intubate the TI')
+
+    def test_a_deeper_landmarks_own_segment_is_its_own(self):
+        for rest in self.THEIRS:
+            with self.subTest(rest=rest):
+                text = report('Colonoscopy', D_PROSE, 'Extent: cecum; ' + rest)
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[1], 'cecum')
+        # a reach denial in a segment of its own before it still denies the label
+        for rest in ('not reached; TI not intubated', 'not reached, unable to intubate the TI',
+                     'cecum not reached - TI not seen', 'not reached; unable to retroflex'):
+            with self.subTest(rest=rest):
+                text = report('Colonoscopy', D_PROSE, 'Extent: cecum; ' + rest)
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
+        # a terminal ileum label's own denial of passing the valve is its own: incomplete at the prose landmark
+        text = report('Colonoscopy', D_PROSE, 'Extent: terminal ileum; unable to intubate the ileocecal valve')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
+        # the D2 label is read (the base's own reading: "unable to advance" reads the procedure incomplete)
+        text = report('EGD', UPPER_PROSE, 'Extent: D2; unable to advance to D3')
+        self.assertEqual(extent_of(text, 'gi.egd')[:2], ('incomplete', 'incomplete: second part of duodenum'))
+
+    def test_a_denial_beyond_the_labels_landmark_elsewhere_decides_nothing(self):
+        """The guard reads only denials of a landmark up to the doubted label's own: "TI not intubated." does not say
+        the cecum was not reached."""
+        for prose, label in ((COLON_PROSE, 'Extent: cecum; no biopsies taken\nTI not intubated.'),
+                             (COLON_PROSE, 'Extent: cecum; no biopsies taken; TI not intubated'),
+                             (COLON_PROSE, 'Extent: cecum; prep fair?\nThe terminal ileum was not intubated.')):
+            with self.subTest(label=label):
+                text = report('Colonoscopy', prose, label)
+                self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
+                self.assertTrue(held_for_the_extent(text, '45378', 'Procedure: Colonoscopy'))
+        text = report('Colonoscopy', COLON_PROSE, 'Extent: cecum; prep fair?\nThe cecum was not reached.')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+        # a denial of a landmark no deeper than the one reached says nothing of the label's: the extent is withheld (the
+        # family's status is the base's own reading of that sentence)
+        text = report('Colonoscopy', D_PROSE + '\nThe sigmoid colon was not reached on the first pass.',
+                      'Extent: cecum; no biopsies taken')
+        self.assertIsNone(extent_of(text, 'gi.colonoscopy')[1])
+        # without the label the base reads a terminal ileum not intubated as the procedure incomplete, as before
+        text = report('Colonoscopy', COLON_PROSE, 'The terminal ileum was not intubated.')
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
+
     def test_the_two_rules_agree(self):
         """plan:B's unread label and plan:D2's refused one read the same, and hold 45378 the same way."""
         for label in ('Extent: Cecum | Scope: Olympus', 'Extent: cecum; no biopsies taken'):

@@ -3278,7 +3278,7 @@ def _landmarks(an: Analysis, sentences, table, unread: Optional[list] = None,
     or an unresolved negation: "Cecum not reached."); with the blocked ones, they keep that rule from firing (plan:B2).
     ``doubted``, when given, collects every extent label plan:D refuses to read as reached (_P2_refused_label) whose own
     sentence states no reach denial (_P2_reach_denied: "Extent: cecum; no biopsies taken"), with that sentence's span
-    after its landmark; such a label withholds the extent beside a shallower landmark (_P2_doubted_beyond, round 4c-2
+    after its landmark; such a label withholds the extent beside a shallower landmark (_P2_doubted_withholds, round 4c-2
     plan:D2). A label refused for a reach denial ("Extent: cecum; not reached") is a denied one."""
     text = an.text
     reached, blocked = [], []
@@ -3467,25 +3467,44 @@ def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
 def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
     """Where the rest of an extent label's own sentence after its landmark (of ``depth`` in ``table``, ending at
     ``end``) stops (round 4c-2 plan:D): the line's end or CLAUSE_REACH characters, past ";" and ",", up to a full stop,
-    a next field (_P2_field_opens, after a cell break or a ";" or ","), a landmark of ``table`` deeper than ``depth``,
-    or retroflexion."""
+    a next field (_P2_field_opens, after a cell break or a ";" or ","), or the segment (_P2_segment_start) that names a
+    landmark of ``table`` deeper than ``depth``, retroflexion, or a passage of the ileocecal valve beside a lower-tract
+    label short of the terminal ileum (plan:D2: "; unable to intubate the TI", "; unable to retroflex" are theirs)."""
     text = an.text
     stop = min(len(text), end + CLAUSE_REACH)
     line_end = text.find('\n', end, stop)
     stop = line_end if line_end >= 0 else stop
     for found in (_P2_SENTENCE_STOP.search(text, end, stop), _SEC_NEXT_CELL.search(text, end, stop),
-                  _P2_NEUTRAL_CELL.search(text, end, stop), _RETROFLEXION.search(text, end, stop)):
+                  _P2_NEUTRAL_CELL.search(text, end, stop)):
         if found:
             stop = min(stop, found.start())
     field = next((sep for sep in _P2_FIELD_SEPARATOR.finditer(text, end, stop) if _P2_field_opens(text, sep.end())), None)
     if field:
         stop = field.start()
-    for _, deeper, pattern in table:
-        if deeper > depth:
-            found = pattern.search(text, end, stop)
-            if found:
-                stop = min(stop, found.start())
+    theirs = [pattern.search(text, end, stop) for _, deeper, pattern in table if deeper > depth]
+    theirs.append(_RETROFLEXION.search(text, end, stop))
+    if table is cues.LOWER_LANDMARKS and depth < _P2_TI_DEPTH:
+        theirs.append(_P2_TI_PASSAGE.search(text, end, stop))
+    for found in theirs:
+        if found:
+            stop = min(stop, _P2_segment_start(text, end, found.start()))
     return stop
+
+
+# Round 4c-2 plan:D2: passing the ileocecal valve is reaching the terminal ileum ("unable to intubate the ileocecal
+# valve", "IC valve not intubated", "could not pass the IC valve"), whatever the cecum pattern says of the valve.
+_P2_TI_DEPTH = next(depth for label, depth, _ in cues.LOWER_LANDMARKS if label == 'terminal ileum')
+_P2_TI_PASSAGE = re.compile(
+    r"\b(?:intubat|pass|travers|cross|negotiat|enter|cannulat)\w*\s+(?:(?:of|into|through)\s+)?(?:the\s+)?"
+    r"(?:ileo-?cecal|IC)\s+valve\b"
+    r"|\b(?:ileo-?cecal|IC)\s+valve\s+(?:(?:was|were|is|could|can|did|not|be|been|unable|to|cannot|"
+    r"(?:could|can|did|was|were)n['\u2019]t)\s+)*(?:intubat|travers|cannulat|pass|enter|negotiat|cross)\w*", re.A | re.I)
+
+
+def _P2_segment_start(text: str, lo: int, pos: int) -> int:
+    """Where the segment that holds ``pos`` starts in [lo, pos): after the last _P2_REACH_BREAK there, else ``lo``."""
+    breaks = [b.end() for b in _P2_REACH_BREAK.finditer(text, lo, pos)]
+    return breaks[-1] if breaks else lo
 
 
 # Round 4c-2 plan:D2: plan:D's refusal lets a shallower landmark read the procedure incomplete only when the label's own
@@ -3595,10 +3614,13 @@ def _P2_refused_label(an: Analysis, reading: Reading, start: int, end: int, ws: 
             and _reached_label(an, ws, start) and _plain_tail(an, end, we) and _P2_label_denied(an, end, depth, table))
 
 
-def _P2_doubted_beyond(doubted: list, depth: int) -> bool:
+def _P2_doubted_withholds(doubted: list, hits: list, depth: int) -> bool:
     """Whether a label plan:D refuses for no reach denial names a landmark deeper than ``depth``, the deepest one read
-    as reached (round 4c-2 plan:D2): that shallower landmark then decides no extent, and none is read."""
-    return any(hit[0] > depth for hit in doubted)
+    as reached, while the family's text outside that label's own sentence (_P2_outside) denies no landmark between
+    the two (round 4c-2 plan:D2): then that shallower landmark decides no extent, and none is read. "The cecum was not
+    reached." still lets it decide; a denial of a landmark beyond the label's own ("TI not intubated.") does not."""
+    outside = _P2_outside(hits, doubted)
+    return any(hit[0] > depth and not any(depth < other[0] <= hit[0] for other in outside) for hit in doubted)
 
 
 def _P2_outside(hits: list, doubted: list) -> list:
@@ -3725,13 +3747,16 @@ _SUB_ACT_PLACE = re.compile(r'\bterminal\s+ileum\b|\bneo-?terminal\s+ileum\b|\bT
 
 def _reached_expected_depth(an: Analysis, attributed: list[Optional[str]], family: str) -> bool:
     """Whether the family's own text documents its expected extent reached: the cecum for a colonoscopy,
-    the depth the named upper endoscopy calls for for an EGD."""
+    the depth the named upper endoscopy calls for for an EGD. An extent label plan:D refuses for no reach denial
+    counts too (round 4c-2 plan:D2: "Extent: cecum; prep fair?" beside "The terminal ileum was not intubated."): its
+    extent is withheld and asked, and a sentence about a sub-act (_only_a_sub_act) reads no incomplete procedure."""
     key = ('reached-depth', family)
     if key not in an.memo:
         table, expected = ((cues.LOWER_LANDMARKS, cues.CECUM_DEPTH) if family == 'gi.colonoscopy'
                            else (cues.UPPER_LANDMARKS, _expected_upper_depth(an)))
-        reached, _ = _landmarks(an, _family_sentences(an, attributed, family), table)
-        an.memo[key] = max((depth for depth, _, _ in reached), default=0) >= expected
+        doubted = []
+        reached, _ = _landmarks(an, _family_sentences(an, attributed, family), table, None, None, doubted)
+        an.memo[key] = max((hit[0] for hit in reached + doubted), default=0) >= expected
     return an.memo[key]
 
 
@@ -4083,7 +4108,7 @@ def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
-        if _P2_doubted_beyond(doubted, depth) and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+        if _P2_doubted_withholds(doubted, blocked + denied, depth):
             return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
@@ -4119,8 +4144,7 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
-    if depth < _expected_upper_depth(an) and _P2_doubted_beyond(doubted, depth) \
-            and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+    if depth < _expected_upper_depth(an) and _P2_doubted_withholds(doubted, blocked + denied, depth):
         return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
     if incomplete or depth < _expected_upper_depth(an):
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
@@ -4162,7 +4186,7 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     if not reached:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
-    if _P2_doubted_beyond(doubted, depth) and not _P2_denied_beyond(_P2_outside(blocked + denied, doubted), depth):
+    if _P2_doubted_withholds(doubted, blocked + denied, depth):
         return None  # round 4c-2 plan:D2: a landmark label refused for no reach denial lies deeper
     return Fact('extent', label, 'document', (span,))
 
