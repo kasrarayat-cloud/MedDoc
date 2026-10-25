@@ -43,11 +43,13 @@ and text boxes. Rules:
   content, whatever symbols its checked and unchecked states are set to; a
   hidden control writes nothing and is counted.
 - A list paragraph whose numbering bullet is a box glyph (Wingdings, Wingdings
-  2, Zapf Dingbats or a box character in any font) starts with ☐ or ☒ when the
-  document's list bullets show checked boxes too (a checklist); when none is a
-  checked box, a box-shaped bullet may be a bullet or an empty box, so it is
-  written as the unread mark '[?]' (routing holds the item) and counted in a
-  note. Other bullets and numbering are not written.
+  2, Zapf Dingbats or a box character in any font) starts with ☐ or ☒ when its
+  own list's bullets (a run of consecutive box-bulleted paragraphs) show a
+  checked box too (a checklist); when none of them is a checked box, a
+  box-shaped bullet may be a bullet or an empty box, so it is written as the
+  unread mark '[?]' (routing holds the item) and counted in a note: a checked
+  box in another list says nothing of it. Other bullets and numbering are not
+  written.
 - Text boxes are read after the paragraph that anchors them.
 - Header, footer, footnote, endnote and comment text is not extracted; when
   present its size is reported. Content that has no text here (images,
@@ -59,6 +61,7 @@ from __future__ import annotations
 import collections
 import dataclasses
 import io
+import re
 import zipfile
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -172,6 +175,7 @@ _ING_WHITE_LEVEL = 0xFD  # each channel of a colour at least this is white (0.99
 # The unread mark of the box contract (studio.ingest.pdf): a box bullet that may be a bullet or an unchecked box.
 _ING_UNREAD_BOX = '[?]'
 _ING_BULLET = '\x00'  # stands for an unchecked box bullet until every bullet is read (XML text holds no NUL)
+_ING_PLACEHOLDER = re.compile('\x00([0-9]+)\x00')  # an unchecked box bullet's placeholder, tagged with its list
 
 
 def extract_docx(data: bytes, limits: Limits) -> ExtractionResult:
@@ -527,8 +531,10 @@ class _Walker:
         self.struck = 0  # runs of text formatted as struck through, read as written
         self.unseen = 0  # runs of white text with nothing shaded behind them, read
         self.checked_bullets = 0  # list paragraphs whose bullet is a checked box
-        self.unread_bullets = 0  # unchecked box bullets written unread (no checked box bullet in the document)
+        self.unread_bullets = 0  # unchecked box bullets written unread (no checked box bullet in their list)
         self._style_numbering: dict = {}  # paragraph style -> (numId, ilvl) its chain gives
+        self._ING_list = 0  # the list being read: a run of consecutive paragraphs whose bullets are boxes
+        self._ING_checked_lists: set = set()  # the lists whose bullets show a checked box
 
     @property
     def unread(self) -> bool:
@@ -537,15 +543,19 @@ class _Walker:
         return bool(self.unread_alternates or self.struck or self.unseen)
 
     def bulleted(self, text: str) -> str:
-        """``text`` with each unchecked box bullet written: ☐ when the document's list bullets show checked boxes too (a
-        checklist), else the unread mark, counted: a box-shaped bullet on its own may be a bullet or an empty box."""
-        count = text.count(_ING_BULLET)
-        if not count:
+        """``text`` with each unchecked box bullet written: ☐ when the bullets of its own list (a run of consecutive
+        box-bulleted paragraphs) show a checked box too (a checklist), else the unread mark, counted: a box-shaped
+        bullet on its own may be a bullet or an empty box, and a checked box in another list says nothing of it."""
+        if _ING_BULLET not in text:
             return text
-        if self.checked_bullets:
-            return text.replace(_ING_BULLET, UNCHECKED_BOX)
-        self.unread_bullets = count
-        return text.replace(_ING_BULLET, _ING_UNREAD_BOX)
+
+        def written(placeholder) -> str:
+            if int(placeholder.group(1)) in self._ING_checked_lists:
+                return UNCHECKED_BOX
+            self.unread_bullets += 1
+            return _ING_UNREAD_BOX
+
+        return _ING_PLACEHOLDER.sub(written, text)
 
     def notes(self) -> list[str]:
         notes = []
@@ -570,9 +580,10 @@ class _Walker:
                          'original.')
         if self.unread_bullets:
             count = self.unread_bullets
-            notes.append(f'The document has {count} list item{"" if count == 1 else "s"} whose bullet is a box, and no '
-                         f'list bullet that is a checked box; {"it was" if count == 1 else "they were"} written as '
-                         'unread ([?]), so check the original.')
+            where = ('and no list bullet that is a checked box' if not self.checked_bullets
+                     else f'in {"a list that shows" if count == 1 else "lists that show"} no checked box bullet')
+            notes.append(f'The document has {count} list item{"" if count == 1 else "s"} whose bullet is a box, {where}; '
+                         f'{"it was" if count == 1 else "they were"} written as unread ([?]), so check the original.')
         return notes
 
     def blocks(self, container, table_style: str | None = None) -> list[str]:
@@ -698,6 +709,19 @@ class _Walker:
         return CHECKED_BOX if check_box_control(sdt) else UNCHECKED_BOX
 
     def _box_bullet(self, paragraph, style: str | None) -> str:
+        """☒, or the placeholder of an unchecked box tagged with its list (written by bulleted), when the paragraph's
+        numbering level is a bullet that draws a box, else '': any other paragraph ends the list of box bullets."""
+        glyph = self._ING_bullet_box(paragraph, style)
+        if glyph == CHECKED_BOX:
+            self.checked_bullets += 1
+            self._ING_checked_lists.add(self._ING_list)
+            return CHECKED_BOX
+        if glyph == UNCHECKED_BOX:
+            return f'{_ING_BULLET}{self._ING_list}{_ING_BULLET}'
+        self._ING_list += 1
+        return ''
+
+    def _ING_bullet_box(self, paragraph, style: str | None) -> str:
         """☐ or ☒ when the paragraph's numbering level is a bullet that draws a box, else ''."""
         level = self.numbering.level(*self._numbering_of(paragraph, style))
         if level is None:
@@ -718,10 +742,7 @@ class _Walker:
             else:
                 shown.append(as_box(char))
         glyph = ''.join(shown).strip()
-        if glyph == CHECKED_BOX:
-            self.checked_bullets += 1
-            return CHECKED_BOX
-        return _ING_BULLET if glyph == UNCHECKED_BOX else ''  # written once every bullet is read (bulleted)
+        return glyph if glyph in (CHECKED_BOX, UNCHECKED_BOX) else ''
 
     def _numbering_of(self, paragraph, style: str | None) -> tuple[str | None, str]:
         """(numId, ilvl) of the paragraph: its own w:numPr, else its paragraph style chain's (read once per style)."""
