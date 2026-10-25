@@ -1291,9 +1291,11 @@ def _VAL_opening_sentences(text: str, service_date: Optional[date] = None) -> tu
 
 
 # What may open a sentence before its procedure's name: a list marker ("2)", "(2)", "2.", "-", "*", a bullet). A
-# sentence opened by a time or a condition ("Before banding, ...", "If anoscopy ...") names no procedure done by its lead.
+# sentence opened by a time or a condition ("Before banding, ...", "If anoscopy ...") names no procedure done by its
+# lead.
 _VAL_LIST_MARKER = re.compile(r'[ \t]*(?:\(?\d{1,3}[.)]|[-*\u2022])[ \t]+', re.A)
-_VAL_TEMPORAL_LEAD = re.compile(r'[ \t]*(?:after|before|once|when|while|following|until|if|unless|since)\b', re.A | re.I)
+_VAL_TEMPORAL_LEAD = re.compile(r'[ \t]*(?:after|before|once|when|while|following|until|if|unless|since)\b',
+                                re.A | re.I)
 
 
 @functools.lru_cache(maxsize=4)
@@ -1313,7 +1315,8 @@ def _VAL_lead_name(an, text: str, index: int, service_date: Optional[date]) -> s
     if index in memo:
         return memo[index]
     if 'detected' not in memo:
-        memo['detected'] = [family for family in detect.PROCEDURE_FAMILIES if any(m.family == family for m in an.services)]
+        memo['detected'] = [family for family in detect.PROCEDURE_FAMILIES
+                            if any(m.family == family for m in an.services)]
     s, e = an.lay.sentences[index]
     name = ''
     marker = _VAL_LIST_MARKER.match(text, s, e)
