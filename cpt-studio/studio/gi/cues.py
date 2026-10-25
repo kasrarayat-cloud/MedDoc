@@ -359,7 +359,11 @@ OTHER_TIME = (
     # "in November", "on November 3", "in early November", "November 3", "in May": a month with no year
     ('month', rx(r'(?:\b' + _MONTH_LEAD + r'[\s-]+(?:(?:early|mid|late)[\s-]+)?(?P<month>' + _MONTH_NAME + r')\.?'
                  r'(?:\s+(?P<mday>\d{1,2})(?:st|nd|rd|th)?)?'
-                 r'|\b(?:in|on|during|by|until|early|mid|late)\s+(?P<may>may)'
+                 # May: the part-of-month leads and the hyphen every other month takes, and its day (round 5
+                 # declared:7); 'last' / 'past' only before a capitalised May ("The last may be benign." is the
+                 # modal), and never 'this' or 'next', which open the modal "This may represent ..."
+                 r'|\b(?:(?:in|on|during|by|until|early|mid|late|end\s+of|beginning\s+of)[\s-]+'
+                 r'|(?:last|past)[\s-]+(?=(?-i:May|MAY)\b))(?P<may>may)(?:\s+(?P<mayday>\d{1,2})(?:st|nd|rd|th)?)?'
                  r'|\b(?P<month2>' + _MONTH_NAME + r'|may)\.?\s+(?P<mday2>\d{1,2})(?:st|nd|rd|th)?)\b(?![\s,]*\d{4})')),
     # "on 10/14": a month and a day with no year
     ('month/day', rx(r'\b(?:on|dated|by|until)\s+(?P<m>\d{1,2})/(?P<d>\d{1,2})\b(?!/\d)')),

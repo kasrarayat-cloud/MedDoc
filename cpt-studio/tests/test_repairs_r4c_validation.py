@@ -323,3 +323,53 @@ class Regression5HistoricalFamilyKeepsTheProcedureTests(Case):
         self.assertEqual(routed(text).finding('gi.other').status, 'performed')
         proposals, _ = real(text, ('99214', R5_VISIT))
         self.assertVisitHeld(proposals, 'Other GI service is documented as performed on the same date')
+
+
+# --- declared:7: May reads as every other month ----------------------------------------------------------------------
+
+def eus_line(day, tail):
+    return (f'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT\nDate of service: {day}\nProcedure: EUS with fine-needle biopsy '
+            f'of the pancreatic head mass {tail}\nIndication: Pancreatic head mass on CT.\n')
+
+
+class Declared7MayLikeEveryOtherMonthTests(Case):
+    """declared:7 (high, declared misread; the same at R4B-BASE and R3B-BASE). The 'may' alternative of cues.OTHER_TIME
+    'month' took only in/on/during/by/until/early/mid/late and a space - never _MONTH_LEAD's 'end of', 'beginning
+    of', 'last' or 'past', the hyphen, the qualifier, or a day - so "EUS ... at the end of May." on 2026-05-21 (or "last
+    May." on 2026-10-21) read no time and 43242 was ready, while the same tails with any other month hold."""
+
+    HELD = (('2026-05-21', 'at the end of May.'), ('2026-05-21', 'at the beginning of May.'),
+            ('2026-05-21', 'in mid-May.'), ('2026-05-21', 'in late-May.'), ('2026-05-21', 'late-May.'),
+            ('2026-05-21', 'in early-May.'), ('2026-05-21', 'on May 3.'), ('2026-05-21', 'by May 3rd.'),
+            ('2026-10-21', 'at the end of May.'), ('2026-10-21', 'in mid-May.'), ('2026-10-21', 'last May.'),
+            ('2026-10-21', 'this past May.'), ('2026-10-21', 'LAST MAY.'))
+
+    def test_the_claimed_tails_hold_43242(self):
+        for day, tail in self.HELD:
+            text = eus_line(day, tail)
+            line = text.splitlines()[2]
+            with self.subTest(day=day, tail=tail):
+                self.assertNotEqual(routed(text, date.fromisoformat(day)).finding('gi.eus').status, 'performed')
+                proposals, _ = real(text, ('43242', line))
+                self.assertEqual(proposals['43242'].status, 'needs_clarification')
+                self.assertIn('performed_status', [c.fact for c in proposals['43242'].clarifications])
+
+    def test_controls_the_date_of_service_s_own_may_stays_ready(self):
+        for day, tail in (('2026-05-21', 'in May.'), ('2026-05-21', 'on May 21.'), ('2026-05-21', 'during May.'),
+                          ('2026-05-21', 'on May 21st.'), ('2026-10-21', 'in October.')):
+            text = eus_line(day, tail)
+            with self.subTest(day=day, tail=tail):
+                proposals, _ = real(text, ('43242', text.splitlines()[2]))
+                self.assertReady(proposals['43242'])
+
+    def test_controls_the_modal_verb_is_never_a_month(self):
+        from studio.gi import cues
+        month = dict(cues.OTHER_TIME)['month']
+        for phrase in ('This may represent adenocarcinoma.', 'The last may be benign.',
+                       'Symptoms in the past may have resolved.', 'Next may be an EGD.', 'which may be repeated',
+                       'Biopsies may be taken at the end of the procedure.'):
+            with self.subTest(phrase=phrase):
+                self.assertIsNone(month.search(phrase))
+        text = eus_line('2026-10-21', 'and three nodes. The last may be benign.')
+        proposals, _ = real(text, ('43242', text.splitlines()[2]))
+        self.assertReady(proposals['43242'])

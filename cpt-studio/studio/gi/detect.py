@@ -1520,7 +1520,7 @@ def _today_compatible(an: Analysis, name: str, m: re.Match) -> bool:
     if said.startswith(('last', 'next', 'past')):
         return False
     month = _MONTH_INDEX[(m.group('month') or m.group('may') or m.group('month2')).lower()]
-    mday = m.group('mday') or m.group('mday2')
+    mday = m.group('mday') or m.group('mday2') or m.group('mayday')  # "on May 3" (round 5 declared:7)
     if mday is None and _PART_OF_MONTH.search(said):
         return False  # "at the end of October", "in early October": maybe not the day of service (round 4 routing:7)
     return month == day.month and (mday is None or int(mday) == day.day)
