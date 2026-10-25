@@ -287,3 +287,233 @@ class Validation5LigationIsNotBandingTests(Case):
         proposals, result = real(BAND_REPORT.format(second='Excisional hemorrhoidectomy was performed.'),
                                  ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
         self.assertNamedMissed(result, 'Excisional hemorrhoidectomy')
+
+
+# --- validation:0, 1, 2, 8; bounded:4, validation:9: the doubt guard reads what routing reads, and only what doubts ----
+
+REPORT = HEAD + 'Procedure: {proc}\n{status}Indication: Rectal bleeding.\nFindings: {find}\nImpression: Findings as described.\n'
+OWN = {'46600': ('Anoscopy', 'Anoscopy revealed grade 2 internal hemorrhoids.'),
+       '91010': ('Esophageal manometry', 'Esophageal manometry showed normal peristalsis.'),
+       '49083': ('Paracentesis', 'Paracentesis yielded 4 liters of straw-colored fluid.'),
+       '46221': ('Rubber band ligation of internal hemorrhoids', 'Rubber band ligation of the right posterior column.')}
+DECLARED = ('Procedure performed: No', 'Procedure done: No', 'Procedure performed: None', 'Procedure performed: N',
+            'Procedure performed: N/A', 'Procedure performed? No', 'Status: Incomplete', 'Status: Pending',
+            'Status: On hold', 'Status: TBD', 'Status: Unknown', 'Status: Requested', 'Status: ☒ Pending',
+            'Status: ☒ Incomplete', 'Procedure status: Incomplete', 'Status: Discontinued', 'Rescheduled.',
+            'Called off.', 'Status: Cancelled.', 'Not performed.', 'Patient declined.')
+RULE_WORDING = 'is not read as documenting that service as done on that date'
+
+
+class Validation0DeclaredDenialTests(Case):
+    """validation:0 (critical, regression against 9a9f403) and validation:1 (high, declared misread). The doubt guard
+    read only layout sentences holding an own-procedure word, a reference word or an act verb, so a report that says
+    'Procedure performed: No' (split into a heading and 'No'), 'Status: Pending' or 'Rescheduled.' corroborated its
+    findings sentence (validation:2's arm) and its procedure line (the routed arm): 46600 READY. The guard now also
+    reads routing's own structural denials - the done-question answered no on its line, a status line that denies,
+    and a short line that denies, cancels or reschedules (detect._denies) - and a sentence that cuts a procedure short
+    with no other procedure named ('The anoscope could not be passed ...'). Hold-only."""
+
+    def test_each_declared_denial_holds_the_findings_sentence_and_the_procedure_line(self):
+        for code, (proc, find) in OWN.items():
+            for status in DECLARED:
+                text = REPORT.format(proc=proc, status=f'{status}\n', find=find)
+                for passage in (find, f'Procedure: {proc}'):
+                    with self.subTest(code=code, status=status, passage=passage):
+                        item = real(text, (code, passage))[0][code]
+                        self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                        self.assertIn(RULE_WORDING, check_of(item, 'service.status').detail)
+
+    def test_a_denial_at_the_end_of_the_report_or_by_the_procedure_s_name_holds(self):
+        for code, (proc, find) in (('46600', OWN['46600']), ('46221', OWN['46221'])):
+            name = {'46600': 'Anoscopy', '46221': 'Rubber band ligation'}[code]
+            for tail in ('Procedure performed: No\n', 'Status: Pending\n', 'Addendum: Rescheduled.\n',
+                         f'{name} performed: No\n'):
+                text = REPORT.format(proc=proc, status='', find=find) + tail
+                for passage in (find, f'Procedure: {proc}'):
+                    with self.subTest(code=code, tail=tail, passage=passage):
+                        self.assertEqual(real(text, (code, passage))[0][code].status, 'needs_clarification')
+
+    def test_a_longer_sentence_rescheduling_the_procedure_holds(self):
+        # too long for the short-line grammar: its own reading, planned by a rescheduling of today's procedure
+        line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
+        for extra in (' The anoscopy was rescheduled to next week because her anticoagulant had not been held.',
+                      '\nAddendum: The anoscopy was rescheduled to next week because her anticoagulant had not been held.'):
+            text = REPORT.format(proc='Anoscopy', status='', find=line + extra)
+            for passage in (line, 'Procedure: Anoscopy'):
+                with self.subTest(extra=extra, passage=passage):
+                    self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
+
+    def test_an_instrument_that_could_not_be_passed_holds(self):
+        for code, sentence in (('46600', 'The anoscope could not be passed beyond the anal verge because of pain.'),
+                               ('91010', 'The catheter could not be passed through the lower esophageal sphincter.'),
+                               ('49083', 'The needle could not be advanced into the larger pocket.')):
+            proc, find = OWN[code]
+            text = REPORT.format(proc=proc, status='', find=f'{find} {sentence}')
+            for passage in (find, f'Procedure: {proc}'):
+                with self.subTest(code=code, passage=passage):
+                    self.assertEqual(real(text, (code, passage))[0][code].status, 'needs_clarification')
+
+    def test_controls_no_denial_of_today_s_procedure_keeps_the_report_ready(self):
+        for code, (proc, find) in OWN.items():
+            for status in ('', 'Procedure performed: Yes\n', 'Status: Completed.\n', 'Procedure completed: Yes\n',
+                           'Plan: Repeat in 6 months.\n'):
+                text = REPORT.format(proc=proc, status=status, find=find)
+                for passage in (find, f'Procedure: {proc}'):
+                    with self.subTest(code=code, status=status, passage=passage):
+                        self.assertReady(real(text, (code, passage))[0][code])
+
+
+class Validation2ReferenceDenialTests(Case):
+    """validation:2 (critical, regression against 9a9f403). A sentence that cuts short 'the procedure' or 'the exam'
+    was no doubt when it also named banding ('The procedure was terminated early; banding will be scheduled.'), so the
+    anoscopy the report says was terminated was READY. A reference word that is the subject of a denial, cancellation,
+    cut or doubt now counts whatever else the sentence names; so does a pronoun with no procedure named before it."""
+
+    EXTRAS = ('The procedure was terminated early; banding will be scheduled.',
+              'The procedure was aborted before banding could be performed.',
+              'The exam was incomplete; hemorrhoid banding is planned under anesthesia.',
+              'The exam was terminated early because of pain, so banding was not attempted.',
+              'Because of pain the procedure was stopped and no banding was done.',
+              'It was aborted due to pain, and rubber band ligation was deferred.',
+              'Banding was considered, but the procedure was aborted because of pain.',
+              'The procedure was terminated early; RBL will be scheduled.',
+              'The exam was aborted, so no hemorrhoidectomy was considered.',
+              'The study was cancelled; ligation is planned.',
+              # read only at the reference word ("was attempted" governs the word, not the sentence)
+              'The procedure was attempted but abandoned; banding is planned under anesthesia.',
+              'The exam was attempted; hemorrhoid banding is planned.')
+
+    def test_the_claimed_sentences_hold_the_findings_sentence_and_the_procedure_line(self):
+        line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
+        for extra in self.EXTRAS:
+            text = REPORT.format(proc='Anoscopy', status='', find=f'{line} {extra}')
+            for passage in (line, 'Procedure: Anoscopy'):
+                with self.subTest(extra=extra, passage=passage):
+                    self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
+
+    def test_controls_another_procedure_s_denial_is_no_doubt_about_this_one(self):
+        line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
+        for extra in ('Banding was deferred because she takes apixaban.',
+                      'Banding was deferred because it was not indicated.',
+                      'Banding was not performed; it was deferred to a later visit.'):
+            text = REPORT.format(proc='Anoscopy', status='', find=f'{line} {extra}')
+            for passage in (line, 'Procedure: Anoscopy'):
+                with self.subTest(extra=extra, passage=passage):
+                    self.assertReady(real(text, ('46600', passage))[0]['46600'])
+
+
+class Validation8AnotherActIsNoDoubtTests(Case):
+    """validation:8 (medium over-hold). The guard held ordinary reports whose procedure line every base approved:
+    another act's denial ('No biopsies were performed.', 'No sedation was required for the exam.'), another
+    procedure qualified as such ('No other procedure was done.'), or a plan line saying no repeat is needed. Such a
+    sentence denies another act or a future one, so it is no doubt about today's procedure (restores 9a9f403 for the
+    procedure line, R4B-BASE for the findings sentence); a true denial still holds."""
+
+    OTHER = ('No biopsies were performed.', 'Biopsy was not performed.', 'No polypectomy was performed.',
+             'Retroflexion was not performed.', 'No sedation was required for the exam.',
+             'Photo documentation was not performed.', 'Digital rectal exam was deferred.',
+             'No further procedure was performed.', 'No additional procedures were performed.',
+             'No other procedure was done.')
+    PLAN = {'46221': ('Plan: No further banding is needed.', 'Plan: Repeat banding is not necessary.',
+                      'Plan: No repeat banding needed at this time.',
+                      'Impression: Successful banding; no further banding needed.'),
+            '46600': ('Plan: No repeat anoscopy needed.',),
+            '49083': ('Plan: No repeat paracentesis is needed at this time.',),
+            '91010': ('Plan: No repeat manometry is needed.',)}
+
+    def test_another_act_denied_keeps_the_procedure_line_ready(self):
+        for code, (proc, find) in OWN.items():
+            for other in self.OTHER:
+                for where in ('addendum', 'findings'):
+                    if where == 'addendum':
+                        text = REPORT.format(proc=proc, status='', find=find) + f'Addendum: {other}\n'
+                    else:
+                        text = REPORT.format(proc=proc, status='', find=f'{find} {other}')
+                    with self.subTest(code=code, other=other, where=where):
+                        self.assertReady(real(text, (code, f'Procedure: {proc}'))[0][code])
+
+    def test_a_plan_saying_no_repeat_is_needed_keeps_the_procedure_line_ready(self):
+        for code, lines in self.PLAN.items():
+            proc, find = OWN[code]
+            for line in lines:
+                text = REPORT.format(proc=proc, status='', find=find).replace('Impression: Findings as described.\n',
+                                                                                 f'{line}\n')
+                with self.subTest(code=code, line=line):
+                    self.assertReady(real(text, (code, f'Procedure: {proc}'))[0][code])
+
+    def test_controls_true_denials_still_hold(self):
+        for code, (proc, find) in OWN.items():
+            name = proc.split()[0]
+            for denial in (f'{name} was not performed; the patient declined.', 'The procedure was aborted before insertion.',
+                           'It was not performed.', 'No procedure was performed.', 'Sedation was not given; not performed.',
+                           'The exam was stopped early because of pain.', 'Called off.', 'Rescheduled.',
+                           # read silent as a span here: only routing's next-line denial grammar reads them
+                           'Not performed.', 'Patient declined.'):
+                text = REPORT.format(proc=proc, status='', find=find) + f'Addendum: {denial}\n'
+                with self.subTest(code=code, denial=denial):
+                    self.assertEqual(real(text, (code, f'Procedure: {proc}'))[0][code].status, 'needs_clarification')
+
+
+class Bounded4DoubtGuardCostTests(Case):
+    """bounded:4 (high) and validation:9 (medium). The doubt guard read every sentence holding an act verb, 'it',
+    'procedure' or a gi.other word, up to five times, each read paying the family judgement's scan of every routed
+    service: 'Colonoscopy was performed.' x 14,809 under an anoscopy report failed the assess stage at 60 s after the
+    provider request was sent (9a9f403: 16 s), and 'Anoscopy normal.' x 23,000 took 9x 9a9f403. The guard now reads only
+    sentences whose wording can doubt (and something they could be about), each with the passage's own reading, under
+    a read budget beyond which the whole text counts as doubted (held, never released)."""
+
+    def reads(self, text, code, passage):
+        from unittest import mock
+        from studio.gi import detect
+        from studio.validation import checks
+        checks._V2_doubt_index.cache_clear()
+        calls = []
+        own = detect.own_status_for_span
+
+        def counting(*args, **kwargs):
+            calls.append(args[1:3])
+            return own(*args, **kwargs)
+        with mock.patch.object(detect, 'own_status_for_span', counting):
+            item = real(text, (code, passage))[0][code]
+        checks._V2_doubt_index.cache_clear()
+        return item, len(calls)
+
+    def test_repeated_lines_naming_another_procedure_take_no_guard_reads(self):
+        for unit in ('Colonoscopy was performed.\n', 'EGD done.\n'):
+            text = (HEAD + 'Procedure: Anoscopy\nFindings: Grade 2 internal hemorrhoids were seen.\n') + unit * 3000
+            with self.subTest(unit=unit):
+                item, count = self.reads(text, '46600', 'Grade 2 internal hemorrhoids were seen.')
+                self.assertEqual(item.status, 'needs_clarification')
+                self.assertLessEqual(count, 5)  # the cited passage's own readings, never a read per line
+
+    def test_repeated_sentences_with_no_doubting_word_take_no_guard_reads(self):
+        for unit in ('Anoscopy normal. ', 'Anoscopy anoscopy anoscopy anoscopy normal. ', 'It was normal. '):
+            text = HEAD + 'Procedure: Anoscopy\nIndication: Bleeding.\nFindings: ' + unit * 2000 + '\n'
+            with self.subTest(unit=unit):
+                item, count = self.reads(text, '46600', 'Procedure: Anoscopy')
+                self.assertReady(item)
+                self.assertLessEqual(count, 5)
+
+    def test_beyond_the_read_budget_the_text_counts_as_doubted(self):
+        from unittest import mock
+        from studio.validation import checks
+        text = REPORT.format(proc='Anoscopy', status='', find='Anoscopy revealed grade 2 internal hemorrhoids. '
+                             'No fissure was seen. Grade 2 internal hemorrhoids were not bleeding.')
+        self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+        checks._V2_doubt_index.cache_clear()
+        with mock.patch.object(checks, '_V2_READ_BUDGET', 1):
+            item = real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600']
+        checks._V2_doubt_index.cache_clear()
+        self.assertEqual(item.status, 'needs_clarification')
+        self.assertIn(RULE_WORDING, check_of(item, 'service.status').detail)
+
+    def test_the_review_s_stage_inputs_assess_within_the_deadline(self):
+        import time
+        for unit, chars in (('Colonoscopy was performed.\n', 200000), ('EGD done.\n', 150000)):
+            text = HEAD + 'Procedure: Anoscopy\nFindings: Grade 2 internal hemorrhoids were seen.\n'
+            text += unit * ((chars - len(text)) // len(unit))
+            with self.subTest(unit=unit):
+                started = time.monotonic()
+                item = real(text, ('46600', 'Grade 2 internal hemorrhoids were seen.'))[0]['46600']
+                self.assertLess(time.monotonic() - started, 40)  # route and assess; 60 s is the stage deadline
+                self.assertEqual(item.status, 'needs_clarification')
