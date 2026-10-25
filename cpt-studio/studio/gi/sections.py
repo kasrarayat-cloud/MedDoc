@@ -16,22 +16,30 @@ unless HEADINGS lists it ("Procedures performed today:"); a performed-today
 label that answers nothing ("Procedures performed today: none") opens none.
 "Referral:", "Orders:", "To do:" and the other plan labels round 3b added are
 field labels as often as headings: "Orders: none" is a field, and with an
-answer of their own followed by more fields they speak for their own line
-only.
+answer of their own they plan their own line only. Up to the next heading, a
+field after them that names no service or intervention ("Extent: cecum")
+reads in the section in force before them, and every other line is held: an
+``other`` section of its own, with no default (inside a plan or history
+section that section reads every line).
 
 A label line without a colon ("Planned procedures", "Further management", a
 Word heading paragraph) opens a plan or history section when its words say so
 and it ends with the section of a note it names (procedures, plan,
-management, work-up ...), or starts with the plan or the procedures and a
-plan word ("Procedures planned", "Plan going forward", never today's); never
-a service, an intervention or a landmark. A numbered or bulleted line is read
+management, work-up ...), or is the plan or the procedures and plan words
+only ("Procedures planned", "Plan going forward", never today's); never a
+service, an intervention or a landmark. A numbered or bulleted line is read
 the same way ("2. Upcoming procedures"), so a statement in a numbered list
 ("3. Further workup recommended") stays content because it does not end with
 its noun. Such a line that reads as a phrase ("Changes of prior radiation
 therapy", "Specimens sent for further testing") is a finding or a statement:
 inside a procedure, findings or technique section it opens an ``other``
 section with no default (elsewhere it opens its plan or history section, as
-before), and in a numbered list it is content.
+before), and in a numbered list it is content. A line that starts with the
+plan or the procedures and a plan word but is not only that ("Procedure
+completed as planned", "Procedures planned for next week"), and a numbered or
+bulleted history item ("2. Prior radiation therapy"), are held the same way,
+and outside a plan or history section too; another phrase line under such an
+``other`` section is read as inside the section it stands in for.
 
 The blocks extraction adds after a PDF page's text, "[PDF form fields on page
 N]" and "[PDF annotation text on page N]", are ``other`` sections with no
@@ -139,8 +147,8 @@ HEADINGS: dict[str, str] = {
 }
 
 # Round 3b's plan labels (75a3cfac7, e7bc88a) are field labels as often as headings ("Referral: Dr. B. Synthetic",
-# "Orders: none"). Round 4 structure:5: with an answer of their own they never open a plan section over later field
-# lines (see _headings), and a no-answer value (_SEC_NO_ANSWER) is a field, as at R3B-BASE.
+# "Orders: none"). Round 4 structure:5: a no-answer value (_SEC_NO_ANSWER) is a field, as at R3B-BASE. Round 4c
+# regression:2 and sections:5: with an answer of their own they speak for their own line only (see layout).
 _SEC_FIELD_PLAN_LABELS = frozenset(('pending procedures', 'pending procedure', 'pending orders', 'orders', 'referrals',
                                     'referral', 'to do', 'to-do', 'procedure to be done', 'procedures to be done',
                                     'procedure to be performed', 'procedures to be performed',
@@ -154,10 +162,12 @@ _SEC_NO_ANSWER = re.compile(r'[ \t]*(?:none|n/?a|not[ \t]+applicable|no|nil)[ \t
 _SEC_TODAY_LABELS = frozenset(('procedure performed today', 'procedures performed today', 'procedure done today',
                                'procedures done today', 'intervention performed', 'interventions performed',
                                'intervention performed today', 'interventions performed today'))
-# A key-value line ("Extent: cecum"): after a field-label line with an answer, it ends that label's reach.
 _SEC_NO_ANSWER_LABELS = _SEC_FIELD_PLAN_LABELS | _SEC_TODAY_LABELS
+# A key-value line ("Extent: cecum"): after a field-label line with an answer, it reads in the section in force before
+# the label when it names no service or intervention (see layout).
 _SEC_FIELD_LINE = re.compile(r'[ \t]*[A-Za-z][^:\n|]{0,39}:[ \t]*\S', re.A)
-_SEC_FIELD_REACH = 3  # how many lines after a field-label line are read for the next field (bounds the work)
+# The 'other' section of the lines held after such a label (round 4c regression:2, sections:5; see layout).
+_SEC_PLAN_HELD_LABEL = 'line after a plan label with an answer of its own'
 _PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
 _CLOCK = re.compile(r'[ \t]*\d{1,2}:\d{2}', re.A)
 # An unrecognised bare "Label:" (nothing after the colon) is a heading: a plan or history one
@@ -637,11 +647,10 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
     section beyond themselves; (line, header line) for each block's end: the line after the blank
     line that ends it, where the section in force before the block's header resumes; and (line,
     header line) after each form-field line that opened a section of its own (_field_heading), where
-    the block's own section resumes; and (line, label line) after a line labelled by one of round 3b's plan
-    labels with an answer of its own (_SEC_FIELD_PLAN_LABELS) when the next line that is not blank is another field,
-    where the section in force before the label line resumes: such a label speaks for its own line only. A
-    performed-today label (_SEC_TODAY_LABELS) answered "None" on the next line is no heading."""
-    headings, inside, resumes, field_ends, line_ends = {}, set(), [], [], []
+    the block's own section resumes; and the lines labelled by one of round 3b's plan labels with an answer of
+    their own (_SEC_FIELD_PLAN_LABELS), which speak for their own line only (see layout). A performed-today label
+    (_SEC_TODAY_LABELS) answered "None" on the next line is no heading."""
+    headings, inside, resumes, field_ends, field_labels = {}, set(), [], [], []
     header, fields = None, False
     for i, (ls, le) in enumerate(lines):
         block = FORM_BLOCK.fullmatch(text[ls:le].strip())
@@ -667,16 +676,14 @@ def _headings(text: str, lines: list[tuple[int, int]]) -> tuple[dict, set[int], 
                 continue
         if heading and heading[1] in _SEC_FIELD_PLAN_LABELS and i not in inside and i + 1 < len(lines) \
                 and lines[i + 1][0] < len(text) and text[heading[2].end:lines[i][1]].strip():
-            nxt = next((text[ls:le] for ls, le in lines[i + 1:i + 1 + _SEC_FIELD_REACH] if text[ls:le].strip()), '')
-            if _SEC_FIELD_LINE.match(nxt):
-                line_ends.append((i + 1, i))  # "Referral: Dr. B. Synthetic\nExtent: cecum" (structure:5)
-    return headings, inside, resumes, field_ends, line_ends
+            field_labels.append(i)  # "Referral: Dr. B. Synthetic", "Orders: CBC" (structure:5; round 4c sections:5)
+    return headings, inside, resumes, field_ends, field_labels
 
 
 @functools.lru_cache(maxsize=16)
 def layout(text: str) -> Layout:
     lines = _lines(text)
-    headings, inside, resumes, field_ends, line_ends = _headings(text, lines)
+    headings, inside, resumes, field_ends, field_labels = _headings(text, lines)
     joins, held = [], []  # whether each line runs on into the next; the lines held after an unfinished clause
     for i, (ls, le) in enumerate(lines):
         content = headings[i][2].end if headings[i] else ls  # a heading's inline content may run on
@@ -685,6 +692,33 @@ def layout(text: str) -> Layout:
         joins.append(open_end and _soft_wrap(text, (content, le), lines[i + 1]))
         if open_end and not joins[-1] and i + 1 not in inside and _sec_held_after(text, (content, le), lines[i + 1]):
             held.append(i + 1)  # structure:11: it opens an 'other' section for itself alone
+    # Round 4c regression:2 and sections:5. One of round 3b's plan labels with an answer of its own ("Referral: Dr. B.
+    # Synthetic", "Orders: CBC") plans its own line, with the lines its sentence runs on into, and nothing after it:
+    # round 4b's plan ran on over the prose after it (the performed polypectomy was excluded), and its resume before a
+    # field read a planned field as performed ("EMR: ascending colon polyp at a tertiary center", 45390 ready). Up to
+    # the next heading, a field line that names no service or intervention ("Extent: cecum") reads in the section in
+    # force before the label, as round 4b's structure:5 repair wanted; every other run of lines (a line and the lines
+    # its sentence runs on into) is HELD in an 'other' section of its own (_SEC_PLAN_HELD_LABEL): it may be what the
+    # label orders or today's ("Interventions: cold snare polypectomy"), and no word list tells which. Inside a plan or
+    # history section nothing is held: that section reads every line (see the gate below).
+    line_ends, plan_runs, taken = [], [], set(held)
+    for label_line in field_labels:
+        end = next((j for j in range(label_line + 1, len(lines)) if headings[j]), len(lines))
+        j = label_line
+        while j + 1 < end and joins[j]:
+            j += 1
+        line_ends.append((j + 1, label_line))
+        j += 1
+        while j < end:
+            first = j
+            while j + 1 < end and joins[j]:
+                j += 1
+            line = text[lines[first][0]:lines[first][1]]
+            if line.strip() and not (first == j and _SEC_FIELD_LINE.match(line) and not _sec_act_named(line)):
+                first += first in taken  # a line held after an unfinished clause keeps its own hold
+                if first <= j:
+                    plan_runs.append((first, j))
+            j += 1
     # The marks of one line, in this order: the section in force before a block resumes (after the blank line
     # that ends it), the block's own section resumes (after a field line that opened its own), the section in
     # force before a field-label line or a held line resumes (after a label that speaks for its own line only, or
@@ -694,11 +728,13 @@ def layout(text: str) -> Layout:
     marks = sorted([(i, heading, h) for i, h in headings.items() if h]
                    + [(i, held_open, ('other', _SEC_HELD_LABEL, None)) for i in held]
                    + [(i + 1, line_end, i) for i in held if i + 1 < len(lines)]
+                   + [(first, held_open, ('other', _SEC_PLAN_HELD_LABEL, None)) for first, _ in plan_runs]
+                   + [(last + 1, line_end, first) for first, last in plan_runs if last + 1 < len(lines)]
                    + [(i, resume, header) for i, header in resumes if i < len(lines)]
                    + [(i, field_end, header) for i, header in field_ends if i < len(lines)]
                    + [(i, line_end, label_line) for i, label_line in line_ends if i < len(lines)],
                    key=lambda mark: mark[:2])
-    line_only = {label_line for _, label_line in line_ends} | set(held)
+    line_only = {label_line for _, label_line in line_ends} | set(held) | {first for first, _ in plan_runs}
     # A phrase line (structure:4) and a held line (structure:11) only ever stand in for a procedure, findings or
     # technique section. In any other section the reading of 4347acd24 stands: a held line takes the section in force,
     # and a phrase line opens the plan or history section it opened then. The 'other' section such a line opens inside
@@ -708,19 +744,21 @@ def layout(text: str) -> Layout:
     # sections:4) open the plan or history section of a phrase line only inside a plan or history section; elsewhere
     # (an impression, an indication, the text before the first heading) they are held too, because 4347acd24 read them
     # as content there, and a silent line there takes its family's reading.
-    gated = {i for i, h in headings.items() if h and _sec_phrase_heading(text, h)} | set(held)
+    gated = {i for i, h in headings.items() if h and _sec_phrase_heading(text, h)} | set(held) \
+        | {first for first, _ in plan_runs}
     widened = {i for i in gated if headings.get(i) and (_SEC_PLAN_FIRST.match(headings[i][1])
-                                                        or _LIST_ITEM.match(text, *lines[i]))}
+                                                        or _LIST_ITEM.match(text, *lines[i]))} \
+        | {first for first, _ in plan_runs}
     opened, current, before_block, before_line, skipped = [], ('other', '', None), {}, {}, set()
     enclosed = False  # whether the 'other' section in force stands in for a procedure, findings or technique section
     for i, what, value in marks:
         positive = current[0] in POSITIVE_KINDS or enclosed
-        if what in (heading, held_open) and i in gated and not positive:
+        if what in (heading, held_open) and i in gated and not positive \
+                and (i not in widened or current[0] in ('plan', 'history')):
             if what == held_open:
                 skipped.add(i)
                 continue
-            if i not in widened or current[0] in ('plan', 'history'):
-                value = ('plan' if _PLAN_LABEL.search(value[1]) else 'history', value[1], value[2])
+            value = ('plan' if _PLAN_LABEL.search(value[1]) else 'history', value[1], value[2])
         if what == line_end and value in skipped:
             continue
         if what in (heading, held_open):

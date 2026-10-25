@@ -1800,6 +1800,29 @@ def _SEC_listed_under(section) -> str:
             'plan')
 
 
+_SEC_AFTER_A_PLAN_LABEL = ("uncertain: it follows a plan label with an answer of its own ('Referral:', 'Orders:', "
+                           "'To do:'), so it may name what is still to be done")
+
+
+def _SEC_hold_cue(an: Analysis, section) -> Optional[str]:
+    """The cue of the hold every line takes in an 'other' section that holds what it lists: under a colon-less phrase
+    line inside a procedure, findings or technique section (sections, round 4 structure:4; round 4c sections:2, :4),
+    or after one of round 3b's plan labels with an answer of its own (round 4c regression:2, sections:5)."""
+    if section.kind == 'other' and section.label == gi_sections._SEC_PLAN_HELD_LABEL:
+        return _SEC_AFTER_A_PLAN_LABEL
+    return _SEC_listed_under(section) if _SEC_phrase_section(an, section) else None
+
+
+def _SEC_held_within(an: Analysis, start: int, end: int) -> Optional[str]:
+    """The hold cue (_SEC_hold_cue) of the first section that [start, end) reaches into: a passage cited across a line
+    break, from a findings line into a line held after a plan label ("The ascending colon polyp needs" then "EMR at a
+    tertiary center."), reads as the held line does, never as the section it starts in."""
+    lay = an.lay
+    lo = max(bisect.bisect_right(lay.section_starts, start) - 1, 0)
+    hi = bisect.bisect_left(lay.section_starts, max(end, start + 1))
+    return next((cue for cue in map(lambda section: _SEC_hold_cue(an, section), lay.sections[lo:hi]) if cue), None)
+
+
 def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
     """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
     a history section (uncertain if its clause says today), uncertain in a plan section (carrying PLAN_TODAY when a
@@ -1819,10 +1842,12 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     past = status == 'negated' and all(f[2] for f in found if f[0] == 'negated')
     doubt = status == 'uncertain' and any(f[3] for f in found if f[0] == 'uncertain')
     section = an.lay.section_at(start)
-    if status == 'performed' and not em and _SEC_phrase_section(an, section):
-        # round 4c sections:0: under a phrase line ("Review of prior procedures") a line with its own performance cue is
-        # held like the lines without one (it may tell another time or a plan), never performed
-        return Reading('uncertain', (_SEC_listed_under(section),) + deciding, 'cue')
+    hold = _SEC_held_within(an, start, end) if status == 'performed' and not em else None
+    if hold:
+        # round 4c sections:0: under a phrase line ("Review of prior procedures"), or after a plan label with an answer
+        # of its own (regression:2), a line with its own performance cue is held like the lines without one (it may tell
+        # another time or a plan), never performed
+        return Reading('uncertain', (hold,) + deciding, 'cue')
     if status == 'performed' and section.kind == 'history':
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
         return Reading('uncertain' if today else 'historical', deciding + (_section_label(section),), 'cue')
@@ -1848,6 +1873,9 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     section = an.lay.section_at(start)
     label = _section_label(section)
     if section.kind in POSITIVE_SECTIONS:
+        hold = _SEC_held_within(an, start, end)  # round 4c: a passage that reaches into a held line
+        if hold:
+            return Reading('uncertain', (hold, label), 'cue')
         held = _another_time(an, start, end)  # a time no listed cue reads keeps the section silent (routing:8)
         if held:
             # a doubt, so it contradicts the family's other section evidence (round 4 routing:7)
@@ -1870,10 +1898,12 @@ def _default_reading(an: Analysis, start: int, end: int) -> Reading:
     if section.kind == 'other' and section.label == gi_sections._SEC_HELD_LABEL:
         # a service line after a line cut on a plan, cancellation or denial verb (sections, round 4 structure:11)
         return Reading('uncertain', (HELD_AFTER_A_CUT,), 'cue', doubt=True)
-    if _SEC_phrase_section(an, section):
+    hold = _SEC_hold_cue(an, section)
+    if hold:
         # under a colon-less phrase line inside findings (sections, round 4 structure:4): it may tell another time or
-        # a plan ("Surgical opinion for further management"), so what is listed under it is held, never silent
-        return Reading('uncertain', (_SEC_listed_under(section),), 'cue')
+        # a plan ("Surgical opinion for further management"), so what is listed under it is held, never silent; and the
+        # same after a plan label with an answer of its own (round 4c regression:2, sections:5)
+        return Reading('uncertain', (hold,), 'cue')
     if (section.kind == 'other' and heading is not None and heading.end - heading.start <= 80
             and _DENYING_LABEL.fullmatch(an.text, heading.start, heading.end)):
         # "Cancelled procedures:" opens a section of its own: what is listed under it is not silent (round 4 release:9)

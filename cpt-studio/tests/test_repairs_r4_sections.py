@@ -340,10 +340,16 @@ class Structure5FieldPlanLabelTests(unittest.TestCase):
                 self.assertNotEqual(proposal.bucket, 'excluded')
 
     def test_the_summary_with_the_field_under_the_procedure_line(self):
+        """Round 4c (round 5 regression:2): after such a label a line that names a service or an intervention is held
+        for itself, never read in the resumed section, because a planned "EMR: ascending colon polyp at a tertiary
+        center" field took the findings reading and was a ready 45390 (4347acd24 excluded it). So the summary's
+        "Interventions:" field is held for the reviewer here (round 4b read it ready): an accepted over-hold. The extent
+        field still reads in the procedure section."""
         text = structure5_summary('Referral: Dr. B. Synthetic, primary care', indication=False)
-        self.assertEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'procedure')
+        self.assertEqual(kind_at(text, 'Extent: cecum'), 'procedure')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
-        self.assertTrue(ready(run_engine(text, [('45385', STRUCTURE5_INTERVENTION)])['45385']))
+        proposal = run_engine(text, [('45385', STRUCTURE5_INTERVENTION)])['45385']
+        self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
         for field in ('Orders: none', 'Referrals: none'):  # held, as at R3B-BASE (the field reads as denying the procedure)
             text = structure5_summary(field, indication=False)
             with self.subTest(field=field):
@@ -371,12 +377,14 @@ class Structure5FieldPlanLabelTests(unittest.TestCase):
             with self.subTest(inline=label):
                 self.assertEqual(kind_at(text, EMR_LINE), 'plan')
                 self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
-        text = emr_note('Orders: EGD with esophageal dilation')
-        self.assertEqual(kind_at(text, EMR_LINE), 'plan')
-        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
-        text = emr_note('Referral: GI surgery\n')  # past a blank line, the next line that is not a field
-        self.assertEqual(kind_at(text, EMR_LINE), 'plan')
-        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        # Round 4c (round 5 sections:5): with an answer the label plans its own line only; the lines after it are held,
+        # never planned (the prose after "Referral: Dr. B. Synthetic" took the plan and the performed polypectomy was
+        # excluded), so the planned EMR here is held for the reviewer, still never ready.
+        for label in ('Orders: EGD with esophageal dilation', 'Referral: GI surgery\n'):  # the second past a blank line
+            text = emr_note(label)
+            with self.subTest(answered=label):
+                proposal = run_engine(text, [('45390', EMR_LINE)])['45390']
+                self.assertEqual((proposal.bucket, proposal.status), ('selected', 'needs_clarification'))
         text = structure5_summary('Referral: Dr. B. Synthetic, primary care\n')  # past a blank line, a field
         self.assertNotEqual(kind_at(text, STRUCTURE5_INTERVENTION), 'plan')
 

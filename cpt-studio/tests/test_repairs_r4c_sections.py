@@ -308,5 +308,173 @@ class Sections6SecondPhraseLineTests(HeldOrReadyAssertions, unittest.TestCase):
         self.assertEqual(run_engine(text, [('45390', emr)])['45390'].bucket, 'excluded')
 
 
+
+# --- regression:2 / sections:5: a round-3b plan label with an answer of its own -------------------------------------
+
+R2_FIND = ('Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 30 mm laterally spreading polyp '
+           'in the ascending colon was tattooed and not removed.\n')
+R2_EGD = ('Procedure: EGD with biopsy\nFindings: The gastroscope was advanced to the second part of the duodenum. A 2 cm '
+          'subepithelial lesion in the gastric body. Biopsies of the antrum were taken.\n')
+S5_POLYP = '6 mm sigmoid polyp removed with cold snare'
+
+
+class Regression2PlannedServiceFieldTests(HeldOrReadyAssertions, unittest.TestCase):
+    """regression:2 (critical, a regression from 400f4ebf1) - after a round-3b plan label with an answer of its own
+    ("Referrals: advanced endoscopy"), a planned service written as a field line ("Colonoscopy with EMR: ascending colon
+    polyp, tertiary center") took the findings section again through round 4b's resume, so 45390 / 43242 were READY
+    (4347acd24 excluded them). Any line after such a label that names a service or an intervention, up to the next
+    heading, is now held for itself, never performed and never planned; the lines that name none (an "Extent: cecum"
+    field, prose) read in the section in force before the label, as round 4b's structure:5 repair wanted."""
+
+    CLAIMED = (('Referrals: advanced endoscopy', 'Colonoscopy with EMR: ascending colon polyp, tertiary center'),
+               ('Orders: CBC, INR', 'EMR: ascending colon polyp at a tertiary center'),
+               ('To do: refer', 'Colonoscopy with EMR: ascending colon polyp'),
+               ('Pending procedures: see below', 'Colonoscopy with EMR: ascending colon polyp, tertiary center'))
+
+    def test_the_claimed_inputs(self):
+        for label, field in self.CLAIMED:
+            text = HEADER + R2_FIND + label + '\n' + field + '\n'
+            with self.subTest(label=label):
+                self.assert_held_never_excluded(text, '45390', field)
+                self.assertNotIn('EMR', fact_value(text, 'gi.colonoscopy', 'interventions') or '')
+        field = 'EUS with FNA: gastric body subepithelial lesion'
+        text = HEADER + R2_EGD + 'Orders: CT abdomen\n' + field + '\n'
+        self.assert_held_never_excluded(text, '43242', field)
+        self.assertNotIn(family(text, 'gi.eus'), POSITIVE)
+
+    def test_the_verifiers_variants(self):
+        emr = 'EMR: ascending colon polyp at a tertiary center'
+        for body in ('Referral: advanced endoscopy\nProcedure requested: colonoscopy with EMR of the ascending colon polyp',
+                     'Orders: CBC, INR\nReferral: advanced endoscopy\n' + emr,
+                     'Referrals: advanced endoscopy\n\n' + emr,
+                     'Pending procedures: at a tertiary center\n' + emr,
+                     'To do: schedule\n' + emr,
+                     'Referrals: advanced endoscopy\nExtent: cecum\n' + emr,  # second in the run
+                     'Referrals: advanced endoscopy\nExtent: cecum\nWithdrawal time: 8 minutes\n' + emr,
+                     '1. Referrals: advanced endoscopy\n2. ' + emr,
+                     'Referrals: advanced endoscopy\nThe patient was counseled.\n' + emr):
+            text = HEADER + R2_FIND + body + '\n'
+            phrase = body.rsplit('\n', 1)[-1]
+            with self.subTest(body=body):
+                self.assertNotIn(read(text, phrase)[0], POSITIVE)
+                self.assert_never_ready(text, '45390', phrase)
+
+    def test_a_cited_span_from_a_resumed_field_into_a_held_line(self):
+        """A passage cited across the line break, from the "Extent: cecum" field the section before the label reads into
+        the held field or sentence after it, reads as the held line does, never as the findings it starts in."""
+        for second in ('EMR: ascending colon polyp at a tertiary center',
+                       'EMR of the ascending colon polyp was performed at a tertiary center.'):
+            text = HEADER + R2_FIND + 'Referrals: advanced endoscopy\nExtent: cecum\n' + second + '\n'
+            with self.subTest(second=second):
+                self.assertEqual(read(text, 'Extent: cecum')[0], 'performed')  # the field itself reads as before
+                self.assertEqual(read(text, 'Extent: cecum\n' + second)[0], 'uncertain')
+                self.assert_never_ready(text, '45390', 'Extent: cecum\n' + second)
+
+    def test_a_cued_line_after_the_label(self):
+        """A line with its own performance cue after such a label is held too (HEAD held it in the label's plan section)."""
+        line = 'EMR of the ascending colon polyp was performed at a tertiary center.'
+        text = HEADER + R2_FIND + 'Referrals: advanced endoscopy\n' + line + '\n'
+        self.assertEqual(read(text, line)[0], 'uncertain')
+        self.assert_never_ready(text, '45390', line)
+
+    def test_the_labels_plan_bare_inline_and_under_a_plan(self):
+        for label in ('Referrals:', 'Pending procedures', 'Orders:'):
+            text = emr_note(label)
+            with self.subTest(label=label):
+                self.assertEqual(kind_at(text, EMR_LINE), 'plan')
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        text = emr_note('Orders: ' + EMR_LINE).replace('\n' + EMR_LINE + '\n', '\n')  # the label's own line plans
+        self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+        field = 'EMR: ascending colon polyp at a tertiary center'
+        text = HEADER + R2_FIND + 'Plan:\nReferrals: advanced endoscopy\n' + field + '\n'
+        self.assertEqual(kind_at(text, field), 'plan')
+        self.assertEqual(run_engine(text, [('45390', field)])['45390'].bucket, 'excluded')
+
+    def test_a_field_that_names_no_service_reads_in_the_section_before_the_label(self):
+        """structure:5's repair stands: "Extent: cecum" after the label is the report's own extent."""
+        text = (HEADER + 'Procedure: Colonoscopy\nReferral: Dr. B. Synthetic, primary care\nExtent: cecum\nFindings: A 6 mm '
+                'sigmoid polyp was removed with a cold snare.\n')
+        self.assertEqual(kind_at(text, 'Extent: cecum'), 'procedure')
+        self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+        self.assertTrue(ready(run_engine(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare.')])['45385']))
+
+
+class Sections5PlanLabelOverProseTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:5 (critical, a round-3b regression that round 4b kept) - a round-3b plan label with an answer of its own
+    ("Referral: Dr. B. Synthetic, primary care") opened a plan over the prose after it, so the performed polypectomy was
+    excluded (R3B-BASE read it ready). The label plans only its own line (ARCHITECTURE 5.3); up to the next heading the
+    lines after it are HELD, except a field that names no service ("Extent: cecum"), which reads in the section before
+    the label. An accepted over-hold against R3B-BASE: the same layout writes "Orders: EGD with esophageal dilation"
+    over a planned EMR, or over "Resection of the lesion at a tertiary center", which must never read ready."""
+
+    LABELS = ('Referral: Dr. B. Synthetic, primary care', 'Orders: CBC and iron studies', 'Referrals: GI clinic',
+              'To do: pathology follow-up', 'Pending orders: CBC')
+
+    def test_the_claimed_labels_under_the_procedure_line(self):
+        for label in self.LABELS:
+            text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\n' + label + '\nThe colonoscope was advanced '
+                    'to the cecum.\n' + S5_POLYP + '\nImpression: Sigmoid polyp.\n')
+            with self.subTest(label=label):
+                self.assert_held_never_excluded(text, '45385', S5_POLYP)
+                # the prose under the label is held too, never planned (a cited span across the two lines holds)
+                self.assertEqual(read(text, 'The colonoscope was advanced to the cecum.')[0], 'uncertain')
+                self.assert_held_never_excluded(text, '45385', 'The colonoscope was advanced to the cecum.\n' + S5_POLYP)
+
+    def test_the_claimed_labels_in_a_findings_list(self):
+        for label in self.LABELS:
+            text = (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\nFindings:\n' + label + '\nThe colonoscope '
+                    'was advanced to the cecum.\n' + S5_POLYP + '\nImpression: Sigmoid polyp.\n')
+            with self.subTest(label=label):
+                self.assertNotEqual(run_engine(text, [('45385', S5_POLYP)])['45385'].bucket, 'excluded')
+
+    def test_more_shapes(self):
+        polyp_field = 'Polypectomy: 6 mm sigmoid polyp removed with cold snare'
+        for body, phrase in (('Indication: Positive FIT\nReferral: Dr. B. Synthetic\nCecum reached.\n' + S5_POLYP, S5_POLYP),
+                             ('Referral: Dr. B. Synthetic\nThe colonoscope was advanced to the cecum.\n' + polyp_field,
+                              polyp_field),
+                             ('Referral: Dr. B. Synthetic\nA 6 mm sigmoid polyp was removed with a cold snare.',
+                              'A 6 mm sigmoid polyp was removed with a cold snare.')):
+            text = HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\n' + body + '\nImpression: Sigmoid polyp.\n'
+            with self.subTest(body=body):
+                self.assertNotIn(read(text, phrase)[0], NOT_TODAY)
+                self.assertNotEqual(run_engine(text, [('45385', phrase)])['45385'].bucket, 'excluded')
+
+    def test_a_planned_emr_after_the_label_is_never_ready(self):
+        for label in ('Orders: EGD with esophageal dilation', 'Referral: GI surgery\n', 'Referrals: advanced endoscopy'):
+            text = emr_note(label)
+            with self.subTest(label=label):
+                self.assertNotIn(read(text, EMR_LINE)[0], POSITIVE)
+                self.assert_never_ready(text, '45390', EMR_LINE)
+        text = emr_note('Referrals: advanced endoscopy\nGI clinic in 2 weeks')  # the second line after the label
+        self.assert_never_ready(text, '45390', EMR_LINE)
+        text = HEADER + R2_FIND + 'Referral: Dr. B.\nThe ascending colon polyp needs\nEMR at a tertiary center.\n'
+        self.assert_never_ready(text, '45390', 'The ascending colon polyp needs\nEMR at a tertiary center.')
+        self.assert_never_ready(text, '45390', 'EMR at a tertiary center.')
+
+    def test_prose_that_names_no_service_is_held_too(self):
+        """A planned procedure written without a service name the readers know ("Resection of the lesion at a tertiary
+        center.") is never read in the section before the label, in a positive section or in an impression or an
+        indication, where a silent line would take the colonoscopy's performed reading."""
+        line = 'Resection of the ascending colon lesion at a tertiary center.'
+        for heading in ('', 'Impression: Ascending colon polyp.\n', 'Indication: Surveillance.\n'):
+            text = HEADER + R2_FIND + heading + 'Referrals: advanced endoscopy\n' + line + '\n'
+            with self.subTest(heading=heading):
+                self.assert_held_never_excluded(text, '45390', line)
+
+    def test_the_labels_own_value_wrapped_onto_the_next_line_plans(self):
+        line = 'advanced endoscopy for EMR of the ascending colon polyp'
+        text = HEADER + R2_FIND + 'To do: refer to\n' + line + '\n'
+        self.assertEqual(read(text, line)[0], 'planned')
+        self.assertEqual(run_engine(text, [('45390', line)])['45390'].bucket, 'excluded')
+
+    def test_outside_a_procedure_findings_or_technique_section_the_section_in_force_reads(self):
+        base = HEADER + R2_FIND
+        for heading, status in (('Plan:', 'planned'), ('Past history:', 'historical')):
+            text = base + heading + '\nReferral: GI clinic\n' + EMR_LINE + '\n'
+            with self.subTest(heading=heading):
+                self.assertEqual(read(text, EMR_LINE)[0], status)
+                self.assertEqual(run_engine(text, [('45390', EMR_LINE)])['45390'].bucket, 'excluded')
+
+
 if __name__ == '__main__':
     unittest.main()
