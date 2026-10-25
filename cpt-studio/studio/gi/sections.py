@@ -59,8 +59,7 @@ on a plan, cancellation or denial verb that its own clause leaves without an
 object ("Dr. Smith recommended", then "EUS with FNA of the pancreatic head
 mass." on the next line, with or without a list marker) is held: it is an
 ``other`` section of its own, with no default, and the section before it
-resumes on the next line. A complete sentence that ends in a kept booking ("The
-procedure was performed as planned") is no such cut.
+resumes on the next line.
 """
 from __future__ import annotations
 
@@ -515,14 +514,10 @@ def _soft_wrap(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> bool:
 _SEC_HELD_LABEL = 'line after an unfinished clause'
 _SEC_CLAUSE_EDGE = re.compile(r'[;,]', re.A)
 # Round 4c sections:9: the next line is read without its list marker ("- EUS with FNA ...", "1. EUS ...", "A. EUS ...");
-# only a field ("Date of service: ...") or a table row stays exempt. (A lower-case letter marker, "a) EUS ...", joins the
-# cut line instead, so the cut verb's own cue reads the service.)
+# only a table row stays exempt. A field is held like any service line ("- EUS: FNA of the pancreatic head mass"; a field
+# that names no service, "Date of service: ...", is never held). (A lower-case letter marker, "a) EUS ...", joins the cut
+# line instead, so the cut verb's own cue reads the service.)
 _SEC_LIST_MARK = re.compile(r'[ \t]*(?:[-*\u2022]|\(?\d{1,2}[.)]|\(?[A-Za-z][.)])[ \t]+', re.A)
-_SEC_FIELD_START = re.compile(r'[^:\n|]{1,40}:[ \t]*\S', re.A)
-# Round 4c sections:10: a plan word the kept-booking "as" introduces ("The procedure was performed as planned", "as
-# ordered", "as previously scheduled") ends a complete sentence, never a cut: the cue names the declared cue reader
-# skips after cues.AS_BOOKED_BEFORE (detect._clause_reading_cues), read the same way.
-_SEC_KEPT_BOOKING = frozenset(('scheduled', 'plan', 'booked', 'ordered', 'recommend'))
 _SEC_DENIAL_TO_END = re.compile(r'\b(?:declined|declines|refused|refuses|denied|denies)[ \t]+to[ \t]+[a-z][a-z-]*$', re.A)
 _SEC_LAST_WORD = re.compile(r'(?<![A-Za-z-])([A-Za-z][A-Za-z-]*)$', re.A)
 
@@ -539,28 +534,21 @@ def _sec_held_after(text: str, prev: tuple[int, int], nxt: tuple[int, int]) -> b
     if not before or before[-1] in '.!?:;,':
         return False
     tail = before[-WRAP_TAIL:]
-    cue, kept = _SEC_DENIAL_TO_END.search(tail), None
+    cue = _SEC_DENIAL_TO_END.search(tail)
     if cue is None:
         cue = _SEC_LAST_WORD.search(tail)
-        names = [name for name, pattern in cues.PLANNED_CLAUSE + cues.CANCELLED_CLAUSE
-                 if cue is not None and pattern.fullmatch(cue.group(1))]
-        if not names:
+        if cue is None or not any(pattern.fullmatch(cue.group(1)) for _, pattern in cues.PLANNED_CLAUSE + cues.CANCELLED_CLAUSE):
             return False
-        if all(name in _SEC_KEPT_BOOKING for name in names):
-            kept = cues.AS_BOOKED_BEFORE.search(tail, max(0, cue.start() - 30), cue.start())
     after = text[nxt[0]:nxt[1]].strip()
     mark = _SEC_LIST_MARK.match(after)
     after = after[mark.end():] if mark else after
     if not after or (after[0].islower() and not mark) or ' | ' in tail or ' | ' in after[:OWN_CLAUSE_REACH] \
-            or _SEC_FIELD_START.match(after) or (not mark and _LIST_OR_FIELD.match(after)) or _own_clause(after) \
-            or not _sec_act_named(after[:OWN_CLAUSE_REACH]) or _answered(tail) or _OPTION_ROW.search(tail):
+            or _own_clause(after) or not _sec_act_named(after[:OWN_CLAUSE_REACH]) or _answered(tail) \
+            or _OPTION_ROW.search(tail):
         return False
     offset = len(before) - len(tail)
     stops = [b - prev[0] - offset for b in _sentence_breaks(text, prev[0] + offset, prev[1])]
     clause = max([0] + [x for x in stops if x <= cue.start()] + [m.end() for m in _SEC_CLAUSE_EDGE.finditer(tail, 0, cue.start())])
-    if kept and not any(pattern.search(tail, clause, kept.start())
-                        for _, pattern in cues.PLANNED_CLAUSE + cues.CANCELLED_CLAUSE):
-        return False  # a complete sentence that kept its booking ("was performed as planned"); "will be done as scheduled" holds
     return not _sec_act_named(tail[clause:cue.start()])
 
 

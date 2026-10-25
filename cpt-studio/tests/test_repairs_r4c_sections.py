@@ -779,9 +779,8 @@ class CutVerbHoldTests(HeldOrReadyAssertions, unittest.TestCase):
     """sections:9 (high, an under-correction of structure:11) - the hold of a service line after a line cut on a plan,
     cancellation or denial verb ("Dr. Smith recommended") skipped a bulleted or numbered service line, so "- EUS with
     FNA ..." was a READY 43242; the hold now reads the line without its list marker (a field or a table row stays
-    exempt). sections:10 (medium) - it fired after a complete sentence that ends in a kept booking ("The procedure was
-    performed as planned", "as ordered", "as scheduled"), holding an ordinary polypectomy; a plan word the kept-booking
-    "as" introduces is no cut verb (the declared cue reader skips it the same way), as at 4347acd24 and R3B-BASE."""
+    exempt). sections:10 (medium) - it fires after a complete sentence that ends in a kept booking ("The procedure was
+    performed as planned"), holding an ordinary polypectomy: deliberately left held (see the test below)."""
 
     def test_a_marked_service_line_is_held(self):
         for cut in ('Dr. Smith recommended', 'The endoscopist deferred', 'The family declined to authorize'):
@@ -798,6 +797,10 @@ class CutVerbHoldTests(HeldOrReadyAssertions, unittest.TestCase):
         self.assert_held_never_excluded(text, '43242', S9_EUS + '.')
         text = s9_note('Dr. Smith recommended', '- eus with fine-needle aspiration of the pancreatic head mass')
         self.assert_never_ready(text, '43242', 'eus with fine-needle aspiration of the pancreatic head mass')
+        for line in ('EUS: FNA of the pancreatic head mass', '- EUS: FNA of the pancreatic head mass'):  # a service field
+            text = s9_note('Dr. Smith recommended', line)
+            with self.subTest(field=line):
+                self.assert_held_never_excluded(text, '43242', 'EUS: FNA of the pancreatic head mass')
 
     def test_a_list_item_after_a_cut_list_item_is_held_too(self):
         """Dropping the list-item exemption holds more, the safe direction (an accepted over-hold)."""
@@ -818,15 +821,19 @@ class CutVerbHoldTests(HeldOrReadyAssertions, unittest.TestCase):
                 'recommended\n' + polyp + '\n')
         self.assertTrue(ready(run_engine(text, [('45385', polyp)])['45385']))
 
-    def test_a_kept_booking_ends_its_sentence(self):
+    def test_a_kept_booking_line_still_holds_and_never_excludes(self):
+        """sections:10 is deliberately NOT released: after an unpunctuated kept-booking sentence ("The procedure was
+        performed as planned") a verbless service line may be the performed polypectomy or the planned EMR at a
+        tertiary center written the same way, and lifting the hold read the EMR a READY 45390 (HEAD held it). So both
+        are held, never excluded; with closing punctuation the sentence ends and the polypectomy reads performed."""
+        emr = 'EMR of the ascending colon lesion at a tertiary center.'
         for line in ('The procedure was performed as planned', 'The patient completed the bowel preparation as ordered',
-                     'The patient arrived for the procedure as scheduled', 'Moderate sedation was given as planned',
-                     'The patient arrived as arranged', 'The procedure was performed as recommended',
-                     'The procedure was performed as previously scheduled', 'Moderate sedation given as planned'):
-            text = s10_note(line)
+                     'The patient arrived for the procedure as scheduled', 'Moderate sedation was given as planned'):
             with self.subTest(line=line):
+                self.assert_held_never_excluded(s10_note(line), '45385', S10_POLYP)
+                self.assert_never_ready(s10_note(line).replace(S10_POLYP, emr), '45390', emr)
+                text = s10_note(line + '.')
                 self.assertEqual(read(text, S10_POLYP)[0], 'performed')
-                self.assertTrue(ready(run_engine(text, [('45385', S10_POLYP)])['45385']))
 
     def test_a_cut_plan_verb_still_holds(self):
         for line in ('Dr. Smith recommended', 'The procedure was planned', 'Dr. Smith ordered',
