@@ -373,7 +373,9 @@ class PlanBUnreadExtentLabelTests(unittest.TestCase):
                       'Extent: cecum was the goal', 'Extent: Cecum | Reached: No', 'Extent: Cecum (attempted) | Scope: Olympus',
                       'Extent: Cecum? | Scope: Olympus', 'Extent: Cecum | Scope: Olympus; not reached',
                       'Extent: Cecum | Scope: Olympus, cecum not reached', 'Extent: Cecum | Scope: Olympus, aborted',
-                      'Extent: Cecum, no photos | Complications: None'):
+                      'Extent: Cecum, no photos | Complications: None', 'Extent: Cecum (hoped) | Scope: Olympus',
+                      'Extent: Cecum (proposed) | Scope: Olympus', 'Extent: Cecum (sought) | Scope: Olympus',
+                      'Extent: Cecum, wanted | Scope: Olympus'):
             with self.subTest(label=label):
                 self.assertEqual(extent_of(report('Colonoscopy', COLON_PROSE, label), 'gi.colonoscopy')[:2],
                                  ('incomplete', 'incomplete: rectum'))

@@ -3252,7 +3252,7 @@ def _P2_doubted_by_a_next_field(an: Analysis, reading: Reading, end: int, ws: in
 # such a label as no extent, and its shallower prose landmark still decides (round 4c-2 plan:B keeps that reading).
 _P2_AIM_WORD = re.compile(r'\b(?:intend\w*|intent\w*|goals?|targets?|targeted|aim\w*|expect\w*|attempt\w*|objectives?|'
                           r'desir\w*|anticipat\w*|tried|try|trying|incomplet\w*|partial\w*|abandon\w*|unsuccessful|'
-                          r'fail\w*)\b', re.A | re.I)
+                          r'fail\w*|hop(?:e|ed|es|ing)|sought|propos\w*|want\w*|wish\w*)\b', re.A | re.I)
 
 
 def _P2_tail_contrary(an: Analysis, end: int) -> bool:
