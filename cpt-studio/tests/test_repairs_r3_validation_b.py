@@ -109,7 +109,9 @@ class Validation0SectionOnlyOtherCodeTests(Case):
         self.assertEqual(status.status, 'warn')
         self.assertNotIn('Documented as performed', status.detail)
         self.assertIn(f'“{passage}”', status.detail)
-        self.assertIn('names no procedure', status.detail)
+        # round 5 validation:1: worded from the rule, never 'names no procedure' (a held passage may name one)
+        self.assertIn('is not read as documenting that service as done on that date', status.detail)
+        self.assertNotIn('names no procedure', status.detail)
         self.assertNotIn('never names', status.detail)
         self.assertIn('Service status: not established as performed.', item.rationale)
 
@@ -265,7 +267,8 @@ class Validation0SectionOnlyOtherCodeTests(Case):
         held = checks.resolve_status([negated, section_only])
         self.assertEqual((held.state, held.reason, held.contrary), ('uncertain', 'section_only', negated))
         detail = checks.status_check(held, 'the service reported as 46221').detail
-        self.assertIn('names no procedure', detail)
+        self.assertIn('is not read as documenting that service as done on that date', detail)
+        self.assertNotIn('names no procedure', detail)
         self.assertIn('Another linked passage reads as negated: “Anoscopy - patient declined.”', detail)
         ready = checks.resolve_status([section_only, named])
         self.assertEqual((ready.state, ready.decisive), ('performed', named))

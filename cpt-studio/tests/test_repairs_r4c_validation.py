@@ -164,3 +164,72 @@ class Validation4AnotherTimeInTheActsClauseTests(Case):
         text = BANDING_REPORT.format(line=self.HELD[0])
         proposals, _ = real(text, ('46221', 'Rubber band ligation of internal hemorrhoids'))
         self.assertReady(proposals['46221'])
+
+
+# --- validation:1: the section-only reason is worded from its rule, never "names no procedure" ----------------------
+
+OFFICE_NOTE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+               'Chief complaint: rectal bleeding.\n{body}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+COLONOSCOPY_REPORT = (HEAD + 'Procedure: Colonoscopy\nIndication: Average-risk screening.\nFindings: The colonoscope was '
+                      'advanced to the cecum. The colon was normal.\nImpression: Normal colonoscopy.\n')
+RULE_WORDING = 'is not read as documenting that service as done on that date'
+
+
+class Validation1SectionOnlyReasonWordingTests(Case):
+    """validation:1 (high, false statement). The section_only reason said the linked passage "names no procedure"
+    although round 4b's rule tests whether it documents the code's OWN procedure as done: "Anoscopy revealed grade 2
+    internal hemorrhoids." held for 46600, "Anoscopy showed grade 3 internal hemorrhoids." for 46221 and "Banding sites
+    well healed." were all told, in the check and in the clarification, that they name no procedure. The reason is now
+    worded from the rule that decided it."""
+
+    def assertRuleWorded(self, item, passage):
+        self.assertEqual(item.status, 'needs_clarification', [c.detail for c in item.checks])
+        status = check_of(item, 'service.status')
+        (reason,) = [c.reason for c in item.clarifications if c.fact == 'performed_status']
+        for text in (status.detail, reason):
+            self.assertIn(f'“{passage}”', text)
+            self.assertIn(RULE_WORDING, text)
+            self.assertNotIn('names no procedure', text)
+
+    def assertNeverNamesNoProcedure(self, proposals):
+        for item in proposals.values():
+            for text in [c.detail for c in item.checks] + [c.reason for c in item.clarifications]:
+                self.assertNotIn('names no procedure', text)
+
+    def test_held_passages_that_name_a_procedure(self):
+        cases = (
+            (OFFICE_NOTE.format(body='Procedure: Anoscopy.\nFindings: Anoscopy revealed grade 2 internal hemorrhoids.'),
+             'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+            (HEAD + 'Procedure: Anoscopy\nFindings: Anoscopy showed grade 3 internal hemorrhoids. Banding was deferred '
+                    'because she takes apixaban.\n', 'Anoscopy showed grade 3 internal hemorrhoids.', '46221'),
+            (FOLLOW_UP.format(line='Banding sites well healed.'), 'Banding sites well healed.', '46221'),
+            (FOLLOW_UP.format(line='Hemorrhoidectomy scar noted.'), 'Hemorrhoidectomy scar noted.', '46250'),
+            (FOLLOW_UP.format(line=Validation4AnotherTimeInTheActsClauseTests.HELD[0]),
+             Validation4AnotherTimeInTheActsClauseTests.HELD[0], '46221'),
+            (COLONOSCOPY_REPORT, 'The colon was normal.', '46600'),  # a passage that names none: the same wording
+        )
+        for text, passage, code in cases:
+            with self.subTest(passage=passage, code=code):
+                proposals, _ = real(text, (code, passage))
+                self.assertRuleWorded(proposals[code], passage)
+
+    def test_the_visit_s_own_documentation_is_worded_from_the_rule_too(self):
+        text = OFFICE_NOTE.format(body='Procedure: Anoscopy - patient declined.')
+        proposals, _ = real(text, ('46600', 'Established patient office visit.'))
+        self.assertRuleWorded(proposals['46600'], 'Established patient office visit.')
+        self.assertIn('only as E/M documentation', check_of(proposals['46600'], 'service.status').detail)
+
+    def test_the_claimed_inputs_never_say_names_no_procedure(self):
+        anoscopy = (HEAD + 'Procedure: Anoscopy\nIndication: Rectal bleeding.\nFindings: Anoscopy revealed grade 2 '
+                    'internal hemorrhoids. No fissure.\n')
+        banding = HEAD + ('Procedure: Hemorrhoid banding\nIndication: Bleeding internal hemorrhoids.\nFindings: After '
+                          'informed consent we banded the right posterior column.\n')
+        visit = (HEAD + 'Place of service: Office (POS 11)\nOffice visit and anoscopy were performed today.\n'
+                 'Chief complaint: anal itching.\nMedical decision making: low.\nTotal time: 25 minutes.\n')
+        for text, passage, code in ((anoscopy, 'Anoscopy revealed grade 2 internal hemorrhoids.', '46600'),
+                                    (banding, 'After informed consent we banded the right posterior column.', '46221'),
+                                    (visit, 'Office visit and anoscopy were performed today.', '46600')):
+            picks = [(code, passage)] + ([('99213', 'Total time: 25 minutes.')] if 'Total time' in text else [])
+            with self.subTest(code=code, passage=passage):
+                proposals, _ = real(text, *picks)
+                self.assertNeverNamesNoProcedure(proposals)

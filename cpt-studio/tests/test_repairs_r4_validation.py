@@ -281,7 +281,9 @@ class OwnProcedureNamedTests(Case):
         self.assertEqual(status.status, 'warn')
         self.assertNotIn('Documented as performed', status.detail)
         self.assertIn(f'“{passage}”', status.detail)
-        self.assertIn('names no procedure', status.detail)
+        # round 5 validation:1: worded from the rule, never 'names no procedure' (a held passage may name one)
+        self.assertIn('is not read as documenting that service as done on that date', status.detail)
+        self.assertNotIn('names no procedure', status.detail)
 
     def test_validation2_a_follow_up_finding_names_no_banding_done(self):
         for line, code in (('Banding sites well healed.', '46221'),

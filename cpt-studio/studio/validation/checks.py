@@ -174,8 +174,8 @@ class Reading:
     start: Optional[int] = None  # a linked passage's offsets in the text
     end: Optional[int] = None
     # Set by the engine on a linked passage of a gi.other code: a positive reading that rests on its section or on E/M
-    # documentation alone, in a passage that names no procedure (see engine._unnamed_other). It is not evidence that
-    # the code's service was done.
+    # documentation alone, in a passage that is not read as documenting the code's own procedure as done (see
+    # engine._unnamed_other). It is not evidence that the code's service was done.
     unnamed: bool = False
     # Set by the engine on a linked passage that hedges another service than the code's (see engine._other_service):
     # "Possible EGD if symptoms persist." cited for an E/M. It holds the code alone, but never contests it.
@@ -194,7 +194,8 @@ class StatusOutcome:
     # names the family only as uncertain; ``contrary`` is that routing reading), 'contested' (one of its own
     # passages reads as performed and another hedges; ``decisive`` is the hedge, ``contrary`` the performed one) or
     # 'section_only' (every positive passage of a gi.other code reads performed only by its section or as the office
-    # visit's own documentation, and names no procedure; ``decisive`` is that passage).
+    # visit's own documentation, and is not read as documenting the code's own procedure as done; ``decisive`` is that
+    # passage).
     reason: str = ''
 
 
@@ -360,7 +361,8 @@ def resolve_status(readings: Sequence[Reading], *, detectable: bool = False) -> 
       (``detectable``: routing can recognise the family in text) a family the document never names or names only
       as uncertain: a passage about another service, or about none in particular, is not evidence for this one.
     - Nor can a passage marked ``unnamed`` (a gi.other code's passage read performed only by its section or as E/M
-      documentation, naming no procedure): when it is the only positive passage the code is held, never excluded.
+      documentation, not read as documenting the code's own procedure as done): when it is the only positive passage
+      the code is held, never excluded.
     """
     own = [r for r in readings if r.origin == 'evidence']
     routed = [r for r in readings if r.origin == 'routing']
@@ -456,10 +458,13 @@ def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
                 f'{name} is not established as performed as coded on the date of service.')
     if outcome.reason == 'section_only' and outcome.decisive:
         # Only the linked passages are judged: the document may document the service in a passage not linked to it.
+        # Worded from the rule that decided it (engine._unnamed_other), never from what the passage names: it may name
+        # a procedure, even the code's own, without being read as documenting it done (round 5 validation:1).
         documented = any(cue.startswith(EM_DOCUMENTATION_CUE_PREFIX) for cue in outcome.decisive.cues)
         basis = 'as E/M documentation' if documented else 'by its section'
         reason = (f'No linked passage establishes that {name} was performed on the date of service: the linked passage '
-                  f'reads as {outcome.decisive.status} only {basis} ({cite(outcome.decisive)}) and names no procedure.')
+                  f'reads as {outcome.decisive.status} only {basis} ({cite(outcome.decisive)}), and it is not read as '
+                  'documenting that service as done on that date.')
         if outcome.contrary:
             reason += f' Another linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}.'
         return reason
