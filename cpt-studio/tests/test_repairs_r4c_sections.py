@@ -842,5 +842,59 @@ class Declared6DenyingLabelSpellingsTests(HeldOrReadyAssertions, unittest.TestCa
                 self.assertTrue(ready(run_engine(text, [('43249', D6_EGD)])['43249']))
 
 
+
+# --- declared:11: ordinary extent labels the closed tail list left unread --------------------------------------------
+
+D11_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+class Declared11ExtentTailTests(unittest.TestCase):
+    """declared:11 (high) - cues.EXTENT_TAIL, the closed list of words that may follow an extent label's landmark, lacked
+    the landmark table's own spellings ("TI", "neo-terminal", "cecal base"), and a Word table row's or a column
+    layout's next cell was read as the value's tail ("Extent: Cecum | Prep quality: Good"), so an ordinary extent label
+    stayed unread (45385 held for the extent, and with prose naming the rectum the colonoscopy read INCOMPLETE). The
+    tail now admits those spellings, and a next cell ends the value when it opens one of a closed list of other report
+    fields; any other next cell ("| intended", "| Reached: No") stays in the tail, so an aim still leaves it unread."""
+
+    def note(self, extent, where='after procedure', technique=''):
+        if where == 'after procedure':
+            return (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\n' + technique + extent + '\nFindings: '
+                    + D11_POLYP + '\n')
+        if where == 'in findings':
+            return HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings:\n' + extent + '\n' + D11_POLYP + '\n'
+        return HEADER + 'Procedure: Colonoscopy with cold snare polypectomy.\nFindings: ' + D11_POLYP + '\n' + extent + '\n'
+
+    READ = (('Extent: cecum and TI.', 'cecum'), ('Extent reached: terminal ileum (TI).', 'terminal ileum'),
+            ('Extent: Cecum | Prep quality: Good | Withdrawal time: 9 min', 'cecum'), ('Extent: cecum    Prep: good', 'cecum'),
+            ('Extent reached: cecum | Boston Bowel Preparation Scale: 8', 'cecum'), ('Extent: cecum\tWithdrawal time: 8 min', 'cecum'),
+            ('Extent: neo-terminal ileum.', 'terminal ileum'), ('Extent: cecum (cecal base).', 'cecum'),
+            ('Extent: Cecum | Bowel preparation: adequate', 'cecum'), ('Extent: cecum | BBPS: 8', 'cecum'))
+
+    def test_ordinary_extent_labels_are_read(self):
+        for extent, value in self.READ:
+            for where in ('after procedure', 'in findings', 'after findings'):
+                text = self.note(extent, where)
+                with self.subTest(extent=extent, where=where):
+                    self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), value)
+                    self.assertTrue(ready(run_engine(text, [('45385', D11_POLYP)])['45385']))
+
+    def test_never_incomplete_from_the_rectum_beside_a_table_row(self):
+        technique = 'Technique: The colonoscope was inserted into the rectum and advanced without difficulty.\n'
+        for extent in ('Extent: Cecum | Prep quality: Good | Withdrawal time: 9 min', 'Extent: cecum and TI.'):
+            text = self.note(extent, technique=technique)
+            with self.subTest(extent=extent):
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+
+    def test_an_aim_or_another_next_cell_still_leaves_it_unread(self):
+        for extent in ('Extent: cecum (intended).', 'Extent: cecum was the goal.', 'Extent: cecum | intended',
+                       'Extent: cecum | Reached: No', 'Extent: cecum    Intended: yes', 'Extent: cecum, TI intended.',
+                       'Extent: cecum (TI not reached).'):
+            text = self.note(extent)
+            with self.subTest(extent=extent):
+                self.assertNotEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
+                self.assertFalse(ready(run_engine(text, [('45385', D11_POLYP)])['45385']))
+
+
 if __name__ == '__main__':
     unittest.main()

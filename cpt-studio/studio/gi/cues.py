@@ -654,11 +654,14 @@ EXTENT_LEAD = frozenset(('the', 'actual', 'final'))
 # The only words that may follow the landmark of an extent label's value for it to state the extent reached
 # (round 4 routing:9, release:3: 'Extent: cecum (intended).', 'cecum (intended; not reached)', 'cecum was the
 # goal'). A closed list, read up to the value's sentence or line end: any other word leaves the extent unread.
+# Round 4c declared:11: with the landmark table's own spellings ("cecum and TI", "terminal ileum (TI)", "neo-terminal
+# ileum", "cecal base", "cecal pole").
 EXTENT_TAIL = frozenset(('reached', 'intubated', 'entered', 'visualized', 'visualised', 'identified', 'confirmed',
                          'seen', 'photographed', 'photodocumented', 'photodocumentation', 'documented',
                          'documentation', 'photo', 'photos', 'image', 'images', 'successfully', 'easily', 'was',
                          'were', 'by', 'the', 'and', 'with', 'of', 'appendiceal', 'orifice', 'ileocecal', 'valve',
-                         'terminal', 'ileum', 'cecum', 'caecum'))
+                         'terminal', 'ileum', 'cecum', 'caecum', 'ti', 'neo-terminal', 'neoterminal', 'cecal', 'pole',
+                         'base'))
 SERVICE_TO_GAP = rx(r'\s*(?:\(\s*[A-Z]{2,6}\s*\)\s*)?(?:to|into|through|up\s+to|as\s+far\s+as)\s+(?:the\s+)?'
                     r'(?:level\s+of\s+the\s+)?')
 ADVANCED = rx(r'\b(?:advanced|passed|inserted|introduced|examined|reached)\b')

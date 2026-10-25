@@ -3124,14 +3124,25 @@ def _answers_silently(an: Analysis, reading: Reading, start: int, end: int) -> b
 _ANSWERING_SECTIONS = frozenset(('addendum', 'pdf form fields', 'pdf annotation text'))
 _EXTENT_TAIL_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*|\d+", re.A)
 _VALUE_END = re.compile(r'[.;\n]')
+# Round 4c declared:11: a Word table row's next cell (" | ", extraction joins cells so), or a column after a tab or two
+# or more spaces, ends the value when it opens one of these report fields ("Extent: Cecum | Prep quality: Good |
+# Withdrawal time: 9 min"). A closed list: any other next cell ("| intended", "| Reached: No") stays in the tail, so an
+# aim or an answer there still leaves the extent unread.
+_SEC_NEXT_CELL = re.compile(r'(?:[ \t]*\|[ \t]*|\t[ \t]*|[ ]{2,})(?:(?:bowel[ \t]+)?prep(?:aration)?(?:[ \t]+quality)?'
+                            r'|quality[ \t]+of[ \t]+(?:the[ \t]+)?(?:bowel[ \t]+)?prep(?:aration)?|bbps'
+                            r'|boston[ \t]+bowel[ \t]+prep(?:aration)?[ \t]+scale(?:[ \t]+\(bbps\))?|withdrawal[ \t]+time'
+                            r'|insertion[ \t]+time|sedation|complications|findings|retroflexion)[ \t]*:', re.A | re.I)
 
 
 def _plain_tail(an: Analysis, end: int, we: int) -> bool:
     """Whether the value after an extent label's landmark adds nothing but punctuation and cues.EXTENT_TAIL words,
-    read to the value's sentence or line end (round 4 routing:9, release:3: "Extent: cecum (intended)." and "cecum
-    (intended; not reached)" name no extent reached). A closed list: any other word leaves the extent unread."""
+    read to the value's sentence or line end, or to a next cell that opens another report field (_SEC_NEXT_CELL)
+    (round 4 routing:9, release:3: "Extent: cecum (intended)." and "cecum (intended; not reached)" name no extent
+    reached). A closed list: any other word leaves the extent unread."""
     stop = _VALUE_END.search(an.text, end, we)
-    tail = an.text[end:stop.start() if stop else we]
+    stop_at = stop.start() if stop else we
+    cell = _SEC_NEXT_CELL.search(an.text, end, stop_at)
+    tail = an.text[end:cell.start() if cell else stop_at]
     return all(word.lower() in cues.EXTENT_TAIL for word in _EXTENT_TAIL_WORD.findall(tail))
 
 
