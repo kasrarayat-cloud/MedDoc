@@ -436,5 +436,101 @@ class Box2GRowCitedWholeTests(unittest.TestCase):
         self.assertEqual(dict((f.name, f.value) for f in route.facts)['interventions'], 'cold snare')
 
 
+
+# --- box2:H -- a box opening a line takes no option label from the line above ------------------------------------------
+
+H_REPORT = HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum.\n{above}\n{line}\n'
+H_LINE = '\u2612 Cold snare polypectomy of the 6 mm sigmoid polyp'
+H_SILENT = detect.SILENT
+H_FINDINGS = 'section: findings (Findings)'
+
+
+class Box2HOptionLabelAcrossALineTests(unittest.TestCase):
+    """box2:H (critical, a regression against R3B-BASE d05326ef). _OPTION_BEFORE read an option word back from a box with
+    "$", which also matches before the newline that ends the search window: the last word of the line above ("none",
+    "no", "not done") became the option label of a checked box opening the next line, which then read as an unchecked
+    option, so "Complications: none / ☒ Cold snare polypectomy ..." was NEGATED and 45385 excluded (d05326ef: silent,
+    not excluded). Every option-word lookbehind of that family (_OPTION_BEFORE, _BOX_BESIDE_BEFORE) now ends at the
+    window's own end (\\Z): a box governs its own line, and the R3B-BASE readings come back."""
+
+    def read(self, text, phrase):
+        start = text.index(phrase)
+        return detect.status_for_span(text, start, start + len(phrase), D)
+
+    def test_the_claimed_lines_read_as_at_r3b(self):
+        for above, wanted in (('Complications: none', ('uncertain', (H_SILENT,))),
+                              ('Procedures performed today: none', ('performed', (H_FINDINGS,)))):
+            with self.subTest(above=above):
+                text = H_REPORT.format(above=above, line=H_LINE)
+                self.assertEqual(self.read(text, H_LINE), wanted)
+                proposals, _ = real(text, ('45385', H_LINE))
+                self.assertEqual(outcome(proposals['45385']), 'ready', [c.detail for c in proposals['45385'].checks])
+
+    def test_every_option_word_ending_the_line_above(self):
+        """A checked box opening a line is never negated, and no other rule fires on it for that reason (box2:G)."""
+        for above in ('Complications: none', 'EBL: none', 'Biopsy: no', 'Polyps removed: not done', 'Tattoo: Not performed',
+                      'Procedures performed today: none', 'Biopsy taken: yes', 'Retroflexion done', 'Biopsy performed',
+                      'Complications: none  ', 'Biopsy: no\t'):
+            for glyph in ('\u2612', '\u2611', '[x]', '(x)', '\u2713', '[*]'):
+                line = glyph + ' Cold snare polypectomy of the 6 mm sigmoid polyp'
+                with self.subTest(above=above, glyph=glyph):
+                    text = H_REPORT.format(above=above, line=line)
+                    status, cues = self.read(text, line)
+                    self.assertNotEqual(status, 'negated', cues)
+                    self.assertNotIn(detect.UNCHECKED, cues)
+                    self.assertNotIn(getattr(detect, '_B2_ITEMS_DIFFER', 'absent'), cues)
+                    proposals, _ = real(text, ('45385', line))
+                    self.assertNotEqual(outcome(proposals['45385']), 'excluded')
+
+    def test_an_unchecked_box_opening_a_line_denies_its_own_item(self):
+        """The R3B-BASE reading, a structural box state: "Complications: none / ☐ Cold snare polypectomy" read silent at
+        the base (the "none" above made the box an option with no answer)."""
+        for above in ('Complications: none', 'Biopsy: no', 'Cecum reached: yes'):
+            for glyph in ('\u2610', '[ ]', '( )'):
+                line = glyph + ' Cold snare polypectomy of the 6 mm sigmoid polyp'
+                with self.subTest(above=above, glyph=glyph):
+                    self.assertEqual(self.read(H_REPORT.format(above=above, line=line), line),
+                                     ('negated', (detect.UNCHECKED,)))
+
+    def test_a_selected_denial_option_naming_no_item_is_held(self):
+        """Read on its own line, "☒ Not performed" under "Biopsy taken: yes" no longer reads performed (the "yes" above was
+        its option label); it reads as round 5 declared:8 holds such a line, never negated: it names nothing it could
+        deny (R3B-BASE held it too). The base negated it under any other line."""
+        for above in ('Prep: good', 'Biopsy taken: yes', 'Complications: none', 'Retroflexion done'):
+            for line in ('\u2612 Not performed', 'Performed \u2610 Not performed \u2612', 'Completed | \u2610 | Not done | \u2612',
+                         '[x] Not done'):
+                with self.subTest(above=above, line=line):
+                    text = H_REPORT.format(above=above, line=line)
+                    status, cues = self.read(text, line)
+                    self.assertEqual(status, 'uncertain', cues)
+                    self.assertTrue(cues[0].startswith('uncertain: a status option on the line'), cues)
+                    proposals, _ = real(text, ('45378', line))
+                    self.assertEqual(outcome(proposals['45378']), 'held')
+        text = H_REPORT.format(above='Prep: good', line='\u2612 Not performed\n\u2612 Not done')
+        self.assertEqual(self.read(text, '\u2612 Not performed\n\u2612 Not done')[0], 'uncertain')  # two such lines, cited together
+        for line, status in (('Biopsy: [x] Not performed', 'negated'), ('Procedure performed: \u2610 Yes \u2612 No', 'negated'),
+                             ('\u2610 Not performed', 'uncertain')):
+            with self.subTest(line=line):  # an item's own denial, a done-question answered no, an unchecked option
+                self.assertEqual(self.read(H_REPORT.format(above='Prep: good', line=line), line)[0], status)
+
+    def test_options_on_their_own_line_read_as_before(self):
+        for line, status in (('Biopsy taken: \u2612 Yes \u2610 No', 'performed'), ('Biopsy taken: \u2610 Yes \u2612 No', 'negated'),
+                             ('Biopsy taken: Yes \u2612 No \u2610', 'performed'), ('Biopsy taken: Yes \u2610 No \u2612', 'negated'),
+                             ('Biopsy taken: No \u2612', 'negated')):
+            with self.subTest(line=line):
+                text = H_REPORT.format(above='Cecum reached: yes', line=line)  # a line that keeps the findings section
+                self.assertEqual(self.read(text, 'Biopsy')[0], status)
+
+    def test_the_lookbehinds_end_at_their_window(self):
+        for pattern, text, at in ((detect._OPTION_BEFORE, 'Complications: none\n\u2612', None),
+                                  (detect._OPTION_BEFORE, 'Biopsy taken: No \u2612', 'match'),
+                                  (detect._BOX_BESIDE_BEFORE, 'Status: Completed \u2610\nPending', None),
+                                  (detect._BOX_BESIDE_BEFORE, 'Status: Completed \u2610 Pending', 'match')):
+            with self.subTest(text=text):
+                end = len(text) - 1 if text.endswith('\u2612') else text.rindex('Pending')
+                found = pattern.search(text, max(0, end - 20), end)
+                self.assertEqual(found is not None, at == 'match', (text, found))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -2067,7 +2067,10 @@ BOX_REACH = 200  # a box governs only an item within this many characters of it,
 # The option a box marks in a yes/no pair ("Biopsy taken: [x] Yes [ ] No", "Biopsy taken: Yes [ ] No [x]").
 _OPTION_WORDS = r'(?:(?P<yes>yes|done|performed)|(?P<no>no|not[ \t]+done|not[ \t]+performed|none))'
 _OPTION_AFTER = re.compile(r'[ \t]*' + _OPTION_WORDS + r'\b', re.A | re.I)
-_OPTION_BEFORE = re.compile(r'\b' + _OPTION_WORDS + r'[ \t]*$', re.A | re.I)
+# Read back from a box, never across a line break (\Z, not $: "$" also matches before the newline that ends the
+# search window, so the last word of the line above became the option label of a box opening the next line; round
+# 4c-2 box2:H, as at d05326ef).
+_OPTION_BEFORE = re.compile(r'\b' + _OPTION_WORDS + r'[ \t]*\Z', re.A | re.I)
 # A "No" that labels a box is an option, not a negation of the item ("[x] Yes [ ] No"): it explains itself.
 _BOX_TEXT = _BOX.pattern.replace('?P<off>', '?:').replace('?P<on>', '?:')
 _NO_OPTION = r'(?:no|none|not[ \t]+done|not[ \t]+performed)'
@@ -2077,7 +2080,7 @@ _OPTION_LABEL = re.compile(r'(?:' + _BOX_TEXT + r')[ \t]*' + _NO_OPTION + r'\b|\
 # cell bar between (_box_beside_a_mark: round 5 declared:8, regression:0).
 _BOX_BESIDE_AFTER = re.compile(r'[ \t|:]*(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern + ')')
 _BOX_BESIDE_BEFORE = re.compile(r'(?:(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern
-                                + r')[ \t|:]*$')
+                                + r')[ \t|:]*\Z')  # never across a line break, as _OPTION_BEFORE (box2:H)
 # What joins the items of one label ("Biopsy/polypectomy", "biopsy or polypectomy", "Biopsy, polypectomy"): a box
 # after the label governs every item it names.
 _LABEL_JOINER = re.compile(r'(?:[ \t\-/,&+()]|\b(?:and|or)\b)*', re.A | re.I)
@@ -2796,6 +2799,13 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         return Reading('uncertain', (BOXES_DISAGREE,), 'cue', doubt=True)
     if _B2_items_differ(an, start, end, state):  # round 4c-2 box2:G: a row of items in different box states, read whole
         return Reading('uncertain', (_B2_ITEMS_DIFFER,), 'cue', doubt=True)
+    if state == 'off' and _box_selected_denial(an, start, end):
+        # round 4c-2 box2:H: a passage naming no item that selects a "Not performed" or "Not done" option ("☒ Not
+        # performed") is held, as round 5 declared:8 holds the service it follows: it names nothing it could deny
+        line_start = an.text.rfind('\n', 0, start) + 1
+        line_end = an.text.find('\n', end)
+        shown = ' '.join(an.text[line_start:len(an.text) if line_end < 0 else line_end].split())[:160]
+        return Reading('uncertain', (BOX_STATUS_OPTION.format(shown),), 'cue', doubt=True)
     if state == 'off' or _unchecked_state(an, start, end):
         return Reading('negated', (UNCHECKED,), 'cue')
     held = _within(fields.held, fields.held_starts, start, end) if one_line else None
