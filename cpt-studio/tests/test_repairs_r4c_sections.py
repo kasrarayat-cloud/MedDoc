@@ -536,12 +536,26 @@ class Sections1TodayLabelAnsweredNoneInWordsTests(HeldOrReadyAssertions, unittes
                   'bleeding.\nMedical decision making: Moderate.\nAssessment and plan: Grade II internal hemorrhoids.\n')
         for line in ('Procedures performed today: flexible sigmoidoscopy to 30 cm',
                      'Procedures performed today:\n\u2612 Flexible sigmoidoscopy to 30 cm',
-                     'Procedures performed today: no sedation; flexible sigmoidoscopy to 30 cm',
-                     'Procedures performed today:\nFlexible sigmoidoscopy to 30 cm was performed.'):
+                     'Procedures performed today: no sedation; flexible sigmoidoscopy to 30 cm'):
             text = office + line + '\n'
             with self.subTest(line=line):
                 self.assertEqual(family(text, 'gi.flex_sig'), 'performed')
                 self.assertTrue(ready(run_engine(text, [('45330', 'lexible sigmoidoscopy to 30 cm')])['45330']))
+
+    def test_a_cued_line_below_the_label_is_held_too(self):
+        """A line with its own performance cue below the label's line is held as well: under "Past history:" R3B-BASE read
+        "EGD with balloon dilation was performed." historical, under a plan it held it. Only a checked box keeps the
+        section's reading. The accepted cost: a cued item under the bare label in a plan is held (HEAD: performed)."""
+        line = 'EGD with balloon dilation was performed.'
+        for before in ('Past history:\n', 'Assessment and plan:\n1. Dysphagia.\n', 'Chief complaint: Dysphagia.\n'):
+            text = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n' + before + 'Procedures '
+                    'performed today: None today\n' + line + '\n')
+            with self.subTest(before=before):
+                self.assertNotIn(read(text, line)[0], POSITIVE)
+                self.assert_never_ready(text, '43249', line)
+        text = (HEADER + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nAssessment and plan: Grade II '
+                'internal hemorrhoids.\nProcedures performed today:\nFlexible sigmoidoscopy to 30 cm was performed.\n')
+        self.assert_held_never_excluded(text, '45330', 'Flexible sigmoidoscopy to 30 cm was performed.')
 
     def test_an_unboxed_item_under_the_bare_label_is_held_not_excluded(self):
         """The accepted cost of the general form: an unchecked, unverbed item under the bare label in a plan is held
@@ -563,6 +577,17 @@ class Sections1TodayLabelAnsweredNoneInWordsTests(HeldOrReadyAssertions, unittes
                 self.assert_never_ready(text, '43249', S1_ITEM)
         text = 'Procedures performed today: None today\n' + S1_ITEM + '\n'  # nothing before the label at all
         self.assertNotIn(read(text, S1_ITEM)[0], POSITIVE)
+
+    def test_after_a_positive_section_a_negated_answer_holds(self):
+        """After a procedure or findings section a label whose answer carries a negation word holds the lines below it
+        too (R3B-BASE: the "None" doubted the next line in the same section); an ordinary answer reads as before."""
+        for before in ('Procedure: EGD\n', 'Procedure: EGD\nFindings: The gastroscope was advanced to the duodenum.\n'):
+            for label in ('- Procedures performed today: None today', 'Procedures performed today: No procedures performed',
+                          'Procedures performed today:\nNone today', 'Procedures performed today:\n\nnone performed'):
+                text = HEADER + before + label + '\n' + S1_ITEM + '\n'
+                with self.subTest(before=before, label=label):
+                    self.assertNotIn(read(text, S1_ITEM)[0], POSITIVE)
+                    self.assert_never_ready(text, '43249', S1_ITEM)
 
     def test_after_a_positive_section_the_label_reads_as_before(self):
         polyp = 'Cold snare polypectomy of a 6 mm sigmoid polyp'

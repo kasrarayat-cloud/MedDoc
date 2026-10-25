@@ -1817,6 +1817,10 @@ def _SEC_hold_cue(an: Analysis, section) -> Optional[str]:
     return _SEC_listed_under(section) if _SEC_phrase_section(an, section) else None
 
 
+_SEC_NEXT_LINE = re.compile(r'\n[ \t]*(?:\n[ \t]*)?[^\n]*')  # the first line under a label that is not blank, or the next
+_SEC_ANSWER_REACH = 200  # how much of that line is read for a negation word (bounds the work per span)
+
+
 def _SEC_today_label_hold(an: Analysis, section, start: int, end: int) -> Optional[str]:
     """A cue holding [start, end) when only its procedure section would read it performed, and that section was opened
     by one of round 3b's performed-today labels ("Procedures performed today:") over any section but a procedure,
@@ -1824,19 +1828,28 @@ def _SEC_today_label_hold(an: Analysis, section, start: int, end: int) -> Option
     text before the first heading), below the label's own line (round 4c sections:1). The label may answer none in any
     words ("None today", "No procedures performed", "None. EGD to be scheduled"), and then the item after it is planned
     or silent (R3B-BASE: excluded under a plan, held elsewhere), never performed; no word list tells, so the line is
-    held. The label's own line and its sentence keep their reading, and so does an
-    item its checked box governs (round 3 contract:8: "Procedures performed today:" then "[x] Flexible
-    sigmoidoscopy to 30 cm"), read through the box vocabulary's own reader (_box_state)."""
+    held, with or without a performance cue of its own (_cue_reading). The label's own line and its sentence keep their
+    reading, and so does an item its checked box governs (round 3 contract:8: "Procedures performed today:" then "[x]
+    Flexible sigmoidoscopy to 30 cm"), read through the box vocabulary's own reader (_box_state)."""
     if section.kind != 'procedure' or section.label not in gi_sections._SEC_TODAY_LABELS or section.heading is None:
         return None
+    text = an.text
+    line_end = text.find('\n', section.heading.end)
+    line_end = len(text) if line_end < 0 else line_end
     index = bisect.bisect_right(an.lay.section_starts, section.start) - 1
     if index > 0 and an.lay.sections[index - 1].kind in POSITIVE_SECTIONS:
+        # after a procedure, findings or technique section, only a label whose answer (its value, or the first line
+        # under a bare label) carries an unresolved negation word ("None today", "No procedures performed"): there it
+        # doubted the next line at R3B-BASE, inside the section in force
+        answer_end = line_end
+        if not text[section.heading.end:line_end].strip():
+            nxt = _SEC_NEXT_LINE.search(text, line_end, min(len(text), line_end + _SEC_ANSWER_REACH))
+            answer_end = nxt.end() if nxt else line_end
+        if not cues.DOUBT_TOKEN.search(text, section.heading.end, answer_end):
+            return None
+    if an.lay.sentence_for(start, end)[0] < line_end or _box_state(an, start, end) == 'on':
         return None
-    line_end = an.text.find('\n', section.heading.end)
-    if an.lay.sentence_for(start, end)[0] < (len(an.text) if line_end < 0 else line_end) \
-            or _box_state(an, start, end) == 'on':
-        return None
-    label = ' '.join(an.text[section.heading.start:(len(an.text) if line_end < 0 else line_end)].split())[:80]
+    label = ' '.join(text[section.heading.start:line_end].split())[:80]
     return f"uncertain: listed after '{label}', a performed-today label that may answer none"
 
 
@@ -1869,11 +1882,14 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
     past = status == 'negated' and all(f[2] for f in found if f[0] == 'negated')
     doubt = status == 'uncertain' and any(f[3] for f in found if f[0] == 'uncertain')
     section = an.lay.section_at(start)
-    hold = _SEC_held_within(an, start, end) if status == 'performed' and not em else None
+    hold = (_SEC_held_within(an, start, end) or _SEC_today_label_hold(an, section, start, end)
+            if status == 'performed' and not em else None)
     if hold:
         # round 4c sections:0: under a phrase line ("Review of prior procedures"), or after a plan label with an answer
-        # of its own (regression:2), a line with its own performance cue is held like the lines without one (it may tell
-        # another time or a plan), never performed
+        # of its own (regression:2), or below a performed-today label opened over a section that is not a procedure,
+        # findings or technique one (sections:1: "Past history:" then "Procedures performed today: None today" then
+        # "EGD ... was performed." read historical at R3B-BASE), a line with its own performance cue is held like the
+        # lines without one, never performed
         return Reading('uncertain', (hold,) + deciding, 'cue')
     if status == 'performed' and section.kind == 'history':
         today = any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end))
