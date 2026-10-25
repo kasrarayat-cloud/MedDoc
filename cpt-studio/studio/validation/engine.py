@@ -347,10 +347,18 @@ def _done_today(finding: FamilyFinding) -> Optional[str]:
 
 def _possibly_today(finding: FamilyFinding) -> bool:
     """A routed family whose performance on the date of service is not established, through a mention that can speak
-    for that date. A gi.other finding is read mention by mention: each of its mentions may be another procedure."""
+    for that date. A gi.other finding is read mention by mention: each of its mentions may be another procedure. So,
+    outside plan, history and indication sections, is a detected family not read as done (round 4d validation:6): its
+    aggregate may rank what the history says of another encounter first ("History of present illness: EGD and
+    colonoscopy last month were unremarkable." beside "Assessment: EGD was performed today and showed esophagitis
+    versus reflux."), and a hedged mention there is still a possible same-day procedure (ARCHITECTURE 5.6)."""
     if finding.family == OTHER_GI:
         return any(m.status == 'uncertain' and _speaks_for_today(m) for m in finding.mentions)
-    return finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions)
+    if finding.status == 'uncertain' and any(_speaks_for_today(m) for m in finding.mentions):
+        return True
+    return finding.status not in checks.POSITIVE and any(
+        m.status == 'uncertain' and m.section not in NOT_TODAY_SECTIONS and _speaks_for_today(m)
+        for m in finding.mentions)
 
 
 def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection]) -> set[int]:

@@ -72,3 +72,112 @@ class Validation3TemporalLeadTests(Case):
             with self.subTest(line=line, layout='banding report'):
                 proposals, _ = real(BANDING.format(find=line), ('46221', line))
                 self.assertReady(proposals['46221'])
+
+
+# --- validation:6: a hedged same-day procedure outside plan, history and indication holds the E/M, whatever ranks first
+
+OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{line}\n'
+          'Medical decision making: moderate.\nTotal time: 32 minutes.\n')
+VISIT = 'Established patient office visit.'
+
+
+def _labels():
+    from studio.gi.profiles import PROFILES
+    return {family: PROFILES[family].label for family in ('gi.egd', 'gi.flex_sig', 'gi.other', 'gi.colonoscopy')}
+
+
+class Validation6HedgedSameDayProcedureTests(Case):
+    """validation:6 (critical, regression against 9a9f403). With 'History of present illness: EGD and colonoscopy last
+    month were unremarkable.' (regression:6 made the coordinated pair historical), 'Assessment: EGD was performed today
+    and showed esophagitis versus reflux.' left 99214 READY: routing's family aggregate ranks the HPI's historical
+    first, and engine._possibly_today asked only for an uncertain family. ARCHITECTURE 5.6 reads every routed mention
+    outside plan, history and indication sections that hedges as a possible same-day procedure, so a detected family is
+    now read mention by mention too, as gi.other already was (hold-only)."""
+
+    HPI = ('History of present illness: EGD and colonoscopy last month were unremarkable.',
+           'History of present illness: Colonoscopy and EGD 2 years ago were normal.',
+           'History of present illness: EGD last month was unremarkable.',
+           'History of present illness: She had an EGD in 2020.')
+    STATEMENTS = ('Assessment: EGD was performed today and showed esophagitis versus reflux.',
+                  'Impression: EGD was performed today and showed a Schatzki ring versus a web.',
+                  'Assessment: EGD today showed esophagitis versus reflux.')
+
+    def test_the_claimed_notes_hold_the_visit_for_the_egd(self):
+        labels = _labels()
+        for hpi in self.HPI:
+            for statement in self.STATEMENTS:
+                with self.subTest(hpi=hpi, statement=statement):
+                    proposals, _ = real(OFFICE.format(line=f'Chief complaint: dysphagia.\n{hpi}\n{statement}'),
+                                        ('99214', VISIT))
+                    self.assertVisitHeld(proposals, f'{labels["gi.egd"]} is possibly performed on the same date')
+                    self.assertNotIn(labels['gi.colonoscopy'],
+                                     check_of(proposals['99214'], 'em.same_day_procedure').detail)
+
+    def test_round_4_validation_0_s_held_lines_beside_a_past_procedure_in_the_history(self):
+        from tests.test_repairs_r4_validation import Validation0DiscussionReleaseRevertedTests as Pinned
+        for hpi in ('History of present illness: EGD and flexible sigmoidoscopy last year were normal.',
+                    'History of present illness: EGD and colonoscopy last month were unremarkable.',
+                    'History of present illness: Flexible sigmoidoscopy in 2020 was normal.'):
+            for line, label in Pinned.HELD:
+                if label == _labels()['gi.other']:
+                    continue  # a banding beside a family named only in the history: validation:7's tests
+                with self.subTest(hpi=hpi, line=line):
+                    proposals, _ = real(OFFICE.format(line=f'{hpi}\n{line}'), ('99214', VISIT))
+                    self.assertVisitHeld(proposals, f'{label} is possibly performed on the same date')
+
+    def test_controls_a_past_procedure_or_a_plan_alone_keeps_the_visit_ready(self):
+        for line in ('Chief complaint: dysphagia.\nHistory of present illness: EGD and colonoscopy last month were '
+                     'unremarkable.\nAssessment: GERD.',
+                     'Chief complaint: dysphagia.\nHistory of present illness: EGD and colonoscopy last month were '
+                     'unremarkable.\nAssessment and plan: Possible EGD if symptoms persist.',
+                     'Chief complaint: dysphagia.\nHistory of present illness: EGD last month was unremarkable.\n'
+                     'Plan: EGD next month if symptoms persist.',
+                     'Chief complaint: dysphagia.\nHistory of present illness: She had an EGD in 2020.\n'
+                     'Assessment: GERD, controlled.'):
+            with self.subTest(line=line):
+                proposals, _ = real(OFFICE.format(line=line), ('99214', VISIT))
+                self.assertVisitReady(proposals)
+
+
+from tests.test_repairs_status_r2_validation import placed  # noqa: E402
+from tests.test_validation import EM, EngineCase, Note, finding, selected, visit_context  # noqa: E402
+
+
+class Validation6MentionByMentionTests(EngineCase):
+    """validation:6 with constructed routing: which mentions of a detected family not read as done hold the E/M. A
+    hedge under Assessment does; a history mention held only by routing's another-time rule does not (round 5
+    regression:6: 'EGD and colonoscopy last month were unremarkable.' held every such visit), nor does a plan."""
+
+    NOTE = Note('Date of service: 2026-10-21', 'Established patient office visit.', 'Total time 32 minutes.',
+                'EGD in 2019 was normal.', 'EGD and colonoscopy last month were unremarkable.',
+                'EGD was performed today and showed esophagitis versus reflux.', 'Possible EGD if symptoms persist.')
+    VISIT, TIME = 'Established patient office visit.', 'Total time 32 minutes.'
+
+    def visit_for(self, *mentions, status='historical'):
+        self.statuses = {self.TIME: None}
+        visit = finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
+                        facts={'em_basis': 'total time 32 minutes'})
+        egd = finding('gi.egd', status, placed(self.NOTE, 'gi.egd', 'historical', 'EGD in 2019 was normal.', 'history',
+                                               'historical: 2019 is before the service date'), *mentions)
+        result = self.run_engine(self.NOTE, selected('99214', self.NOTE.span(self.TIME)), findings=[visit, egd],
+                                 ctx=visit_context())
+        return self.proposal(result, '99214')
+
+    def test_a_hedge_under_assessment_holds_the_visit_whatever_the_family_ranks_first(self):
+        hedge = placed(self.NOTE, 'gi.egd', 'uncertain', 'EGD was performed today and showed esophagitis versus reflux.',
+                       'assessment', 'uncertain: versus')
+        for status in ('historical', 'planned', 'negated', 'cancelled'):
+            with self.subTest(status=status):
+                visit = self.visit_for(hedge, status=status)
+                self.assertEqual(visit.status, 'needs_clarification')
+                self.assertIn('separate_em', [c.fact for c in visit.clarifications])
+
+    def test_controls_a_history_time_hold_or_a_plan_hedge_alone_does_not(self):
+        for mention in (placed(self.NOTE, 'gi.egd', 'uncertain', 'EGD and colonoscopy last month were unremarkable.',
+                               'history', "uncertain: another time: 'last month' may date it or another thing in its "
+                               'clause'),
+                        placed(self.NOTE, 'gi.egd', 'uncertain', 'Possible EGD if symptoms persist.', 'plan',
+                               'uncertain: possible')):
+            with self.subTest(section=mention.section):
+                visit = self.visit_for(mention)
+                self.assertEqual(visit.status, 'ready', [c.detail for c in visit.checks])

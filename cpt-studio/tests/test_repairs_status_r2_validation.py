@@ -686,12 +686,15 @@ class Status1GuardTests(EngineCase):
         self.statuses = {self.TIME: None, self.BIOPSY: biopsy_reading}
         visit = finding(EM, 'performed', placed(self.NOTE, EM, 'performed', self.VISIT, 'other', 'seen'),
                         facts={'em_basis': 'total time 32 minutes'})
+        # Round 4d validation:6: a hedged mention outside plan, history and indication sections of a family not read
+        # as done holds the E/M on its own (ARCHITECTURE 5.6), so the constructed procedure line sits in an indication
+        # section here: these tests isolate the guard (an excluded code stated as done), not that rule.
         flex = finding('gi.flex_sig', 'historical',
                        placed(self.NOTE, 'gi.flex_sig', 'historical', self.PRIOR, 'history',
                               'historical: 2022 is before the service date', 'historical: Prior'),
-                       placed(self.NOTE, 'gi.flex_sig', 'uncertain', self.LINE, 'procedure',
+                       placed(self.NOTE, 'gi.flex_sig', 'uncertain', self.LINE, 'indication',
                               "uncertain: section silent: 'to evaluate' follows the service name",
-                              'section: procedure (Procedure)'),
+                              'section: indication (Indication)'),
                        facts={'extent': '40 cm'})
         result = self.run_engine(self.NOTE, selected('99214', self.NOTE.span(self.TIME)),
                                  selected(code, self.NOTE.span(self.BIOPSY)), findings=[visit, flex],
