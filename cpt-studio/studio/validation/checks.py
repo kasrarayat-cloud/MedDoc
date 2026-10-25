@@ -1208,14 +1208,23 @@ def _VAL_name(text: str) -> str:
     return flat[_VAL_NAME_LEAD.match(flat).end():] if _VAL_NAME_LEAD.match(flat) else flat
 
 
+def _VAL_one_procedure_words(code: str):
+    """The words of the code's one-procedure class (_VAL_ONE_PROCEDURE), or None for a code whose range is not one
+    procedure."""
+    return next((pattern for low, high, pattern in _VAL_ONE_PROCEDURE if low <= code <= high), None)
+
+
+def _VAL_in_class(code: str, name: str) -> bool:
+    """Whether a routed procedure name is in the code's one-procedure class and is no range sibling (a
+    hemorrhoidectomy)."""
+    words = _VAL_one_procedure_words(code)
+    return bool(words and words.search(name) and not _VAL_SIBLING.search(name))
+
+
 def _VAL_same_procedure(code: str, one: str, other: str) -> bool:
     """Whether two routed procedure names are the same single procedure for the code: equal as words, or both in the
-    code's own one-procedure class (_VAL_ONE_PROCEDURE) and neither a range sibling (a hemorrhoidectomy)."""
-    if _VAL_name(one) == _VAL_name(other):
-        return True
-    words = next((pattern for low, high, pattern in _VAL_ONE_PROCEDURE if low <= code <= high), None)
-    return bool(words and words.search(one) and words.search(other)
-                and not _VAL_SIBLING.search(one) and not _VAL_SIBLING.search(other))
+    code's own one-procedure class (_VAL_in_class)."""
+    return _VAL_name(one) == _VAL_name(other) or (_VAL_in_class(code, one) and _VAL_in_class(code, other))
 
 
 def _VAL_owns(code: str, name: str) -> bool:

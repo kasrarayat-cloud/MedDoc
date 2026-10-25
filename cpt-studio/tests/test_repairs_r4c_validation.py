@@ -548,3 +548,57 @@ class Validation2OwnProcedureReportOverHoldTests(Case):
             with self.subTest(passage=passage, code=code):
                 proposals, _ = real(text, (code, passage))
                 self.assertNotEqual(proposals[code].status, 'ready', [c.detail for c in proposals[code].checks])
+
+
+# --- validation:5: one procedure named twice in its own report is covered by its code --------------------------------
+
+V5_ANOSCOPY = (HEAD + 'Procedure: Anoscopy\nIndication: Rectal bleeding.\nFindings: Anoscopy was performed and showed '
+               'grade 2 internal hemorrhoids.\n')
+V5_BANDING = HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Two internal hemorrhoids were banded.\n'
+V5_OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal '
+             'bleeding.\n{body}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Validation5OneProcedureNamedTwiceTests(Case):
+    """validation:5 (medium over-warn; round 4 validation:13 by another input). A selected gi.other code covered only
+    the routed mention its passage speaks for, so a report naming its one procedure on the procedure line and again in
+    its findings called the code's own procedure "a possible missed service ... with no selected proposal". A done
+    mention that names again the same single procedure as one the code speaks for is covered now; a range sibling (a
+    hemorrhoidectomy beside 46221, a capsule endoscopy or another manometry beside 91010) is still named."""
+
+    def unproposed(self, text, *picks):
+        from tests.test_repairs_r3_validation_b import encounter_check
+        return encounter_check(real(text, *picks)[1], 'services.unproposed')
+
+    def test_the_claimed_reports_pass_whichever_line_is_cited(self):
+        for text, code, cited in ((V5_ANOSCOPY, '46600', 'Procedure: Anoscopy'),
+                                  (V5_ANOSCOPY, '46600', 'Anoscopy was performed and showed grade 2 internal hemorrhoids.'),
+                                  (V5_ANOSCOPY + 'Impression: Grade 2 internal hemorrhoids.\nPlan: Fiber.\n', '46600',
+                                   'Procedure: Anoscopy'),
+                                  (V5_BANDING, '46221', 'Procedure: Rubber band ligation of internal hemorrhoids'),
+                                  (V5_BANDING, '46221', 'Two internal hemorrhoids were banded.'),
+                                  # a code whose range is no single procedure: the same name, word for word
+                                  (HEAD + 'Procedure: Esophageal manometry\nFindings: Esophageal manometry was performed '
+                                          'and showed normal peristalsis.\n', '91010', 'Procedure: Esophageal manometry')):
+            with self.subTest(code=code, cited=cited):
+                check = self.unproposed(text, (code, cited))
+                self.assertEqual(check.status, 'pass', check.detail)
+
+    def test_a_range_sibling_is_still_a_possible_missed_service(self):
+        cases = (
+            (V5_BANDING + 'Excisional hemorrhoidectomy with ligation of the vascular pedicle was performed today.\n',
+             ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'), 'Excisional hemorrhoidectomy'),
+            (V5_OFFICE.format(body='Rubber band ligation x2 was performed today, and excisional hemorrhoidectomy was '
+                                   'performed.'),
+             ('46221', 'Rubber band ligation x2 was performed today'), 'excisional hemorrhoidectomy'),
+            (V5_OFFICE.format(body='Esophageal manometry was performed today.\nCapsule endoscopy was performed today.'),
+             ('91010', 'Esophageal manometry was performed today.'), 'Capsule endoscopy'),
+            (V5_OFFICE.format(body='Esophageal manometry was performed today.\nAnorectal manometry was performed today.'),
+             ('91010', 'Esophageal manometry was performed today.'), 'Anorectal manometry'),
+        )
+        for text, pick, missed in cases:
+            with self.subTest(missed=missed):
+                check = self.unproposed(text, pick, ('99213', 'Total time: 32 minutes.')) if 'Total time' in text \
+                    else self.unproposed(text, pick)
+                self.assertEqual(check.status, 'warn', check.detail)
+                self.assertIn(missed, check.detail)

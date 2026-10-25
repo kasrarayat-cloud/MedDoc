@@ -387,6 +387,32 @@ def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection])
     return {i for start, end in spans for i in (only(sentences, start, end), only(names, start, end)) if i is not None}
 
 
+def _VAL_named_again(mentions: Sequence[ServiceMention], selections: Sequence[_Selection]) -> set[int]:
+    """The positions of the done gi.other mentions that name again a procedure a selected, non-excluded gi.other code
+    speaks for (_cited, code by code; round 5 validation:5): "Procedure: Anoscopy" cited by 46600 also covers "Anoscopy
+    was performed and showed ..." under Findings - one procedure, named twice. Two names are one procedure when they are
+    the same single procedure for that code (checks._VAL_same_procedure: equal as words, or both in its one-procedure
+    class - 46221 banding, 46600-46615 anoscopy - and neither a hemorrhoidectomy); never a range sibling (an uncoded
+    hemorrhoidectomy beside 46221, a capsule endoscopy or another manometry beside 91010), which stays a possible
+    missed service. Indexed once per code: a set of its cited names and its class, one look per mention."""
+    done = [index for index, m in enumerate(mentions) if m.status in checks.POSITIVE]
+    covered: set[int] = set()
+    for s in selections:
+        if s.family != OTHER_GI or s.excluded:
+            continue
+        own = _cited(mentions, [s])
+        if not own:
+            continue
+        names = {checks._VAL_name(mentions[i].span.text) for i in own}
+        in_class = any(checks._VAL_in_class(s.code, mentions[i].span.text) for i in own)
+        for index in done:
+            text = mentions[index].span.text
+            if index not in own and (checks._VAL_name(text) in names
+                                     or (in_class and checks._VAL_in_class(s.code, text))):
+                covered.add(index)
+    return covered
+
+
 def _same_day_family(finding: FamilyFinding) -> bool:
     """A routed family that is a procedure for the same-day E/M rule: a procedure profile, or another GI service.
     Routing emits a gi.other finding only for a procedure documented at this encounter that names none of the
@@ -622,7 +648,7 @@ def _missed(routing: RoutingResult, selections: Sequence[_Selection], procedure_
         if not (f.family in PROFILES and (PROFILES[f.family].supported or f.family == OTHER_GI) and _done_today(f)):
             continue
         if f.family == OTHER_GI and f.mentions:
-            cited = _cited(f.mentions, selections)
+            cited = _cited(f.mentions, selections) | _VAL_named_again(f.mentions, selections)
             uncited = [m.span.text for index, m in enumerate(f.mentions)
                        if m.status in checks.POSITIVE and index not in cited]
             if uncited and OTHER_GI in proposed:
