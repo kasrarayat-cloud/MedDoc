@@ -117,14 +117,16 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
 Proposal `bucket` ∈ selected | alternative | excluded. `status` ∈ ready |
 needs_clarification | excluded | informational (alternatives). `decision_state`
 ∈ undecided | approved | rejected | reinstated | exclusion_confirmed. `allowed_actions` is computed by
-the server and is the only source of truth for which buttons are enabled.
+the server and is the only source of truth for which buttons are enabled. `approve_withheld_by` is the
+same for every member: on a reinstated exclusion it names the check that withholds approve
+(`review.reinstatement` or `em.same_day_if_reinstated`), and it is null otherwise.
 
 ## POST /api/encounters/{id}/decisions
 
 `{"proposal_id": "uuid", "action": "approve|reject|reinstate|confirm|revoke", "note": "", "acknowledgement": "..."}`
 Approve requires the acknowledgement to be exactly the current attestation
 for the reviewer's actor kind (`acknowledgement` in `GET /api/session`;
-surrounding whitespace is ignored); any other text answers 400, so a page
+surrounding whitespace is ignored); any other text, or none, answers 400, so a page
 loaded before the attestation changed is told to reload. → `201 {decision}`; 409 when the
 action is not allowed for that proposal now. A documentation check's exclusion
 (`bucket` excluded, `reinstatable` true) is a recommendation, not a final

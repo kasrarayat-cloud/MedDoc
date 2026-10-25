@@ -180,6 +180,7 @@ def _proposal_json(proposal, current, assessment, membership, clarification_ids)
         'decision_state': DECISION_STATES.get(decision.action, 'undecided') if decision else 'undecided',
         'reinstated_by': _reinstated_by(proposal, decision),
         'allowed_actions': review.allowed_actions(proposal, assessment, membership),
+        'approve_withheld_by': review.approve_withheld_by(proposal, assessment, current),
     }
 
 

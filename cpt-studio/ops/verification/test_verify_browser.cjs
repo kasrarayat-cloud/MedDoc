@@ -451,3 +451,110 @@ test('planConfirmations confirms only the families must_not_code names', () => {
     assert.deepEqual(vb.planConfirmations(other, [{ family: 'gi.colonoscopy' }], {}), [], JSON.stringify(extra));
   }
 });
+
+// --- round 6, pipeline:3: readDom's candidate rows, over the markup the live app renders -----------------------------
+//
+// A minimal DOM for readDom's own selectors (tag, .class, [attr="value"], compound and descendant), so the unit suite
+// runs the same $$eval callbacks the real walk runs in Chromium. Dropping the candidate rows from readDom must fail here.
+
+function parseHtml(html) {
+  const decode = text => text.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#x27;/g, "'")
+    .replace(/&#x60;/g, '`').replace(/&amp;/g, '&');
+  const VOID = new Set(['area', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr']);
+  const root = { tag: '#root', attrs: {}, children: [], parent: null };
+  let node = root;
+  const token = /<!--[\s\S]*?-->|<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:\s+[^\s=>/]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+))?)*)\s*(\/?)>|([^<]+)/g;
+  for (const m of html.matchAll(token)) {
+    if (m[5] !== undefined) { node.children.push({ text: decode(m[5]) }); continue; }
+    if (!m[2]) continue;
+    const tag = m[2].toLowerCase();
+    if (m[1]) {
+      let open = node;
+      while (open && open.tag !== tag) open = open.parent;
+      if (open && open.parent) node = open.parent;
+      continue;
+    }
+    const attrs = {};
+    for (const a of m[3].matchAll(/([^\s=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?/g)) attrs[a[1].toLowerCase()] = decode(a[2] ?? a[3] ?? a[4] ?? '');
+    const element = { tag, attrs, children: [], parent: node };
+    node.children.push(element);
+    if (!VOID.has(tag) && !m[4]) node = element;
+  }
+  return root;
+}
+
+function compoundMatches(node, compound) {
+  if (!node || !node.tag || node.tag === '#root') return false;
+  const tag = compound.match(/^[a-z][a-z0-9-]*/i);
+  if (tag && node.tag !== tag[0].toLowerCase()) return false;
+  const classes = (node.attrs.class || '').split(/\s+/);
+  for (const [, name] of compound.matchAll(/\.([\w-]+)/g)) if (!classes.includes(name)) return false;
+  for (const [, name, value] of compound.matchAll(/\[([\w-]+)(?:="([^"]*)")?\]/g)) {
+    if (!(name in node.attrs) || (value !== undefined && node.attrs[name] !== value)) return false;
+  }
+  return true;
+}
+
+function selectorMatches(node, selector) {
+  const parts = selector.trim().split(/\s+/);
+  if (!compoundMatches(node, parts.pop())) return false;
+  let ancestor = node.parent;
+  while (parts.length) {
+    while (ancestor && !compoundMatches(ancestor, parts[parts.length - 1])) ancestor = ancestor.parent;
+    if (!ancestor) return false;
+    parts.pop();
+    ancestor = ancestor.parent;
+  }
+  return true;
+}
+
+function wrap(node) {
+  const descendants = function* walk(n) { for (const child of n.children || []) { if (child.tag) { yield child; yield* walk(child); } } };
+  const text = n => (n.text !== undefined ? n.text : (n.children || []).map(text).join(''));
+  const dataset = {};
+  for (const [name, value] of Object.entries(node.attrs || {})) {
+    if (name.startsWith('data-')) dataset[name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase())] = value;
+  }
+  return {
+    id: node.attrs.id || '', dataset, textContent: text(node),
+    closest(selector) {
+      for (let n = node; n && n.tag !== '#root'; n = n.parent) if (selectorMatches(n, selector)) return wrap(n);
+      return null;
+    },
+    querySelector(selector) { for (const d of descendants(node)) if (selectorMatches(d, selector)) return wrap(d); return null; },
+    querySelectorAll(selector) { return [...descendants(node)].filter(d => selectorMatches(d, selector)).map(wrap); },
+  };
+}
+
+function fakePage(html) {
+  const root = parseHtml(html);
+  root.attrs = {};
+  const top = wrap(root);
+  return { $$eval: async (selector, fn) => fn(top.querySelectorAll(selector)) };
+}
+
+test('readDom reads a confirmed exclusion from its candidate row in the rendered page, and the decision check passes', async () => {
+  const app = require('../../studio/static/studio/app.js');
+  const doc = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'tests', 'fixtures', 'api', 'encounter-ready.json'), 'utf8'));
+  const id = '0b6f6a2e-3c1d-4f7a-9e2b-5d8c7a6b4e3f';
+  const excluded = { ...doc.assessment.proposals[0], id, code: '45378', bucket: 'excluded', status: 'excluded', reinstatable: true,
+    exclusion_reason: 'Documented as planned, not as performed on the date of service.', reinstated_by: null,
+    decision: { action: 'confirm', reviewer: 'Review Agent One', reviewer_kind: 'agent' }, decision_state: 'exclusion_confirmed',
+    allowed_actions: ['revoke'], approve_withheld_by: null };
+  // A decided selected code shows its own undo button inside its code card: that one is not a candidate row.
+  const [first, ...rest] = doc.assessment.proposals;
+  const approved = { ...first, decision: { action: 'approve', reviewer: 'Review Agent One', reviewer_kind: 'agent' },
+    decision_state: 'approved', allowed_actions: ['revoke'] };
+  const enc = { ...doc, assessment: { ...doc.assessment, proposals: [approved, ...rest, excluded] } };
+  const html = app.reviewView(enc, app.documentLayout(enc), 'codes', true);
+  assert.ok(html.includes(`data-decision="revoke" data-proposal="${approved.id}"`), 'the code card has no undo button: the filter is untested');
+  const dom = await vb.readDom(fakePage(html));
+  assert.ok(Array.isArray(dom.candidates), 'readDom returned no candidate rows');
+  assert.deepEqual(dom.candidates.map(c => c.proposal), [id]);
+  assert.ok(dom.candidates[0].text.includes('Exclusion confirmed by Review Agent One'), dom.candidates[0].text);
+  assert.ok(dom.cards.length >= 1, 'the code cards were not read: the fake page proves nothing');
+  const made = [{ http_status: 201, action: 'confirm', proposal_id: id, code: '45378' }];
+  assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, dom.candidates).map(r => r.status), ['pass']);
+  // and the same check fails when the row is missing, as it did when readDom dropped the rows
+  assert.deepEqual(vb.checkDecisionDom(made, enc, dom.cards, []).map(r => r.status), ['fail']);
+});

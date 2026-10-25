@@ -80,6 +80,8 @@ def api_view(view):
             return JsonResponse({'error': 'Not found.'}, status=404)
         except PermissionDenied as exc:
             return JsonResponse({'error': str(exc) or 'Your role cannot do that.'}, status=403)
+        except review.AttestationRefused as exc:
+            return JsonResponse({'error': ' '.join(exc.messages)}, status=400)
         except ValidationError as exc:
             return JsonResponse({'error': ' '.join(exc.messages)}, status=409)
         except RecursionError:  # a backstop: a nested value that reached code recursing per level

@@ -527,24 +527,34 @@ function candidateDecision(proposal) {
   const who = proposal.decision?.reviewer || 'a reviewer whose name was not recorded';
   if (proposal.decision_state === 'exclusion_confirmed') return `Exclusion confirmed by ${who}.`;
   if (proposal.decision_state === 'reinstated') {
-    const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
-    if (allowed.includes('approve')) return `Reinstated for review by ${who}; approve or reject it.`;
-    // The server withholds approve until the gate a selected code meets is met; say which one (round 5, bypass:6).
+    // The code's own gate, which the server reads the same for every member, says whether it can be approved; the
+    // member's action list only says what this member may do (round 6, bypass:3). A withheld code names the gate
+    // (round 5, bypass:6).
+    const withheld = typeof proposal.approve_withheld_by === 'string' ? proposal.approve_withheld_by : '';
+    if (!withheld) {
+      const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
+      return allowed.includes('approve') ? `Reinstated for review by ${who}; approve or reject it.` : `Reinstated for review by ${who}; a reviewer approves or rejects it.`;
+    }
     const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
-    const gate = checks.find(check => check.id === 'review.reinstatement' && check.status !== 'pass') || checks.find(check => check.id === 'em.same_day_if_reinstated');
-    return [`Reinstated for review by ${who}. It cannot be approved yet: reject it, undo the reinstatement, or add the missing documentation as an addendum.`, gate?.detail || ''].filter(Boolean).join(' ');
+    const gate = checks.find(check => check.id === withheld);
+    return [`Reinstated for review by ${who}. It cannot be approved yet: it can be rejected, the reinstatement undone, or the missing documentation added as an addendum.`, gate?.detail || ''].filter(Boolean).join(' ');
   }
   if (proposal.decision_state === 'approved' || proposal.decision_state === 'rejected') return `${lookup(DECISION_TITLES, proposal.decision?.action, 'Decided')} by ${who} after reinstatement.`;
   if (proposal.bucket === 'excluded' && proposal.reinstatable) return 'Needs your decision: confirm the exclusion or reinstate the code.';
   return '';
 }
 
-function candidateSection(title, proposals, fallback) {
+function candidateSection(title, proposals, fallback, doc) {
   if (!proposals.length) return '';
   const items = proposals.map(proposal => {
     const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
     // Every action the server allows, in the card order: a reinstated code is approved or rejected here too.
-    const actions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal)).join(' ');
+    const decisions = ACTION_BUTTONS.filter(([name]) => allowed.includes(name)).map(([name]) => decisionButton(name, proposal));
+    // A reinstated code whose gate withholds approve is told to add the missing documentation, so the row offers the
+    // addendum itself; POST /addenda needs no clarification (round 6, bypass:1).
+    const withheld = proposal.decision_state === 'reinstated' && typeof proposal.approve_withheld_by === 'string' && proposal.approve_withheld_by;
+    const addendum = withheld && doc && canEdit(doc) ? ['<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>'] : [];
+    const actions = decisions.concat(addendum).join(' ');
     return checkItem('muted', 'info', `${proposal.code} · ${proposal.family_label || proposal.family || ''}`, [proposal.exclusion_reason || fallback, candidateDecision(proposal)].filter(Boolean).join(' '), actions);
   });
   return `${sectionHeading(title, proposals.length)}<div class="check-list-card">${items.join('')}</div>`;
@@ -558,9 +568,14 @@ function unsupportedSection(assessment) {
 
 function emptySelectionCopy(assessment) {
   // Codes a documentation check excluded still need a reviewer decision, so the panel never says nothing was
-  // proposed while they wait below (round 5, bypass:6).
+  // proposed while they wait below (round 5, bypass:6). Only the codes still waiting are counted, as readiness
+  // counts them, so a decided set is never told it needs a decision (round 6, bypass:4).
   const excluded = proposalsIn(assessment, 'excluded');
-  if (excluded.some(proposal => proposal.reinstatable)) return 'No code is selected for approval. The provider proposed codes that a documentation check excluded; each needs your decision under Excluded candidates below.';
+  const reinstatable = excluded.filter(proposal => proposal.reinstatable);
+  const waiting = reinstatable.filter(proposal => proposal.decision_state === 'undecided' || proposal.decision_state === 'reinstated').length;
+  if (waiting === 1) return 'One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.';
+  if (waiting) return `${waiting} codes that a documentation check excluded need a reviewer's decision under Excluded candidates below.`;
+  if (reinstatable.length) return 'Every code that a documentation check excluded has a decision; see Excluded candidates below.';
   if (excluded.length || proposalsIn(assessment, 'alternative').length) return 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
   return 'No CPT codes were proposed for this document.';
 }
@@ -571,7 +586,7 @@ function suggestionsPanel(doc, layout) {
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
   const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment))}</p></div>`];
-  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
+  return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.', doc)}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.', doc)}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
 function checkItems(checks) {

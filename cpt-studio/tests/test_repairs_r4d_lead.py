@@ -4,6 +4,7 @@ bounded:1 — every cited span's family lookup scanned every routed service, so 
   quadratic (a 400,000-character status-row report overran the assess stage).
 Synthetic data only; no network.
 """
+import os
 import time
 from datetime import date
 
@@ -148,8 +149,9 @@ _ROUTE = detect.route
 NEW_DATE = date(2026, 10, 22)  # OFFICE_NOTE documents 2026-10-20
 
 
-@override_settings(**LIVE)
-class DateChangeRoutesBeforeSendingTests(TestCase):
+class LiveEncounter:
+    """A reviewer, a FakeProvider standing in for the live adapter, and the encounter helpers."""
+
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
@@ -178,6 +180,13 @@ class DateChangeRoutesBeforeSendingTests(TestCase):
                                         content_type='application/json')
         self.assertEqual(response.status_code, 201, response.content)
 
+    def post(self, path, data):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.client.post(path, data=json.dumps(data), content_type='application/json')
+
+
+@override_settings(**LIVE)
+class DateChangeRoutesBeforeSendingTests(LiveEncounter, TestCase):
     def test_a_new_date_the_document_cannot_be_routed_for_in_time_sends_nothing(self):
         encounter_id = self.finished_encounter()
         runs_before = models.ProviderRun.objects.filter(encounter_id=encounter_id).count()
@@ -222,11 +231,7 @@ DOCUMENT_DATE = date(2026, 10, 20)
 
 
 @override_settings(**LIVE)
-class StoppedOrOverranAnalysisTests(DateChangeRoutesBeforeSendingTests):
-    def post(self, path, data):
-        with self.captureOnCommitCallbacks(execute=True):
-            return self.client.post(path, data=json.dumps(data), content_type='application/json')
-
+class StoppedOrOverranAnalysisTests(LiveEncounter, TestCase):
     def extracted_only(self, text=OFFICE_NOTE):
         with self.captureOnCommitCallbacks(execute=True):
             response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
@@ -319,4 +324,156 @@ class StoppedOrOverranAnalysisTests(DateChangeRoutesBeforeSendingTests):
         self.assertFalse(models.Job.objects.filter(revision=revision, kind=models.Job.PREDICT).exists())
         self.assertFalse(models.ProviderRun.objects.filter(revision=revision).exists())
 
-    # the inherited date-change tests run here too; they need nothing else
+
+# --- bypass:2 / pipeline:6: a missing or wrong attestation is invalid input (400), as API.md says ------------------
+
+from studio import review  # noqa: E402
+
+
+@override_settings(**LIVE)
+class AttestationStatusTests(LiveEncounter, TestCase):
+    def test_a_missing_or_wrong_acknowledgement_answers_400_and_records_nothing(self):
+        encounter_id = self.finished_encounter()
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        approvable = [p['id'] for p in detail['assessment']['proposals'] if 'approve' in p['allowed_actions']]
+        self.assertTrue(approvable, 'nothing to approve: the test proves nothing')
+        url = f'/api/encounters/{encounter_id}/decisions'
+        for acknowledgement in ('I did not read the document.', review.ACKNOWLEDGEMENTS['agent'], '', '   ', None):
+            body = {'proposal_id': approvable[0], 'action': 'approve'}
+            if acknowledgement is not None:
+                body['acknowledgement'] = acknowledgement
+            with self.subTest(acknowledgement=acknowledgement):
+                response = self.post(url, body)
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertIn('acknowledgement', response.json()['error'])
+        self.assertFalse(models.Decision.objects.filter(encounter_id=encounter_id).exists())
+
+    def test_controls_an_unavailable_action_is_still_409_and_the_exact_attestation_approves(self):
+        encounter_id = self.finished_encounter()
+        detail = self.client.get(f'/api/encounters/{encounter_id}').json()
+        approvable = [p['id'] for p in detail['assessment']['proposals'] if 'approve' in p['allowed_actions']]
+        url = f'/api/encounters/{encounter_id}/decisions'
+        response = self.post(url, {'proposal_id': approvable[0], 'action': 'revoke'})
+        self.assertEqual(response.status_code, 409, response.content)
+        response = self.post(url, {'proposal_id': approvable[0], 'action': 'approve',
+                                   'acknowledgement': '  ' + review.ACKNOWLEDGEMENTS['human'] + '\n'})
+        self.assertEqual(response.status_code, 201, response.content)
+
+
+# --- bypass:3: whether a reinstated code can be approved is the same answer for every member -----------------------
+
+from studio import reports, serializers  # noqa: E402
+from tests.test_repairs_r4c_lead_review import excluded_em_result  # noqa: E402
+
+
+class ApproveWithheldByTests(TestCase):
+    def setUp(self):
+        self.s = pf.scenario()
+
+    def field(self, key):
+        answers = {}
+        for user in (self.s.reviewer, self.s.viewer):
+            detail = json.loads(json.dumps(serializers.encounter_detail(self.s.encounter, self.s.membership(user)),
+                                           default=str))
+            (item,) = [p for p in detail['assessment']['proposals'] if p['key'] == key]
+            answers[user.username] = (item['approve_withheld_by'], 'approve' in item['allowed_actions'])
+        return answers
+
+    def test_a_reinstated_code_whose_gate_passes_is_approvable_for_every_member_who_asks(self):
+        pf.assess(self.s.encounter, pf.standard_result())
+        self.assertEqual({value for value, _ in self.field('exc:0').values()}, {None})  # not reinstated yet
+        self.s.decide('exc:0', 'reinstate', note='Performed today.')
+        answers = self.field('exc:0')
+        self.assertEqual(answers[self.s.reviewer.username], (None, True))
+        self.assertEqual(answers[self.s.viewer.username], (None, False))
+
+    def test_a_gate_that_does_not_pass_or_a_same_day_hold_is_named_for_every_member(self):
+        held = pf.result(pf.proposal('exc:0', '45378', [pf.PLAN_PASSAGE], bucket='excluded', reinstatable=True,
+                                     checks=pf.standard_checks() + (pf.check('review.reinstatement', 'warn'),)))
+        pf.assess(self.s.encounter, held)
+        self.s.decide('exc:0', 'reinstate')
+        self.assertEqual(set(self.field('exc:0').values()), {('review.reinstatement', False)})
+
+        s = self.s = pf.scenario()
+        pf.assess(s.encounter, excluded_em_result(), ctx=pf.context(s.encounter, s.revision))
+        s.decide('exc:1', 'reinstate')
+        s.decide('exc:0', 'reinstate')
+        self.assertEqual(set(self.field('exc:0').values()), {('em.same_day_if_reinstated', False)})
+        self.assertEqual(set(self.field('exc:1').values()) - {(None, False)}, {(None, True)})
+
+
+# --- pipeline:4: the reviewed status line counts confirmations, never an exclusion nobody decided -------------------
+
+class ConfirmedCountTests(TestCase):
+    def setUp(self):
+        self.s = pf.scenario()
+
+    def status_line(self):
+        text = bytes(reports.generate(self.s.encounter, models.ReportArtifact.REVIEWED, 'txt',
+                                      self.s.reviewer).content).decode('utf-8')
+        (line,) = [ln for ln in text.splitlines() if ln.startswith('Review status:')]
+        return line
+
+    @staticmethod
+    def not_reinstatable(key, code, passage):
+        return pf.proposal(key, code, [passage], bucket='excluded', reinstatable=False,
+                           exclusion_reason='Excluded from CPT-only results.')
+
+    def test_an_undecided_exclusion_that_cannot_be_reinstated_is_never_counted_as_confirmed(self):
+        pf.assess(self.s.encounter, pf.result(pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE]),
+                                              self.not_reinstatable('exc:8', '45380', pf.CECUM_PASSAGE)))
+        self.s.decide('sel:0', 'approve')
+        line = self.status_line()
+        self.assertTrue(line.startswith('Review status: complete — 1 approved, 0 rejected, 0 documentation-check '
+                                        'exclusions confirmed;'), line)
+
+    def test_one_confirmation_beside_two_undecided_exclusions_counts_one(self):
+        pf.assess(self.s.encounter, pf.result(
+            pf.proposal('sel:0', '43239', [pf.EGD_PASSAGE]),
+            pf.proposal('exc:0', '45378', [pf.PLAN_PASSAGE], bucket='excluded', reinstatable=True,
+                        exclusion_reason='The colonoscopy is planned, not performed on this date.'),
+            self.not_reinstatable('exc:8', '45380', pf.CECUM_PASSAGE),
+            self.not_reinstatable('exc:9', '45385', pf.SNARE_PASSAGE)))
+        self.s.decide('sel:0', 'approve')
+        self.s.decide('exc:0', 'confirm')
+        line = self.status_line()
+        self.assertTrue(line.startswith('Review status: complete — 1 approved, 0 rejected, 1 documentation-check '
+                                        'exclusion confirmed;'), line)
+
+
+# --- pipeline:5: each stage's child computes the context and the analysis once and reuses them -----------------------
+
+from studio.gi import context as gi_context  # noqa: E402
+from tests.test_repairs_r4c_lead_pipeline import Probe  # noqa: E402
+
+
+@override_settings(**LIVE)
+class OneComputationPerChildTests(LiveEncounter, TestCase):
+    def test_each_child_computes_the_context_and_the_analysis_once(self):
+        # _service_dates runs only inside context._context's cached body and _route only inside detect._analysis's,
+        # so each probe line is one real computation, not one public call. A fresh text and empty caches in this
+        # process: a child forks with this process's caches, and an inherited entry would read as reuse.
+        detect._analysis.cache_clear()
+        gi_context._context.cache_clear()
+        probe = Probe(self)
+        text = OFFICE_NOTE + 'Reference: one computation per child.\n'
+        with mock.patch.object(detect, '_route', probe.wrap('analysis', detect._route)), \
+                mock.patch.object(gi_context, '_service_dates', probe.wrap('context', gi_context._service_dates)):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
+            self.assertEqual(response.status_code, 201, response.content)
+            drain()
+        encounter_id = response.json()['id']
+        self.assertEqual(models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.ASSESS).state,
+                         models.Job.SUCCEEDED)
+        self.assertEqual(len(self.provider.sent), 1, 'the provider was not reached: validation read no cited span')
+        per_child = {}
+        for label, pid in probe.calls():
+            per_child.setdefault(int(pid), []).append(label)
+        self.assertNotIn(os.getpid(), per_child, 'a computation ran in the worker process')
+        # routing reads the context itself, so the assess child computes it once too: one of each per child, and a
+        # second computation of either in one child is the reuse lost
+        self.assertEqual(sorted(sorted(labels) for labels in per_child.values()),
+                         [['analysis', 'context'], ['analysis', 'context']],
+                         f'expected two children (analyze, assess), each computing the context and the analysis once: '
+                         f'{per_child}')

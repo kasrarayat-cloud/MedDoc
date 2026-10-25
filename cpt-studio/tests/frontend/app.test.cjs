@@ -422,13 +422,14 @@ test('a reinstated exclusion that cannot be approved says why and never asks for
   // round 5, bypass:6: the server withholds approve until the reinstatement gate is met.
   const detail = 'If a reviewer reinstates this code, it can only be rejected until the documentation is completed (add it as an addendum): Which extent was reached?';
   const proposal = { bucket: 'excluded', reinstatable: true, decision_state: 'reinstated', allowed_actions: ['reject', 'revoke'],
-    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' },
+    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' }, approve_withheld_by: 'review.reinstatement',
     checks: [{ id: 'review.reinstatement', status: 'warn', detail }] };
   const sentence = app.candidateDecision(proposal);
   assert.equal(sentence.includes('approve or reject it'), false, sentence);
   assert.ok(sentence.startsWith('Reinstated for review by Reviewer One. It cannot be approved yet'), sentence);
   assert.ok(sentence.endsWith(detail), sentence);
-  const em = { ...proposal, checks: [{ id: 'em.same_day_if_reinstated', status: 'warn', detail: 'Same-day gate.' }] };
+  const em = { ...proposal, approve_withheld_by: 'em.same_day_if_reinstated',
+    checks: [{ id: 'review.reinstatement', status: 'pass', detail: 'Clear.' }, { id: 'em.same_day_if_reinstated', status: 'warn', detail: 'Same-day gate.' }] };
   assert.ok(app.candidateDecision(em).endsWith('Same-day gate.'));
   const html = render(excludedDoc(proposal));
   assert.equal(html.includes(`data-decision="approve" data-proposal="${UUID}"`), false);
@@ -440,9 +441,56 @@ test('an encounter whose only proposals are documentation-check exclusions never
   const only = { ...doc, assessment: { ...doc.assessment, proposals: doc.assessment.proposals.filter(p => p.bucket === 'excluded') } };
   const html = render(only);
   assert.equal(html.includes('No CPT codes were proposed for this document.'), false);
-  assert.ok(html.includes('each needs your decision under Excluded candidates below'));
+  assert.ok(html.includes('One code that a documentation check excluded needs a reviewer&#x27;s decision under Excluded candidates below.'), html);
   assert.equal(app.emptySelectionCopy({ proposals: [] }), 'No CPT codes were proposed for this document.');
   assert.ok(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }).startsWith('No code is selected for approval.'));
+});
+
+// round 6, bypass:3: whether a reinstated code can be approved is the code's own gate, never the member's action list.
+test('a viewer is told a reinstated code is approvable by a reviewer, and is told it is withheld only by its gate', () => {
+  const reinstated = { bucket: 'excluded', reinstatable: true, decision_state: 'reinstated', allowed_actions: [],
+    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' }, approve_withheld_by: null,
+    checks: [{ id: 'review.reinstatement', status: 'pass', detail: 'Clear.' }] };
+  const clear = app.candidateDecision(reinstated);
+  assert.equal(clear, 'Reinstated for review by Reviewer One; a reviewer approves or rejects it.');
+  assert.equal(clear.includes('cannot be approved yet'), false);
+  const reviewer = app.candidateDecision({ ...reinstated, allowed_actions: ['approve', 'reject', 'revoke'] });
+  assert.equal(reviewer, 'Reinstated for review by Reviewer One; approve or reject it.');
+  const held = app.candidateDecision({ ...reinstated, approve_withheld_by: 'review.reinstatement',
+    checks: [{ id: 'review.reinstatement', status: 'warn', detail: 'Which extent was reached?' }] });
+  assert.ok(held.startsWith('Reinstated for review by Reviewer One. It cannot be approved yet'), held);
+  assert.ok(held.endsWith('Which extent was reached?'), held);
+});
+
+// round 6, bypass:1: the copy that names the addendum path comes with the addendum control.
+test('a reinstated code withheld by its gate offers an addendum that needs no clarification, to a member who can edit', () => {
+  const withheld = { decision_state: 'reinstated', allowed_actions: ['reject', 'revoke'], approve_withheld_by: 'review.reinstatement',
+    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' },
+    checks: [{ id: 'review.reinstatement', status: 'warn', detail: 'Which extent was reached?' }] };
+  const addendum = '<button type="button" class="button secondary" data-action="addendum">Add the missing documentation (addendum)</button>';
+  const html = render(excludedDoc(withheld));
+  assert.ok(html.includes(addendum), 'no addendum control beside the copy that asks for one');
+  assert.equal(render({ ...excludedDoc(withheld), permissions: { can_review: false } }).includes(addendum), false, 'a viewer was offered an addendum');
+  assert.equal(render({ ...excludedDoc(withheld), pipeline: { ...excludedDoc(withheld).pipeline, busy: true } }).includes(addendum), false,
+    'an addendum was offered while a stage runs');
+  const clear = { ...withheld, approve_withheld_by: null, allowed_actions: ['approve', 'reject', 'revoke'] };
+  assert.equal(render(excludedDoc(clear)).includes(addendum), false, 'an approvable code was told to add documentation');
+});
+
+// round 6, bypass:4: the empty-selection panel counts only the exclusions still waiting, as readiness does.
+test('the empty-selection panel counts the exclusions still waiting and says when every one has a decision', () => {
+  const excluded = (state, extra = {}) => ({ bucket: 'excluded', reinstatable: true, decision_state: state, ...extra });
+  const copy = proposals => app.emptySelectionCopy({ proposals });
+  assert.equal(copy([excluded('undecided'), excluded('reinstated')]),
+    '2 codes that a documentation check excluded need a reviewer\'s decision under Excluded candidates below.');
+  assert.equal(copy([excluded('exclusion_confirmed'), excluded('reinstated')]),
+    'One code that a documentation check excluded needs a reviewer\'s decision under Excluded candidates below.');
+  for (const decided of [[excluded('exclusion_confirmed'), excluded('approved')], [excluded('exclusion_confirmed'), excluded('exclusion_confirmed')],
+    [excluded('rejected'), { bucket: 'excluded', reinstatable: false, decision_state: 'undecided' }]]) {
+    const text = copy(decided);
+    assert.equal(text, 'Every code that a documentation check excluded has a decision; see Excluded candidates below.', text);
+  }
+  assert.ok(copy([{ bucket: 'excluded', reinstatable: false, decision_state: 'undecided' }]).startsWith('No code is selected for approval.'));
 });
 
 test('the review dialog shows the attestation the server serves, and the built-in copy only before the session loads', () => {

@@ -19,6 +19,13 @@ from .models import (Assessment, Clarification, Decision, DecisionInvalidation, 
                      ProviderRun, SourceRevision)
 from .types import sha256_json, to_jsonable
 
+
+class AttestationRefused(ValidationError):
+    """An approval whose acknowledgement is missing or is not the current attestation: invalid input (400, as
+    API.md documents), not a state conflict, so a page loaded before the attestation changed is told to reload
+    rather than read as 'not allowed right now' (round 6 bypass:2, pipeline:6)."""
+
+
 APPROVE, REJECT, REINSTATE, REVOKE = Decision.APPROVE, Decision.REJECT, Decision.REINSTATE, Decision.REVOKE
 CONFIRM = Decision.CONFIRM  # confirm a documentation check's exclusion (round 4: never a silent drop)
 ACTION_LABELS = dict(Decision.ACTIONS)
@@ -184,6 +191,21 @@ def _same_day_held(proposal, assessment):
         _reinstated_procedures(assessment, current_decisions(assessment)))
 
 
+def approve_withheld_by(proposal, assessment, decisions):
+    """The check that withholds approve from a reinstated exclusion, whoever is looking: 'review.reinstatement' while
+    that check does not pass, SAME_DAY_EM_GATE while a reinstated same-day procedure holds this E/M, else None. The
+    same gates as _actions, read without the member's role, so a viewer is never told a code cannot be approved when
+    a reviewer can approve it now (round 6 bypass:3)."""
+    current = decisions.get(proposal.pk)
+    if current is None or current.action != REINSTATE:
+        return None
+    if not _reinstatement_clear(proposal):
+        return 'review.reinstatement'
+    if _same_day_held(proposal, assessment):
+        return SAME_DAY_EM_GATE
+    return None
+
+
 def _same_day_blocker(visit, procedures):
     codes = [p.code for p in procedures]
     listed = codes[0] if len(codes) == 1 else ', '.join(codes[:-1]) + ' and ' + codes[-1]
@@ -223,10 +245,10 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
             raise ValidationError(f'{ACTION_LABELS[action]} is not available for {proposal.code} right now.')
         note, acknowledgement = (note or '').strip(), (acknowledgement or '').strip()
         if action == APPROVE and not acknowledgement:
-            raise ValidationError('Approving requires an acknowledgement.')
+            raise AttestationRefused('Approving requires an acknowledgement.')
         if action == APPROVE and acknowledgement != ACKNOWLEDGEMENTS.get(user.actor_kind):
-            raise ValidationError('The acknowledgement is not the current review attestation. Reload the page '
-                                  'and approve again.')
+            raise AttestationRefused('The acknowledgement is not the current review attestation. Reload the page '
+                                     'and approve again.')
         decision = Decision.objects.create(
             encounter=locked, assessment=assessment, revision=assessment.revision, proposal=proposal, action=action,
             note=note, reviewer=user, reviewer_kind=user.actor_kind, acknowledgement=acknowledgement,
