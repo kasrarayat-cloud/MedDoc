@@ -562,10 +562,21 @@ def _audit_section(snap):
 def _review_status(snap):
     ready = snap['readiness']
     if snap['kind'] == REVIEWED:
-        return ['Review status: complete — every proposed code has an approve or reject decision.']
+        return [_reviewed_status_line(snap['proposals'])]
     if ready['reviewed']:
         return ['Review status: complete — a reviewed report is available; this file is a draft.']
     return ['Review status: not complete'] + [f'  - {blocker}' for blocker in ready['blockers']]
+
+
+def _reviewed_status_line(items):
+    """The completed review, counted from the snapshot's own lists: a review that recorded only confirmations says
+    so, rather than claiming approve or reject decisions it does not have (round 5, bypass:3)."""
+    approved = sum(1 for item in items if item['list'] == 'approved')
+    rejected = sum(1 for item in items if item['list'] == 'rejected')
+    confirmed = sum(1 for item in items if item['list'] == 'excluded' and item['decision'] is not None)
+    return (f'Review status: complete — {approved} approved, {rejected} rejected, {confirmed} documentation-check '
+            'exclusion' + ('' if confirmed == 1 else 's') + ' confirmed; every selected or reinstated code has an '
+            'approve or reject decision, and every documentation-check exclusion is confirmed or reinstated.')
 
 
 def _join(lines):

@@ -5,7 +5,7 @@ from unittest import mock
 
 from django.test import Client, TestCase, override_settings
 
-from studio import jobs, models
+from studio import jobs, models, review
 from studio.providers.base import ProviderUnavailable
 from studio.providers.corti import ADAPTER_VERSION
 from studio.types import ProviderRequest, RawExchange, sha256_json
@@ -200,7 +200,7 @@ class PipelineApiTests(TestCase):
         if approvable:
             response = self.post(f'/api/encounters/{encounter_id}/decisions',
                                  {'proposal_id': approvable[0]['id'], 'action': 'approve',
-                                  'acknowledgement': 'Reviewed the source evidence (synthetic test).'})
+                                  'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
             self.assertEqual(response.status_code, 201, response.content)
         response = self.post(f'/api/encounters/{encounter_id}/addenda',
                              {'text': 'Setting confirmed as office.', 'synthetic_attestation': 'yes'})

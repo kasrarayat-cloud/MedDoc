@@ -4,7 +4,7 @@ They are the regression universe for normal notes: a routing repair that makes
 a not-done service read as not done must leave these readings where they are.
 The checks mirror ops/verify_browser.cjs (checkContext and checkRouting) over
 each document's .txt source, with the pipeline's context and service-date
-handling (studio/jobs.py: make_context, context_service_date, routing_for).
+handling (studio/jobs.py: _analyze_child, _service_date_of, context_service_date).
 Synthetic text only; pure functions.
 """
 import json

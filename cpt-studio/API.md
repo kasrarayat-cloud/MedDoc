@@ -19,6 +19,7 @@ Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
   "workspace": {"id": "uuid", "name": "Gastroenterology", "subtitle": "Synthetic demonstration workspace",
                 "category": {"slug": "gastroenterology", "name": "Gastroenterology", "profiles_version": "gi-profiles@2"}},
   "role": "reviewer", "can_review": true,
+  "acknowledgement": "I am an automated agent. I read the whole source document, ...",
   "counts": {"documents": 7, "queue": 2},
   "synthetic_only": true, "provider_mode": "live", "release": "<git sha>"
 }
@@ -121,7 +122,10 @@ the server and is the only source of truth for which buttons are enabled.
 ## POST /api/encounters/{id}/decisions
 
 `{"proposal_id": "uuid", "action": "approve|reject|reinstate|confirm|revoke", "note": "", "acknowledgement": "..."}`
-Approve requires a non-empty acknowledgement. → `201 {decision}`; 409 when the
+Approve requires the acknowledgement to be exactly the current attestation
+for the reviewer's actor kind (`acknowledgement` in `GET /api/session`;
+surrounding whitespace is ignored); any other text answers 400, so a page
+loaded before the attestation changed is told to reload. → `201 {decision}`; 409 when the
 action is not allowed for that proposal now. A documentation check's exclusion
 (`bucket` excluded, `reinstatable` true) is a recommendation, not a final
 outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and
@@ -136,10 +140,11 @@ procedure day, a known service date); otherwise only `reject` and `revoke`.
 The current decision is the one recorded last (by sequence, never by clock).
 An E/M whose checks include `em.same_day_if_reinstated` offers no `approve`
 while a code carrying `review.same_day_em` has a current `reinstate` or
-`approve` decision, since that code is then a same-day procedure; if the E/M
-was approved first, `readiness.blockers` lists "<E/M> needs a separately
-identifiable E/M: <code> was reinstated as a same-day procedure". Rejecting or
-revoking the reinstatement releases the E/M.
+`approve` decision, since that code is then a same-day procedure; while the
+E/M is selected and undecided, reinstated, or was approved first,
+`readiness.blockers` lists "<E/M> needs a separately identifiable E/M: <code>
+was reinstated as a same-day procedure". Rejecting the E/M, confirming its
+exclusion, or rejecting or revoking the reinstatement releases it.
 
 ## POST /api/encounters/{id}/addenda
 
@@ -164,8 +169,9 @@ not, so the attempt the reconciliation released is still made, and neither is a
 reserved run the stale sweep settled as not sent (it was never sent). The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
-nothing is changed. 409 while a stage is queued or running, or before the text
-is extracted.
+nothing is changed. 409 while a stage is queued or running, before the text
+is extracted, or when the revision's analysis never finished (it overran its
+limits or failed): nothing is ever sent for a document that could not be read.
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 

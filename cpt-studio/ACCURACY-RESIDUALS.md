@@ -15,7 +15,7 @@ measured instead of chased one phrasing at a time (round 4, 2026-10-24):
   directive calls for (independently adjudicated cases, withheld from development), where its real frequency decides
   whether it earns a rule.
 
-"Effect now" is the behaviour on the round-4 repair branch. *Held* means needs_clarification; *ready* means approvable
+"Effect now" is the behaviour on the repair branch when the entry was recorded (round 4 or round 5). *Held* means needs_clarification; *ready* means approvable
 with the whole-document acknowledgement; *excluded* means a recommendation the reviewer must confirm or reinstate.
 
 | id (round 4) | example input | effect now | why it is not a rule yet |
@@ -34,6 +34,10 @@ with the whole-document acknowledgement; *excluded* means a recommendation the r
 | validation:10, 11, 12 | "Plan: Colonoscopy prep instructions given today." / "Banded x3." under Procedure | E/M or code held (over-holds) | conservative holds, accepted |
 | release:8 (rest) | "Procedure aborted prior to scope insertion." / "The patient withdrew consent in the pre-procedure area." / "The exam did not take place..." | 43242 ready | cancellation phrasings outside PROCEDURE_CANCELLED (a status line, a typed "Procedure performed: No" and a denying heading are read) |
 | routing:5 (rest) | "...for surveillance; adenomas were removed last year." | 45385 excluded (reviewer confirms or reinstates) | a clause with no service name owning a time |
+| round 5 regression:7 | "Impression: Sigmoid polyp, removed. Defer surveillance colonoscopy until pathology returns." beside today's colonoscopy | 45385 held (over-hold) | the deferral rule cannot tell whose deferral it is (the next exam's, not today's) |
+| round 5 regression:8 | "Surveillance colonoscopy deferred pending pathology." / "Repeat colonoscopy deferred to primary care." under Impression, Assessment or Disposition | 45385 excluded (reviewer confirms or reinstates) | a cancellation verb on a service named as a future exam, with no declared other-encounter marker |
+| round 5 declared:13 | "Procedure status:" with its options one per line ("☐ Completed" / "☒ Cancelled", also a Word form with one check box per paragraph) | 43242 ready | the status readers read a label's own line; a value on later lines is a layout outside the declared ones |
+| round 5 sections:11 | "When asked about a biopsy of the hemorrhoid the patient stated no" / "...and the answer was no" before "Cold snare polypectomy ... was performed." | 45385 excluded (reviewer confirms or reinstates) | spoken answers outside the closed verb list (said, answered, replied, responded, chose) join the next clause |
 
 How an entry leaves this list: the accuracy evaluation shows the phrasing occurs in real adjudicated documents, and a
 rule is written for it under the hold-only rule (it may hold; it never newly excludes or releases), with a corpus

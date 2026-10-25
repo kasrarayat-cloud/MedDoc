@@ -247,7 +247,7 @@ class Scenario:
     def decide(self, key, action, user=None, *, note='', acknowledgement=None, assessment=None):
         user = user or self.reviewer
         if acknowledgement is None:
-            acknowledgement = 'Reviewed the source evidence (synthetic test).' if action == 'approve' else ''
+            acknowledgement = review.ACKNOWLEDGEMENTS[user.actor_kind] if action == 'approve' else ''
         self.encounter.refresh_from_db()
         return review.record_decision(encounter=self.encounter, proposal=self.proposal(key, assessment), action=action,
                                       user=user, membership=self.membership(user), note=note,

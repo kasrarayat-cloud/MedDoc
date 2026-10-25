@@ -12,7 +12,7 @@ from django.db.migrations.executor import MigrationExecutor
 from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
-from studio import audit, jobs, models
+from studio import audit, jobs, models, review
 from tests.test_pipeline_api import drain
 from tests.test_repairs_pipeline import LIVE, ApiHarness
 
@@ -187,7 +187,8 @@ class NonStringIdentifiersTests(ApiHarness, TestCase):
         drain()
         proposal = models.Encounter.objects.get(pk=encounter_id).current_assessment.proposals.get(code='99213')
         response = self.post(f'/api/encounters/{encounter_id}/decisions',
-                             {'proposal_id': str(proposal.pk), 'action': 'approve', 'acknowledgement': 'ok'})
+                             {'proposal_id': str(proposal.pk), 'action': 'approve',
+                              'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
         self.assertEqual(response.status_code, 201, response.content)
 
 

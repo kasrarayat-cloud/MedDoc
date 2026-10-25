@@ -409,3 +409,45 @@ test('the DOM checks agree with the markup the live app.js renders', { skip: !fs
   assert.ok(options.includes('data-export-kind="draft" data-export-fmt="txt"') && options.includes('data-export-kind="draft" data-export-fmt="csv"'));
   assert.equal(options.includes('data-export-kind="reviewed"'), false);
 });
+
+// --- round 5: a confirmed exclusion has no code card (pipeline:3); the walk confirms only must_not_code (pipeline:5)
+
+function withExcluded(enc, id, code, family, extra = {}) {
+  enc.assessment.proposals.push(proposal(id, code, { bucket: 'excluded', status: 'excluded', family, reinstatable: true,
+    exclusion_reason: 'Documented as planned, not as performed on the date of service.',
+    allowed_actions: ['reinstate', 'confirm'], ...extra }));
+  return enc;
+}
+
+function confirmed(enc, id) {
+  const p = enc.assessment.proposals.find(item => item.id === id);
+  p.decision = { id: `d-${id}`, proposal_id: id, code: p.code, action: 'confirm', note: 'n', reviewer: AGENT,
+    reviewer_kind: 'agent', created_at: '2026-10-23T21:00:00Z', revision_number: 1 };
+  p.decision_state = 'exclusion_confirmed';
+  p.allowed_actions = ['revoke'];
+  return enc;
+}
+
+test('checkDecisionDom reads a confirmed exclusion from its candidate row, not from a code card', () => {
+  const enc = confirmed(withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy'), 'p-plan');
+  const made = [{ proposal_id: 'p-plan', code: '45378', action: 'confirm', http_status: 201 }];
+  const row = { proposal: 'p-plan', text: `45378 · Colonoscopy Documented as planned, not as performed on the date of service. Exclusion confirmed by ${AGENT}. Undo decision` };
+  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [row])), []);
+  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [])), ['dom.decision.45378']);
+  assert.deepEqual(failures(vb.checkDecisionDom(made, enc, [], [{ ...row, text: 'Exclusion confirmed by someone else.' }])), ['dom.decision.45378']);
+  const undone = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy');
+  assert.deepEqual(failures(vb.checkDecisionDom(made, undone, [], [row])), ['dom.decision.45378']);
+});
+
+test('planConfirmations confirms only the families must_not_code names', () => {
+  // pipeline:5's witness: a misread exclusion of the visit the author expects to be coded is never confirmed.
+  const enc = withExcluded(withExcluded(encounter(), 'p-visit', '99213', 'gi.office_em'), 'p-plan', '45378', 'gi.colonoscopy');
+  const plan = vb.planConfirmations(enc, [{ family: 'gi.colonoscopy' }], { confirm: 'Synthetic confirmation.' });
+  assert.deepEqual(plan.map(d => [d.code, d.action, d.note]), [['45378', 'confirm', 'Synthetic confirmation.']]);
+  assert.deepEqual(vb.planConfirmations(enc, [], {}), []);
+  assert.deepEqual(vb.planConfirmations(enc, undefined, {}), []);
+  for (const extra of [{ reinstatable: false }, { decision_state: 'reinstated' }, { allowed_actions: ['reinstate'] }]) {
+    const other = withExcluded(encounter(), 'p-plan', '45378', 'gi.colonoscopy', extra);
+    assert.deepEqual(vb.planConfirmations(other, [{ family: 'gi.colonoscopy' }], {}), [], JSON.stringify(extra));
+  }
+});

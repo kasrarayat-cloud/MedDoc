@@ -417,3 +417,45 @@ test('the results page and the acknowledgement never claim that unrecognised wor
     assert.ok(text.includes('can miss wording they do not recognise'), text);
   }
 });
+
+test('a reinstated exclusion that cannot be approved says why and never asks for an approval', () => {
+  // round 5, bypass:6: the server withholds approve until the reinstatement gate is met.
+  const detail = 'If a reviewer reinstates this code, it can only be rejected until the documentation is completed (add it as an addendum): Which extent was reached?';
+  const proposal = { bucket: 'excluded', reinstatable: true, decision_state: 'reinstated', allowed_actions: ['reject', 'revoke'],
+    decision: { action: 'reinstate', reviewer: 'Reviewer One', reviewer_kind: 'human' },
+    checks: [{ id: 'review.reinstatement', status: 'warn', detail }] };
+  const sentence = app.candidateDecision(proposal);
+  assert.equal(sentence.includes('approve or reject it'), false, sentence);
+  assert.ok(sentence.startsWith('Reinstated for review by Reviewer One. It cannot be approved yet'), sentence);
+  assert.ok(sentence.endsWith(detail), sentence);
+  const em = { ...proposal, checks: [{ id: 'em.same_day_if_reinstated', status: 'warn', detail: 'Same-day gate.' }] };
+  assert.ok(app.candidateDecision(em).endsWith('Same-day gate.'));
+  const html = render(excludedDoc(proposal));
+  assert.equal(html.includes(`data-decision="approve" data-proposal="${UUID}"`), false);
+  assert.ok(html.includes(`data-decision="reject" data-proposal="${UUID}"`));
+});
+
+test('an encounter whose only proposals are documentation-check exclusions never says nothing was proposed', () => {
+  const doc = excludedDoc({});
+  const only = { ...doc, assessment: { ...doc.assessment, proposals: doc.assessment.proposals.filter(p => p.bucket === 'excluded') } };
+  const html = render(only);
+  assert.equal(html.includes('No CPT codes were proposed for this document.'), false);
+  assert.ok(html.includes('each needs your decision under Excluded candidates below'));
+  assert.equal(app.emptySelectionCopy({ proposals: [] }), 'No CPT codes were proposed for this document.');
+  assert.ok(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }).startsWith('No code is selected for approval.'));
+});
+
+test('the review dialog shows the attestation the server serves, and the built-in copy only before the session loads', () => {
+  // round 5, bypass:4: the server accepts exactly its own attestation text.
+  assert.equal(app.attestationText({ acknowledgement: 'Server attestation.', user: { actor_kind: 'agent' } }), 'Server attestation.');
+  assert.equal(app.attestationText({ user: { actor_kind: 'agent' } }), app.ACKNOWLEDGEMENTS.agent);
+  assert.equal(app.attestationText({ user: { actor_kind: 'human' } }), app.ACKNOWLEDGEMENTS.human);
+  assert.equal(app.attestationText(null), app.ACKNOWLEDGEMENTS.human);
+});
+
+test('the review dialog takes its attestation from attestationText (the server enforces the same text)', () => {
+  // The dialog itself needs a DOM; this pins its wiring, and the live walk posts what the dialog shows.
+  const source = fs.readFileSync(path.join(__dirname, '..', '..', 'studio', 'static', 'studio', 'app.js'), 'utf8');
+  assert.ok(source.includes("$('#reviewAckText').textContent = attestationText(state.session);"));
+  assert.equal(source.split("$('#reviewAckText').textContent =").length - 1, 1, 'one writer of the attestation text');
+});

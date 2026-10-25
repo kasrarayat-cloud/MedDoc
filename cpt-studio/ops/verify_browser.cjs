@@ -416,10 +416,20 @@ function checkEvidenceMarks(enc, marks, cards) {
   return out;
 }
 
-function checkDecisionDom(decisions, enc, cards) {
+function checkDecisionDom(decisions, enc, cards, candidates = []) {
   return decisions.filter(d => d.http_status === 201).map(d => {
+    const proposal = proposalsOf(enc).find(p => p.id === d.proposal_id);
+    const reviewer = proposal?.decision?.reviewer || '';
+    if (d.action === 'confirm') {
+      // A confirmed exclusion stays an excluded candidate, which has no code card: its candidate row carries the
+      // decision line and the undo button (round 5, pipeline:3).
+      const row = candidates.find(c => c.proposal === d.proposal_id);
+      const stateOk = proposal?.decision_state === 'exclusion_confirmed';
+      const rowOk = Boolean(row) && Boolean(reviewer) && row.text.includes(`Exclusion confirmed by ${reviewer}`);
+      return check(`dom.decision.${d.code}`, 'hard', stateOk && rowOk,
+        row ? `decision state ${proposal?.decision_state || 'missing'}; candidate row ${rowOk ? 'names the confirming reviewer' : 'lacks "Exclusion confirmed by" and the reviewer'}` : 'no candidate row with an undo button after reload');
+    }
     const card = cards.find(c => c.id === `card-${d.proposal_id}`);
-    const reviewer = proposalsOf(enc).find(p => p.id === d.proposal_id)?.decision?.reviewer || '';
     const badgeOk = card && (d.action === 'approve' ? /^Approved/.test(card.badge) && /agent/i.test(card.badge) : card.badge === 'Rejected');
     const insightOk = card && card.insight.includes(AGENT_LABEL) && Boolean(reviewer) && card.insight.includes(reviewer);
     return check(`dom.decision.${d.code}`, 'hard', Boolean(badgeOk && insightOk),
@@ -616,7 +626,12 @@ async function readDom(page) {
     insight: (el.querySelector('.review-insight')?.textContent || '').replace(/\s+/g, ' ').trim(),
     unlocated: el.querySelectorAll('.evidence-chip.unlocated').length,
   })));
-  return { marks, cards };
+  // Excluded and alternative candidates are listed outside the code cards; a decided one shows an undo button.
+  const candidates = await page.$$eval('button[data-decision="revoke"]', els => els.filter(el => !el.closest('article.code-card')).map(el => ({
+    proposal: el.dataset.proposal,
+    text: (el.closest('.check-item')?.textContent || '').replace(/\s+/g, ' ').trim(),
+  })));
+  return { marks, cards, candidates };
 }
 
 async function decide(page, encounterId, decision) {
@@ -757,7 +772,7 @@ async function verifyDocument(page, opts, manifest, item, sink) {
     saveSnapshot(record, docDir, opts.out, 'after_reload', reloaded);
     const after = await readDom(page);
     add(checkPersistence(record.decisions, enc, afterDecisions, reloaded));
-    add(checkDecisionDom(record.decisions, reloaded, after.cards));
+    add(checkDecisionDom(record.decisions, reloaded, after.cards, after.candidates));
     add(checkReadiness(reloaded));
 
     const readiness = reloaded.readiness || {};
@@ -876,7 +891,7 @@ async function main(argv) {
 
 module.exports = {
   parseArgs, UsageError, cpSlice, safeName, sessionProblems, checkPipeline, checkExtraction, checkContext, checkRouting,
-  checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, checkReadiness,
+  checkEvidenceExact, checkMustNotCode, checkClarifications, checkIncomplete, planDecisions, planConfirmations, checkReadiness,
   checkPersistence, checkEvidenceMarks, checkDecisionDom, expectedDownloads, checkDownloads, checkListing, summarize,
   documentResult,
 };

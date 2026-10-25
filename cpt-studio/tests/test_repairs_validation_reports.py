@@ -275,7 +275,7 @@ class ReinstatementGateTests(ApiHarness, TestCase):
     def approve(self, encounter_id, proposal):
         return self.post(f'/api/encounters/{encounter_id}/decisions',
                          {'proposal_id': str(proposal.pk), 'action': 'approve',
-                          'acknowledgement': 'Reviewed the source evidence (synthetic test).'})
+                          'acknowledgement': review.ACKNOWLEDGEMENTS['human']})
 
     def test_missing_required_fact_blocks_approval_after_reinstatement(self):
         from tests.test_pipeline_api import OFFICE_NOTE

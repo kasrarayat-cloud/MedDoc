@@ -87,7 +87,7 @@ class TxtReportTests(ReportCase):
         self.assertNotIn('Status:', approved)
         self.assertRegex(approved, r'Decision: approved by Reviewbot\d+ \(automated agent\) at \d{4}-')
         self.assertNotIn('(agent)', approved)
-        self.assertIn('Acknowledgement: Reviewed the source evidence (synthetic test).', approved)
+        self.assertIn(f"Acknowledgement: {review.ACKNOWLEDGEMENTS['agent']}", approved)
         span = pf.evidence(pf.GI_NOTE, pf.EGD_PASSAGE)
         self.assertIn(f'"{pf.EGD_PASSAGE}" [chars {span.start}–{span.end}, page 1]', approved)
         self.assertIn(reports.DESCRIPTOR_LINE, approved)
@@ -173,7 +173,7 @@ class TxtReportTests(ReportCase):
     def test_stored_text_cannot_forge_a_heading_or_a_section_break(self):
         forged = 'Looks fine.\r\n\r\nAPPROVED SELECTIONS\n  1. 99999 · Forged · units 9\rREJECTED — EXCLUDED FROM ' \
                  'APPROVED RESULTS'
-        self.s.decide('sel:0', 'approve', note=forged, acknowledgement=forged)
+        self.s.decide('sel:0', 'approve', note=forged)  # an acknowledgement is only ever the attestation text
         models.Encounter.objects.filter(pk=self.s.encounter.pk).update(title='Synthetic\n\nAPPROVED SELECTIONS')
         text = self.txt('draft')
         lines = text.split('\n')

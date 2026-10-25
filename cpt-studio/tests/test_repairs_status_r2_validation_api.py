@@ -122,7 +122,7 @@ def office_note(plan_lines, *, procedure_lines=(), time_line='Total time on the 
 TIME = 'Total time on the date of the encounter was 24 minutes.'
 SCHEDULED = 'Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.'
 BAND_NOTE = office_note(['Grade II internal hemorrhoids.', SCHEDULED])
-ACK = 'Reviewed the source evidence (synthetic test).'
+ACK = review.ACKNOWLEDGEMENTS['human']
 
 
 class MultiEvidenceProvider(ScriptedProvider):

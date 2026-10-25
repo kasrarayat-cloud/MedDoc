@@ -40,6 +40,11 @@ const ACKNOWLEDGEMENTS = {
   human: 'I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This synthetic review is not clinical approval or billing advice.',
   agent: 'I am an automated agent. I read the whole source document, not only the cited passages, and it supports this code as a service performed at this encounter. The documentation checks can miss wording they do not recognise. This agent-executed synthetic review is not clinical approval or billing advice.',
 };
+// The attestation the server accepts is the one /api/session serves (round 5, bypass:4); the built-in copy above
+// only covers a page drawn before the session loads, and tests hold the two equal.
+function attestationText(session) {
+  return session?.acknowledgement || (session?.user?.actor_kind === 'agent' ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human);
+}
 const REVIEW_COPY = {
   approve: { eyebrow: 'APPROVE', title: 'Make the decision visible.', button: 'Approve code' },
   reject: { eyebrow: 'REJECT', title: 'Leave a clear record.', button: 'Reject code' },
@@ -521,7 +526,14 @@ function clarificationCard(clarification, doc) {
 function candidateDecision(proposal) {
   const who = proposal.decision?.reviewer || 'a reviewer whose name was not recorded';
   if (proposal.decision_state === 'exclusion_confirmed') return `Exclusion confirmed by ${who}.`;
-  if (proposal.decision_state === 'reinstated') return `Reinstated for review by ${who}; approve or reject it.`;
+  if (proposal.decision_state === 'reinstated') {
+    const allowed = Array.isArray(proposal.allowed_actions) ? proposal.allowed_actions : [];
+    if (allowed.includes('approve')) return `Reinstated for review by ${who}; approve or reject it.`;
+    // The server withholds approve until the gate a selected code meets is met; say which one (round 5, bypass:6).
+    const checks = Array.isArray(proposal.checks) ? proposal.checks : [];
+    const gate = checks.find(check => check.id === 'review.reinstatement' && check.status !== 'pass') || checks.find(check => check.id === 'em.same_day_if_reinstated');
+    return [`Reinstated for review by ${who}. It cannot be approved yet: reject it, undo the reinstatement, or add the missing documentation as an addendum.`, gate?.detail || ''].filter(Boolean).join(' ');
+  }
   if (proposal.decision_state === 'approved' || proposal.decision_state === 'rejected') return `${lookup(DECISION_TITLES, proposal.decision?.action, 'Decided')} by ${who} after reinstatement.`;
   if (proposal.bucket === 'excluded' && proposal.reinstatable) return 'Needs your decision: confirm the exclusion or reinstate the code.';
   return '';
@@ -544,12 +556,21 @@ function unsupportedSection(assessment) {
   return `${sectionHeading('Services outside the GI profiles', items.length)}<div class="check-list-card">${items.map(item => checkItem('pending', 'info', [item.label || item.family, item.status].filter(Boolean).join(' · '), item.detail)).join('')}</div>`;
 }
 
+function emptySelectionCopy(assessment) {
+  // Codes a documentation check excluded still need a reviewer decision, so the panel never says nothing was
+  // proposed while they wait below (round 5, bypass:6).
+  const excluded = proposalsIn(assessment, 'excluded');
+  if (excluded.some(proposal => proposal.reinstatable)) return 'No code is selected for approval. The provider proposed codes that a documentation check excluded; each needs your decision under Excluded candidates below.';
+  if (excluded.length || proposalsIn(assessment, 'alternative').length) return 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
+  return 'No CPT codes were proposed for this document.';
+}
+
 function suggestionsPanel(doc, layout) {
   const assessment = doc.assessment;
   const selected = proposalsIn(assessment, 'selected');
   const inline = new Set(selected.flatMap(proposal => clarificationsFor(proposal, doc).map(item => item.id)));
   const general = openClarifications(doc).filter(item => !inline.has(item.id)).map(item => clarificationCard(item, doc));
-  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : ['<div class="check-list-card"><p class="card-empty">No CPT codes were proposed for this document.</p></div>'];
+  const cards = selected.length ? selected.map(proposal => codeCard(proposal, doc, layout)) : [`<div class="check-list-card"><p class="card-empty">${escapeHtml(emptySelectionCopy(assessment))}</p></div>`];
   return `<div class="card-stack">${general.join('')}${cards.join('')}</div>${unsupportedSection(assessment)}${candidateSection('Alternatives (not selected)', proposalsIn(assessment, 'alternative'), 'Offered by the provider as an alternative and not selected. Alternatives cannot be approved.')}${candidateSection('Excluded candidates', proposalsIn(assessment, 'excluded'), 'Excluded from CPT-only results.')}<div class="review-insight">${icon('shield')}<div><strong>The source remains the starting point</strong><p>The checks hold or exclude planned, historical, cancelled and uncertain services when they recognise the wording, and they can miss wording they do not recognise. Read the document before deciding; agreement between sources is not treated as verification.</p></div></div>`;
 }
 
@@ -1085,7 +1106,7 @@ async function openReview(proposalId, action) {
   $('#reviewDescriptor').textContent = proposal.descriptor?.label || 'Description withheld.';
   $('#reviewAckLabel').hidden = action !== 'approve';
   $('#reviewAcknowledgement').checked = false;
-  $('#reviewAckText').textContent = agent ? ACKNOWLEDGEMENTS.agent : ACKNOWLEDGEMENTS.human;
+  $('#reviewAckText').textContent = attestationText(state.session);
   $('#reviewNote').value = '';
   $('#reviewNotice').textContent = notVerified.length ? `Still not verified for this code: ${notVerified.join('; ')}.` : 'A review decision records a judgement; it is not billing advice.';
   $('#saveReviewLabel').textContent = copy.button;
@@ -1565,7 +1586,7 @@ if (typeof module === 'object' && module.exports) {
     passagesLabel, codeUnitOffsets, mergeSpans, pageRanges, paragraphRanges, paragraphPieces, layoutDocument,
     factValue, metaFact, exportStatusText, documentLayout, reviewView, documentRow, listBody, listDescription,
     inviteMarkup, overviewView, documentsView, howItWorksView, exportOptions, state, QUEUE_STATES, decisionLine,
-    hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS,
+    hasAgentDecision, candidateDecision, ACKNOWLEDGEMENTS, emptySelectionCopy, attestationText,
   };
 }
 if (typeof document !== 'undefined') boot();

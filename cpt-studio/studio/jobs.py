@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import sys
 import time
 import uuid
 from datetime import date, timedelta
@@ -25,7 +26,7 @@ from .gi import detect as gi_detect
 from .ingest import Limits, extract_document, extract_paste
 from .providers import get_provider, normalizer_for
 from .providers.base import ProviderUnavailable
-from .reference.store import DbReferenceLookup
+from .reference.store import prefetched_lookup, selected_codes
 from .storage import read_original
 from .types import Fact, PageSpan, ProviderRequest, RoutingResult, from_jsonable, sha256_json, to_jsonable
 from .validation.engine import assess as run_assessment
@@ -92,7 +93,12 @@ def context_facts(context) -> dict[str, Fact]:
 
 
 def context_service_date(context):
-    fact = (context.facts or {}).get('service_date') or {}
+    return _service_date_of(context.facts)
+
+
+def _service_date_of(facts):
+    """The effective service date of a context's facts (as stored): a documented or member-supplied date, else None."""
+    fact = (facts or {}).get('service_date') or {}
     if fact.get('origin') not in {'document', 'user'} or not fact.get('value'):
         return None
     try:
@@ -120,27 +126,77 @@ def _bounded(fn, *args, seconds, refusal=None):
 
 
 def make_context(encounter, revision, *, created_by=None, seconds=None, refusal=None):
-    """Snapshot document facts merged with the encounter's member-supplied values."""
+    """Snapshot document facts merged with the encounter's member-supplied values (a member's change: the stages
+    extract the facts inside their own single bounded child, _analyze_child)."""
     document_facts = _bounded(gi_context.extract_context, revision.text,
                               seconds=seconds or settings.JOB_DEADLINE_SECONDS['analyze'], refusal=refusal)
-    merged = gi_context.merge_user_values(document_facts, dict(encounter.user_values or {}))
-    facts = {name: to_jsonable(fact) for name, fact in merged.items()}
+    return _record_context(encounter, revision, document_facts, created_by=created_by)
+
+
+def _merged_facts(document_facts, user_values):
+    merged = gi_context.merge_user_values(document_facts, dict(user_values or {}))
+    return {name: to_jsonable(fact) for name, fact in merged.items()}
+
+
+def _record_context(encounter, revision, document_facts, *, created_by=None):
     user_values = dict(encounter.user_values or {})
+    facts = _merged_facts(document_facts, user_values)
     return models.EncounterContext.objects.create(
         encounter=encounter, revision=revision, facts=facts, user_values=user_values, version=CONTEXT_VERSION,
         sha256=sha256_json({'facts': facts, 'user_values': user_values, 'revision': str(revision.pk)}),
         created_by=created_by)
 
 
-def routing_for(revision, service_date=None, *, stage='analyze'):
-    """The deterministic routing of a revision for an effective service date, stored once per distinct result."""
-    result = _bounded(gi_detect.route, revision.text, service_date, seconds=settings.JOB_DEADLINE_SECONDS[stage])
-    data = to_jsonable(result)
+def _record_routing(revision, data):
+    """Store a routing result (its JSON form) once per distinct result."""
     digest = sha256_json(data)
-    existing = models.RoutingRun.objects.filter(revision=revision, version=result.version, sha256=digest).first()
+    version = data.get('version', '')
+    existing = models.RoutingRun.objects.filter(revision=revision, version=version, sha256=digest).first()
     if existing:
         return existing
-    return models.RoutingRun.objects.create(revision=revision, version=result.version, result=data, sha256=digest)
+    return models.RoutingRun.objects.create(revision=revision, version=version, result=data, sha256=digest)
+
+
+# --- the bounded children (round 5: bounded:0-2, pipeline:1-2, validation:0) ---------------------------------
+#
+# Each CPU-bound stage runs ALL of its document reading in ONE forked child under the stage's own deadline and the
+# memory allowance (studio/bounded.py), so no part of a stage reads the document unbounded in the worker, the stage
+# deadline is the stage's and not each call's, and no routing analysis is ever retained in the long-lived worker.
+# The children are Django-free and never touch the database: the parent records what they return.
+
+def _analyze_child(text, user_values):
+    """The document's facts and its routing for the effective service date those facts (with the member's values)
+    give. Routing then reuses the context work the child already did, instead of redoing it cold."""
+    document_facts = gi_context.extract_context(text)
+    service_date = _service_date_of(_merged_facts(document_facts, user_values))
+    return document_facts, service_date, to_jsonable(gi_detect.route(text, service_date))
+
+
+def _assess_child(text, service_date, pages, context, normalized, reference, provider_status, extraction_status,
+                  extraction_messages):
+    """The routing for ``service_date`` and the validation assessment that reads it, in one child: validation's span
+    readings reuse the routing analysis the child already made."""
+    data = to_jsonable(gi_detect.route(text, service_date))
+    result = run_assessment(
+        text=text, pages=pages, context=context, routing=from_jsonable(RoutingResult, data), normalized=normalized,
+        reference=reference, service_date=service_date, provider_status=provider_status,
+        extraction_status=extraction_status, extraction_messages=extraction_messages)
+    return data, result
+
+
+ROUTING_CACHE_MODULES = ('studio.gi.detect', 'studio.gi.sections', 'studio.gi.context', 'studio.validation.checks',
+                         'studio.validation.engine')
+
+
+def release_routing_caches():
+    """Clear every functools cache of the routing and validation modules in this process. The stages read documents
+    only in bounded children, so in the worker this is a backstop: nothing a stage read stays resident (bounded:2)."""
+    for name in ROUTING_CACHE_MODULES:
+        module = sys.modules.get(name)
+        for value in vars(module).values() if module else ():
+            clear = getattr(value, 'cache_clear', None)
+            if callable(clear) and hasattr(value, 'cache_info'):
+                clear()
 
 
 DATE_CONTEXT_PREFIX = 'Date of service: '
@@ -221,8 +277,12 @@ def stage_extract(job):
 def stage_analyze(job):
     revision, encounter = job.revision, job.encounter
     revision.refresh_from_db()
-    context = make_context(encounter, revision)
-    routing = routing_for(revision, context_service_date(context))
+    document_facts, service_date, data = _bounded(_analyze_child, revision.text, dict(encounter.user_values or {}),
+                                                  seconds=settings.JOB_DEADLINE_SECONDS['analyze'])
+    context = _record_context(encounter, revision, document_facts)
+    if context_service_date(context) != service_date:  # the child read the same facts; never route another date
+        raise StageFailure('The document was routed for another service date than its context; nothing was used.')
+    routing = _record_routing(revision, data)
     with transaction.atomic():
         locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
         if locked.current_revision_id == revision.pk:
@@ -373,13 +433,13 @@ def stage_assess(job):
     if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
                            'it was not used. Change the context again to request proposals for this date.')
-    routing_run = routing_for(revision, context_service_date(context), stage='assess')
     provider_status, normalized = _provider_inputs(run)
-    result = run_assessment(
-        text=revision.text, pages=tuple(PageSpan(**p) for p in revision.pages), context=context_facts(context),
-        routing=from_jsonable(RoutingResult, routing_run.result), normalized=normalized,
-        reference=DbReferenceLookup(), service_date=context_service_date(context), provider_status=provider_status,
-        extraction_status=revision.extraction_status, extraction_messages=tuple(revision.messages))
+    reference = prefetched_lookup(selected_codes(normalized))
+    data, result = _bounded(
+        _assess_child, revision.text, context_service_date(context), tuple(PageSpan(**p) for p in revision.pages),
+        context_facts(context), normalized, reference, provider_status, revision.extraction_status,
+        tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'])
+    routing_run = _record_routing(revision, data)
     try:
         assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,
                                                routing_run=routing_run, provider_run=run, result=result)
@@ -433,6 +493,8 @@ def run_job(job):
     except Exception:  # noqa: BLE001 — recorded, never shown with internals
         log.exception('stage %s failed for job %s', job.kind, job.pk)
         job.state, job.error = Job.FAILED, f'The {job.kind} stage failed unexpectedly; the error was logged.'
+    finally:
+        release_routing_caches()
     if job.state != Job.QUEUED:
         job.finished_at = timezone.now()
     # Only the columns the worker owns: a Stop recorded on this row meanwhile must survive.
@@ -664,6 +726,11 @@ def change_context(encounter, user, values):
             raise Refused('Context can be set once the document text has been extracted.')
         if busy(encounter):
             raise Refused('Wait for processing to finish (or stop it) before changing context.')
+        if not models.RoutingRun.objects.filter(revision=revision).exists():
+            # Its analysis never finished (an overrun or a failure), so nothing may be sent for it, whatever the
+            # context says: the request would answer a document the service could not read (round 5, pipeline:0).
+            raise Refused('This document could not be read to the end, so its context cannot be changed and nothing '
+                          'is sent for it. Upload it again, shorter or split.')
         merged = dict(encounter.user_values or {})
         for key, value in values.items():
             if value:

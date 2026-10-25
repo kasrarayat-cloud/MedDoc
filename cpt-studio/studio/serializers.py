@@ -31,6 +31,7 @@ def session_json(user, membership):
                       'category': {'slug': workspace.category.slug, 'name': workspace.category.name,
                                    'profiles_version': workspace.category.profiles_version}},
         'role': membership.role, 'can_review': membership.can_review,
+        'acknowledgement': review.ACKNOWLEDGEMENTS.get(user.actor_kind, ''),
         'counts': {'documents': encounters.count(), 'queue': encounters.filter(state__in=queue_states).count()},
         'synthetic_only': settings.SYNTHETIC_ONLY, 'provider_mode': settings.PROVIDER_MODE,
         'release': settings.RELEASE_SHA,

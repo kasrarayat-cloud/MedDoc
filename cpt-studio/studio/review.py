@@ -22,6 +22,19 @@ from .types import sha256_json, to_jsonable
 APPROVE, REJECT, REINSTATE, REVOKE = Decision.APPROVE, Decision.REJECT, Decision.REINSTATE, Decision.REVOKE
 CONFIRM = Decision.CONFIRM  # confirm a documentation check's exclusion (round 4: never a silent drop)
 ACTION_LABELS = dict(Decision.ACTIONS)
+# The whole-document attestation an approval records, one per actor kind. The page shows the server's text
+# (/api/session) and the server accepts only that text, so an approval can never carry an attestation that
+# says less (round 5, bypass:4). studio/static/studio/app.js keeps the same two strings for a page served
+# before the session loads; tests/test_repairs_r4c_lead_review.py holds them equal.
+ACKNOWLEDGEMENTS = {
+    'human': ('I read the whole source document, not only the cited passages, and it supports this code as a '
+              'service performed at this encounter. The documentation checks can miss wording they do not '
+              'recognise. This synthetic review is not clinical approval or billing advice.'),
+    'agent': ('I am an automated agent. I read the whole source document, not only the cited passages, and it '
+              'supports this code as a service performed at this encounter. The documentation checks can miss '
+              'wording they do not recognise. This agent-executed synthetic review is not clinical approval or '
+              'billing advice.'),
+}
 SELECTED, EXCLUDED, ALTERNATIVE = Proposal.SELECTED, Proposal.EXCLUDED, Proposal.ALTERNATIVE
 # The only (bucket, status) pairs a proposal may have; anything else is refused when persisted.
 BUCKET_STATUSES = {
@@ -211,6 +224,9 @@ def record_decision(*, encounter, proposal, action, user, membership, note='', a
         note, acknowledgement = (note or '').strip(), (acknowledgement or '').strip()
         if action == APPROVE and not acknowledgement:
             raise ValidationError('Approving requires an acknowledgement.')
+        if action == APPROVE and acknowledgement != ACKNOWLEDGEMENTS.get(user.actor_kind):
+            raise ValidationError('The acknowledgement is not the current review attestation. Reload the page '
+                                  'and approve again.')
         decision = Decision.objects.create(
             encounter=locked, assessment=assessment, revision=assessment.revision, proposal=proposal, action=action,
             note=note, reviewer=user, reviewer_kind=user.actor_kind, acknowledgement=acknowledgement,
@@ -501,6 +517,15 @@ def _reviewable(proposal, decision):
                                            and (decision is not None or proposal.reinstatable))
 
 
+def _could_bill(proposal, decision):
+    """Whether a gated E/M is still on its way to a reviewed approval: selected and undecided, reinstated, or
+    approved. A rejection, a confirmed exclusion and an exclusion nobody has decided yet bill nothing, so the same-day
+    rule has nothing to hold (round 5, bypass:0); the exclusion's own blocker covers the undecided one."""
+    if decision is None:
+        return proposal.bucket == SELECTED
+    return decision.action in (APPROVE, REINSTATE)
+
+
 def _assessment_blockers(encounter, assessment):
     blockers = []
     if assessment.context_id != encounter.current_context_id:
@@ -525,7 +550,7 @@ def _assessment_blockers(encounter, assessment):
         if not _reviewable(proposal, decision):
             continue
         reviewable += 1
-        if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and not (decision and decision.action == REJECT):
+        if reinstated and _has_check(proposal, SAME_DAY_EM_GATE) and _could_bill(proposal, decision):
             # Also when this E/M was approved before the procedure was brought back.
             blockers.append(_same_day_blocker(proposal, reinstated))
         if decision is not None and decision.action in (APPROVE, REJECT, CONFIRM):

@@ -138,3 +138,38 @@ class InMemoryReferenceLookup:
     def _read_rows(self, source_key: str, code: str) -> dict[str, dict]:
         return {modifier: dict(value) for (row_code, modifier), value in self._facts.get(source_key, {}).items()
                 if row_code == code}
+
+
+def selected_codes(normalized) -> tuple[str, ...]:
+    """The codes an assessment of ``normalized`` can look up: the provider's selected codes (validation looks up
+    nothing else)."""
+    if normalized is None:
+        return ()
+    return tuple(sorted({c.code for c in normalized.codes if c.role == 'selected' and isinstance(c.code, str)}))
+
+
+class PrefetchedReferenceLookup:
+    """The rows of named codes, read in one query, for an assessment that runs where the database is not reachable
+    (the assess stage's bounded child). The same answers as DbReferenceLookup for those codes; any other code is an
+    error, never an empty result, so a lookup the prefetch missed cannot quietly report "not found"."""
+
+    def __init__(self, sources, facts, codes):
+        self._memory = InMemoryReferenceLookup(sources, facts)
+        self._codes = frozenset(codes)
+
+    def sources(self) -> tuple[ReferenceSourceInfo, ...]:
+        return self._memory.sources()
+
+    def lookup(self, code: str, service_date: Optional[date]) -> CodeReference:
+        if code not in self._codes:
+            raise LookupError(f'{code} was not prefetched for this assessment.')
+        return self._memory.lookup(code, service_date)
+
+
+def prefetched_lookup(codes) -> PrefetchedReferenceLookup:
+    sources = tuple(source_info(row) for row in ReferenceSource.objects.all())
+    facts = {source.key: {} for source in sources}
+    rows = ReferenceCodeFact.objects.filter(code__in=list(codes)).values_list('source__key', 'code', 'modifier', 'facts')
+    for key, code, modifier, value in rows:
+        facts[key][(code, modifier)] = value
+    return PrefetchedReferenceLookup(sources, facts, codes)

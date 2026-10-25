@@ -462,12 +462,20 @@ where a rule restores what an ordinary note read before round 3b.
 - Cost: each mention stores a bounded window of its sentence, not the whole
   sentence, and a member's pre-triggers are read once from its own bounded
   start, so a long coordinated list stays linear. Clause lookups take only the
-  first or last few clauses they need (by bisection). Routing and context
-  extraction run in a forked child under the stage's wall clock
-  (`JOB_DEADLINE_SECONDS`; `CONTEXT_REQUEST_SECONDS` when a member's context
-  change runs it inside a web request) and a memory allowance
-  (`BOUNDED_MEMORY_BYTES`, `studio/bounded.py`): an overrun fails the stage, or
-  refuses the change, with a plain message instead of holding the worker.
+  first or last few clauses they need (by bisection). Every stage reads the
+  document in ONE forked child under the stage's own wall clock
+  (`JOB_DEADLINE_SECONDS`) and a memory allowance (`BOUNDED_MEMORY_BYTES`,
+  `studio/bounded.py`): analyze extracts the context and routes in one child,
+  and assess routes and runs the whole validation assessment (whose span
+  readings reuse that routing's analysis) in one child, with the reference rows
+  of the selected codes fetched in the worker first (`prefetched_lookup`; a code
+  it was not given is an error, never an empty answer). An overrun fails the
+  stage with a plain message instead of holding the worker; nothing a stage
+  read stays cached in the worker (`jobs.release_routing_caches` after every
+  stage is the backstop). A member's context change re-reads the document's
+  facts in a child under `CONTEXT_REQUEST_SECONDS`, and is refused for a
+  revision whose analysis never finished, so nothing is ever sent for a
+  document the service could not read.
 
 ### 5.4 `studio/providers` — proposal adapters
 
@@ -648,7 +656,9 @@ relevant context values).
 
 Actions: `approve` (only `ready` proposals on the current assessment, with
 an acknowledgement that the reviewer read the whole document and it supports
-the code), `reject` (any selected proposal), `reinstate` (a reinstatable
+the code: exactly the current attestation text for the reviewer's actor kind,
+`review.ACKNOWLEDGEMENTS`, which `/api/session` serves to the page; any other
+text is refused), `reject` (any selected proposal), `reinstate` (a reinstatable
 excluded proposal → becomes reviewable, recorded), `confirm` (agree with a
 reinstatable exclusion: it stays excluded, now with a named reviewer), `revoke`
 (undo the reviewer's current decision). A reinstatable exclusion is a
@@ -666,10 +676,12 @@ when every selected proposal has a current approve/reject decision, every
 reinstatable exclusion is confirmed or reinstated and decided; anything else
 is draft-only, with the blocking items listed. While a
 code marked `review.same_day_em` has a current reinstate or approve decision,
-an E/M marked `em.same_day_if_reinstated` cannot be approved, and if it was
-approved first the reviewed report is blocked ("<E/M> needs a separately
+an E/M marked `em.same_day_if_reinstated` cannot be approved, and while that
+E/M is still on its way to an approval (selected and undecided, reinstated, or
+approved first) the reviewed report is blocked ("<E/M> needs a separately
 identifiable E/M: <code> was reinstated as a same-day procedure"); rejecting
-or revoking the reinstatement releases it.
+the E/M, confirming its exclusion, or rejecting or revoking the reinstatement
+releases it.
 
 ### 5.8 `studio/reports` — exports
 
