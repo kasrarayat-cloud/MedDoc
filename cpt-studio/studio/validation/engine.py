@@ -156,7 +156,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
         own = _unnamed_other(own, text, routing, day, code)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing, text, day)
-    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, routing, text) else r
+    families = _VAL_family_index(routing) if any(r.status == 'uncertain' for r in own) else {}
+    own = tuple(replace(r, other_service=True) if _other_service(r, selection.family, families, text) else r
                 for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
@@ -204,18 +205,27 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     return tuple(marked)
 
 
-def _other_service(reading: checks.Reading, family: str, routing: RoutingResult, text: str) -> bool:
+def _VAL_family_index(routing: RoutingResult) -> dict:
+    """{family: an overlap test over that family's routed mention spans (_VAL_overlap_test)}, built once per code
+    (round 5 bounded:4): "which routed families does this passage touch" then costs two bisections per family, never a
+    scan of every routed mention for every hedged passage (20,000 hedged lines took 82 s in assess())."""
+    spans: dict[str, list[tuple[int, int]]] = {}
+    for finding in routing.findings:
+        spans.setdefault(finding.family, []).extend((m.span.start, m.span.end) for m in finding.mentions)
+    return {family: _VAL_overlap_test(found) for family, found in spans.items()}
+
+
+def _other_service(reading: checks.Reading, family: str, families: dict, text: str) -> bool:
     """Whether a hedging linked passage is about another service than the code's (validation:4). For an E/M code: it
     touches no E/M documentation routing reads (visit statement, chief complaint, MDM, time), as "Possible EGD if
     symptoms persist." or "Epigastric pain; rule out celiac disease?" do not. For any other code: it names a routed
     service of another family, none of the code's own, and none of the code family's interventions ("Possible EGD
     ..." cited for a colonoscopy code; never "Possible EGD and biopsy of the sigmoid colon?" for 45380). A hedge that
     names no service is the code's own for a procedure code (fail-closed: "It is unclear whether biopsies were
-    taken.")."""
+    taken."). ``families``: the routed mentions indexed once per code (_VAL_family_index)."""
     if reading.status != 'uncertain' or checks.silent(reading.status, reading.cues):
         return False
-    named = {f.family for f in routing.findings for m in f.mentions
-             if m.span.start < reading.end and reading.start < m.span.end}
+    named = {name for name, overlaps in families.items() if overlaps(reading.start, reading.end)}
     if family in checks.EM_FAMILIES:
         return 'gi.office_em' not in named
     return bool(named) and family not in named and not checks.names_intervention(text, reading.start, reading.end,
