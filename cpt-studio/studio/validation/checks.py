@@ -1378,13 +1378,19 @@ _VAL_REFERENCE = re.compile(r'\b(?:procedures?|exam(?:ination)?s?|stud(?:y|ies)|
 _VAL_ACT_VERB = re.compile(r'\b(?:perform\w*|done|complet\w*|abort\w*|cancel\w*|terminat\w*|stopp?\w*|defer\w*|'
                            r'attempt\w*|postpon\w*|declin\w*|refus\w*)\b', re.A | re.I)
 _VAL_DOUBT_STATUSES = ('negated', 'cancelled', 'incomplete')
+_VAL_NAMES_PER_SENTENCE = 4  # own-procedure words a sentence's names are read at (bounds the work per sentence)
 
 
 @functools.lru_cache(maxsize=4)
 def _VAL_own_sentence_readings(text: str, service_date: Optional[date]) -> tuple:
     """Per text: (start, end, status, cues) of every layout sentence holding a word of some gi.other code's own
     procedure, a procedure named by reference ("the procedure", "the exam", "it") or a procedure's act verb, as routing
-    reads it (span_status). Read once per text."""
+    reads it (span_status). Read once per text.
+
+    A sentence's own-procedure words are also read on their own, and one read negated, cancelled or incomplete adds
+    that reading for its sentence (round 4c-2, lead): routing reads the clause after a gi.other name only for the name
+    ("Anoscopy was incomplete because of pain." reads incomplete at "Anoscopy"), while the whole sentence reads
+    performed by its section alone, so the report's own denial of its procedure went unseen."""
     from studio.gi import detect
     an = detect._analysis(text, service_date)[0]
     found = []
@@ -1393,6 +1399,13 @@ def _VAL_own_sentence_readings(text: str, service_date: Optional[date]) -> tuple
             parsed = normalise_span_status(span_status(text, s, e, service_date))
             if parsed is not None:
                 found.append((s, e) + parsed)
+            for count, word in enumerate(_VAL_ANY_OWN.finditer(text, s, e)):
+                if count == _VAL_NAMES_PER_SENTENCE:
+                    break
+                named = normalise_span_status(span_status(text, word.start(), word.end(), service_date))
+                if named is not None and named[0] in _VAL_DOUBT_STATUSES:
+                    found.append((s, e) + named)
+                    break
     return tuple(found)
 
 

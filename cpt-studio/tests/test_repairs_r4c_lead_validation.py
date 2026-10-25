@@ -112,3 +112,40 @@ class IncompleteFamilyLineTests(Case):
         detail = check_of(item, 'service.status').detail
         self.assertIn('reads as performed only by its section (', detail)
         self.assertNotIn('as incomplete only through', detail)
+
+
+class NamedProcedureIncompleteTests(Case):
+    """Found by the lead while proving IncompleteFamilyLineTests' controls: "Anoscopy was incomplete because of pain."
+    left 46600 READY, "Documented as performed", citing that sentence or the procedure line. Routing reads the clause
+    after a gi.other name only for the name (it reads incomplete at "Anoscopy"), while the whole sentence reads
+    performed by its section alone, so validation:2's doubt guard (checks._VAL_doubted) never saw the report's own
+    statement. A sentence's own-procedure words are now also read on their own; one read negated, cancelled or
+    incomplete is a doubt about that procedure."""
+
+    def test_a_report_that_says_its_procedure_was_incomplete_corroborates_nothing(self):
+        anoscopy = REPORT.format(proc='Anoscopy', find='Anoscopy was incomplete because of pain.')
+        banding = REPORT.format(proc='Rubber band ligation of internal hemorrhoids',
+                                find='Two columns. Banding was incomplete due to discomfort.')
+        for text, code, line in ((anoscopy, '46600', 'Anoscopy was incomplete because of pain.'),
+                                 (anoscopy, '46600', 'Procedure: Anoscopy'),
+                                 (banding, '46221', 'Procedure: Rubber band ligation of internal hemorrhoids')):
+            with self.subTest(code=code, line=line):
+                item = real(text, (code, line))[0][code]
+                self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                self.assertIn(RULE_WORDING, check_of(item, 'service.status').detail)
+
+    def test_controls_no_statement_about_this_procedure_keeps_it_as_before(self):
+        ordinary = REPORT.format(proc='Anoscopy', find='Anoscopy revealed grade 2 internal hemorrhoids.')
+        for line in ('Anoscopy revealed grade 2 internal hemorrhoids.', 'Procedure: Anoscopy'):
+            with self.subTest(line=line):
+                self.assertReady(real(ordinary, ('46600', line))[0]['46600'])
+        for tail in ('Plan: Repeat anoscopy in 6 months.\n', 'Addendum: Banding was incomplete due to discomfort.\n'):
+            with self.subTest(tail=tail):
+                text = REPORT.format(proc='Anoscopy', find='Grade 2 internal hemorrhoids.') + tail
+                self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+        # the passage that states the incomplete act itself keeps its own reading
+        text = REPORT.format(proc='Anoscopy', find='Anoscopy was terminated because of pain.')
+        item = real(text, ('46600', 'Anoscopy was terminated because of pain.'))[0]['46600']
+        self.assertReady(item)
+        self.assertIn('Documented as incomplete: “Anoscopy was terminated because of pain.”',
+                      check_of(item, 'service.status').detail)
