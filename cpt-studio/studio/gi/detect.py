@@ -1863,6 +1863,42 @@ def _SEC_held_within(an: Analysis, start: int, end: int) -> Optional[str]:
     return next((cue for cue in map(lambda section: _SEC_hold_cue(an, section), lay.sections[lo:hi]) if cue), None)
 
 
+# Round 4c-2 plan:A: a plan clause that says today and states the procedure's own RESULT ("EGD today showed esophagitis
+# versus reflux.") carries PLAN_TODAY whatever hedge outranks it, as round 4c's validation:3 arm does for a performance
+# statement: the hedge then speaks of the finding, not of whether the procedure was done. The result is stated by a
+# reporting verb (_REPORTING, the verbs the continuation reader reads as reporting what the procedure found) straight
+# after the service name; only further names (coordinated services, the interventions and landmarks it names), these
+# joiners and a today phrase may stand between them. A hedged, conditioned or discussed plan names no result ("Possible
+# EGD today if symptoms persist.", "Discussed colonoscopy today"), so it reads as before (round 3 validation:1).
+_P2_RESULT_REACH = 120  # how far after a service's name its reporting verb is looked for (bounds the work per span)
+_P2_RESULT_GAP = re.compile(r'[ \t,()/&+]*', re.A)
+_P2_RESULT_JOINER = re.compile(r'(?:with|and|plus)\b|w/', re.A | re.I)
+
+
+def _P2_states_its_result(an: Analysis, start: int, end: int) -> bool:
+    """Whether a service named in [start, end) is followed in its own clause by a reporting verb (_REPORTING:
+    "showed", "revealed", "demonstrated", "found", "noted", ...) with nothing between them but further names
+    (_named_at), "with", "w/", "and", "plus" and a today phrase (cues.TODAY): "EGD today showed ...", "EGD with biopsies
+    this morning revealed ...", "Today's EGD showed ...". Read within _P2_RESULT_REACH of each name."""
+    text = an.text
+    for m in an.services_in(start, max(end, start + 1)):
+        limit = min(_clause_end(an, m.start, len(text)), m.end + _P2_RESULT_REACH)
+        pos = m.end
+        while pos < limit:
+            pos = _P2_RESULT_GAP.match(text, pos, limit).end()
+            step = _named_at(an, pos, limit) if pos < limit else None
+            if step is None:
+                joined = cues.TODAY.match(text, pos, limit) or _P2_RESULT_JOINER.match(text, pos, limit)
+                step = joined.end() if joined else None
+            if step is None:
+                word = _NEXT_WORD.match(text, pos, limit)
+                if word is not None and word.group(0).lower() in _REPORTING:
+                    return True
+                break
+            pos = step
+    return False
+
+
 def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Optional[Reading]:
     """The reading of [start, end) from the cues of its clauses. An explicit performance cue is history in
     a history section (uncertain if its clause says today), uncertain in a plan section (carrying PLAN_TODAY when a
@@ -1904,6 +1940,12 @@ def _cue_reading(an: Analysis, start: int, end: int, em: bool = False) -> Option
         # performed arm above does, and validation holds the E/M beside it. A plan clause with no performance statement
         # ("Possible EGD today if symptoms persist.", "Discussed colonoscopy today") reads as before (round 3 validation:1,
         # round 2 review:1: its visit stays approvable).
+        return Reading('uncertain', deciding + (PLAN_TODAY, _section_label(section)), 'cue', past, doubt)
+    if status == 'uncertain' and section.kind == 'plan' and not em \
+            and any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)) \
+            and _P2_states_its_result(an, start, end):
+        # round 4c-2 plan:A: a plan clause that says today and states the procedure's result ("EGD today showed
+        # esophagitis versus reflux.") holds as the unhedged clause does (PLAN_TODAY); the hedge is the finding's
         return Reading('uncertain', deciding + (PLAN_TODAY, _section_label(section)), 'cue', past, doubt)
     if status == 'performed' and section.kind == 'indication' and not em \
             and not any(cues.TODAY.search(an.text, cs, ce) for cs, ce in an.lay.clauses_for(start, end)):
