@@ -647,8 +647,10 @@ class Box2IUnselectedOptionTests(unittest.TestCase):
         both ways, or a label whose option cannot be read, holds too."""
         for row, item, whole in (('Repeat in 3 years \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy', 'held'),
                                  ('Planned \u2610 | Cold snare polypectomy \u2612', 'Cold snare polypectomy', 'held'),
-                                 # the row cited whole reads performed at every tree (no reader takes its "Not")
-                                 ('Not performed [ ] | Cold snare polypectomy [x]', 'Cold snare polypectomy', 'ready'),
+                                 # the row cited whole read performed at every tree (no reader takes its "Not"); round 4d
+                                 # BOXES3 (strict check-box rows): the box reader leads and the entries trail, so the row
+                                 # cannot be paired and is held whole
+                                 ('Not performed [ ] | Cold snare polypectomy [x]', 'Cold snare polypectomy', 'held'),
                                  ('Colonoscopy \u2610 Cancelled \u2612 Completed', 'Colonoscopy', 'held'),
                                  ('Colonoscopy: \u2610 Cancelled [?] Completed', 'Colonoscopy', 'held')):
             with self.subTest(row=row):
@@ -791,7 +793,9 @@ class Box2IUnselectedOptionTests(unittest.TestCase):
                                    ('Colonoscopy completed? \u2610 Yes \u2611 No', 'Colonoscopy', 'negated'),
                                    ('Follow-up colonoscopy in 3 years ( )', 'colonoscopy', 'negated'),
                                    ('Colonoscopy cancelled: [ ] Yes [x] No', 'Colonoscopy', 'negated'),
-                                   ('Cold snare polypectomy \u2610 | Repeat in 3 years \u2612', 'Cold snare polypectomy', 'negated'),
+                                   # round 4d BOXES3 (strict check-box rows): the option readers take the checked plan
+                                   # option's box for the polypectomy's ☐, so the row cannot be paired: held, never negated
+                                   ('Cold snare polypectomy \u2610 | Repeat in 3 years \u2612', 'Cold snare polypectomy', 'uncertain'),
                                    ('Colonoscopy: \u2612 Cancelled \u2610 Completed', 'Colonoscopy', 'cancelled')):
             with self.subTest(control=row):  # yes / no questions, a plan line, an item's own unchecked box
                 self.assertEqual(self.read(I_REPORT.format(row=row), cited, within=row)[0], status)
@@ -968,8 +972,10 @@ class Box2KNonItemFirstWordTests(unittest.TestCase):
                                   ('Biopsy | \u2610 | Cold snare polypectomy | \u2612', 'Biopsy', 'negated'),
                                   ('Colonoscopy: \u2610 biopsy \u2612 cold snare polypectomy', 'cold snare polypectomy', 'performed'),
                                   ('Colonoscopy: \u2610 biopsy \u2612 cold snare polypectomy', 'biopsy', 'negated'),
-                                  # one box fewer than the entries: the readings cannot be told apart, read as at d05326ef
-                                  ('Photos \u2610 Biopsy \u2612 Cold snare polypectomy', 'Cold snare polypectomy', 'performed'),
+                                  # one box fewer than the entries: the readings cannot be told apart (read as at
+                                  # d05326ef before round 4d); BOXES3's strict rows hold it: the last entry may be a remark
+                                  # or the checked box's item
+                                  ('Photos \u2610 Biopsy \u2612 Cold snare polypectomy', 'Cold snare polypectomy', 'uncertain'),
                                   ('\u2611 Cold snare polypectomy \u2610 Biopsy', 'Cold snare polypectomy', 'performed'),
                                   # a yes / no answer is read by the option it marks; entries labelled "X:" are round 4c's
                                   ('Biopsy No \u2612', 'Biopsy', 'negated'),

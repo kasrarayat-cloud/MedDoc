@@ -830,7 +830,9 @@ class Routing19StoredSizeTests(unittest.TestCase):
         result, size = self.stored(text)
         self.assertLess(time.monotonic() - started, 20)
         self.assertLess(size, 20 * len(text), size)
-        self.assertEqual(result.finding('gi.colonoscopy').status, 'performed')
+        # Round 4d BOXES3 (contract-r4d section 4): one box row of 140,000 characters, longer than a row is ever paired
+        # (B3_ROW_CHARS): held, never read by a box (performed before); the stored size is what this test bounds
+        self.assertEqual(result.finding('gi.colonoscopy').status, 'uncertain')
         self.assert_mentions_hold_their_spans(text, result)
 
     def test_many_mentions_in_one_sentence_store_linearly(self):

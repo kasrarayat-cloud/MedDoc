@@ -424,7 +424,9 @@ class Extraction10WidgetOverTheBoxInkTests(unittest.TestCase):
         form.checkbox('Check Box1', widget_rect(SNARE_ROW, 72 + 6.5), False, tu='Cold snare polypectomy')
         text = text_of(form.build())
         self.assertIn('Interventions:\n☐ ☐ Cold snare polypectomy\n', text)
-        self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+        # Round 4d BOXES3 (contract-r4d section 4, strict check-box rows): two boxes for one entry cannot be paired one
+        # to one, so the item is held (it was excluded), never negated by a guess
+        self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'held')
 
 
 # --- contract:1 -- the repair's own inputs with Acrobat's default names ---------------------------------------------

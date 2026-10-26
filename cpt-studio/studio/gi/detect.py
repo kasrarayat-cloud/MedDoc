@@ -956,7 +956,9 @@ def _unchecked_option(an: Analysis, start: int, end: int) -> bool:
     Only a line every denying option of which has its own unchecked box is one (routing:0): a checked, disagreeing or
     unread box on any denying option ("☐ Completed ☒ Cancelled") makes it a statement, whatever box comes first. A
     form-field line answered with a denial is one only when its label carries the denial ("Procedure cancelled: No",
-    not "Procedure status: Not performed")."""
+    not "Procedure status: Not performed"). Round 4d BOXES3: never a line the strict check-box rows hold (_B3_hold)."""
+    if _B3_hold(an, start, end) is not None:
+        return False
     if _box_state(an, start, end) == 'off':
         options = _box_denying_options(an, start, end)
         if not options:  # nothing on the line would deny if selected ("Procedure completed: ☐ Yes ☒ No"): no option
@@ -1067,13 +1069,15 @@ def _boxed_status_denies(an: Analysis, lo: int, hi: int) -> Optional[bool]:
     Postponed"; round 4, BOXES' residual): True when any denying option is not plainly unchecked (checked,
     disagreeing, unread, or governed by no box), False when every one is unchecked, None when the value has no box or
     no denying option (it is read as text, as before round 4b: round 5 regression:0). The caller holds the service
-    line; it never excludes."""
+    line; it never excludes. Round 4d BOXES3: True on a row the strict check-box rows hold (_B3_hold)."""
     _, boxes = _box_tokens(an, lo, hi)
     if not boxes:
         return None
     options = _box_denying_options(an, lo, hi)
     if not options:
         return None
+    if _B3_hold(an, lo, hi) is not None:
+        return True
     words = options + [m.span() for m in _BOX_DONE_OPTION.finditer(an.text, lo, hi)]
     return any(state != 'off' for state in _box_option_states(an, lo, hi, options, words))
 
@@ -1131,6 +1135,8 @@ def _box_selected_denial(an: Analysis, lo: int, hi: int) -> bool:
     spans = [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(text, lo, hi) if _box_beside_a_mark(text, *m.span(), lo, hi)]
     if not spans:
         return False
+    if _B3_hold(an, lo, hi) is not None:
+        return True  # round 4d BOXES3: on a row the strict check-box rows hold, such an option is no unselected one
     words = _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
     return any(state not in ('off', None) for state in _box_option_states(an, lo, hi, spans, words))
 
@@ -2810,7 +2816,21 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     printed item or a status field that gives no completion (and its own reading has no explicit performance cue and no
     checked box of its own). A checked field line itself stays silent. A field that answers for an item in a way this
     reader cannot read holds that passage only, with no doubt about its family's service: such an answer is about
-    another time or attribute ("Flexible sigmoidoscopy in the last 10 years: No"), or one this reader cannot read."""
+    another time or attribute ("Flexible sigmoidoscopy in the last 10 years: No"), or one this reader cannot read.
+    Round 4d BOXES3: the strict check-box rows are consulted first (_B3_hold): a passage of a row whose marks cannot be
+    paired with its entries in exactly one way is held (uncertain, a doubt), never read by a box; where the row's own
+    reading below already holds it, that hold and its cue stand. A row too long to pair is held without being read."""
+    unpaired = _B3_hold(an, start, end)
+    if unpaired is not None and _B3_long_row(an, start, end):
+        return Reading('uncertain', (unpaired,), 'cue', doubt=True)
+    reading = _B3_declared_box_reading(an, start, end)
+    if unpaired is None or (reading is not None and reading.status == 'uncertain'):
+        return reading
+    return Reading('uncertain', (unpaired,), 'cue', doubt=True)
+
+
+def _B3_declared_box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """The declared box contract's reading of [start, end) (_box_reading, before round 4d's strict rows)."""
     state = _box_state(an, start, end)
     fields = _form_fields(an)
     one_line = an.text.find('\n', start, end) < 0
@@ -2829,6 +2849,8 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
         label = _B2_label_state(an, start, end)
         if label == 'on':
             state = 'on'  # "Colonoscopy" of "Colonoscopy: ☐ Cancelled ☒ Completed": read as its line's options say
+        elif label == 'unpaired':  # round 4d BOXES3: its row's marks cannot be paired with certainty
+            return Reading('uncertain', (_B3_hold(an, start, end),), 'cue', doubt=True)
         elif label == 'unknown':
             return Reading('uncertain', (BOX_UNREAD,), 'cue', doubt=True)
         elif label == 'across':
@@ -2997,7 +3019,10 @@ def _box_checked_option(an: Analysis, start: int, end: int) -> Optional[Reading]
     line selects a denying option, itself or another ("[ ] Completed [x] Cancelled [ ] Aborted", "Completed ☐ |
     Aborted ☒"): a checked, disagreeing or unread box on a denying option makes the line a statement (routing:0), held
     and never read as that status (_box_option_states). None when every denying option of the line is unchecked. The
-    line is read within BOX_REACH of the option."""
+    line is read within BOX_REACH of the option. Round 4d BOXES3: held with the strict rows' cue on a row they hold."""
+    unpaired = _B3_hold(an, start, end)
+    if unpaired is not None:
+        return Reading('uncertain', (unpaired,), 'cue', doubt=True)
     text = an.text
     lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
     newline = text.find('\n', end, end + BOX_REACH)
@@ -3806,7 +3831,10 @@ def _box_own_option_off(an: Analysis, start: int, end: int) -> bool:
     line's option words (_box_option_states, as _unchecked_option and _box_checked_option read them), is unchecked:
     "Aborted" of "Status: Completed ☒ Aborted ☐ Cancelled ☐". Such an option states nothing (round 5 regression:4:
     read where an item would be, the box before it, Completed's ☒, was taken for its own). The line is read within
-    BOX_REACH of the reference."""
+    BOX_REACH of the reference. Round 4d BOXES3: never on a row the strict check-box rows hold (_B3_hold): its marks
+    cannot be paired with its entries with certainty, so no box there is the option's own (round 6 regression:0, 5)."""
+    if _B3_hold(an, start, end) is not None:
+        return False
     text = an.text
     lo = max(text.rfind('\n', max(0, start - BOX_REACH), start) + 1, start - BOX_REACH)
     newline = text.find('\n', end, end + BOX_REACH)
@@ -3851,6 +3879,8 @@ def _B2_option_words(an: Analysis, start: int, end: int, ts: int, te: int, shown
     unselected = _B2_unselected_option(an, start, end, ts, te)
     if unselected == 'off':
         return []
+    if unselected == 'unpaired':  # round 4d BOXES3: held with the strict rows' cue, keeping the words' rank
+        return [('uncertain', _B3_hold(an, start, end), False, True, status)]
     if unselected in ('unknown', 'across', 'blank', 'remark'):
         label = {'unknown': _B2_OPTION_UNREAD, 'across': _B2_OPTION_ACROSS, 'blank': _B2_OPTION_BLANK,
                  'remark': _B2_OPTION_REMARK}[unselected]
@@ -3869,7 +3899,11 @@ def _B2_unselected_option(an: Analysis, start: int, end: int, ts: int, te: int) 
     other words, else None. A target inside the option's words ("☐
     Repeat colonoscopy in 3 years") and prose after a single box ("☐ Biopsy. Repeat colonoscopy in 3 years.") read as
     before. Round 5 regression:4 (ARCHITECTURE 5.3), carried from the status references to the clause readers a
-    service or an item is read by. The option is read once per span (memoised)."""
+    service or an item is read by. The option is read once per span (memoised). 'unpaired' (round 4d BOXES3) when the
+    strict check-box rows hold the option's words (_B3_hold): its row's marks cannot be paired with its entries with
+    certainty, so they are never dropped (round 6 regression:1, regression:2)."""
+    if _B3_hold(an, start, end) is not None:
+        return 'unpaired'
     key = ('b2-unselected', start, end)
     if key not in an.memo:
         an.memo[key] = _B2_option_reading(an, start, end)
@@ -4021,9 +4055,12 @@ def _B2_label_state(an: Analysis, start: int, end: int) -> Optional[str]:
     passage across an unchecked option and other words is). 'unknown' when an option's box cannot be read, the line
     can be read both ways, or an unchecked option's text may hold a remark (_B2_has_remark: "Colonoscopy: ☐ Incomplete
     - patient declined further sedation ☒ Completed"); else None (read as before: "Colonoscopy: ☐ Completed ☒
-    Cancelled" stays denied)."""
+    Cancelled" stays denied). 'unpaired' (round 4d BOXES3) when the strict check-box rows hold the passage (_B3_hold):
+    its row's marks cannot be paired with its entries in exactly one way, so its options are not read at all."""
     if an.text.find('\n', start, end) >= 0:
         return None
+    if _B3_hold(an, start, end) is not None:
+        return 'unpaired'
     lo, hi = _B2_line_window(an, start, end)
     line = _B2_status_line(an, lo, hi)
     if line is None or start >= line[0]:
@@ -4130,16 +4167,363 @@ def _B2_label_hold(an: Analysis, start: int, end: int) -> Optional[str]:
     beside its own mark, _BOX_STATUS_HOLD_WORD: pending, incomplete, on hold, TBD, TBA, unknown, unclear, requested,
     ...; round 4c regression:0) has its own box checked: the cue naming it, else None. As under "Status:", where the
     line's hold words hold the service; a service's name as the label read it performed (45378 ready). The callers
-    read it only where the passage would otherwise read performed."""
+    read it only where the passage would otherwise read performed. Round 4d BOXES3: a passage the strict check-box rows
+    hold (_B3_hold) takes their cue; the label ends at any of the shared separators (_B3_LABEL_SEP: "Colonoscopy -
+    ☒ Incomplete ☐ Completed", "Colonoscopy completed: ☒ Incomplete", a tab, "=": round 6 declared:2); and a hold word
+    whose own box cannot be read or disagrees holds it too, as its option ("'Pending' is an option on its line whose
+    own box cannot be read": round 6 declared:3). Only holds."""
     if an.text.find('\n', start, end) >= 0:
         return None
-    line = _B2_status_line(an, *_B2_line_window(an, start, end))
-    if line is None or start >= line[0]:
+    unpaired = _B3_hold(an, start, end)
+    if unpaired is not None:
+        return unpaired
+    lo, hi = _B2_line_window(an, start, end)
+    line = _B2_status_line(an, lo, hi)
+    if line is None:
         return None
+    label_end = max(line[0], _B3_label_end(an.text, lo, line[5][0][0]))
+    if start >= label_end:
+        return None
+    # A passage in the label only by the shared separators, on a line of one mark ("Colonoscopy - ☒ Incomplete"): the
+    # status line's entries take the label for one, so a hold word beside the mark reads that mark's state.
+    single = line[5][0] if start >= line[0] and len(line[5]) == 1 else None
     for (option_start, option_end), state in zip(line[1], line[2]):
-        if state == 'on' and _BOX_STATUS_HOLD_WORD.fullmatch(an.text, option_start, option_end):
+        if not _BOX_STATUS_HOLD_WORD.fullmatch(an.text, option_start, option_end):
+            continue
+        if single is not None and _box_beside_a_mark(an.text, option_start, option_end, lo, hi):
+            state = 'unknown' if single[2] == 'unread' else single[2]
+        if state == 'on':
             return _B2_LABEL_HOLD.format(an.text[option_start:option_end])
+        if state in ('unknown', 'mixed', 'unclear'):
+            return _B2_OPTION_UNREAD.format(an.text[option_start:option_end])
     return None
+
+
+def _B3_label_end(text: str, lo: int, first_mark: int) -> int:
+    """The end of a status line's label in [lo, first_mark), the text before its first mark: after its last label
+    separator (_B3_LABEL_SEP) and the spaces after it, or ``lo`` when it has none (round 6 declared:2)."""
+    last = None
+    for last in _B3_LABEL_SEP.finditer(text, lo, first_mark):
+        pass
+    return lo if last is None else _BOX_RUN_GAP.match(text, last.end(), first_mark).end()
+
+
+# --- round 4d BOXES3: strict check-box rows (contract-r4d section 4) -------------------------------------------------
+# ONE predicate (_B3_row) decides whether the check boxes of a passage's row can be read. The row is the passage's box
+# segment on its line (_box_segment: its sentence, joined to the sentences beside it on the line that open with a box
+# when that run ends with one). A row of one mark that is not the unread mark keeps its reading. Any other row is read
+# only when its marks and its entries pair in exactly one way (_B3_pairing: the word runs between the marks are its
+# entries, after the row's label; every entry has exactly one mark, all leading or all trailing their entries) and
+# every reader of the row pairs them so (_B3_agrees): the box reader for each item (_box_state), the option readers for
+# each status option (_box_option_states over the row and over the option's own line window, as _box_own_option_off and
+# _box_checked_option read it, and _B2_status_line). Every box reader consults it first (_B3_hold): on any other row of
+# two or more marks, or one with an unread mark, a passage the row's marks may govern is held (uncertain, a doubt, the
+# cue below), never ready and never newly negated or excluded. On a row that pairs, the declared box contract applies
+# as before, and an unread mark holds what it may govern: the entry it marks (as before), a passage across it, and the
+# label of a row of options (read by every option: round 6 declared:0, declared:3).
+B3_ROW_CHARS = 1000  # a box row longer than this is never paired: it is held (bounds the work per row)
+_B3_ROW_HOLD = ("uncertain: the check boxes on the line '{}' cannot be paired with its entries in exactly one way, so "
+                'what they say of it is held')
+_B3_HOLD_PREFIX = _B3_ROW_HOLD.split("'")[0]
+_B3_LINES_KEY = ('b3-line-breaks',)  # the text's line breaks, sorted (each line's bounds are read by bisection)
+# What ends a row's label in the text before its first mark: a colon (after the label's own "?"), a cell bar, "=", a
+# tab, a dash with a space on either side (the shared grammar's separators, _BOX_Q_SEP: round 6 declared:2), a linking
+# word ("with", "w/", "including": _BOX_LEAD_GAP), or a comma right before the mark ("Colonoscopy, ☐ biopsy ☒ cold
+# snare", structure:0). A hyphen inside a word ("Fine-needle") is none.
+_B3_LABEL_SEP = re.compile(r'[:|=\t]|(?<=[ \t])[-–—](?=[ \t])|\b(?:with|including)\b|\bw/'
+                           r'|,(?=[ \t ]*\Z)', re.A | re.I)
+# An entry that is one yes/no answer ("Yes", "No", "None", "Not done", "N/A"): a row of them answers its label.
+_B3_YES_NO = re.compile(r'(?:' + _OPTION_WORDS + r'|n/a)[ \t.]*', re.A | re.I)
+_B3_CELL_BEFORE = re.compile(r'[|\t][ \t ]*\Z')  # a cell bar or tab right before a mark ("Biopsy | ☐")
+_B3_CELL_AFTER = re.compile(r'[ \t ]*(?:[|\t]|\Z)')  # a cell bar or tab, or the row's end, after it ("☐ | Cold")
+
+
+def _B3_line(an: Analysis, pos: int) -> tuple[int, int]:
+    """[start, end) of the physical line holding ``pos``: found by bisection over the text's line breaks, indexed once
+    per text, so a long line is never scanned again per passage."""
+    if _B3_LINES_KEY not in an.memo:
+        an.memo[_B3_LINES_KEY] = [m.start() for m in re.finditer('\n', an.text)]
+    breaks = an.memo[_B3_LINES_KEY]
+    index = bisect.bisect_left(breaks, pos)
+    return (breaks[index - 1] + 1 if index else 0), (breaks[index] if index < len(breaks) else len(an.text))
+
+
+def _B3_word_run(text: str, lo: int, hi: int) -> Optional[tuple[int, int]]:
+    """[lo, hi) trimmed of spaces and cell bars, or None when no word is left (as _B2_entry_runs trims a run)."""
+    part = text[lo:hi]
+    left, right = len(part) - len(part.lstrip(' \t| ')), len(part.rstrip(' \t| '))
+    if right > left and _B2_WORD.search(part, left, right):
+        return lo + left, lo + right
+    return None
+
+
+def _B3_pairing(an: Analysis, lo: int, hi: int, marks: list, label_end: int, options: list) -> Optional[tuple]:
+    """('lead' | 'trail', [((run start, run end), mark index or None)]) of the row [lo, hi) read with its label ending
+    at ``label_end``, or None when its marks and its entries (the word runs between the marks, after the label) do not
+    alternate one to one: two marks with no entry between them (one entry's boxes), a last mark with no entry after it
+    in a leading row, or an entry before the first mark and one after the last that names an option. In a leading row
+    every mark comes before its entry, and an entry ending in ":" before the next mark is that mark's label, so the row
+    cannot lead ("Colonoscopy: ☐ EGD: ☒ dilation"); in a trailing row every mark comes after its entry, and a last run
+    naming no option is a remark no mark governs ("... | ☒ | clip placed after polypectomy", ARCHITECTURE 5.3), unless
+    the last mark is the unread mark, which may be the box of the run after it as well: 'ambiguous'."""
+    text = an.text
+    sequence, cursor = [], label_end
+    for index, (start, end, _) in enumerate(marks):
+        run = _B3_word_run(text, cursor, start)
+        if run:
+            sequence.append(('run', run))
+        sequence.append(('mark', index))
+        cursor = end
+    run = _B3_word_run(text, cursor, hi)
+    if run:
+        sequence.append(('run', run))
+    if any(a[0] == b[0] for a, b in zip(sequence, sequence[1:])):
+        return None
+    if sequence[0][0] == 'mark':
+        if sequence[-1][0] != 'run':
+            return None
+        pairs = [(sequence[i + 1][1], sequence[i][1]) for i in range(0, len(sequence), 2)]
+        if any(text[run[1] - 1] == ':' for run, _ in pairs[:-1]):
+            return None
+        return 'lead', pairs
+    pairs = [(sequence[i][1], sequence[i + 1][1]) for i in range(0, len(sequence) - 1, 2)]
+    if len(sequence) % 2:
+        remark = sequence[-1][1]
+        if marks[-1][2] == 'unread':
+            return 'ambiguous'  # the unread mark may be the box of the text after it as well (ARCHITECTURE 5.1)
+        if any(remark[0] < e and s < remark[1] for s, e in options) or _B3_YES_NO.fullmatch(text, *remark):
+            return None
+        pairs.append((remark, None))
+    return 'trail', pairs
+
+
+def _B3_label_reading(an: Analysis, lo: int, hi: int, marks: list, options: list) -> Optional[tuple]:
+    """(label end, orientation, pairs) of the row [lo, hi): the one way its marks and its entries pair, or None when
+    they pair in none or in more than one. The text before the first mark is the row's label up to its last label
+    separator (_B3_LABEL_SEP: "Colonoscopy:", "Colonoscopy -", "Biopsy taken:", "Colonoscopy with"), what follows it an
+    entry ("Interventions: Photos ☒ | Biopsy ☐"). A label that ends right before the first mark may also be the row's
+    first entry, whose box trails it ("Biopsy: ☐", "Biopsy | ☐ | Cold snare polypectomy | ☒"): when both readings pair,
+    marks alone in their cells trail their entries; a label naming a service, or naming no item, is the row's label
+    ("Colonoscopy: ☐ biopsy ☒ cold snare", "Interventions: ☐ Biopsy ☒ Cold snare polypectomy"); a label naming an item
+    pairs both ways and cannot be told ("Biopsy: ☐ Cold snare polypectomy ☒ hot snare", round 6 declared:8). With no
+    separator, a row of yes/no answers answers the text before them ("Biopsy taken ☐ Yes ☒ No"). A reading that leaves
+    the unread mark the last mark before an entry pairs it both ways ('ambiguous': "Biopsy: [?] Cold snare
+    polypectomy", round 6 declared:1), and so does the row."""
+    text = an.text
+    first = marks[0][0]
+
+    def read(label_end: int) -> Optional[tuple]:
+        found = _B3_pairing(an, lo, hi, marks, label_end, options)
+        return (label_end,) + found if isinstance(found, tuple) else found
+
+    if _B3_word_run(text, lo, first) is None:
+        found = read(lo)
+        return found if isinstance(found, tuple) else None
+    separators = list(_B3_LABEL_SEP.finditer(text, lo, first))
+    if not separators:
+        answered = read(first)
+        if isinstance(answered, tuple) and answered[1] == 'lead' and all(
+                _B3_YES_NO.fullmatch(text, *run) for run, _ in answered[2]):
+            return answered
+        found = read(lo)
+        return found if isinstance(found, tuple) else None
+    cut = _BOX_RUN_GAP.match(text, separators[-1].end(), first).end()
+    if _B3_word_run(text, cut, first):  # the label, then the row's first entry
+        found = read(cut)
+        return found if isinstance(found, tuple) else None
+    as_label, as_entry = read(cut), read(lo)
+    if 'ambiguous' in (as_label, as_entry):
+        return None
+    if as_label is None or as_entry is None:
+        return as_label or as_entry
+    if all(_B3_CELL_BEFORE.search(text, max(lo, s - 20), s) and _B3_CELL_AFTER.match(text, e, hi) for s, e, _ in marks):
+        return as_entry
+    if an.services_in(lo, cut) or not _box_tokens(an, lo, cut)[0]:
+        return as_label
+    return None
+
+
+def _B3_agrees(an: Analysis, lo: int, hi: int, label_end: int, pairs: list, marks: list) -> bool:
+    """Whether every reader of the row [lo, hi) reads each item and each status option after its label by the mark it
+    pairs with (``pairs``; an entry no mark governs, a remark, gives None; the unread mark reads 'unknown'), wherever
+    a reader's reading could release or exclude: the box reader (_box_state) for every item ('unclear', BOX_LATER's
+    hold, agrees with an unchecked or unread mark; a checked box and none agree, as both leave the item to its own
+    words; no box agrees for an item among an option's own words, which the option readers read: "☐ Repeat colonoscopy
+    in 5 years"); the status-line reader of each option's line window (_B2_status_line: its denying options
+    exactly, its completion options and listed items where it reads one checked that is not); and the option readers
+    over the row and over that window (_box_option_states, as _box_own_option_off, _box_checked_option, _unchecked_option
+    and _boxed_status_denies read a status line): exactly for a status reference or a "Not done" option, or on a row
+    naming no item, else where they read a denying option unchecked or a completion checked that is not. A reading
+    that can only hold is no disagreement ("Procedure status: Completed ☒ Not done ☐" reads Completed unchecked)."""
+    text = an.text
+    starts = [run[0] for run, _ in pairs]
+
+    def paired(start: int, end: int) -> Optional[str]:
+        index = bisect.bisect_right(starts, start) - 1
+        if index < 0 or max(end, start + 1) > pairs[index][0][1]:
+            return 'outside'
+        mark = pairs[index][1]
+        if mark is None:
+            return None
+        state = marks[mark][2]
+        return 'unknown' if state == 'unread' else state
+
+    denying = _merged([o for o in _box_denying_options(an, lo, hi) if o[0] >= label_end])
+    worded = [m.span() for m in _BOX_DONE_OPTION.finditer(text, label_end, hi)
+              if not any(_overlaps(*m.span(), s, e) for s, e in denying)]
+    in_options = [(run, any(_overlaps(*run, s, e) for s, e in denying + worded)) for run, _ in pairs]
+    # a completion word is an option only beside a mark: a remark's prose ("... polyp was performed.") is none
+    done = [o for o in worded if _box_beside_a_mark(text, *o, lo, hi)]
+    items = [item for item in _box_tokens(an, lo, hi)[0] if item[0] >= label_end]
+    if _B2_VISITS_KEY not in an.memo:
+        an.memo[_B2_VISITS_KEY] = sorted((v.start, v.end) for v in an.em if v.kind == 'em-visit')
+    all_visits = an.memo[_B2_VISITS_KEY]
+    visits = [v for v in all_visits[bisect.bisect_left(all_visits, (label_end, -1)):bisect.bisect_left(all_visits, (hi, -1))]
+              if v[1] <= hi]
+    for start, end in visits:  # the visit statement's own reader (_B2_visit_box): option by option among statements
+        _, _, vlo, vhi = _box_segment(an, start, end)
+        others = [v for v in all_visits[bisect.bisect_left(all_visits, (vlo, -1)):bisect.bisect_left(all_visits, (vhi + 1, -1))]
+                  if v[1] <= vhi and v != (start, end)]
+        read = (_box_option_states(an, vlo, vhi, [(start, end)], _merged(others + [(start, end)] + list(
+            _box_tokens(an, vlo, vhi)[0])))[0] if others else _box_state(an, start, end))
+        wanted = paired(start, end)
+        if read != wanted and not (read in (None, 'on') and wanted in (None, 'on')):
+            return False
+    for start, end in items:
+        wanted, read = paired(start, end), _box_state(an, start, end)
+        if read == wanted or (read == 'unclear' and wanted in ('off', 'unknown')):
+            continue
+        if read in (None, 'on') and wanted in (None, 'on'):
+            continue  # a checked box and none both leave the item to its own words (_box_reading reads neither)
+        if read is None and any(run[0] <= start and end <= run[1] and option for run, option in in_options):
+            continue  # an option's own words ("☐ Repeat colonoscopy in 5 years"): the option readers read them
+        return False
+    if not denying and not done:
+        return True
+    exact = [(m.start(), m.end()) for _, pattern in _REFERENCE_PATTERNS for m in pattern.finditer(text, label_end, hi)]
+    exact += [m.span() for m in _BOX_NOT_DONE_OPTION.finditer(text, label_end, hi)]
+
+    def conflicts(completion: bool, read: Optional[str], wanted: Optional[str], strict: bool) -> bool:
+        if read == wanted:
+            return False
+        if completion:
+            return read == 'on'  # a completion read checked where its own mark is not: a release
+        return strict or read == 'off'  # a denying option read unchecked where its own mark is not: a release
+
+    options = _merged(denying + done)
+    for (start, end), read in zip(options, _box_option_states(an, lo, hi, options, options)):
+        strict = not items or any(_overlaps(start, end, s, e) for s, e in exact)
+        if conflicts((start, end) in done, read, paired(start, end), strict):
+            return False
+    for start, end in options:
+        wanted, completion = paired(start, end), (start, end) in done
+        strict = not items or any(_overlaps(start, end, s, e) for s, e in exact)
+        wlo, whi = _B2_line_window(an, start, end)
+        words = _box_denying_options(an, wlo, whi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, wlo, whi)]
+        if conflicts(completion, _box_option_states(an, wlo, whi, [(start, end)], words)[0], wanted, strict):
+            return False
+        line = _B2_status_line(an, wlo, whi)
+        if line is None:
+            continue
+        entries = list(zip(line[1], line[2])) + list(zip(line[3], line[4]))
+        if any(_overlaps(s, e, start, end) and conflicts(completion, state, wanted, True) for (s, e), state in entries):
+            return False
+        if any(label_end <= s and e <= hi and state == 'on' and paired(s, e) != 'on' for (s, e), state in line[8]):
+            return False
+    return True
+
+
+def _B3_row(an: Analysis, start: int, end: int) -> Optional[tuple]:
+    """The strict reading of the box row of the passage [start, end) (see above): None when the row holds no mark, or
+    one mark that is not the unread mark; else (row start, row end, label end, readable, pairs, marks, whether a mark
+    is unread, whether its entries are options, the hold's cue, whether the row is too long to pair, the end of a label
+    no reading pairs with a mark). Memoised per row."""
+    text = an.text
+    line_lo, line_hi = _B3_line(an, start)
+    seg_lo, seg_hi, _, _ = _box_segment(an, start, end)
+    lo, hi = max(seg_lo, line_lo), min(seg_hi, line_hi)
+    key = ('b3-row', lo, hi, bool(an.other_names))
+    if key not in an.memo:
+        result = None
+        if hi > lo and (_BOX.search(text, lo, hi) or _BOX_UNREAD.search(text, lo, hi)
+                        or _BOX_RADIO.search(text, lo, hi)):
+            result = _B3_row_read(an, lo, hi)
+        an.memo[key] = result
+    return an.memo[key]
+
+
+def _B3_row_read(an: Analysis, lo: int, hi: int) -> Optional[tuple]:
+    text = an.text
+    cue = _B3_ROW_HOLD.format(' '.join(text[lo:min(hi, lo + 640)].split())[:160])
+    if hi - lo > B3_ROW_CHARS:
+        return lo, hi, lo, False, (), (), True, False, cue, True, lo
+    _, marks = _box_tokens(an, lo, hi)
+    unread = any(state == 'unread' for _, _, state in marks)
+    if not marks or (len(marks) == 1 and not unread):
+        return None
+    # The row's option words: denying and completion words written beside a mark (as a hold word is an option only
+    # there: _box_beside_a_mark), so a remark's prose ("... polyp was performed.") names none.
+    options = [o for o in _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
+               if _box_beside_a_mark(text, *o, lo, hi)]
+    # A label no reading pairs with a mark: a service's name and a label separator followed by the row's first entry, on
+    # a row of items ("Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed"; a service is described by its
+    # interventions, never governed by their boxes: _box_trail_state); passages within it are not the row's to hold. An
+    # item's label is read by its options ("Polypectomy: cold snare [?] hot snare", round 6 declared:1), so it is none.
+    cut = _B3_label_end(text, lo, marks[0][0])
+    free = (cut if cut > lo and _B3_word_run(text, cut, marks[0][0]) and not any(o[0] >= cut for o in options)
+            and an.services_in(lo, cut) and not an.interventions_in(lo, cut) and not _other_names_in(an, lo, cut)
+            else lo)
+    reading = _B3_label_reading(an, lo, hi, marks, options)
+    if reading is None:
+        return lo, hi, lo, False, (), tuple(marks), unread, False, cue, False, free
+    label_end, _, pairs = reading
+    readable = _B3_agrees(an, lo, hi, label_end, pairs, marks)
+    with_options = any(o[0] >= label_end for o in options) or any(_B3_YES_NO.fullmatch(text, *run) for run, _ in pairs)
+    return lo, hi, label_end, readable, tuple(pairs), tuple(marks), unread, with_options, cue, False, free
+
+
+def _B3_hold(an: Analysis, start: int, end: int) -> Optional[str]:
+    """The hold's cue (_B3_ROW_HOLD) when the strict check-box rows hold the passage [start, end), else None: its row's
+    marks cannot be paired with its entries in exactly one way, or are paired so but an unread mark may govern it (the
+    passage opens in the label of a row of options, or runs across entries one of whose marks is unread). A passage
+    that starts outside the row (prose after it on its line) is not the row's, nor one no mark is near: a box governs
+    only what is within BOX_REACH of it on its line. Memoised per passage (apart before and after routing names the
+    other procedures, as _box_tokens)."""
+    key = ('b3-hold', start, end, bool(an.other_names))
+    if key not in an.memo:
+        an.memo[key] = _B3_hold_read(an, start, end)
+    return an.memo[key]
+
+
+def _B3_hold_read(an: Analysis, start: int, end: int) -> Optional[str]:
+    text = an.text
+    line_lo, line_hi = _B3_line(an, start)
+    near_lo, near_hi = max(line_lo, start - BOX_REACH), min(line_hi, max(end, start + 1) + BOX_REACH)
+    if not (_BOX.search(text, near_lo, near_hi) or _BOX_UNREAD.search(text, near_lo, near_hi)
+            or _BOX_RADIO.search(text, near_lo, near_hi)):
+        return None
+    row = _B3_row(an, start, end)
+    if row is None:
+        return None
+    lo, hi, label_end, readable, pairs, marks, unread, with_options, cue, _, free = row
+    if not lo <= start < hi or max(end, start + 1) <= free:
+        return None
+    if not readable:
+        return cue
+    if unread:
+        if start < label_end and with_options:
+            return cue
+        spanned = [mark for run, mark in pairs if run[0] < max(end, start + 1) and start < run[1]]
+        if (len(spanned) > 1 or (spanned and start < label_end)) and any(
+                mark is not None and marks[mark][2] == 'unread' for mark in spanned):
+            return cue
+    return None
+
+
+def _B3_long_row(an: Analysis, start: int, end: int) -> bool:
+    """Whether the passage's row is too long to pair (B3_ROW_CHARS): held without being read further."""
+    row = _B3_row(an, start, end)
+    return row is not None and row[9]
 
 
 def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, Reading]:
@@ -4159,6 +4543,11 @@ def _references(an: Analysis, attributed: list[Optional[str]]) -> dict[Mention, 
                 for m in pattern.finditer(text, cs, ce):
                     context = _generic_reading(an, m.start(), m.end())
                     if context.status in ('historical', 'planned'):
+                        continue
+                    unpaired = _B3_hold(an, m.start(), m.end())
+                    if unpaired is not None:  # round 4d BOXES3: its row's marks cannot be paired: held, never read
+                        found[Mention(family, m.start(), m.end(), 'reference', m.group(0))] = Reading(
+                            'uncertain', (unpaired,), 'cue', doubt=True)
                         continue
                     if context.cues == (UNCHECKED,):  # an unchecked status option ("Procedure cancelled | [ ]") ...
                         selected = _box_checked_option(an, m.start(), m.end())
@@ -4773,7 +5162,17 @@ def _B2_visit_box(an: Analysis, start: int, end: int) -> Optional[Reading]:
     another visit type never holds the checked one; as a status line's label it is read by the line's options
     (_B2_label_state). Held, never negated: an unchecked visit statement is no statement that the visit did not
     happen. A checked hold word of its status line holds it (box2:L), and so does a row its boxes can be read for both
-    ways (box2:K)."""
+    ways (box2:K). Round 4d BOXES3: so does a row the strict check-box rows hold (_B3_hold), where the reading below
+    does not already hold it."""
+    unpaired = _B3_hold(an, start, end)
+    held = _B3_visit_box_as_declared(an, start, end)
+    if unpaired is None or held is not None:
+        return held
+    return Reading('uncertain', (unpaired,), 'cue', doubt=True)
+
+
+def _B3_visit_box_as_declared(an: Analysis, start: int, end: int) -> Optional[Reading]:
+    """The declared box contract's hold of an E/M visit statement (_B2_visit_box, before round 4d's strict rows)."""
     hold = _B2_label_hold(an, start, end)
     if hold:
         return Reading('uncertain', (hold,), 'cue', doubt=True)

@@ -100,14 +100,18 @@ class Routing5RemarkAfterTheLastBoxTests(BoxCase):
 
     def test_leading_boxes_under_a_label_are_unchanged(self):
         for row in ('Colonoscopy: [ ] biopsy [x] cold snare', 'Colonoscopy with ☐ biopsy ☒ cold snare',
-                    'Polypectomy: [ ] biopsy [x] cold snare', '☐ Biopsy ☒ Cold snare polypectomy | clip placed',
-                    '[ ] Biopsy [x] Cold snare polypectomy'):
+                    '☐ Biopsy ☒ Cold snare polypectomy | clip placed', '[ ] Biopsy [x] Cold snare polypectomy'):
             with self.subTest(row=row):
                 text = BOXED + row + '\n'
                 biopsy = 'biopsy' if 'biopsy' in row else 'Biopsy'
                 snare = 'cold snare' if 'cold snare' in row else 'Cold snare'
                 self.assertEqual(read(text, biopsy)[0], 'negated')
                 self.assertEqual(read(text, snare)[0], 'performed')
+        # Round 4d BOXES3 (strict check-box rows; round 6 declared:8): an item's label before the first box may be the
+        # item the box trails ("Polypectomy: [ ]") or the label the boxes lead from: the row pairs both ways, so the
+        # biopsy is held (it read negated), never read by a guess
+        for item in ('biopsy', 'cold snare'):
+            self.assertEqual(read(BOXED + 'Polypectomy: [ ] biopsy [x] cold snare\n', item)[0], 'uncertain')
         self.assertEqual(family(BOXED + 'Colonoscopy: [ ] biopsy [x] cold snare\n', 'gi.colonoscopy'), 'performed')
 
     def test_trailing_boxes_without_a_remark_are_unchanged(self):
@@ -359,12 +363,17 @@ class Contract2DisagreeingBoxesTests(BoxCase):
                 self.assertEqual(outcome(proposals['45380']), 'held')
 
     def test_boxes_in_cells_of_their_own_are_options(self):
-        """A flattened 'Done | Not done' table (round 2b status:19): the first box after the item governs it."""
-        self.assertEqual(read(BOXED + 'Biopsy | ☒ | ☐\n', 'Biopsy')[0], 'performed')
-        self.assertEqual(read(BOXED + 'Biopsy | ☐ | ☒\n', 'Biopsy')[0], 'negated')
+        """A flattened 'Done | Not done' table (round 2b status:19): the first box after the item governed it. Round 4d
+        BOXES3 (contract-r4d section 4, strict check-box rows): one entry with two boxes cannot be paired in exactly one
+        way (which column says done cannot be told without the table's header), so the item is held, never read by the
+        first box (it read performed or negated before)."""
+        self.assertEqual(read(BOXED + 'Biopsy | ☒ | ☐\n', 'Biopsy')[0], 'uncertain')
+        self.assertEqual(read(BOXED + 'Biopsy | ☐ | ☒\n', 'Biopsy')[0], 'uncertain')
 
     def test_agreeing_boxes_read_as_one(self):
-        for row, status in (('☐ ☐ Biopsy', 'negated'), ('☒ ☒ Biopsy', 'performed'), ('Biopsy ☐ ☐', 'negated')):
+        """Round 4d BOXES3 (strict check-box rows): two boxes for one entry, even agreeing, cannot be paired one to one
+        (a flattened two-column table reads the same), so the item is held (it read negated or performed before)."""
+        for row, status in (('☐ ☐ Biopsy', 'uncertain'), ('☒ ☒ Biopsy', 'uncertain'), ('Biopsy ☐ ☐', 'uncertain')):
             with self.subTest(row=row):
                 self.assertEqual(read(BOXED + row + '\n', 'Biopsy')[0], status)
 

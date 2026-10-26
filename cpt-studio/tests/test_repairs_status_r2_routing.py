@@ -1345,13 +1345,15 @@ class Status19OtherProcedureTests(unittest.TestCase):
                          'negated')
         other = self.other(self.office(f'Procedure: {BOX_OFF} None {BOX_ON} Anoscopy'))  # "None" is no name
         self.assertEqual([(m.span.text, m.status) for m in other.mentions], [('Anoscopy', 'uncertain')])
-        # A flattened two-column table ("Done | Not done"): the first box after an item governs it; an empty cell is
-        # no name, and the items after it are still read.
+        # A flattened two-column table ("Done | Not done"): the first box after an item governed it; an empty cell is
+        # no name, and the items after it are still read. Round 4d BOXES3 (contract-r4d section 4, strict check-box
+        # rows): an entry with two boxes cannot be paired in exactly one way (which column says done cannot be told
+        # without the table's header), so each item is held, never negated by its first box.
         for body in (f'Procedure: Anoscopy | {BOX_ON} | {BOX_OFF} | Hemorrhoidectomy | {BOX_OFF} | {BOX_ON}',
                      f'Procedures:\nAnoscopy | {BOX_ON} | {BOX_OFF}\nHemorrhoidectomy | {BOX_OFF} | {BOX_ON}'):
             other = self.other(self.office(body))
             self.assertEqual([(m.span.text, m.status) for m in other.mentions],
-                             [('Anoscopy', 'uncertain'), ('Hemorrhoidectomy', 'negated')], body)
+                             [('Anoscopy', 'uncertain'), ('Hemorrhoidectomy', 'uncertain')], body)
 
     def test_a_long_subject_is_named_from_a_whole_word_within_reach(self):
         for body, name in (
@@ -1446,7 +1448,10 @@ class ScaleTests(unittest.TestCase):
         started = time.monotonic()
         result = route(text)
         self.assertLess(time.monotonic() - started, 20)
-        self.assertEqual(result.finding('gi.colonoscopy').status, 'performed')
+        # Round 4d BOXES3 (contract-r4d section 4): the line is one box row of 140,000 characters, longer than a row is
+        # ever paired (B3_ROW_CHARS) and repeating its label inside its entries: held, never read by a box (performed
+        # before)
+        self.assertEqual(result.finding('gi.colonoscopy').status, 'uncertain')
 
 
 if __name__ == '__main__':

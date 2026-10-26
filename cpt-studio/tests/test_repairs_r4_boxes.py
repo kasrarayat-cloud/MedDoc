@@ -284,12 +284,17 @@ class Structure0RemarkAfterTheLastBoxTests(BoxCase):
                 self.assert_outcome(text, '45385', snare, ('held', 'ready'))
 
     def test_items_both_readings_agree_on_are_not_held(self):
-        for row in ('Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed',
-                    'Colonoscopy ☒ Biopsy ☐ Cold snare polypectomy ☒ clip placed'):
-            with self.subTest(row=row):
-                text = S0_NOTE.format(row=row)
-                self.assertEqual(read(text, 'Colonoscopy', 1)[0], 'performed')
-                self.assertEqual(read(text, 'clip')[0], 'performed')
+        """Round 4d BOXES3 (contract-r4d section 4, strict check-box rows): a row whose boxes can be read leading or
+        trailing cannot be paired in exactly one way, so what its boxes may govern is held: the remark after the last
+        box too ("clip", which the leading reading gives the last box), and a service before the first box with no
+        separator ("Colonoscopy ☒", which the trailing reading gives the first box). A service label ended by its colon
+        before the first entry is no reading's entry, so it reads as before."""
+        text = S0_NOTE.format(row='Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed')
+        self.assertEqual(read(text, 'Colonoscopy', 1)[0], 'performed')
+        self.assertEqual(read(text, 'clip')[0], 'uncertain')
+        text = S0_NOTE.format(row='Colonoscopy ☒ Biopsy ☐ Cold snare polypectomy ☒ clip placed')
+        self.assertEqual(read(text, 'Colonoscopy', 1)[0], 'uncertain')
+        self.assertEqual(read(text, 'clip')[0], 'uncertain')
 
     def test_the_egd_row(self):
         text = S0_NOTE.format(row='EGD: Biopsy ☐ Balloon dilation ☒ dilation to 15 mm')
@@ -300,7 +305,8 @@ class Structure0RemarkAfterTheLastBoxTests(BoxCase):
         for row, biopsy, snare in (('Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒', 'negated', 'performed'),
                                    ('Colonoscopy: [ ] biopsy [x] cold snare', 'negated', 'performed'),
                                    ('Colonoscopy with ☐ biopsy ☒ cold snare', 'negated', 'performed'),
-                                   ('Polypectomy: [ ] biopsy [x] cold snare', 'negated', 'performed'),
+                                   # round 4d BOXES3 (strict rows; round 6 declared:8): an item's label pairs both ways
+                                   ('Polypectomy: [ ] biopsy [x] cold snare', 'uncertain', 'uncertain'),
                                    ('☐ Biopsy ☒ Cold snare polypectomy | clip placed', 'negated', 'performed'),
                                    ('Biopsy | ☐ | Cold snare polypectomy | ☒ | clip placed', 'negated', 'performed'),
                                    ('Biopsy: [ ] Cold snare polypectomy: [x] clip placed', 'negated', 'performed'),
