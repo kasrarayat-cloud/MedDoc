@@ -3979,30 +3979,37 @@ def _S2_reach_denial_of(an: Analysis, ms: int, me: int, ws: int, we: int, depth:
     return False
 
 
-def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, table) -> list:
-    """``reached`` without each extent label read only because of declared:11's cell cut (``cut``, from _landmarks) whose
-    landmark the family's own text denies outright (round 4d regression:3: "Extent: cecum | Prep quality: Good" then
-    "Cecum not reached."): a blocked or denied hit (``cut_denials``) of a landmark deeper than the deepest one reached by
-    anything else and no deeper than the label's own (plan:D2's guard, _P2_doubted_withholds) whose own reading is
-    negated, cancelled or incomplete ("No cecal intubation.", "Unable to reach the cecum.") or that a reach denial of
-    plan:D2's closed list names (_S2_reach_denial_of: "Cecum not reached."). 9a9f40301's reading then returns: the extent
-    withheld, or the procedure incomplete at the shallower landmark it reached. A doubt that says how the landmark was
-    seen ("The cecum was not well seen due to stool.", "The sigmoid colon could not be examined."), a denial beyond the
-    label's landmark ("TI not intubated.") and a label read whole (the listed residual 'round 4c-2 plan:D (rest)') leave
-    the reading as it was. Each denial is judged at most once per depth level (bounded by the hits)."""
+def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, table) -> tuple[list, bool]:
+    """(``reached``, withhold) after judging each extent label read only because of declared:11's cell cut (``cut``,
+    from _landmarks) against the family's own text (round 4d regression:3: "Extent: cecum | Prep quality: Good" then
+    "Cecum not reached."). A blocked or denied hit (``cut_denials``) of a landmark deeper than the deepest one reached by
+    anything else and no deeper than the label's own contradicts the label (plan:D2's guard, _P2_doubted_withholds):
+    - denied outright - its own reading negated, cancelled or incomplete ("No cecal intubation.", "Unable to reach the
+      cecum.") or a reach denial of plan:D2's closed list naming it (_S2_reach_denial_of: "Cecum not reached.") - the
+      label is dropped, and 9a9f40301's reading returns: the extent withheld, or the procedure incomplete at the
+      shallower landmark it reached;
+    - only doubted, at the label's own depth ("Cecum: not seen.", "The cecum was not well seen due to stool."): whether it
+      denies the reach or tells how the landmark was seen cannot be read, so the extent is withheld (``withhold``) and
+      asked - never the label's landmark, never a shallower one;
+    - only doubted, shallower ("The sigmoid colon could not be examined."): the scope passed it; the reading stands.
+    A denial beyond the label's landmark ("TI not intubated.") and a label read whole (the listed residual 'round 4c-2
+    plan:D (rest)') change nothing. Each denial is judged at most once per depth level (bounded by the hits)."""
     if not cut:
-        return reached
+        return reached, False
     cut_ids = {id(hit) for hit in cut}
     depth = max((hit[0] for hit in reached if id(hit) not in cut_ids), default=0)
     top = max(hit[0] for hit in cut)
-    denied = set()
+    denied, doubted = set(), set()
     for other, ms, me, ws, we, explicit in cut_denials:
         level = other[0]
-        if depth < level <= top and level not in denied and (explicit or _S2_reach_denial_of(an, ms, me, ws, we, level,
-                                                                                             table)):
-            denied.add(level)
+        if depth < level <= top and level not in denied:
+            if explicit or _S2_reach_denial_of(an, ms, me, ws, we, level, table):
+                denied.add(level)
+            else:
+                doubted.add(level)
     dropped = {id(hit) for hit in cut if any(depth < level <= hit[0] for level in denied)}
-    return [hit for hit in reached if id(hit) not in dropped] if dropped else reached
+    withhold = any(hit[0] in doubted for hit in cut if id(hit) not in dropped)
+    return ([hit for hit in reached if id(hit) not in dropped] if dropped else reached), withhold
 
 
 # Where the words that lead an extent label start: after the last separator before it in its clause.
@@ -4963,8 +4970,8 @@ def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials = [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
-    if not reached:
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
+    if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < cues.CECUM_DEPTH:
@@ -5001,8 +5008,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials = [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS)  # round 4d regression:3
-    if not reached:
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS)  # round 4d regression:3
+    if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
@@ -5048,8 +5055,8 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     denied, doubted, cut, cut_denials = [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, None, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
-    if not reached:
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
+    if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
     if _P2_doubted_withholds(doubted, blocked + denied, depth):
