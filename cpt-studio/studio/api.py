@@ -205,8 +205,11 @@ def decisions(request, encounter_id):
             proposal = encounter.current_assessment.proposals.get(pk=_identifier(data.get('proposal_id')))
         except (models.Proposal.DoesNotExist, ValueError, ValidationError):
             raise ApiError(404, 'That proposal is not part of the current review.')
+        action = data.get('action')
+        if not isinstance(action, str) or action not in review.ACTION_LABELS:
+            raise ApiError(400, 'Unknown review action.')  # round 7 bypass:3: invalid input, never a state conflict
         decision = review.record_decision(
-            encounter=encounter, proposal=proposal, action=str(data.get('action', '')), user=request.user,
+            encounter=encounter, proposal=proposal, action=action, user=request.user,
             membership=membership, note=_text_field(data, 'note', 'The note'),
             acknowledgement=_text_field(data, 'acknowledgement', 'The acknowledgement'))
     return JsonResponse(serializers._decision_json(decision), status=201)

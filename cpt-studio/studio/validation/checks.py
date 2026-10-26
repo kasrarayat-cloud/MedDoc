@@ -1039,7 +1039,13 @@ def provider_checks(provider_status: str, normalized: Optional[NormalizedRespons
     selected = sum(1 for code in normalized.codes if code.role == 'selected')
     others = len(normalized.codes) - selected
     origin = f'{normalized.provider} ({normalized.adapter_version})'
-    if selected:
+    if normalized.refused:
+        # Round 7 bypass:1: a response refused whole (over a count cap, malformed, recorded for another adapter) was
+        # never read, so it is not "no selected code"; the problems check below says why it was not used.
+        check = Check('provider.status', label, 'fail',
+                      f'The response from {origin} was not used, so there are no CPT proposals. {NO_PROPOSALS}',
+                      PROVIDER_SOURCE)
+    elif selected:
         check = Check('provider.status', label, 'pass',
                       f'{origin} returned {plural(selected, "selected CPT-labelled code")} and '
                       f'{plural(others, "candidate or alternative")}.', PROVIDER_SOURCE)

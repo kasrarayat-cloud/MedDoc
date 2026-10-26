@@ -421,11 +421,13 @@ def _context_reason(changes, problem):
     return f'Re-assessed: {problem}.'
 
 
-def _carry_target(decision, old, candidates, all_new):
+def _carry_target(decision, old, candidates, all_new, same_engine):
     """(new proposal, '') when ``decision`` still holds in the new assessment, else (None, why not)."""
     if not candidates:
-        if any(item.code == old.code for item in all_new):
-            return None, f'the evidence or checks for {old.code} changed'
+        same_code = [item for item in all_new if item.code == old.code]
+        if same_code:
+            return None, _what_differs(old, next((item for item in same_code if item.key == old.key), same_code[0]),
+                                       same_engine)
         return None, f'{old.code} is no longer proposed'
     target = next((item for item in candidates if item.key == old.key), candidates[0])
     for field, label, show in (('code', 'code', str), ('bucket', 'list', str),
@@ -436,6 +438,36 @@ def _carry_target(decision, old, candidates, all_new):
     if decision.action in (REINSTATE, CONFIRM) and not target.reinstatable:
         return None, f'{old.code} can no longer be reinstated'
     return target, ''
+
+
+def _what_differs(old, new, same_engine):
+    """Why a decision on ``old`` does not carry to ``new``, the same code proposed again with another fingerprint:
+    the part of the fingerprint that differs, named from the persisted rows - or, when every persisted part is the
+    same under the same engine, the one part a row does not keep: the context values the decision depends on (the
+    service date; for an E/M the setting, patient status and billing context; for a PC/TC code the billing context).
+    Round 7 bypass:0: "the evidence or checks changed" was printed in the reviewed report when only those had."""
+    for field, label, show in (('family', 'family', str), ('bucket', 'list', str), ('status', 'status', status_label),
+                               ('profile_version', 'profile version', str), ('units', 'units', str)):
+        before, after = getattr(old, field), getattr(new, field)
+        if before != after:
+            return f'the {label} of {old.code} changed from {show(before)} to {show(after)}'
+    changed = [label for label, read in (('evidence', _evidence_texts), ('checks', _check_results))
+               if read(old) != read(new)]
+    if changed:
+        return f'the {" and ".join(changed)} for {old.code} changed'
+    if same_engine:
+        return f'the decision on {old.code} depends on a context value that changed'
+    return f'{old.code} was re-assessed by another engine version'
+
+
+def _evidence_texts(proposal):
+    """The evidence as the fingerprint reads it: its passages' text, sorted."""
+    return sorted(str(span.get('text', '')) for span in proposal.evidence)
+
+
+def _check_results(proposal):
+    """The checks as the fingerprint reads them: each check's id and status."""
+    return sorted([str(check.get('id', '')), str(check.get('status', ''))] for check in proposal.checks)
 
 
 def _carry_decisions(previous, assessment, proposals, revision, context):
@@ -458,7 +490,8 @@ def _carry_decisions(previous, assessment, proposals, revision, context):
         old = old_proposals[decision.proposal_id]
         candidates = [item for item in new_items
                       if item.fingerprint == decision.proposal_fingerprint and item.pk not in used]
-        target, problem = _carry_target(decision, old, candidates, new_items)
+        target, problem = _carry_target(decision, old, candidates, new_items,
+                                        previous.engine_version == assessment.engine_version)
         if target is None:
             _invalidate(decision, _context_reason(changes, problem), by_context=context)
             continue
@@ -591,7 +624,11 @@ def _assessment_blockers(encounter, assessment):
         else:
             blockers.append(f'{proposal.code} has no decision')
     if run is not None and run.state == ProviderRun.SUCCEEDED and reviewable == 0:
-        blockers.append('No CPT code was proposed')
+        # A succeeded run's provider check fails only when its response was refused whole, unread: the provider's
+        # codes were never read, so nothing may say that none was proposed (round 7 bypass:1).
+        refused = any(check.get('id') == 'provider.status' and check.get('status') == 'fail'
+                      for check in assessment.encounter_checks)
+        blockers.append('The provider response was not used' if refused else 'No CPT code was proposed')
     return blockers
 
 

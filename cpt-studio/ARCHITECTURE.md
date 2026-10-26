@@ -951,8 +951,14 @@ with `trust_env=False`, `max_retries=0`, `allow_redirects=False`, connect
 10 s / read 120 s, request ≤ 512,000 bytes (refused, never truncated),
 response ≤ 4 MiB. A response listing more than 64 selected codes
 (`MAX_SELECTED`) or more than 256 candidate and alternative codes
-(`MAX_INFORMATIONAL`) is not used, and says so by count; an assessment's
-proposals are written in one INSERT (round 6 bounded:5). Usage = `usageInfo.creditsConsumed`, basis
+(`MAX_INFORMATIONAL`, alternatives nested under candidates included) is not
+used, and says so by count; an assessment's proposals are written in one
+INSERT (round 6 bounded:5). A response refused whole is never reported as one
+that proposed nothing: the provider check fails ("The response from
+<provider> was not used, so there are no CPT proposals"), the problems check
+gives the reason, the readiness blocker reads "The provider response was not
+used" instead of "No CPT code was proposed", and the code panel shows the
+failed check's wording (round 7 bypass:1). Usage = `usageInfo.creditsConsumed`, basis
 `provider_reported_credits_not_usd`.
 
 `ReplayProvider` (tests/dev only): returns recorded bytes for a known request
@@ -1297,7 +1303,14 @@ every current decision is invalidated (`DecisionInvalidation`, reason names
 the new revision). **New assessment on the same revision (context change):**
 a decision is carried (`carried_from`) only when a proposal with the same
 fingerprint exists in the new assessment; otherwise invalidated with the
-context field that changed. Readiness: a reviewed report is available only
+context field that changed and the part of the fingerprint that differs, read
+from the persisted rows as the fingerprint reads it (family, list, status,
+profile version and units by value; the evidence passages' text; each check's
+id and status, never its wording), or, when none differs under the same
+engine, "the decision on <code> depends on a context value that changed" (the
+service date; for an E/M the setting, patient status and billing context; for
+a PC/TC code the billing context) — never "the evidence or checks changed"
+when neither did (round 7 bypass:0). Readiness: a reviewed report is available only
 when every selected proposal has a current approve/reject decision, every
 reinstatable exclusion is confirmed or reinstated and decided; anything else
 is draft-only, with the blocking items listed. While a
@@ -1323,7 +1336,11 @@ neutralisation (`=`, `+`, `-`, `@`, tab, CR prefixed with `'`). In both formats
 a C0 control other than tab and line breaks, DEL and a C1 control print as
 `\xNN`; in the TXT a line break of any form continues the value at seven
 spaces or deeper, below every structural line. Draft:
-"DRAFT — NOT REVIEWED", no "approved selections" section. Reviewed: approved
+"DRAFT — NOT REVIEWED", no "approved selections" section; its list of
+undecided and provisionally approved codes is titled "UNDECIDED — REVIEW NOT
+COMPLETE", or "UNDECIDED OR PROVISIONAL — THE REVIEWED REPORT IS AVAILABLE"
+once the review is complete (round 7 bypass:4; the download verifier finds
+either by its "UNDECIDED" prefix). Reviewed: approved
 selections only in the approved section; rejected listed as excluded from
 approved results; reviewer identity, kind and time; agent review labelled
 "agent-executed synthetic review — not clinical approval". Both: source file

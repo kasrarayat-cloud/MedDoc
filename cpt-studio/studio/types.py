@@ -140,6 +140,7 @@ class NormalizedResponse:
     codes: tuple[ProviderCode, ...] = ()  # CPT-labelled codes, every role
     internal_context: tuple[ProviderCode, ...] = ()  # other systems (e.g. ICD-10-CM); never shown as results
     problems: tuple[str, ...] = ()
+    refused: bool = False  # the whole response was not used and none of its codes was read; problems say why
 
 
 @dataclass(frozen=True)

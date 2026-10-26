@@ -294,7 +294,7 @@ class TxtReportTests(ReportCase):
         self.assertEqual(len(entries), 3)
         self.assertIn('43239 · approve', entries[0])
         self.assertIn('Invalidated', entries[0])
-        self.assertIn('the evidence or checks for 43239 changed', entries[0])
+        self.assertIn('the decision on 43239 depends on a context value that changed', entries[0])
         self.assertIn('carried forward to a later assessment', entries[1])
         self.assertIn('this assessment · carried from', entries[2])
 

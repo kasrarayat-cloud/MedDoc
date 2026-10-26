@@ -327,7 +327,9 @@ class CarryAndInvalidateTests(ReviewCase):
         self.assertEqual(invalidation.by_context, second.context)
         self.assertIsNone(invalidation.by_revision)
         self.assertIn('service date: 2026-10-21 → 2026-10-22 [member-supplied]', invalidation.reason)
-        self.assertIn('the evidence or checks for 43239 changed', invalidation.reason)
+        # round 7 bypass:0: neither the evidence nor a check result differs, so neither is named
+        self.assertIn('the decision on 43239 depends on a context value that changed', invalidation.reason)
+        self.assertNotIn('evidence', invalidation.reason)
         self.assertEqual(set(self.current(second)), {'sel:1'})
         self.assertEqual(self.current(second)['sel:1'].carried_from, self.rejected)
 

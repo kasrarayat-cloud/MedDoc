@@ -341,7 +341,7 @@ def normalize_coding_response(provider: str, request: ProviderRequest, response_
     so a replayed response can never come out labelled as live output.
     """
     def refused(*reasons):
-        return NormalizedResponse(provider=provider, adapter_version=ADAPTER_VERSION,
+        return NormalizedResponse(provider=provider, adapter_version=ADAPTER_VERSION, refused=True,
                                   problems=tuple(f'The provider response was not used: {reason}.' for reason in reasons))
 
     if (request.provider, request.adapter_version) != (provider, ADAPTER_VERSION):

@@ -127,7 +127,8 @@ same for every member: on a reinstated exclusion it names the check that withhol
 Approve requires the acknowledgement to be exactly the current attestation
 for the reviewer's actor kind (`acknowledgement` in `GET /api/session`;
 surrounding whitespace is ignored); any other text, or none, answers 400, so a page
-loaded before the attestation changed is told to reload. → `201 {decision}`; 409 when the
+loaded before the attestation changed is told to reload. → `201 {decision}`; 400 when the
+action is not one of the five (any other text, none, or not a string); 409 when the
 action is not allowed for that proposal now. A documentation check's exclusion
 (`bucket` excluded, `reinstatable` true) is a recommendation, not a final
 outcome: it offers `confirm` (agree with the exclusion) and `reinstate`, and

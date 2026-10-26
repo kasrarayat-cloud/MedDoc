@@ -509,10 +509,17 @@ def _not_verified_section(snap):
 
 def _provider_section(snap):
     lines = []
+    # A succeeded run whose provider check failed was refused whole: the assessment read none of its codes, so it is
+    # never "used by this assessment" (round 7 bypass:1).
+    refused = any(check['id'] == 'provider.status' and check['status'] == 'fail'
+                  for check in snap['assessment']['encounter_checks'])
     for run in snap['provider_runs']:
         mode = 'REPLAY (recorded response, not live output)' if run['mode'] == 'replay' else run['mode']
         status = f' · HTTP {run["http_status"]}' if run['http_status'] else ''
-        used = ' · used by this assessment' if run['used_by_assessment'] else ''
+        used = ''
+        if run['used_by_assessment']:
+            used = (' · read by this assessment; its response was not used'
+                    if refused and run['state'] == 'succeeded' else ' · used by this assessment')
         lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
                      f' · requested {run["created_at"]}{used}')
         usage = json.dumps(run['usage'], sort_keys=True, ensure_ascii=False) if run['usage'] else 'none reported'
@@ -611,7 +618,11 @@ def render_txt(snap) -> bytes:
         sections.append(('APPROVED SELECTIONS', _numbered(snap, 'approved', kind)))
     sections.append(('REJECTED — EXCLUDED FROM APPROVED RESULTS', _rejected_section(snap)))
     if kind == DRAFT:
-        sections.append(('UNDECIDED — REVIEW NOT COMPLETE', _numbered(snap, 'undecided', kind)))
+        # round 7 bypass:4: after a complete review the draft's list holds provisional approvals, not an incomplete
+        # review; the 'UNDECIDED' prefix stays (ops/verify_downloads.py finds the section by it)
+        title = ('UNDECIDED OR PROVISIONAL — THE REVIEWED REPORT IS AVAILABLE' if snap['readiness'].get('reviewed')
+                 else 'UNDECIDED — REVIEW NOT COMPLETE')
+        sections.append((title, _numbered(snap, 'undecided', kind)))
     sections += [('EXCLUDED CANDIDATES', _excluded_section(snap)),
                  ('ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED', _alternatives_section(snap)),
                  ('CHECKS', _checks_section(snap)),

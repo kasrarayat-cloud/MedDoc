@@ -446,6 +446,21 @@ test('an encounter whose only proposals are documentation-check exclusions never
   assert.ok(app.emptySelectionCopy({ proposals: [{ bucket: 'alternative' }] }).startsWith('No code is selected for approval.'));
 });
 
+// round 7, bypass:1: a provider response refused whole was never read, so the panel never says nothing was proposed.
+test('a provider check that failed gives the panel its reason, and only a failed one does', () => {
+  const detail = 'The response from corti (corti-coding@2) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
+  const refused = { proposals: [], encounter_checks: [{ id: 'extraction.status', status: 'fail', detail: 'Other.' }, { id: 'provider.status', status: 'fail', detail }] };
+  assert.equal(app.emptySelectionCopy(refused), detail);
+  const html = render({ ...excludedDoc({}), assessment: { ...excludedDoc({}).assessment, ...refused } });
+  assert.equal(html.includes('No CPT codes were proposed for this document.'), false);
+  assert.ok(html.includes('was not used, so there are no CPT proposals'), html);
+  for (const status of ['warn', 'pass', 'not_verified']) {
+    const read = { proposals: [], encounter_checks: [{ id: 'provider.status', status, detail: 'Read.' }] };
+    assert.equal(app.emptySelectionCopy(read), 'No CPT codes were proposed for this document.', status);
+  }
+  assert.equal(app.emptySelectionCopy({ proposals: [], encounter_checks: [{ id: 'provider.status', status: 'fail' }] }), 'No CPT codes were proposed for this document.');
+});
+
 // round 6, bypass:3: whether a reinstated code can be approved is the code's own gate, never the member's action list.
 test('a viewer is told a reinstated code is approvable by a reviewer, and is told it is withheld only by its gate', () => {
   const reinstated = { bucket: 'excluded', reinstatable: true, decision_state: 'reinstated', allowed_actions: [],
