@@ -980,8 +980,15 @@ def routing_targets(config_texts):
     return sorted(targets)
 
 
+NGINX_WARNING_RE = re.compile(r'(?:nginx: \[warn\] |\d{4}/\d\d/\d\d \d\d:\d\d:\d\d \[warn\] \d+#\d+: )(.+)')
+
+
 def nginx_warnings(text):
-    return sorted({line.strip() for line in text.splitlines() if line.startswith('nginx: [warn]')})
+    """The warning messages of `nginx -t`, which prints 'nginx: [warn] <message>' or, when its startup log is
+    stderr (this host's Ubuntu build), '<date> <time> [warn] <pid>#<tid>: <message>'. Only the message (it names
+    file:line) is kept: the timestamp and pid differ on every run and would make every warning look new."""
+    found = (NGINX_WARNING_RE.fullmatch(line.strip()) for line in text.splitlines())
+    return sorted({match.group(1) for match in found if match})
 
 
 def nginx_test() -> dict:
@@ -1312,8 +1319,12 @@ def service_args(role, image_id, revision, provider_mode, authorization_ref):
               '--log-opt', 'max-size=10m', '--log-opt', 'max-file=5', '--stop-timeout', str(STOP_SECONDS[role]),
               '--mount', f'type=volume,src={FILES_VOLUME},dst={STATE_DIR}', '--env-file', '/dev/stdin']
     if role == 'web':
+        # The path, never the file. A context change in the web builds the request it would send to tell a
+        # re-check from a re-send (jobs._run_answers); building a request opens nothing, and only the worker
+        # sends. Without the path, live mode had no provider in the web, so every setting or billing save
+        # re-predicted and the worker re-sent a failed or not-sent request (pre-install review, 2026-10-26).
         return [*common, *hardening('768m', 128, '256m'), '-p', f'127.0.0.1:{WEB_PORT}:8000',
-                *runtime_env(provider_mode, authorization_ref), image_id, 'web']
+                *runtime_env(provider_mode, authorization_ref, credentials=live), image_id, 'web']
     extra = ['--mount', f'type=bind,src={CORTI_TARGET},dst={CREDENTIALS_IN_CONTAINER},readonly'] if live else []
     return [*common, *hardening('1536m', 256, '1g'), '--no-healthcheck', *extra,
             *runtime_env(provider_mode, authorization_ref, credentials=live), image_id, 'worker']
@@ -1365,9 +1376,11 @@ def require_db():
 
 
 def wait_db_ready(attempts=60):
+    # Over TCP, as the application connects: the image's first-start init server answers on the unix socket only,
+    # so a socket probe could call the database ready between initdb and the real server.
     for _ in range(attempts):
-        if docker('exec', DB_CONTAINER, 'pg_isready', '-q', '-U', DB_USER, '-d', DB_NAME, check=False,
-                  timeout=15).returncode == 0:
+        if docker('exec', DB_CONTAINER, 'pg_isready', '-q', '-h', '127.0.0.1', '-p', '5432', '-U', DB_USER,
+                  '-d', DB_NAME, check=False, timeout=15).returncode == 0:
             return
         time.sleep(1)
     raise InstallError('The CPT Studio database did not become ready.')
