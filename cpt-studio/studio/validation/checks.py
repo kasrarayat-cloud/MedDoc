@@ -1546,7 +1546,9 @@ def _V2_wording(an, text: str, s: int, e: int, marked: bool) -> bool:
     stands under a label that denies performance (read once per line by _V2_doubt_index)."""
     from studio.gi import cues as words
     return bool(marked or _V2_DOUBT_WORDS.search(text, s, e) or words.DOUBT_TOKEN.search(text, s, e)
-                or any(c.status != 'performed' for c in an.cues_in(s, e)) or an.dates_in(s, e))
+                or any(c.status != 'performed' for c in an.cues_in(s, e)) or an.dates_in(s, e)
+                # routing's own times that may place a statement on another date ("During her stay, we banded ...")
+                or any(pattern.search(text, s, e) for _, pattern in words.OTHER_TIME))
 
 
 class _V2Overflow(Exception):
@@ -1573,7 +1575,12 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
     an = detect._analysis(text, service_date)[0]
     patterns = _V2_patterns()
     lines = [0] + [m.end() for m in re.finditer('\n', text)]
-    budget = {'reads': 0, 'per_read': 1 + len(an.references) + len(an.em)}
+    # Where a detected family carries a document-level judgement (an.adjustments), a performed reading is read again as
+    # routing reads the span (status_for_span), so a sentence of that family's report reads incomplete as at HEAD (an
+    # own banding sentence in an incomplete colonoscopy's findings is held, round 4c-2 lead); that read scans every
+    # routed service (detect._family_of_span), so it counts against the work budget.
+    judged = any(adjustment is not None for adjustment in an.adjustments.values())
+    budget = {'reads': 0, 'per_read': 1 + len(an.references) + len(an.em) + (len(an.services) if judged else 0)}
 
     def spend():
         budget['reads'] += 1
@@ -1582,7 +1589,10 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
 
     def read(s: int, e: int) -> Optional[tuple]:
         spend()
-        return normalise_span_status(detect.own_status_for_span(text, s, e, service_date))
+        own = normalise_span_status(detect.own_status_for_span(text, s, e, service_date))
+        if judged and own is not None and own[0] == 'performed':
+            return normalise_span_status(detect.status_for_span(text, s, e, service_date))
+        return own
 
     def denies(s: int, e: int) -> bool:
         spend()
@@ -1647,8 +1657,9 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
             its = list(_V2_IT.finditer(text, s, e))
             status_line = detect._status_line(an, s, e)
             act = status_line or cut(s, e)
-            if not (own or nouns or its or act) or not (status_line or _V2_wording(an, text, s, e,
-                                                                                   line_marked(line_at))):
+            # in a judged document a sentence may doubt through its family's judgement alone: read as at HEAD
+            if not (own or nouns or its or act) or not (status_line or judged or _V2_wording(an, text, s, e,
+                                                                                             line_marked(line_at))):
                 continue
             first_named = min([m.start() for m in own] + [m.start() for m in detect._PROCEDURE_WORD.finditer(text, s, e)]
                               + [m.start for m in an.services_in(s, e)] + [e])

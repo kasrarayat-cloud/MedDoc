@@ -459,6 +459,22 @@ class Validation8AnotherActIsNoDoubtTests(Case):
                 with self.subTest(code=code, line=line):
                     self.assertEqual(real(text, (code, f'Procedure: {proc}'))[0][code].status, 'needs_clarification')
 
+    def test_controls_what_head_held_through_routing_s_time_and_family_judgement_still_holds(self):
+        # a banding told at another occasion in its own report, and an own banding sentence in an incomplete
+        # colonoscopy's, EGD's or flexible sigmoidoscopy's findings (round 4c-2 lead): held, as at HEAD
+        text = BANDING.format(find='During her stay, we banded two columns.')
+        self.assertEqual(real(text, ('46221', 'Procedure: Hemorrhoid banding'))[0]['46221'].status,
+                         'needs_clarification')
+        for proc, technique in (('Colonoscopy', 'The colonoscope was advanced to the splenic flexure.'),
+                                ('Colonoscopy', 'The colonoscope could not be advanced beyond the sigmoid colon.'),
+                                ('EGD', 'The gastroscope could not be advanced beyond the mid esophagus.'),
+                                ('Flexible sigmoidoscopy', 'The sigmoidoscope could not be advanced beyond 15 cm.')):
+            text = (HEAD + f'Procedure performed: {proc}\nTechnique: {technique}\n'
+                    'Findings: Two internal hemorrhoids were banded.\n')
+            with self.subTest(proc=proc, technique=technique):
+                item = real(text, ('46221', 'Two internal hemorrhoids were banded.'))[0]['46221']
+                self.assertEqual(item.status, 'needs_clarification')
+
     def test_controls_true_denials_still_hold(self):
         for code, (proc, find) in OWN.items():
             name = proc.split()[0]
