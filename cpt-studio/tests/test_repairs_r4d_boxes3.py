@@ -816,7 +816,8 @@ class Declared10AttestationBoxAboveTests(Case):
                  'Separate E/M attestation: No', 'Attested: No', 'Attestation: No', 'E/M attestation: Not attested',
                  '\u2612 Not attested', 'Attestation: pending', 'Attested - No', 'Separate E/M: \u2610 Yes \u2612 No',
                  'Attestation: Agree', 'Unattested', 'Not attested', '\u2612 Agree \u2610 Disagree', 'Modifier 25 not appended',
-                 'Notes: Not attested', 'Notes: Agree')
+                 'Notes: Not attested', 'Notes: Agree', 'Attestation: I do not attest to a separate service today, see note.',
+                 'I cannot confirm that a separate service was provided.', 'The physician declined to attest.')
     CHECKED = ('\u2612 Separate E/M attestation:', '\u2612 Attested', 'Attested: \u2612', '[x] Attested', 'Attested | [x]',
                'Separate E/M attested: Yes', 'Attested - Yes', 'Attested: Yes', 'Separate E/M: \u2612 Yes \u2610 No')
 
@@ -851,7 +852,7 @@ class Declared10AttestationBoxAboveTests(Case):
                      'Attestation: I saw and examined the patient and agree with the resident note.',
                      'I attest that I personally performed the procedure.',
                      'I attest that I personally performed the procedure and no complications occurred.',
-                     'Patient agrees with the plan and has no questions.'):
+                     'Patient agrees with the plan and has no questions.', 'No other issues and I agree with the plan.'):
             with self.subTest(line=line):
                 text = ATTEST_NOTE.format(above=line + '\n', under='')
                 self.assertEqual(separate_em_fact(text), 'documented')

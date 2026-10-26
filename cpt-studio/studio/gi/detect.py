@@ -5541,6 +5541,11 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
 _B3_ATTEST_ABOVE = re.compile(r'\b(?:(?:un|non-?|dis)?(?:attest|agree|confirm|acknowledg)\w*|separate\w*|modifier)\b',
                               re.A | re.I)
 B3_ABOVE_ANSWER_WORDS = 4  # a field's value read as an answer above the statement: at most this many words
+# The attestation itself denied, at any length: "I do not attest ...", "cannot confirm", "declined to attest" (and the
+# words negated in themselves, as _B2_DENIED, defined further down, reads them).
+_B3_ATTEST_DENIED = re.compile(r"(?:\b(?:not|never|cannot)\b|n't\b|\b(?:decline[sd]?|refuse[sd]?|unable)\s+to\b)"
+                               r"[ \t\w]{0,20}?\b(?:attest|agree|confirm|acknowledg)\w*"
+                               r"|\b(?:un|non-?|dis)(?:attest|agree|confirm|acknowledg)\w*", re.A | re.I)
 
 
 def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
@@ -5558,8 +5563,10 @@ def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
       "Notes: Not attested", "Attestation: Agree" refuse; "Attested - Yes", "Attested by: Dr. Smith", "Modifier: 25" do
       not; the first two were held at d05326ef and ready since 4347acd); a longer value is prose ("Attestation: I saw
       the patient and agree with the resident's note.");
+    - a line that denies the attestation itself, at any length (_B3_ATTEST_DENIED: "Attestation: I do not attest to a
+      separate service today.", "cannot confirm", "Unattested");
     - a line of at most B3_ABOVE_ANSWER_WORDS words with no field that holds a word the statement's own line would
-      refuse (_B2_contrary: "Not attested", "Unattested", "Modifier 25 not appended");
+      refuse (_B2_contrary: "Not attested", "Modifier 25 not appended");
     - a form field tied to that printed line, not checked ("Attested" printed above, its PDF box unchecked).
     Only refuses (a hold)."""
     text = an.text
@@ -5573,6 +5580,8 @@ def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
         return False
     if _B2_MARK.search(text, start, end):
         return _B2_attestation_line_refuses(an, start, end) or not _box_answer_affirms(an, start, end)
+    if _B3_ATTEST_DENIED.search(text, start, end):
+        return True  # "Attestation: I do not attest to a separate service today."
     field = _B2_FIELD.match(text, start, end)
     if (field is not None and _B3_words(text, field.end(), end, B3_ABOVE_ANSWER_WORDS) <= B3_ABOVE_ANSWER_WORDS
             and _B2_attestation_line_refuses(an, start, end)):
