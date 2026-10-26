@@ -35,6 +35,10 @@ class _Evaluation:
     outcome: checks.StatusOutcome
     reference: CodeReference
     own: tuple[checks.Reading, ...] = ()  # the status readings of its own linked passages
+    # (start, end) of the routed gi.other mentions that corroborated one of its passages (round 4d validation:10): the
+    # report's procedure line a findings sentence opening with the code's own procedure counts through. The code speaks
+    # for them (_cited), so its own procedure is never called a missed service with no selected proposal.
+    speaks_for: tuple[tuple[int, int], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -152,8 +156,9 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     # check and rationale come from its own passages, as for every family routing does not detect.
     finding = routing.finding(selection.family) if selection.family in DETECTED_FAMILIES else None
     own = checks.evidence_readings(text, kept, day)
+    speaks_for: tuple = ()
     if selection.family == OTHER_GI:
-        own = _unnamed_other(own, text, routing, day, code)
+        own, speaks_for = _unnamed_other(own, text, routing, day, code)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing, text, day)
     families = _VAL_family_index(routing) if any(r.status == 'uncertain' for r in own) else {}
@@ -161,7 +166,7 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
                 for r in own)
     outcome = checks.resolve_status(own + checks.routing_readings(finding),
                                     detectable=selection.family in DETECTED_FAMILIES)
-    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own))
+    return replace(selection, evaluation=_Evaluation(finding, outcome, reference.lookup(code, day), own, speaks_for))
 
 
 def _VAL_overlap_test(intervals):
@@ -173,7 +178,7 @@ def _VAL_overlap_test(intervals):
 
 
 def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingResult, day: Optional[date],
-                   code: str) -> tuple[checks.Reading, ...]:
+                   code: str) -> tuple[tuple[checks.Reading, ...], tuple[tuple[int, int], ...]]:
     """A gi.other code's linked passages, each positive one that rests on its section alone (or on the office visit's
     own documentation, checks.states_no_procedure) marked ``unnamed`` unless it documents the code's own procedure as
     done (round 4 validation:2, validation:3, evidence:0, release:11): a routed gi.other mention read as done lies in
@@ -186,9 +191,10 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     internal hemorrhoids." names another procedure for 46221: none is evidence that the code's procedure was done.
     Fail-closed: an unnamed passage holds the code (section_only), never excludes it. Routing's gi.other finding still
     never decides the code's status (it may be another procedure). Indexed once per code: each passage costs a few
-    bisections."""
+    bisections. Also returns the (start, end) of each routed opening mention a passage counted through
+    (_VAL_opens_with), which the code then speaks for (round 4d validation:10)."""
     if not any(r.status in checks.POSITIVE and checks._VAL_states_no_procedure_of_its_own(text, r, day) for r in own):
-        return own
+        return own, ()
     other = routing.finding(OTHER_GI)
     done = [m for m in (other.mentions if other else ())
             if m.status in checks.POSITIVE and checks._VAL_owns(code, m.span.text)
@@ -198,12 +204,13 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     opened = _VAL_overlap_test(openings)
     # the code's own procedure as a procedure section's first sentence documents it done: what a later sentence of the
     # report may open with, read by its section alone (round 5 validation:2)
-    opening_names = [m.span.text for m in done if opened(m.span.start, m.span.end)]
+    openers = [m for m in done if opened(m.span.start, m.span.end)]
+    opening_names = [m.span.text for m in openers]
     # ... unless the document reads the code's own procedure denied, called off or doubted somewhere (fail-closed).
     # Routing's gi.other finding never reads such a denial ("Anoscopy was not performed; the patient declined." names
     # no mention), so the same doubt also withdraws the routed mention and the procedure line themselves (round 4c).
     doubted = None
-    marked = []
+    marked, speaks = [], []
     for reading in own:
         if (reading.status in checks.POSITIVE and checks._VAL_states_no_procedure_of_its_own(text, reading, day)
                 and not checks.names_procedure(text, reading.start, reading.end, code, day)):
@@ -211,12 +218,17 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
             counted = False
             if routed_done or (opening_names and checks.by_section_alone(reading)):
                 doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
-                counted = not doubted and (routed_done or checks._VAL_opens_with(
-                    text, reading.start, reading.end, code, opening_names, day))
+                counted = not doubted and routed_done
+                if not doubted and not routed_done:
+                    # _VAL_opens_with over the opening names, read name by name to know which mention corroborates
+                    matched = [m for m in openers if checks._VAL_opens_with(text, reading.start, reading.end, code,
+                                                                             [m.span.text], day)]
+                    counted = bool(matched)
+                    speaks += [(m.span.start, m.span.end) for m in matched]
             if not counted:  # round 4d validation:4: and which procedure's judgement made it incomplete, if any
                 reading = replace(reading, unnamed=True, judged_by=checks._V2_judged_by(text, reading, day))
         marked.append(reading)
-    return tuple(marked)
+    return tuple(marked), tuple(dict.fromkeys(speaks))
 
 
 def _VAL_family_index(routing: RoutingResult) -> dict:
@@ -403,7 +415,10 @@ def _cited(mentions: Sequence[ServiceMention], selections: Sequence[_Selection])
 
     sentences = index(lambda m: (m.sentence.start, m.sentence.end))
     names = index(lambda m: (m.span.start, m.span.end))
-    return {i for start, end in spans for i in (only(sentences, start, end), only(names, start, end)) if i is not None}
+    found = {i for start, end in spans for i in (only(sentences, start, end), only(names, start, end)) if i is not None}
+    # round 4d validation:10: and the routed mention that corroborated one of its passages (_Evaluation.speaks_for)
+    corroborated = {span for s in selections if s.family == OTHER_GI and not s.excluded for span in s.evaluation.speaks_for}
+    return found | {i for i in done if (mentions[i].span.start, mentions[i].span.end) in corroborated}
 
 
 def _VAL_named_again(mentions: Sequence[ServiceMention], selections: Sequence[_Selection]) -> set[int]:

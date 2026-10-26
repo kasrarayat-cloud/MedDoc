@@ -633,3 +633,56 @@ class Validation7OwnCueTests(Case):
 
     def test_another_procedure_s_cue_states_nothing_of_the_intervention(self):
         self.assertIsNone(routed(self.TEXT).finding('gi.other'))
+
+
+# --- validation:10: a code counted through its report's procedure line speaks for that line's mention ---------------
+
+class Validation10CorroboratedPassageCoversItsProcedureTests(Case):
+    """validation:10 (medium, export). 46600 citing 'Anoscopy revealed grade 2 internal hemorrhoids.' is ready through
+    round 5 validation:2's arm - the report's own procedure line, read done by routing, corroborates it - yet
+    services.unproposed said 'Possible missed service: Other GI service ("Anoscopy") is documented as performed with no
+    selected proposal.' The code now speaks for the routed mention that corroborated its passage."""
+
+    def test_the_corroborated_findings_sentence_covers_its_procedure_line(self):
+        from tests.test_repairs_r4c_validation import Validation2OwnProcedureReportOverHoldTests as V2
+        for proc, line, code in V2.FINDINGS:
+            if code == '91122':
+                continue  # no in-memory fee-schedule row is needed for coverage; skipped only to keep the codes priced
+            text = REPORT.format(proc=proc, status='', find=line)
+            with self.subTest(code=code, line=line):
+                proposals, result = real(text, (code, line))
+                self.assertReady(proposals[code])
+                self.assertEqual(encounter_check(result, 'services.unproposed').status, 'pass')
+
+    def test_controls_another_uncoded_procedure_and_a_sibling_are_still_named(self):
+        line = 'Anoscopy revealed grade 2 internal hemorrhoids.'
+        text = REPORT.format(proc='Anoscopy', status='', find=f'{line} Paracentesis was performed today.')
+        _, result = real(text, ('46600', line))
+        check = encounter_check(result, 'services.unproposed')
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Paracentesis', check.detail)
+        self.assertNotIn('“Anoscopy”', check.detail)
+        # two procedure lines: the findings sentence corroborates only its own
+        text = (HEAD + 'Procedure: Anoscopy\nFindings: Anoscopy revealed grade 2 internal hemorrhoids.\n'
+                'Procedure: Paracentesis\nFindings: Four liters of fluid were removed.\n')
+        _, result = real(text, ('46600', 'Anoscopy revealed grade 2 internal hemorrhoids.'))
+        check = encounter_check(result, 'services.unproposed')
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Paracentesis', check.detail)
+        self.assertNotIn('“Anoscopy”', check.detail)
+        # two of the range's procedures: the findings sentence opening with one corroborates that one only
+        text = (HEAD + 'Procedure: Hemorrhoidectomy\nProcedure: Rubber band ligation\n'
+                'Findings: Hemorrhoidectomy of the left lateral column.\n')
+        _, result = real(text, ('46250', 'Hemorrhoidectomy of the left lateral column.'))
+        check = encounter_check(result, 'services.unproposed')
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Rubber band ligation', check.detail)
+        self.assertNotIn('“Hemorrhoidectomy”', check.detail)
+        line = 'Rubber band ligation of the right posterior column.'
+        text = REPORT.format(proc='Rubber band ligation of internal hemorrhoids', status='',
+                             find=f'{line} Excisional hemorrhoidectomy was performed.')
+        _, result = real(text, ('46221', line))
+        check = encounter_check(result, 'services.unproposed')
+        self.assertEqual(check.status, 'warn')
+        self.assertIn('Excisional hemorrhoidectomy', check.detail)
+        self.assertNotIn('internal hemorrhoids”', check.detail)
