@@ -1266,6 +1266,56 @@ def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
     return an.memo[key]
 
 
+# Round 4d BOXES3 (round 6 declared:9): the typed done-question with a service's own name as its noun ("Was the EUS
+# performed today? No", "EUS performed? No", "Colonoscopy completed: No", "Was the EUS with FNA performed today? No"),
+# in the grammar's lead, verb, separator and denial. _BOX_Q_NOUN names only the procedure's own words, so such a line
+# read 'uncertain: ?' (a hedge, no doubt) and the procedure line's section evidence released the family. The noun is
+# at most 60 characters and holds no separator, and the denial is the whole answer: the line ends after it, or a
+# punctuation mark, a dash or a parenthesis follows ("No.", "No - the patient had eaten", "No (patient declined)").
+# A word straight after it is a description, not an answer ("Colonoscopy performed: no polyps were seen", "EGD
+# performed - no complications": _B3_ASKED_END).
+_B3_ASKED_END = r'(?=[ \t]*(?:[.,;:!(\u2013\u2014-]|\Z))'
+_B3_SERVICE_ANSWERED_NO = re.compile(_BOX_Q_LEAD + r'(?P<noun>[A-Za-z][^\n?:=|\t]{0,59}?)[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
+                                     + _BOX_Q_SEP + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
+_B3_ASKED_NO = 'uncertain: the line \'{}\' asks whether the service it names was done and answers no'
+
+
+def _B3_asked_no(an: Analysis, start: int, end: int) -> Optional[str]:
+    """The hold of a passage within the question of a typed done-question that names a service and answers it with a
+    denial (_B3_SERVICE_ANSWERED_NO: the passage lies inside the line's noun and that noun names a service), or None.
+    A hold with doubt (_box_reading), so the service named is held wherever its family's section evidence stands; the
+    question's own "?" was read as a hedge, which is no doubt. Matched once per line, from its start."""
+    line_start, line_end = _B3_line(an, start)
+    if end > line_end:
+        return None
+    key = ('b3-asked', line_start)
+    if key not in an.memo:
+        an.memo[key] = None
+        found = _B3_SERVICE_ANSWERED_NO.match(an.text, line_start, line_end)
+        if found is not None and an.services_in(*found.span('noun')):
+            an.memo[key] = found.span('noun')
+    noun = an.memo[key]
+    if noun is None or not (noun[0] <= start and max(end, start + 1) <= noun[1]):
+        return None
+    return _B3_ASKED_NO.format(_B3_shown_line(an, start, end))
+
+
+def _B3_label_hold_unread(an: Analysis, start: int, end: int) -> Optional[str]:
+    """box2:L's hold (_B2_label_hold: a status line whose hold word has its own box checked, "Colonoscopy: ☒ Incomplete
+    ☐ Completed") of a passage its own words and section leave uncertain with no doubt: a status row outside a positive
+    section ("Procedure: Colonoscopy" / "Indication: Screening." / "Colonoscopy: ☒ Pending ☐ Completed"). box2:L is read
+    only where the passage would otherwise read performed, so such a row read 'no performance evidence' and the
+    procedure line's section evidence released the family, where the same row straight under the procedure line holds
+    it (round 6 declared:9's mechanism: the hold read only after a performed reading). A hold with doubt, nothing else."""
+    if not _BOX.search(an.text, max(0, start - BOX_REACH), min(len(an.text), max(end, start + 1) + BOX_REACH)):
+        return None
+    hold = _B2_label_hold(an, start, end)
+    if hold is None:
+        return None
+    own = _cue_reading(an, start, end) or _default_reading(an, start, end)
+    return hold if own.status == 'uncertain' and not own.doubt else None
+
+
 def _calls_off(an: Analysis, ks: int, ke: int) -> bool:
     """Whether the sentence [ks, ke) is a status line or a typed or boxed answer that denies the service, or says the
     procedure was called off."""
@@ -2886,11 +2936,16 @@ def _box_reading(an: Analysis, start: int, end: int) -> Optional[Reading]:
     another time or attribute ("Flexible sigmoidoscopy in the last 10 years: No"), or one this reader cannot read.
     Round 4d BOXES3: the strict check-box rows are consulted first (_B3_hold): a passage of a row whose marks cannot be
     paired with its entries in exactly one way is held (uncertain, a doubt), never read by a box; where the row's own
-    reading below already holds it, that hold and its cue stand. A row too long to pair is held without being read."""
+    reading below already holds it, that hold and its cue stand. A row too long to pair is held without being read.
+    Where the boxes say nothing, a passage inside the noun of a typed done-question that names a service and answers no
+    ("Was the EUS performed today? No") is held with doubt (_B3_asked_no; round 6 declared:9)."""
     unpaired = _B3_hold(an, start, end)
     if unpaired is not None and _B3_long_row(an, start, end):
         return Reading('uncertain', (unpaired,), 'cue', doubt=True)
     reading = _B3_declared_box_reading(an, start, end)
+    if unpaired is None and reading is None:
+        asked = _B3_asked_no(an, start, end) or _B3_label_hold_unread(an, start, end)  # round 6 declared:9
+        return None if asked is None else Reading('uncertain', (asked,), 'cue', doubt=True)
     if unpaired is None or (reading is not None and reading.status == 'uncertain'):
         return reading
     return Reading('uncertain', (unpaired,), 'cue', doubt=True)

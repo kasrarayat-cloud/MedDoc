@@ -685,6 +685,107 @@ class Declared11TwoDenialOptionsTests(Case):
                 self.assertFalse(detect._B3_later_denial_checked(row, marks(row)))
 
 
+# --- declared:9 -- a done-question named by the service, and a status row outside a positive section ---------------
+
+EUS_I = HEAD + ('Procedure: EUS with fine-needle aspiration of the pancreatic head mass\nIndication: Pancreatic mass.\n'
+                '{row}\n')
+EUS_ABOVE = HEAD + '{row}\nProcedure: EUS with fine-needle aspiration of the pancreatic head mass\n'
+COLO_I = (HEAD + 'Procedure: Colonoscopy\nIndication: Screening.\n{row}\nFindings: The colonoscope was advanced to the cecum. '
+          'A 6 mm sigmoid polyp was seen.\n')
+
+
+class Declared9ServiceNamedDoneQuestionTests(Case):
+    """declared:9 (medium, a residual at every base). "Was the EUS performed today? No": the done-question grammar's noun
+    names only the procedure's own words (_BOX_Q_NOUN), so the question's EUS read 'uncertain: ?' (a hedge, no doubt)
+    and the procedure line's section evidence released the family: 43242 READY. Now a typed done-question whose noun
+    names a service and whose whole answer is a denial holds that service's mention with doubt (_B3_asked_no), so the
+    family is held wherever the question stands. The status-label form ("Colonoscopy?: ☒ Pending ☐ Completed") is held
+    by the strict rows; the same row without the '?' outside a positive section (under "Indication:") read 'no
+    performance evidence', and box2:L, read only after a performed reading, never held it: now it does
+    (_B3_label_hold_unread). All holds."""
+
+    ASKED = ('Was the EUS performed today? No', 'EUS performed? No', 'EUS completed? No', 'EUS performed today? No',
+             'Was EUS done? No', 'EUS done? No', 'EUS performed?: No', '- EUS performed? No', 'Was the EUS performed? No.',
+             'EUS performed? Not performed', 'EUS performed? No - the patient had eaten', 'Was the EUS completed today? N/A',
+             'EUS performed: No', 'EUS performed - No', 'Was the EUS with FNA performed today? No',
+             'Was the endoscopic ultrasound performed today? No', 'EUS performed? No (patient declined)')
+
+    def test_the_claimed_rows(self):
+        for frame in (EUS, EUS_I, EUS_ABOVE):
+            for row in self.ASKED:
+                with self.subTest(row=row, frame=frame[len(HEAD):len(HEAD) + 30]):
+                    text = frame.format(row=row)
+                    self.assert_held(text, '43242', EUS_PHRASE)
+                    self.assertEqual(family(text, 'gi.eus'), 'uncertain')
+
+    def test_the_family_named_by_the_question(self):
+        for row in ('Was the colonoscopy performed? No', 'Colonoscopy completed? No', 'Colonoscopy performed? No'):
+            with self.subTest(row=row):
+                self.assert_held(COLO_F.format(row=row), '45378', 'Procedure: Colonoscopy')
+        text = EGD.format(row='Was the EGD performed today? No')
+        self.assertEqual(family(text, 'gi.egd'), 'uncertain')
+
+    def test_the_question_s_own_mention_is_a_doubt(self):
+        text = EUS.format(row='Was the EUS performed today? No')
+        start = text.rindex('EUS')
+        status, cues = detect.status_for_span(text, start, start + 3, D)
+        self.assertEqual(status, 'uncertain')
+        self.assertEqual(cues[0], "uncertain: the line 'Was the EUS performed today? No' asks whether the service it "
+                                  "names was done and answers no")
+        an = detect._analysis(text, D)[0]
+        self.assertTrue(detect._generic_reading(an, start, start + 3).doubt)
+        # only a service named in the question's noun: an item's question ("Was the biopsy performed? No") is the
+        # item's, and the words after the answer are no part of the question
+        for row, phrase in (('Was the biopsy performed? No', 'biopsy'), ('EUS performed? No - the patient had eaten', 'patient')):
+            with self.subTest(row=row):
+                status, cues = read(EUS.format(row=row), phrase)
+                self.assertFalse(any('asks whether the service it names was done' in c for c in cues), cues)
+
+    def test_a_status_row_read_as_history_keeps_its_reading(self):
+        """box2:L outside a positive section reads only a passage its words and section leave uncertain with no doubt: a
+        dated row under "History:" stays historical, and today's colonoscopy stays performed."""
+        text = (HEAD + 'Procedure: Colonoscopy\nHistory: Colonoscopy: \u2612 Incomplete \u2610 Completed in 2019.\nFindings: The '
+                'colonoscope was advanced to the cecum.\n')
+        start = text.index('History: ') + len('History: ')
+        self.assertEqual(detect.status_for_span(text, start, start + len('Colonoscopy'), D)[0], 'historical')
+        self.assertEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+    def test_the_status_label_rows(self):
+        for row in ('Colonoscopy?: \u2612 Pending \u2610 Completed', 'Colonoscopy?: \u2612 Incomplete \u2610 Completed',
+                    'Colonoscopy status?: \u2612 Pending \u2610 Completed'):
+            with self.subTest(row=row):
+                self.assert_held(COLO_F.format(row=row), '45378', 'Procedure: Colonoscopy')
+        for row in ('Colonoscopy: \u2612 Pending \u2610 Completed', 'Colonoscopy: \u2612 Incomplete \u2610 Completed',
+                    'Colonoscopy: [x] On hold [ ] Completed', 'Colonoscopy status: \u2612 Pending \u2610 Completed'):
+            with self.subTest(row=row):
+                text = COLO_I.format(row=row)
+                self.assert_held(text, '45378', 'Procedure: Colonoscopy')
+                self.assertEqual(family(text, 'gi.colonoscopy'), 'uncertain')
+
+    def test_controls(self):
+        for row in ('Was the EUS performed today? Yes', 'EUS performed? Yes', 'The EUS was performed today.',
+                    'EUS performed: no complications.', 'EUS performed - no complications.', 'EUS performed? Unknown',
+                    'Was the EGD performed today? No', 'Was the biopsy performed? No', 'Was the FNA performed? No'):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(EUS.format(row=row), '43242', EUS_PHRASE), 'ready')
+        for frame, row in ((COLO_F, 'Colonoscopy completed? Yes'), (COLO_F, 'Colonoscopy performed: no polyps were seen.'),
+                           (COLO_I, 'Colonoscopy: \u2610 Pending \u2612 Completed'),
+                           (COLO_I, 'Colonoscopy: \u2610 Incomplete \u2612 Completed')):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(frame.format(row=row), '45378', 'Procedure: Colonoscopy'), 'ready')
+
+    def test_the_answer_grammar(self):
+        for line, noun in (('Was the EUS completed today? N/A', 'EUS'), ('EUS performed? NA', 'EUS'),
+                           ('EUS performed? No (patient declined)', 'EUS'), ('EUS done: none.', 'EUS'),
+                           ('Was the EUS with FNA performed today? No', 'EUS with FNA'), ('EUS performed - No', 'EUS')):
+            with self.subTest(line=line):
+                self.assertEqual(detect._B3_SERVICE_ANSWERED_NO.match(line).group('noun'), noun)
+        for line in ('EUS performed: no complications', 'EUS performed - no complications.',
+                     'Colonoscopy performed: no polyps were seen.', 'EUS performed? Yes', 'EUS performed? Unknown'):
+            with self.subTest(line=line):
+                self.assertIsNone(detect._B3_SERVICE_ANSWERED_NO.match(line))
+
+
 class StrictRowsCostTests(unittest.TestCase):
     """contract-r4d section 6: the predicate is read once per row and per passage (memoised), and a row longer than
     B3_ROW_CHARS is held without being paired, so a long one-line paste of any row stays linear. Each shape was timed at
