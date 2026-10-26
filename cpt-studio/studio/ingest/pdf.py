@@ -147,6 +147,8 @@ _ING_MAX_SCAN = 64
 _ING_COLUMN_GAP = 0.6
 # The operators that show text (PDF 32000-1 9.4.3): where each draws is kept with the piece pypdf joins it into.
 _I2_SHOWS = frozenset({b'Tj', b'TJ', b"'", b'"'})
+# ... of which these show one string: a piece drawn by one of them alone is one string of ink.
+_I2_ONE_STRING = frozenset({b'Tj', b"'", b'"'})
 # Page text left of a box that is only a list marker ('1.', '2)', '(a)', a bullet) is not a label for the box.
 _ING_LIST_MARKER = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?[0-9]{1,3}[.)]|'
                               r'\(?[A-Za-z][.)])')
@@ -743,7 +745,7 @@ class _I2_Places:
             if index < 0 or '\n' in text[firsts[index]:start]:
                 continue
             first = firsts[index]
-            shows, lead, font, em = layer.drawn[first]
+            shows, lead, font, em, _ = layer.drawn[first]
             origin = origins.get(first) or placed.get(first)
             if origin is None or not origin[2]:
                 continue
@@ -966,6 +968,8 @@ class _ING_Ink:
         first = next(found, None)
         if first is None or first[0] > x + BOX_SLACK:
             return True  # the piece's text is not where the layer puts it
+        if self.layer is not None and self._I2_alone(offset):
+            return False  # the line is one string alone: ink beyond it on the row is another line's
         low = bisect_left(self.tied_baselines, y - 2 * BOX_SLACK)
         high = bisect_right(self.tied_baselines, y + 2 * BOX_SLACK)
         rows_of_boxes = [boxes for _, boxes in self.tied[low:high]]
@@ -988,6 +992,18 @@ class _ING_Ink:
             if next_high > drawn_end:
                 drawn_end, trailing = next_high, (next_space if next_high < stop - 1e-9 else 0.0)
         return False
+
+    def _I2_alone(self, offset: int) -> bool:
+        """Whether nothing follows the box's piece (at ``offset``) on its text line and the piece is drawn by one operator
+        that shows one string (Tj, ', "): whatever else is drawn on the row pypdf put on another line, or before the box
+        on this one, neither of which the box governs, and the string itself is one string of ink (no gap inside it is
+        read, as before)."""
+        text = self.layer.text
+        newline = text.find('\n', offset)
+        end = len(text) if newline < 0 else newline
+        later = bisect_right(self.offsets, offset)
+        return ((later == len(self.offsets) or self.offsets[later] >= end)
+                and self.layer.drawn.get(offset, ((), False, None, None, False))[4])
 
     def _I2_joins(self, offset: int, x: float, y: float) -> bool:
         """Whether pypdf joined into the text line of the box's piece (at ``offset``, drawn at (x, y)), after it and
@@ -1117,6 +1133,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
     # Where each text-showing operator not yet flushed into a piece draws, on the page (None: unknown). pypdf moves
     # its text matrix only with the positioning operators, so this is where the operator's line or move put it.
     shows: list = []
+    strings: list = []  # for each of ``shows``: whether its operator shows one string
 
     def placement():
         """The matrix that places what is drawn now on the page (IDENTITY on the page itself), or None."""
@@ -1137,16 +1154,18 @@ def _layer_text(page, content: PageContent) -> _Layer:
         elif operator in _I2_SHOWS:
             matrix = placement()
             shows.append(_ING_placed(cm, tm, matrix) if matrix is not None else None)
+            strings.append(operator in _I2_ONE_STRING)
 
     def visit(text, cm, tm, font, size):
         if text:
-            drawn = (tuple(shows), _I2_em(cm, tm, size, placement()))
+            drawn = (tuple(shows), _I2_em(cm, tm, size, placement()), len(strings) == 1 and strings[0])
             if not forms:
                 pieces.append((text, _origin(cm, tm), font, None, drawn))
             else:
                 matrix = forms[-1][0] if forms[-1][2] else None
                 pieces.append((text, None, font, _ING_placed(cm, tm, matrix) if matrix is not None else None, drawn))
         shows.clear()
+        strings.clear()
 
     try:
         copy = extraction_page(page, content)
@@ -1158,7 +1177,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
     except Exception:
         return _Layer()
     if ''.join(piece[0] for piece in pieces) != raw:
-        pieces = [(raw, None, None, None, ((), None))]
+        pieces = [(raw, None, None, None, ((), None, False))]
     ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
     return replace(_decoded(pieces), ink=ink)
 
@@ -1227,7 +1246,7 @@ def _decoded(pieces) -> _Layer:
     placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
     drawn: dict = {}  # as _Layer.drawn
     decoders: dict[int, object] = {}
-    for text, origin, font, placed, (shows, em) in pieces:
+    for text, origin, font, placed, (shows, em, single) in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
@@ -1252,7 +1271,7 @@ def _decoded(pieces) -> _Layer:
                 firsts.append((size, origin))
                 if origin is None and placed is not None:
                     placed_firsts.append((size, placed))
-                drawn[size] = (shows, lead, font, em)
+                drawn[size] = (shows, lead, font, em, single)
                 first = False
             elif first:
                 lead = True

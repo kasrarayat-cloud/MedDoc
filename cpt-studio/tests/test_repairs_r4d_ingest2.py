@@ -7,6 +7,14 @@ Every rule here is hold-only: where a box's placement or state is in doubt, extr
   after an ordinary box-bulleted list, or a hidden checked paragraph, turned that list's bullets into '☐'. A table
   cell's boundary and a text box's boundary now end a list, and a paragraph Word does not show (its mark hidden, no
   visible text) writes no bullet and belongs to no list.
+- extraction:0 (regression): an unchecked PDF box before a line that runs on into another column wrote '☐' where the
+  next column sat on another baseline, its gap was padded with spaces, or its font gave no widths: '[?]' now.
+- extraction:2, extraction:3 (regression): a pen tick, a field showing a value, a check box or a typed mark over a
+  printed box is read where the box is drawn (inside its brackets, past leading spaces, on its own piece's baseline).
+- extraction:4 (residual): two check boxes over one printed box, or one over several, are named as unread boxes, never
+  as a position that could not be read.
+- extraction:5 (over-hold): an unchecked box before an item whose line pypdf ends after it (its detail drawn later, on a
+  line of its own) is '☐' again, as 4347acd and 9a9f403 read it.
 
 Each document is synthetic, built here from raw WordprocessingML or raw PDF syntax, extracted with the sandboxed
 extract_document, routed for real and assessed by the real engine.
@@ -544,6 +552,82 @@ class Extraction3MarkInsideAPrintedBoxTests(unittest.TestCase):
         self.assertIn(OVERLAP, result.messages)
         self.assertNotIn(UNREAD_NOTE, result.messages)
         self.assertIn(f'{UNREAD} Biopsy {UNREAD}', result.text)
+
+
+# --- extraction:5 -- an item's own detail on a line of its own does not hold the item -------------------------------
+
+def detail_rows(*, joined=False, detail='Site: sigmoid colon', snare_detail='Size: 6 mm', next_column=None,
+                biopsy_on=False):
+    """'Interventions:', then '[box] Biopsy' and '[box] Cold snare polypectomy' (check boxes 4 pt before their items;
+    the biopsy's ``biopsy_on``, the snare's checked), each item one string, with a detail 40 pt to its right on its
+    baseline: drawn after all the items (pypdf puts each detail on a line of its own), or right after its item
+    (``joined``: one line). ``next_column``: a sentence in the details' place instead of the biopsy's detail."""
+    form = Form(NOTE_HEAD)
+    rows = ((620, 'Biopsy', next_column or detail, biopsy_on), (600, 'Cold snare polypectomy', snare_detail, True))
+    form.line(text_line(72, 640, 'Interventions:'))
+    details = []
+    for y, item, extra, on in rows:
+        form.checkbox(f'Check Box{y}', (72, y - 3, 84, y + 9), on)
+        form.line(text_line(88, y, item))
+        op = text_line(88 + _width(item) + 40, y, extra) if extra else None
+        if op and joined:
+            form.line(op)
+        elif op:
+            details.append(op)
+    for op in details:
+        form.line(op)
+    return form.build()
+
+
+class Extraction5DetailOnItsOwnLineTests(unittest.TestCase):
+    """An unchecked box before an item whose text line pypdf ends after it (the item one string, its detail drawn
+    later and put on a line of its own) governs that item alone: '☐', as 4347acd and 9a9f403 read it."""
+
+    def test_the_item_keeps_its_state(self):
+        for detail in ('Site: sigmoid colon', 'Site: ____________', 'Site:', 'Jar: ____'):
+            with self.subTest(detail=detail):
+                text = extracted(detail_rows(detail=detail)).text
+                self.assertIn('☐ Biopsy\n', text)
+                self.assertIn('☒ Cold snare polypectomy\n', text)
+                self.assertEqual(codes(text, ('45380', 'Biopsy'))[0], 'excluded')
+
+    def test_the_next_column_on_its_own_line_is_never_negated(self):
+        text = extracted(detail_rows(next_column=SENTENCE)).text
+        self.assertIn('☐ Biopsy\n', text)
+        self.assertIn(f'\n{SENTENCE}', text)
+        self.assertEqual(codes(text, ('45380', 'Biopsy'))[0], 'excluded')
+        self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy of the 6 mm'))[0], 'excluded')
+
+    def test_a_detail_joined_into_the_line_still_holds(self):
+        """Control (the joined line: the detail is on the box's line, which may run on into another column): held, as
+        before; and a checked box keeps its glyph."""
+        text = extracted(detail_rows(joined=True)).text
+        self.assertIn(f'{UNREAD} Biopsy', text)
+        self.assertNotEqual(codes(text, ('45380', 'Biopsy'))[0], 'excluded')
+        text = extracted(detail_rows(joined=True, next_column=SENTENCE)).text
+        self.assertIn(f'{UNREAD} Biopsy', text)
+        self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy of the 6 mm'))[0], 'excluded')
+        text = extracted(detail_rows(biopsy_on=True)).text
+        self.assertIn('☒ Biopsy\n', text)
+
+    def test_one_operator_with_more_than_one_string_still_measures_its_gaps(self):
+        """The item and its detail shown by one TJ operator (one piece, several strings): the gap inside it is read as
+        before, so the box is held; an item alone in a font that gives no widths is held as before (not measured)."""
+        from tests.test_repairs_ingest_pdf import esc
+        form = Form(NOTE_HEAD)
+        form.line(text_line(72, 640, 'Interventions:'))
+        form.checkbox('Check Box1', (72, 617, 84, 629), False)
+        form.line(f'BT /F1 11 Tf 88 620 Td [({esc("Biopsy")}) -3600 ({esc("Site: sigmoid colon")})] TJ ET')
+        text = extracted(form.build()).text
+        self.assertIn(f'{UNREAD} Biopsy', text)
+        form = Form(NOTE_HEAD)
+        form.objects[23] = NO_WIDTHS
+        form.line(text_line(72, 640, 'Interventions:'))
+        form.checkbox('Check Box1', (72, 617, 84, 629), False)
+        form.line(text_line(88, 620, 'Biopsy', font='MG'))
+        form.line(text_line(88, 600, 'Cold snare polypectomy'))
+        text = extracted(form.build()).text
+        self.assertIn(f'{UNREAD} Biopsy', text)
 
 
 # --- extraction:4 -- the page note names what is true about boxes under form check boxes -----------------------------
