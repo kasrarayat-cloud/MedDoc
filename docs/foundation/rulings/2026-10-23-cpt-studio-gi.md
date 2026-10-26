@@ -331,6 +331,28 @@ owner said, and so any of them can be overruled.
    regressions, and misreadings of what the code declares it reads. This is a
    change of the session's own stopping rule, recorded so it can be
    overruled.
+7. **Input bounds that meet the stage limits (2026-10-26, after refutation
+   round 7).** The owner's decision below makes stage time or memory limits a
+   must-fix class. Where a reader's cost is inherent in the input rather than a
+   defect in the code, the limit is met by a documented bound. Nothing is ever
+   truncated: the input is refused or held.
+   - A document naming procedures more than 1,000 times is not read. The
+     analyze stage fails with a plain message naming the count, and nothing is
+     sent.
+   - A provider response citing more than 1,024 evidence passages is not used.
+     It is refused whole and by count, as the 64 and 256 code caps are.
+   - A check-box row with a mark past the document's first 1,000 marks is held,
+     never paired.
+   - A service line with more than eight negation words is not read for its own
+     denial. The line above decides, and it can only hold.
+   - The assess stage has 120 s and 768 MiB: twice the analyze stage's time, and
+     its memory plus 256 MiB.
+
+   No real report reaches the first four. Each is a constant
+   (`settings.MAX_SERVICE_MENTIONS`, `corti.MAX_EVIDENCE`,
+   `detect.B3_DOCUMENT_MARKS`, `detect._S2_OWN_LINE_TOKENS`,
+   `settings.JOB_DEADLINE_SECONDS` and `ASSESS_MEMORY_BYTES`), and any can be
+   raised or removed if the owner overrules it.
 
 ## Owner decision, 2026-10-25 — how the refutation rounds finish
 
