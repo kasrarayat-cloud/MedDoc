@@ -1747,9 +1747,9 @@ def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> b
     - a line answering the done question no ("Procedure performed: No"; "Anoscopy performed: No" when the label names
       the code's own procedure and nothing else).
     Never: another procedure's, act's or care step's denial ("Banding was deferred." for 46600, "No biopsies were
-    performed.", "No sedation was required for the exam.", "No other procedure was done."), a plan or history mention
-    that denies or reschedules ("Plan: No repeat anoscopy needed."), a done question in a plan or history section, or a
-    no-repeat statement ("no further banding needed"). Bounded: the index is read once per text; a code then costs one
+    performed.", "No sedation was required for the exam.", "No other procedure was done."), a structural denial or a
+    done question in a plan or history section, or a no-repeat statement ("Plan: No repeat anoscopy needed.", "no
+    further banding needed"). Bounded: the index is read once per text; a code then costs one
     pass over the sentences it kept, and a few searches per sentence that doubts."""
     from studio.gi import detect
     overflow, sentences, answered = _V2_doubt_index(text, service_date)
@@ -1767,12 +1767,14 @@ def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> b
     for item in sentences:
         doubts, denied, clause_doubts = list(item.doubts), item.denies, item.clause_doubts
         if item.elsewhere:
-            # a plan or history mention: only a cancellation, a cut or a hedge of it may be today's
-            doubts = [r for r in doubts if r[0] in ('cancelled', 'incomplete', 'uncertain')]
+            # a plan or history line is asked no structural denial (as detect._called_off_further reads them): only
+            # what its own words say of the procedure ("Plan: Anoscopy was not performed due to pain; will
+            # reschedule.") doubts it
             denied, clause_doubts = False, ()
-        elif doubts and _V2_NO_REPEAT.search(text, item.start, item.end) \
+        if (doubts or denied) and _V2_NO_REPEAT.search(text, item.start, item.end) \
                 and not _V2_denial_beyond(text, item.start, item.end):
-            doubts = [r for r in doubts if r[0] != 'negated']  # "no further banding needed": a future procedure
+            # "no further banding needed", "Repeat banding is not necessary.": a future procedure's denial
+            doubts, denied = [r for r in doubts if r[0] != 'negated'], False
         if item.called_off and not item.elsewhere:
             return True  # "The exam was stopped early because of pain.": the procedure by reference, whatever else
         if not (doubts or denied or clause_doubts):

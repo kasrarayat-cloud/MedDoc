@@ -416,10 +416,13 @@ class Validation8AnotherActIsNoDoubtTests(Case):
              'No other procedure was done.')
     PLAN = {'46221': ('Plan: No further banding is needed.', 'Plan: Repeat banding is not necessary.',
                       'Plan: No repeat banding needed at this time.',
-                      'Impression: Successful banding; no further banding needed.'),
+                      'Impression: Successful banding; no further banding needed.',
+                      'Impression: Repeat banding is not necessary.'),
             '46600': ('Plan: No repeat anoscopy needed.',),
             '49083': ('Plan: No repeat paracentesis is needed at this time.',),
-            '91010': ('Plan: No repeat manometry is needed.',)}
+            '91010': ('Plan: No repeat manometry is needed.',
+                      # another substance's denial and a no-further plan line (round 6's own ready controls)
+                      'Plan: Albumin was not given.', 'Plan: Return as needed; no further intervention is required.')}
 
     def test_another_act_denied_keeps_the_procedure_line_ready(self):
         for code, (proc, find) in OWN.items():
@@ -440,6 +443,21 @@ class Validation8AnotherActIsNoDoubtTests(Case):
                                                                                  f'{line}\n')
                 with self.subTest(code=code, line=line):
                     self.assertReady(real(text, (code, f'Procedure: {proc}'))[0][code])
+
+    def test_controls_a_plan_or_history_that_denies_today_s_procedure_still_holds(self):
+        # only a no-repeat statement is a plan's future procedure; a plan or history that denies or reschedules the
+        # procedure is a doubt about it, as at HEAD
+        names = {'46600': 'Anoscopy', '91010': 'Esophageal manometry', '49083': 'Paracentesis',
+                 '46221': 'Rubber band ligation'}
+        for code, (proc, find) in OWN.items():
+            name = names[code]
+            for line in (f'Plan: {name} was not performed due to pain; will reschedule.',
+                         f'Plan: {name} was rescheduled to next week.', 'Plan: The procedure was cancelled.',
+                         f'History of present illness: {name} was not performed because she declined.'):
+                text = REPORT.format(proc=proc, status='', find=find).replace('Impression: Findings as described.\n',
+                                                                                 f'{line}\n')
+                with self.subTest(code=code, line=line):
+                    self.assertEqual(real(text, (code, f'Procedure: {proc}'))[0][code].status, 'needs_clarification')
 
     def test_controls_true_denials_still_hold(self):
         for code, (proc, find) in OWN.items():
