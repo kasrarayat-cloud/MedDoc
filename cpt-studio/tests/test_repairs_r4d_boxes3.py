@@ -619,6 +619,72 @@ class Declared8ItemLabelBeforeABoxTests(Case):
                 self.assertEqual(read(COLO_F.format(row=row), item, row)[0], status)
 
 
+# --- declared:11 -- two denial options on an item's label, the second checked --------------------------------------
+
+class Declared11TwoDenialOptionsTests(Case):
+    """declared:11 (low; the three bases excluded it). "Cold snare polypectomy: ☐ Not done ☒ Not performed": _group_state
+    read only the first denial option (unchecked) and, with no yes option, nothing; box2:I dropped the unchecked
+    option's words, so the item read performed (45385 READY). A denial option after the first, checked while the first
+    is not, among the item's own options (_B3_later_denial_checked), makes the item's boxes disagree ('mixed'): held,
+    never ready, never newly excluded. With a checked Yes as well it is held too ("☒ Yes ☐ Not done ☒ Not performed",
+    READY at aaf517e, excluded at every base); with an unchecked Yes the item stays denied, as before."""
+
+    ROWS = (('Cold snare polypectomy: \u2610 Not done \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Colonoscopy: \u2610 Not done \u2612 Not performed', '45378', 'Procedure: Colonoscopy'),
+            ('1. Colonoscopy: \u2610 Not done \u2612 Not performed', '45378', 'Procedure: Colonoscopy'),
+            ('- Colonoscopy: \u2610 Not done \u2612 Not performed', '45378', 'Procedure: Colonoscopy'),
+            ('Cold snare polypectomy: Not done \u2610 Not performed \u2612', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: [ ] Not done [x] Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy | \u2610 Not done | \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 not done \u2612 not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 Not done \u2612 Not performed - poor prep', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 None \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 No \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 Not performed \u2612 None', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 Not done \u2610 Completed \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 Not done \u2612 Not performed \u2610 Completed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2612 Yes \u2610 Not done \u2612 Not performed', '45385', 'Cold snare polypectomy'),
+            ('Cold snare polypectomy: \u2610 Not done \u2612 Not performed \u2612 Yes', '45385', 'Cold snare polypectomy'))
+
+    def test_the_claimed_rows(self):
+        for row, code, phrase in self.ROWS:
+            with self.subTest(row=row):
+                self.assert_held(COLO_F.format(row=row), code, phrase)
+
+    def test_the_family_is_never_released_by_the_service_row(self):
+        for marker in ('', '1. ', '- '):
+            with self.subTest(marker=marker):
+                text = COLO_F.format(row=marker + 'Colonoscopy: \u2610 Not done \u2612 Not performed')
+                self.assertNotEqual(family(text, 'gi.colonoscopy'), 'performed')
+
+    def test_controls(self):
+        for row, wanted in (('Cold snare polypectomy: \u2612 Not performed', 'excluded'),
+                            ('Cold snare polypectomy: \u2610 Yes \u2612 No', 'excluded'),
+                            ('Cold snare polypectomy: \u2612 Yes \u2610 No', 'ready'),
+                            ('Cold snare polypectomy: \u2612 Not done \u2610 Not performed', 'excluded'),
+                            ('Cold snare polypectomy: \u2610 Not done \u2612 Not performed \u2610 Yes', 'excluded'),
+                            ('Cold snare polypectomy: \u2610 Yes \u2610 Not done \u2612 Not performed', 'excluded'),
+                            ('Cold snare polypectomy: \u2610 Not done \u2610 Not performed \u2612 Completed', 'ready'),
+                            ('Cold snare polypectomy: \u2612 Completed \u2610 Not done \u2610 Not performed', 'ready')):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(COLO_F.format(row=row), '45385', 'Cold snare polypectomy'), wanted)
+
+    def test_the_item_s_own_options_only(self):
+        """Another item's options after its label are not the item's own: the passage across both items keeps box2:G's
+        cue (the items differ), not the item's own boxes disagreeing."""
+        def marks(row):
+            group = [(m.start(), m.end(), 'off' if m.group('off') is not None else 'on') for m in detect._BOX.finditer(row)]
+            return [(b, detect._OPTION_AFTER.match(row, b[1])) for b in group]
+        self.assertTrue(detect._B3_later_denial_checked('\u2610 Not done \u2612 Not performed',
+                                                        marks('\u2610 Not done \u2612 Not performed')))
+        row = '\u2610 Not done \u2610 Completed \u2612 Not performed'
+        self.assertTrue(detect._B3_later_denial_checked(row, marks(row)))
+        for row in ('\u2612 Yes \u2610 No  Cold snare polypectomy: \u2610 Yes \u2612 No', '\u2610 Not done \u2610 Biopsy: \u2612 Not performed',
+                    '\u2612 Not done \u2612 Not performed', '\u2610 Not done \u2610 Not performed'):
+            with self.subTest(row=row):
+                self.assertFalse(detect._B3_later_denial_checked(row, marks(row)))
+
+
 class StrictRowsCostTests(unittest.TestCase):
     """contract-r4d section 6: the predicate is read once per row and per passage (memoised), and a row longer than
     B3_ROW_CHARS is held without being paired, so a long one-line paste of any row stays linear. Each shape was timed at

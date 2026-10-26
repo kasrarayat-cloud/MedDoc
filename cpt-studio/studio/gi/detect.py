@@ -2444,10 +2444,48 @@ def _other_names_in(an: Analysis, start: int, end: int) -> tuple:
     return tuple(name for name in names[low:high] if name[1] <= end)
 
 
+# What may stand between one item's options ("☐ Not done ☒ Not performed", "☐ Not done | ☒ Not performed", "Not done ☐
+# / Not performed ☒"), and the label of an option that is no yes/no word ("☐ Not done ☐ Completed ☒ Not performed"):
+# anything else (another item's label, "Biopsy: ☒ Yes ☐ No  Cold snare polypectomy: ☐ Yes ☒ No") ends the item's own
+# options (_B3_later_denial_checked).
+_B3_OPTION_GAP = re.compile(r'[ \t\u00a0|,;/]*')
+_B3_OPTION_LABEL = re.compile(r'[^:\n]{0,40}')
+
+
+def _B3_later_denial_checked(text: str, marks: list) -> bool:
+    """Whether, among an item's own options (the option boxes ``marks``, (box, its yes/no word or None) as _group_state
+    reads them, written one after another with only _B3_OPTION_GAP after an option's word, or a short label with no
+    colon in place of a word), a denial option after the first one is checked while the first is not: "Cold snare
+    polypectomy: ☐ Not done ☒ Not performed", "☒ Yes ☐ Not done ☒ Not performed", "☐ Not done ☐ Completed ☒ Not
+    performed". _group_state read only the first denial option, so the checked one was never read and the item read
+    performed where every base excluded it (round 6 declared:11): the boxes for the item disagree."""
+    after = marks[0][1].start() >= marks[0][0][1]
+    first_no = None
+    for at, (box, word) in enumerate(marks):
+        if at:
+            previous_box, previous_word = marks[at - 1]
+            if after:
+                gap, pattern = ((previous_word.end(), box[0]), _B3_OPTION_GAP) if previous_word is not None else (
+                    (previous_box[1], box[0]), _B3_OPTION_LABEL)
+            else:
+                gap, pattern = ((previous_box[1], word.start()), _B3_OPTION_GAP) if word is not None else (
+                    (previous_box[1], box[0]), _B3_OPTION_LABEL)
+            if gap[0] > gap[1] or not pattern.fullmatch(text, *gap):
+                return False
+        if word is not None and word.group('no'):
+            if first_no is None:
+                first_no = box
+            elif box[2] == 'on':
+                return first_no[2] != 'on'
+    return False
+
+
 def _group_state(text: str, group: list) -> Optional[str]:
     """The boxes after an item, up to the next item: the first one (with the boxes written next to it) governs,
     unless they mark yes/no options. Then the item is denied when "No" is checked or "Yes" is not, and held ('mixed')
-    when both are checked."""
+    when both are checked, or when a later denial option of the item's own is checked while the first is not and no
+    unchecked "Yes" denies it ("☐ Not done ☒ Not performed", "☒ Yes ☐ Not done ☒ Not performed": round 4d BOXES3,
+    _B3_later_denial_checked)."""
     first = group[0]
     if _OPTION_BEFORE.search(text, max(0, first[0] - 20), first[0]):
         marks = [(b, _OPTION_BEFORE.search(text, max(0, b[0] - 20), b[0])) for b in group]
@@ -2464,6 +2502,8 @@ def _group_state(text: str, group: list) -> Optional[str]:
         return 'unknown'
     yes = next((b for b, word in marks if word and word.group('yes')), None)
     no = next((b for b, word in marks if word and word.group('no')), None)
+    if no is not None and no[2] != 'on' and (yes is None or yes[2] == 'on') and _B3_later_denial_checked(text, marks):
+        return 'mixed'  # round 4d BOXES3 (round 6 declared:11): "☐ Not done ☒ Not performed": a later denial checked
     if no is not None and no[2] == 'on' and yes is not None and yes[2] == 'on':
         return 'mixed'  # both options marked: the boxes for the item disagree (structure:15)
     if no is not None and no[2] == 'on':
