@@ -5490,7 +5490,9 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
       glyph or cross, an answer in parentheses ("☐ ...", "... [ ]", "[N] ...", "○ ...", "(N) ...": structure:10);
     - the line under it answers it with anything but yes (a checked "Yes", a lone checked box, a bare "Yes"), or it
       asks (it ends with a colon) and no such answer follows; a lone box line right above it is not checked
-      (routing:11, contract:0's next-line layout);
+      (routing:11, contract:0's next-line layout); the line above it (one blank line may stand between) is about the
+      attestation and refuses it as the line under would (_B3_attestation_above_refuses: round 4d BOXES3, round 6
+      declared:10);
     - its page's form block has a field line naming it that is not checked, or a denying or answering line that names
       nothing printed: an attestation box whose glyph extraction could not place ("Separate E/M attestation: not
       checked", "Check Box 7: not checked": contract:0, release:5, routing:11)."""
@@ -5517,6 +5519,8 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
     above = _box_line_before(text, line_start) if line_start else None
     if above is not None and _BOX_LONE_MARKS.fullmatch(text, *above) and not _box_answer_affirms(an, *above):
         return True
+    if line_start and _B3_attestation_above_refuses(an, line_start):
+        return True  # round 6 declared:10: "☐ Separate E/M attestation:" on the line above it
     fields = _form_fields(an)
     named = _within(fields.named, fields.named_starts, start, end) if text.find('\n', start, end) < 0 else None
     if named is not None and named.state != 'on':
@@ -5529,6 +5533,57 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
             return True  # (declared:4: a PDF's unchecked box beside its printed label "Attested")
     index = bisect.bisect_right(fields.untied_starts, start) - 1
     return index >= 0 and start < fields.untied[index].end
+
+
+# The attestation's own words, as a line above the statement may carry them (_B3_attestation_above_refuses): narrower
+# than _BOX_ATTEST_WORD, whose "significant", "identifiable" and "E/M" are the statement's own words and open many
+# lines about something else ("Significant findings: none", "E/M: established patient, no new problems").
+_B3_ATTEST_ABOVE = re.compile(r'\b(?:(?:un|non-?|dis)?(?:attest|agree|confirm|acknowledg)\w*|separate\w*|modifier)\b',
+                              re.A | re.I)
+B3_ABOVE_ANSWER_WORDS = 4  # a field's value read as an answer above the statement: at most this many words
+
+
+def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
+    """Whether the line above the separately identifiable E/M statement's line (starting at ``line_start``; one blank
+    line may stand between, as under it) is about the attestation and refuses it (round 6 declared:10: only a lone box
+    line above was read, so "☐ Separate E/M attestation:", "☐ Attested", "Attested: ☐", "[ ] Attested" or "Attested |
+    [ ]" right above the statement left it attesting, 99214 ready). Only a line with one of the attestation's own words
+    (_B3_ATTEST_ABOVE) is asked, and only in the shapes of an answer, since a line above the statement is as often the
+    end of what comes before it ("☐ Labs reviewed", "Attestation: I saw the patient and agree with the resident's
+    note."):
+    - a line with a mark: refused unless its marks affirm (_box_answer_affirms: checked boxes alone, a checked Yes) and
+      box2:F does not refuse it ("☐ Attested", "Attested | [ ]", "Notes: ☐ Attested", "☒ Not attested");
+    - a field line whose value is at most B3_ABOVE_ANSWER_WORDS words: read by box2:F (_B2_attestation_line_refuses),
+      as under the statement ("Separate E/M attested: No", "Attestation: pending", "E/M attestation: Not attested",
+      "Notes: Not attested", "Attestation: Agree" refuse; "Attested - Yes", "Attested by: Dr. Smith", "Modifier: 25" do
+      not; the first two were held at d05326ef and ready since 4347acd); a longer value is prose ("Attestation: I saw
+      the patient and agree with the resident's note.");
+    - a line of at most B3_ABOVE_ANSWER_WORDS words with no field that holds a word the statement's own line would
+      refuse (_B2_contrary: "Not attested", "Unattested", "Modifier 25 not appended");
+    - a form field tied to that printed line, not checked ("Attested" printed above, its PDF box unchecked).
+    Only refuses (a hold)."""
+    text = an.text
+    above = _box_line_before(text, line_start)
+    if above is None and line_start >= 2 and text[line_start - 2] == '\n':
+        above = _box_line_before(text, line_start - 1)  # one blank line between
+    if above is None:
+        return False
+    start, end = above
+    if not _B3_ATTEST_ABOVE.search(text, start, end):
+        return False
+    if _B2_MARK.search(text, start, end):
+        return _B2_attestation_line_refuses(an, start, end) or not _box_answer_affirms(an, start, end)
+    field = _B2_FIELD.match(text, start, end)
+    if (field is not None and _B3_words(text, field.end(), end, B3_ABOVE_ANSWER_WORDS) <= B3_ABOVE_ANSWER_WORDS
+            and _B2_attestation_line_refuses(an, start, end)):
+        return True
+    if field is None and _B3_words(text, start, end, B3_ABOVE_ANSWER_WORDS) <= B3_ABOVE_ANSWER_WORDS and _B2_contrary(
+            text, start, end):
+        return True  # a short line that refuses it: "Not attested", "Unattested", "Modifier 25 not appended"
+    fields = _form_fields(an)
+    index = bisect.bisect_left(fields.named_starts, start)
+    tied = fields.named[index] if index < len(fields.named) else None
+    return tied is not None and tied.start < end and tied.state != 'on'
 
 
 def _box_answers_its_own_label(an: Analysis, start: int, end: int) -> bool:

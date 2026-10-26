@@ -786,6 +786,130 @@ class Declared9ServiceNamedDoneQuestionTests(Case):
                 self.assertIsNone(detect._B3_SERVICE_ANSWERED_NO.match(line))
 
 
+# --- declared:10 -- the attestation's own box on the line above the separately identifiable E/M statement -----------
+
+ATTEST_NOTE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nProcedure: Anoscopy with rubber '
+               'band ligation of two internal hemorrhoids was performed today.\n{above}A significant, separately '
+               'identifiable E/M service was performed today.\n{under}Medical decision making: moderate.\n')
+
+
+def separate_em_fact(text):
+    finding = detect.route(text, D).finding('gi.office_em')
+    return next((f.value for f in (finding.facts if finding else ()) if f.name == 'separate_em'), None)
+
+
+def visit_outcome(text):
+    return outcome(text, '99214', 'Established patient office visit.')
+
+
+class Declared10AttestationBoxAboveTests(Case):
+    """declared:10 (medium, a residual at every base). "☐ Separate E/M attestation:" (or "☐ Attested", "Attested: ☐",
+    "[ ] Attested", "Attested | [ ]") on the line ABOVE "A significant, separately identifiable E/M service was performed
+    today.": only a lone box line above was read, so the statement attested (separate_em documented) and 99214 was
+    READY beside the same-day anoscopy. The line above is now read as the line under is, when it is about the
+    attestation (_B3_attestation_above_refuses): its own box unchecked, box2:F's refusals, a labelled answer naming the
+    attestation that does not say yes ("Separate E/M attested: No": held at d05326ef, ready since 4347acd), a form field
+    tied to it unchecked; one blank line may stand between. Only refusals (holds)."""
+
+    UNCHECKED = ('\u2610 Separate E/M attestation:', '\u2610 Attested', 'Attested: \u2610', '[ ] Attested', 'Attested | [ ]',
+                 'Notes: \u2610 Attested', '\u2610 Agree', '\u2610 Modifier 25', 'Separate E/M attested: No',
+                 'Separate E/M attestation: No', 'Attested: No', 'Attestation: No', 'E/M attestation: Not attested',
+                 '\u2612 Not attested', 'Attestation: pending', 'Attested - No', 'Separate E/M: \u2610 Yes \u2612 No',
+                 'Attestation: Agree', 'Unattested', 'Not attested', '\u2612 Agree \u2610 Disagree', 'Modifier 25 not appended',
+                 'Notes: Not attested', 'Notes: Agree')
+    CHECKED = ('\u2612 Separate E/M attestation:', '\u2612 Attested', 'Attested: \u2612', '[x] Attested', 'Attested | [x]',
+               'Separate E/M attested: Yes', 'Attested - Yes', 'Attested: Yes', 'Separate E/M: \u2612 Yes \u2610 No')
+
+    def test_the_claimed_rows(self):
+        for line in self.UNCHECKED:
+            for gap in ('\n', '\n\n'):
+                with self.subTest(line=line, gap=gap):
+                    text = ATTEST_NOTE.format(above=line + gap, under='')
+                    self.assertIsNone(separate_em_fact(text))
+                    self.assertEqual(visit_outcome(text), 'held')
+
+    def test_the_checked_twins_attest(self):
+        for line in self.CHECKED:
+            with self.subTest(line=line):
+                text = ATTEST_NOTE.format(above=line + '\n', under='')
+                self.assertEqual(separate_em_fact(text), 'documented')
+                self.assertEqual(visit_outcome(text), 'ready')
+
+    def test_a_form_field_tied_to_the_line_above(self):
+        """The printed label above the statement with no glyph, its PDF box in the page's form-field block."""
+        for printed, field, attested in (('Attested', 'Attested: not checked', False), ('Attested', 'Attested: No', False),
+                                         ('Attested', 'Attested: checked', True), ('Biopsy', 'Biopsy: not checked', True)):
+            with self.subTest(printed=printed, field=field):
+                text = ATTEST_NOTE.format(above=printed + '\n', under='') + f'\n[PDF form fields on page 1]\n{field}'
+                self.assertEqual(separate_em_fact(text), 'documented' if attested else None)
+                self.assertEqual(visit_outcome(text), 'ready' if attested else 'held')
+
+    def test_a_line_above_of_no_attestation_stays_as_it_was(self):
+        for line in ('\u2610 Labs reviewed', '\u2612 Labs reviewed', 'Allergies: None', 'Smoker: No', 'Attestation:',
+                     '\u2610 Biopsy', 'Attested by: Dr. Smith', 'Modifier: 25', 'Significant findings: none.',
+                     'E/M: established patient, no new problems.', 'Patient agrees with the plan.', 'Modifier 25 appended.',
+                     'Attestation: I saw and examined the patient and agree with the resident note.',
+                     'I attest that I personally performed the procedure.',
+                     'I attest that I personally performed the procedure and no complications occurred.',
+                     'Patient agrees with the plan and has no questions.'):
+            with self.subTest(line=line):
+                text = ATTEST_NOTE.format(above=line + '\n', under='')
+                self.assertEqual(separate_em_fact(text), 'documented')
+                self.assertEqual(visit_outcome(text), 'ready')
+
+
+class Declared10AttestationBoxAboveFilesTests(unittest.TestCase):
+    """declared:10 in real files: a fillable PDF whose 'Attested' check box, beside its printed label, stands on the line
+    above the statement, and a Word check-box content control before "Separate E/M attestation:" in the paragraph above
+    it; each with its checked twin, through the sandboxed extract_document, routing and the real engine."""
+
+    def assert_attested(self, text, attested):
+        from tests.test_repairs_r3_forms_routing import outcome as engine_outcome
+        from tests.test_repairs_r4_boxes_pdf import ATTEST_PICKS
+        from tests.test_repairs_status_r2_routing import clarified, routed, run_engine
+        fact = next((f for f in routed(text).finding('gi.office_em').facts if f.name == 'separate_em'), None)
+        proposals, _ = run_engine(text, ATTEST_PICKS)
+        if attested:
+            self.assertIsNotNone(fact, text[-300:])
+            self.assertNotIn('separate_em', clarified(proposals['99214']))
+        else:
+            self.assertIsNone(fact, text[-300:])
+            self.assertEqual(engine_outcome(proposals['99214']), 'held')
+            self.assertIn('separate_em', clarified(proposals['99214']))
+
+    def test_a_pdf_box_above_the_statement(self):
+        from tests.test_repairs_r3_forms_pdf import extracted, text_line
+        from tests.test_repairs_r4_boxes_pdf import ATTEST_OFFICE, ATTESTATION, page_form, row_y
+        for checked in (False, True):
+            for name, tu in (('Attested', None), ('Check Box1', 'Attested')):
+                with self.subTest(checked=checked, name=name):
+                    form = page_form(ATTEST_OFFICE)
+                    y = row_y(ATTEST_OFFICE, len(ATTEST_OFFICE))
+                    form.line(text_line(90, y, 'Attested'))
+                    form.checkbox(name, (72, y - 3, 84, y + 9), checked, tu=tu)
+                    form.line(text_line(72, row_y(ATTEST_OFFICE, len(ATTEST_OFFICE) + 1), ATTESTATION))
+                    result = extracted(form.build())
+                    self.assertEqual(result.status, 'ok', result.messages)
+                    self.assertLess(result.text.index('Attested'), result.text.index(ATTESTATION))
+                    self.assert_attested(result.text, checked)
+
+    def test_a_word_box_above_the_statement(self):
+        from tests.support import docgen
+        from tests.test_repairs_r3_forms_docx import control, docx_result, paragraph
+        from tests.test_repairs_r4_boxes_pdf import ATTEST_OFFICE, ATTESTATION
+        for checked in (False, True):
+            for label in (' Separate E/M attestation:', ' Attested'):
+                with self.subTest(checked=checked, label=label):
+                    body = ''.join(paragraph(line) for line in ['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT',
+                                                                'Date of service: 2026-10-21'] + ATTEST_OFFICE)
+                    body += f'<w:p>{control(checked)}<w:r><w:t xml:space="preserve">{label}</w:t></w:r></w:p>'
+                    body += paragraph(ATTESTATION)
+                    result = docx_result(docgen.make_docx_from_body(body))
+                    self.assertEqual(result.status, 'ok', result.messages)
+                    self.assertIn(('\u2612' if checked else '\u2610') + label, result.text)
+                    self.assert_attested(result.text, checked)
+
+
 class StrictRowsCostTests(unittest.TestCase):
     """contract-r4d section 6: the predicate is read once per row and per passage (memoised), and a row longer than
     B3_ROW_CHARS is held without being paired, so a long one-line paste of any row stays linear. Each shape was timed at
