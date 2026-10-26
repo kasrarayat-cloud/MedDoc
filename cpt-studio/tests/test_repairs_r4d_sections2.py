@@ -715,5 +715,200 @@ class S2Bounded6LabelRestOnceTests(unittest.TestCase):
         detect._analysis.cache_clear()
 
 
+# === Round 4d, second round: the independent verifier's new problems in this branch ====================================
+
+def extent_status(text, slug):
+    finding = routed(text).finding(slug)
+    extent = next((f.value for f in (finding.facts if finding else ()) if f.name == 'extent'), None)
+    return (finding.status if finding else None), extent
+
+
+# --- regression:3 (second round): what a denial beside a cell-cut extent label is about ------------------------------
+
+R3R2_RECTUM = 'Technique: The colonoscope was inserted into the rectum and advanced.'
+R3R2_SIGMOID = 'Technique: The colonoscope was advanced to the sigmoid colon and beyond.'
+R3R2_CELLS = ('Extent: cecum | Prep quality: Good', 'Extent: Cecum | Bowel preparation: adequate',
+              'Extent reached: cecum | Withdrawal time: 9 min', 'Extent: cecum  Sedation: MAC')
+# an act done (or not) at the label's landmark, or a lesion there: the verifier's eighteen sentences and round 4d's own
+R3R2_ACTS = ('The cecum was not biopsied.', 'No biopsies of the cecum were obtained.', 'Cecal biopsies were not taken.',
+             'Biopsies of the cecum were not obtained.', 'The cecum was not tattooed.',
+             'Photodocumentation of the cecum was not obtained.', 'Photographs of the cecum were not taken.',
+             'No photos of the cecum were taken.', 'The appendiceal orifice was not biopsied.',
+             'The ileocecal valve was not biopsied.', 'No polypectomy was performed in the cecum.',
+             'The cecal polyp was not resected.', 'The cecal lipoma was not removed.',
+             'Random biopsies were not taken from the cecum.', 'The cecum was not photographed.', 'Cecum not biopsied.',
+             'No cecal biopsies.', 'The cecum was not clipped.', 'Biopsy of the cecum was cancelled.',
+             'Tattooing of the cecum was deferred.', 'Biopsies of the cecum were declined by the family.',
+             'The cecum was not clipped after polypectomy.', 'Retroflexion in the cecum could not be completed.',
+             'Cecal intubation was not photographed.', 'Cecal intubation was not photodocumented.',
+             'A 6 mm polyp in the ascending colon was removed; the cecum was not biopsied.',
+             'The colonoscope was advanced to the cecum, which was not biopsied.',
+             'The colonoscope was advanced without difficulty; the cecum was not biopsied.',
+             # a reach word in another segment of the clause, and a denial outside the landmark's own segment
+             'The colonoscope was advanced without difficulty, the cecum was not biopsied.',
+             'The scope was advanced toward the cecum (not biopsied).', 'Advanced to the cecum - not biopsied.',
+             'The colonoscope was advanced to the cecum (photos not taken).',
+             # a photo denied beside a view word: the photo is what is denied
+             'Photos of the cecum could not be obtained due to poor visualization.',
+             'No photos of the cecum were taken as it was poorly seen.')
+# a finding at the landmark (a negation that speaks of what was found there, never of reaching it)
+R3R2_FINDINGS = ('The cecum was not inflamed.', 'The cecum was not ulcerated.', 'The appendiceal orifice was not inflamed.',
+                 'The ileocecal valve was not lipomatous.',
+                 'The appendiceal orifice was not seen due to a prior appendectomy.', 'The cecum was not well prepped.')
+
+
+def r3r2_note(cell, line, technique=R3R2_RECTUM, before=False):
+    if before:
+        return (HEADER + 'Procedure: Colonoscopy\n' + technique + '\nFindings: ' + line + '\n' + cell
+                + '\nImpression: Normal colonoscopy.\n')
+    return (HEADER + 'Procedure: Colonoscopy\n' + technique + '\n' + cell + '\nFindings: ' + line + ' The colon was '
+            'otherwise normal.\nImpression: Normal colonoscopy.\n')
+
+
+class S2R2Regression3ActOrFindingAtTheLandmarkTests(unittest.TestCase):
+    """regression:3, second round (high, the verifier's new problems 1 and 7) - the outright-denial arm counted any
+    negated, cancelled or declined reading of the label's own landmark as a reach denial, so "The cecum was not biopsied."
+    or "No photos of the cecum were taken." beside "Extent: cecum | Prep quality: Good" dropped the label and a complete
+    colonoscopy read 'incomplete: rectum' (45378 ready with service.incomplete and a 52/53 consideration); and the doubt
+    arm withheld the extent for "The cecum was not inflamed." or "The cecum was not photographed.". HEAD, 4347acd24 and
+    d05326ef read the cecum (9a9f40301 never read a cell-cut label). A denial now contradicts the label only when it
+    speaks of reaching the landmark: a closed-list reach denial, or a reading of it negated with a reach word and no act
+    in its own segment, drops it; a reach word otherwise, or a view word or hedge with no act, doubts it; an act or a
+    finding at the landmark changes nothing."""
+
+    def test_an_act_at_the_labels_landmark_is_no_reach_denial(self):
+        for line in R3R2_ACTS:
+            for cell in R3R2_CELLS:
+                for technique, before in ((R3R2_RECTUM, False), (R3R2_SIGMOID, False), (R3R2_RECTUM, True)):
+                    text = r3r2_note(cell, line, technique, before)
+                    with self.subTest(line=line, cell=cell, technique=technique[-30:], before=before):
+                        self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('performed', 'cecum'))
+            text = r3r2_note(R3R2_CELLS[0], line)
+            with self.subTest(line=line, engine=True):
+                proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
+                self.assertTrue(ready(proposal), (proposal.bucket, proposal.status, clarified(proposal)))
+                self.assertNotIn('service.incomplete', checks(proposal))
+
+    def test_a_finding_at_the_labels_landmark_never_withholds(self):
+        for line in R3R2_FINDINGS:
+            for cell in R3R2_CELLS:
+                text = r3r2_note(cell, line)
+                with self.subTest(line=line, cell=cell):
+                    self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('performed', 'cecum'))
+
+    def test_the_upper_tract(self):
+        for cell in ('Extent: second part of the duodenum | Sedation: MAC', 'Extent: D2 | Sedation: MAC'):
+            for line in ('The second part of the duodenum was not biopsied.', 'D2 was not biopsied.',
+                         'No biopsies were taken from the second part of the duodenum.',
+                         'Photodocumentation of D2 was not obtained.'):
+                text = (HEADER + 'Procedure: EGD\nTechnique: The gastroscope was passed into the esophagus.\n' + cell
+                        + '\nFindings: ' + line + ' Gastritis in the antrum.\nImpression: Gastritis.\n')
+                with self.subTest(cell=cell, line=line):
+                    self.assertEqual(extent_status(text, 'gi.egd'), ('performed', 'second part of duodenum'))
+
+    def test_a_denial_of_reaching_it_still_contradicts_the_label(self):
+        """Controls: a reach denial in its own segment beside an act, or a landmark answered by a bare denial, still drops
+        the label (9a9f40301's reading); a reach word beside an act, or a view word, withholds the extent."""
+        for line, extent in (('Cecum not reached; no biopsies taken.', 'incomplete: rectum'),
+                             ('No cecal intubation; biopsies of the rectum were taken.', 'incomplete: rectum'),
+                             ('No cecal intubation, biopsies of the rectum were taken.', 'incomplete: rectum'),
+                             ('The cecum was not intubated.', 'incomplete: rectum'),
+                             ('We did not reach the cecum.', 'incomplete: rectum'),
+                             ('Cecal intubation: no.', 'incomplete: rectum'),
+                             ('Cecum: no.', 'incomplete: rectum'),
+                             ('The cecum was not reached or biopsied.', None),
+                             ('The lesion near the cecum could not be reached.', None),
+                             ('The scope never made it to the cecum.', None),
+                             ('The cecum could not be fully examined due to stool.', None)):
+            text = r3r2_note(R3R2_CELLS[0], line)
+            with self.subTest(line=line):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy')[1], extent)
+                self.assertNotEqual(extent_status(text, 'gi.colonoscopy')[1], 'cecum')
+
+    def test_a_landmark_answered_as_a_field(self):
+        """A landmark written as a field's label is answered across the separator after it (the field's own, never a
+        segment break): a denial or a bare answer there drops the label (9a9f40301's reading), a view word withholds,
+        and an act or a finding answered there changes nothing. A status answer naming no act ("not done", "declined",
+        "cancelled") denies the landmark itself."""
+        for line, extent in (('Cecum - not reached.', 'incomplete: rectum'), ('Cecum | not reached.', 'incomplete: rectum'),
+                             ('Cecum (not reached).', 'incomplete: rectum'), ('The cecum - not reached.', 'incomplete: rectum'),
+                             ('Cecum – not reached.', 'incomplete: rectum'), ('Cecum, not reached.', 'incomplete: rectum'),
+                             ('Cecum - not intubated due to looping.', 'incomplete: rectum'),
+                             ('Cecum - none.', 'incomplete: rectum'), ('Cecum: not done.', 'incomplete: rectum'),
+                             ('Cecum: declined.', 'incomplete: rectum'), ('Cecum: cancelled.', 'incomplete: rectum'),
+                             ('Cecum: not performed due to poor prep.', 'incomplete: rectum'),
+                             ('Cecum - not seen.', None), ('Appendiceal orifice - not identified.', None),
+                             ('Cecum: never.', None),
+                             ('Cecum - no biopsies.', 'cecum'), ('Cecum - no lesions.', 'cecum'),
+                             ('Cecum (not photographed).', 'cecum')):
+            text = r3r2_note(R3R2_CELLS[0], line)
+            with self.subTest(line=line):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy')[1], extent)
+
+    def test_a_terminal_ileum_label_beside_a_denial_of_the_terminal_ileum(self):
+        """The terminal ileum is a sub-act of a colonoscopy: its denial doubts a terminal-ileum label, never drops it to
+        the insertion landmark ('incomplete: rectum', 9a9f40301's reading, which never read the label). A denial of the
+        cecum still does."""
+        for cell in ('Extent: terminal ileum | Prep quality: Good', 'Extent reached: TI | BBPS: 8'):
+            for line in ('The terminal ileum was not intubated.', 'TI not intubated.',
+                         'Unable to intubate the terminal ileum.', 'The ileocecal valve could not be traversed.',
+                         'The terminal ileum could not be reached.'):
+                text = r3r2_note(cell, line)
+                with self.subTest(cell=cell, line=line):
+                    self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('performed', None))
+                    proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
+                    self.assertIn('extent', clarified(proposal))
+                    self.assertNotIn('service.incomplete', checks(proposal))
+            text = r3r2_note(cell, 'Cecum not reached.')
+            with self.subTest(cell=cell, line='Cecum not reached.'):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: rectum'))
+
+
+class S2R2Regression3ShallowCutLabelTests(unittest.TestCase):
+    """regression:3, second round (high, the verifier's new problem 3) - the withhold arm dropped the incompleteness of
+    a cell-cut label short of the expected depth: "Extent: transverse colon | Prep quality: Poor" beside "The transverse
+    colon was not well seen due to stool." read performed with the extent withheld (a [PASS] 'Documented as performed'),
+    where every older tree read the procedure incomplete. A doubt withholds only for a label at or beyond the depth the
+    procedure calls for; a shorter label reads the procedure incomplete at its own landmark, as HEAD, 4347acd24 and
+    d05326ef read it."""
+
+    def test_a_doubt_beside_a_shallow_label_keeps_its_incompleteness(self):
+        for cell, line, extent in (
+                ('Extent: transverse colon | Prep quality: Poor', 'The transverse colon was not well seen due to stool.',
+                 'incomplete: transverse colon'),
+                ('Extent: transverse colon | Prep quality: Poor', 'The transverse colon could not be fully examined.',
+                 'incomplete: transverse colon'),
+                ('Extent: splenic flexure | Bowel preparation: inadequate', 'The splenic flexure was not inflamed.',
+                 'incomplete: splenic flexure'),
+                ('Extent: descending colon | Withdrawal time: 6 min', 'The descending colon was not ulcerated.',
+                 'incomplete: descending colon'),
+                ('Extent: hepatic flexure | Prep quality: Poor', 'The hepatic flexure was not biopsied.',
+                 'incomplete: hepatic flexure'),
+                ('Extent: ascending colon | Prep quality: Poor', 'The ascending colon could not be evaluated.',
+                 'incomplete: ascending colon')):
+            text = r3r2_note(cell, line)
+            with self.subTest(cell=cell, line=line):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', extent))
+                proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
+                self.assertEqual(checks(proposal).get('service.incomplete'), 'warn')
+
+    def test_an_outright_denial_of_a_shallow_label_still_drops_it(self):
+        for cell, line in (('Extent: transverse colon | Prep quality: Poor', 'The transverse colon was not reached.'),
+                           ('Extent: hepatic flexure | Prep quality: Poor', 'The hepatic flexure was not reached.')):
+            text = r3r2_note(cell, line)
+            with self.subTest(cell=cell):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: rectum'))
+
+    def test_the_upper_tract_short_of_its_depth(self):
+        for line in ('The stomach was not well seen due to retained food.', 'The stomach was not biopsied.'):
+            text = (HEADER + 'Procedure: EGD\nTechnique: The gastroscope was passed into the esophagus.\nExtent: stomach | '
+                    'Sedation: MAC\nFindings: ' + line + ' Gastritis in the antrum.\nImpression: Gastritis.\n')
+            with self.subTest(line=line):
+                self.assertEqual(extent_status(text, 'gi.egd'), ('incomplete', 'incomplete: stomach'))
+        text = (HEADER + 'Procedure: EGD\nTechnique: The gastroscope was passed into the esophagus.\nExtent: D2 | Sedation: '
+                'MAC\nFindings: D2 was not well seen. Gastritis in the antrum.\nImpression: Gastritis.\n')
+        self.assertEqual(extent_status(text, 'gi.egd'), ('performed', None))  # at the depth called for: withheld
+
+
 if __name__ == '__main__':
     unittest.main()

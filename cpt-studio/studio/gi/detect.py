@@ -3964,36 +3964,127 @@ def _S2_read_by_the_cut(an: Analysis, end: int, we: int) -> bool:
                    for word in _EXTENT_TAIL_WORD.finditer(an.text, end, stop.start() if stop else we))
 
 
+# Round 4d regression:3, second round: a landmark written as a field's label ("Cecum - not reached", "The cecum | not
+# seen", "Cecum (not reached)") is answered across the separator after it, which is the field's own, never a segment
+# break of plan:D2's; only "the" or "a" may lead the label in its segment.
+_S2_FIELD_SEP = re.compile(r'[ \t]*(?:[;,|(\[]|[-\u2013\u2014]+)[ \t]*', re.A)
+
+
+def _S2_label_lead(text: str, lo: int, ms: int) -> bool:
+    """Whether the landmark at ``ms`` opens its segment (which starts at ``lo``) as a field's label would: no word but
+    "the" or "a" before it."""
+    return all(word.group(0).lower() in ('the', 'a') for word in _EXTENT_TAIL_WORD.finditer(text, lo, ms))
+
+
+def _S2_segment(text: str, ws: int, ms: int, me: int, we: int) -> tuple[int, int]:
+    """The landmark match [ms, me)'s own segment inside its clause window [ws, we): between plan:D2's separators
+    (_P2_REACH_BREAK), past the field's own separator right after a landmark written as a field's label (_S2_FIELD_SEP,
+    _S2_label_lead)."""
+    lo = _P2_segment_start(text, ws, ms)
+    after = _P2_REACH_BREAK.search(text, me, we)
+    if after and not text[me:after.start()].strip() and _S2_label_lead(text, lo, ms):
+        after = _P2_REACH_BREAK.search(text, after.end(), we)
+    return lo, (after.start() if after else we)
+
+
 def _S2_reach_denial_of(an: Analysis, ms: int, me: int, ws: int, we: int, depth: int, table) -> bool:
     """Whether the landmark match [ms, me) (its clause window [ws, we)) is the subject or the object of a reach denial
     of plan:D2's closed list in its own segment (_P2_REACH_DENIAL, read by _P2_reach_names_the_landmark): "Cecum not
-    reached.", "The colonoscope failed to reach the cecum.", "The appendiceal orifice was not visualized." Reads the
-    window only (round 4d regression:3)."""
+    reached.", "The colonoscope failed to reach the cecum.", "The appendiceal orifice was not visualized.", and across a
+    field's own separator after a landmark written as its label ("Cecum - not reached", _S2_segment). Reads the window
+    only (round 4d regression:3)."""
     text = an.text
+    label = _S2_label_lead(text, _P2_segment_start(text, ws, ms), ms)
     for denial in _P2_REACH_DENIAL.finditer(text, ws, we):
         lo = _P2_segment_start(text, ws, denial.start())
         after = _P2_REACH_BREAK.search(text, denial.end(), we)
         hi = after.start() if after else we
-        if lo <= ms and me <= hi and _P2_reach_names_the_landmark(text, lo, denial, hi, table, depth):
+        own = (lo <= ms and me <= hi) or (label and me <= lo and bool(_S2_FIELD_SEP.fullmatch(text, me, lo)))
+        if own and _P2_reach_names_the_landmark(text, lo, denial, hi, table, depth):
             return True
     return False
 
 
-def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, table) -> tuple[list, bool]:
+# Round 4d regression:3, second round: what a denial or doubt of a landmark's own reading may be about instead of its
+# reach - an act done (or not) at that landmark, or a lesion there ("The cecum was not biopsied.", "No photos of the
+# cecum were taken.", "Tattooing of the cecum was deferred.", "Retroflexion in the cecum could not be completed.", "The
+# lesion near the cecum could not be reached."); a surgical procedure counts by its form ("due to a prior
+# appendectomy"). A closed list: a word it does not name is no act.
+_S2_ACT_AT = re.compile(
+    r'\b(?:biops\w*|tattoo\w*|photo\w*|pictures?|images?|imaged|video\w*|clip\w*|polyp\w*|lesions?|mass(?:es)?|'
+    r'tumou?rs?|lipoma\w*|resect\w*|remov\w*|excis\w*|retroflex\w*|snar\w*|inject\w*|dilat\w*|band(?:s|ed|ing)?|'
+    r'ligat\w*|ablat\w*|APC|argon|cauter\w*|coagulat\w*|EMR|ESD|sampl\w*|brush\w*|marked|marking|retriev\w*|'
+    r'aspirat\w*|irrigat\w*|lavage|wash\w*|suction\w*|stent\w*|specimens?|cultures?|spray\w*|chromoendoscop\w*|'
+    r'hemosta\w*|\w+(?:ectom(?:y|ies)|otom(?:y|ies)|ostom(?:y|ies)|plast(?:y|ies)|pex(?:y|ies)|rrhaph(?:y|ies)|centesis))\b',
+    re.A | re.I)
+# The words that say a landmark was or was not reached (a reach predicate), and those that say how it was seen (a view
+# predicate): only a denial or doubt of these speaks of the extent at all. Closed lists.
+_S2_REACH_WORD = re.compile(r'\b(?:reach\w*|intubat\w*|advanc\w*|achiev\w*|enter(?:ed|ing|s)?|pass(?:ed|es|ing)?|'
+                            r'travers\w*|attain\w*|access\w*|arriv\w*|made[ \t]+it)\b', re.A | re.I)
+# A landmark answered by a bare denial ("Cecum: no.", "Cecum - none"): whether it denies the reach or answers another
+# question cannot be read, so it doubts.
+_S2_BARE_DENIAL = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*)?(?:no|not|none|never|n/?a)[ \t]*\.?[ \t]*\Z', re.A | re.I)
+_S2_VIEW_WORD = re.compile(r'\b(?:seen|see|visuali[sz]\w*|visible|identif\w*|evaluat\w*|examin\w*|inspect\w*|view\w*|'
+                           r'assess\w*)\b', re.A | re.I)
+
+
+def _S2_contradiction(an: Analysis, ms: int, me: int, ws: int, we: int, explicit: bool, level: int,
+                      table) -> Optional[str]:
+    """How the blocked or denied landmark match [ms, me) (clause window [ws, we), at ``level``; ``explicit``: its own
+    reading is negated, cancelled or incomplete) speaks of reaching it (round 4d regression:3): 'denied' - a reach
+    denial of plan:D2's closed list naming it (_S2_reach_denial_of: "Cecum not reached."), or its explicit reading with no
+    act in its own segment: with no act there, what is denied is the landmark itself ("No cecal intubation.", "Cecal
+    intubation: not done.", "Despite multiple attempts the cecum was not reached.", "Cecum: no.", "Cecum: declined.");
+    'doubted' - a reach word in its segment beside an act ("The cecum was not reached or biopsied.", "The lesion near the
+    cecum could not be reached.") or in a reading that only doubts ("The cecum may not have been reached."), or, with no
+    act there, a view word, a hedge or a bare denial ("Cecum: not seen.", "The cecum could not be evaluated."); None - its
+    segment holds no negation, cue or hedge of its own (its reading comes from another segment: "The colonoscope was
+    advanced to the cecum, which was not biopsied."), or what it denies is an act or a finding at the landmark ("The cecum
+    was not biopsied.", "Biopsy of the cecum was cancelled.", "The cecum was not inflamed.", "Cecal intubation was not
+    photodocumented."): HEAD's reading of the label stands. The segment is the landmark's own (_S2_segment: between
+    plan:D2's separators inside the window, a field's own separator after a landmark label included); a reach word of
+    the match itself ("cecal intubation") is no reach word for the doubt. Reads the segment only."""
+    if _S2_reach_denial_of(an, ms, me, ws, we, level, table):
+        return 'denied'
+    text = an.text
+    lo, hi = _S2_segment(text, ws, ms, me, we)
+    hedged = bool(_P2_REACH_HEDGE.search(text, lo, hi))
+    if not (hedged or cues.DOUBT_TOKEN.search(text, lo, hi) or any(c.status != 'performed' for c in an.cues_in(lo, hi))):
+        return None
+    acts = bool(_S2_ACT_AT.search(text, lo, hi))
+    if explicit and not acts:
+        return 'denied'
+    if (_S2_REACH_WORD.search(text, lo, ms) or _S2_REACH_WORD.search(text, me, hi)
+            or (not acts and (hedged or _S2_VIEW_WORD.search(text, lo, hi) or _S2_BARE_DENIAL.match(text[me:hi])))):
+        return 'doubted'
+    return None
+
+
+def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, table, expected: int,
+                   sub_acts: bool = False) -> tuple[list, bool]:
     """(``reached``, withhold) after judging each extent label read only because of declared:11's cell cut (``cut``,
     from _landmarks) against the family's own text (round 4d regression:3: "Extent: cecum | Prep quality: Good" then
     "Cecum not reached."). A blocked or denied hit (``cut_denials``) of a landmark deeper than the deepest one reached by
-    anything else and no deeper than the label's own contradicts the label (plan:D2's guard, _P2_doubted_withholds):
-    - denied outright - its own reading negated, cancelled or incomplete ("No cecal intubation.", "Unable to reach the
-      cecum.") or a reach denial of plan:D2's closed list naming it (_S2_reach_denial_of: "Cecum not reached.") - the
-      label is dropped, and 9a9f40301's reading returns: the extent withheld, or the procedure incomplete at the
-      shallower landmark it reached;
-    - only doubted, at the label's own depth ("Cecum: not seen.", "The cecum was not well seen due to stool."): whether it
+    anything else and no deeper than the label's own may contradict the label (plan:D2's guard, _P2_doubted_withholds),
+    as _S2_contradiction reads it:
+    - denied ("Cecum not reached.", "No cecal intubation.") - the label is dropped, and 9a9f40301's reading returns: the
+      extent withheld, or the procedure incomplete at the shallower landmark it reached;
+    - doubted at the label's own depth ("Cecum: not seen.", "The cecum was not well seen due to stool."): whether it
       denies the reach or tells how the landmark was seen cannot be read, so the extent is withheld (``withhold``) and
-      asked - never the label's landmark, never a shallower one;
-    - only doubted, shallower ("The sigmoid colon could not be examined."): the scope passed it; the reading stands.
-    A denial beyond the label's landmark ("TI not intubated.") and a label read whole (the listed residual 'round 4c-2
-    plan:D (rest)') change nothing. Each denial is judged at most once per depth level (bounded by the hits)."""
+      asked - never the label's landmark, never a shallower one - when the label lies at or beyond ``expected``, the depth
+      the procedure calls for; a label short of it reads the procedure incomplete at its own landmark, as HEAD reads it
+      (round 4d, second round: withholding it erased that incompleteness, "Extent: transverse colon | Prep quality: Poor"
+      beside "The transverse colon was not well seen due to stool." read performed);
+    - doubted, shallower ("The sigmoid colon could not be examined."): the scope passed it; the reading stands;
+    - neither - an act or a finding at the landmark denied ("The cecum was not biopsied.", "The cecum was not
+      inflamed."): the reading stands (round 4d, second round: such a denial dropped the label and a complete
+      colonoscopy read 'incomplete: rectum').
+    With ``sub_acts`` (a colonoscopy), a denial of a landmark beyond ``expected`` - the terminal ileum, a sub-act
+    (_only_a_sub_act) - only doubts the label: "Extent: terminal ileum | Prep quality: Good" beside "The terminal ileum
+    was not intubated." says nothing of the cecum, and dropping the label read a complete colonoscopy 'incomplete:
+    rectum' (9a9f40301's reading, which never read the label). A denial beyond the label's landmark ("TI not intubated."
+    beside a cecum label) and a label read whole (the listed residual 'round 4c-2 plan:D (rest)') change nothing. Each
+    denial is judged once (bounded by the hits)."""
     if not cut:
         return reached, False
     cut_ids = {id(hit) for hit in cut}
@@ -4003,12 +4094,15 @@ def _S2_cut_denied(an: Analysis, reached: list, cut: list, cut_denials: list, ta
     for other, ms, me, ws, we, explicit in cut_denials:
         level = other[0]
         if depth < level <= top and level not in denied:
-            if explicit or _S2_reach_denial_of(an, ms, me, ws, we, level, table):
+            verdict = _S2_contradiction(an, ms, me, ws, we, explicit, level, table)
+            if verdict == 'denied' and sub_acts and level > expected:
+                verdict = 'doubted'  # a sub-act's landmark: the label is doubted, never dropped
+            if verdict == 'denied':
                 denied.add(level)
-            else:
+            elif verdict == 'doubted':
                 doubted.add(level)
     dropped = {id(hit) for hit in cut if any(depth < level <= hit[0] for level in denied)}
-    withhold = any(hit[0] in doubted for hit in cut if id(hit) not in dropped)
+    withhold = any(hit[0] in doubted and hit[0] >= expected for hit in cut if id(hit) not in dropped)
     return ([hit for hit in reached if id(hit) not in dropped] if dropped else reached), withhold
 
 
@@ -4970,7 +5064,8 @@ def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials = [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, unread, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS,  # round 4d regression:3
+                                       cues.CECUM_DEPTH, sub_acts=True)
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
@@ -5008,7 +5103,8 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     unread, denied, doubted, cut, cut_denials = [], [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.UPPER_LANDMARKS, unread, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS)  # round 4d regression:3
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.UPPER_LANDMARKS,  # round 4d regression:3
+                                       _expected_upper_depth(an))
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
@@ -5055,7 +5151,8 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     denied, doubted, cut, cut_denials = [], [], [], []
     reached, blocked = _landmarks(an, sentences, cues.LOWER_LANDMARKS, None, denied, doubted, cut=cut,
                                   cut_denials=cut_denials)
-    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS)  # round 4d regression:3
+    # round 4d regression:3: a flexible sigmoidoscopy calls for no depth, so a doubted label always withholds
+    reached, withhold = _S2_cut_denied(an, reached, cut, cut_denials, cues.LOWER_LANDMARKS, 0)
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
