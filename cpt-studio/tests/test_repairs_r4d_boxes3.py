@@ -707,8 +707,12 @@ class Declared8ItemLabelBeforeABoxTests(Case):
 
     def test_controls(self):
         for row, item, status in (('Biopsy: ☐', 'Biopsy', 'negated'), ('☐ Cold snare polypectomy', 'Cold snare polypectomy', 'negated'),
-                                  ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy', 'performed'),
-                                  ('Biopsy: ☒ Cold snare polypectomy', 'Cold snare polypectomy', 'performed'),
+                                  # round 4d integration (the BOXES3 verifier's new problem 6, the owner's strict
+                                  # rows): the checked box trails Biopsy or leads the snare, so it is trusted for
+                                  # neither - both held (every tree read both performed here; under "Procedures
+                                  # performed today:" round 4d had released the biopsy round 6 held)
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy', 'uncertain'),
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Cold snare polypectomy', 'uncertain'),
                                   ('Colonoscopy: [ ] biopsy [x] cold snare', 'biopsy', 'negated'),
                                   ('Biopsy | ☐', 'Biopsy', 'negated')):
             with self.subTest(row=row, item=item):
@@ -912,7 +916,9 @@ class Declared10AttestationBoxAboveTests(Case):
                  'Separate E/M attestation: No', 'Attested: No', 'Attestation: No', 'E/M attestation: Not attested',
                  '\u2612 Not attested', 'Attestation: pending', 'Attested - No', 'Separate E/M: \u2610 Yes \u2612 No',
                  'Attestation: Agree', 'Unattested', 'Not attested', '\u2612 Agree \u2610 Disagree', 'Modifier 25 not appended',
-                 'Notes: Not attested', 'Notes: Agree', 'Attestation: I do not attest to a separate service today, see note.',
+                 # 'Notes: Agree' is no longer here (round 4d integration, the verifier's new problem 2): a bare agree
+                 # names no attestation, as "Consent: patient agrees." does not, so it leaves the statement attesting
+                 'Notes: Not attested', 'Attestation: I do not attest to a separate service today, see note.',
                  'I cannot confirm that a separate service was provided.', 'The physician declined to attest.')
     CHECKED = ('\u2612 Separate E/M attestation:', '\u2612 Attested', 'Attested: \u2612', '[x] Attested', 'Attested | [x]',
                'Separate E/M attested: Yes', 'Attested - Yes', 'Attested: Yes', 'Separate E/M: \u2612 Yes \u2610 No')

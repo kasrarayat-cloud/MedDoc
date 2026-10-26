@@ -1285,9 +1285,15 @@ def _performed_answer_denies(an: Analysis, ls: int, le: int) -> bool:
 # A word straight after it is a description, not an answer ("Colonoscopy performed: no polyps were seen", "EGD
 # performed - no complications": _B3_ASKED_END).
 _B3_ASKED_END = r'(?=[ \t]*(?:[.,;:!(\u2013\u2014-]|\Z))'
-_B3_SERVICE_ANSWERED_NO = re.compile(_BOX_Q_LEAD + r'(?P<noun>[A-Za-z][^\n?:=|\t]{0,59}?)[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
+_B3_SERVICE_ANSWERED_NO = re.compile(_BOX_Q_LEAD + r'(?P<noun>[A-Za-z](?:[^\n?:=|\t.;]|\.(?=\S)){0,59}?)[ \t]+' + _BOX_Q_DONE + _BOX_Q_TODAY
                                      + _BOX_Q_SEP + _BOX_Q_DENIAL + r'(?![0-9A-Za-z_])' + _B3_ASKED_END, re.I)
 _B3_ASKED_NO = 'uncertain: the line \'{}\' asks whether the service it names was done and answers no'
+# A noun qualified as earlier asks about another time, not today's service (round 4d integration, BOXES3 verifier's new
+# problem 3: "Prior colonoscopy performed? No" under Indication held today's colonoscopy). The noun also ends at a
+# sentence end or a semicolon (new problem 4: "Colonoscopy to the cecum. Biopsy done? No"); a period inside an
+# abbreviation ("E.U.S.") does not end it.
+_B3_EARLIER_NOUN = re.compile(r'(?:(?:any|the|a|your|her|his|their)\s+)?(?:prior|previous|last|earlier|past|preceding|'
+                              r'former|old)\b', re.I)
 
 
 def _B3_asked_no(an: Analysis, start: int, end: int) -> Optional[str]:
@@ -1302,7 +1308,8 @@ def _B3_asked_no(an: Analysis, start: int, end: int) -> Optional[str]:
     if key not in an.memo:
         an.memo[key] = None
         found = _B3_SERVICE_ANSWERED_NO.match(an.text, line_start, line_end)
-        if found is not None and an.services_in(*found.span('noun')):
+        if (found is not None and an.services_in(*found.span('noun'))
+                and not _B3_EARLIER_NOUN.match(an.text, *found.span('noun'))):
             an.memo[key] = found.span('noun')
     noun = an.memo[key]
     if noun is None or not (noun[0] <= start and max(end, start + 1) <= noun[1]):
@@ -2437,11 +2444,14 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
             else:  # 'both' (structure:0): the readings agree, or the item is held as boxes that disagree
                 led = _box_lead_state(text, boxes, span_end)
                 trailed = _box_trail_state(an, items, boxes, start, end, hi)
-                if led == trailed or (led in (None, 'on') and trailed in (None, 'on')):
-                    result = led or trailed
+                if led == trailed:
+                    result = led
                 elif 'unknown' in (led, trailed):
                     result = 'unknown'  # round 4d BOXES3: a reading gives it the unread mark: held as unread
                 else:
+                    # round 4d integration (BOXES3 verifier, new problem 6): one reading giving the item a checked box
+                    # and the other none is a disagreement too ("Biopsy: ☒ Cold snare polypectomy": the box trails
+                    # Biopsy or leads the snare), so the item is held as mixed, never read checked by one reading alone
                     result = 'mixed'
         an.memo[key] = result
     return an.memo[key]
@@ -4689,6 +4699,12 @@ B3_LINE_MARKS = 64  # a line with more marks than this is never paired, row by r
 _B3_ROW_HOLD = ("uncertain: the check boxes on the line '{}' cannot be paired with its entries in exactly one way, so "
                 'what they say of it is held')
 _B3_HOLD_PREFIX = _B3_ROW_HOLD.split("'")[0]
+# The cap's hold (B3_ROW_CHARS, B3_LINE_MARKS): the row is never paired, so the cue says so (round 4d integration, BOXES3
+# verifier's new problem 7: "cannot be paired in exactly one way" was untrue of a row nobody tried to pair). Same prefix,
+# so every reader that recognises the strict rows' hold recognises it.
+_B3_ROW_UNPAIRED = ("uncertain: the check boxes on the line '{}' are not paired with its entries (the row is too long, or "
+                    'its line carries too many check boxes), so what they say of it is held')
+assert _B3_ROW_UNPAIRED.split("'")[0] == _B3_HOLD_PREFIX
 _B3_LINES_KEY = ('b3-line-breaks',)  # the text's line breaks, sorted (each line's bounds are read by bisection)
 # What ends a row's label in the text before its first mark: a colon (after the label's own "?"), a cell bar, "=", a
 # tab, a dash with a space on either side (the shared grammar's separators, _BOX_Q_SEP: round 6 declared:2), a linking
@@ -4963,15 +4979,26 @@ def _B3_crowded(an: Analysis, line_lo: int, line_hi: int) -> bool:
 
 def _B3_row_read(an: Analysis, lo: int, hi: int, crowded: bool) -> Optional[tuple]:
     text = an.text
-    cue = _B3_ROW_HOLD.format(' '.join(text[lo:min(hi, lo + 640)].split())[:160])
+    shown = ' '.join(text[lo:min(hi, lo + 640)].split())[:160]
+    cue = _B3_ROW_HOLD.format(shown)
     if hi - lo > B3_ROW_CHARS:
-        return lo, hi, lo, False, (), (), True, False, cue, True, lo
+        # Round 4d integration (BOXES3 verifier, new problem 7): one plain box is never paired, so a long row with one
+        # keeps its reading as a short one does - counted with a search that stops at the second mark (linear); any
+        # other mark, or more than one, is held with the cap's own cue, since the row was never paired at all.
+        glyphs = []
+        for glyph in _B3_MARK_GLYPH.finditer(text, lo, hi):
+            glyphs.append(glyph)
+            if len(glyphs) > 1:
+                break
+        if not glyphs or (len(glyphs) == 1 and _BOX.fullmatch(text, *glyphs[0].span())):
+            return None
+        return lo, hi, lo, False, (), (), True, False, _B3_ROW_UNPAIRED.format(shown), True, lo
     _, marks = _box_tokens(an, lo, hi)
     unread = any(state == 'unread' for _, _, state in marks)
     if not marks or (len(marks) == 1 and not unread):
         return None
     if crowded:  # its line carries more than B3_LINE_MARKS marks: never paired (bounded), held
-        return lo, hi, lo, False, (), tuple(marks), unread, False, cue, True, lo
+        return lo, hi, lo, False, (), tuple(marks), unread, False, _B3_ROW_UNPAIRED.format(shown), True, lo
     # The row's option words: denying and completion words written beside a mark (as a hold word is an option only
     # there: _box_beside_a_mark), so a remark's prose ("... polyp was performed.") names none.
     options = [o for o in _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
@@ -5863,6 +5890,14 @@ def _box_attestation_refused(an: Analysis, start: int, end: int, rest_end: int) 
 _B3_ATTEST_ABOVE = re.compile(r'\b(?:(?:un|non-?|dis)?(?:attest|agree|confirm|acknowledg)\w*|separate\w*|modifier)\b',
                               re.A | re.I)
 B3_ABOVE_ANSWER_WORDS = 4  # a field's value read as an answer above the statement: at most this many words
+# A line above with no mark is asked only when it names the attestation itself (round 4d integration, BOXES3 verifier's
+# new problem 2): an attestation word, modifier 25, or "separate(ly)" about the E/M - never a bare agree, confirm or
+# acknowledge, which ordinary lines carry ("Allergies confirmed: none.", "Consent: patient agrees.", "Diagnosis not
+# confirmed."). A line with a mark is still asked by any of _B3_ATTEST_ABOVE's words.
+_B3_ATTEST_NAME = re.compile(r'\b(?:un|non-?|dis)?attest\w*|\bmodifier\W{0,3}25\b'
+                             r'|\bseparate\w*[ \t,]+(?:\w+[ \t,]+){0,3}?(?:E\s*/\s*M\b|E&M\b|evaluation\b|identifiable\b'
+                             r'|service\b|visit\b|encounter\b)',
+                             re.A | re.I)
 # The attestation itself denied, at any length: "I do not attest ...", "cannot confirm", "declined to attest" (and the
 # words negated in themselves, as _B2_DENIED, defined further down, reads them).
 _B3_ATTEST_DENIED = re.compile(r"(?:\b(?:not|never|cannot)\b|n't\b|\b(?:decline[sd]?|refuse[sd]?|unable)\s+to\b)"
@@ -5902,6 +5937,8 @@ def _B3_attestation_above_refuses(an: Analysis, line_start: int) -> bool:
         return False
     if _B2_MARK.search(text, start, end):
         return _B2_attestation_line_refuses(an, start, end) or not _box_answer_affirms(an, start, end)
+    if not _B3_ATTEST_NAME.search(text, start, end):
+        return False  # round 4d integration (BOXES3 verifier, new problem 2): "Allergies confirmed: none." is not it
     if _B3_ATTEST_DENIED.search(text, start, end):
         return True  # "Attestation: I do not attest to a separate service today."
     field = _B2_FIELD.match(text, start, end)
