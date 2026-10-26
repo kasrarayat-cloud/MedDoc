@@ -16,10 +16,11 @@ under an answered plan label) is NOT fixed here: routing's hold of such a line r
 cannot tell "Upper endoscopy with dilation." from "Upper endoscopy with dilation today." - releasing both would drop the
 same-day question for the second. It stays a known limit (ACCURACY-RESIDUALS.md). Synthetic data only.
 """
+import re
 import unittest
 
 from studio.gi import detect
-from tests.test_repairs_r4d_boxes3 import ATTEST_NOTE, HEAD, family, outcome, read, separate_em_fact
+from tests.test_repairs_r4d_boxes3 import ATTEST_NOTE, HEAD, D, family, outcome, read, separate_em_fact
 
 COLONOSCOPY = HEAD + ('Procedure: Colonoscopy\nIndication: Average-risk screening.\n{line}\nFindings: The colonoscope was '
                       'advanced to the cecum. A 6 mm sigmoid polyp was seen and removed with a cold snare.\n'
@@ -138,3 +139,93 @@ class OneBoxOnALongRowTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# --- a list member's tail: the next service name after spaces and commas is read without masking to the window's end -
+
+from unittest import mock  # noqa: E402
+
+from studio.gi import cues  # noqa: E402
+
+LEADS = ('', ' ', ',', ', ', ' ,', ',,', '\t, ', ' , ,  ')
+# Continuations that each tail reader accepts at a tail's start (the positive control below proves every reader
+# matches one of them when no service token stands before it).
+TAILS = (' was not performed', ' not performed', ' were not.', ': not performed', ' (not performed)', ', declined',
+         ' was declined', ' was incomplete', ' attempted', ' - partial', ' if needed', ' ?', ' pending', ': pending',
+         ' was discussed', ' may be needed', ' may have been performed', ' of the cecum may have been taken',
+         ' would be done', ' possibly performed', ': unsure', ' related', '-related', ' complications', ' findings',
+         ' were not performed', ' n/a', ' none', ' no')
+READERS = ([(f'NEGATED_POST {label}', p) for label, p in cues.NEGATED_POST]
+           + [(f'INCOMPLETE_POST {label}', p) for label, p in cues.INCOMPLETE_POST]
+           + [(f'UNCERTAIN_POST {label}', p) for label, p in cues.UNCERTAIN_POST]
+           + [('NEGATION_HEAD_AFTER', cues.NEGATION_HEAD_AFTER)])
+
+
+class ListTailTests(unittest.TestCase):
+    def test_every_tail_reader_fails_on_a_tail_that_opens_with_the_next_service(self):
+        for label, reader in READERS:
+            with self.subTest(reader=label):
+                self.assertTrue(any(reader.match(tail) for tail in TAILS), f'no continuation exercises {label}')
+                for lead in LEADS:
+                    for tail in TAILS + ('',):
+                        self.assertIsNone(reader.match(lead + detect.LIST_TAIL + tail), (lead, tail))
+                        self.assertIsNone(reader.match(lead + detect.LIST_TAIL.rstrip() + tail), (lead, tail))
+        for lead in LEADS:  # what the fast path stands in for: a tail that opens like this, whatever follows
+            self.assertIsNotNone(re.fullmatch(r'[\s,]*' + re.escape(detect.LIST_TAIL.strip()) + r'\b.*',
+                                              lead + detect.LIST_TAIL + 'was not performed'))
+
+    def readings(self, text):
+        detect._analysis.cache_clear()
+        an = detect._analysis(text, D)[0]
+        routed = detect._route(an)
+        spans = [detect.status_for_span(text, s, e, D)[:2] for s, e in an.lay.sentences if e > s]
+        return [(f.family, f.status, tuple(m.status for m in f.mentions)) for f in routed.findings], spans
+
+    def test_the_readings_are_those_the_whole_masked_tail_gives(self):
+        texts = [HEAD + 'Procedure: Colonoscopy\nFindings: ' + body + '\n' for body in (
+            'EUS, EGD were not performed.', 'EUS, EGD, colonoscopy pending.', 'No EUS, EGD complications were seen.',
+            'EUS, EGD and ERCP may have been performed.', 'EUS, EGD were declined.', 'EUS,, EGD, ERCP - not performed',
+            'EGD, EUS (not performed), colonoscopy.', 'EUS, EGD was incomplete.', 'EUS, EGD if needed.',
+            'EUS, ' * 300 + 'EGD were not performed.', 'Colonoscopy, EGD, EUS; ERCP was cancelled.')]
+        slow = detect._masked
+        for text in texts:
+            with self.subTest(text=text[len(HEAD):][:60]):
+                fast = self.readings(text)
+                with mock.patch.object(detect, '_masked_post', lambda an, me, ce: slow(an, me, ce)):
+                    whole = self.readings(text)
+                self.assertEqual(fast, whole)
+
+    def test_controls_a_tail_that_says_something_is_still_read(self):
+        # the equivalence above compares the two paths; these pin what the tails themselves say
+        for body, phrase, status in (('EUS, EGD were not performed.', 'EUS', 'negated'),
+                                     ('EUS, EGD were not performed.', 'EGD', 'negated'),
+                                     ('EUS, EGD, colonoscopy pending.', 'colonoscopy', 'uncertain'),
+                                     ('EUS, EGD, colonoscopy pending.', 'EUS', 'uncertain'),
+                                     ('EUS, EGD was incomplete.', 'EGD', 'incomplete')):
+            text = HEAD + 'Procedure: Colonoscopy\nFindings: ' + body + '\n'
+            with self.subTest(body=body, phrase=phrase):
+                start = text.index(phrase, text.index('Findings: '))
+                self.assertEqual(detect.status_for_span(text, start, start + len(phrase), D)[0], status)
+
+    def test_a_list_member_tail_is_not_masked_to_the_windows_end(self):
+        text = HEAD + 'Findings: ' + 'EUS, ' * 400 + 'done.\n'
+        counts = {}
+        for name, patch in (('fast', None), ('whole', lambda an, me, ce: original(an, me, ce))):
+            original = detect._masked
+            calls = []
+
+            def counting(an, start, end):
+                calls.append(1)
+                return original(an, start, end)
+            patches = [mock.patch.object(detect, '_masked', counting)]
+            if patch is not None:
+                patches.append(mock.patch.object(detect, '_masked_post', lambda an, me, ce: counting(an, me, ce)))
+            detect._analysis.cache_clear()
+            with patches[0]:
+                if len(patches) > 1:
+                    with patches[1]:
+                        detect.route(text, D)
+                else:
+                    detect.route(text, D)
+            counts[name] = len(calls)
+        self.assertLess(counts['fast'] * 3, counts['whole'], counts)

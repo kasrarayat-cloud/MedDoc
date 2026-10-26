@@ -341,8 +341,27 @@ def _outside_a_service(an: Analysis, pos: int) -> int:
 def _masked_post(an: Analysis, me: int, ce: int) -> str:
     """``_masked(an, me, ce)``: the text after a member is read whole, since a post pattern may end at the window's end
     ('was not' followed by nothing). Not memoised: round 4 (pipeline:0) measured a memo of these tails at 1.5 GiB on a
-    20 KB paste, for no time saved."""
+    20 KB paste, for no time saved.
+
+    Except where the member is followed, after nothing but spaces and commas, by the next service name inside the
+    window (a list: "EUS, EUS, EUS ..."): every reader of a member's tail - NEGATED_POST, INCOMPLETE_POST,
+    UNCERTAIN_POST and NEGATION_HEAD_AFTER - is anchored at its start and fails on a tail that opens with spaces or
+    commas and then a service token, whatever follows (none takes the token there: each needs a word of its own first,
+    and the one that may take any word, HEDGED_AFTER's place phrase, takes it only after a preposition). Such a tail
+    is read as LIST_TAIL, which every one of them reads the same way, instead of being masked to the window's end once
+    per member per mention: on a long list that cost 18 ms a mention, 85 s on a 50,000-character paste (round 4d
+    integration; pinned with the readers' own outcomes in tests/test_repairs_r4d_integration.py)."""
+    following = bisect.bisect_left(an._service_starts, me)
+    if following < len(an.services):
+        nxt = an.services[following]
+        if nxt.end <= ce and _LIST_GAP.fullmatch(an.text, me, nxt.start) is not None:
+            return LIST_TAIL
     return _masked(an, me, ce)
+
+
+# A member's tail that opens with the next service name (_masked_post): spaces and commas, then the token.
+LIST_TAIL = f' {cues.SERVICE_TOKEN} '
+_LIST_GAP = re.compile(r'[\s,]*')
 
 
 def _pre_negations(an: Analysis, start: int, ms: int) -> list[tuple[str, str, int]]:
@@ -439,16 +458,17 @@ def _member_negations(an: Analysis, cs: int, ce: int, ms: int, me: int, post: Op
     read from _pre_start, which finds exactly what the whole window would."""
     key = ('negations', cs, ce, ms, me)
     if key not in an.memo:
-        post = _masked(an, me, ce) if post is None else post
+        post = _masked_post(an, me, ce) if post is None else post
         found, governs_next = [], []
+        listed = post is LIST_TAIL  # every post reader fails on it (_masked_post): nothing to search
         for name, said, at in _pre_negations(an, _pre_start(an, cs, ms), ms):
             where = (at, ms)
-            if cues.NEGATION_HEAD_AFTER.match(post):
+            if not listed and cues.NEGATION_HEAD_AFTER.match(post):
                 governs_next.append(where)
             else:
                 past = name != cues.REFUSAL and bool(cues.NEGATION_ABOUT_PAST.search(said))
                 found.append((f'negated: {said.strip()}', past, where))
-        for _, pattern in cues.NEGATED_POST:
+        for _, pattern in () if listed else cues.NEGATED_POST:
             m = pattern.search(post)
             if m:
                 found.append((f'negated: {_said(m)}', False, (me, _masked_map(an, me, ce)[1][m.end()])))
@@ -1882,7 +1902,8 @@ def _clause_reading_cues(an: Analysis, clause: tuple[int, int], ts: int, te: int
         found += pre_cues
         if had is not None and not today:
             found.append(had)
-        for status, entries in (('incomplete', cues.INCOMPLETE_POST), ('uncertain', cues.UNCERTAIN_POST)):
+        for status, entries in () if post is LIST_TAIL else (('incomplete', cues.INCOMPLETE_POST),
+                                                              ('uncertain', cues.UNCERTAIN_POST)):
             for name, pattern in entries:
                 m = pattern.search(post)
                 if m:
