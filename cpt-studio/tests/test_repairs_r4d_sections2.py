@@ -409,7 +409,12 @@ class S2Sections1ReachOnwardTests(unittest.TestCase):
                 self.assertTrue(extent and extent.startswith('incomplete: '), extent)
 
     def test_a_label_shallower_than_the_beyond_landmark_reads_as_before(self):
-        text = s1_note('Extent: terminal ileum; not advanced beyond the cecum')  # the TI label denied by its own rest
+        # round 4d, second round (the verifier's new problem 5): "beyond the cecum" after a terminal-ileum label says the
+        # cecum was reached - the label is doubted and its extent withheld, never 'incomplete: rectum' (this pin read
+        # it so); a "beyond" short of the cecum still denies the label
+        text = s1_note('Extent: terminal ileum; not advanced beyond the cecum')
+        self.assertIsNone(fact_value(text, 'gi.colonoscopy', 'extent'))
+        text = s1_note('Extent: terminal ileum; not advanced beyond the transverse colon')
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'incomplete: rectum')
         text = s1_note('Extent: cecum')  # a plain label reads as every base reads it
         self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')
@@ -997,6 +1002,12 @@ class S2R2Sections1ShallowLabelTests(unittest.TestCase):
     def test_a_label_at_the_depth_called_for_still_withholds(self):
         self.assertEqual(extent_status(s1r2_note('Extent: cecum; not advanced further due to looping'), 'gi.colonoscopy'),
                          ('performed', None))
+        # plan:D2's guard reads the nearest denial outside the label's own sentence: one between still lets the prose
+        # landmark decide, whatever lies beyond the label
+        text = s1r2_note('Extent: cecum; prep fair?', extra=' The transverse colon was not reached. TI not intubated.')
+        self.assertEqual(extent_status(text, 'gi.colonoscopy')[1], 'incomplete: rectum')
+        text = s1r2_note('Extent: cecum; prep fair?', extra=' TI not intubated.')
+        self.assertIsNone(extent_status(text, 'gi.colonoscopy')[1])
         for label in ('Extent: D2; not advanced further', 'Extent: duodenal bulb; not advanced past the duodenal bulb'):
             with self.subTest(label=label):
                 self.assertEqual(extent_status(s1r2_egd(label), 'gi.egd'), ('performed', None))
@@ -1005,6 +1016,67 @@ class S2R2Sections1ShallowLabelTests(unittest.TestCase):
         text = s1r2_note('Extent: transverse colon; not advanced further',
                          'Technique: The colonoscope was advanced to the hepatic flexure.')
         self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: hepatic flexure'))
+
+
+# --- sections:1 (second round): "beyond" a landmark the procedure calls for, after a deeper label ---------------------
+
+S1B_POLYP = 'A 6 mm sigmoid polyp was removed with a cold snare.'
+
+
+def s1b_note(label):
+    return (HEADER + 'Procedure: Colonoscopy with cold snare polypectomy\nTechnique: The colonoscope was inserted into the '
+            'rectum and advanced.\n' + label + '\nFindings: ' + S1B_POLYP + '\n')
+
+
+def s1b_egd(label):
+    return (HEADER + 'Procedure: EGD with biopsy\nTechnique: The gastroscope was passed into the esophagus and advanced.\n'
+            + label + '\nFindings: Gastritis. Biopsies were taken from the antrum.\n')
+
+
+class S2R2Sections1BeyondACompleteLandmarkTests(unittest.TestCase):
+    """sections:1, second round (high, the verifier's new problem 5; every base and the round 4c-2 head disagree) - after
+    a terminal-ileum label, "not advanced beyond the cecum" or "not advanced past the ileocecal valve" still counted as a
+    denial of reaching the label's landmark, and the cecum in it as denied, so a complete colonoscopy read 'incomplete:
+    rectum' (45385 ready with service.incomplete and a 52/53 consideration); 9a9f40301, 4347acd24 and d05326ef read it
+    performed. "Beyond" or "past" now denies reaching the label's landmark only before a landmark short of both the
+    label's depth and the depth the procedure calls for: the label is doubted and its extent withheld (the verifier's
+    acceptable reading), never incomplete at the insertion landmark. "To" and "into", and a "beyond" short of the
+    depth called for, still deny."""
+
+    def test_the_verifiers_inputs(self):
+        for label in ('Extent: terminal ileum; not advanced beyond the cecum', 'Extent: terminal ileum; not advanced past the cecum',
+                      'Extent: terminal ileum; not advanced past the ileocecal valve', 'Extent: TI; not advanced beyond the cecum',
+                      'Extent: terminal ileum; not advanced beyond the cecum due to looping',
+                      'Extent: terminal ileum; not advanced beyond the appendiceal orifice'):
+            text = s1b_note(label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('performed', None))
+                proposal = run_engine(text, [('45385', S1B_POLYP)])['45385']
+                self.assertIn('extent', clarified(proposal))
+                self.assertNotIn('service.incomplete', checks(proposal))
+
+    def test_the_upper_tract(self):
+        """An EGD calls for the duodenum (the bulb): "beyond D2" after a third-part label is no incompleteness."""
+        for label in ('Extent: third part of the duodenum; not advanced beyond D2',
+                      'Extent: third part of the duodenum; not advanced beyond the second part of the duodenum',
+                      'Extent: third part of the duodenum; not advanced past the duodenal bulb'):
+            text = s1b_egd(label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_status(text, 'gi.egd'), ('performed', None))
+                proposal = run_engine(text, [('43239', 'Biopsies were taken from the antrum.')])['43239']
+                self.assertNotIn('service.incomplete', checks(proposal))
+
+    def test_a_denial_short_of_the_depth_called_for_still_denies(self):
+        for label, slug, extent in (
+                ('Extent: terminal ileum; not advanced beyond the transverse colon', 'gi.colonoscopy', 'incomplete: rectum'),
+                ('Extent: terminal ileum; not advanced further than the sigmoid colon', 'gi.colonoscopy', 'incomplete: rectum'),
+                ('Extent: terminal ileum; could not be advanced to the cecum', 'gi.colonoscopy', 'incomplete: rectum'),
+                ('Extent: cecum; not advanced beyond the hepatic flexure', 'gi.colonoscopy', 'incomplete: rectum'),
+                ('Extent: D2; not advanced beyond the stomach', 'gi.egd', 'incomplete: esophagus'),
+                ('Extent: D2; could not be advanced past the pylorus', 'gi.egd', 'incomplete: esophagus')):
+            text = s1b_note(label) if slug == 'gi.colonoscopy' else s1b_egd(label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_status(text, slug)[1], extent)
 
 
 if __name__ == '__main__':

@@ -3808,14 +3808,17 @@ def _S2_landmark_depth_at(text: str, pos: int, table) -> Optional[int]:
     return next((depth for _, depth, pattern in table if pattern.match(text, pos)), None)
 
 
-def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table, depth: int) -> bool:
+def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table, depth: int,
+                                 expected: Optional[int] = None) -> bool:
     """Whether the reach denial ``hit`` (a _P2_REACH_DENIAL match) in the segment [lo, hi) of an extent label's own
     sentence denies reaching the label's landmark, of ``depth`` in ``table`` (round 4c-2 plan:D2): no hedge or "?" in the
     segment; before it, a reason ("due to poor prep"), a word of consequence ("so", "therefore"), or only landmarks and
     _P2_REACH_SUBJECT words ("cecum was", "scope could"), never a relative clause; after it, nothing or what
     _P2_REACH_ONWARD, _P2_REACH_TOWARD and a reason allow, and for "short of" a landmark. Round 4d sections:1: never an
     onward word ("further", "any further"), and "beyond" or "past" only before a landmark shallower than ``depth``
-    ("further than" reads as "beyond")."""
+    ("further than" reads as "beyond") - and, second round, shallower than ``expected`` too, the depth the procedure
+    calls for, when given: "Extent: terminal ileum; not advanced beyond the cecum" says the cecum was reached, so it
+    denies the label without saying the procedure fell short (the label is doubted, and its extent withheld)."""
     if _P2_REACH_HEDGE.search(text, lo, hi):
         return False
     before = text[lo:hit.start()]
@@ -3850,22 +3853,33 @@ def _P2_reach_names_the_landmark(text: str, lo: int, hit, hi: int, table, depth:
     if first in _P2_REACH_TOWARD:
         rest = [w for w in words[1:] if w[1] not in ('the', 'a', 'to', 'far', 'as')]
         landmark = _S2_landmark_depth_at(text, rest[0][0], table) if rest else None
-        return landmark is not None and (first not in _S2_BEYOND or landmark < depth)  # round 4d sections:1
+        return landmark is not None and (first not in _S2_BEYOND or (  # round 4d sections:1
+            landmark < depth and (expected is None or landmark < expected)))
     return False
 
 
 def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table, depth: int) -> bool:
     """Whether [end, stop), the rest of an extent label's own sentence, states that its landmark (of ``depth``) was not
     reached: a reach denial of the closed list (_P2_REACH_DENIAL) whose segment speaks of that landmark (round 4c-2
-    plan:D2)."""
+    plan:D2), read against the depth the procedure calls for (_S2_expected_depth; round 4d sections:1)."""
     text = an.text
     for hit in _P2_REACH_DENIAL.finditer(text, end, stop):
         breaks = [b.end() for b in _P2_REACH_BREAK.finditer(text, end, hit.start())]
         after = _P2_REACH_BREAK.search(text, hit.end(), stop)
         if _P2_reach_names_the_landmark(text, breaks[-1] if breaks else end, hit, after.start() if after else stop, table,
-                                        depth):
+                                        depth, _S2_expected_depth(an, table)):
             return True
     return False
+
+
+def _S2_expected_depth(an: Analysis, table) -> int:
+    """The depth the procedure of ``table`` calls for: the cecum for the lower tract, _expected_upper_depth for the
+    upper (round 4d sections:1). Memoised per analysis."""
+    if table is not cues.UPPER_LANDMARKS:
+        return cues.CECUM_DEPTH
+    if 's2-expected-upper' not in an.memo:
+        an.memo['s2-expected-upper'] = _expected_upper_depth(an)
+    return an.memo['s2-expected-upper']
 
 
 def _P2_reach_denied(an: Analysis, end: int, depth: int, table) -> bool:
@@ -3905,9 +3919,20 @@ def _S2_doubted_short(doubted: list, hits: list, depth: int, expected: int) -> t
     further, or not reached at all - leave the procedure incomplete, so it reads the procedure incomplete at its own
     landmark, as every base reads it (round 4d sections:1, second round: withholding it erased the incompleteness its
     depth establishes - "Extent: transverse colon; not advanced further due to looping" beside "The colonoscope was
-    inserted into the rectum" read performed). Neither when none counts."""
-    outside = _P2_outside(hits, doubted)
-    clear = [hit for hit in doubted if hit[0] > depth and not any(depth < other[0] <= hit[0] for other in outside)]
+    inserted into the rectum" read performed). Neither when none counts. The guard is read in one sorted sweep, as
+    _P2_outside reads it (a hit is outside when its clause starts in no doubted label's own sentence), so the work is
+    linear in the labels and the hits, never their product (one line of many labels held thousands of each)."""
+    if not any(hit[0] > depth for hit in doubted):
+        return False, None
+    regions, i, reach, floor = sorted(hit[3] for hit in doubted), 0, -1, None
+    for other in sorted(hits, key=lambda hit: hit[2].start):
+        start = other[2].start
+        while i < len(regions) and regions[i][0] <= start:
+            reach = max(reach, regions[i][1])
+            i += 1
+        if reach <= start and other[0] > depth:  # outside every doubted label's own sentence (_P2_outside)
+            floor = other[0] if floor is None else min(floor, other[0])
+    clear = [hit for hit in doubted if hit[0] > depth and (floor is None or floor > hit[0])]
     if any(hit[0] >= expected for hit in clear):
         return True, None
     return False, max(clear, key=lambda hit: hit[0], default=None)
@@ -5180,7 +5205,7 @@ def _flex_sig_extent(an: Analysis, sentences) -> Optional[Fact]:
     if not reached or withhold:
         return None
     depth, label, span = max(reached, key=lambda hit: hit[0])
-    if _P2_doubted_withholds(doubted, blocked + denied, depth):
+    if _S2_doubted_short(doubted, blocked + denied, depth, 0)[0]:  # _P2_doubted_withholds, read in one sweep (round 4d)
         return None  # round 4c-2 plan:D2: a landmark label refused for no reach denial lies deeper
     return Fact('extent', label, 'document', (span,))
 
