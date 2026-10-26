@@ -1455,12 +1455,17 @@ _V2_SUBJECT = re.compile(r"[ \t]+(?:was|were|is|are|had|has|have|been|could|woul
                          r"cannot|can't|wasn't|weren't|isn't|not|never|aborted|abandoned|cancel\w*|terminated|"
                          r"discontinued|halted|stopped|deferred|postponed|rescheduled|incomplete|declined|refused)\b",
                          re.A | re.I)
-# A reference qualified as another procedure or exam ("No other procedure was done.", "Digital rectal exam was
-# deferred."): it never refers to the report's procedure.
-_V2_ANOTHER_BEFORE = re.compile(r'\b(?:other|further|additional|more|another|separate|subsequent|second|follow-?up|'
-                                r'future|next|prior|previous|earlier|last|physical|digital[ \t]+rectal)[ \t]+'
-                                r'(?:[A-Za-z][\w-]*[ \t]+)?$', re.A | re.I)
-_V2_BEFORE_REACH = 40  # how far back a reference's qualifier is looked for (bounds the work per reference)
+# Round 4d repair 2 (the verifier's new problem 2): a qualifier never makes "the exam" another one by itself - "Today's
+# follow-up exam was aborted because of pain.", "The second exam was aborted ..." deny today's procedure. Another
+# procedure is denied as such only in this exact form, ending its clause ("No other procedure was done.", "No further
+# procedure was performed.", "No additional procedures were performed today."): not "No further examination could be
+# done because the patient was in pain." The digital rectal and physical exams are other acts, never the procedure.
+_V2_N3 = re.compile(r'\b(?:no|not[ \t]+any)[ \t]+(?:other|further|additional|more|another|separate)[ \t]+'
+                    r'(?:procedures?|exam(?:ination)?s?|stud(?:y|ies)|interventions?)[ \t]+(?:was|were|is|are|has[ \t]+'
+                    r'been|have[ \t]+been)[ \t]+(?:performed|done|undertaken|needed|necessary|required|indicated|'
+                    r'planned)(?:[ \t]+(?:today|at[ \t]+this[ \t]+time))?(?=[ \t]*(?:[.;|)\n]|$))', re.A | re.I)
+_V2_OTHER_EXAM = re.compile(r'\b(?:digital(?:[ \t]+rectal)?[ \t]+exam(?:ination)?s?|DRE|'
+                            r'physical[ \t]+exam(?:ination)?s?)\b', re.A | re.I)
 # Wording without which a sentence cannot deny, cancel, cut short or doubt a procedure (ARCHITECTURE 5.6): a negation,
 # a status, hedge, plan, history or time word, a digit, a question mark; a sentence holding none is never read for a
 # doubt, whatever its section or its family's document-level judgement say (that judgement is another procedure's:
@@ -1487,6 +1492,87 @@ _V2_NO_REPEAT = re.compile(r'\b(?:no|not)[ \t]+(?:further|repeat|additional|more
                            r'indicated|warranted|recommended|planned)\b|\b(?:further|repeat|additional)[ \t]+'
                            r'(?:[\w-]+[ \t]+){0,3}?(?:is|was|are|were)[ \t]+not[ \t]+(?:needed|necessary|required|'
                            r'indicated|warranted|recommended)\b', re.A | re.I)
+# Round 4d repair 2 (the verifier's new problems 1-3): every word that can deny, cut short or doubt the procedure must
+# be accounted for by what it is written about, read by position, or its clause doubts the procedure (_V2_accounted).
+# The first repair exempted a whole sentence whenever another act or procedure was named anywhere in it, so
+# "Complications: Aborted due to inadequate sedation." left 46600 READY (HEAD held it). The words:
+# - a cut that routing may not read ("Stopped early because of pain.", "Incomplete due to pain.": no cue reads them
+#   without a service name), counted also on a sentence routing reads as done;
+_V2_CUT = re.compile(r"\b(?:abort\w*|terminat\w*|discontinu\w*|halt(?:ed|ing)|stopp(?:ed|ing)|abandon\w*|incomplet\w*|"
+                     r"unsuccessful(?:ly)?|cancel\w*|postpon\w*|deferr(?:ed|al)|called[ \t]+off|re-?schedul\w*|"
+                     r"rebook\w*|not[ \t]+(?:done|"
+                     r"performed|completed|finished|started|begun|tolerated)|(?:unable[ \t]+to|could[ \t]+not|"
+                     r"couldn't|cannot|can't|failed[ \t]+to)[ \t]+(?:be[ \t]+)?(?:complet|finish|perform|do|proceed|"
+                     r"continu|pass|advanc|insert|toler|introduc)\w*)\b", re.A | re.I)
+# - an attempt, a partial or limited act, a failure or a prevention, read like a cut but never counted on its own;
+_V2_SOFT = re.compile(r'\b(?:attempt(?:ed|s)?|partial(?:ly)?|limited|fail(?:ed|ure|s)?|unable|'
+                      r'prevent(?:ed|s)?|preclud(?:ed|es)?|impossible|not[ \t]+possible)\b', re.A | re.I)
+# - a hedge, accounted for only by a clause about another act or procedure and nothing that is the procedure.
+_V2_HEDGE = re.compile(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlikely|versus|vs|uncertain|unclear|'
+                       r'unknown|undetermined|unconfirmed|unsure|pending|tbd|tba|suspected|presumed|perhaps|maybe|'
+                       r'whether|if|unless)\b', re.A | re.I)
+# The negations that govern the noun phrase after them ("No biopsies were performed.", "without sedation", "Patient
+# declined sedation."), and those whose predicate denies the subject before them ("Biopsy was not performed.") - with
+# routing's own participles for another act denied after its name (cues.OTHER_ACT_DENIED).
+_V2_NEG_BEFORE = frozenset(('no', 'without', 'w/o', 'nor', 'declined', 'declines', 'refused', 'refuses', 'refusal'))
+_V2_NEG_AFTER = frozenset(('not', 'never', "n't", 'cannot', 'unable'))
+_V2_DENIED_PARTICIPLE = re.compile(r"(?:[ \t]+(?:be|been|to|able|to[ \t]+be))*[ \t]+(?:needed|required|used|given|"
+                                   r"administered|performed|done|taken|saved|obtained|indicated|necessary|attempted|"
+                                   r"pursued|undertaken|carried[ \t]+out)\b", re.A | re.I)
+# A noun phrase is read word by word (bounded): back from a predicate over its auxiliaries and adverbs to the break
+# that opens its clause, or forward from a negation over its determiners to the first verb, preposition or break.
+_V2_WORD = re.compile(r"[A-Za-z0-9][\w'/&.-]*|[^\sA-Za-z0-9]", re.A)
+_V2_PRED_WORDS = frozenset(('was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had', 'could', 'can',
+                            'did', 'does', 'do', 'will', 'would', 'should', 'may', 'might', 'must', 'not', 'never',
+                            'then', 'also', 'subsequently', 'successfully', 'ultimately', 'eventually', 'today',
+                            'again', 'already', 'later', 'thus', 'therefore', 'initially', 'finally', 'to', 'able',
+                            ':', '=', '-', '–', '—'))
+_V2_BREAK_WORDS = frozenset(('and', 'or', 'but', 'so', 'yet', 'then', 'because', 'as', 'since', 'although', 'though',
+                             'while', 'whereas', 'after', 'before', 'until', 'when', 'if', 'once', 'which', 'that',
+                             'who', 'where', 'whether', 'unless'))
+_V2_BREAK_MARKS = frozenset((';', ':', ',', '(', ')', '[', ']', '.', '!', '?', '|', '–', '—', '"'))
+_V2_NP_SKIP = frozenset(('the', 'a', 'an', 'her', 'his', 'their', 'its', 'any', 'all', 'both', 'further',
+                         'additional', 'other', 'routine', 'repeat', 'formal', 'separate', 'planned', 'however',
+                         'unfortunately', 'conscious', 'moderate', 'deep', 'general', 'iv', 'intravenous', 'procedural',
+                         '-', '*', '•'))
+_V2_NP_STOP = frozenset(('was', 'were', 'is', 'are', 'be', 'been', 'being', 'has', 'have', 'had', 'will', 'would',
+                         'could', 'can', 'did', 'does', 'do', 'should', 'may', 'might', 'must', 'because', 'due', 'for',
+                         'to', 'of', 'in', 'on', 'at', 'with', 'without', 'and', 'or', 'but', 'so', 'after', 'before',
+                         'until', 'since', 'as', 'by', 'from', 'today', 'during', 'than', 'that', 'which', 'if',
+                         'unless', 'when', 'while', 'not', 'no', 'despite', 'under', 'into', 'through', 'beyond',
+                         'past', 'per', 'via', 'against', 'toward', 'towards', 'within', 'around', 'over', 'onto',
+                         'upon', 'about', 'following', 'prior', 'regarding', 'secondary', 'owing', 'given', 'using',
+                         'whereas', 'although', 'though', 'except', 'like', 'near', 'along', 'across', 'behind',
+                         'below', 'above', 'among', 'amid', 'once', 'then', 'early', 'late', 'again', 'here', 'there',
+                         'now'))
+# What a noun phrase may name to account for a doubting word: another act or care step (routing's cues._OTHER_ACT and
+# the digital rectal or physical exam), a medication or treatment (routing's cues.MEDICATION), bleeding, another
+# family's scope, a routed detected service, or a procedure word or intervention that is no word of the code's own; and
+# what it never may: a reference, a pronoun, a person, the session (_V2_NOT_ATTR) or the code's own procedure word.
+_V2_SCOPES = re.compile(r'\b(?:colonoscope|sigmoidoscope|gastroscope|upper[ \t]+endoscope|enteroscope|duodenoscope|'
+                        r'echoendoscope)s?\b', re.A | re.I)
+_V2_BLEEDING = re.compile(r'\b(?:bleeding|oozing|hemorrhage|haemorrhage|blood[ \t]+loss)\b', re.A | re.I)
+# routing's medications (cues.MEDICATION) less its "therapy", "treatment", "diet" and "drug", which may be the procedure
+# itself ("The treatment was stopped early because of pain.")
+_V2_MEDICATION = re.compile(r'\b(?:aspirin|clopidogrel|plavix|prasugrel|ticagrelor|warfarin|coumadin|apixaban|eliquis|'
+                            r'rivaroxaban|xarelto|dabigatran|edoxaban|heparin|enoxaparin|lovenox|anticoagula\w*|'
+                            r'antiplatelet\w*|medications?|meds|iron|metformin|insulin|semaglutide|tirzepatide|glp-1|'
+                            r'nsaids?|ppi|omeprazole|pantoprazole|esomeprazole|supplements?)\b', re.A | re.I)
+_V2_NOT_ATTR = re.compile(r'\b(?:procedures?|exam(?:ination)?s?|stud(?:y|ies)|endoscop(?:y|ies)|tests?|evaluations?|'
+                          r'cases?|sessions?|visits?|encounters?|scopes?|it|this|that|these|those|they|we|i|she|he|you|'
+                          r'patients?|pt)\b', re.A | re.I)
+_V2_PROCEDURE_STEP = re.compile(r'\b(?:insertion|intubation|passage|advancement|introduction|\w*scopes?)\b',
+                                re.A | re.I)
+# What makes a cut in a plan line a plan rather than a statement of today's procedure ("Plan: Banding will be deferred
+# if the INR is high."): a modal, a condition, a plan or a recommendation in its clause, outside the cut itself (so
+# "could not be completed" is a cut, never a modal).
+_V2_MODAL = re.compile(r"\b(?:will|would|may|might|can|could|should|shall|if|unless|whether|consider\w*|plan(?:s|ned|"
+                       r"ning)?|to[ \t]+be|going[ \t]+to|recommend\w*|discuss\w*|offer\w*|candidate|options?|"
+                       r"possibl[ey]|potential\w*|needs?|needed|want\w*|prefer\w*)\b", re.A | re.I)
+_V2_NP_WORDS = 8  # a noun phrase longer than this accounts for nothing (fail-closed)
+_V2_NP_REACH = 160  # how far back a predicate's subject is read (bounds the work per word)
+_V2_TOKENS_PER_CLAUSE = 12  # doubting words read in one clause; beyond them the clause doubts (bounds the work)
+_V2_EXPLAIN_BEFORE, _V2_EXPLAIN_AFTER = 60, 300  # routing's exception patterns are matched around each word (bounded)
 _V2_REFERENCES_PER_SENTENCE = 2  # subject references a sentence's words are read at (bounds the work per sentence)
 _V2_CLAUSES_PER_SENTENCE = 3  # clauses of one sentence read on their own (bounds the work per sentence)
 _V2_SHORT = 6  # a line of at most this many words is asked routing's short-line denial (detect._denies)
@@ -1509,8 +1595,17 @@ def _V2_patterns() -> dict:
     marks = [symbols.BOX_OFF_PATTERN, symbols.BOX_ON_PATTERN, symbols.BOX_UNREAD_PATTERN, symbols.BOX_RADIO_PATTERN,
              symbols.BOX_CROSS_PATTERN] + (['[' + symbols.BOX_HELD_GLYPHS + ']'] if symbols.BOX_HELD_GLYPHS else [])
     return {'other_act': re.compile(r'\b' + words._OTHER_ACT + r'\b|\b(?:digital[ \t]+rectal[ \t]+exam(?:ination)?|DRE|'
-                                    r'physical[ \t]+exam(?:ination)?)\b', re.A | re.I),
-            'instruments': tuple(pattern for _, pattern in words.INSTRUMENTS),
+                                    r'physical[ \t]+exam(?:ination)?|sedated|anesthetized|anaesthetized)\b',
+                                    re.A | re.I),
+            # round 4d repair 2: routing's declared exceptions that account for a negation word wherever they stand
+            # (a complication, a qualifier or another act denied after a negation; a no-repeat statement; another
+            # procedure denied as such), and the denied findings, which account for one only when they name no
+            # procedure, reference or person (_V2_explained)
+            'explain': (words.COMPLICATION_NEGATION, words.QUALIFIER_NEGATION, words.OTHER_ACT_NEGATION, _V2_N3,
+                        _V2_NO_REPEAT),
+            'finding': tuple(words.FINDING_NEGATION),
+            'medication': _V2_MEDICATION,
+            'doubt_token': words.DOUBT_TOKEN,
             'box': re.compile('|'.join(f'(?:{pattern})' for pattern in marks)),
             'rescheduled': detect._RESCHEDULED,
             'named_no': re.compile(detect._BOX_Q_LEAD + r'(?P<name>[A-Za-z][\w/()&-]*(?:[ \t]+[A-Za-z][\w/()&-]*){0,5}?)'
@@ -1526,6 +1621,41 @@ def _V2_doubt(status: str, cues: Sequence[str], reschedules: bool = False) -> bo
 
 
 @dataclass(frozen=True)
+class _V2Phrase:
+    """A noun phrase a doubting word may be about (_V2_np_before, _V2_np_after), read once per text."""
+    start: int
+    end: int
+    names: bool  # another act or care step, a medication, bleeding, another family's scope, a routed detected service,
+    # or a procedure word or intervention (whether it is the code's own is asked code by code: _V2_accounted)
+    clean: bool  # and no reference, pronoun, person or session, no auxiliary, at most _V2_NP_WORDS words
+
+
+@dataclass(frozen=True)
+class _V2Token:
+    """One word of a clause that can deny, cut short or doubt the procedure (_V2_tokens)."""
+    start: int
+    end: int
+    kind: str  # 'cut' (counted on its own), 'soft' (an attempt, a failure), 'negation', 'hedge', 'time' (another time
+    # or place)
+    explained: bool  # routing's declared exceptions, a no-repeat statement or another procedure denied as such
+    before: Optional[_V2Phrase]  # the subject of its predicate ("Biopsy was not performed.")
+    after: Optional[_V2Phrase]  # the phrase it governs ("No biopsies ...", "declined sedation", "deferred biopsy")
+    denial: bool = False  # a negation whose predicate denies its subject's act (_V2_DENIED_PARTICIPLE): "was not
+    # performed", never "was not possible"
+
+
+@dataclass(frozen=True)
+class _V2Clause:
+    """One clause of a sentence the doubt guard read, with its doubting words (None: more than it reads)."""
+    start: int
+    end: int
+    about: bool  # a reference, a gi.other procedure word, an act verb, a cut, a cancellation cue or a status line
+    other: bool  # it names another act or procedure and nothing that is the procedure (accounts for a hedge)
+    tokens: Optional[tuple]
+    modal: bool = False  # a modal, condition or plan outside its cuts (_V2_MODAL): its cut is a plan
+
+
+@dataclass(frozen=True)
 class _V2Sentence:
     """One sentence the doubt guard read (_V2_doubt_index): its doubts, and what it could be about."""
     start: int
@@ -1533,11 +1663,15 @@ class _V2Sentence:
     elsewhere: bool  # a plan or history section, and the sentence does not say today
     doubts: tuple  # (status, cues) of its own reading and of the first own-procedure or subject word read as a doubt
     denies: bool  # routing's next-line denial grammar (detect._denies) reads it as a denial
-    clause_doubts: tuple  # (start, end) of each clause that, read on its own, is a doubt or a denial
+    clause_doubts: tuple  # (start, end, status, cues) of each clause that, read on its own, is a doubt or a denial
+    # ('denied': routing's next-line denial grammar)
     reference: bool  # an unqualified reference word anywhere in it ("procedure", "exam", "study", "it")
     subject: bool  # such a reference as its subject, a pronoun only with no procedure named before it
     act: bool  # a procedure's act verb, a cancellation or incompleteness cue, a rescheduling, or a status line
     called_off: bool  # routing's reference denial of "the procedure" / "the exam" / "the study" (_V2_called_off)
+    clauses: tuple = ()  # _V2Clause, each with its doubting words (round 4d repair 2)
+    unread: bool = False  # a cut there counts on its own: a section describing the procedure, not of another time
+    plan: bool = False  # a plan line that does not say today: a cut stated there as done counts (_V2_unaccounted)
 
 
 def _V2_wording(an, text: str, s: int, e: int, marked: bool) -> bool:
@@ -1553,6 +1687,297 @@ def _V2_wording(an, text: str, s: int, e: int, marked: bool) -> bool:
 
 class _V2Overflow(Exception):
     """The doubt guard's read budget is spent (_V2_READ_BUDGET, _V2_WORK_BUDGET)."""
+
+
+_V2_AUX = re.compile(r"\b(?:was|were|is|are|am|be|been|being|has|have|had|did|does|do|will|would|could|can|should|may|"
+                     r"might|must|shall)\b|n't\b", re.A | re.I)
+_V2_LIST_MARK = re.compile(r'\(?(?:\d{1,3}|[a-z])[.)]', re.A | re.I)
+_V2_TOKENS_PER_TEXT = 6000  # doubting words one text may read (bounds the work per text; beyond, it counts as doubted)
+# Where a cut counts on its own (_V2Sentence.unread): the sections that describe the procedure, and unheaded text; never
+# an indication, an assessment, an examination or a time line, whose cuts are a symptom's or another act's.
+_V2_UNREAD_SECTIONS = ('procedure', 'findings', 'technique', 'impression', 'other')
+
+
+def _V2_phrase(an, text: str, a: int, b: int) -> _V2Phrase:
+    """The noun phrase [a, b): whether it names another act or thing (_V2_Phrase.names), and whether it holds nothing
+    that is the procedure (_V2_Phrase.clean). Bounded: a few searches of at most _V2_NP_WORDS words."""
+    from studio.gi import detect
+    patterns = _V2_patterns()
+    exams = [m.span() for m in _V2_OTHER_EXAM.finditer(text, a, b)]
+    clean = (0 < len(text[a:b].split()) <= _V2_NP_WORDS and not _V2_AUX.search(text, a, b)
+             and not any(not any(x <= m.start() < y for x, y in exams) for m in _V2_NOT_ATTR.finditer(text, a, b)))
+    names = bool(exams or patterns['other_act'].search(text, a, b) or patterns['medication'].search(text, a, b)
+                 or _V2_BLEEDING.search(text, a, b) or _V2_SCOPES.search(text, a, b) or an.services_in(a, b)
+                 or detect._PROCEDURE_WORD.search(text, a, b) or an.interventions_in(a, b))
+    return _V2Phrase(a, b, names, clean)
+
+
+def _V2_np_before(an, text: str, cs: int, at: int) -> Optional[_V2Phrase]:
+    """The subject of the predicate that the doubting word at ``at`` belongs to: back over its auxiliaries, adverbs and
+    a separator ("Biopsy was not performed.", "Retroflexion: not performed", "Banding was deferred because ..."), to the
+    break that opens its clause - a mark or a conjunction; "and" / "or" only after a comma or a clause with its own
+    auxiliary ("Hemostasis was achieved and bleeding stopped.", never the compound "The exam and the banding were
+    terminated"). None when there is none ("Aborted due to pain.") or it runs past _V2_NP_REACH. Bounded: one window."""
+    lo = max(cs, at - _V2_NP_REACH)
+    words = [(m.start(), m.end(), m.group(0).lower()) for m in _V2_WORD.finditer(text, lo, at)]
+    i = len(words)
+    label = False
+    while i and (words[i - 1][2] in _V2_PRED_WORDS
+                 or (words[i - 1][2].endswith('ly') and len(words[i - 1][2]) > 4 and words[i - 1][2].isalpha())):
+        label = label or words[i - 1][2] in (':', '=')
+        i -= 1
+    j = i
+    while j:
+        word = words[j - 1][2]
+        if word in _V2_BREAK_MARKS:
+            break
+        if word in _V2_BREAK_WORDS:
+            # a conjunction opens the clause only after a comma or after a clause with its own auxiliary; otherwise it
+            # joins the subject or is a preposition inside it ("The exam before banding was stopped ...", "The exam
+            # and the banding were terminated ..."): the phrase goes on
+            k = j - 1
+            while k and words[k - 1][2] not in _V2_BREAK_MARKS and words[k - 1][2] not in _V2_BREAK_WORDS:
+                k -= 1
+            if (j >= 2 and words[j - 2][2] == ',') or any(_V2_AUX.fullmatch(w[2]) for w in words[k:j - 1]):
+                break
+        j -= 1
+    if j == 0 and lo > cs:
+        return None  # the window cut the phrase: too long to account for anything (fail-closed)
+    k = j
+    while k < i and (words[k][2] in _V2_NP_SKIP or _V2_LIST_MARK.fullmatch(words[k][2])):
+        k += 1
+    if k >= i:
+        return None
+    phrase = _V2_phrase(an, text, words[k][0], words[i - 1][1])
+    # a label before a colon is the subject only when it names an act or a thing ("Retroflexion: not performed"); a
+    # document label ("Addendum: Not possible due to pain.") is structure, so the word has no subject
+    return phrase if phrase.names or not label else None
+
+
+def _V2_np_after(an, text: str, ce: int, at: int) -> Optional[_V2Phrase]:
+    """The phrase the doubting word ending at ``at`` governs: over up to three determiners or qualifiers, then up to
+    six words before a verb, a preposition, a conjunction or a mark ("No biopsies were performed.", "without sedation",
+    "Patient declined sedation.", "deferred biopsy"). None when no word follows. Bounded: one window."""
+    words = [(m.start(), m.end(), m.group(0).lower()) for m in _V2_WORD.finditer(text, at, min(ce, at + 80))]
+    k = 0
+    while k < len(words) and k < 3 and words[k][2] in _V2_NP_SKIP:
+        k += 1
+    start = k
+    while k < len(words) and k - start < 6 and words[k][2] not in _V2_BREAK_MARKS and words[k][2] not in _V2_NP_STOP \
+            and words[k][2][0].isalnum():
+        k += 1
+    return _V2_phrase(an, text, words[start][0], words[k - 1][1]) if k > start else None
+
+
+def _V2_explained(an, text: str, cs: int, ce: int, t0: int, t1: int) -> bool:
+    """Whether routing's own declared exceptions account for the doubting word [t0, t1): a complication, a qualifier or
+    another act denied after a negation (cues.COMPLICATION_NEGATION, QUALIFIER_NEGATION, OTHER_ACT_NEGATION: "without
+    complications", "not difficult", "no sedation was given"), a no-repeat statement (_V2_NO_REPEAT), another
+    procedure denied as such (_V2_N3), or a denied finding that names no procedure, reference or person
+    (cues.FINDING_NEGATION: "No fissure was seen."). Matched in a bounded window around the word, on the text as
+    written (routing's masked service names never match here: that only accounts for less)."""
+    from studio.gi import detect
+    patterns = _V2_patterns()
+    lo, hi = max(cs, t0 - _V2_EXPLAIN_BEFORE), min(ce, t1 + _V2_EXPLAIN_AFTER)
+    for pattern in patterns['explain']:
+        for m in pattern.finditer(text, lo, hi):
+            if m.start() > t0:
+                break
+            if t1 <= m.end():
+                return True
+    for pattern in patterns['finding']:
+        for m in pattern.finditer(text, lo, hi):
+            if m.start() > t0:
+                break
+            if t1 <= m.end() and not (_V2_NOT_ATTR.search(text, m.start(), m.end())
+                                      or _VAL_ANY_OWN.search(text, m.start(), m.end())
+                                      or detect._PROCEDURE_WORD.search(text, m.start(), m.end())
+                                      or an.services_in(m.start(), m.end())):
+                return True
+    return False
+
+
+def _V2_tokens(an, text: str, cs: int, ce: int) -> list:
+    """The words of the clause [cs, ce) that can deny, cut short or doubt the procedure, each with what may account
+    for it (_V2Token): routing's negation words (cues.DOUBT_TOKEN) and its cancellation, incompleteness, negation and
+    hedge cues, a rescheduling (detect._RESCHEDULED), the cuts routing may not read (_V2_CUT), an attempt or a failure
+    (_V2_SOFT), a hedge (_V2_HEDGE), and another time or place (routing's historical and planned cues, cues.OTHER_TIME,
+    a date that is not the date of service). Words that overlap are read as one (the widest, the strongest kind)."""
+    from studio.gi import context as gi_context
+    from studio.gi import cues as words
+    from studio.gi import detect
+    patterns = _V2_patterns()
+    found = []
+    for m in patterns['doubt_token'].finditer(text, cs, ce):
+        found.append((m.start(), m.end(), 'negation'))
+    for c in an.cues_in(cs, ce):
+        if c.status in ('cancelled', 'incomplete'):
+            found.append((c.start, c.end, 'cut'))
+        elif c.status == 'negated':
+            found.append((c.start, c.end, 'negation'))
+        elif c.status == 'uncertain':
+            found.append((c.start, c.end, 'hedge'))
+        elif c.status in ('historical', 'planned'):
+            found.append((c.start, c.end, 'time'))
+    for pattern, kind in ((_V2_CUT, 'cut'), (detect._RESCHEDULED, 'cut'), (_V2_SOFT, 'soft'), (_V2_HEDGE, 'hedge')):
+        found += [(m.start(), m.end(), kind) for m in pattern.finditer(text, cs, ce)]
+    # another time or place: routing's own times and a date that is not the date of service ("The exam was performed
+    # an hour ago; no biopsies were taken.": the sentence reads negated by its other clause)
+    for _, pattern in words.OTHER_TIME:
+        found += [(m.start(), m.end(), 'time') for m in pattern.finditer(text, cs, ce)]
+    found += [(d.start, d.end, 'time') for d in an.dates_in(cs, ce)
+              if an.service_date is None or gi_context.compare_to_service(d, an.service_date) != 0]
+    found.sort(key=lambda t: (t[0], -t[1]))
+    merged = []
+    rank = {'cut': 0, 'negation': 1, 'soft': 2, 'hedge': 3, 'time': 4}
+    for t0, t1, kind in found:
+        if merged and t0 < merged[-1][1]:
+            last = merged[-1]
+            merged[-1] = (last[0], max(last[1], t1), kind if rank[kind] < rank[last[2]] else last[2])
+            continue
+        merged.append((t0, t1, kind))
+    return merged
+
+
+def _V2_token(an, text: str, cs: int, ce: int, t0: int, t1: int, kind: str) -> _V2Token:
+    """A doubting word with what may account for it (_V2_explained, and the phrase it is about: _V2_np_before for a
+    cut, an attempt, a negated predicate after its subject; _V2_np_after for a cut and a negation that governs what
+    follows it)."""
+    word = text[t0:t1].lower()
+    before = after = None
+    denial = False
+    if kind in ('cut', 'soft'):
+        before, after = _V2_np_before(an, text, cs, t0), _V2_np_after(an, text, ce, t1)
+    elif kind == 'negation':
+        lead = word.split()[0] if word.split() else word
+        if lead in _V2_NEG_BEFORE or lead in ('defer', 'defers', 'deferring', 'postpone', 'postpones', 'postponing'):
+            after = _V2_np_after(an, text, ce, t1)
+        if lead in _V2_NEG_AFTER or word.endswith("n't") or _V2_AUX.match(word):
+            before = _V2_np_before(an, text, cs, t0)
+            denial = bool(_V2_DENIED_PARTICIPLE.match(text, t1) or _V2_AUX.match(word))
+    return _V2Token(t0, t1, kind, _V2_explained(an, text, cs, ce, t0, t1), before, after, denial)
+
+
+def _V2_owns_phrase(text: str, start: int, end: int, code: str) -> bool:
+    """Whether [start, end) holds a word of the code's own procedure (_VAL_OWN_PROCEDURES; True for a code whose range
+    lists none: fail-closed)."""
+    entry = _VAL_own_procedure(code)
+    return entry is None or any(pattern.search(text, start, end) for pattern in entry[2])
+
+
+def _V2_accounted(text: str, clause: _V2Clause, token: _V2Token, code: str) -> bool:
+    """Whether the doubting word is accounted for as about another act, procedure or thing, for this code: routing's
+    exceptions (_V2_Token.explained), or the phrase it is about names one and holds nothing that is the procedure -
+    no reference, pronoun or person, and no word of the code's own procedure ("Banding was deferred because she takes
+    apixaban." for 46600, never for 46221). A hedge, or another time or place, is accounted for only by a clause that
+    names another act or procedure and nothing that is this one ("Banding was done last week." for 46600)."""
+    if token.explained:
+        return True
+    if token.kind in ('hedge', 'time'):
+        return clause.other and not _V2_owns_phrase(text, clause.start, clause.end, code)
+    phrases = (token.before, token.after) if token.kind != 'negation' or token.denial else (token.after,)
+    return any(phrase is not None and phrase.names and phrase.clean
+               and not _V2_owns_phrase(text, phrase.start, phrase.end, code) for phrase in phrases)
+
+
+def _V2_of_the_procedure(text: str, token: _V2Token, code: str) -> bool:
+    """Whether a negation or an attempt or failure is written of the procedure itself: no phrase at all ("Not possible
+    due to pain.", "Limited because of pain."), or a phrase holding a reference, a pronoun or a person, or the code's
+    own procedure word ("Further examination was not possible because of pain.", "A complete exam was not possible
+    ..."). Read only where routing's reading does not see them (_V2Sentence.unread); a denied finding ("No masses were
+    felt.") is none."""
+    phrases = [phrase for phrase in (token.before, token.after) if phrase is not None]
+    if not phrases:
+        return True
+    for phrase in phrases:
+        exams = [m.span() for m in _V2_OTHER_EXAM.finditer(text, phrase.start, phrase.end)]
+        if any(not any(x <= m.start() < y for x, y in exams)
+               for m in _V2_NOT_ATTR.finditer(text, phrase.start, phrase.end)):
+            return True
+        # a step or the instrument of the procedure ("Insertion of the anoscope failed because of a stricture."),
+        # never another family's scope (_V2_SCOPES)
+        if any(not _V2_SCOPES.match(text, m.start(), m.end())
+               for m in _V2_PROCEDURE_STEP.finditer(text, phrase.start, phrase.end)):
+            return True
+        if _VAL_own_procedure(code) is not None and _V2_owns_phrase(text, phrase.start, phrase.end, code):
+            return True
+    return False
+
+
+def _V2_unaccounted(text: str, item: '_V2Sentence', code: str, cuts_only: bool = False, plan: bool = False) -> bool:
+    """Whether a clause of the sentence that is about a procedure holds a doubting word (only a cut, or a negation or
+    an attempt or failure written of the procedure itself, when ``cuts_only``: _V2_of_the_procedure) that is not
+    accounted for (_V2_accounted): then the sentence doubts the code's own procedure. A clause with more doubting words
+    than _V2_TOKENS_PER_CLAUSE doubts it (fail-closed). ``plan``: only a cut in a clause with no modal, condition or
+    plan (_V2_Clause.modal: "Plan: The exam was stopped early; repeat in two weeks.", never "Plan: Banding will be
+    deferred if the INR is high.")."""
+    for clause in item.clauses:
+        if not clause.about or (plan and clause.modal):
+            continue
+        if clause.tokens is None:
+            return True
+        for token in clause.tokens:
+            if plan and token.kind != 'cut':
+                continue
+            if cuts_only and (token.kind in ('hedge', 'time') or token.kind != 'cut'
+                              and not _V2_of_the_procedure(text, token, code)):
+                continue
+            if not _V2_accounted(text, clause, token, code):
+                return True
+    return False
+
+
+# routing's held abort (detect._abort_status)
+_V2_ABORT_CUE_TAIL = ', with no statement whether the procedure had started'
+
+
+def _V2_explicable(status: str, cues: Sequence[str]) -> bool:
+    """Whether a doubting reading comes from words _V2_tokens reads: a negation, a cancellation, an incompleteness or a
+    rescheduling cue of its own status, routing's next-line denial ('denied'), or an uncertain reading held only by an
+    unresolved negation or an abort with no statement whether the procedure had started. Any other doubt - an
+    unchecked or unread box ("The exam ☐ was completed; no biopsies were taken." reads negated by its box), a form
+    field, an extent, a date, another time, a label, a hedge - is not, and only a sentence wholly about another act or
+    procedure is accounted for then (_V2_doubts_it)."""
+    if status == 'denied':
+        return True
+    for cue in cues:
+        if cue.startswith((SECTION_CUE_PREFIX, PERFORMED_CUE_PREFIX)):
+            continue
+        # a box, a form field, an extent, a cannulation or a date decided it: no doubting word is its source
+        if 'box' in cue or 'field' in cue or cue.startswith(('incomplete: extent', 'incomplete: cannulation')) \
+                or cue.endswith('after the service date'):
+            return False
+        if status in ('negated', 'cancelled', 'incomplete', 'planned') and cue.startswith(status + ': '):
+            continue
+        if status == 'uncertain' and (cue.startswith('uncertain: unresolved negation')
+                                      or cue.endswith(_V2_ABORT_CUE_TAIL)):
+            continue
+        return False
+    return status in ('negated', 'cancelled', 'incomplete', 'planned', 'uncertain')
+
+
+def _V2_doubts_it(text: str, item: '_V2Sentence', code: str, sources: Sequence[tuple]) -> bool:
+    """Whether a sentence that doubts something (its doubting readings ``sources``: (status, cues)) doubts the code's
+    own procedure (round 4d repair 2). When every doubt comes from its doubting words (_V2_explicable), it does unless
+    each of those words in a clause about a procedure is accounted for as another act's, procedure's or thing's
+    (_V2_unaccounted; and a doubt with no such word found doubts it: fail-closed). Otherwise it does unless every
+    clause about a procedure names another act or procedure and nothing that is this one ("Banding was done last
+    week." for 46600)."""
+    about = [clause for clause in item.clauses if clause.about]
+    if all(_V2_explicable(status, cues) for status, cues in sources):
+        if not any(clause.tokens is None or clause.tokens for clause in item.clauses):
+            return True  # a doubt whose words were not found (fail-closed)
+        return _V2_unaccounted(text, item, code)
+    return not about or not all(clause.other and not _V2_owns_phrase(text, clause.start, clause.end, code)
+                                for clause in about)
+
+
+def _V2_reference_nouns(text: str, s: int, e: int) -> list:
+    """The reference nouns ("procedure", "exam", "study") of [s, e) that may be the report's procedure: not the digital
+    rectal or physical exam (another act), and not another procedure denied as such (_V2_N3: "No other procedure was
+    done."). A qualifier alone never makes one another procedure ("Today's follow-up exam was aborted ...")."""
+    away = [m.span() for pattern in (_V2_OTHER_EXAM, _V2_N3) for m in pattern.finditer(text, s, e)]
+    return [m for m in _V2_NOUN_REFERENCE.finditer(text, s, e) if not any(a <= m.start() < b for a, b in away)]
 
 
 @functools.lru_cache(maxsize=4)
@@ -1603,11 +2028,10 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
         "The exam was stopped early because of pain.", "The procedure was cancelled.") of an unqualified "procedure",
         "exam" or "study", read as detect._procedure_called_off reads them: not historical or planned where they stand,
         and not an option whose own box is unchecked."""
+        nouns = [m.start() for m in _V2_reference_nouns(text, s, e)]
         for pattern in (words.PROCEDURE_CANCELLED, words.PROCEDURE_NOT_PERFORMED, words.PROCEDURE_INCOMPLETE):
             for m in pattern.finditer(text, s, e):
-                noun = _V2_NOUN_REFERENCE.search(text, m.start(), m.end())
-                if noun is None or _V2_ANOTHER_BEFORE.search(text, max(s, noun.start() - _V2_BEFORE_REACH),
-                                                             noun.start()):
+                if not any(m.start() <= at < m.end() for at in nouns):
                     continue
                 spend()
                 if detect._generic_reading(an, m.start(), m.end()).status not in ('historical', 'planned') \
@@ -1616,9 +2040,33 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
         return False
 
     def cut(s: int, e: int) -> bool:
-        """An act verb, a cancellation or incompleteness cue, or a rescheduling in [s, e)."""
+        """An act verb, a cancellation or incompleteness cue, a rescheduling, or a cut routing may not read (_V2_CUT:
+        "Stopped early because of pain.", "Incomplete due to pain.") in [s, e)."""
         return bool(_VAL_ACT_VERB.search(text, s, e) or patterns['rescheduled'].search(text, s, e)
+                    or _V2_CUT.search(text, s, e)
                     or any(c.status in ('cancelled', 'incomplete') for c in an.cues_in(s, e)))
+
+    tokens_read = [0]
+
+    def clause(cs: int, ce: int, status_line: bool) -> _V2Clause:
+        """The clause [cs, ce) with its doubting words (_V2_tokens), and whether it is about a procedure."""
+        about = bool(status_line or _V2_reference_nouns(text, cs, ce) or _V2_PRONOUN.search(text, cs, ce)
+                     or _VAL_ANY_OWN.search(text, cs, ce) or cut(cs, ce) or _V2_SOFT.search(text, cs, ce)
+                     or _V2_PROCEDURE_STEP.search(text, cs, ce))
+        found = _V2_tokens(an, text, cs, ce)
+        tokens_read[0] += len(found)
+        if tokens_read[0] > _V2_TOKENS_PER_TEXT:
+            raise _V2Overflow
+        whole = _V2_phrase(an, text, cs, ce)
+        exams = [m.span() for m in _V2_OTHER_EXAM.finditer(text, cs, ce)]
+        other = whole.names and not any(not any(x <= m.start() < y for x, y in exams)
+                                        for m in _V2_NOT_ATTR.finditer(text, cs, ce))
+        cuts = [(t0, t1) for t0, t1, kind in found if kind == 'cut']
+        modal = any(not any(a <= m.start() < b for a, b in cuts) for m in _V2_MODAL.finditer(text, cs, ce))
+        if len(found) > _V2_TOKENS_PER_CLAUSE:
+            return _V2Clause(cs, ce, about, other, None, modal)
+        return _V2Clause(cs, ce, about, other, tuple(_V2_token(an, text, cs, ce, t0, t1, kind)
+                                                     for t0, t1, kind in found), modal)
 
     found, answered, marked = [], [], {}
 
@@ -1652,14 +2100,17 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
                 continue
             line_at = bisect.bisect_right(lines, s) - 1
             own = list(_VAL_ANY_OWN.finditer(text, s, e))
-            nouns = [m for m in _V2_NOUN_REFERENCE.finditer(text, s, e)
-                     if not _V2_ANOTHER_BEFORE.search(text, max(s, m.start() - _V2_BEFORE_REACH), m.start())]
+            nouns = _V2_reference_nouns(text, s, e)
             its = list(_V2_IT.finditer(text, s, e))
             status_line = detect._status_line(an, s, e)
             act = status_line or cut(s, e)
-            # in a judged document a sentence may doubt through its family's judgement alone: read as at HEAD
-            if not (own or nouns or its or act) or not (status_line or judged or _V2_wording(an, text, s, e,
-                                                                                             line_marked(line_at))):
+            # in a judged document a sentence may doubt through its family's judgement alone: read as at HEAD; an
+            # attempt or a failure, and a step or the instrument of the procedure, are read too ("Not possible due to
+            # pain.", "Insertion of the anoscope failed ...", "No further advancement was possible.": round 4d repair
+            # 2), though they are no act of their own (_V2Sentence.act)
+            if not (own or nouns or its or act or _V2_SOFT.search(text, s, e)
+                    or _V2_PROCEDURE_STEP.search(text, s, e)) \
+                    or not (status_line or judged or _V2_wording(an, text, s, e, line_marked(line_at))):
                 continue
             first_named = min([m.start() for m in own] + [m.start() for m in detect._PROCEDURE_WORD.finditer(text, s, e)]
                               + [m.start for m in an.services_in(s, e)] + [e])
@@ -1682,18 +2133,31 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
             clauses = detect._first_clauses_in(an, s, e, _V2_CLAUSES_PER_SENTENCE + 1)
             if len(clauses) > 1:
                 for cs, ce in clauses[:_V2_CLAUSES_PER_SENTENCE]:
-                    lead = _V2_PRONOUN.match(text, detect._SEPARATOR.match(text, cs, ce).end(), ce)
-                    if not cut(cs, ce) or (lead and first_named < cs and _V2_SUBJECT.match(text, lead.end(), ce)):
-                        continue  # a pronoun after a procedure named before it speaks of that one
-                    clause = read(cs, ce)
-                    if (clause is not None and _V2_doubt(clause[0], clause[1], detect._reschedules(an, cs, ce))) or (
-                            _V2_DENIAL_WORDS.search(text, cs, ce) and len(text[cs:ce].split()) <= _V2_SHORT
-                            and denies(cs, ce)):
-                        clause_doubts.append((cs, ce))
-            elsewhere = (an.lay.section_at(s).kind in detect.ELSEWHERE_SECTIONS
-                         and not _V2_says_today(text, s, e))
+                    # (round 4d repair 2: a pronoun after a procedure named before it is no longer read as that
+                    # one's - "After biopsies were discussed, it was aborted because of pain." - its antecedent is never
+                    # guessed)
+                    if not cut(cs, ce):
+                        continue
+                    read_clause = read(cs, ce)
+                    if read_clause is not None and _V2_doubt(read_clause[0], read_clause[1],
+                                                             detect._reschedules(an, cs, ce)):
+                        clause_doubts.append((cs, ce) + read_clause)
+                    elif (_V2_DENIAL_WORDS.search(text, cs, ce) and len(text[cs:ce].split()) <= _V2_SHORT
+                          and denies(cs, ce)):
+                        clause_doubts.append((cs, ce, 'denied', ()))
+            # every clause with its doubting words (round 4d repair 2): the sentence cut at the ends of its first
+            # clauses, so nothing of it goes unread (the rest past them is read as one)
+            cuts = [s] + sorted({min(e, ce) for _, ce in clauses[:_V2_CLAUSES_PER_SENTENCE] if s < ce < e}) + [e]
+            read_clauses = tuple(clause(a, b, status_line) for a, b in zip(cuts, cuts[1:]) if a < b)
+            kind = an.lay.section_at(s).kind
+            elsewhere = kind in detect.ELSEWHERE_SECTIONS and not _V2_says_today(text, s, e)
+            # a cut counts on its own in a section that describes the procedure, unless the sentence reads as another
+            # time's (round 4d repair 2: "Stopped early because of pain." reads done by its section)
+            unread = (kind in _V2_UNREAD_SECTIONS and not elsewhere
+                      and (reading is None or reading[0] not in ('historical', 'planned')))
             found.append(_V2Sentence(s, e, elsewhere, tuple(doubts), denied, tuple(clause_doubts),
-                                     bool(nouns or its), bool(subjects), act, bool(nouns) and called_off(s, e)))
+                                     bool(nouns or its), bool(subjects), act, bool(nouns) and called_off(s, e),
+                                     read_clauses, unread, elsewhere and kind == 'plan'))
     except _V2Overflow:
         return True, (), ()
     return False, tuple(found), tuple(answered)
@@ -1705,63 +2169,32 @@ def _V2_says_today(text: str, start: int, end: int) -> bool:
     return bool(words.TODAY.search(text, start, end))
 
 
-def _V2_names_another(text: str, s: int, e: int, code: str, service_date: Optional[date] = None) -> bool:
-    """Whether [s, e) names a procedure, act or care step that is not the code's own (round 4d validation:8): a detected
-    family's service or instrument, another act or care step ("Sedation was not needed.", "Retroflexion was not
-    performed.", "Digital rectal exam was deferred."), a procedure qualified as another ("No other procedure was
-    done."), or a procedure word, intervention or gi.other procedure word that is no word of the code's own procedure
-    ("No biopsies were performed." for 46600; "Biopsy was not performed." still denies 47000's own liver biopsy)."""
-    from studio.gi import detect
-    an = detect._analysis(text, service_date)[0]
-    patterns = _V2_patterns()
-    if an.services_in(s, e) or patterns['other_act'].search(text, s, e) \
-            or any(pattern.search(text, s, e) for pattern in patterns['instruments']):
-        return True
-    if any(_V2_ANOTHER_BEFORE.search(text, max(s, m.start() - _V2_BEFORE_REACH), m.start())
-           for m in _V2_NOUN_REFERENCE.finditer(text, s, e)):
-        return True
-    entry = _VAL_own_procedure(code)
-    own = entry[2] if entry else ()
-    # another gi.other code's procedure only when named whole ("Esophageal dilation", never the "lower esophageal
-    # sphincter" alone), as _VAL_owns reads a name
-    if any(other is not entry and all(pattern.search(text, s, e) for pattern in other[2])
-           for other in _VAL_OWN_PROCEDURES):
-        return True
-    spans = ([m.span() for m in detect._PROCEDURE_WORD.finditer(text, s, e)]
-             + [(iv.start, iv.end) for iv in an.interventions_in(s, e)])
-    return any(not any(pattern.search(text, a, b) for pattern in own) for a, b in spans)
-
-
-def _V2_denial_beyond(text: str, start: int, end: int) -> bool:
-    """Whether [start, end) holds a negation outside its no-repeat statements (_V2_NO_REPEAT): "Banding was aborted; no
-    further banding needed." still denies today's banding."""
-    from studio.gi import cues as words
-    repeats = [m.span() for m in _V2_NO_REPEAT.finditer(text, start, end)]
-    return any(not any(a <= m.start() < b for a, b in repeats) for m in words.DOUBT_TOKEN.finditer(text, start, end))
-
-
 def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> bool:
     """Whether the document denies, cancels, cuts short or doubts the gi.other code's own procedure (ARCHITECTURE 5.6;
-    round 4d validation:0, 1, 2, 8): then a passage is never counted by the report's procedure line alone, which
-    routing still reads done (engine._unnamed_other). From what _V2_doubt_index read:
+    round 4d validation:0, 1, 2, 8 and repair 2): then a passage is never counted by the report's procedure line alone,
+    which routing still reads done (engine._unnamed_other). From what _V2_doubt_index read:
     - a sentence naming the code's own procedure (_VAL_owns) that reads as a doubt, as a whole or at one of its own
       words, or as a denial ("No banding was performed today.", "Banding was deferred.", "Anoscopy was not performed;
       the patient declined.", "Anoscopy rescheduled to next week.");
     - one whose subject is "the procedure", "the exam" or "the study" - or "it" / "this" with no procedure named before
       it - and that reads as a doubt or a denial, whatever else it names ("The procedure was terminated early; banding
-      will be scheduled.", "It was aborted due to pain, and rubber band ligation was deferred.");
-    - one with a reference anywhere, an act verb, a cancellation, incompleteness or rescheduling, or a status line,
-      that names no other procedure, act or care step and reads as a doubt or a denial ("The procedure was aborted
-      before insertion.", "Not performed.", "Rescheduled.", "Called off.", "Status: Pending", "The anoscope could not
-      be passed beyond the anal verge because of pain."), or a clause of one that does so ("Sedation was not given;
-      not performed.");
-    - a line answering the done question no ("Procedure performed: No"; "Anoscopy performed: No" when the label names
-      the code's own procedure and nothing else).
-    Never: another procedure's, act's or care step's denial ("Banding was deferred." for 46600, "No biopsies were
-    performed.", "No sedation was required for the exam.", "No other procedure was done."), a structural denial or a
-    done question in a plan or history section, or a no-repeat statement ("Plan: No repeat anoscopy needed.", "no
-    further banding needed"). Bounded: the index is read once per text; a code then costs one
-    pass over the sentences it kept, and a few searches per sentence that doubts."""
+      will be scheduled.", "Today's follow-up exam was aborted because of pain.");
+    - one with a reference anywhere, an act verb, a cut, a cancellation, incompleteness or rescheduling, or a status
+      line, that reads as a doubt or a denial (or holds a clause that does), when a clause of it that is about a
+      procedure holds a doubting word not accounted for as another act's, procedure's or thing's (_V2_unaccounted:
+      "Complications: Aborted due to inadequate sedation.", "The procedure under moderate sedation was terminated
+      early due to desaturation.", "After biopsies were discussed, it was aborted because of pain.", "Not
+      performed.", "Status: Pending", "The anoscope could not be passed beyond the anal verge because of pain.");
+    - a cut that routing does not read, in a section describing the procedure, not accounted for ("Stopped early
+      because of pain.", "Incomplete due to pain.": _V2Sentence.unread);
+    - a line answering the done question no ("Procedure performed: No"; "Anoscopy performed: No" when the label holds
+      a word of the code's own procedure).
+    Never: another procedure's, act's or care step's denial written about it ("Banding was deferred because she takes
+    apixaban." for 46600, "No biopsies were performed.", "No sedation was required for the exam.", "Digital rectal
+    exam was deferred.", "No other procedure was done."), a structural denial or a done question in a plan or history
+    section, or a no-repeat statement whose sentence doubts nothing else ("Plan: No repeat anoscopy needed.", never
+    "Banding was cancelled today ..., and no repeat banding is needed." for 46221). Bounded: the index is read once per
+    text; a code then costs one pass over the sentences it kept, and a few look-ups per doubting word."""
     from studio.gi import detect
     overflow, sentences, answered = _V2_doubt_index(text, service_date)
     if overflow:
@@ -1771,9 +2204,9 @@ def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> b
     for ls, le, name in answered:
         if an.lay.section_at(ls).kind in detect.ELSEWHERE_SECTIONS:
             continue
-        if name is None or _VAL_owns(code, text[name[0]:name[1]]) or (
-                entry is not None and any(pattern.search(text, *name) for pattern in entry[2])
-                and not _V2_names_another(text, name[0], name[1], code, service_date)):
+        # round 4d repair 2: a label holding a word of the code's own procedure answers for it, whatever else it names
+        # ("Anoscopy with biopsy performed: No")
+        if name is None or (entry is not None and any(pattern.search(text, *name) for pattern in entry[2])):
             return True
     for item in sentences:
         doubts, denied, clause_doubts = list(item.doubts), item.denies, item.clause_doubts
@@ -1783,19 +2216,29 @@ def _VAL_doubted(text: str, code: str, service_date: Optional[date] = None) -> b
             # reschedule.") doubts it
             denied, clause_doubts = False, ()
         if (doubts or denied) and _V2_NO_REPEAT.search(text, item.start, item.end) \
-                and not _V2_denial_beyond(text, item.start, item.end):
-            # "no further banding needed", "Repeat banding is not necessary.": a future procedure's denial
+                and not _V2_unaccounted(text, item, code):
+            # "no further banding needed", "Repeat banding is not necessary.": a future procedure's denial, when nothing
+            # else in the sentence doubts (round 4d repair 2: "Banding was cancelled today ..., and no repeat banding is
+            # needed." still doubts 46221's banding)
             doubts, denied = [r for r in doubts if r[0] != 'negated'], False
         if item.called_off and not item.elsewhere:
             return True  # "The exam was stopped early because of pain.": the procedure by reference, whatever else
-        if not (doubts or denied or clause_doubts):
-            continue
-        if doubts or denied:
-            if _VAL_owns(code, text[item.start:item.end]) or item.subject:
-                return True
-            if (item.reference or item.act) and not _V2_names_another(text, item.start, item.end, code, service_date):
-                return True
-        if any(not _V2_names_another(text, cs, ce, code, service_date) for cs, ce in clause_doubts):
+        if (doubts or denied) and _VAL_owns(code, text[item.start:item.end]):
+            return True
+        # a reference (its subject included: "Today's follow-up exam was aborted ...", "The procedure was terminated
+        # early; banding will be scheduled."), an act verb or a cut: the doubt is this procedure's unless what doubts
+        # is accounted for as another act's, procedure's or thing's (_V2_doubts_it)
+        sources = (doubts + ([('denied', ())] if denied else [])
+                   + [(status, cues) for _, _, status, cues in clause_doubts])
+        # (routing's next-line denial grammar reads the line as a denial of the procedure named before it, so a
+        # denied line is about a procedure whatever its words: "Addendum: Not possible due to pain.")
+        if sources and (item.reference or item.act or denied) and _V2_doubts_it(text, item, code, sources):
+            return True
+        if item.unread and _V2_unaccounted(text, item, code, cuts_only=True):
+            return True
+        # a cut of the procedure stated as done in a plan line ("Plan: The exam was stopped early; repeat in two
+        # weeks.", "Plan: Postponed to next week."), never a planned or conditional one (round 4d repair 2)
+        if item.plan and _V2_unaccounted(text, item, code, plan=True):
             return True
     return False
 

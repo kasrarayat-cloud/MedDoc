@@ -219,11 +219,13 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
             if routed_done or (opening_names and checks.by_section_alone(reading)):
                 doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
                 counted = not doubted and routed_done
-                if not doubted and not routed_done:
-                    # _VAL_opens_with over the opening names, read name by name to know which mention corroborates
+                if not routed_done:
+                    # _VAL_opens_with over the opening names, read name by name to know which mention corroborates;
+                    # the code speaks for that mention even in a document that doubts the procedure (round 4d repair 2:
+                    # it is held, so that procedure has a selected proposal and is never called missed)
                     matched = [m for m in openers if checks._VAL_opens_with(text, reading.start, reading.end, code,
                                                                              [m.span.text], day)]
-                    counted = bool(matched)
+                    counted = not doubted and bool(matched)
                     speaks += [(m.span.start, m.span.end) for m in matched]
             if not counted:  # round 4d validation:4: and which procedure's judgement made it incomplete, if any
                 reading = replace(reading, unnamed=True, judged_by=checks._V2_judged_by(text, reading, day))

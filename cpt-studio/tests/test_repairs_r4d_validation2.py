@@ -394,12 +394,26 @@ class Validation2ReferenceDenialTests(Case):
     def test_controls_another_procedure_s_denial_is_no_doubt_about_this_one(self):
         line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
         for extra in ('Banding was deferred because she takes apixaban.',
-                      'Banding was deferred because it was not indicated.',
-                      'Banding was not performed; it was deferred to a later visit.'):
+                      'Banding was deferred because the INR was high.',
+                      'Grade 3 internal hemorrhoids, banding deferred.'):
             text = REPORT.format(proc='Anoscopy', status='', find=f'{line} {extra}')
             for passage in (line, 'Procedure: Anoscopy'):
                 with self.subTest(extra=extra, passage=passage):
                     self.assertReady(real(text, ('46600', passage))[0]['46600'])
+
+    def test_a_pronoun_s_antecedent_is_never_guessed(self):
+        # round 4d repair 2 (the verifier's "After biopsies were discussed, it was aborted because of pain."): a pronoun
+        # after another procedure named before it may be that one or the report's own, so its denial holds (an
+        # accepted over-hold: these two were ready at the first repair, which read the pronoun as the banding's)
+        line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
+        for extra in ('Banding was deferred because it was not indicated.',
+                      'Banding was not performed; it was deferred to a later visit.',
+                      'After biopsies were discussed, it was aborted because of pain.',
+                      'It and the biopsy were deferred because of anticoagulation.'):
+            text = REPORT.format(proc='Anoscopy', status='', find=f'{line} {extra}')
+            for passage in (line, 'Procedure: Anoscopy'):
+                with self.subTest(extra=extra, passage=passage):
+                    self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
 
 
 class Validation8AnotherActIsNoDoubtTests(Case):
@@ -720,3 +734,280 @@ class Validation10CorroboratedPassageCoversItsProcedureTests(Case):
         self.assertEqual(check.status, 'warn')
         self.assertIn('Excisional hemorrhoidectomy', check.detail)
         self.assertNotIn('internal hemorrhoids”', check.detail)
+
+
+# --- round 4d repair 2 (the verifier's new problems 1-3, and validation:0 / validation:2 still in their class): every
+# word that can deny, cut short or doubt the procedure is accounted for by what it is written about, or it doubts ----
+
+REPAIR2_PLACES = ('findings', 'complications', 'addendum')
+
+
+def _repair2_report(code, extra, where):
+    proc, find = OWN[code]
+    if where == 'findings':
+        return HEAD + (f'Procedure: {proc}\nIndication: Rectal bleeding.\nFindings: {find} {extra}\n'
+                       'Impression: Findings as described.\n')
+    if where == 'complications':
+        return HEAD + (f'Procedure: {proc}\nIndication: Rectal bleeding.\nFindings: {find}\nComplications: {extra}\n'
+                       'Impression: Findings as described.\n')
+    return HEAD + (f'Procedure: {proc}\nIndication: Rectal bleeding.\nFindings: {find}\n'
+                   f'Impression: Findings as described.\nAddendum: {extra}\n')
+
+
+class Repair2AnotherActMentionedIsNoExemptionTests(Case):
+    """The verifier's new problem 1 (critical, release against aaf517e). The first repair exempted a sentence whenever
+    it named another act or procedure anywhere, so a sentence that aborts, cancels, postpones, defers or terminates
+    today's procedure while merely mentioning sedation, anesthesia, photos, retroflexion or a biopsy left the gi.other
+    code READY ("Complications: Aborted due to inadequate sedation."). A doubting word is now accounted for only by the
+    phrase it is written about (its subject, or what it governs), never by a word elsewhere in the sentence."""
+
+    SENTENCES = ('Aborted due to inadequate sedation.', 'Aborted after sedation because of hypotension.',
+                 'Cancelled after sedation because she was hypotensive.', 'Postponed because sedation was not available.',
+                 'Deferred until biopsy results are available.', 'Aborted before biopsies could be taken because of pain.',
+                 'Terminated early due to pain, so no photos were taken.',
+                 'The patient became hypotensive after sedation and we terminated early.',
+                 'Terminated due to patient discomfort despite sedation.',
+                 'After biopsies were discussed, it was aborted because of pain.',
+                 'The procedure under moderate sedation was terminated early due to desaturation.',
+                 'The procedure, which was started under sedation, was aborted because of hypotension.',
+                 'The exam, done under topical anesthesia, was stopped because of pain.',
+                 'The exam itself was aborted after sedation because of hypotension.',
+                 'Stopped after propofol was given because of desaturation.',
+                 'Discontinued due to hypoxia after sedation.', 'Aborted because of pain before retroflexion.',
+                 'Attempted, but aborted after sedation because of hypotension.',
+                 'Could not be completed despite sedation.')
+
+    def test_the_claimed_sentences_hold_both_passages_in_four_reports(self):
+        for code in OWN:
+            for sentence in self.SENTENCES:
+                for where in REPAIR2_PLACES:
+                    text = _repair2_report(code, sentence, where)
+                    for passage in (OWN[code][1], f'Procedure: {OWN[code][0]}'):
+                        with self.subTest(code=code, sentence=sentence, where=where, passage=passage):
+                            item = real(text, (code, passage))[0][code]
+                            self.assertEqual(item.status, 'needs_clarification')
+                            self.assertNotIn('Documented as performed', check_of(item, 'service.status').detail)
+
+    def test_the_held_code_still_speaks_for_its_procedure_line(self):
+        # a doubted report holds the code, but its findings sentence still opens with the procedure line's anoscopy, so
+        # that anoscopy has a selected proposal and is never called a possible missed service (validation:10)
+        line = 'Anoscopy revealed grade 2 internal hemorrhoids.'
+        text = _repair2_report('46600', 'Aborted due to inadequate sedation.', 'complications')
+        proposals, result = real(text, ('46600', line))
+        self.assertEqual(proposals['46600'].status, 'needs_clarification')
+        check = encounter_check(result, 'services.unproposed')
+        self.assertNotIn('“Anoscopy”', check.detail)
+        self.assertNotEqual(check.status, 'warn', check.detail)
+
+    def test_controls_another_act_denied_as_such_stays_no_doubt(self):
+        for code in OWN:
+            for sentence in ('No biopsies were performed.', 'Retroflexion was not performed.',
+                             'No sedation was required for the exam.', 'Photo documentation was not performed.',
+                             'Digital rectal exam was deferred.', 'Patient declined sedation.',
+                             'Biopsy was deferred because the lesion looked benign.', 'Bleeding stopped with pressure.',
+                             'Hemostasis was achieved, and bleeding stopped.'):
+                text = _repair2_report(code, sentence, 'addendum')
+                with self.subTest(code=code, sentence=sentence):
+                    self.assertReady(real(text, (code, f'Procedure: {OWN[code][0]}'))[0][code])
+
+
+class Repair2QualifiedExamIsTodaysTests(Case):
+    """The verifier's new problem 2 (critical). 'follow-up', 'further', 'additional' or 'second' before 'exam' or
+    'procedure' read it as another procedure, so "Today's follow-up exam was aborted because of pain." left 46600 READY.
+    A qualifier alone never makes the reference another one; only "No other / further / additional procedure was
+    done." (ending its clause) denies another procedure as such."""
+
+    SENTENCES = ("Today's follow-up exam was aborted because of pain.", 'The follow-up exam today was aborted because of pain.',
+                 'The follow-up exam was aborted because of pain.', 'The follow-up procedure was terminated early because of pain.',
+                 'Further exam was aborted because of pain.', 'The additional exam was stopped because of pain.',
+                 'The second exam was aborted because of pain.',
+                 'No further examination could be done because the patient was in pain.',
+                 'Further examination was not possible because of pain.', 'Further exam was limited by pain.',
+                 'A complete exam was not possible because of pain.')
+
+    def test_the_claimed_sentences_hold(self):
+        for sentence in self.SENTENCES:
+            for where in REPAIR2_PLACES:
+                text = _repair2_report('46600', sentence, where)
+                for passage in ('Anoscopy revealed grade 2 internal hemorrhoids.', 'Procedure: Anoscopy'):
+                    with self.subTest(sentence=sentence, where=where, passage=passage):
+                        self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
+
+    def test_a_qualified_exam_at_another_time_holds(self):
+        # the first repair read a qualified exam as another procedure, so another time in its clause went unread
+        for sentence in ('The follow-up exam last week was negative; no biopsies were taken.',
+                         'The second study on Monday was normal; no biopsies were taken.'):
+            text = _repair2_report('46600', sentence, 'addendum')
+            with self.subTest(sentence=sentence):
+                self.assertEqual(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'].status, 'needs_clarification')
+
+    def test_controls_another_procedure_denied_as_such_stays_no_doubt(self):
+        for sentence in ('No other procedure was done.', 'No further procedure was performed.',
+                         'No additional procedures were performed today.', 'No further exam is needed.'):
+            for where in REPAIR2_PLACES:
+                text = _repair2_report('46600', sentence, where)
+                with self.subTest(sentence=sentence, where=where):
+                    self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+
+
+class Repair2NoRepeatBesideACutTests(Case):
+    """The verifier's new problem 3 (critical). The no-repeat rule cleared a sentence that cancels, defers, aborts or cuts
+    short today's procedure when it also said no repeat is needed ("Banding was cancelled today because the hemorrhoids
+    had resolved, and no repeat banding is needed." left 46221 READY), and a plan line dropped the clause that holds
+    the cut. A no-repeat statement now excuses only its own negation: any other doubting word must be accounted for."""
+
+    BANDING_REPORT = (HEAD + 'Procedure: Hemorrhoid banding\nIndication: Bleeding internal hemorrhoids.\n'
+                      'Findings: Grade 2 internal hemorrhoids.\n{line}\n')
+
+    def test_the_claimed_sentences_hold_the_own_procedure(self):
+        for line in ('Impression: Banding was cancelled today because the hemorrhoids had resolved, and no repeat '
+                     'banding is needed.', 'Impression: Banding was deferred, and no further banding is planned.',
+                     'Impression: Banding was terminated early due to pain and no repeat banding is required.',
+                     'Impression: Incomplete banding due to pain; no further banding recommended.',
+                     'Plan: Banding was aborted; no further banding needed.',
+                     'Plan: Banding was postponed; no repeat banding needed.'):
+            with self.subTest(line=line):
+                text = self.BANDING_REPORT.format(line=line)
+                self.assertEqual(real(text, ('46221', 'Procedure: Hemorrhoid banding'))[0]['46221'].status,
+                                 'needs_clarification')
+        for line in ('Impression: Anoscopy was cancelled today because the hemorrhoids had resolved, and no repeat '
+                     'anoscopy is needed.', 'Impression: Anoscopy was deferred, and no further anoscopy is planned.',
+                     'Impression: Anoscopy was terminated early due to pain and no repeat anoscopy is required.'):
+            text = REPORT.format(proc='Anoscopy', status='', find='Grade 2 internal hemorrhoids.').replace(
+                'Impression: Findings as described.', line)
+            with self.subTest(line=line):
+                self.assertEqual(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'].status, 'needs_clarification')
+
+    def test_controls_a_no_repeat_statement_alone_or_another_procedure_s_cut_stays_ready(self):
+        for line in ('Plan: No further banding is needed.', 'Impression: Successful banding; no further banding needed.',
+                     'Plan: Repeat banding is not necessary.'):
+            with self.subTest(line=line):
+                self.assertReady(real(self.BANDING_REPORT.format(line=line),
+                                      ('46221', 'Procedure: Hemorrhoid banding'))[0]['46221'])
+        # the banding's cancellation is no doubt about the anoscopy
+        text = REPORT.format(proc='Anoscopy', status='', find='Grade 2 internal hemorrhoids.').replace(
+            'Impression: Findings as described.', 'Impression: Banding was cancelled today because the hemorrhoids had '
+                                                  'resolved, and no repeat banding is needed.')
+        self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+
+
+class Repair2ReferenceSubjectBeyondItsVerbTests(Case):
+    """validation:2 still in its class (the verifier: not fixed). The subject reading needed the verb right after "the
+    procedure", so one word between ("The procedure today was aborted before banding could be done.") brought back the
+    banding exemption. The cut is now accounted for only by its own subject phrase, which here is the procedure."""
+
+    SENTENCES = ('The procedure today was aborted before banding could be done.',
+                 'The procedure, which included banding, was aborted because of pain.',
+                 'The procedure with planned banding was terminated early because of pain.',
+                 'The exam before banding was stopped because of pain.',
+                 'The procedure itself was aborted, so banding will be scheduled.',
+                 'The exam, and therefore the banding, was terminated early because of pain.')
+
+    def test_the_claimed_sentences_hold_both_passages(self):
+        line = 'Anoscopy revealed grade 3 internal hemorrhoids.'
+        for sentence in self.SENTENCES:
+            text = REPORT.format(proc='Anoscopy', status='', find=f'{line} {sentence}')
+            for passage in (line, 'Procedure: Anoscopy'):
+                with self.subTest(sentence=sentence, passage=passage):
+                    self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
+
+
+class Repair2CutRoutingDoesNotReadTests(Case):
+    """validation:0 still in its class (found in the verifier's own guard variants): a cut that no routing cue reads
+    without a service name ("Stopped early because of pain.", "Incomplete due to pain.") or that routing's reading of
+    an addendum or a complications line does not see, left the code READY through the findings sentence (9a9f403 held
+    it) and the procedure line. Such a cut, or a negation or failure written of the procedure itself, now doubts it
+    where a section describes the procedure."""
+
+    SENTENCES = ('Stopped early because of pain.', 'Incomplete due to pain.', 'Unable to complete because of pain.',
+                 'Not completed because of pain.', 'Could not be completed despite sedation.', 'Unsuccessful due to pain.',
+                 'Insertion of the anoscope failed because of a stricture.', 'Not possible due to pain.',
+                 # "treatment" may be the procedure itself (routing's medication words less it)
+                 'The treatment was stopped early because of pain.')
+
+    def test_the_cuts_hold_both_passages(self):
+        for code in ('46600', '46221'):
+            for sentence in self.SENTENCES:
+                for where in REPAIR2_PLACES:
+                    text = _repair2_report(code, sentence, where)
+                    for passage in (OWN[code][1], f'Procedure: {OWN[code][0]}'):
+                        with self.subTest(code=code, sentence=sentence, where=where, passage=passage):
+                            self.assertEqual(real(text, (code, passage))[0][code].status, 'needs_clarification')
+
+    def test_controls_a_cut_of_another_thing_and_a_denied_finding_stay_ready(self):
+        for sentence in ('Bleeding stopped with pressure.', 'Aspirin was stopped five days before the visit.',
+                         'No masses were palpated on digital exam.', 'The study showed no fissure.',
+                         'The procedure was well tolerated; no biopsies were taken.',
+                         'It was well tolerated; no sedation was given.',
+                         'There was no evidence of fissure; it was a normal exam otherwise.'):
+            for where in REPAIR2_PLACES:
+                text = _repair2_report('46600', sentence, where)
+                with self.subTest(sentence=sentence, where=where):
+                    self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+
+
+class Repair2AnotherTimeIsNeverAccountedForByAnActTests(Case):
+    """A sentence about the procedure that also places it at another time or place doubts it, even when its doubting
+    reading comes from another act's denial in its other clause: "The exam was performed an hour ago; no biopsies were
+    taken." reads negated by "no biopsies", but its first clause dates the exam (HEAD and the first repair held it
+    through the subject reading). Another time or place is accounted for only by a clause wholly about another act or
+    procedure ("Banding was done last week." for 46600)."""
+
+    def test_another_time_or_place_holds(self):
+        for sentence in ('The exam was performed an hour ago; no biopsies were taken.',
+                         'The procedure was performed at an outside hospital; no biopsies were taken.',
+                         'The exam on Monday was normal; no biopsies were taken.',
+                         'No biopsies were taken; the exam was performed an hour ago.',
+                         'No biopsies were taken; performed an hour ago.',
+                         'The procedure was performed on 10/15/2026; no biopsies were taken.',
+                         'It was performed yesterday; no sedation was given.'):
+            for where in ('findings', 'addendum'):
+                text = _repair2_report('46600', sentence, where)
+                with self.subTest(sentence=sentence, where=where):
+                    self.assertEqual(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'].status,
+                                     'needs_clarification')
+
+    def test_a_doubt_no_doubting_word_explains_holds(self):
+        # an unchecked box decided the reading, not "no biopsies": the exam's own box (HEAD held it; the first repair
+        # released it through the biopsies' denial)
+        for sentence in ('The exam \u2610 was completed; no biopsies were taken.',
+                         '\u2610 The procedure was completed; no biopsies were taken.'):
+            text = _repair2_report('46600', sentence, 'addendum')
+            with self.subTest(sentence=sentence):
+                self.assertEqual(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'].status, 'needs_clarification')
+
+    def test_controls_another_procedure_at_another_time_is_no_doubt(self):
+        for sentence in ('Banding was done last week.', 'Hemorrhoidectomy was done in 2019; no biopsies were taken.'):
+            text = _repair2_report('46600', sentence, 'addendum')
+            with self.subTest(sentence=sentence):
+                self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+
+
+class Repair2CutInAPlanLineTests(Case):
+    """A cut of the procedure stated as done in a plan line ("Plan: The follow-up exam was stopped early; repeat in two
+    weeks.") went unread: a plan or history line is asked no structural denial and its clauses were not read, so
+    46600 stayed READY (as at HEAD; 9a9f403 held the findings sentence). A cut there now doubts the procedure unless
+    its clause is a plan itself - a modal, a condition or a recommendation ("Plan: Banding will be deferred if the INR
+    is high.") - or the cut is accounted for as another act's or thing's."""
+
+    PLAN = REPORT.format(proc='Anoscopy', status='', find='Anoscopy revealed grade 2 internal hemorrhoids.')
+
+    def test_a_cut_stated_as_done_in_a_plan_line_holds(self):
+        for line in ('Plan: The follow-up exam was stopped early; repeat in two weeks.', 'Plan: Postponed to next week.',
+                     'Plan: Aborted due to pain; will reschedule.', 'Plan: The procedure was incomplete; repeat under '
+                     'sedation.', 'Plan: The exam could not be completed; repeat under anesthesia.',
+                     'Plan: The second exam was aborted because of pain; will repeat.'):
+            text = self.PLAN.replace('Impression: Findings as described.\n', f'{line}\n')
+            for passage in ('Anoscopy revealed grade 2 internal hemorrhoids.', 'Procedure: Anoscopy'):
+                with self.subTest(line=line, passage=passage):
+                    self.assertEqual(real(text, ('46600', passage))[0]['46600'].status, 'needs_clarification')
+
+    def test_controls_a_planned_cut_or_another_thing_s_cut_stays_ready(self):
+        for line in ('Plan: Banding will be deferred if the INR is high.', 'Plan: Repeat anoscopy in 6 months.',
+                     'Plan: Aspirin was stopped; resume in five days.', 'Plan: Banding was deferred; return in 6 weeks.',
+                     'Plan: Consider banding if bleeding persists.',
+                     'Plan: The exam should be stopped early if pain occurs.',
+                     'Plan: The exam may be stopped early if pain recurs.'):
+            text = self.PLAN.replace('Impression: Findings as described.\n', f'{line}\n')
+            with self.subTest(line=line):
+                self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
