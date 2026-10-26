@@ -1377,10 +1377,13 @@ def _called_off_further(an: Analysis, index: int) -> Optional[str]:
 # it. ("Cancelled procedures:", with no verb, is a heading of its own: the lines under it read its silent default.)
 # Round 4c declared:6: after any list marker the other readers strip (_LEADING_MARK's bullets, "1.", "2)", "(1)",
 # "b."), and with parentheses in its words ("Procedure(s) not performed:", "Cancelled procedures (patient request):").
+# Round 4d declared:7: any number of words before and after the denial ("The following procedures were not performed:",
+# "Procedures not performed today due to patient refusal of sedation:"); the label is bounded by its length, 80
+# characters, at every reader, never by an undeclared word count.
 _SEC_LABEL_MARK = (r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014][ \t]*|\(?\d{1,3}[.)][ \t]*'
                    r'|\(?[A-Za-z][.)][ \t]+)')
-_DENYING_LABEL = re.compile(r'[ \t]*' + _SEC_LABEL_MARK + r'?(?:[A-Za-z][\w/()-]*[ \t]+){0,3}?(?:not[ \t]+(?:performed|done)|'
-                            r'cancell?ed|deferred|declined)(?:[ \t]+[\w/()-]+){0,5}[ \t]*:[ \t]*', re.A | re.I)
+_DENYING_LABEL = re.compile(r'[ \t]*' + _SEC_LABEL_MARK + r'?(?:[A-Za-z][\w/()-]*[ \t]+)*?(?:not[ \t]+(?:performed|done)|'
+                            r'cancell?ed|deferred|declined)(?:[ \t]+[\w/()-]+)*[ \t]*:[ \t]*', re.A | re.I)
 LABEL_ITEMS = 12  # item lines read back to their label (bounds the work per span)
 
 
@@ -3227,13 +3230,16 @@ def _box_status_answer(an: Analysis, start: int, end: int) -> Optional[Reading]:
 # naming an intervention ("Cold snare polypectomy of the 6 mm sigmoid polyp.") read performed by its section. The label
 # is read exactly as that reader reads it (LABEL_ITEMS lines back, in the same section, stopping at a blank line or at
 # another label line), and the hold is a doubt, as the verbless denying heading's own default is (round 4 release:9).
-_P2_LEADING_BOX = re.compile(r'[ \t]*(?:' + _BOX_MARK.pattern + r')[ \t]*')
+# Round 4d declared:6: the box may follow a list marker the other readers strip ("- [ ] Procedures not performed:", "1. [x]
+# Not done:", "• ☐ Cancelled procedures:"), as it may precede one ("☐ 1. Procedures not performed:").
+_P2_LEADING_BOX = re.compile(r'[ \t]*(?:' + _SEC_LABEL_MARK + r')?(?:' + _BOX_MARK.pattern + r')[ \t]*')
 
 
 def _P2_boxed_denying_label(text: str, ls: int, le: int) -> bool:
     """Whether the label line [ls, le) is a denying label led by one box of any state ("[ ] Procedures not performed:",
-    "[x] Not done:", "[?] Cancelled procedures:"): one box, then the label as _DENYING_LABEL reads it. An unchecked box
-    may be an unselected option, so what is listed under it is held, never read performed (round 4c-2 plan:C)."""
+    "[x] Not done:", "[?] Cancelled procedures:"), after any list marker ("- [ ] ...", round 4d declared:6): one box,
+    then the label as _DENYING_LABEL reads it. An unchecked box may be an unselected option, so what is listed under it
+    is held, never read performed (round 4c-2 plan:C)."""
     lead = _P2_LEADING_BOX.match(text, ls, le)
     return bool(lead) and bool(_DENYING_LABEL.fullmatch(text, lead.end(), le))
 
