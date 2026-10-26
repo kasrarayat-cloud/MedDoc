@@ -1932,6 +1932,15 @@ _SEC_NEXT_LINE = re.compile(r'\n[ \t]*(?:\n[ \t]*)?[^\n]*')  # the first line un
 _SEC_ANSWER_REACH = 200  # how much of that line is read for a negation word (bounds the work per span)
 
 
+def _box_checked_in_every_reading(an: Analysis, start: int, end: int) -> bool:
+    """Whether a checked box governs [start, end) in every reading of its row: _box_state is 'on' and, on a row that
+    pairs both ways, both readings give the item that checked box. One reading alone ("Biopsy: ☒ Cold snare
+    polypectomy": the box trails Biopsy or leads the snare) keeps _box_state's 'on' - the row reads as every tree read
+    it outside a performed-today label - but is no proof enough to lift a hold that only an item's own box lifts
+    (round 4d integration: the BOXES3 verifier's new problem 6, where it released round 4c's performed-today hold)."""
+    return _box_state(an, start, end) == 'on' and not an.memo.get(('box-one-reading', start, end), False)
+
+
 def _SEC_today_label_hold(an: Analysis, section, start: int, end: int) -> Optional[str]:
     """A cue holding [start, end) when only its procedure section would read it performed, and that section was opened
     by one of round 3b's performed-today labels ("Procedures performed today:") over any section but a procedure,
@@ -1958,7 +1967,7 @@ def _SEC_today_label_hold(an: Analysis, section, start: int, end: int) -> Option
             answer_end = nxt.end() if nxt else line_end
         if not cues.DOUBT_TOKEN.search(text, section.heading.end, answer_end):
             return None
-    if an.lay.sentence_for(start, end)[0] < line_end or _box_state(an, start, end) == 'on':
+    if an.lay.sentence_for(start, end)[0] < line_end or _box_checked_in_every_reading(an, start, end):
         return None
     label = ' '.join(text[section.heading.start:line_end].split())[:80]
     return f"uncertain: listed after '{label}', a performed-today label that may answer none"
@@ -2444,14 +2453,16 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
             else:  # 'both' (structure:0): the readings agree, or the item is held as boxes that disagree
                 led = _box_lead_state(text, boxes, span_end)
                 trailed = _box_trail_state(an, items, boxes, start, end, hi)
-                if led == trailed:
-                    result = led
+                if led == trailed or (led in (None, 'on') and trailed in (None, 'on')):
+                    result = led or trailed
+                    # round 4d integration (BOXES3 verifier, new problem 6): a checked box only one reading gives the
+                    # item ("Biopsy: ☒ Cold snare polypectomy": the box trails Biopsy or leads the snare) is no proof
+                    # the item itself was checked (_box_checked_in_every_reading)
+                    if led != trailed:
+                        an.memo[('box-one-reading', start, end)] = True
                 elif 'unknown' in (led, trailed):
                     result = 'unknown'  # round 4d BOXES3: a reading gives it the unread mark: held as unread
                 else:
-                    # round 4d integration (BOXES3 verifier, new problem 6): one reading giving the item a checked box
-                    # and the other none is a disagreement too ("Biopsy: ☒ Cold snare polypectomy": the box trails
-                    # Biopsy or leads the snare), so the item is held as mixed, never read checked by one reading alone
                     result = 'mixed'
         an.memo[key] = result
     return an.memo[key]

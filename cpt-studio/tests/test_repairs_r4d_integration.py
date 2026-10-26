@@ -1,9 +1,10 @@
 """Round 4d integration (lead): what the round-4d verifiers confirmed and the repairs left open, fixed on the integrated
 head.
 
-- BOXES3's verifier, new problem 6 (low): on a row that pairs both ways, one reading giving an item a checked box and the
-  other none read it checked ("Biopsy: ☒ Cold snare polypectomy" under "Procedures performed today:"), releasing round
-  4c's performed-today hold against the strict rows.
+- BOXES3's verifier, new problem 6 (low): on a row that pairs both ways, a checked box that only one reading gives an
+  item lifted round 4c's performed-today hold ("Biopsy: ☒ Cold snare polypectomy" under "Procedures performed
+  today:"). Only that hold now asks for a box every reading gives the item; elsewhere the row reads as every tree read
+  it (a two-column PDF form's "Biopsy: ☒ <the next column's sentence>" stays ready: round 4 extraction:0's pin).
 - New problem 2 (medium): ordinary lines above the separately identifiable E/M statement refused it ("Allergies
   confirmed: none.", "Consent: patient agrees.").
 - New problems 3 and 4 (medium): a done-question about a prior procedure ("Prior colonoscopy performed? No"), or one
@@ -32,7 +33,7 @@ class OneReadingAloneIsNoCheckedBoxTests(unittest.TestCase):
     NOTE = HEAD + ('Procedure: Colonoscopy\nIndication: Screening.\nProcedures performed today:\n{row}\n'
                    'Findings: The colonoscope was advanced to the cecum.\n')
 
-    def test_an_item_label_row_with_one_box_holds_both_items(self):
+    def test_under_a_performed_today_label_one_reading_alone_lifts_no_hold(self):
         for row in ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy: [x] Cold snare polypectomy',
                     'Biopsy:\t☒ Cold snare polypectomy', 'Biopsy:  ☒ Cold snare polypectomy'):
             text = self.NOTE.format(row=row)
@@ -40,6 +41,12 @@ class OneReadingAloneIsNoCheckedBoxTests(unittest.TestCase):
                 self.assertEqual(read(text, 'Biopsy')[0], 'uncertain')
                 self.assertEqual(read(text, 'Cold snare polypectomy')[0], 'uncertain')
                 self.assertEqual(outcome(text, '45380', 'Biopsy'), 'held')
+
+    def test_outside_that_label_the_row_reads_as_every_tree_read_it(self):
+        text = HEAD + ('Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. A 6 mm sigmoid polyp '
+                       'was seen.\nBiopsy: \u2612 Cold snare polypectomy\n')
+        self.assertEqual(read(text, 'Biopsy')[0], 'performed')
+        self.assertEqual(read(text, 'Cold snare polypectomy')[0], 'performed')
 
     def test_controls_a_box_that_only_one_way_can_govern_is_read(self):
         for row, phrase, status in (('☒ Biopsy', 'Biopsy', 'performed'),

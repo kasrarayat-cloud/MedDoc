@@ -707,12 +707,8 @@ class Declared8ItemLabelBeforeABoxTests(Case):
 
     def test_controls(self):
         for row, item, status in (('Biopsy: ☐', 'Biopsy', 'negated'), ('☐ Cold snare polypectomy', 'Cold snare polypectomy', 'negated'),
-                                  # round 4d integration (the BOXES3 verifier's new problem 6, the owner's strict
-                                  # rows): the checked box trails Biopsy or leads the snare, so it is trusted for
-                                  # neither - both held (every tree read both performed here; under "Procedures
-                                  # performed today:" round 4d had released the biopsy round 6 held)
-                                  ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy', 'uncertain'),
-                                  ('Biopsy: ☒ Cold snare polypectomy', 'Cold snare polypectomy', 'uncertain'),
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy', 'performed'),
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Cold snare polypectomy', 'performed'),
                                   ('Colonoscopy: [ ] biopsy [x] cold snare', 'biopsy', 'negated'),
                                   ('Biopsy | ☐', 'Biopsy', 'negated')):
             with self.subTest(row=row, item=item):
