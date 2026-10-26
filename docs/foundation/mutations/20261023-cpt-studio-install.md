@@ -1,11 +1,5 @@
 # Prospective declaration: CPT Studio at cpt.quillmd.com (synthetic, login-protected)
 
-DRAFT — the lead finalises it: put the 40-character merge commit in place of
-every revision placeholder, refresh the baseline figures below from a fresh
-read-only look, delete this paragraph, commit, and only then run any phase.
-`ops/install.py` refuses a declaration that still holds a placeholder or does
-not name the revision it installs.
-
 Authority: the owner's directive recorded in
 docs/foundation/rulings/2026-10-23-cpt-studio-gi.md ("Install a protected
 synthetic demonstration at cpt.quillmd.com with normal HTTPS verification",
@@ -16,15 +10,16 @@ This is a new standalone service: no QuillMD source, database, users, files,
 units or environment are shared, promoted or edited. No purchase, agreement,
 new ACME account, real-patient processing or provider request is part of it.
 
-Revision installed: <REVISION> (image tag: cpt-studio: followed by its first 12 characters).
+Revision installed: 29e4d1f52939427ee277287e585b479912122679 (the merge commit of
+PR #1435; image tag cpt-studio:29e4d1f52939).
 Execute each phase separately through scripts/run-ruled-mutation.sh with
-`python3 -B cpt-studio/ops/install.py --phase <phase> --revision <REVISION>
---receipts /home/claude/cpt-studio-install-20261023`, in this order:
+`python3 -B cpt-studio/ops/install.py --phase <phase> --revision
+29e4d1f52939427ee277287e585b479912122679 --receipts /home/claude/cpt-studio-install-20261023`, in this order:
 preflight, secrets, image, db, app, reference, provision, http-vhost, cert,
 https-vhost, verify. Read each receipt before the next phase. ops/INSTALL.md
 describes every check.
 
-## Baseline (read-only, 2026-10-23 22:05Z; the preflight receipt is binding)
+## Baseline (read-only, 2026-10-26T19:07Z; the preflight receipt is binding)
 
 - /etc/nginx/sites-available sha256: dealhunter cbc089226d5f9f55f3543ee277f16e7e91f08f2ea6737141d7471e155b3c4ebd;
   dealmason 6fd1916b6444caf394d30f49fe7d3e943b5cdf322e0bfe009bb5bd7724979c74;
@@ -48,14 +43,17 @@ describes every check.
 - Docker: 57 containers (21 running), 39 volumes, 13 networks; none of
   cpt-studio-db/-web/-worker, cpt-studio-net, cpt-studio-pg, cpt-studio-files
   exists (cpt-studio-test-pg is the session's disposable test database, not
-  touched). Ports 127.0.0.1:9150 and 55451 free. uid 10150 unused on the host
-  (uid 10001 is used by the voiceassistmain-agent containers, which is why the
-  image does not use it).
+  touched). Ports 127.0.0.1:9150 and 55451 free. uid 10150 runs no task on the
+  host (uid 10001 is used by the voiceassistmain-agent containers, which is why
+  the image does not use it). The pinned helper and postgres images are present.
 - DNS: cpt.quillmd.com A 147.189.172.8, no AAAA.
 - Let's Encrypt lineages referenced by enabled vhosts: quillmd.com,
-  staging.quillmd.com, voice.kasitcorp.com. The full list, renewal-config
-  hashes and the single ACME account id are recorded by path in the preflight
-  receipt; key material is never opened.
+  staging.quillmd.com, voice.kasitcorp.com (dealmason and leathererp use their
+  own certificates). The full list, renewal-config hashes and the single ACME
+  account id are recorded by path in the preflight receipt; key material is
+  never opened.
+- Every figure above equals the 2026-10-23 22:05Z look this declaration was
+  drafted from; none moved in the three days between.
 
 ## Expected changes, per phase
 
@@ -66,8 +64,8 @@ describes every check.
   corti-credentials.env (byte copy of /etc/quillmd-corti-test/credentials.env,
   10150:10150 0400; only its four key names are checked).
 - image: new local image tagged with the revision's first 12 characters, built
-  from git archive of <REVISION> cpt-studio/ (base python:3.12-slim-bookworm
-  pinned by digest).
+  from git archive of 29e4d1f52939427ee277287e585b479912122679 cpt-studio/
+  (base python:3.12-slim-bookworm pinned by digest).
 - db: new bridge network cpt-studio-net, volumes cpt-studio-pg and
   cpt-studio-files, container cpt-studio-db (postgres 17.11-alpine pinned by
   digest, uid 70, all capabilities dropped, 512 MiB, 127.0.0.1:55451,
@@ -77,8 +75,8 @@ describes every check.
   tmpfs /tmp, cap-drop ALL, no-new-privileges, uid 10150, no swap, no core
   dumps, restart unless-stopped. Provider mode live with
   CPT_STUDIO_AUTHORIZATION_REF=docs/foundation/rulings/2026-10-23-cpt-studio-gi.md
-  (the lead confirms this or changes it to --provider-mode disabled before
-  committing); the Corti credentials are mounted read-only into the worker
+  (confirmed by the lead: the directive's "Use the existing authorized Corti
+  account"); the Corti credentials are mounted read-only into the worker
   only, after the application's own loader has parsed them in that mount
   layout with no network (before migrations, so a bad file changes nothing).
   The installer itself sends no provider request; the first live request
@@ -89,10 +87,17 @@ describes every check.
   into cpt-studio-files/reference/ and imported as two ReferenceSource rows
   (code-keyed facts only, descriptors dropped) with the pinned release, URL
   and window and the retrieval times the operator states for the downloads
-  (--pfs-retrieved-at, --mue-retrieved-at).
-- provision: Category gastroenterology, one Gastroenterology workspace, one
-  human owner account and one agent reviewer account labelled as an
-  automated agent; /etc/cpt-studio/initial-credentials.json (root 0600, both)
+  (--pfs-retrieved-at, --mue-retrieved-at). Arguments: --pfs-zip
+  /home/claude/cpt-studio-reference-20261026/rvu26d-updated-08-26-2026.zip
+  --pfs-retrieved-at 2026-10-16T20:26:58Z (its download record) --mue-zip
+  /home/claude/cpt-studio-reference-20261026/medicare-ncci-2026-q4-practitioner-services-mue-table.zip
+  --mue-retrieved-at 2026-10-23T21:01:44Z (the downloaded file's own time; no
+  separate record). Both copies were checked against the pinned sizes and
+  sha256 before this declaration was committed.
+- provision (--owner-username owner): Category gastroenterology, one
+  Gastroenterology workspace, one human owner account ("owner") and one agent
+  reviewer account labelled as an automated agent;
+  /etc/cpt-studio/initial-credentials.json (root 0600, both)
   and /home/claude/.cpt-studio/agent-credentials.json (0600, agent only).
 - http-vhost: new /etc/nginx/sites-available/quillmd-cpt (HTTP stage: ACME
   path and a 301 to https only) and the sites-enabled symlink; nginx reload.
@@ -120,7 +125,8 @@ ok. In particular: secrets reports names/modes only; image reports the
 revision label, user 10150, English OCR, passing Django checks and a WSGI load
 as its own user on a read-only root; app reports
 health {status ok, service cpt-studio, data_mode synthetic-only, database ok,
-release <REVISION>} through 127.0.0.1:9150 and a worker that stayed up;
+release 29e4d1f52939427ee277287e585b479912122679} through 127.0.0.1:9150 and a
+worker that stayed up;
 http-vhost proves the ACME probe is served for cpt.quillmd.com and the 301;
 cert records the lineage by path with other lineages unchanged; https-vhost
 proves https://cpt.quillmd.com/health/ with normal certificate verification
