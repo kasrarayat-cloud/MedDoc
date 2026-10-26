@@ -113,13 +113,17 @@ OVERRUN_MESSAGES = {
     'memory': 'Reading this document needed more memory than the limit allows and was stopped. Shorten it or split '
               'it, then upload it again.',
 }
+MENTIONS_MESSAGE = ('This document names a procedure {count:,} times, more than the {limit:,} this service reads in one '
+                    'document, so it was not read and nothing was sent. Shorten it or split it, then upload it again.')
 
 
-def _bounded(fn, *args, seconds, refusal=None):
-    """``fn(*args)`` under the wall-clock and memory limits (studio/bounded.py); an overrun fails the stage, or is
-    refused to the member when ``refusal`` is given (a web request)."""
+def _bounded(fn, *args, seconds, refusal=None, memory_bytes=None):
+    """``fn(*args)`` under the wall-clock and memory limits (studio/bounded.py; ``memory_bytes`` defaults to
+    BOUNDED_MEMORY_BYTES); an overrun fails the stage, or is refused to the member when ``refusal`` is given (a web
+    request)."""
     try:
-        return bounded.run_bounded(fn, *args, seconds=seconds, memory_bytes=settings.BOUNDED_MEMORY_BYTES)
+        return bounded.run_bounded(fn, *args, seconds=seconds,
+                                   memory_bytes=memory_bytes or settings.BOUNDED_MEMORY_BYTES)
     except bounded.Overrun as exc:
         message = OVERRUN_MESSAGES[exc.reason].format(seconds=seconds)
         raise (refusal or StageFailure)(message) from None
@@ -166,9 +170,15 @@ def _record_routing(revision, data, service_date):
 # deadline is the stage's and not each call's, and no routing analysis is ever retained in the long-lived worker.
 # The children are Django-free and never touch the database: the parent records what they return.
 
-def _analyze_child(text, user_values):
+def _analyze_child(text, user_values, mention_limit):
     """The document's facts and its routing for the effective service date those facts (with the member's values)
-    give. Routing then reuses the context work the child already did, instead of redoing it cold."""
+    give. Routing then reuses the context work the child already did, instead of redoing it cold. A document naming
+    procedures more than ``mention_limit`` times is not read: only that count (an int) is returned (round 7: a
+    mention is read in its list window, and a long list of one service's name overran the stage). Every later stage
+    reads only a revision this stage read."""
+    named = gi_detect.service_mention_count(text)
+    if named > mention_limit:
+        return named
     document_facts = gi_context.extract_context(text)
     service_date = _service_date_of(_merged_facts(document_facts, user_values))
     return document_facts, service_date, to_jsonable(gi_detect.route(text, service_date))
@@ -284,8 +294,11 @@ def stage_extract(job):
 def stage_analyze(job):
     revision, encounter = job.revision, job.encounter
     revision.refresh_from_db()
-    document_facts, service_date, data = _bounded(_analyze_child, revision.text, dict(encounter.user_values or {}),
-                                                  seconds=settings.JOB_DEADLINE_SECONDS['analyze'])
+    read = _bounded(_analyze_child, revision.text, dict(encounter.user_values or {}), settings.MAX_SERVICE_MENTIONS,
+                    seconds=settings.JOB_DEADLINE_SECONDS['analyze'])
+    if isinstance(read, int):  # it names procedures more often than the service reads: not read, nothing recorded
+        raise StageFailure(MENTIONS_MESSAGE.format(count=read, limit=settings.MAX_SERVICE_MENTIONS))
+    document_facts, service_date, data = read
     context = _record_context(encounter, revision, document_facts)
     if context_service_date(context) != service_date:  # the child read the same facts; never route another date
         raise StageFailure('The document was routed for another service date than its context; nothing was used.')
@@ -452,7 +465,8 @@ def stage_assess(job):
     data, result = _bounded(
         _assess_child, revision.text, service_date, tuple(PageSpan(**p) for p in revision.pages),
         context_facts(context), normalized, reference, provider_status, revision.extraction_status,
-        tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'])
+        tuple(revision.messages), seconds=settings.JOB_DEADLINE_SECONDS['assess'],
+        memory_bytes=settings.ASSESS_MEMORY_BYTES)
     routing_run = _record_routing(revision, data, service_date)
     try:
         assessment = review.persist_assessment(encounter=encounter, revision=revision, context=context,

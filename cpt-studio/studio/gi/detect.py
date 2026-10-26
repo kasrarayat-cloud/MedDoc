@@ -121,6 +121,12 @@ def _service_mentions(text: str) -> tuple[Mention, ...]:
     return _without_overlaps(found)
 
 
+def service_mention_count(text: str) -> int:
+    """How many times the text names a procedure family (the service mentions route() reads one by one): what the
+    analyze stage bounds before reading a document (settings.MAX_SERVICE_MENTIONS)."""
+    return len(_service_mentions(text))
+
+
 def _without_overlaps(found: list[Mention]) -> tuple[Mention, ...]:
     """Left to right; where two mentions overlap the longer one wins."""
     found.sort(key=lambda m: (m.start, -(m.end - m.start)))
@@ -3159,6 +3165,13 @@ def _SEC_answer_above(an: Analysis, ls: int, le: int) -> Optional[str]:
     return None
 
 
+# The negation words a service's own line is read for (_S2_own_line_denies): each is read in a clause window of its own,
+# so a line of more is not read for its own denial and the line above decides, which can only hold (round 7 bounded:5:
+# "Biopsies were taken, no, no, ..." under an answered question routed 10-12x slower than aaf517e, and without the
+# question the analyze stage overran from about 200,000 characters).
+_S2_OWN_LINE_TOKENS = 8
+
+
 def _S2_own_line_denies(an: Analysis, lo: int, hi: int) -> bool:
     """Whether [lo, hi), the service's own line within CLAUSE_REACH of the span, holds a negation word that negates on
     its own, as the cue reader negates (_clause_reading_cues): an anchored negation of a service or intervention named
@@ -3168,10 +3181,16 @@ def _S2_own_line_denies(an: Analysis, lo: int, hi: int) -> bool:
     (round 4d sections:3: the hold was skipped on any negation word, so the question's "No" above still excluded the
     biopsy). A word a complication, qualifier or finding explains ("without difficulty", "with no bleeding", "no polyps
     were seen") or that only doubts (", which was not ulcerated", "could not be completed") does not: the cross-line
-    negation is then what decides, and it holds. Bounded by the window; the negation readers are memoised."""
+    negation is then what decides, and it holds. Bounded: a line with more than _S2_OWN_LINE_TOKENS negation words is
+    not read for them (False: the cross-line answer decides, and it can only hold), counted by a search that stops past
+    the cap; the negation readers are memoised."""
     text = an.text
+    tokens = []
     for token in cues.DOUBT_TOKEN.finditer(text, lo, hi):
-        span = (token.start(), token.end())
+        tokens.append((token.start(), token.end()))
+        if len(tokens) > _S2_OWN_LINE_TOKENS:
+            return False
+    for span in tokens:
         cs, ce = an.lay.window(an.lay.clauses_for(*span)[0], span[0], span[1], CLAUSE_REACH)
         if _anchored_explains(an, cs, ce, span) or _covered(span, [where for _, where in _memberless_negations(an, cs, ce)]):
             return True
@@ -4683,6 +4702,11 @@ def _B2_label_hold(an: Analysis, start: int, end: int) -> Optional[str]:
     if unpaired is not None:
         return unpaired
     lo, hi = _B2_line_window(an, start, end)
+    if not (_BOX.search(an.text, lo, hi) or _BOX_UNREAD.search(an.text, lo, hi) or _BOX_RADIO.search(an.text, lo, hi)):
+        # no mark in the window: its status line has no box (_box_tokens_read finds none, and no positional mark
+        # without one), so it is None - answered without reading and memoising the window's items for every performed
+        # mention of a box-free text (round 7 bounded:3: 34 MB of them at 30,000 characters of "EUS; EUS; ...")
+        return None
     line = _B2_status_line(an, lo, hi)
     if line is None:
         return None
@@ -4728,6 +4752,11 @@ def _B3_label_end(text: str, lo: int, first_mark: int) -> int:
 # label of a row of options (read by every option: round 6 declared:0, declared:3).
 B3_ROW_CHARS = 1000  # a box row longer than this is never paired: it is held (bounds the work per row)
 B3_LINE_MARKS = 64  # a line with more marks than this is never paired, row by row: held (bounds the work per line)
+# A row with a mark past the document's first B3_DOCUMENT_MARKS is never paired: held (bounds the work per document).
+# Pairing reads each option in its own line window, and a line's cap leaves the document's unbounded: 64-mark rows one
+# per line kept a window read per option, 98 MB at 50,000 characters, and a 300,000-character paste of them overran the
+# analyze stage's memory where aaf517e read it in 3 s (round 7 bounded:0, regression:0).
+B3_DOCUMENT_MARKS = 1000
 _B3_ROW_HOLD = ("uncertain: the check boxes on the line '{}' cannot be paired with its entries in exactly one way, so "
                 'what they say of it is held')
 _B3_HOLD_PREFIX = _B3_ROW_HOLD.split("'")[0]
@@ -4737,6 +4766,10 @@ _B3_HOLD_PREFIX = _B3_ROW_HOLD.split("'")[0]
 _B3_ROW_UNPAIRED = ("uncertain: the check boxes on the line '{}' are not paired with its entries (the row is too long, or "
                     'its line carries too many check boxes), so what they say of it is held')
 assert _B3_ROW_UNPAIRED.split("'")[0] == _B3_HOLD_PREFIX
+_B3_DOCUMENT_UNPAIRED = ("uncertain: the check boxes on the line '{}' are not paired with its entries (the document has "
+                         'more than ' + f'{B3_DOCUMENT_MARKS:,}' + ' check boxes up to it), so what they say of it is held')
+assert _B3_DOCUMENT_UNPAIRED.split("'")[0] == _B3_HOLD_PREFIX
+_B3_DOCUMENT_CAP_KEY = ('b3-document-cap',)  # where the document's mark past B3_DOCUMENT_MARKS starts
 _B3_LINES_KEY = ('b3-line-breaks',)  # the text's line breaks, sorted (each line's bounds are read by bisection)
 # What ends a row's label in the text before its first mark: a colon (after the label's own "?"), a cell bar, "=", a
 # tab, a dash with a space on either side (the shared grammar's separators, _BOX_Q_SEP: round 6 declared:2), a linking
@@ -4986,9 +5019,25 @@ def _B3_row(an: Analysis, start: int, end: int) -> Optional[tuple]:
         result = None
         if hi > lo and (_BOX.search(text, lo, hi) or _BOX_UNREAD.search(text, lo, hi)
                         or _BOX_RADIO.search(text, lo, hi)):
-            result = _B3_row_read(an, lo, hi, _B3_crowded(an, line_lo, line_hi))
+            unpaired = (_B3_ROW_UNPAIRED if _B3_crowded(an, line_lo, line_hi)
+                        else _B3_DOCUMENT_UNPAIRED if hi > _B3_document_cap(an) else None)
+            result = _B3_row_read(an, lo, hi, unpaired)
         an.memo[key] = result
     return an.memo[key]
+
+
+def _B3_document_cap(an: Analysis) -> int:
+    """Where the document's mark past its first B3_DOCUMENT_MARKS starts (past the text when it has no more): a row
+    ending after it has a mark there or later and is never paired. Found once per text by a search that stops at that
+    mark, so the cap depends on the text alone, never on which rows were read first."""
+    if _B3_DOCUMENT_CAP_KEY not in an.memo:
+        cap = len(an.text) + 1
+        for count, glyph in enumerate(_B3_MARK_GLYPH.finditer(an.text), 1):
+            if count > B3_DOCUMENT_MARKS:
+                cap = glyph.start()
+                break
+        an.memo[_B3_DOCUMENT_CAP_KEY] = cap
+    return an.memo[_B3_DOCUMENT_CAP_KEY]
 
 
 _B3_MARK_GLYPH = re.compile('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern)
@@ -5009,7 +5058,7 @@ def _B3_crowded(an: Analysis, line_lo: int, line_hi: int) -> bool:
     return an.memo[key]
 
 
-def _B3_row_read(an: Analysis, lo: int, hi: int, crowded: bool) -> Optional[tuple]:
+def _B3_row_read(an: Analysis, lo: int, hi: int, unpaired: Optional[str]) -> Optional[tuple]:
     text = an.text
     shown = ' '.join(text[lo:min(hi, lo + 640)].split())[:160]
     cue = _B3_ROW_HOLD.format(shown)
@@ -5029,8 +5078,9 @@ def _B3_row_read(an: Analysis, lo: int, hi: int, crowded: bool) -> Optional[tupl
     unread = any(state == 'unread' for _, _, state in marks)
     if not marks or (len(marks) == 1 and not unread):
         return None
-    if crowded:  # its line carries more than B3_LINE_MARKS marks: never paired (bounded), held
-        return lo, hi, lo, False, (), tuple(marks), unread, False, _B3_ROW_UNPAIRED.format(shown), True, lo
+    if unpaired is not None:  # its line carries more than B3_LINE_MARKS marks, or it has a mark past the document's
+        # first B3_DOCUMENT_MARKS: never paired (bounded), held with the cue that says which
+        return lo, hi, lo, False, (), tuple(marks), unread, False, unpaired.format(shown), True, lo
     # The row's option words: denying and completion words written beside a mark (as a hold word is an option only
     # there: _box_beside_a_mark), so a remark's prose ("... polyp was performed.") names none.
     options = [o for o in _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
@@ -5605,9 +5655,12 @@ def _cannulation(an: Analysis, sentences) -> Optional[Fact]:
 def _egd_location(an: Analysis, interventions: Optional[Fact]) -> Optional[Fact]:
     if not interventions:
         return None
-    found = []
+    found, seen = [], set()
     for span in interventions.evidence:
         for cs, ce in an.lay.clauses_for(span.start, span.end):
+            if (cs, ce) in seen:  # a clause's locations are read once, however many of its interventions are listed
+                continue  # (round 7 bounded:4: once per intervention, a listed clause cost interventions x locations)
+            seen.add((cs, ce))
             hits = sorted(((m.start(), -(m.end() - m.start()), m.end(), label) for label, p in cues.UPPER_LOCATIONS
                            for m in p.finditer(an.text, cs, ce)))
             last_end = -1

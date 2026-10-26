@@ -7,6 +7,7 @@ I/O. ``to_jsonable`` / ``from_jsonable`` round-trip them through JSON fields.
 from __future__ import annotations
 
 import dataclasses
+import functools
 import hashlib
 import json
 import typing
@@ -242,14 +243,22 @@ def to_jsonable(value):
     return value
 
 
+@functools.lru_cache(maxsize=None)
+def _fields_of(tp) -> tuple:
+    """A dataclass's (field name, resolved type) pairs, read once per class: typing.get_type_hints resolves every
+    annotation again on each call, and rebuilding a mention-dense routing instance by instance spent most of the assess
+    child's round trip there (round 7 bounded:1: from_jsonable 5.4 s against 0.5 s at 100,000 characters)."""
+    hints = typing.get_type_hints(tp)
+    return tuple((f.name, hints[f.name]) for f in dataclasses.fields(tp))
+
+
 def _build(tp, data):
     origin = typing.get_origin(tp)
     if dataclasses.is_dataclass(tp):
-        hints = typing.get_type_hints(tp)
         kwargs = {}
-        for f in dataclasses.fields(tp):
-            if f.name in data:
-                kwargs[f.name] = _build(hints[f.name], data[f.name])
+        for name, hint in _fields_of(tp):
+            if name in data:
+                kwargs[name] = _build(hint, data[name])
         return tp(**kwargs)
     if origin is tuple:
         args = typing.get_args(tp)

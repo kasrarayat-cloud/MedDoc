@@ -174,7 +174,8 @@ document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text
 is extracted, or when the revision's analysis never finished (it overran its
-limits or failed): nothing is ever sent for a document that could not be read.
+limits, the document names procedures more often than the service reads, or it
+failed): nothing is ever sent for a document that could not be read.
 
 ## POST /api/encounters/{id}/stop · /resume · /reconcile
 

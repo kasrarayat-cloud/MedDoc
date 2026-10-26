@@ -21,6 +21,10 @@ import traceback
 
 log = logging.getLogger(__name__)
 READ_CHUNK = 1 << 20
+# Built before any limit is set: the child's MemoryError handler runs while the failed call's frames still hold the
+# address space, so pickling the answer there failed too and the child exited without one (round 7 bounded:6: the
+# stage then said it "failed unexpectedly" instead of naming the memory limit).
+MEMORY_PAYLOAD = pickle.dumps(('memory', None))
 
 
 class Overrun(Exception):
@@ -45,9 +49,12 @@ def _child(write_fd, fn, args, memory_bytes):
         try:
             payload = pickle.dumps(('ok', fn(*args)), protocol=pickle.HIGHEST_PROTOCOL)
         except MemoryError:
-            payload = pickle.dumps(('memory', None))
+            payload = MEMORY_PAYLOAD  # nothing is allocated here; what the call held is released after the handler
         except BaseException:  # noqa: BLE001 — reported to the parent, which logs it
-            payload = pickle.dumps(('error', traceback.format_exc()))
+            try:
+                payload = pickle.dumps(('error', traceback.format_exc()))
+            except MemoryError:  # describing the failure needed the memory the failure left
+                payload = MEMORY_PAYLOAD
         view = memoryview(payload)
         while view:
             view = view[os.write(write_fd, view):]

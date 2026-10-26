@@ -31,6 +31,7 @@ ADAPTER_VERSION = 'corti-coding-v2@cptstudio-1'
 SYSTEMS = ('icd10cm-outpatient', 'cpt')
 MAX_SELECTED = 64
 MAX_INFORMATIONAL = 256  # candidate and alternative codes one response may list (bounded:5)
+MAX_EVIDENCE = 1024  # evidence passages one response may cite, over every code, candidate and alternative (round 7)
 DEFAULT_MAX_REQUEST_BYTES = 512_000
 DEFAULT_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 USAGE_BASIS = 'provider_reported_credits_not_usd'
@@ -300,6 +301,17 @@ def _strict_json(raw: bytes):
     return value
 
 
+def _entries(parsed: dict):
+    """Every object entry of a parsed response that may cite evidence: its codes and candidates, and each one's
+    alternatives (what _ResponseReader reads; a malformed entry is skipped here as there)."""
+    for entry in parsed['codes'] + parsed['candidates']:
+        if isinstance(entry, dict):
+            yield entry
+            alternatives = entry.get('alternatives')
+            if isinstance(alternatives, list):
+                yield from (alternative for alternative in alternatives if isinstance(alternative, dict))
+
+
 def _unique_keys(pairs):
     result = {}
     for key, value in pairs:
@@ -369,6 +381,13 @@ def normalize_coding_response(provider: str, request: ProviderRequest, response_
     if informational > MAX_INFORMATIONAL:
         return refused(f'it lists {informational} candidate and alternative codes, more than the '
                        f'{MAX_INFORMATIONAL} this adapter accepts')
+    # Every evidence passage of every code, candidate and nested alternative is read in the assess stage: tens of
+    # thousands of exact spans inside the 4 MiB response exhausted its memory after the request was sent (round 7
+    # bounded:2). Refused whole and named by count, never truncated: dropping a passage could change a code's status
+    # without the reviewer. The retained responses cite 32 to 45 passages in all.
+    cited = sum(len(entry['evidences']) for entry in _entries(parsed) if isinstance(entry.get('evidences'), list))
+    if cited > MAX_EVIDENCE:
+        return refused(f'it cites {cited} evidence passages, more than the {MAX_EVIDENCE} this adapter accepts')
     reader = _ResponseReader(request.contexts)
     for role, key in (('selected', 'codes'), ('candidate', 'candidates')):
         for index, entry in enumerate(parsed[key]):

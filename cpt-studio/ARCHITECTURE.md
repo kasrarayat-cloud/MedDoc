@@ -739,7 +739,10 @@ The service's own line keeps its own reading only when a negation word on it
   word a complication, qualifier or finding explains, a word that only doubts,
   or a clause cue leaves the hold ("Biopsies were taken from the gastric antrum
   without difficulty." under "Has the patient had a prior adverse reaction to
-  sedation or anesthesia? No" is held) (round 6 sections:3).
+  sedation or anesthesia? No" is held) (round 6 sections:3). Each negation word is
+  read in a clause window of its own, so a line with more than eight of them
+  (`_S2_OWN_LINE_TOKENS`) is not read for them: the line above decides, and it can
+  only hold (round 7 bounded:5).
   The line above is read whole, from its own start, and by
   sections' own answer readers (a dash, a column, a tab or the last field of the
   line; an option row; a field question of any length, its "?" included; a
@@ -846,7 +849,10 @@ The service's own line keeps its own reading only when a negation word on it
   characters) is never paired and is held, unless its only mark is one plain box, which keeps its reading at any length
   (round 4d verifier, boxes3 new problem 7); so is a row of two or more marks, or of an unread mark, on a line carrying
   more than `B3_LINE_MARKS` (64) marks (round 6 bounded:0, bounded:2); their cue says the row was never paired
-  (`_B3_ROW_UNPAIRED`, the same prefix).
+  (`_B3_ROW_UNPAIRED`, the same prefix). So is a row with a mark past the document's first `B3_DOCUMENT_MARKS` (1,000)
+  marks, held with `_B3_DOCUMENT_UNPAIRED` (the same prefix; its cue names the document's count): where that mark is
+  depends on the text alone, never on which rows were read first, and a row of one plain box keeps its reading there
+  too (round 7 bounded:0, regression:0: 64-mark rows one per line overran the analyze stage's memory).
   The `[PDF form fields on page N]` and `[PDF annotation text
   on page N]` blocks are section boundaries of kind `other` with no default
   (a field labelled with a procedure, findings or technique heading reads its
@@ -877,8 +883,8 @@ The service's own line keeps its own reading only when a negation word on it
   `BOX_FIELD_HELD_UNTIED`, `BOX_FIELD_ANSWER_UNTIED`, `BOX_FIELD_STATUS`) and
   the section holds (`_SEC_AFTER_A_PLAN_LABEL`, the performed-today label hold,
   `HELD_AFTER_A_CUT`) are uncertain cues like any other hold.
-  So are the strict rows' holds (`_B3_ROW_HOLD`, and `_B3_ROW_UNPAIRED` for a row never paired, which share the prefix
-  "uncertain: the check boxes on the line") and the service-named done-question's hold (`_B3_ASKED_NO`), each a doubt.
+  So are the strict rows' holds (`_B3_ROW_HOLD`, and `_B3_ROW_UNPAIRED` and `_B3_DOCUMENT_UNPAIRED` for a row never
+  paired, which share the prefix "uncertain: the check boxes on the line") and the service-named done-question's hold (`_B3_ASKED_NO`), each a doubt.
 - Cost: each mention stores a bounded window of its sentence, not the whole
   sentence, and a member's pre-triggers are read once from its own bounded
   start, so a long coordinated list stays linear. Clause lookups take only the
@@ -888,7 +894,10 @@ The service's own line keeps its own reading only when a negation word on it
   status line's boxes and option words are indexed once per line window (`_B3_line_index`), so the option readers find
   an option's text, and whether it holds a remark (`_B3_line_remark`, asked once per window), by bisection; and a hold's
   quoted line is read once per line, its bounds by bisection over the text's line breaks (`_B3_shown_line`; round 6
-  bounded:0, bounded:2).
+  bounded:0, bounded:2). Pairing reads each option in its own line window, so the rows paired are bounded per document
+  as well as per line (`B3_DOCUMENT_MARKS`); the status-line label hold answers a line window with no mark without
+  reading or memoising its items (round 7 bounded:3); and the EGD location reader reads each clause's locations once,
+  however many of its interventions the clause lists (round 7 bounded:4).
   A span's family is found positionally — the
   services are sorted and never overlap, so only those starting within the
   longest service name before the span are tested — so a provider citing a long
@@ -904,7 +913,7 @@ The extent readers make one span of a clause and share it among its landmark
   reader of a member's tail - `NEGATED_POST`, `INCOMPLETE_POST`, `UNCERTAIN_POST`, `NEGATION_HEAD_AFTER` - is anchored
   at its start and fails on a tail that opens with spaces or commas and a service token, whatever follows, so the
   readings are exactly those of the whole tail (round 4d integration; a long comma list of service names costs about
-  half what it did, and one past about 60,000 characters still overruns: ACCURACY-RESIDUALS).
+  half what it did; a document naming procedures more than `MAX_SERVICE_MENTIONS` times is not read, below).
   Every stage reads the
   document in ONE forked child under the stage's own wall clock
   (`JOB_DEADLINE_SECONDS`) and a memory allowance (`BOUNDED_MEMORY_BYTES`,
@@ -915,7 +924,20 @@ The extent readers make one span of a clause and share it among its landmark
   it was not given is an error, never an empty answer). An overrun fails the
   stage with a plain message instead of holding the worker; nothing a stage
   read stays cached in the worker (`jobs.release_routing_caches` after every
-  stage is the backstop). A member's context change re-reads the document's
+  stage is the backstop). The assess stage routes the document again (its span
+  readings read that routing's analysis) and then validates, so it has twice the
+  analyze stage's deadline and the analyze stage's memory allowance plus 256 MiB
+  (`ASSESS_MEMORY_BYTES`): a document the analyze stage read within its limits is
+  never sent and then left unassessed for repeating that work (round 7
+  bounded:1), and `from_jsonable` resolves each dataclass's field types once. A
+  document naming procedures more than `MAX_SERVICE_MENTIONS` (1,000) times is not
+  read: the analyze child counts the service mentions first, and the stage fails
+  with a plain message naming the count; nothing is recorded or sent. Each mention
+  is read in its list window, and a list of one service's name overran the stage
+  from about 40,000 characters (round 7 declared:8, bounded:1, bounded:3). A child
+  that runs out of memory answers with a reply built before its limit was set, so
+  the stage names the memory limit rather than an unexpected failure (round 7
+  bounded:6). A member's context change re-reads the document's
   facts in a child under `CONTEXT_REQUEST_SECONDS`, and is refused for a
   revision whose analysis overran or failed, so nothing is ever sent for a
   document the service could not read; a stopped, swept or expired analysis is
@@ -951,9 +973,11 @@ with `trust_env=False`, `max_retries=0`, `allow_redirects=False`, connect
 10 s / read 120 s, request ≤ 512,000 bytes (refused, never truncated),
 response ≤ 4 MiB. A response listing more than 64 selected codes
 (`MAX_SELECTED`) or more than 256 candidate and alternative codes
-(`MAX_INFORMATIONAL`, alternatives nested under candidates included) is not
-used, and says so by count; an assessment's proposals are written in one
-INSERT (round 6 bounded:5). A response refused whole is never reported as one
+(`MAX_INFORMATIONAL`, alternatives nested under candidates included), or
+citing more than 1,024 evidence passages over all its codes, candidates and
+alternatives (`MAX_EVIDENCE`; every passage is read in the assess stage, round 7
+bounded:2), is not used, and says so by count; an assessment's proposals are
+written in one INSERT (round 6 bounded:5). A response refused whole is never reported as one
 that proposed nothing: the provider check fails ("The response from
 <provider> was not used, so there are no CPT proposals"), the problems check
 gives the reason, the readiness blocker reads "The provider response was not
@@ -1032,8 +1056,11 @@ other procedure word in the name: "Anoscopy with rubber band ligation" beside
 code is selected). Each check: `{id, label, status ∈ pass | warn | fail | not_verified |
 not_applicable | info, detail, source}`. Engine `cpt-studio-validation@3`.
 A selected, non-excluded `gi.other` code also speaks for the routed procedure
-line its passage opens with (`_Evaluation.speaks_for`, read name by name by
-`_VAL_opens_with`: 46600 citing "Anoscopy revealed grade 2 internal
+line its passage opens with (`_Evaluation.speaks_for`: a passage's own sentence
+leads are read once (`_VAL_owned_leads`) and each lead is compared with the
+routed openers once per code (`_VAL_lead_matches`, what `_VAL_opens_with`
+asks), never the passage rescanned per opener (round 7 validation:1,
+validation:2): 46600 citing "Anoscopy revealed grade 2 internal
 hemorrhoids." covers the report's "Procedure: Anoscopy"), and so for that
 procedure named again, whether the code is ready or held because the document
 doubts the procedure; another procedure line it does not open with is still
@@ -1214,7 +1241,10 @@ services where a family is judged)) and 6,000 doubting words per text, beyond
 which every code's procedure counts as doubted (held, never excluded); a clause
 about a procedure with more than 12 doubting words doubts it; a phrase is read
 within 160 characters before its word or 80 after it, and routing's exceptions
-within 60 before it and 300 after.
+within 60 before it and 300 after. Whether a word lies inside another exam's
+phrase, a no-other-procedure denial or a cut is a bisection over those spans
+(`_V2_inside`), never a scan of them per word: one long sentence of "physical
+exam" phrases ran outside every budget (round 7 validation:0).
 A passage that reads incomplete only through its detected family's
 document-level judgement ("Procedure: Colonoscopy" when the colonoscopy stopped
 at the splenic flexure) is judged by its own reading before that judgement

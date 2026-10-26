@@ -110,6 +110,10 @@ STORAGES = {
 # exactly once and never rewrites them.
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024
 MAX_PASTE_CHARS = 400_000
+# A document naming procedures more often than this is not read (the analyze stage fails with a plain message and
+# nothing is sent): each mention is read in its list window, and "EUS, EUS, ..." overran the analyze stage from about
+# 40,000 characters (round 7 declared:8, bounded:1, bounded:3). A real report names them a few dozen times.
+MAX_SERVICE_MENTIONS = 1000
 DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 0
 FILE_UPLOAD_PERMISSIONS = 0o600
@@ -153,11 +157,15 @@ PROVIDER_CONNECT_TIMEOUT_SECONDS = 10
 PROVIDER_READ_TIMEOUT_SECONDS = 120
 PROVIDER_MAX_REQUEST_BYTES = 512_000
 PROVIDER_MAX_RESPONSE_BYTES = 4 * 1024 * 1024
-JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 60}
+# The assess stage routes the document again (validation's span readings read that routing's analysis) and then
+# validates, so it has the analyze stage's time and memory and as much again for the validation: a document the analyze
+# stage read within its limits is never sent and then left unassessed for repeating that work (round 7 bounded:1).
+JOB_DEADLINE_SECONDS = {'extract': 300, 'analyze': 60, 'predict': 180, 'assess': 120}
 # Routing and context extraction run in a forked child under these (studio/bounded.py): the stage's deadline
 # above, this growth of address space past what the worker already uses, and a shorter wall clock when a
 # member's context change runs the extraction inside a web request.
 BOUNDED_MEMORY_BYTES = 512 * 1024 * 1024
+ASSESS_MEMORY_BYTES = BOUNDED_MEMORY_BYTES + 256 * 1024 * 1024  # the assess child's: routing's, and validation's
 CONTEXT_REQUEST_SECONDS = 15
 STALE_RUNNING_SECONDS = 600
 

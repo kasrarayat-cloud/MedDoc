@@ -212,7 +212,9 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
     # Routing's gi.other finding never reads such a denial ("Anoscopy was not performed; the patient declined." names
     # no mention), so the same doubt also withdraws the routed mention and the procedure line themselves (round 4c).
     doubted = None
-    marked, speaks = [], []
+    marked, speaks, spoken = [], [], set()
+    lead_openers: dict[str, tuple[int, ...]] = {}  # an owned sentence lead -> the openers it opens with, read once
+    emitted: set[str] = set()  # the leads whose openers the code already speaks for
     for reading in own:
         if (reading.status in checks.POSITIVE and checks._VAL_states_no_procedure_of_its_own(text, reading, day)
                 and not checks.names_procedure(text, reading.start, reading.end, code, day)):
@@ -222,17 +224,32 @@ def _unnamed_other(own: tuple[checks.Reading, ...], text: str, routing: RoutingR
                 doubted = checks._VAL_doubted(text, code, day) if doubted is None else doubted
                 counted = not doubted and routed_done
                 if not routed_done:
-                    # _VAL_opens_with over the opening names, read name by name to know which mention corroborates;
-                    # the code speaks for that mention even in a document that doubts the procedure (round 4d repair 2:
-                    # it is held, so that procedure has a selected proposal and is never called missed)
-                    matched = [m for m in openers if checks._VAL_opens_with(text, reading.start, reading.end, code,
-                                                                             [m.span.text], day)]
-                    counted = not doubted and bool(matched)
-                    speaks += [(m.span.start, m.span.end) for m in matched]
+                    # _VAL_opens_with over the opening names, to know which mentions corroborate; the code speaks for
+                    # them even in a document that doubts the procedure (round 4d repair 2: it is held, so that
+                    # procedure has a selected proposal and is never called missed). The passage's own leads are read
+                    # once and each lead is compared with the openers once per code (round 7 validation:1,
+                    # validation:2: name by name, a passage was rescanned per opener and every match was appended
+                    # per passage, openers x passages); the openers it speaks for keep the order that reading
+                    # passage by passage, opener by opener, gives.
+                    hits = []
+                    for lead in checks._VAL_owned_leads(text, reading.start, reading.end, code, day):
+                        if lead not in lead_openers:
+                            lead_openers[lead] = tuple(index for index, m in enumerate(openers)
+                                                       if checks._VAL_lead_matches(code, lead, m.span.text))
+                        if lead_openers[lead]:
+                            hits.append(lead)
+                    counted = not doubted and bool(hits)
+                    fresh = [lead for lead in hits if lead not in emitted]
+                    emitted.update(fresh)
+                    for index in sorted({index for lead in fresh for index in lead_openers[lead]}):
+                        span = (openers[index].span.start, openers[index].span.end)
+                        if span not in spoken:
+                            spoken.add(span)
+                            speaks.append(span)
             if not counted:  # round 4d validation:4: and which procedure's judgement made it incomplete, if any
                 reading = replace(reading, unnamed=True, judged_by=checks._V2_judged_by(text, reading, day))
         marked.append(reading)
-    return tuple(marked), tuple(dict.fromkeys(speaks))
+    return tuple(marked), tuple(speaks)
 
 
 def _VAL_family_index(routing: RoutingResult) -> dict:

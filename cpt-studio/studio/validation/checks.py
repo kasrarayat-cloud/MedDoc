@@ -2094,8 +2094,24 @@ def _V2_reference_nouns(text: str, s: int, e: int) -> list:
     """The reference nouns ("procedure", "exam", "study") of [s, e) that may be the report's procedure: not the digital
     rectal or physical exam (another act), and not another procedure denied as such (_V2_N3: "No other procedure was
     done."). A qualifier alone never makes one another procedure ("Today's follow-up exam was aborted ...")."""
-    away = [m.span() for pattern in (_V2_OTHER_EXAM, _V2_N3) for m in pattern.finditer(text, s, e)]
-    return [m for m in _V2_NOUN_REFERENCE.finditer(text, s, e) if not any(a <= m.start() < b for a, b in away)]
+    away = _V2_inside([m.span() for pattern in (_V2_OTHER_EXAM, _V2_N3) for m in pattern.finditer(text, s, e)])
+    return [m for m in _V2_NOUN_REFERENCE.finditer(text, s, e) if not away(m.start())]
+
+
+def _V2_inside(spans: list[tuple[int, int]]):
+    """A test of whether a position lies in any of the (start, end) spans - ``any(a <= p < b for a, b in spans)`` - by
+    a bisection over their starts with the furthest end reached so far: one long sentence of "physical exam" phrases
+    asked it per noun of every phrase, quadratically and outside every budget (round 7 validation:0)."""
+    spans = sorted(spans)
+    starts, reach, furthest = [s for s, _ in spans], [], -1
+    for _, e in spans:
+        furthest = max(furthest, e)
+        reach.append(furthest)
+
+    def inside(p: int) -> bool:
+        index = bisect.bisect_right(starts, p) - 1
+        return index >= 0 and reach[index] > p
+    return inside
 
 
 @functools.lru_cache(maxsize=4)
@@ -2176,11 +2192,10 @@ def _V2_doubt_index(text: str, service_date: Optional[date]) -> tuple:
         if tokens_read[0] > _V2_TOKENS_PER_TEXT:
             raise _V2Overflow
         whole = _V2_phrase(an, text, cs, ce)
-        exams = [m.span() for m in _V2_OTHER_EXAM.finditer(text, cs, ce)]
-        other = whole.names and not any(not any(x <= m.start() < y for x, y in exams)
-                                        for m in _V2_NOT_ATTR.finditer(text, cs, ce))
-        cuts = [(t0, t1) for t0, t1, kind in found if kind == 'cut']
-        modal = any(not any(a <= m.start() < b for a, b in cuts) for m in _V2_MODAL.finditer(text, cs, ce))
+        exam = _V2_inside([m.span() for m in _V2_OTHER_EXAM.finditer(text, cs, ce)])
+        other = whole.names and not any(not exam(m.start()) for m in _V2_NOT_ATTR.finditer(text, cs, ce))
+        cut_at = _V2_inside([(t0, t1) for t0, t1, kind in found if kind == 'cut'])
+        modal = any(not cut_at(m.start()) for m in _V2_MODAL.finditer(text, cs, ce))
         if len(found) > _V2_TOKENS_PER_CLAUSE:
             return _V2Clause(cs, ce, about, other, None, modal)
         return _V2Clause(cs, ce, about, other, tuple(_V2_token(an, text, cs, ce, t0, t1, kind)
@@ -2370,23 +2385,39 @@ def _VAL_opens_with(text: str, start: int, end: int, code: str, names: Sequence[
     (_VAL_same_procedure). ``names``: routed gi.other mentions of the code's own procedure read done in the first
     sentence of a procedure section - the corroboration, so a passage's wording alone never releases a held code.
     Bounded: each sentence's lead is read once per text; a passage costs one bisection and a look per sentence it
-    overlaps."""
-    from studio.gi import detect
-    if not names or start >= end:
+    overlaps (_VAL_owned_leads), then one comparison per lead and name."""
+    if not names:
         return False
+    return any(_VAL_lead_matches(code, name, other)
+               for name in _VAL_owned_leads(text, start, end, code, service_date) for other in names)
+
+
+def _VAL_owned_leads(text: str, start: int, end: int, code: str, service_date: Optional[date] = None) -> list[str]:
+    """The leading names (_VAL_lead_name) of the sentences the passage [start, end) overlaps that are the code's own
+    procedure (_VAL_owns): distinct, in reading order, and none for an empty passage. What _VAL_opens_with compares
+    with the routed names: read once per passage, so a caller asking which of many names a passage opens with compares
+    each lead once per name, never rescanning the passage per name (round 7 validation:1, validation:2)."""
+    from studio.gi import detect
+    if start >= end:
+        return []
     an = detect._analysis(text, service_date)[0]
     sentences = an.lay.sentences
     index = max(bisect.bisect_right(sentences, (start, 1 << 62)) - 1, 0)
+    leads = {}
     while index < len(sentences) and sentences[index][0] < end:
         if sentences[index][1] > start:
             name = _VAL_lead_name(an, text, index, service_date)
             if name and _VAL_owns(code, name):
-                said = _VAL_name(name)
-                if any(said == _VAL_name(other) or said.startswith(_VAL_name(other) + ' ')
-                       or _VAL_same_procedure(code, other, name) for other in names):
-                    return True
+                leads[name] = None
         index += 1
-    return False
+    return list(leads)
+
+
+def _VAL_lead_matches(code: str, name: str, other: str) -> bool:
+    """Whether a sentence's own leading name ``name`` opens with the routed name ``other``: the same words, or ``other``
+    and then more words, or the same single procedure for the code (_VAL_same_procedure)."""
+    said = _VAL_name(name)
+    return said == _VAL_name(other) or said.startswith(_VAL_name(other) + ' ') or _VAL_same_procedure(code, other, name)
 
 
 def names_intervention(text: str, start: int, end: int, family: str) -> bool:
