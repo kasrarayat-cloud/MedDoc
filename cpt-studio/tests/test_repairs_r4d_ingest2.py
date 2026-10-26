@@ -1051,5 +1051,90 @@ class PaddingInsideAStringTests(unittest.TestCase):
                 self.assertEqual(codes(text, ('45380', 'Biopsy'))[0], outcome)
 
 
+# --- verification of round 4d, extraction:2 neighbour: a printed box drawn after a font change with no move --------
+
+def stale_row(*, printed='wingdings', on=False, mark='tick', wrap=False):
+    """'1. ', a printed box and ' Cold snare polypectomy' in one text object, the box and the label set after font
+    changes with no move: pypdf reports the box's piece where '1. ' begins (72), though it is drawn after it. A mark
+    on the box as drawn (a tick, a field showing X, a checked check box), on the label, or none; the page drawn
+    through a form XObject (``wrap``) or by itself."""
+    from tests.test_repairs_r3_forms_pdf import PRINTED
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    font, off, on_code = PRINTED[printed]
+    form = Form(NOTE_HEAD, wrap=wrap)
+    form.line(text_line(72, 640, 'Interventions:'))
+    form.line(f'BT /F1 11 Tf 72 620 Td (2. ) Tj /{font} 11 Tf <{off}> Tj /F1 11 Tf ( Biopsy) Tj ET')
+    form.line(f'BT /F1 11 Tf 72 600 Td (1. ) Tj /{font} 11 Tf <{on_code if on else off}> Tj /F1 11 Tf '
+              '( Cold snare polypectomy) Tj ET')
+    x = 72 + _width('1. ')
+    width = _width('o', font='ZapfDingbats') if printed == 'zapf' else 11.0
+    on_box = (round(x + 1.5, 2), 597, round(x + width - 1.5, 2), 609)
+    if mark == 'tick':
+        annotate(form, 'tick', on_box)
+    elif mark == 'field X':
+        _shown_field(form, on_box, 'X')
+    elif mark == 'check box on':
+        form.checkbox('Check Box1', on_box, True)
+    elif mark == 'label':
+        annotate(form, 'tick', (round(x + width + 20, 2), 597, round(x + width + 40, 2), 609))
+    return form.build()
+
+
+class BoxAfterAFontChangeTests(unittest.TestCase):
+    """A printed box that starts a piece no operator placed (a font change with no move after '1. ') is not where
+    pypdf reports it: it lies somewhere right of where its text object was last moved to, so a mark over it as drawn
+    leaves it unread (9a9f403 held this on a page drawn through a form XObject; HEAD excluded it)."""
+
+    def test_a_mark_over_the_box_as_drawn_holds_the_item(self):
+        for printed in ('wingdings', 'zapf', 'text font'):
+            for mark in ('tick', 'field X', 'check box on'):
+                for wrap in (False, True):
+                    with self.subTest(printed=printed, mark=mark, wrap=wrap):
+                        result = extracted(stale_row(printed=printed, mark=mark, wrap=wrap))
+                        self.assertEqual(result.status, 'partial', result.messages)
+                        self.assertIn(f'1. {UNREAD} Cold snare polypectomy', result.text)
+                        if not (wrap and mark == 'check box on'):  # there every printed box is lost to check boxes
+                            self.assertIn('☐ Biopsy', result.text)
+                        self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_controls_without_a_mark(self):
+        for printed in ('wingdings', 'text font'):
+            for wrap in (False, True):
+                with self.subTest(printed=printed, wrap=wrap):
+                    text = extracted(stale_row(printed=printed, mark=None, wrap=wrap)).text
+                    self.assertIn('1. ☐ Cold snare polypectomy', text)
+                    self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                    text = extracted(stale_row(printed=printed, on=True, mark=None, wrap=wrap)).text
+                    self.assertIn('1. ☒ Cold snare polypectomy', text)
+                    self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'ready')
+
+    def test_a_box_placed_by_its_own_move_keeps_its_place(self):
+        """Controls: a box placed by a Td after '1. ' (its piece is reported where it is drawn), and rows drawn with
+        the ' operator (a move to the next line, then the box): a tick on the label, right of the box, is over no box."""
+        from tests.test_repairs_r4c_ingest_marks import annotate
+        form = Form(NOTE_HEAD)
+        form.line(text_line(72, 640, 'Interventions:'))
+        for y, label in ((620, 'Biopsy'), (600, 'Cold snare polypectomy')):
+            form.line(f'BT /F1 11 Tf 72 {y} Td (1. ) Tj 14 0 Td /WD 11 Tf <A8> Tj /F1 11 Tf 16 0 Td ({label}) Tj ET')
+        annotate(form, 'tick', (140, 597, 160, 609))
+        text = extracted(form.build()).text
+        self.assertIn('1. ☐ Cold snare polypectomy', text)
+        form = Form(NOTE_HEAD)
+        form.line(text_line(72, 640, 'Interventions:'))
+        form.line("BT 20 TL /WD 11 Tf 72 640 Td <A8> ' /F1 11 Tf 16 0 Td (Biopsy) Tj /WD 11 Tf <A8> ' "
+                  "/F1 11 Tf 16 0 Td (Cold snare polypectomy) Tj ET")  # the second box at (88, 600), by its ' alone
+        annotate(form, 'tick', (120, 597, 140, 609))
+        text = extracted(form.build()).text
+        self.assertIn('☐ Cold snare polypectomy', text)
+        self.assertNotIn(UNREAD, text)
+
+    def test_a_mark_on_the_label_holds_a_box_whose_place_is_not_read(self):
+        """The declared cost of reading it: a tick on the label, right of a box no operator placed, may lie over the
+        box, so the box is unread (held), never read as decided."""
+        result = extracted(stale_row(mark='label'))
+        self.assertIn(f'1. {UNREAD} Cold snare polypectomy', result.text)
+        self.assertEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'held')
+
+
 if __name__ == '__main__':
     unittest.main()

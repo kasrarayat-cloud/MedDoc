@@ -149,6 +149,10 @@ _ING_COLUMN_GAP = 0.6
 _I2_SHOWS = frozenset({b'Tj', b'TJ', b"'", b'"'})
 # ... of which these show one string: a piece drawn by one of them alone is one string of ink.
 _I2_ONE_STRING = frozenset({b'Tj', b"'", b'"'})
+# The operators that set where the next text is drawn (PDF 32000-1 9.4.2, and BT): pypdf reports a piece at the place
+# the last of them gave, so a piece that starts after text drawn since then (a font change, no move) is reported where
+# that earlier text began, not where it is drawn.
+_I2_MOVES = frozenset({b'BT', b'Td', b'TD', b'Tm', b'T*', b"'", b'"'})
 # Page text left of a box that is only a list marker ('1.', '2)', '(a)', a bullet) is not a label for the box.
 _ING_LIST_MARKER = re.compile(r'(?:[-*\u2022\u00b7\u25aa\u25e6\u25cf\u2023\u2043\u2013\u2014]|\(?[0-9]{1,3}[.)]|'
                               r'\(?[A-Za-z][.)])')
@@ -733,8 +737,10 @@ class _I2_Places:
     starts a piece lies at the piece's first glyph drawn (after any whitespace its string opens with: the ink's first
     glyph that draws), across the box's own width (measured by the piece's font where it gives every character's
     width, else one em for a box glyph and 0.6 em for each character of a typed box); one whose glyph cannot be found
-    there (the piece opens with whitespace and no measured ink starts it), and one inside a piece, lie somewhere right
-    of where each of the piece's operators draws, on that operator's baseline. A box that no piece places is left to
+    there (the piece opens with whitespace and no measured ink starts it), one that starts a piece no operator placed
+    (pypdf reports such a piece, after a font change with no move, where earlier text of its text object began), and
+    one inside a piece, lie somewhere right of where each of the piece's operators draws, on that operator's baseline.
+    A box that no piece places is left to
     _placed_boxes' own reading. Each piece is indexed once per baseline it draws on, and its boxes are looked up by
     the piece (_I2_boxes), so a piece drawn on many baselines costs its baselines plus its boxes, never their
     product."""
@@ -753,12 +759,12 @@ class _I2_Places:
             if index < 0 or bisect_right(breaks, firsts[index]) != bisect_right(breaks, start):
                 continue
             first = firsts[index]
-            shows, lead, font, em, _ = layer.drawn[first]
+            shows, lead, font, em, _, positioned = layer.drawn[first]
             origin = origins.get(first) or placed.get(first)
             if origin is None or not origin[2]:
                 continue
-            record = self._ink_at(ink, origin) if first == start else None
-            if first == start and (record is not None or not lead):
+            record = self._ink_at(ink, origin) if first == start and positioned else None
+            if first == start and positioned and (record is not None or not lead):
                 x = max(origin[0], record[2][1]) if record is not None else origin[0]
                 exact.append((origin[1], x, start, (x + self._width(match.group(0), font, em, record, fonts), match)))
                 continue
@@ -1021,7 +1027,7 @@ class _ING_Ink:
         end = len(text) if newline < 0 else newline
         later = bisect_right(self.offsets, offset)
         return ((later == len(self.offsets) or self.offsets[later] >= end)
-                and self.layer.drawn.get(offset, ((), False, None, None, False))[4])
+                and self.layer.drawn.get(offset, ((), False, None, None, False, True))[4])
 
     def _I2_joins(self, offset: int, x: float, y: float) -> bool:
         """Whether pypdf joined into the text line of the box's piece (at ``offset``, drawn at (x, y)), after it and
@@ -1144,7 +1150,8 @@ class _Layer:
     placed_pieces: tuple = ()
     # offset of each piece's first character (not a space) -> (where on the page each text-showing operator pypdf joined
     # into the piece draws, None where that is unknown; whether whitespace opens the piece; its font; one em along
-    # its baseline, page space, or None): what a piece is drawn from, read by _ING_Ink and _placed_boxes
+    # its baseline, page space, or None; whether one operator showing one string draws it; whether an operator placed
+    # it, so that its origin is where it is drawn): what a piece is drawn from, read by _ING_Ink and _placed_boxes
     drawn: dict = field(default_factory=dict)
 
 
@@ -1169,6 +1176,10 @@ def _layer_text(page, content: PageContent) -> _Layer:
     # its text matrix only with the positioning operators, so this is where the operator's line or move put it.
     shows: list = []
     strings: list = []  # for each of ``shows``: whether its operator shows one string
+    # Whether text has advanced the text position since the last positioning operator (_I2_MOVES), and, for the
+    # piece being gathered, whether none had when its first text was shown: pypdf reports a piece where the last
+    # positioning operator put the text, so a piece that starts after text drawn since then is not drawn there.
+    advanced, placed_first = [False], []
 
     def placement():
         """The matrix that places what is drawn now on the page (IDENTITY on the page itself), or None."""
@@ -1187,13 +1198,18 @@ def _layer_text(page, content: PageContent) -> _Layer:
         if operator == b'Do' and forms:
             forms.pop()
         elif operator in _I2_SHOWS:
+            if not shows:
+                placed_first[:] = [operator in _I2_MOVES or not advanced[0]]  # ' and " move before they show
             matrix = placement()
             shows.append(_ING_placed(cm, tm, matrix) if matrix is not None else None)
             strings.append(operator in _I2_ONE_STRING)
+        if operator in _I2_SHOWS or operator in _I2_MOVES:
+            advanced[0] = operator in _I2_SHOWS  # a show (also ' and ", after their move) advances; a move resets
 
     def visit(text, cm, tm, font, size):
         if text:
-            drawn = (tuple(shows), _I2_em(cm, tm, size, placement()), len(strings) == 1 and strings[0])
+            drawn = (tuple(shows), _I2_em(cm, tm, size, placement()), len(strings) == 1 and strings[0],
+                     placed_first[0] if placed_first else True)
             if not forms:
                 pieces.append((text, _origin(cm, tm), font, None, drawn))
             else:
@@ -1201,6 +1217,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
                 pieces.append((text, None, font, _ING_placed(cm, tm, matrix) if matrix is not None else None, drawn))
         shows.clear()
         strings.clear()
+        placed_first.clear()
 
     try:
         copy = extraction_page(page, content)
@@ -1212,7 +1229,7 @@ def _layer_text(page, content: PageContent) -> _Layer:
     except Exception:
         return _Layer()
     if ''.join(piece[0] for piece in pieces) != raw:
-        pieces = [(raw, None, None, None, ((), None, False))]
+        pieces = [(raw, None, None, None, ((), None, False, True))]
     ink, content.ink = tuple(content.ink), []  # read once, here: the page's other readers do not keep it
     return replace(_decoded(pieces), ink=ink)
 
@@ -1281,7 +1298,7 @@ def _decoded(pieces) -> _Layer:
     placed_lines, placed_firsts = [], []  # the same, for text drawn inside a form XObject placed on the page
     drawn: dict = {}  # as _Layer.drawn
     decoders: dict[int, object] = {}
-    for text, origin, font, placed, (shows, em, single) in pieces:
+    for text, origin, font, placed, (shows, em, single, positioned) in pieces:
         if id(font) not in decoders:
             decoders[id(font)] = _decoder(font)
         decode = decoders[id(font)]
@@ -1306,7 +1323,7 @@ def _decoded(pieces) -> _Layer:
                 firsts.append((size, origin))
                 if origin is None and placed is not None:
                     placed_firsts.append((size, placed))
-                drawn[size] = (shows, lead, font, em, single)
+                drawn[size] = (shows, lead, font, em, single, positioned)
                 first = False
             elif first:
                 lead = True
