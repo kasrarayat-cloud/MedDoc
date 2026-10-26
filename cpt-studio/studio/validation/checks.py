@@ -184,6 +184,10 @@ class Reading:
     # judgement and names no routed service (round 4d validation:4): the label of the family routing attributes it to,
     # or '' when routing attributes it to none. None: the passage names the procedure whose judgement it takes.
     judged_by: Optional[str] = None
+    # Set on a gi.other code's linked passage that read as cancelled only through a detected family's document-level
+    # judgement (_V2_judged_away, round 4d repair 2): (its own reading's status, the family's label or '' when the
+    # passage names that family's service). It is held, never excluded.
+    judged_away: Optional[tuple] = None
 
 
 @dataclass(frozen=True)
@@ -383,6 +387,32 @@ def _V2_judged_by(text: str, reading: Reading, service_date: Optional[date] = No
     return PROFILES[family].label if family in PROFILES else ''
 
 
+_V2_JUDGED_AWAY_PREFIX = 'uncertain: read as cancelled only through what the document says of'
+
+
+def _V2_judged_away(text: str, readings: Sequence[Reading], service_date: Optional[date] = None) -> tuple:
+    """A gi.other code's linked passages, each one that reads as cancelled only through a detected family's
+    document-level judgement - its own reading before that judgement (detect.own_status_for_span) is performed or
+    incomplete - held as uncertain instead (round 4d repair 2, the verifier's pre-existing high: "Assessment: Anoscopy
+    with rubber band ligation of two internal hemorrhoids was performed today." beside "Procedure: EGD was cancelled."
+    excluded 46221 "Documented as cancelled"). The cancelled EGD's judgement is another procedure's: ARCHITECTURE 5.6
+    holds a gi.other code judged only through a detected family and never excludes it. Read only for a cancelled
+    passage: one span reading and two bisections each."""
+    from studio.gi.detect import own_status_for_span
+    held = []
+    for reading in readings:
+        if (reading.status == 'cancelled' and reading.origin == 'evidence' and reading.start is not None
+                and reading.end is not None and reading.start < reading.end):
+            own = normalise_span_status(own_status_for_span(text, reading.start, reading.end, service_date))
+            if own is not None and own[0] in POSITIVE:
+                label = _V2_judged_by(text, reading, service_date)  # read with the family's cue: never section-only
+                of = f'{label}, the procedure routing attributes it to' if label else 'the procedure it names'
+                reading = replace(reading, status='uncertain', cues=(f'{_V2_JUDGED_AWAY_PREFIX} {of}',) + own[1],
+                                  judged_away=(own[0], label or ''))
+        held.append(reading)
+    return tuple(held)
+
+
 def restated(reading: Reading) -> bool:
     """An explicit performance statement that only its section downgraded ("Colonoscopy with cold snare polypectomy
     was performed today." under Assessment and plan): 'performed:' and 'section: <kind>' cues and nothing else but
@@ -497,6 +527,15 @@ def exclusion_reason(outcome: StatusOutcome, name: str) -> str:
 
 
 def uncertain_reason(outcome: StatusOutcome, name: str) -> str:
+    if outcome.decisive is not None and outcome.decisive.judged_away is not None:
+        # round 4d repair 2: the passage says what it says; only another family's judgement read it cancelled
+        status, label = outcome.decisive.judged_away
+        own = replace(outcome.decisive, status=status,
+                      cues=tuple(c for c in outcome.decisive.cues if not c.startswith(_V2_JUDGED_AWAY_PREFIX)))
+        basis = ' only by its section' if by_section_alone(own) else ''
+        of = f'{label}, the procedure routing attributes it to' if label else 'the procedure it names'
+        return (f'The linked passage reads as {status}{basis} ({cite(own)}), and as cancelled only through what the '
+                f'document says of {of}; confirm whether {name} was performed on the date of service.')
     if outcome.reason == 'contested' and outcome.decisive and outcome.contrary:
         # Never "no documentation establishes ... performed": one of the code's own passages says it was.
         return (f'A linked passage reads as {outcome.contrary.status}: {cite(outcome.contrary)}, but another linked '

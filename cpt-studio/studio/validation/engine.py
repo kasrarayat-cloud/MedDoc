@@ -158,6 +158,8 @@ def _select(group: list[ProviderCode], text: str, pages, routing: RoutingResult,
     own = checks.evidence_readings(text, kept, day)
     speaks_for: tuple = ()
     if selection.family == OTHER_GI:
+        # round 4d repair 2: a passage read cancelled only through a detected family's judgement is held, not excluded
+        own = checks._V2_judged_away(text, own, day)
         own, speaks_for = _unnamed_other(own, text, routing, day, code)
     if selection.family in checks.EM_FAMILIES:
         own = _undated_visit(own, routing, text, day)

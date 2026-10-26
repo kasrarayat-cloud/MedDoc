@@ -1107,3 +1107,40 @@ class Repair2BandingOfAnotherTargetTests(Case):
                 self.assertReady(proposals['46221'])
                 self.assertEqual(encounter_check(result, 'services.unproposed').status, 'pass',
                                  encounter_check(result, 'services.unproposed').detail)
+
+
+class Repair2CancelledFamilyIsAnotherProceduresTests(Case):
+    """The verifier's pre-existing high (every base): a gi.other code was EXCLUDED "Documented as cancelled" when any EGD
+    or colonoscopy in the note was cancelled - the span reader applied the cancelled family's document-level judgement
+    to the code's own passage ("Anoscopy with rubber band ligation of two internal hemorrhoids was performed today."),
+    and the report also routed that passage as a performed gi.other service. Such a passage is held (needs
+    clarification) and worded from what decided it; a passage that itself says cancelled is still excluded."""
+
+    OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{other}\n{heading}: Anoscopy '
+              'with rubber band ligation of two internal hemorrhoids was performed today.\nMedical decision making: '
+              'moderate.\nTotal time: 32 minutes.\n')
+    LINE = 'Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.'
+
+    def test_another_family_s_cancellation_holds_the_code(self):
+        labels = _labels()
+        for other, family in (('Procedure: EGD was cancelled.', 'gi.egd'), ('Plan: EGD was cancelled.', 'gi.egd'),
+                              ('Procedure: Colonoscopy was cancelled.', 'gi.colonoscopy')):
+            for heading in ('Assessment', 'Procedure'):
+                with self.subTest(other=other, heading=heading):
+                    proposals, result = real(self.OFFICE.format(other=other, heading=heading), ('46221', self.LINE))
+                    item = proposals['46221']
+                    self.assertEqual((item.bucket, item.status), ('selected', 'needs_clarification'))
+                    self.assertEqual([c.fact for c in item.clarifications], ['performed_status'])
+                    detail = check_of(item, 'service.status').detail
+                    self.assertNotIn('Documented as cancelled', detail)
+                    self.assertIn(f'as cancelled only through what the document says of {labels[family]}', detail)
+                    self.assertIn('reads as performed', detail)
+                    self.assertNotEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_controls_the_passage_s_own_cancellation_still_excludes_and_no_cancellation_is_ready(self):
+        text = (HEAD + 'Procedure: Hemorrhoid banding\nIndication: Bleeding internal hemorrhoids.\n'
+                'Findings: Banding was cancelled because the patient took apixaban.\n')
+        item = real(text, ('46221', 'Banding was cancelled because the patient took apixaban.'))[0]['46221']
+        self.assertEqual(item.bucket, 'excluded')
+        text = self.OFFICE.format(other='Chief complaint: rectal bleeding.', heading='Assessment')
+        self.assertReady(real(text, ('46221', self.LINE))[0]['46221'])
