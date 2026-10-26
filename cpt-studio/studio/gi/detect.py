@@ -1082,6 +1082,21 @@ def _boxed_status_denies(an: Analysis, lo: int, hi: int) -> Optional[bool]:
     return any(state != 'off' for state in _box_option_states(an, lo, hi, options, words))
 
 
+def _B3_status_value_denies(an: Analysis, value: int, ne: int) -> bool:
+    """Whether a status line's value [value, ne) denies or holds the service, as round 5 read the value after its key: a
+    value with boxes option by option (_boxed_status_denies), a completion never ("Completed.", "Done"), else a hold
+    word, a short denying or cancelling value, or a value that opens with a calling off ("Cancelled - the patient had
+    eaten breakfast."). _denies reads round 5's key on its value and the shared grammar's on its own, and holds when
+    either denies (round 4d BOXES3)."""
+    boxed = _boxed_status_denies(an, value, ne)
+    if boxed is not None:
+        return boxed  # a value with boxes is read option by option, never by its first word
+    if _STATUS_DONE.match(an.text, value, ne):
+        return False
+    return (bool(_STATUS_HOLD.match(an.text, value, ne)) or _bare_denial(an, value, ne)
+            or _value_calls_off(an, value, ne))
+
+
 def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     """Whether [ns, ne) - the next sentence of the section, or a later clause of the service's own
     sentence, naming no service - denies or doubts the service named just before it. A sentence
@@ -1102,24 +1117,19 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     body = opener.end() if opener else at
     old_key = _STATUS_KEY.match(text, body, ne)
     new_key = _B3_STATUS_KEY.match(text, body, ne)
-    key = old_key or new_key
-    if key:
-        value = max(k.end() for k in (old_key, new_key) if k)  # after a label cell's own colon too ("Status: | ...")
-        boxed = _boxed_status_denies(an, value, ne)
-        if boxed is not None:
-            if boxed or old_key:
-                return boxed  # a value with boxes is read option by option, never by its first word
-        elif _STATUS_DONE.match(text, value, ne):
-            if old_key:
-                return False
-        elif (_STATUS_HOLD.match(text, value, ne) or _bare_denial(an, value, ne)
-              or _value_calls_off(an, value, ne)):
+    if old_key:
+        # round 5's status line is read on its own value exactly as before; the shared grammar's value, after a label
+        # cell's own colon and a second separator ("Status: | Cancelled - ...": round 6 declared:4), may only add a
+        # hold: read after both separators, "Status: | Completed? No" opened with a completion and was released
+        # (round 4d's verification), where its own value, "| Completed? No", holds
+        if _B3_status_value_denies(an, old_key.end(), ne):
             return True
-        elif old_key:
-            return False
-        # round 4d BOXES3: a status line only the shared grammar's lead or separator reads (round 6 declared:4: "•
-        # Status: Cancelled - ...", "Status | Cancelled ...") holds as one; where it would not, the tests below decide
-        # as before, so it never releases a line they hold
+        return bool(new_key) and new_key.end() != old_key.end() and _B3_status_value_denies(an, new_key.end(), ne)
+    if new_key and _B3_status_value_denies(an, new_key.end(), ne):
+        return True
+    # round 4d BOXES3: a status line only the shared grammar's lead or separator reads (round 6 declared:4: "• Status:
+    # Cancelled - ...", "Status | Cancelled ...") holds as one; where it would not (a completion, unchecked boxed
+    # options), the tests below decide as before, so it never releases a line they hold
     if _box_selected_denial(an, body, ne):
         return True  # "☒ Not performed": a selected denial option on a line naming no item holds (round 5 declared:8)
     if bare and _bare_denial(an, body, ne):
@@ -2874,14 +2884,19 @@ def _box_status_field(an: Analysis, start: int, end: int) -> bool:
     text = an.text
     if _BOX_DONE_QUESTION.match(text, start, end):
         return True
-    keys = [k for k in (_STATUS_KEY.match(text, start, end), _B3_STATUS_KEY.match(text, start, end)) if k]
-    if not keys:  # round 6 declared:4: the shared grammar's lead and separators too; such a field only holds
-        return False
-    value = _SEPARATOR.match(text, max(k.end() for k in keys), end).end()
-    if value >= end or _STATUS_DONE.match(text, value, end):
-        return False
-    return (bool(_STATUS_HOLD.match(text, value, end)) or _bare_denial(an, value, end)
-            or _value_calls_off(an, value, end))
+    # round 5's key on its own value, as before, and the shared grammar's (round 6 declared:4: a list marker, "?:", a
+    # cell bar) on its own: either value holds the page. Read only after both separators, "Status: | Completed? No"
+    # opened with a completion and held nothing (round 4d's verification), where round 5's value holds.
+    for key in (_STATUS_KEY.match(text, start, end), _B3_STATUS_KEY.match(text, start, end)):
+        if key is None:
+            continue
+        value = _SEPARATOR.match(text, key.end(), end).end()
+        if value >= end or _STATUS_DONE.match(text, value, end):
+            continue
+        if (_STATUS_HOLD.match(text, value, end) or _bare_denial(an, value, end)
+                or _value_calls_off(an, value, end)):
+            return True
+    return False
 
 
 # The option row a field's label opens on its printed page ("Complications: ☐ Yes ☒ No", "Biopsy taken: [ ] Yes [x]

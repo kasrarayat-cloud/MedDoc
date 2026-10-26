@@ -557,6 +557,102 @@ class Declared4StatusLineLeadTests(Case):
         self.assertEqual(outcome(text, '43242', 'EUS with fine-needle biopsy of the pancreatic head mass'), 'ready')
 
 
+COLO_N = (HEAD + 'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. The colon was normal.\n'
+          '{row}\n')
+CELL_KEYS = ('Status', 'Procedure status', '- Status')
+CELL_SEPARATORS = (': | ', ': - ', ': – ', ': = ', ':: ')
+CELL_VALUES = ('Completed? No', 'Performed? No', 'Done? No', 'Completed: No', 'Completed? No - rescheduled.',
+               'Done? No - cancelled.', 'Completed, then cancelled.')
+
+
+class Declared4OldKeyValueKeptTests(Case):
+    """Round 4d's verification of declared:4 (critical, a regression against aaf517e, 9a9f403 and 4347acd). A status line
+    round 5's key already reads, whose label keeps a second separator after its own colon - a Word table row "Status:" |
+    "Completed? No" extracts as "Status: | Completed? No"; also "Status: - ", "Status: = ", "Status:: " - was read
+    after the widened key, so its value opened with "Completed" and the completion's early return released the EUS
+    (43242) and the colonoscopy (45378), which every older tree held (the value read after round 5's key, "| Completed?
+    No", is a short line with an unexplained "No"). Round 5's key is read on its own value exactly as before, and the
+    shared grammar's value may only add a hold (_B3_status_value_denies), in _denies and in the form-field reader."""
+
+    def test_a_second_separator_after_the_label_colon_holds_as_before(self):
+        for frame, slug, code, phrase in ((EUSB, 'gi.eus', '43242', EUSB_PHRASE),
+                                          (COLO_N, 'gi.colonoscopy', '45378', 'Procedure: Colonoscopy')):
+            for key in CELL_KEYS:
+                for separator in CELL_SEPARATORS:
+                    for value in CELL_VALUES:
+                        row = key + separator + value
+                        with self.subTest(frame=slug, row=row):
+                            text = frame.format(row=row)
+                            self.assertNotEqual(family(text, slug), 'performed')
+                            self.assert_held(text, code, phrase)
+
+    def test_the_word_table_row(self):
+        """The real Word path: a two-cell table row under the procedure line, extracted as "Status: | <value>"."""
+        from studio.ingest import extract_document
+        from tests.support import docgen
+        mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        for lines, code, phrase in ((['Procedure: EUS with fine-needle biopsy of the pancreatic head mass'], '43242',
+                                     EUSB_PHRASE),
+                                    (['Procedure: Colonoscopy', 'Findings: The colonoscope was advanced to the cecum. The '
+                                      'colon was normal.'], '45378', 'Procedure: Colonoscopy')):
+            for label, value, wanted in (('Status:', 'Performed? No - cancelled.', 'held'),
+                                         ('Status:', 'Completed: No - rescheduled.', 'held'),
+                                         ('Procedure status:', 'Completed, then cancelled.', 'held'),
+                                         ('Status:', 'Completed? No', 'held'), ('Status:', 'Cancelled.', 'held'),
+                                         ('Status:', 'Completed.', 'ready'),
+                                         ('Status:', 'Performed - tolerated well.', 'ready')):
+                with self.subTest(code=code, label=label, value=value):
+                    data = docgen.make_docx(['SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT', 'Date of service: 2026-10-21']
+                                            + lines + [[[label, value]]])
+                    result = extract_document(data, 'synthetic.docx', mime, ocr=None)
+                    self.assertEqual(result.status, 'ok', result.messages)
+                    self.assertIn(f'{label} | {value}', result.text)
+                    self.assertEqual(outcome(result.text, code, phrase), wanted)
+
+    def test_a_form_field_status_value_after_a_second_separator(self):
+        """The form-field status reader (_box_status_field) read the same widened value: "Status: | Completed? No" or
+        "Status: = Performed? No" in a PDF form block, past the status lines' reach, released its page's EUS."""
+        filler = ''.join(f'Note {n}: The patient was comfortable.\n' for n in range(8))  # past the status lines' reach
+        for key in ('Status', 'Procedure status'):
+            for separator in (': | ', ': = '):
+                for value in ('Completed? No', 'Performed? No', 'Done? No - cancelled.', 'Completed, then cancelled.'):
+                    field = key + separator + value
+                    with self.subTest(field=field):
+                        text = (HEAD + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nFindings: '
+                                'The pancreatic head mass was sampled.\n' + filler + '[PDF form fields on page 1]\n'
+                                + field + '\n')
+                        self.assert_held(text, '43242', 'EUS with fine-needle biopsy of the pancreatic head mass')
+                        an = detect._analysis(text, D)[0]
+                        start = text.index(field)
+                        self.assertTrue(detect._box_status_field(an, start, start + len(field)))
+
+    def test_the_status_line_reader_itself(self):
+        for line in ('Status: | Completed? No', 'Status: | Performed? No - cancelled.', 'Status:: Done? No',
+                     'Procedure status: - Completed: No - rescheduled.', 'Status: = Completed, then cancelled.'):
+            with self.subTest(line=line):
+                text = EUSB.format(row=line)
+                an = detect._analysis(text, D)[0]
+                start = text.index(line)
+                self.assertTrue(detect._status_line(an, start, start + len(line)))
+                self.assertTrue(detect._denies(an, start, start + len(line), bare=False))
+
+    def test_controls(self):
+        """A completion after the second separator says it was done, as at every older tree; the plain colon reads as
+        before (a completion's value is never read by the short-line tests after it: "Status: Done - not tolerated." is
+        done); the declared:4 rows only the shared grammar reads still hold."""
+        for row, wanted in (('Status: | Completed.', 'ready'), ('Status: | Performed - tolerated well.', 'ready'),
+                            ('Status: - Completed', 'ready'), ('Status:: Done.', 'ready'),
+                            ('Procedure status: = Completed - tolerated well.', 'ready'), ('Status: Completed.', 'ready'),
+                            ('Status: Done - not tolerated.', 'ready'), ('Status: Completed - not tolerated well.', 'ready'),
+                            ('Status: | Cancelled - the patient had eaten breakfast.', 'held'),
+                            ('Status: | Cancelled.', 'held'), ('Status | Cancelled - the patient had eaten breakfast', 'held'),
+                            ('• Status: Cancelled - the patient had eaten breakfast.', 'held'),
+                            ('Status: | Pending.', 'held'), ('Status: | Rescheduled to next week.', 'held')):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(EUSB.format(row=row), '43242', EUSB_PHRASE), wanted)
+                self.assertEqual(outcome(COLO_N.format(row=row), '45378', 'Procedure: Colonoscopy'), wanted)
+
+
 # --- declared:5 -- a spaced checked box pushing a short cancellation past the six-word bound -------------------------
 
 class Declared5SpacedBoxTests(Case):
