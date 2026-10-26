@@ -1067,3 +1067,43 @@ class Repair2LeadNamingAPlaceOrSeasonTests(Case):
                      'Under anoscopic guidance we banded the right posterior column.'):
             with self.subTest(line=line, layout='banding report'):
                 self.assertReady(real(BANDING.format(find=line), ('46221', line))[0]['46221'])
+
+
+class Repair2BandingOfAnotherTargetTests(Case):
+    """validation:5 still open in its class (the verifier: not fixed). 46221's class still took a band ligation of any
+    other target - the singular "varix" escaped the sibling words, and a Dieulafoy lesion, an anal polyp or a rectal ulcer
+    named none - so services.unproposed PASSed beside a selected 46221 where 9a9f403 named the ligation. Every word of a
+    name in 46221's class must now be a word of a hemorrhoid banding's own description."""
+
+    OTHERS = ('Band ligation of a rectal varix was performed today.', 'Band ligation of a gastric varix was performed today.',
+              'Band ligation of a Dieulafoy lesion was performed today.', 'Banding of an anal polyp was performed today.',
+              'Band ligation of a bleeding rectal ulcer was performed today.')
+
+    def test_a_band_ligation_of_another_target_is_named(self):
+        for second in self.OTHERS:
+            for layout in ('report', 'office'):
+                if layout == 'report':
+                    text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Rubber band ligation '
+                            f'of the right anterior column was performed. {second}\n')
+                    passage = 'Procedure: Rubber band ligation of internal hemorrhoids'
+                else:
+                    text = BAND_OFFICE.format(second=second)
+                    passage = 'Rubber band ligation x2 was performed today.'
+                with self.subTest(second=second, layout=layout):
+                    _, result = real(text, ('46221', passage))
+                    check = encounter_check(result, 'services.unproposed')
+                    self.assertEqual(check.status, 'warn', check.detail)
+                    self.assertIn(second.split(' was ')[0], check.detail)
+                    self.assertNotIn('Rubber band ligation', check.detail)
+
+    def test_controls_a_hemorrhoid_banding_named_again_is_covered(self):
+        for second in ("Rubber band ligation of an internal hemorrhoid at the 3 o'clock position was performed.",
+                       'Banding of the right posterior column was performed.', 'RBL x2 was performed.',
+                       'Two internal hemorrhoids were banded.'):
+            text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Rubber band ligation of the '
+                    f'right anterior column was performed. {second}\n')
+            with self.subTest(second=second):
+                proposals, result = real(text, ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
+                self.assertReady(proposals['46221'])
+                self.assertEqual(encounter_check(result, 'services.unproposed').status, 'pass',
+                                 encounter_check(result, 'services.unproposed').detail)

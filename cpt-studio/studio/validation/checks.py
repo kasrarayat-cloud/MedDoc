@@ -1341,6 +1341,21 @@ _VAL_SIBLING = re.compile(r'hemorrhoidectom', re.A | re.I)
 _V2_CLASS_NEEDS = (('46221', '46221', re.compile(r'\b(?:band(?:s|ed|ing)?|RBL)\b', re.A | re.I)),)
 _V2_SIBLING = re.compile(r'\b(?:sutur\w*|arter(?:y|ies|ial)|dearteriali[sz]\w*|doppler|HAL|THD|varic\w*|esophag\w*)\b',
                          re.A | re.I)
+# Round 4d repair 2 (validation:5, not closed in its class: "Band ligation of a rectal varix", "... of a Dieulafoy
+# lesion", "Banding of an anal polyp", "... of a bleeding rectal ulcer" were still covered by a selected 46221): every
+# word of a name in 46221's class must be a word of a hemorrhoid banding's own description - the band and its act, the
+# hemorrhoid, its column and position, counts and grades. A word of any other target holds the name out of the class
+# (fail-closed: an unlisted word names a possible missed service, as at 9a9f403).
+_V2_CLASS_WORDS = (('46221', '46221', frozenset((
+    'rubber', 'band', 'bands', 'banded', 'banding', 'ligation', 'ligations', 'ligated', 'rbl', 'rbls', 'of', 'the', 'a',
+    'an', 'at', 'in', 'on', 'and', 'to', 'with', 'times', 'single', 'multiple', 'one', 'two', 'three', 'four', 'five',
+    'six', 'first', 'second', 'third', 'fourth', 'internal', 'hemorrhoid', 'hemorrhoids', 'hemorrhoidal', 'haemorrhoid',
+    'haemorrhoids', 'haemorrhoidal', 'column', 'columns', 'pile', 'piles', 'bundle', 'bundles', 'cushion', 'cushions',
+    'complex', 'complexes', 'position', 'positions', "o'clock", 'oclock', 'right', 'left', 'anterior', 'posterior',
+    'lateral', 'grade', 'i', 'ii', 'iii', 'iv', 'bleeding', 'prolapsing', 'symptomatic', 'enlarged', 'large', 'small',
+    'were', 'was', 'been', 'have', 'has', 'had', 'is', 'are', 'that', 'which', 'performed', 'done', 'completed',
+    'today', 'successfully', 'using', 'mcgivney', 'suction', 'ligator', 'applied', 'placed'))),)
+_V2_CLASS_WORD = re.compile(r"[A-Za-z][A-Za-z']*", re.A)  # a word of a name (digits and "x3" counts carry none)
 _VAL_NAME_LEAD = re.compile(r'(?:(?:and|then|also|the|an?)\s+)+', re.A | re.I)
 
 
@@ -1361,12 +1376,16 @@ def _VAL_in_class(code: str, name: str) -> bool:
     hemorrhoidectomy), and every procedure word routing reads in it (detect._PROCEDURE_WORD) a word of that class - so
     "Anoscopy with rubber band ligation of two internal hemorrhoids" is never 46600's anoscopy alone, nor "Anoscopy
     with banding" 46221's banding alone. 46221's class also needs a band word and no other ligation's name
-    (_V2_CLASS_NEEDS, _V2_SIBLING: round 4d validation:5)."""
+    (_V2_CLASS_NEEDS, _V2_SIBLING: round 4d validation:5), and no word outside a hemorrhoid banding's own description
+    (_V2_CLASS_WORDS: round 4d repair 2)."""
     from studio.gi import detect
     words = _VAL_one_procedure_words(code)
     needs = next((pattern for low, high, pattern in _V2_CLASS_NEEDS if low <= code <= high), None)
+    allowed = next((vocabulary for low, high, vocabulary in _V2_CLASS_WORDS if low <= code <= high), None)
     return bool(words and words.search(name) and not _VAL_SIBLING.search(name)
                 and (needs is None or (needs.search(name) and not _V2_SIBLING.search(name)))
+                and (allowed is None or all(w.group(0).lower() in allowed
+                                            for w in _V2_CLASS_WORD.finditer(re.sub(r'\bx\d+\b', ' ', name))))
                 and all(words.search(m.group(0)) for m in detect._PROCEDURE_WORD.finditer(name)))
 
 
