@@ -757,9 +757,12 @@ class _Walker:
 
     def _I2_mark_hidden(self, paragraph, context: _Context) -> bool:
         """Whether a paragraph's mark is hidden: w:vanish in its pPr/rPr, else from its character style, its paragraph
-        or table style or the document defaults (resolved as for a run, _run_hidden). The mark formats the bullet."""
+        or table style or the document defaults (resolved as for a run, _run_hidden); or deleted (or moved away) as a
+        tracked change, read as accepted. The mark formats the bullet."""
         properties = paragraph.find(PPR)
         mark = properties.find(RPR) if properties is not None else None
+        if mark is not None and (mark.find(DEL) is not None or mark.find(MOVE_FROM) is not None):
+            return True  # a tracked deletion of the mark, read as accepted: the paragraph runs on into the next
         direct = is_on(mark.find(VANISH)) if mark is not None else None
         if direct is not None:
             return direct

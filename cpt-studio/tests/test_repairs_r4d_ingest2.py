@@ -225,6 +225,20 @@ class Extraction1WordListBoundaryTests(unittest.TestCase):
         self.assertIn(f'{UNREAD} {SNARE}', result.text)
         self.assertEqual(codes(result.text, ('45385', SNARE))[0], 'held')
 
+    def test_a_deleted_paragraph_mark_is_read_as_accepted(self):
+        """A paragraph whose mark is a tracked deletion (or moved away), read as accepted, runs on into the next: its
+        checked bullet makes no list a checklist, and an unchecked one in a checklist is written unread."""
+        for change in ('<w:del w:id="1" w:author="Reviewer" w:date="2026-10-21T00:00:00Z"/>',
+                       '<w:moveFrom w:id="2" w:author="Reviewer" w:date="2026-10-21T00:00:00Z"/>'):
+            with self.subTest(change[:10]):
+                mark = (f'<w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="2"/></w:numPr><w:rPr>{change}</w:rPr>'
+                        '</w:pPr><w:r><w:t>Bowel preparation adequate</w:t></w:r></w:p>')
+                result = docx_result(_document(_para('Procedures performed:') + _procedures() + mark
+                                               + _para(IMPRESSION)))
+                self.assertNotIn('☒', result.text)
+                self.assertIn(f'{UNREAD} {SNARE}', result.text)
+                self.assertEqual(codes(result.text, ('45385', SNARE), ('45380', FORCEPS)), ('held', 'held'))
+
     def test_controls_read_as_before(self):
         """Positive controls: each list in its own row after a label cell, the body lists of round 5, and a checklist
         whose checked and unchecked items are one list (in a cell, a text box or the body) keep their readings; a
