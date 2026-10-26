@@ -762,8 +762,10 @@ class Repair2AnotherActMentionedIsNoExemptionTests(Case):
     phrase it is written about (its subject, or what it governs), never by a word elsewhere in the sentence."""
 
     SENTENCES = ('Aborted due to inadequate sedation.', 'Aborted after sedation because of hypotension.',
-                 'Cancelled after sedation because she was hypotensive.', 'Postponed because sedation was not available.',
-                 'Deferred until biopsy results are available.', 'Aborted before biopsies could be taken because of pain.',
+                 'Cancelled after sedation because she was hypotensive.',
+                 'Postponed because sedation was not available.',
+                 'Deferred until biopsy results are available.',
+                 'Aborted before biopsies could be taken because of pain.',
                  'Terminated early due to pain, so no photos were taken.',
                  'The patient became hypotensive after sedation and we terminated early.',
                  'Terminated due to patient discomfort despite sedation.',
@@ -817,8 +819,10 @@ class Repair2QualifiedExamIsTodaysTests(Case):
     A qualifier alone never makes the reference another one; only "No other / further / additional procedure was
     done." (ending its clause) denies another procedure as such."""
 
-    SENTENCES = ("Today's follow-up exam was aborted because of pain.", 'The follow-up exam today was aborted because of pain.',
-                 'The follow-up exam was aborted because of pain.', 'The follow-up procedure was terminated early because of pain.',
+    SENTENCES = ("Today's follow-up exam was aborted because of pain.",
+                 'The follow-up exam today was aborted because of pain.',
+                 'The follow-up exam was aborted because of pain.',
+                 'The follow-up procedure was terminated early because of pain.',
                  'Further exam was aborted because of pain.', 'The additional exam was stopped because of pain.',
                  'The second exam was aborted because of pain.',
                  'No further examination could be done because the patient was in pain.',
@@ -851,10 +855,11 @@ class Repair2QualifiedExamIsTodaysTests(Case):
 
 
 class Repair2NoRepeatBesideACutTests(Case):
-    """The verifier's new problem 3 (critical). The no-repeat rule cleared a sentence that cancels, defers, aborts or cuts
-    short today's procedure when it also said no repeat is needed ("Banding was cancelled today because the hemorrhoids
-    had resolved, and no repeat banding is needed." left 46221 READY), and a plan line dropped the clause that holds
-    the cut. A no-repeat statement now excuses only its own negation: any other doubting word must be accounted for."""
+    """The verifier's new problem 3 (critical). The no-repeat rule cleared a sentence that cancels, defers, aborts or
+    cuts short today's procedure when it also said no repeat is needed ("Banding was cancelled today because the
+    hemorrhoids had resolved, and no repeat banding is needed." left 46221 READY), and a plan line dropped the clause
+    that holds the cut. A no-repeat statement now excuses only its own negation: any other doubting word must be
+    accounted for."""
 
     BANDING_REPORT = (HEAD + 'Procedure: Hemorrhoid banding\nIndication: Bleeding internal hemorrhoids.\n'
                       'Findings: Grade 2 internal hemorrhoids.\n{line}\n')
@@ -879,7 +884,8 @@ class Repair2NoRepeatBesideACutTests(Case):
                 self.assertEqual(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'].status, 'needs_clarification')
 
     def test_controls_a_no_repeat_statement_alone_or_another_procedure_s_cut_stays_ready(self):
-        for line in ('Plan: No further banding is needed.', 'Impression: Successful banding; no further banding needed.',
+        for line in ('Plan: No further banding is needed.',
+                     'Impression: Successful banding; no further banding needed.',
                      'Plan: Repeat banding is not necessary.'):
             with self.subTest(line=line):
                 self.assertReady(real(self.BANDING_REPORT.format(line=line),
@@ -920,7 +926,8 @@ class Repair2CutRoutingDoesNotReadTests(Case):
     where a section describes the procedure."""
 
     SENTENCES = ('Stopped early because of pain.', 'Incomplete due to pain.', 'Unable to complete because of pain.',
-                 'Not completed because of pain.', 'Could not be completed despite sedation.', 'Unsuccessful due to pain.',
+                 'Not completed because of pain.', 'Could not be completed despite sedation.',
+                 'Unsuccessful due to pain.',
                  'Insertion of the anoscope failed because of a stricture.', 'Not possible due to pain.',
                  # "treatment" may be the procedure itself (routing's medication words less it)
                  'The treatment was stopped early because of pain.')
@@ -993,7 +1000,8 @@ class Repair2CutInAPlanLineTests(Case):
     PLAN = REPORT.format(proc='Anoscopy', status='', find='Anoscopy revealed grade 2 internal hemorrhoids.')
 
     def test_a_cut_stated_as_done_in_a_plan_line_holds(self):
-        for line in ('Plan: The follow-up exam was stopped early; repeat in two weeks.', 'Plan: Postponed to next week.',
+        for line in ('Plan: The follow-up exam was stopped early; repeat in two weeks.',
+                     'Plan: Postponed to next week.',
                      'Plan: Aborted due to pain; will reschedule.', 'Plan: The procedure was incomplete; repeat under '
                      'sedation.', 'Plan: The exam could not be completed; repeat under anesthesia.',
                      'Plan: The second exam was aborted because of pain; will repeat.'):
@@ -1004,7 +1012,8 @@ class Repair2CutInAPlanLineTests(Case):
 
     def test_controls_a_planned_cut_or_another_thing_s_cut_stays_ready(self):
         for line in ('Plan: Banding will be deferred if the INR is high.', 'Plan: Repeat anoscopy in 6 months.',
-                     'Plan: Aspirin was stopped; resume in five days.', 'Plan: Banding was deferred; return in 6 weeks.',
+                     'Plan: Aspirin was stopped; resume in five days.',
+                     'Plan: Banding was deferred; return in 6 weeks.',
                      'Plan: Consider banding if bleeding persists.',
                      'Plan: The exam should be stopped early if pain occurs.',
                      'Plan: The exam may be stopped early if pain recurs.'):
@@ -1016,13 +1025,14 @@ class Repair2CutInAPlanLineTests(Case):
 class Repair2LeadNamingAPlaceOrSeasonTests(Case):
     """validation:3 still open in its class (the verifier: not fixed). The comma arm's "in" and the introductory words
     admitted leads that name a place, a season or an event, so "In the hospital, we banded two columns, and today they
-    look healed." made 46221 READY in a follow-up note (9a9f403 held every lead). A lead now introduces the act only when
-    every word of it is a word of today's procedure's own conduct (position, consent, instrument, guidance, anesthesia,
-    today), and an introduced act counts as stated today only when today is said in its lead or in its own statement,
-    never by a predicate after its clause break ("..., and today they look healed.")."""
+    look healed." made 46221 READY in a follow-up note (9a9f403 held every lead). A lead now introduces the act only
+    when every word of it is a word of today's procedure's own conduct (position, consent, instrument, guidance,
+    anesthesia, today), and an introduced act counts as stated today only when today is said in its lead or in its own
+    statement, never by a predicate after its clause break ("..., and today they look healed.")."""
 
-    LEADS = ('In the hospital,', 'In the emergency department,', 'In the ER,', 'In the operating room,', 'In the spring,',
-             'This spring,', 'Then, at the hospital,', 'With the patient admitted,', 'Under anesthesia in the hospital,',
+    LEADS = ('In the hospital,', 'In the emergency department,', 'In the ER,', 'In the operating room,',
+             'In the spring,', 'This spring,', 'Then, at the hospital,', 'With the patient admitted,',
+             'Under anesthesia in the hospital,',
              'In clinic,', 'In the office,', 'Through the anoscope at the hospital,', 'Using the ligator in the ER,',
              # a conduct lead with today owned by another predicate
              'In the left lateral position,', 'After informed consent,', 'Using the McGivney ligator,')
@@ -1044,7 +1054,8 @@ class Repair2LeadNamingAPlaceOrSeasonTests(Case):
         # routing may read the act's mention done by that today (an office note with no chief complaint, a banding
         # report): the act is told of, so it corroborates nothing
         line = 'In the left lateral position, we banded two columns, and today they look healed.'
-        for text in (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nFindings: ' + line + '\n',
+        for text in (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+                     'Findings: ' + line + '\n',
                      BANDING.format(find=line)):
             with self.subTest(text=text[len(HEAD):len(HEAD) + 40]):
                 self.assertEqual(real(text, ('46221', line))[0]['46221'].status, 'needs_clarification')
@@ -1071,19 +1082,22 @@ class Repair2LeadNamingAPlaceOrSeasonTests(Case):
 
 class Repair2BandingOfAnotherTargetTests(Case):
     """validation:5 still open in its class (the verifier: not fixed). 46221's class still took a band ligation of any
-    other target - the singular "varix" escaped the sibling words, and a Dieulafoy lesion, an anal polyp or a rectal ulcer
-    named none - so services.unproposed PASSed beside a selected 46221 where 9a9f403 named the ligation. Every word of a
-    name in 46221's class must now be a word of a hemorrhoid banding's own description."""
+    other target - the singular "varix" escaped the sibling words, and a Dieulafoy lesion, an anal polyp or a rectal
+    ulcer named none - so services.unproposed PASSed beside a selected 46221 where 9a9f403 named the ligation. Every
+    word of a name in 46221's class must now be a word of a hemorrhoid banding's own description."""
 
-    OTHERS = ('Band ligation of a rectal varix was performed today.', 'Band ligation of a gastric varix was performed today.',
-              'Band ligation of a Dieulafoy lesion was performed today.', 'Banding of an anal polyp was performed today.',
+    OTHERS = ('Band ligation of a rectal varix was performed today.',
+              'Band ligation of a gastric varix was performed today.',
+              'Band ligation of a Dieulafoy lesion was performed today.',
+              'Banding of an anal polyp was performed today.',
               'Band ligation of a bleeding rectal ulcer was performed today.')
 
     def test_a_band_ligation_of_another_target_is_named(self):
         for second in self.OTHERS:
             for layout in ('report', 'office'):
                 if layout == 'report':
-                    text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Rubber band ligation '
+                    text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\n'
+                            'Findings: Rubber band ligation '
                             f'of the right anterior column was performed. {second}\n')
                     passage = 'Procedure: Rubber band ligation of internal hemorrhoids'
                 else:
@@ -1100,7 +1114,8 @@ class Repair2BandingOfAnotherTargetTests(Case):
         for second in ("Rubber band ligation of an internal hemorrhoid at the 3 o'clock position was performed.",
                        'Banding of the right posterior column was performed.', 'RBL x2 was performed.',
                        'Two internal hemorrhoids were banded.'):
-            text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\nFindings: Rubber band ligation of the '
+            text = (HEAD + 'Procedure: Rubber band ligation of internal hemorrhoids\n'
+                    'Findings: Rubber band ligation of the '
                     f'right anterior column was performed. {second}\n')
             with self.subTest(second=second):
                 proposals, result = real(text, ('46221', 'Procedure: Rubber band ligation of internal hemorrhoids'))
@@ -1110,13 +1125,14 @@ class Repair2BandingOfAnotherTargetTests(Case):
 
 
 class Repair2CancelledFamilyIsAnotherProceduresTests(Case):
-    """The verifier's pre-existing high (every base): a gi.other code was EXCLUDED "Documented as cancelled" when any EGD
-    or colonoscopy in the note was cancelled - the span reader applied the cancelled family's document-level judgement
-    to the code's own passage ("Anoscopy with rubber band ligation of two internal hemorrhoids was performed today."),
-    and the report also routed that passage as a performed gi.other service. Such a passage is held (needs
+    """The verifier's pre-existing high (every base): a gi.other code was EXCLUDED "Documented as cancelled" when any
+    EGD or colonoscopy in the note was cancelled - the span reader applied the cancelled family's document-level
+    judgement to the code's own passage ("Anoscopy with rubber band ligation of two internal hemorrhoids was performed
+    today."), and the report also routed that passage as a performed gi.other service. Such a passage is held (needs
     clarification) and worded from what decided it; a passage that itself says cancelled is still excluded."""
 
-    OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{other}\n{heading}: Anoscopy '
+    OFFICE = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n'
+              '{other}\n{heading}: Anoscopy '
               'with rubber band ligation of two internal hemorrhoids was performed today.\nMedical decision making: '
               'moderate.\nTotal time: 32 minutes.\n')
     LINE = 'Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.'
@@ -1151,30 +1167,76 @@ class Repair2BookedEgdReportKeepsItsBandingTests(Case):
     line reads planned ("Procedure: EGD (rescheduled from last week)"), the validation:7 rule made the EGD's own
     "Band ligation of three columns was performed today." a separate performed gi.other procedure (no base did), so
     services.unproposed warned of a missed "Other GI service" beside a selected 43244. The report's own procedure line
-    naming the family as booked keeps its findings' interventions that family's; a procedure section opening between
-    them is another report."""
+    naming the family as booked, called off or denied keeps its findings' interventions that family's, as the base read
+    them; a procedure section with a line of its own opening between them is another report."""
 
     def test_the_booked_report_s_banding_stays_its_own(self):
         for line in ('Procedure: EGD (rescheduled from last week)', 'Procedure: Planned EGD with banding',
-                     'Procedure: EGD, previously scheduled'):
-            text = (HEAD + f'{line}\nIndication: Variceal surveillance.\nFindings: Esophageal varices. Band ligation of '
+                     'Procedure: EGD, previously scheduled',
+                     # called off or denied, the line is still the report's own procedure (as every base read it)
+                     'Procedure: EGD (postponed from last week)', 'Procedure: EGD was cancelled.',
+                     # a label the layout reads as no heading
+                     'Procedure - EGD (rescheduled from last week)', '| Procedure | Planned EGD with banding |',
+                     'Procedure\tEGD, previously scheduled', 'Procedure?: EGD (rescheduled from last week)',
+                     'PROCEDURE = EGD (rescheduled from last week)'):
+            text = (HEAD + f'{line}\nIndication: Variceal surveillance.\n'
+                    'Findings: Esophageal varices. Band ligation of '
                     'three columns was performed today.\nImpression: Esophageal varices, banded.\n')
             with self.subTest(line=line):
                 self.assertIsNone(routed(text).finding('gi.other'))
                 _, result = real(text, ('43244', 'Band ligation of three columns was performed today.'))
                 self.assertNotEqual(encounter_check(result, 'services.unproposed').status, 'warn')
 
+    def test_the_bare_word_endoscopy_or_an_act_names_the_booked_report_s_own_procedure(self):
+        for finding in ('Under endoscopy, band ligation of three columns was performed today.',
+                        'At endoscopy, band ligation of three columns was performed today.',
+                        'Band ligation of three columns was performed today under the endoscopy.',
+                        # an act done within the report's procedure names no procedure of its own
+                        'Sclerotherapy and band ligation of three columns were performed today.'):
+            text = (HEAD + 'Procedure: EGD (rescheduled from last week)\nIndication: Variceal surveillance.\nFindings: '
+                    f'Esophageal varices. {finding}\nImpression: Esophageal varices, banded.\n')
+            with self.subTest(finding=finding):
+                self.assertIsNone(routed(text).finding('gi.other'))
+                _, result = real(text, ('43244', 'Procedure: EGD (rescheduled from last week)'))
+                self.assertNotEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_a_labelled_line_of_another_section_opens_no_report(self):
+        for between in ('Indication - Variceal surveillance.', 'Sedation = Propofol', '| Findings | Varices |'):
+            text = (HEAD + 'Procedure: EGD (rescheduled from last week)\n' + between
+                    + '\nFindings: Esophageal varices. Band ligation of three columns was performed today.\n')
+            with self.subTest(between=between):
+                self.assertIsNone(routed(text).finding('gi.other'))
+
+    def test_a_procedure_heading_with_no_line_opens_no_report(self):
+        text = (HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Esophageal varices.\nProcedure:\n'
+                'Findings: Internal hemorrhoids. Band ligation of three columns was performed today.\n')
+        self.assertIsNone(routed(text).finding('gi.other'))
+
     def test_controls_another_report_s_banding_stays_a_gi_other_procedure(self):
-        for text in (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nProcedure: EGD next '
-                     'month.\nProcedure: Anoscopy with rubber band ligation of two internal hemorrhoids was performed '
-                     'today.\nMedical decision making: moderate.\n',
-                     # the statement names another procedure of its own
-                     HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Anoscopy with rubber band ligation of '
-                     'two internal hemorrhoids was performed today.\n',
-                     # a procedure line naming the family as another encounter's books nothing (validation:11)
-                     HEAD + 'Procedure: EGD in 2020 was normal.\nFindings: Esophageal varices. Band ligation of three '
-                     'columns was performed today.\n'):
+        for text, name in (
+                (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nProcedure: EGD next '
+                 'month.\nProcedure: Anoscopy with rubber band ligation of two internal hemorrhoids was performed '
+                 'today.\nMedical decision making: moderate.\n', 'Anoscopy with rubber band ligation'),
+                # a procedure section with a line of its own opens another report, whatever its separator
+                (HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Esophageal varices.\nProcedure: '
+                 'Anoscopy\nFindings: Internal hemorrhoids. Band ligation of two columns was performed today.\n',
+                 'Band ligation of two columns'),
+                (HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Esophageal varices.\nProcedure - '
+                 'Anoscopy\nFindings: Internal hemorrhoids. Band ligation of two columns was performed today.\n',
+                 'Band ligation of two columns'),
+                # a labelled line naming the family as another encounter's books nothing, nor one in the history
+                (HEAD + 'Procedure - EGD in 2020 was normal.\nFindings: Esophageal varices. Band ligation of three '
+                 'columns was performed today.\n', 'Band ligation of three columns'),
+                (HEAD + 'Past procedures:\nProcedure - EGD (rescheduled from last week)\nFindings: Esophageal varices. '
+                 'Band ligation of three columns was performed today.\n', 'Band ligation of three columns'),
+                # the statement names another procedure of its own
+                (HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Anoscopy with rubber band ligation of '
+                 'two internal hemorrhoids was performed today.\n', 'Anoscopy with rubber band ligation'),
+                # a procedure line naming the family as another encounter's books nothing (validation:11)
+                (HEAD + 'Procedure: EGD in 2020 was normal.\nFindings: Esophageal varices. Band ligation of three '
+                 'columns was performed today.\n', 'Band ligation of three columns')):
             with self.subTest(text=text[len(HEAD):len(HEAD) + 50]):
                 other = routed(text).finding('gi.other')
                 self.assertIsNotNone(other)
-                self.assertEqual(other.status, 'performed')
+                self.assertTrue(any(m.status == 'performed' and m.span.text.startswith(name) for m in other.mentions),
+                                [(m.status, m.span.text) for m in other.mentions])
