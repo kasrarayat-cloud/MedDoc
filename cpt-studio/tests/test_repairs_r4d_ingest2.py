@@ -566,6 +566,12 @@ class Extraction3MarkInsideAPrintedBoxTests(unittest.TestCase):
         self.assertIn(OVERLAP, result.messages)
         self.assertNotIn(UNREAD_NOTE, result.messages)
         self.assertIn(f'{UNREAD} Biopsy {UNREAD}', result.text)
+        form.checkbox('Check Box2', widget_rect(SNARE_ROW), True)  # and an ordinary check box over its own box
+        result = extracted(form.build())
+        self.assertIn(OVERLAP, result.messages)
+        self.assertNotIn(UNREAD_NOTE, result.messages)
+        self.assertIn(f'{UNREAD} Biopsy {UNREAD}', result.text)
+        self.assertIn('☒ Cold snare polypectomy', result.text)
 
 
 # --- extraction:5 -- an item's own detail on a line of its own does not hold the item -------------------------------

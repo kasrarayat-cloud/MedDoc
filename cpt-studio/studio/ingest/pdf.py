@@ -659,7 +659,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         for match in lost:
             unread(match)
     printed = [item[2] for row in known.rows for item in row] + [item[2] for row in inside.rows for item in row] + lost
-    if printed and (widgets or annotations.marks or annotations.unread_marks):
+    if printed and not everything and (widgets or annotations.marks or annotations.unread_marks):
         # Where each printed box is drawn (its glyph, across its width; or somewhere right of where its piece's
         # operators draw): a widget or mark over one that the readings above left decided leaves it unread, and so
         # does the box a widget or mark had written its own state into (two candidates). Holds only.
@@ -696,17 +696,21 @@ def _I2_under_marks(layer: '_Layer', printed: list, widgets: list, annotations: 
     candidates. Also whether the page is named as unread (a box at a known place under a check box, any box under a
     mark, a decided box withdrawn) or as OVERLAP (a box whose place is not read exactly under a check box). Where there
     is too much to read, every printed box on the page."""
+    if not own and not checked:  # no box decided by a widget or mark: only boxes not held yet can change
+        printed = [match for match in printed if match.start() not in held]
+        if not printed:
+            return [], False, False
     places = _I2_Places(layer, printed)
     by_start = {match.start(): match for match in printed}
     out: dict[int, object] = {}
-    named = overlap = False
+    named = overlap = everything = False
     rects = ([(w.rect, own.get(i), True, w.on) for i, w in enumerate(widgets)]
              + [(rect, checked.get(k), False, True) for k, rect in enumerate(annotations.marks)]
              + [(rect, None, False, None) for rect in annotations.unread_marks])
     for rect, mine, widget, on in rects:
         found = places.under(rect)
-        if found is None:  # too much to read: no printed box on the page is read as decided
-            out.update(by_start)
+        if found is None:  # too much to read: no printed box on the page is read as decided (once, at the end)
+            everything = True
             overlap, named = overlap or widget, named or not widget
             continue
         exact, inside = ([match for match in group if match.start() != mine] for group in found)
@@ -721,7 +725,7 @@ def _I2_under_marks(layer: '_Layer', printed: list, widgets: list, annotations: 
             out[match.start()] = match
         named = named or bool(exact) or not widget
         overlap = overlap or (widget and bool(inside))
-    return list(out.values()), named, overlap
+    return list(by_start.values() if everything else out.values()), named, overlap
 
 
 class _I2_Places:
@@ -735,14 +739,16 @@ class _I2_Places:
 
     def __init__(self, layer: '_Layer', printed: list):
         text, firsts = layer.text, sorted(layer.drawn)
+        breaks = [k for k, char in enumerate(text) if char == '\n']  # a box and its piece share a line
         origins, placed = dict(layer.pieces), dict(layer.placed_pieces)
         ink = _ING_Rows((y, x, end, rest) for y, x, end, *rest in layer.ink)
         fonts: dict = {}
+        leftmost: dict = {}  # piece -> {baseline: where its operators on it start, leftmost}, read once per piece
         exact, inside = [], []
         for match in printed:
             start = match.start()
             index = bisect_right(firsts, start) - 1
-            if index < 0 or '\n' in text[firsts[index]:start]:
+            if index < 0 or bisect_right(breaks, firsts[index]) != bisect_right(breaks, start):
                 continue
             first = firsts[index]
             shows, lead, font, em, _ = layer.drawn[first]
@@ -754,12 +760,14 @@ class _I2_Places:
                 x = max(origin[0], record[2][1]) if record is not None else origin[0]
                 exact.append((origin[1], x, start, (x + self._width(match.group(0), font, em, record, fonts), match)))
                 continue
-            lowest: dict = {}  # baseline -> where the piece's operators on it start, leftmost
-            for position in (origin, *shows):
-                if position is not None and position[2]:
-                    key = round(position[1], 2)
-                    lowest[key] = min(lowest.get(key, position[0]), position[0])
-            inside.extend((y, x, start, match) for y, x in lowest.items())
+            if first not in leftmost:
+                lowest: dict = {}  # baseline -> where the piece's operators on it start, leftmost
+                for position in (origin, *shows):
+                    if position is not None and position[2]:
+                        key = round(position[1], 2)
+                        lowest[key] = min(lowest.get(key, position[0]), position[0])
+                leftmost[first] = lowest
+            inside.extend((y, x, start, match) for y, x in leftmost[first].items())
         self.exact, self.inside = _ING_Rows(exact), _ING_Rows(inside)
         self.widest = max((right - x for _, x, _, (right, _) in exact), default=0.0)
 
