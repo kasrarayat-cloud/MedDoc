@@ -1079,5 +1079,116 @@ class S2R2Sections1BeyondACompleteLandmarkTests(unittest.TestCase):
                 self.assertEqual(extent_status(text, slug)[1], extent)
 
 
+# --- sections:0 (second round): landmark fields stating the landmark, and report fields naming a procedure ----------
+
+S0R2_TECH = 'Procedure: Colonoscopy\nTechnique: The colonoscope was inserted into the rectum and advanced.\n'
+S0R2_FIELDS = (('Cecum: reached', 'cecum'), ('Cecum: reached without difficulty', 'cecum'),
+               ('Cecum: reached at 6 minutes', 'cecum'), ('Cecum: reached in 5 min', 'cecum'),
+               ('Cecum: reached with ease', 'cecum'), ('Cecum: reached after abdominal pressure', 'cecum'),
+               ('Cecum: reached with patient repositioning', 'cecum'), ('Cecum: reached, landmarks photographed', 'cecum'),
+               ('Cecum: reached and confirmed by photos', 'cecum'), ('Cecum: reached - yes', 'cecum'),
+               ('Cecum: reached and examined', 'cecum'), ('Cecum: reached (with pictures)', 'cecum'),
+               ('Cecum: reached, normal', 'cecum'), ('Terminal ileum: intubated for 5 cm', 'terminal ileum'),
+               ('TI: intubated and normal', 'terminal ileum'), ('Terminal ileum: intubated, normal mucosa', 'terminal ileum'),
+               ('Cecum: reached; prep good', 'cecum'), ('Cecum: reached, good prep', 'cecum'),
+               ('Cecum: reached by colonoscope', 'cecum'), ('Cecum: reached, photodocumented', 'cecum'),
+               ('Cecum: intubated without difficulty', 'cecum'), ('Cecum: reached easily', 'cecum'),
+               ('Cecum: reached at 08:42', 'cecum'), ('Cecum: reached; photo taken', 'cecum'),
+               ('Terminal ileum: intubated, 10 cm examined', 'terminal ileum'))
+S0R2_PLANS = (('Findings: Sigmoid diverticulosis.\nReferral: Colorectal surgery\n', ''),
+              ('Referral: Dr. B. Synthetic\n', 'Findings: Sigmoid diverticulosis.\n'),
+              ('Findings: Sigmoid diverticulosis.\nOrders: CBC\n', ''))
+
+
+class S2R2Sections0LandmarkFieldStatementTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:0, second round (high, the verifier's new problem 4) - the first round's landmark arm resumed a landmark
+    field after an answered plan label only when every word of its value was on a closed list, so "Cecum: reached
+    without difficulty", "Cecum: reached at 6 minutes" or "Terminal ileum: intubated, normal mucosa" were held and a
+    complete colonoscopy read 'incomplete: rectum' (45378 ready with service.incomplete), where HEAD, 9a9f40301 and
+    d05326ef read the landmark (4347acd24's 'incomplete: rectum' is the reading the first round itself rejected). A
+    landmark field now resumes when its value OPENS by saying the landmark was reached or seen; the rest of the value is
+    read by the section as at HEAD. A value opening with anything else, or naming a service, an intervention or a
+    procedure by its form, is still held."""
+
+    def test_the_verifiers_inputs(self):
+        for field, extent in S0R2_FIELDS:
+            for before, after in S0R2_PLANS:
+                text = HEADER + S0R2_TECH + before + field + '\n' + after + 'Impression: Diverticulosis.\n'
+                with self.subTest(field=field, plan=before[-25:]):
+                    self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('performed', extent))
+            text = HEADER + S0R2_TECH + S0R2_PLANS[0][0] + field + '\nImpression: Diverticulosis.\n'
+            with self.subTest(field=field, engine=True):
+                proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
+                self.assertTrue(ready(proposal), (proposal.bucket, proposal.status, clarified(proposal)))
+                self.assertNotIn('service.incomplete', checks(proposal))
+
+    def test_the_upper_tract(self):
+        for field in ('Second part of the duodenum: reached without difficulty', 'D2: reached, normal mucosa',
+                      'Second part of the duodenum: intubated with ease'):
+            text = (HEADER + 'Procedure: EGD\nTechnique: The gastroscope was passed into the esophagus.\nReferral: Dr. B. '
+                    'Synthetic\n' + field + '\nFindings: Gastritis.\nImpression: Gastritis.\n')
+            with self.subTest(field=field):
+                self.assertEqual(extent_status(text, 'gi.egd'), ('performed', 'second part of duodenum'))
+
+    def test_a_value_opening_otherwise_is_still_held(self):
+        for field in ('Rectum: internal hemorrhoids', 'Cecum: 4 cm mass', 'Cecum: not reached', 'Cecum: to be examined',
+                      'Ascending colon: 4 cm mass, for right hemicolectomy', 'Cecum: with a 3 cm mass',
+                      'Ileocecal valve: the site of a lipoma'):
+            text = HEADER + S0R2_TECH + S0R2_PLANS[0][0] + field + '\nImpression: Diverticulosis.\n'
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, field), 'other')
+
+    def test_a_landmark_field_naming_a_procedure_is_held(self):
+        for field, code in (('Cecum: reached; right hemicolectomy with Dr. B. Synthetic', '44160'),
+                            ('Cecum: reached, hemorrhoidectomy to follow', '46255'),
+                            ('Duodenum: normal, esophageal manometry outpatient', '91010')):
+            text = HEADER + S0_FIND + 'Referral: Colorectal surgery\n' + field + '\n'
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, field), 'other')
+                self.assert_held_never_excluded(text, code, field)
+
+
+class S2R2Sections0ReportFieldNamingAProcedureTests(HeldOrReadyAssertions, unittest.TestCase):
+    """sections:0, second round (critical, the verifier's new problem 6; 4347acd24 excluded it, the other trees read it
+    ready) - a field of the closed list resumed whatever else its value named, when routing detected no service in it:
+    "Extent: cecum, right hemicolectomy with Dr. B. Synthetic" or "Retroflexion: done; hemorrhoidectomy with Dr. B.
+    Synthetic" after "Referral: Colorectal surgery" read performed (section: findings) and 44160 / 46255 were READY. The
+    first round's report wrongly said every base read it ready. A report field that names a procedure by its form (as
+    routing's gi.other reader reads it: -ectomy, -otomy, -scopy, ligation, banding, manometry...) is now held, never
+    performed and never planned."""
+
+    def test_the_verifiers_inputs(self):
+        colon = ('Procedure: Colonoscopy with biopsy and tattoo\nFindings: The colonoscope was advanced to the cecum. A 4 cm '
+                 'fungating ascending colon mass was biopsied and tattooed.\nReferral: Colorectal surgery\n')
+        hemorrhoids = ('Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. Large internal '
+                       'hemorrhoids with stigmata of recent bleeding.\nReferral: Colorectal surgery\n')
+        for body, field, code in ((colon, 'Extent: cecum, right hemicolectomy with Dr. B. Synthetic', '44160'),
+                                  (hemorrhoids, 'Retroflexion: done; hemorrhoidectomy with Dr. B. Synthetic', '46255')):
+            text = HEADER + body + field + '\nImpression: Findings as above.\n'
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, field), 'other')
+                self.assert_held_never_excluded(text, code, field)
+                self.assertEqual(fact_value(text, 'gi.colonoscopy', 'extent'), 'cecum')  # the prose still reaches it
+
+    def test_every_listed_field_naming_a_procedure(self):
+        for field, code in (('Withdrawal time: 8 min; hemorrhoidectomy with Dr. B. Synthetic', '46255'),
+                            ('Insertion time: 5 min; right hemicolectomy with Dr. B. Synthetic', '44160'),
+                            ('Prep quality: good; anoscopy by Dr. B. Synthetic', '46600'),
+                            ('BBPS: 8, esophageal manometry with Dr. B. Synthetic', '91010'),
+                            ('Retroflexion: done; right hemicolectomy with Dr. B. Synthetic', '44160'),
+                            ('Extent: cecum | Withdrawal time: 9 min | hemorrhoidectomy referral', '46255')):
+            text = HEADER + S0_FIND + 'Referral: Colorectal surgery\n' + field + '\n'
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, field), 'other')
+                self.assert_held_never_excluded(text, code, field)
+
+    def test_report_fields_naming_nothing_still_resume(self):
+        for field in ('Extent: cecum', 'Withdrawal time: 8 minutes', 'Prep quality: good', 'BBPS: 8',
+                      'Retroflexion: done', 'Extent: cecum, photos taken', 'Insertion time: 5 minutes'):
+            text = HEADER + 'Procedure: Colonoscopy\nReferral: Dr. B. Synthetic, primary care\n' + field + '\n'
+            with self.subTest(field=field):
+                self.assertEqual(kind_at(text, field), 'procedure')
+
+
 if __name__ == '__main__':
     unittest.main()

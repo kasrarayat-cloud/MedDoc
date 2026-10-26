@@ -20,10 +20,12 @@ answer of their own they plan their own line only. Up to the next heading, a
 field after them that is one of the report's own fields of a closed list
 (extent, depth of insertion, withdrawal, insertion or cecal intubation time,
 preparation and its quality, BBPS, sedation, complications, EBL, findings,
-retroflexion) and names no service or intervention ("Extent: cecum") reads in
-the section in force before them, and every other line is held: an ``other``
-section of its own, with no default (inside a plan or history section that
-section reads every line).
+retroflexion), or a landmark whose value opens by saying it was reached or
+seen ("Cecum: reached without difficulty"), and names no service,
+intervention or procedure by its form ("Extent: cecum") reads in the section
+in force before them, and every other line is held: an ``other`` section of
+its own, with no default (inside a plan or history section that section
+reads every line).
 
 A label line without a colon ("Planned procedures", "Further management", a
 Word heading paragraph) opens a plan or history section when its words say so
@@ -185,20 +187,43 @@ _S2_REPORT_FIELD = re.compile(
     r'|(?:bowel[ \t]+)?prep(?:aration)?(?:[ \t]+quality)?|quality[ \t]+of[ \t]+(?:the[ \t]+)?(?:bowel[ \t]+)?prep(?:aration)?'
     r'|bbps|boston[ \t]+bowel[ \t]+prep(?:aration)?[ \t]+scale(?:[ \t]+\(bbps\))?'
     r'|sedation|complications?|ebl|estimated[ \t]+blood[ \t]+loss|findings|retroflexion)[ \t]*:', re.A | re.I)
-# So does a field whose label is a landmark and whose value only says it was reached or seen ("Cecum: reached", "Terminal
-# ileum: intubated", "Duodenum: normal"): the report's own landmark, never a service; held, it would leave a complete
-# procedure read incomplete at a shallower landmark. A value with any other word ("Ascending colon: 4 cm mass, for
-# right hemicolectomy") is held.
+# So does a field whose label is a landmark and whose value opens by saying it was reached or seen ("Cecum: reached",
+# "Terminal ileum: intubated", "Duodenum: normal", and round 4d's second round: "Cecum: reached without difficulty",
+# "Cecum: reached at 6 minutes", "Terminal ileum: intubated, normal mucosa" - the verifier's new problem 4: held, they
+# read a complete procedure incomplete at a shallower landmark, where HEAD, 9a9f40301 and d05326ef read the landmark):
+# the report's own landmark, never a service; the rest of the value is read by the section as at HEAD. A value that
+# opens with any other word ("Ascending colon: 4 cm mass, for right hemicolectomy", "Rectum: internal hemorrhoids") is
+# held.
 _S2_LANDMARK_VALUE = cues.EXTENT_TAIL | frozenset(('normal', 'unremarkable', 'examined', 'inspected'))
+_S2_LANDMARK_STATEMENT = frozenset(('reached', 'intubated', 'entered', 'visualized', 'visualised', 'identified', 'confirmed',
+                                    'seen', 'photographed', 'photodocumented', 'documented', 'normal', 'unremarkable',
+                                    'examined', 'inspected'))
 _S2_VALUE_WORD = re.compile(r"[A-Za-z][A-Za-z'-]*|\d+", re.A)
+# Round 4d sections:0, second round (the verifier's new problem 6): what makes a phrase a procedure by its form, as
+# routing's gi.other reader reads it (detect._PROCEDURE_WORD): "right hemicolectomy", "hemorrhoidectomy", "anoscopy",
+# "rubber band ligation". A field of the closed list, or a landmark field, that names one is held too: "Extent: cecum,
+# right hemicolectomy with Dr. B. Synthetic" after "Referral: Colorectal surgery" read performed and 44160 READY, where
+# 4347acd24 excluded it as planned.
+_S2_PROCEDURE_WORD = re.compile(r'\b(?:\w+(?:scop(?:y|ies)|ectom(?:y|ies)|otom(?:y|ies)|ostom(?:y|ies)|plast(?:y|ies)|'
+                                r'centesis|pex(?:y|ies)|rrhaph(?:y|ies))|ligations?|banding|biops(?:y|ies)|injections?|'
+                                r'dilat(?:ion|ation)s?|drainage|excisions?|incisions?|resections?|ablations?|sclerotherapy|'
+                                r'cauterization|cautery|manometry|debridement|I[ \t]*&[ \t]*D|RBL)\b', re.A | re.I)
 
 
 def _S2_landmark_field(line: str) -> bool:
-    """Whether the field line names a landmark as its label and only states it reached or seen (see above)."""
+    """Whether the field line names a landmark as its label and its value opens by saying it was reached or seen: the
+    value's first words are of _S2_LANDMARK_VALUE, one of them a statement (_S2_LANDMARK_STATEMENT; see above)."""
     label, _, value = line.partition(':')
     label = label.strip()
-    return (any(pattern.fullmatch(label) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS)
-            and all(word.group(0).lower() in _S2_LANDMARK_VALUE for word in _S2_VALUE_WORD.finditer(value)))
+    if not any(pattern.fullmatch(label) for _, _, pattern in cues.UPPER_LANDMARKS + cues.LOWER_LANDMARKS):
+        return False
+    for word in _S2_VALUE_WORD.finditer(value):
+        lowered = word.group(0).lower()
+        if lowered not in _S2_LANDMARK_VALUE:
+            return False
+        if lowered in _S2_LANDMARK_STATEMENT:
+            return True
+    return False
 # The 'other' section of the lines held after such a label (round 4c regression:2, sections:5; see layout).
 _SEC_PLAN_HELD_LABEL = 'line after a plan label with an answer of its own'
 _PREFIX = re.compile(r'[ \t]*(?:#{1,4}[ \t]*|\*{1,2}[ \t]*|(?:\d{1,2}|[A-Za-z])[.)][ \t]+)?', re.A)
@@ -748,8 +773,10 @@ def layout(text: str) -> Layout:
     # other run of lines (a line and the lines its sentence runs on into) is HELD in an 'other' section of its own
     # (_SEC_PLAN_HELD_LABEL): it may be what the label orders or today's ("Interventions: cold snare polypectomy"), and no
     # word list tells which. Round 4d sections:0: a field naming a service no list knows ("Right hemicolectomy: Dr. B.
-    # Synthetic", 44160 READY) resumed too; only the closed list of the report's own fields resumes now. Inside a plan or
-    # history section nothing is held: that section reads every line (see the gate below).
+    # Synthetic", 44160 READY) resumed too; only the closed list of the report's own fields resumes now, with a landmark
+    # field that states the landmark reached or seen, and (second round) none that names a procedure by its form
+    # (_S2_PROCEDURE_WORD: "Extent: cecum, right hemicolectomy with Dr. B. Synthetic"). Inside a plan or history section
+    # nothing is held: that section reads every line (see the gate below).
     line_ends, plan_runs, taken = [], [], set(held)
     for label_line in field_labels:
         end = next((j for j in range(label_line + 1, len(lines)) if headings[j]), len(lines))
@@ -765,7 +792,7 @@ def layout(text: str) -> Layout:
             line = text[lines[first][0]:lines[first][1]]
             if line.strip() and not (first == j and _SEC_FIELD_LINE.match(line)
                                      and (_S2_REPORT_FIELD.match(line) or _S2_landmark_field(line))
-                                     and not _sec_act_named(line)):
+                                     and not _sec_act_named(line) and not _S2_PROCEDURE_WORD.search(line)):
                 first += first in taken  # a line held after an unfinished clause keeps its own hold
                 if first <= j:
                     plan_runs.append((first, j))
