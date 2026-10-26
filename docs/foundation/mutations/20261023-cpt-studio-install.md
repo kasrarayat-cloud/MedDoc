@@ -10,16 +10,54 @@ This is a new standalone service: no QuillMD source, database, users, files,
 units or environment are shared, promoted or edited. No purchase, agreement,
 new ACME account, real-patient processing or provider request is part of it.
 
-Revision installed: 29e4d1f52939427ee277287e585b479912122679 (the merge commit of
-PR #1435; image tag cpt-studio:29e4d1f52939).
+Revision installed (attempt 2): 2734a6f31ce0e7865a93c3597a09621d16cac0a1, the
+second of two fix commits on top of 489d6bc9; image tag cpt-studio:2734a6f31ce0.
+Its cpt-studio/ differs from attempt 1's revision 29e4d1f5 only in:
+- 8a06fd08 (attempt 1's image failure, below): ops/install.py gives extracted
+  directories 0755; deploy/Dockerfile makes all of /app root-owned 0755/0644
+  after COPY.
+- 2734a6f3 (a read-only review of the phases attempt 1 never reached): in live
+  mode the web is given the worker's Corti credentials PATH, never the file, so
+  a setting or billing change re-checks instead of re-sending a failed request
+  to Corti; the nginx -t warning gate reads this host's timestamped warning
+  format; the database counts as ready only once it answers over TCP.
+- ops/test_install.py and tests/test_web_provider_configuration.py: the tests
+  for both.
 Execute each phase separately through scripts/run-ruled-mutation.sh with
 `python3 -B cpt-studio/ops/install.py --phase <phase> --revision
-29e4d1f52939427ee277287e585b479912122679 --receipts /home/claude/cpt-studio-install-20261023`, in this order:
+2734a6f31ce0e7865a93c3597a09621d16cac0a1 --receipts /home/claude/cpt-studio-install-20261023`, in this order:
 preflight, secrets, image, db, app, reference, provision, http-vhost, cert,
-https-vhost, verify. Read each receipt before the next phase. ops/INSTALL.md
-describes every check.
+https-vhost, verify, from a clean checkout of the merge commit that lands this
+declaration (a descendant of the revision that changes nothing under
+cpt-studio/ or the door). Read each receipt before the next phase.
+ops/INSTALL.md describes every check.
 
-## Baseline (read-only, 2026-10-26T19:07Z; the preflight receipt is binding)
+## Attempt 1 (2026-10-26, revision 29e4d1f5): what ran and what it left
+
+- preflight, 20:42:50Z: ok. Every figure equalled the baseline below
+  (receipt preflight-20261026T204256813877Z.json).
+- secrets, 20:43:32Z: ok, state created. /etc/cpt-studio/ (root 0700) with
+  app.env and db.env (root 0600) and corti-credentials.env (10150:10150 0400);
+  the four Corti key names present.
+- image, 20:43:47Z: FAILED, exit 1, at its own check that the web application
+  loads as the image's user: "/app/deploy/entrypoint.sh: Permission denied" and
+  "No module named 'cptstudio.wsgi'". Cause: install.py runs under umask 077,
+  and its tarfile 'data' filter does not apply directory modes, so all 28
+  directories of the extracted build context were 0700; COPY kept them, so uid
+  10150 could not enter /app/cptstudio or /app/deploy. Stopped there, as the
+  stop conditions require; nothing was re-run.
+- Left on the host: image cpt-studio:29e4d1f52939 (d7495af80fca), used by no
+  container. No container, network or volume was created. The image is not
+  removed by attempt 2; removing it is a separate act.
+- Outside the door, to verify the repair: image cpt-studio-fixcheck:8a06fd08c9a2
+  (3ba480c0dd6a), built from 8a06fd08 (the same Dockerfile and extraction as the
+  revision) through the installer's own extraction under umask 077, with no
+  installer labels. Its directories are
+  0755 and the image phase's checks all pass on it: English OCR, pdftoppm,
+  manage check, and the WSGI load as uid 10150 on a read-only root. It stays
+  until removed separately.
+
+## Baseline (read-only, 2026-10-26T19:07Z, re-read 20:54Z; attempt 2's preflight receipt is binding)
 
 - /etc/nginx/sites-available sha256: dealhunter cbc089226d5f9f55f3543ee277f16e7e91f08f2ea6737141d7471e155b3c4ebd;
   dealmason 6fd1916b6444caf394d30f49fe7d3e943b5cdf322e0bfe009bb5bd7724979c74;
@@ -31,6 +69,10 @@ describes every check.
   voice.kasitcorp.com 051f70eaec42aa7c7736cefb59668b9b082989ca076c31924a320635600f96eb;
   quillmd-email-preview.htpasswd root:www-data 0640 (not readable; presence only).
   /etc/nginx/nginx.conf 196a622ce459de81985338b381d55f5ba357bfa3d7a22a56551c76a4b5504dca; conf.d empty.
+  `nginx -t` passes with two existing warnings, which attempt 1's receipt
+  missed (its parser did not read this nginx's timestamped format): "protocol
+  options redefined for 0.0.0.0:443" in sites-enabled/quillmd:24 and in
+  sites-enabled/voice.kasitcorp.com:28. Attempt 2's preflight records both.
 - sites-enabled: dealhunter, dealmason, leathererp, quillmd (../sites-available/quillmd),
   quillmd-email-preview, quillmd-staging, voice.kasitcorp.com. No quillmd-cpt.
 - Local routing (HEAD through local nginx, per Host/SNI): 55 name/port pairs,
@@ -54,18 +96,25 @@ describes every check.
   never opened.
 - Every figure above equals the 2026-10-23 22:05Z look this declaration was
   drafted from; none moved in the three days between.
+- Re-read at 20:54Z, after attempt 1: unchanged (health release 67acb2628,
+  check-cotenants exit 0, 57 containers with 21 running, 39 volumes,
+  13 networks, ports free, DNS A only), except for what attempt 1 left:
+  /etc/cpt-studio/ and the images cpt-studio:29e4d1f52939 and
+  cpt-studio-fixcheck:8a06fd08c9a2.
 
 ## Expected changes, per phase
 
 - preflight: none. One random ACME probe file is written to
   /var/www/certbot/.well-known/acme-challenge/ and removed.
-- secrets: new /etc/cpt-studio/ (root 0700) holding app.env and db.env (root
-  0600, generated inside the root helper, never displayed) and
-  corti-credentials.env (byte copy of /etc/quillmd-corti-test/credentials.env,
-  10150:10150 0400; only its four key names are checked).
-- image: new local image tagged with the revision's first 12 characters, built
-  from git archive of 29e4d1f52939427ee277287e585b479912122679 cpt-studio/
-  (base python:3.12-slim-bookworm pinned by digest).
+- secrets: none. Attempt 1 created /etc/cpt-studio/ (root 0700) holding
+  app.env and db.env (root 0600, generated inside the root helper, never
+  displayed) and corti-credentials.env (byte copy of
+  /etc/quillmd-corti-test/credentials.env, 10150:10150 0400). Attempt 2 only
+  checks the existing set (owners, modes, key names, the Corti copy still
+  byte-identical to its source) and reports it present.
+- image: new local image cpt-studio:2734a6f31ce0, built from git archive of
+  2734a6f31ce0e7865a93c3597a09621d16cac0a1 cpt-studio/ (base
+  python:3.12-slim-bookworm pinned by digest).
 - db: new bridge network cpt-studio-net, volumes cpt-studio-pg and
   cpt-studio-files, container cpt-studio-db (postgres 17.11-alpine pinned by
   digest, uid 70, all capabilities dropped, 512 MiB, 127.0.0.1:55451,
@@ -79,6 +128,8 @@ describes every check.
   account"); the Corti credentials are mounted read-only into the worker
   only, after the application's own loader has parsed them in that mount
   layout with no network (before migrations, so a bad file changes nothing).
+  The web is given only the setting that names the worker's path (no mount):
+  it builds, never sends, the request a context change would make.
   The installer itself sends no provider request; the first live request
   happens during browser verification, under the single-flight, bounded,
   duplicate-safe controls of the application.
@@ -116,16 +167,18 @@ unknown host (status and certificate per SNI); app.quillmd.com /health/ (status
 and release); check-cotenants.sh results; every container running at preflight
 (same id, still running); every existing volume; every other Let's Encrypt
 lineage and its renewal config, and the ACME account set; the QuillMD rebuild,
-its database, users and files. No `nginx -t` warning may be added.
+its database, users and files; /etc/cpt-studio/'s three files as attempt 1
+wrote them; the images cpt-studio:29e4d1f52939 and
+cpt-studio-fixcheck:8a06fd08c9a2. No `nginx -t` warning may be added.
 
 ## Validation per phase
 
 Each phase's own checks (ops/INSTALL.md) must pass and its receipt must say
-ok. In particular: secrets reports names/modes only; image reports the
-revision label, user 10150, English OCR, passing Django checks and a WSGI load
-as its own user on a read-only root; app reports
+ok. In particular: secrets reports state present, names/modes only; image
+reports the revision label, user 10150, English OCR, passing Django checks and
+a WSGI load as its own user on a read-only root; app reports
 health {status ok, service cpt-studio, data_mode synthetic-only, database ok,
-release 29e4d1f52939427ee277287e585b479912122679} through 127.0.0.1:9150 and a
+release 2734a6f31ce0e7865a93c3597a09621d16cac0a1} through 127.0.0.1:9150 and a
 worker that stayed up;
 http-vhost proves the ACME probe is served for cpt.quillmd.com and the 301;
 cert records the lineage by path with other lineages unchanged; https-vhost
@@ -145,6 +198,16 @@ worker and keeps the database, volumes, image and secrets (applied migrations
 are not reversed). provision discards its staged credentials on failure.
 secrets, db, image and reference are left in place; removing them is a manual,
 separately declared act.
+
+Known limit, found by the pre-install review and not repaired in this revision:
+rollback-vhost judges co-tenant routing and app health against the newest
+preflight receipt for the revision, so any drift since then (a renewed
+co-tenant certificate, a rebuild release) makes it restore the vhost and exit
+1. Run a fresh preflight immediately before rollback-vhost; it accepts CPT
+Studio's own containers and ports. Two others, recorded for later: the worker
+has no init process, so an OCR tool orphaned when an extraction child is
+killed mid-run stays a zombie until the worker restarts; re-running reference
+with a different retrieval time keeps the first one in the database.
 
 ## Stop conditions
 

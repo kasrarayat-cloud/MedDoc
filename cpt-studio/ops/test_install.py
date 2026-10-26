@@ -295,8 +295,18 @@ class NginxParsingTests(unittest.TestCase):
     def test_new_warnings_and_routing_differences(self):
         output = ('nginx: [warn] protocol options redefined for 0.0.0.0:443 in /a:7\n'
                   'nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n')
-        self.assertEqual(install.nginx_warnings(output),
-                         ['nginx: [warn] protocol options redefined for 0.0.0.0:443 in /a:7'])
+        self.assertEqual(install.nginx_warnings(output), ['protocol options redefined for 0.0.0.0:443 in /a:7'])
+        # This host's Ubuntu nginx logs to stderr and prints only the timestamped form (the 2026-10-26 preflight
+        # log). The same warning one second later is the same warning; a new one is new.
+        ubuntu = ('2026/10/26 20:42:50 [warn] 1204878#1204878: protocol options redefined for 0.0.0.0:443 in /a:7\n'
+                  'nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\n'
+                  'nginx: configuration file /etc/nginx/nginx.conf test is successful\n')
+        later = ubuntu.replace('20:42:50', '20:42:51').replace('1204878#1204878', '1204990#1204990')
+        added = later + '2026/10/26 20:42:51 [warn] 1204990#1204990: conflicting server name "x" on 0.0.0.0:80, ignored\n'
+        self.assertEqual(install.nginx_warnings(ubuntu), install.nginx_warnings(output))
+        self.assertEqual(install.nginx_warnings(later), install.nginx_warnings(ubuntu))
+        self.assertEqual(sorted(set(install.nginx_warnings(added)) - set(install.nginx_warnings(ubuntu))),
+                         ['conflicting server name "x" on 0.0.0.0:80, ignored'])
         before = {'http://a.example:80@127.0.0.1': {'status': 200},
                   f'https://{install.DOMAIN}:443@127.0.0.1': {'status': 200}}
         after = {'http://a.example:80@127.0.0.1': {'status': 502},
@@ -584,7 +594,12 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertEqual(self.flags(argv, '--env-file'), ['/dev/stdin'])
         self.assertEqual(self.flags(argv, '--ulimit'), ['core=0'])
         self.assertTrue(self.flags(argv, '--tmpfs')[0].startswith('/tmp:rw,noexec,nosuid,nodev'))
-        self.assertNotIn('corti', ' '.join(argv).lower())
+        # Live: the web names the worker's credentials path (a context change builds the request it would send,
+        # which opens nothing) but never mounts the file; only the worker holds it.
+        self.assertIn(f'CPT_STUDIO_CORTI_CREDENTIALS_FILE={install.CREDENTIALS_IN_CONTAINER}', self.flags(argv, '-e'))
+        self.assertEqual(self.flags(argv, '--mount'), [f'type=volume,src={install.FILES_VOLUME},dst={install.STATE_DIR}'])
+        disabled = install.service_args('web', self.IMAGE, REVISION, 'disabled', '')
+        self.assertNotIn('corti', ' '.join(disabled).lower())
 
     def test_worker_gets_credentials_only_when_live(self):
         live = install.service_args('worker', self.IMAGE, REVISION, 'live', 'docs/x.md')
@@ -612,6 +627,21 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'--uid {uid} --gid {uid}', dockerfile)
         self.assertIn(f'install -d -o {uid} -g {uid} -m 0700 /var/lib/cpt-studio', dockerfile)
         self.assertNotEqual(uid, 10001)
+
+    def test_image_makes_all_of_app_readable_after_copying_the_context(self):
+        # COPY keeps the context's modes; the first install's 0700 directories reached the image this way.
+        dockerfile = (DEPLOY / 'Dockerfile').read_text()
+        after_copy = dockerfile[dockerfile.index('COPY . .'):dockerfile.index('USER ')]
+        self.assertIn('chmod -R u=rwX,go=rX /app', after_copy)
+
+    def test_database_readiness_is_probed_over_tcp(self):
+        # The image's first-start init server listens on the unix socket only; the application connects over TCP.
+        calls = []
+        with mock.patch.object(install, 'docker', side_effect=lambda *argv, **kw: calls.append(argv)
+                               or SimpleNamespace(returncode=0)):
+            install.wait_db_ready(attempts=1)
+        self.assertEqual(calls, [('exec', install.DB_CONTAINER, 'pg_isready', '-q', '-h', '127.0.0.1', '-p', '5432',
+                                  '-U', install.DB_USER, '-d', install.DB_NAME)])
 
     def test_database_container(self):
         argv = install.db_args()
@@ -758,6 +788,19 @@ class ArchiveTests(TemporaryDirectoryTest):
     def test_safe_archive_extracts(self):
         install.extract_archive(self.archive([('cpt-studio', 'dir'), ('cpt-studio/a.py', 'file')]), self.tmp)
         self.assertEqual((self.tmp / 'cpt-studio' / 'a.py').read_bytes(), b'ok')
+
+    def test_directories_are_0755_under_the_installers_umask(self):
+        # main() runs under umask 077, and the 'data' filter leaves directory modes to it: every directory
+        # came out 0700 and the image user could not enter /app. The implicit parent is the case git archive
+        # never lists explicitly in a test, so it is covered too.
+        previous = os.umask(0o077)
+        try:
+            install.extract_archive(self.archive([('cpt-studio', 'dir'), ('cpt-studio/pkg/a.py', 'file')]), self.tmp)
+        finally:
+            os.umask(previous)
+        for relative in ('cpt-studio', 'cpt-studio/pkg'):
+            self.assertEqual(stat.S_IMODE((self.tmp / relative).stat().st_mode), 0o755, relative)
+        self.assertEqual(stat.S_IMODE((self.tmp / 'cpt-studio' / 'pkg' / 'a.py').stat().st_mode), 0o644)
 
     def test_unsafe_archives_are_refused(self):
         for members in ([('cpt-studio/../x', 'file')], [('/abs/x', 'file')], [('other/x', 'file')],
