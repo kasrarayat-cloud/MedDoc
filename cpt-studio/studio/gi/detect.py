@@ -4065,7 +4065,11 @@ _S2_REACH_WORD = re.compile(r'\b(?:reach\w*|intubat\w*|advanc\w*|achiev\w*|enter
                             r'travers\w*|attain\w*|access\w*|arriv\w*|made[ \t]+it)\b', re.A | re.I)
 # A landmark answered by a bare denial ("Cecum: no.", "Cecum - none"): whether it denies the reach or answers another
 # question cannot be read, so it doubts.
-_S2_BARE_DENIAL = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*)?(?:no|not|none|never|n/?a)[ \t]*\.?[ \t]*\Z', re.A | re.I)
+_S2_BARE_DENIAL = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*)?(?:no|not|none|never|n/?a)[ \t]*(?:\.(?=\s)|\.?[ \t]*\Z)',
+                             re.A | re.I)
+# ... of which "none" and "N/A" answer a findings-by-segment line as often as a reach ("Cecum: none." - no lesions): even
+# when its reading is negated, it only doubts.
+_S2_BARE_NONE = re.compile(r'[ \t]*(?:[:=\u2013\u2014-][ \t]*)?(?:none|n/?a)[ \t]*(?:\.(?=\s)|\.?[ \t]*\Z)', re.A | re.I)
 _S2_VIEW_WORD = re.compile(r'\b(?:seen|see|visuali[sz]\w*|visible|identif\w*|evaluat\w*|examin\w*|inspect\w*|view\w*|'
                            r'assess\w*)\b', re.A | re.I)
 
@@ -4076,7 +4080,9 @@ def _S2_contradiction(an: Analysis, ms: int, me: int, ws: int, we: int, explicit
     reading is negated, cancelled or incomplete) speaks of reaching it (round 4d regression:3): 'denied' - a reach
     denial of plan:D2's closed list naming it (_S2_reach_denial_of: "Cecum not reached."), or its explicit reading with no
     act in its own segment: with no act there, what is denied is the landmark itself ("No cecal intubation.", "Cecal
-    intubation: not done.", "Despite multiple attempts the cecum was not reached.", "Cecum: no.", "Cecum: declined.");
+    intubation: not done.", "Despite multiple attempts the cecum was not reached.", "Cecum: no.", "Cecum: declined.") -
+    but a bare "none" or "N/A" (_S2_BARE_NONE: "Cecum: none.", a findings-by-segment answer) only doubts, unless the
+    landmark's own name is the reach ("Cecal intubation: none.");
     'doubted' - a reach word in its segment beside an act ("The cecum was not reached or biopsied.", "The lesion near the
     cecum could not be reached.") or in a reading that only doubts ("The cecum may not have been reached."), or, with no
     act there, a view word, a hedge or a bare denial ("Cecum: not seen.", "The cecum could not be evaluated."); None - its
@@ -4094,7 +4100,7 @@ def _S2_contradiction(an: Analysis, ms: int, me: int, ws: int, we: int, explicit
     if not (hedged or cues.DOUBT_TOKEN.search(text, lo, hi) or any(c.status != 'performed' for c in an.cues_in(lo, hi))):
         return None
     acts = bool(_S2_ACT_AT.search(text, lo, hi))
-    if explicit and not acts:
+    if explicit and not acts and (not _S2_BARE_NONE.match(text[me:hi]) or _S2_REACH_WORD.search(text, ms, me)):
         return 'denied'
     if (_S2_REACH_WORD.search(text, lo, ms) or _S2_REACH_WORD.search(text, me, hi)
             or (not acts and (hedged or _S2_VIEW_WORD.search(text, lo, hi) or _S2_BARE_DENIAL.match(text[me:hi])))):

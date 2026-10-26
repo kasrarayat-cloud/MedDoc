@@ -834,16 +834,20 @@ class S2R2Regression3ActOrFindingAtTheLandmarkTests(unittest.TestCase):
         """A landmark written as a field's label is answered across the separator after it (the field's own, never a
         segment break): a denial or a bare answer there drops the label (9a9f40301's reading), a view word withholds,
         and an act or a finding answered there changes nothing. A status answer naming no act ("not done", "declined",
-        "cancelled") denies the landmark itself."""
+        "cancelled") denies the landmark itself; a bare "none" or "N/A" only doubts it, unless the landmark's own name is
+        the reach ("Cecal intubation: none.")."""
         for line, extent in (('Cecum - not reached.', 'incomplete: rectum'), ('Cecum | not reached.', 'incomplete: rectum'),
                              ('Cecum (not reached).', 'incomplete: rectum'), ('The cecum - not reached.', 'incomplete: rectum'),
                              ('Cecum – not reached.', 'incomplete: rectum'), ('Cecum, not reached.', 'incomplete: rectum'),
                              ('Cecum - not intubated due to looping.', 'incomplete: rectum'),
-                             ('Cecum - none.', 'incomplete: rectum'), ('Cecum: not done.', 'incomplete: rectum'),
+                             ('Cecal intubation: none.', 'incomplete: rectum'), ('Cecum: not done.', 'incomplete: rectum'),
                              ('Cecum: declined.', 'incomplete: rectum'), ('Cecum: cancelled.', 'incomplete: rectum'),
                              ('Cecum: not performed due to poor prep.', 'incomplete: rectum'),
                              ('Cecum - not seen.', None), ('Appendiceal orifice - not identified.', None),
                              ('Cecum: never.', None),
+                             # a bare "none" or "N/A" answers a findings-by-segment line as often as a reach: a doubt
+                             ('Cecum - none.', None), ('Cecum: none.', None), ('Cecum: N/A.', None),
+                             ('Rectum: normal. Sigmoid: diverticulosis. Cecum: none.', None),
                              ('Cecum - no biopsies.', 'cecum'), ('Cecum - no lesions.', 'cecum'),
                              ('Cecum (not photographed).', 'cecum')):
             text = r3r2_note(R3R2_CELLS[0], line)
