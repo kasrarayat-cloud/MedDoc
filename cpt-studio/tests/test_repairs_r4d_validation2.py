@@ -1144,3 +1144,37 @@ class Repair2CancelledFamilyIsAnotherProceduresTests(Case):
         self.assertEqual(item.bucket, 'excluded')
         text = self.OFFICE.format(other='Chief complaint: rectal bleeding.', heading='Assessment')
         self.assertReady(real(text, ('46221', self.LINE))[0]['46221'])
+
+
+class Repair2BookedEgdReportKeepsItsBandingTests(Case):
+    """The verifier's new problem 6 (medium; a routing release no finding requires). In an EGD report whose procedure
+    line reads planned ("Procedure: EGD (rescheduled from last week)"), the validation:7 rule made the EGD's own
+    "Band ligation of three columns was performed today." a separate performed gi.other procedure (no base did), so
+    services.unproposed warned of a missed "Other GI service" beside a selected 43244. The report's own procedure line
+    naming the family as booked keeps its findings' interventions that family's; a procedure section opening between
+    them is another report."""
+
+    def test_the_booked_report_s_banding_stays_its_own(self):
+        for line in ('Procedure: EGD (rescheduled from last week)', 'Procedure: Planned EGD with banding',
+                     'Procedure: EGD, previously scheduled'):
+            text = (HEAD + f'{line}\nIndication: Variceal surveillance.\nFindings: Esophageal varices. Band ligation of '
+                    'three columns was performed today.\nImpression: Esophageal varices, banded.\n')
+            with self.subTest(line=line):
+                self.assertIsNone(routed(text).finding('gi.other'))
+                _, result = real(text, ('43244', 'Band ligation of three columns was performed today.'))
+                self.assertNotEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_controls_another_report_s_banding_stays_a_gi_other_procedure(self):
+        for text in (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nProcedure: EGD next '
+                     'month.\nProcedure: Anoscopy with rubber band ligation of two internal hemorrhoids was performed '
+                     'today.\nMedical decision making: moderate.\n',
+                     # the statement names another procedure of its own
+                     HEAD + 'Procedure: EGD (rescheduled from last week)\nFindings: Anoscopy with rubber band ligation of '
+                     'two internal hemorrhoids was performed today.\n',
+                     # a procedure line naming the family as another encounter's books nothing (validation:11)
+                     HEAD + 'Procedure: EGD in 2020 was normal.\nFindings: Esophageal varices. Band ligation of three '
+                     'columns was performed today.\n'):
+            with self.subTest(text=text[len(HEAD):len(HEAD) + 50]):
+                other = routed(text).finding('gi.other')
+                self.assertIsNotNone(other)
+                self.assertEqual(other.status, 'performed')

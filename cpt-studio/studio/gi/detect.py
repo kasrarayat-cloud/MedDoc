@@ -5316,6 +5316,16 @@ def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[
         if _V2_stated_today(an, iv.start, iv.end):
             if any(family in _V2_named_for_today(an) for family in families):
                 return True
+            # round 4d repair 2: in its own report, the procedure line naming the family as booked is that report's
+            # procedure ("Procedure: EGD (rescheduled from last week)" over "Findings: ... Band ligation of three
+            # columns was performed today."), unless the statement names another procedure of its own ("Anoscopy with
+            # rubber band ligation ...")
+            if (an.lay.section_at(iv.start).kind in POSITIVE_SECTIONS
+                    and not any(not any(_overlaps(m.start(), m.end(), other.start, other.end)
+                                        for other in an.interventions_in(start, end))
+                                for m in _PROCEDURE_WORD.finditer(an.text, start, end))
+                    and _V2_booked_report_line(an, iv.start, families)):
+                return True
         elif an.lay.section_at(iv.start).kind not in POSITIVE_SECTIONS or any(family in named for family in families):
             return True
     return False
@@ -5394,6 +5404,46 @@ def _V2_named_for_today(an: Analysis) -> frozenset:
 
 
 _V2_NAMED_READS = 50  # mentions of one family read for today's naming (bounds the work per text)
+
+
+def _V2_booked_report_line(an: Analysis, at: int, families: list[str]) -> bool:
+    """Whether the procedure line of the report that the intervention at ``at`` lies in - the first sentence of the
+    last procedure section opening before it - names one of ``families`` read as planned: the procedure as booked
+    ("Procedure: EGD (rescheduled from last week)", "Procedure: Planned EGD with banding", "Procedure: EGD, previously
+    scheduled"), whose own findings' band ligation is that procedure's, never a new gi.other procedure (round 4d repair
+    2, the verifier's new problem 6: the validation:7 rule made it one). A procedure section opening between the line
+    and the intervention is another report. Read once per text, in a copy of the memo as _V2_named_for_today reads;
+    bounded: at most _V2_NAMED_READS readings, beyond which every line counts as booked (as the base read them)."""
+    key = ('v2-booked-lines',)
+    if key not in an.memo:
+        starts: list = []
+        booked: list = []
+        kept = an.memo
+        an.memo = dict(kept)
+        reads = 0
+        try:
+            for section in an.lay.sections:
+                if section.kind != 'procedure':
+                    continue
+                first = _SEPARATOR.match(an.text, section.heading.end if section.heading else section.start,
+                                         section.end).end()
+                index = _sentence_index(an, first)
+                if index < 0 or an.lay.section_at(first) is not section:
+                    continue
+                s, e = an.lay.sentences[index]
+                found = set()
+                for m in an.services_in(s, e):
+                    reads += 1
+                    if reads > _V2_NAMED_READS or _generic_reading(an, m.start, m.end).status == 'planned':
+                        found.add(m.family)
+                starts.append(section.start)
+                booked.append(frozenset(found))
+        finally:
+            an.memo = kept
+        an.memo[key] = (starts, booked)
+    starts, booked = an.memo[key]
+    index = bisect.bisect_right(starts, at) - 1
+    return index >= 0 and any(family in booked[index] for family in families)
 
 
 def _procedure_name(an: Analysis, start: int, limit: int) -> Optional[tuple[int, int]]:
