@@ -665,5 +665,31 @@ class S2Bounded3LandmarkClauseCopiesTests(unittest.TestCase):
         self.assertEqual(len({id(hit[2]) for hit in denied}), len({(hit[2].start, hit[2].end) for hit in denied}))
 
 
+# --- bounded:6: plan:D's reading of each extent label, once per label ------------------------------------------------
+
+class S2Bounded6LabelRestOnceTests(unittest.TestCase):
+    """bounded:6 (medium, a cost regression from 9a9f40301) - on a one-line run of extent labels with a hedge tail
+    ("Extent: cecum; prep fair? ", 50,000 characters) route() took 3.6x 9a9f40301's time: _landmarks asked plan:D's
+    _P2_label_denied twice per label and _P2_label_rest four times (and plan:D2 again), each reading up to CLAUSE_REACH
+    characters. They are now memoised per label (an.memo, keyed by the label's end, depth and table); the readings are
+    unchanged (routing JSON identical over the attack corpus), and the time is about 2.3x 9a9f40301's."""
+
+    def test_each_labels_rest_and_verdict_are_read_once(self):
+        from datetime import date
+        from unittest import mock
+
+        from studio.gi import detect
+        text = HEADER + 'Procedure: Colonoscopy\nFindings: ' + 'Extent: cecum; prep fair? ' * 40 + '\n'
+        detect._analysis.cache_clear()
+        with mock.patch.object(detect, '_S2_label_denied_read', wraps=detect._S2_label_denied_read) as denied:
+            detect.route(text, date(2026, 10, 21))
+        self.assertGreater(denied.call_count, 0)
+        self.assertLessEqual(denied.call_count, 40)  # once per label, never twice
+        an, _ = detect._analysis(text, date(2026, 10, 21))
+        self.assertTrue(40 >= len([k for k in an.memo if k[0] == 'p2-label-rest']) > 0)
+        self.assertTrue(40 >= len([k for k in an.memo if k[0] == 'p2-reach-denied']) > 0)
+        detect._analysis.cache_clear()
+
+
 if __name__ == '__main__':
     unittest.main()

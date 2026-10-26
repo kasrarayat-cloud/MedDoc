@@ -3663,7 +3663,16 @@ def _P2_label_denied(an: Analysis, end: int, depth: int, table) -> bool:
     """Whether the rest of an extent label's own sentence after its landmark (of ``depth`` in ``table``, ending at
     ``end``; _P2_label_rest) denies or doubts that landmark (round 4c-2 plan:D): a negation no finding, complication,
     other-act or qualifier exception explains, a clause cue that is no performance cue, an aim word (_P2_AIM_WORD), or
-    a reach denial of the closed list (plan:D2: "; short of the cecum" carries no negation word)."""
+    a reach denial of the closed list (plan:D2: "; short of the cecum" carries no negation word). Read once per label
+    (round 4d bounded:6: _landmarks asked it twice per label, and plan:D2 a third time)."""
+    key = ('p2-label-denied', end, depth, id(table))
+    if key not in an.memo:
+        an.memo[key] = _S2_label_denied_read(an, end, depth, table)
+    return an.memo[key]
+
+
+def _S2_label_denied_read(an: Analysis, end: int, depth: int, table) -> bool:
+    """_P2_label_denied's reading itself (see there), unmemoised."""
     text = an.text
     stop = _P2_label_rest(an, end, depth, table)
     if stop <= end:
@@ -3685,7 +3694,11 @@ def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
     ``end``) stops (round 4c-2 plan:D): the line's end or CLAUSE_REACH characters, past ";" and ",", up to a full stop,
     a next field (_P2_field_opens, after a cell break or a ";" or ","), or the segment (_P2_segment_start) that names a
     landmark of ``table`` deeper than ``depth``, retroflexion, or a passage of the ileocecal valve beside a lower-tract
-    label short of the terminal ileum (plan:D2: "; unable to intubate the TI", "; unable to retroflex" are theirs)."""
+    label short of the terminal ileum (plan:D2: "; unable to intubate the TI", "; unable to retroflex" are theirs). Read
+    once per label (round 4d bounded:6: _landmarks, plan:D and plan:D2 asked it four times per label)."""
+    key = ('p2-label-rest', end, depth, id(table))
+    if key in an.memo:
+        return an.memo[key]
     text = an.text
     stop = min(len(text), end + CLAUSE_REACH)
     line_end = text.find('\n', end, stop)
@@ -3704,6 +3717,7 @@ def _P2_label_rest(an: Analysis, end: int, depth: int, table) -> int:
     for found in theirs:
         if found:
             stop = min(stop, _P2_segment_start(text, end, found.start()))
+    an.memo[key] = stop
     return stop
 
 
@@ -3855,9 +3869,13 @@ def _P2_reach_denied_in(an: Analysis, end: int, stop: int, table, depth: int) ->
 
 
 def _P2_reach_denied(an: Analysis, end: int, depth: int, table) -> bool:
-    """_P2_reach_denied_in over the rest of the extent label's own sentence (_P2_label_rest)."""
-    stop = _P2_label_rest(an, end, depth, table)
-    return stop > end and _P2_reach_denied_in(an, end, stop, table, depth)
+    """_P2_reach_denied_in over the rest of the extent label's own sentence (_P2_label_rest), read once per label (round
+    4d bounded:6)."""
+    key = ('p2-reach-denied', end, depth, id(table))
+    if key not in an.memo:
+        stop = _P2_label_rest(an, end, depth, table)
+        an.memo[key] = stop > end and _P2_reach_denied_in(an, end, stop, table, depth)
+    return an.memo[key]
 
 
 def _P2_refused_label(an: Analysis, reading: Reading, start: int, end: int, ws: int, we: int, depth: int,
