@@ -412,6 +412,9 @@ class StrictRowsPredicateTests(Case):
                 text = COLO_T.format(row=row)
                 self.assertIn(read(text, 'Colonoscopy', row)[0], ('uncertain', 'incomplete'))  # box2:L's trailing reading
                 self.assertNotEqual(family(text, 'gi.colonoscopy'), 'performed')
+        row = 'Colonoscopy - \u2612 Incomplete'
+        status, cues = read(COLO_T.format(row=row), 'Colonoscopy', row)
+        self.assertIn("uncertain: its status line checks 'Incomplete', which holds it", cues)  # truthful: its box is checked
 
     def test_readable_rows_keep_the_declared_reading(self):
         for row, item, status in (('☐ Biopsy ☒ Cold snare polypectomy', 'Biopsy', 'negated'),
@@ -460,6 +463,160 @@ class StrictRowsPredicateTests(Case):
         for item in ('Biopsy', 'Cold snare polypectomy', 'clip'):
             with self.subTest(item=item):
                 self.assertEqual(read(text, item, row)[0], 'uncertain')
+
+
+# --- declared:2 -- a status label ended by a dash, tab, "=" or a completion word -----------------------------------
+
+COLO_S = (HEAD + 'Procedure: Colonoscopy\nIndication: Screening.\nFindings: The colonoscope was advanced to the cecum. No '
+          'polyps.\n{row}\n')
+
+
+class Declared2LabelSeparatorTests(Case):
+    """declared:2 (high). box2:L's hold of a service-labelled status row with a hold word checked read the label only to
+    ':' or '|', so "Colonoscopy - ☒ Incomplete ☐ Completed" (en dash, tab, '=', "Colonoscopy completed:") read
+    PERFORMED (45378 ready, a false complete). The label ends at the shared separators: held, never ready."""
+
+    def test_the_claimed_rows(self):
+        for row in ('Colonoscopy - ☒ Incomplete ☐ Completed', 'Colonoscopy – ☒ Incomplete ☐ Completed',
+                    'Colonoscopy — ☒ Incomplete ☐ Completed', 'Colonoscopy\t☒ Incomplete ☐ Completed',
+                    'Colonoscopy = ☒ Incomplete ☐ Completed', 'Colonoscopy status - Incomplete ☒ Completed ☐',
+                    'Colonoscopy - ☒ Unknown ☐ Completed', 'Colonoscopy completed: ☒ Incomplete ☐ Completed',
+                    'Colonoscopy performed: ☒ Incomplete ☐ Completed', 'Colonoscopy ☒ Incomplete ☐ Completed',
+                    'Colonoscopy - [x] Requested [ ] Completed', 'Colonoscopy - ☒ Unclear ☐ Completed'):
+            with self.subTest(row=row):
+                text = COLO_S.format(row=row)
+                self.assertNotEqual(family(text, 'gi.colonoscopy'), 'performed')
+                self.assert_held(text, '45378', row)
+                self.assert_held(text, '45378', 'Procedure: Colonoscopy')
+
+    def test_controls(self):
+        for row, wanted in (('Colonoscopy status - Completed ☒ Incomplete ☐', 'ready'),
+                            ('Colonoscopy: ☒ Completed ☐ Incomplete', 'ready'),
+                            ('Colonoscopy: ☒ Incomplete ☐ Completed', 'held')):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(COLO_S.format(row=row), '45378', 'Procedure: Colonoscopy'), wanted)
+        # an accepted over-hold: a leading row with a dash, tab or '=' label is read both ways by the status-line
+        # reader, whose label ends at ':' or '|' only, so the strict rows hold it; never excluded
+        self.assertEqual(outcome(COLO_S.format(row='Colonoscopy - ☒ Completed ☐ Incomplete'), '45378',
+                                 'Procedure: Colonoscopy'), 'held')
+
+
+# --- declared:4 -- a status line after a list marker or in a table row ------------------------------------------------
+
+EUSB = HEAD + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass\n{row}\n'
+EUSB_PHRASE = 'EUS with fine-needle biopsy of the pancreatic head mass'
+
+
+class Declared4StatusLineLeadTests(Case):
+    """declared:4 (high). _STATUS_KEY took no list marker and only [:=–—-] as its separator, so "• Status: Cancelled -
+    the patient had eaten breakfast.", "2) Status: ...", "Status | Cancelled - ...", "Procedure status<TAB>Cancelled"
+    (a Word table row) never held the EUS line (43242 READY), where the done-question grammar reads those leads. The
+    status line's key is read in the shared grammar too (_B3_STATUS_KEY); a line only it reads may hold, never release."""
+
+    def test_the_claimed_rows(self):
+        for row in ('• Status: Cancelled - the patient had eaten breakfast.', '* Status: Cancelled - the patient had eaten breakfast.',
+                    '2) Status: Cancelled - the patient had eaten breakfast.', '(1) Status: Cancelled - the patient had eaten breakfast.',
+                    'Procedure status | Not performed - the patient had eaten', 'Status | Cancelled - the patient had eaten breakfast',
+                    'Procedure status\tCancelled - the patient had eaten breakfast',
+                    'Status: | Cancelled - the patient had eaten breakfast.',
+                    '• Status: Rescheduled to next week because the patient was ill.', 'Status  Cancelled - the patient had eaten'):
+            with self.subTest(row=row):
+                text = EUSB.format(row=row)
+                self.assertNotEqual(family(text, 'gi.eus'), 'performed')
+                self.assert_held(text, '43242', EUSB_PHRASE)
+        text = EUSB.format(row='Indication: Pancreatic mass.\n• Status: Cancelled - the patient had eaten breakfast.')
+        self.assert_held(text, '43242', EUSB_PHRASE)  # from further down, as the unmarked line holds
+
+    def test_controls(self):
+        for row in ('• Status: Completed - tolerated well.', 'Status | Completed - tolerated well', '2) Status: Done.',
+                    'Procedure status\tCompleted'):
+            with self.subTest(row=row):
+                self.assertEqual(outcome(EUSB.format(row=row), '43242', EUSB_PHRASE), 'ready')
+
+    def test_a_line_only_the_shared_grammar_reads_never_releases(self):
+        """A status line only _B3_STATUS_KEY reads may hold the service; where its value is a completion or its boxed
+        options are unchecked, the tests the line had before still decide (a completion with a cancellation, a refusal
+        or a rescheduling after it stays held)."""
+        for row in ('\u2022 Status | Completed, then cancelled.', '\u2022 Status\tCompleted - patient declined.',
+                    '\u2022 Status\tDone - not tolerated.', '\u2022 Status | Completed - rescheduled',
+                    '\u2022 Status\tCompleted \u2612 Cancelled \u2610'):
+            with self.subTest(row=row):
+                self.assertNotEqual(family(HEAD + 'Procedure: EUS\n' + row + '\n', 'gi.eus'), 'performed')
+
+    def test_a_form_field_status_label_with_its_own_question_mark(self):
+        """The form-field status reader takes the same key: "Procedure status?: Cancelled" in a PDF form block holds its
+        page's EUS (ready at aaf517e: the old key took no "?")."""
+        filler = ''.join(f'Note {n}: The patient was comfortable.\n' for n in range(8))  # past the status lines' reach
+        for field in ('Procedure status?: Cancelled', 'Status?: Cancelled'):
+            with self.subTest(field=field):
+                text = (HEAD + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nFindings: The pancreatic '
+                        'head mass was sampled.\n' + filler + '[PDF form fields on page 1]\n' + field + '\n')
+                self.assert_held(text, '43242', 'EUS with fine-needle biopsy of the pancreatic head mass')
+        text = (HEAD + 'Procedure: EUS with fine-needle biopsy of the pancreatic head mass.\nFindings: The pancreatic head '
+                'mass was sampled.\n[PDF form fields on page 1]\nProcedure status?: Completed\n')
+        self.assertEqual(outcome(text, '43242', 'EUS with fine-needle biopsy of the pancreatic head mass'), 'ready')
+
+
+# --- declared:5 -- a spaced checked box pushing a short cancellation past the six-word bound -------------------------
+
+class Declared5SpacedBoxTests(Case):
+    """declared:5 (high). "[ x ] Cancelled - patient ate breakfast." under the EUS line counted the bracket and the "x" as
+    words, past the six-word bound of a short cancelling line, so 43242 was READY where "☒" or "[x]" holds it. A box of
+    any spelling is one word (_B3_words)."""
+
+    def test_the_claimed_rows(self):
+        for box in ('[ x ]', '( x )', '[ X ]', '[x ]', '[ x]', '( x)', '(x )', '[  x  ]', '[ x ]', '[ ✓ ]'):
+            for line in ('{} Cancelled - patient ate breakfast.', '{} Cancelled due to poor prep.', '{} Rescheduled to next week.',
+                         'Cancelled - patient ate breakfast {}'):
+                row = line.format(box)
+                with self.subTest(row=row):
+                    self.assert_held(EUSB.format(row=row), '43242', EUSB_PHRASE)
+
+    def test_a_bare_service_line(self):
+        """After a bare service line the short bare-line tests count a box as one word too (_bare_denial)."""
+        for row in ('[ x ] Deferred until next week.', '[ x ] Scheduled for next week.'):
+            with self.subTest(row=row):
+                self.assertNotEqual(family(HEAD + 'Procedure: EUS\n' + row + '\n', 'gi.eus'), 'performed')
+
+    def test_controls(self):
+        self.assertEqual(outcome(EUSB.format(row='[ ] Cancelled - patient ate breakfast.'), '43242', EUSB_PHRASE), 'ready')
+        self.assertEqual(outcome(EUSB.format(row='[ x ] Completed without difficulty.'), '43242', EUSB_PHRASE), 'ready')
+        for row in ('☒ Cancelled - patient ate breakfast.', '[x] Cancelled - patient ate breakfast.'):
+            with self.subTest(row=row):
+                self.assert_held(EUSB.format(row=row), '43242', EUSB_PHRASE)
+        self.assertEqual(detect._B3_words('☒ Cancelled - patient ate breakfast.', 0, 40, 6),
+                         detect._B3_words('[ x ] Cancelled - patient ate breakfast.', 0, 40, 6))
+
+
+# --- declared:8 -- an item's label before one box -----------------------------------------------------------------------
+
+class Declared8ItemLabelBeforeABoxTests(Case):
+    """declared:8 (high). "Biopsy: ☐ Cold snare polypectomy" read the box as leading (the colon after an opening label
+    was a plain lead): the biopsy READY and the polypectomy EXCLUDED, never held, though "Biopsy: ☐" is the declared
+    trailing layout. An item's own label opening the row pairs both ways: both items held, never ready or excluded."""
+
+    def test_the_claimed_rows(self):
+        for row in ('Biopsy: ☐ Cold snare polypectomy', 'Biopsy: ☐ Cold snare polypectomy: Yes',
+                    'Biopsy: [ ] Cold snare polypectomy', 'Biopsy: ☐ Cold snare polypectomy was performed.',
+                    'Biopsy: ☐\tCold snare polypectomy: Yes', 'biopsy: ☐ cold snare polypectomy',
+                    'Biopsy:  ☐  Cold snare polypectomy'):
+            with self.subTest(row=row):
+                text = COLO_F.format(row=row)
+                snare = 'cold snare polypectomy' if 'cold' in row else 'Cold snare polypectomy'
+                biopsy = 'biopsy' if 'biopsy:' in row else 'Biopsy'
+                self.assertEqual(read(text, biopsy, row)[0], 'uncertain')
+                self.assertEqual(read(text, snare, row)[0], 'uncertain')
+                self.assert_held(text, '45380', biopsy)
+                self.assert_held(text, '45385', snare)
+
+    def test_controls(self):
+        for row, item, status in (('Biopsy: ☐', 'Biopsy', 'negated'), ('☐ Cold snare polypectomy', 'Cold snare polypectomy', 'negated'),
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Biopsy', 'performed'),
+                                  ('Biopsy: ☒ Cold snare polypectomy', 'Cold snare polypectomy', 'performed'),
+                                  ('Colonoscopy: [ ] biopsy [x] cold snare', 'biopsy', 'negated'),
+                                  ('Biopsy | ☐', 'Biopsy', 'negated')):
+            with self.subTest(row=row, item=item):
+                self.assertEqual(read(COLO_F.format(row=row), item, row)[0], status)
 
 
 class StrictRowsCostTests(unittest.TestCase):

@@ -941,7 +941,7 @@ def _bare_denial(an: Analysis, start: int, end: int) -> bool:
     first = cues.DOUBT_TOKEN.match(an.text, start, end)
     if first and _denying_word(an, first.start(), first.end()):
         return True
-    words = len(an.text[start:end].split())
+    words = _B3_words(an.text, start, end, 6)  # a box of any spelling is one word (round 6 declared:5)
     if words <= 6 and _denying_word(an, start, end):
         return True
     return words <= 5 and any(c.status in ('cancelled', 'planned', 'uncertain', 'historical')
@@ -1100,22 +1100,33 @@ def _denies(an: Analysis, ns: int, ne: int, bare: bool) -> bool:
     at = _SEPARATOR.match(text, ns, ne).end()
     opener = _OPENER.match(text, at, ne)
     body = opener.end() if opener else at
-    key = _STATUS_KEY.match(text, body, ne)
+    old_key = _STATUS_KEY.match(text, body, ne)
+    new_key = _B3_STATUS_KEY.match(text, body, ne)
+    key = old_key or new_key
     if key:
-        value = key.end()
+        value = max(k.end() for k in (old_key, new_key) if k)  # after a label cell's own colon too ("Status: | ...")
         boxed = _boxed_status_denies(an, value, ne)
         if boxed is not None:
-            return boxed  # a value with boxes is read option by option, never by its first word
-        if _STATUS_DONE.match(text, value, ne):
+            if boxed or old_key:
+                return boxed  # a value with boxes is read option by option, never by its first word
+        elif _STATUS_DONE.match(text, value, ne):
+            if old_key:
+                return False
+        elif (_STATUS_HOLD.match(text, value, ne) or _bare_denial(an, value, ne)
+              or _value_calls_off(an, value, ne)):
+            return True
+        elif old_key:
             return False
-        return (bool(_STATUS_HOLD.match(text, value, ne)) or _bare_denial(an, value, ne)
-                or _value_calls_off(an, value, ne))
+        # round 4d BOXES3: a status line only the shared grammar's lead or separator reads (round 6 declared:4: "•
+        # Status: Cancelled - ...", "Status | Cancelled ...") holds as one; where it would not, the tests below decide
+        # as before, so it never releases a line they hold
     if _box_selected_denial(an, body, ne):
         return True  # "☒ Not performed": a selected denial option on a line naming no item holds (round 5 declared:8)
     if bare and _bare_denial(an, body, ne):
         return True
-    if len(text[body:ne].split()) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)
-                                            or _reschedules(an, body, ne)):
+    # a box of any spelling is one word ("[ x ] Cancelled - patient ate breakfast.": round 6 declared:5)
+    if _B3_words(text, body, ne, 6) <= 6 and (_denies_an_act(an, body, ne) or _cancels(an, body, ne)
+                                              or _reschedules(an, body, ne)):
         return True
     if not _REFERRING_SUBJECT.match(text, body, ne):
         return False
@@ -1178,9 +1189,13 @@ def _value_calls_off(an: Analysis, value: int, end: int) -> bool:
 
 
 def _status_line(an: Analysis, start: int, end: int) -> bool:
+    """Whether [start, end) is a status line: its key after the separator and a sentence adverb, as round 5 read it
+    (_STATUS_KEY) or in the shared grammar, after any list marker or with a bar, tab or two spaces as its separator
+    (_B3_STATUS_KEY, round 6 declared:4). Its callers then ask _denies, which only holds such a line."""
     at = _SEPARATOR.match(an.text, start, end).end()
     opener = _OPENER.match(an.text, at, end)
-    return bool(_STATUS_KEY.match(an.text, opener.end() if opener else at, end))
+    body = opener.end() if opener else at
+    return bool(_STATUS_KEY.match(an.text, body, end) or _B3_STATUS_KEY.match(an.text, body, end))
 
 
 def _procedure_called_off(an: Analysis, start: int, end: int) -> bool:
@@ -1215,6 +1230,12 @@ _BOX_Q_SEP = r'[ \t]*(?:[?:][ \t]*)?(?:[:?=|\u2013\u2014-]|\t| {2,})[ \t]*'
 # The answers that say no, or that this reader cannot read as done: "No", "None", "N", "Not done", "Not performed",
 # "Not completed", "N/A", "NA", "Not applicable".
 _BOX_Q_DENIAL = r'(?:no|none|n|not\s+(?:done|performed|completed)|n/a|na|not\s+applicable)'
+# Round 4d BOXES3 (round 6 declared:4): the status line's key in the same grammar, so a status line after any list
+# marker ("• Status: Cancelled - ...", "2) Status: ...", "(1) Status: ...") or with a cell bar, a tab or two spaces as
+# its separator ("Status | Cancelled", "Procedure status<TAB>Cancelled") is read as one. _STATUS_KEY stays the key of
+# round 5: a line only this key reads may hold the service, never release a line the other readers held (_denies).
+_B3_STATUS_KEY = re.compile(_BOX_Q_LEAD + r'(?:(?:procedure|case|exam|examination|study|service|endoscopy)[ \t]+)?status'
+                            + _BOX_Q_SEP, re.A | re.I)
 
 
 # A typed answer that the procedure was not performed: "Procedure performed: No (patient refused).", "Exam
@@ -2216,7 +2237,8 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
     snare", "Polypectomy: [ ] cold snare [x] hot snare").
     Otherwise they trail ("Biopsy | ☐ | Cold snare polypectomy | ☒"), and items written after the last box are
     remarks that no box governs ("... | ☒ | clip placed after polypectomy"). 'both' when the boxes would lead by that
-    rule but the first box does not come straight after the opening label's colon or a linking word, and every box
+    rule but the first box does not come straight after the opening label's colon or a linking word, or the opening
+    label is an item's name and not a service's ("Biopsy: ☐ Cold snare polypectomy", round 6 declared:8), and every box
     also comes straight after an item ("Colonoscopy: Biopsy ☐ Cold snare polypectomy ☒ clip placed"): either reading
     fits, so _box_state holds the items they disagree about (structure:0)."""
     key = ('box-orientation', lo, hi, extra)
@@ -2255,7 +2277,10 @@ def _box_orientation(an: Analysis, lo: int, hi: int, extra: Optional[tuple[int, 
                     break
             lead = followed and (by_service or by_label) and not labelled
             plain = _BOX_LEAD_GAP.fullmatch(text, label_end, boxes[0][0])
-            if lead and not plain and _box_trails_fit(text, items, boxes):
+            # round 4d BOXES3 (round 6 declared:8): a colon after an item's own name opening the row is no plain lead
+            # ("Biopsy: ☐ Cold snare polypectomy"): "Biopsy: ☐" is the declared trailing layout, so where the boxes
+            # also trail their items both readings fit; a service's name ("Colonoscopy: [ ] biopsy") still leads
+            if lead and (not plain or not by_service) and _box_trails_fit(text, items, boxes):
                 an.memo[key] = 'both'  # an item the two readings disagree about is held (structure:0, _box_state)
             else:
                 an.memo[key] = 'lead' if lead else 'trail'
@@ -2351,6 +2376,8 @@ def _box_state(an: Analysis, start: int, end: int) -> Optional[str]:
                 trailed = _box_trail_state(an, items, boxes, start, end, hi)
                 if led == trailed or (led in (None, 'on') and trailed in (None, 'on')):
                     result = led or trailed
+                elif 'unknown' in (led, trailed):
+                    result = 'unknown'  # round 4d BOXES3: a reading gives it the unread mark: held as unread
                 else:
                     result = 'mixed'
         an.memo[key] = result
@@ -2757,10 +2784,10 @@ def _box_status_field(an: Analysis, start: int, end: int) -> bool:
     text = an.text
     if _BOX_DONE_QUESTION.match(text, start, end):
         return True
-    key = _STATUS_KEY.match(text, start, end)
-    if key is None:
+    keys = [k for k in (_STATUS_KEY.match(text, start, end), _B3_STATUS_KEY.match(text, start, end)) if k]
+    if not keys:  # round 6 declared:4: the shared grammar's lead and separators too; such a field only holds
         return False
-    value = _SEPARATOR.match(text, key.end(), end).end()
+    value = _SEPARATOR.match(text, max(k.end() for k in keys), end).end()
     if value >= end or _STATUS_DONE.match(text, value, end):
         return False
     return (bool(_STATUS_HOLD.match(text, value, end)) or _bare_denial(an, value, end)
@@ -4236,6 +4263,22 @@ _B3_LABEL_SEP = re.compile(r'[:|=\t]|(?<=[ \t])[-–—](?=[ \t])|\b(?:with|incl
 _B3_YES_NO = re.compile(r'(?:' + _OPTION_WORDS + r'|n/a)[ \t.]*', re.A | re.I)
 _B3_CELL_BEFORE = re.compile(r'[|\t][ \t ]*\Z')  # a cell bar or tab right before a mark ("Biopsy | ☐")
 _B3_CELL_AFTER = re.compile(r'[ \t ]*(?:[|\t]|\Z)')  # a cell bar or tab, or the row's end, after it ("☐ | Cold")
+
+
+# A word, where a box or mark of any spelling, with what is written straight after it, is one ("[ x ]", "( x )",
+# "[  x  ]" as "☒": round 6 declared:5); every other word is split at whitespace as str.split() splits it.
+_B3_WORD_OR_MARK = re.compile('(?:' + _BOX_MARK.pattern + r')\S*|\S+')
+
+
+def _B3_words(text: str, lo: int, hi: int, limit: int) -> int:
+    """The number of words of [lo, hi) (_B3_WORD_OR_MARK), counted up to ``limit`` + 1: a bounded read, so a long line
+    is never split whole (the short-line bounds of _denies and _bare_denial ask only whether it is within a few)."""
+    count = 0
+    for _ in _B3_WORD_OR_MARK.finditer(text, lo, hi):
+        count += 1
+        if count > limit:
+            break
+    return count
 
 
 def _B3_line(an: Analysis, pos: int) -> tuple[int, int]:
