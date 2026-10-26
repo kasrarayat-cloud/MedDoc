@@ -34,10 +34,12 @@ What a page shows is read, or the result says what was not read:
   widget or mark, two candidates for one printed box) it is written as the
   unread mark '[?]', which routing holds, and the result is 'partial'. A widget
   or mark is also over a printed box where it overlaps the box as drawn: its
-  glyph across the box's width, past any whitespace its string opens with, on
-  its own piece's baseline (a box inside a piece of text lies somewhere right of
-  where that piece's operators draw); a check box or a mark that checks inside
-  a box whose printed state it agrees with keeps the box as printed.
+  glyph across the box's width, past any whitespace its string opens with and
+  the TJ numbers and strings of spaces before it, on its own piece's baseline (a
+  box inside a piece of text, or starting one no operator placed, after a font
+  change with no move, lies somewhere right of where that piece's operators
+  draw); a check box or a mark that checks inside a box whose printed state it
+  agrees with keeps the box as printed.
   Otherwise a displayed check box is written as ☐ / ☒ before the piece of page
   text it sits beside, when it can be tied to exactly one: its baseline lies
   within the box's height and it starts just right of the box, and every other
@@ -48,9 +50,10 @@ What a page shows is read, or the result says what was not read:
   written as it shows, and boxes after their words, "Moderate [x] MAC [ ]", are
   not written as the next word's), and where the text line it is tied to runs
   on into another column: past a gap between the glyphs drawn (padding spaces
-  draw nothing), or with text pypdf joined into the line from another baseline
-  or from left of it, or that the layer cannot place or the page does not
-  measure. A
+  draw nothing, inside a string as between strings, one whitespace glyph being a
+  word space; a TJ number moves what follows it), or with text pypdf joined into
+  the line from another baseline or from left of it, or that the layer cannot
+  place or the page does not measure (a font that gives no widths). A
   radio button is written the same way before its own option word ("Biopsy
   taken: ☐ Yes ☒ No") when every button of its group can be. Notes,
   drawings and hidden annotations are counted; a field whose appearance
@@ -974,9 +977,10 @@ class _ING_Ink:
         """Whether the text line a box is tied to (the piece at ``offset``, drawn at ``origin``) runs on into text the
         box does not govern, before the next box of the line: text pypdf joined into the line from another baseline
         or from left of the piece, or that the layer cannot place or the page does not measure (_I2_joins); or a gap
-        wider than _ING_COLUMN_GAP font sizes on its row, between the glyphs drawn (padding spaces draw nothing; one
-        whitespace glyph between two words is a word space). True when that cannot be read (the piece's text is not
-        where the layer puts it, or more than _ING_MAX_SCAN strings or operators before an answer)."""
+        wider than _ING_COLUMN_GAP font sizes on its row, between the glyphs drawn (padding spaces draw nothing, inside
+        a string, the box's own included, as between strings; a TJ number moves the glyphs after it; one whitespace
+        glyph between two words is a word space). True when that cannot be read (the piece's text is not where the
+        layer puts it, or more than _ING_MAX_SCAN strings or operators before an answer)."""
         x, y, _ = origin
         if self.layer is not None and self._I2_joins(offset, x, y):
             return True
@@ -1018,10 +1022,10 @@ class _ING_Ink:
         return False
 
     def _I2_alone(self, offset: int) -> bool:
-        """Whether nothing follows the box's piece (at ``offset``) on its text line and the piece is drawn by one operator
-        that shows one string (Tj, ', "): whatever else is drawn on the row pypdf put on another line, or before the box
-        on this one, neither of which the box governs, and the string itself is one string of ink (no gap inside it is
-        read, as before)."""
+        """Whether nothing follows the box's piece (at ``offset``) on its text line and the piece is drawn by one
+        operator that shows one string (Tj, ', "): whatever else is drawn on the row pypdf put on another line, or
+        before the box on this one, neither of which the box governs. A gap inside that string is read before this
+        (runs_on: padding inside the string the box is tied to)."""
         text = self.layer.text
         newline = text.find('\n', offset)
         end = len(text) if newline < 0 else newline
@@ -1033,8 +1037,10 @@ class _ING_Ink:
         """Whether pypdf joined into the text line of the box's piece (at ``offset``, drawn at (x, y)), after it and
         before the next piece a box is written before or that a printed box starts, text that is not that piece's
         continuation: drawn on another baseline (another column's line, or a wrapped cell's), left of the piece,
-        where the layer cannot place it, not upright, or (a piece) where the page text is not measured (a font that
-        gives no widths). Each operator pypdf joined in is read where it draws (_Layer.drawn)."""
+        where the layer cannot place it, not upright, or (a piece) where the page text is not measured, or set in a
+        font that gives no widths (_I2_measured: pypdf reports a piece that follows a font change with no move where
+        earlier text began, which other text's ink may share). Each operator pypdf joined in is read where it draws
+        (_Layer.drawn)."""
         layer, text = self.layer, self.layer.text
         newline = text.find('\n', offset)
         end = len(text) if newline < 0 else newline

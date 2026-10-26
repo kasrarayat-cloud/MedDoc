@@ -1040,7 +1040,8 @@ class _TextPlacement:
                      * state.scale for width, spaced in end] for end in ends[:2]]
         inner = 0.0
         for count, spaced, total, widest_spaced, widest_other in ends[2]:
-            padded = (total / 1000 * state.size + count * state.char_spacing + spaced * state.word_spacing) * state.scale
+            padded = ((total / 1000 * state.size + count * state.char_spacing + spaced * state.word_spacing)
+                      * state.scale)
             one = max((widest_spaced / 1000 * state.size + state.char_spacing + state.word_spacing) * state.scale
                       if spaced else -math.inf,
                       (widest_other / 1000 * state.size + state.char_spacing) * state.scale

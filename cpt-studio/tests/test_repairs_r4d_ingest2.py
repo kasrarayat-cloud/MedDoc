@@ -32,7 +32,7 @@ from tests.test_repairs_r4c_ingest_docx import CHECKED, SHADOWED, unread_in_list
 from tests.test_repairs_status_r2_routing import read
 
 
-# --- extraction:1 -- Word box bullets: a list ends at a cell or text-box boundary --------------------------------------
+# --- extraction:1 -- Word box bullets: a list ends at a cell or text-box boundary -----------------------------------
 
 def _run(text, hidden=False):
     rpr = '<w:rPr><w:vanish/></w:rPr>' if hidden else ''
@@ -398,7 +398,7 @@ class Extraction0ColumnOnAnotherBaselineTests(unittest.TestCase):
                 self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
 
 
-# --- extraction:2 -- a tick over a printed box placed by its own piece, not its line's start ---------------------------
+# --- extraction:2 -- a tick over a printed box placed by its own piece, not its line's start ------------------------
 
 def joined_tick(*, wrap, dy=6.0, tick=True, size=10):
     """'Details' in a left column at baseline 640 - dy, and 'Interventions: [ ] Cold snare polypectomy' in one text
@@ -471,7 +471,7 @@ class Extraction2TickOverABoxInsideItsLineTests(unittest.TestCase):
                 self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
 
 
-# --- extraction:3 -- a mark drawn inside a printed box ------------------------------------------------------------------
+# --- extraction:3 -- a mark drawn inside a printed box ---------------------------------------------------------------
 
 INSIDE = (74.9, SNARE_ROW - 3, 81.3, SNARE_ROW + 9)  # between the brackets of '[  ]' typed at x 72 in Helvetica 11
 
@@ -521,9 +521,10 @@ class Extraction3MarkInsideAPrintedBoxTests(unittest.TestCase):
                     self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
 
     def test_marks_that_agree_or_lie_beside_change_nothing(self):
-        """Controls: an empty field, an unchecked check box inside an empty box, a checked one inside a printed '[x]' or a
-        checked glyph, and a tick on the label beside the box: the printed boxes read as before."""
-        for printed, kind, expected in (('[  ]', 'field empty', '[  ] Cold snare'), ('[  ]', 'check box off', '[  ] Cold'),
+        """Controls: an empty field, an unchecked check box inside an empty box, a checked one inside a printed '[x]'
+        or a checked glyph, and a tick on the label beside the box: the printed boxes read as before."""
+        for printed, kind, expected in (('[  ]', 'field empty', '[  ] Cold snare'),
+                                        ('[  ]', 'check box off', '[  ] Cold'),
                                         ('wingdings', 'check box off', '☐ Cold'), ('[  ]', 'tick beside', '[  ] Cold'),
                                         ('[x]', 'check box on', '[x] Cold'), ('wingdings', 'tick beside', '☐ Cold')):
             with self.subTest(printed=printed, kind=kind):
@@ -847,8 +848,9 @@ def _shown_field(form, rect, value):
     ap = form.add(stream(f'/Tx BMC q BT /Helv 10 Tf 0 g 1 2 Td ({esc(value)}) Tj ET Q EMC',
                          f'/Type /XObject /Subtype /Form /BBox [0 0 {rect[2] - rect[0]} {rect[3] - rect[1]}] '
                          '/Resources << /Font << /Helv 4 0 R >> >>').decode('latin-1'))
-    form.annots.append(form.add(f'<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text1) /Rect [{" ".join(map(str, rect))}]'
-                                f' /F 4 /P 3 0 R /DA (/Helv 10 Tf 0 g) /V ({esc(value)}) /AP << /N {ap} 0 R >> >>'))
+    form.annots.append(form.add('<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text1) '
+                                f'/Rect [{" ".join(map(str, rect))}] /F 4 /P 3 0 R /DA (/Helv 10 Tf 0 g) '
+                                f'/V ({esc(value)}) /AP << /N {ap} 0 R >> >>'))
     form.fields.append(form.annots[-1])
 
 
@@ -1039,8 +1041,8 @@ class PaddingInsideAStringTests(unittest.TestCase):
         """The item's own detail padded inside its string ('Biopsy        Site: sigmoid colon') cannot be told from
         another column: held (a declared over-hold); two spaces are a word space and keep '☐'; checked keeps '☒'."""
         from tests.test_repairs_ingest_pdf import esc
-        for spaces, on, expected, outcome in ((8, False, f'{UNREAD} Biopsy', 'held'), (2, False, '☐ Biopsy', 'excluded'),
-                                              (8, True, '☒ Biopsy', 'ready')):
+        for spaces, on, expected, outcome in ((8, False, f'{UNREAD} Biopsy', 'held'),
+                                              (2, False, '☐ Biopsy', 'excluded'), (8, True, '☒ Biopsy', 'ready')):
             with self.subTest(spaces=spaces, on=on):
                 form = Form(NOTE_HEAD)
                 form.line(text_line(72, 640, 'Interventions:'))
@@ -1110,7 +1112,8 @@ class BoxAfterAFontChangeTests(unittest.TestCase):
 
     def test_a_box_placed_by_its_own_move_keeps_its_place(self):
         """Controls: a box placed by a Td after '1. ' (its piece is reported where it is drawn), and rows drawn with
-        the ' operator (a move to the next line, then the box): a tick on the label, right of the box, is over no box."""
+        the ' operator (a move to the next line, then the box): a tick on the label, right of the box, is over no
+        box."""
         from tests.test_repairs_r4c_ingest_marks import annotate
         form = Form(NOTE_HEAD)
         form.line(text_line(72, 640, 'Interventions:'))
