@@ -1,0 +1,1310 @@
+{
+  "schema": "cpt-studio-verification-manifest@1",
+  "purpose": "Fresh synthetic US gastroenterology documents for verifying the deployed CPT Studio flow: automatic routing, exact evidence, clarification, review decisions, reload persistence and the downloaded reports.",
+  "synthetic_only": true,
+  "banner": "SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE",
+  "author_expectations": "author_expected_cpt is the document author's expectation, written while authoring these documents. It is NOT independent adjudication, it is never asserted by the verifiers, and it must not be used as accuracy evidence. Accuracy needs independently adjudicated cases withheld from development (ARCHITECTURE.md section 9).",
+  "review_notes": {
+    "approve": "Agent-executed synthetic verification review",
+    "reject": "Agent-executed synthetic verification review - designated rejection exercising the reject path; not a clinical judgement",
+    "confirm": "Agent-executed synthetic verification review - confirms an exclusion the document author marked as not coded; not a clinical judgement"
+  },
+  "semantics": {
+    "upload.service_date": "null: the verifier clears the service-date field so the date documented in the note is used.",
+    "expected_extraction": "status_in / method_in against revision.extraction; ocr_pages_nonempty requires OCR to have run; text_matches_source 'exact' compares revision.text with the source (trailing whitespace ignored, hard), 'whitespace' compares after collapsing whitespace (soft).",
+    "expected_context": "per context fact: origin_in and optional value_in (values use the API vocabulary).",
+    "expected_routing.families": "presence 'required' fails when routing does not report the family; 'optional' checks the family only when reported. status_in is the aggregated family status. facts.<name>.value_contains_any is a case-insensitive substring test on a fact reported with origin 'document'. missing_includes / missing_excludes test the family's missing required facts. 'informational' expectations are reported as warnings only.",
+    "expected_routing.not_performed": "families that, when reported, must have no performed or incomplete status, neither aggregated nor on any mention.",
+    "expected_clarifications": "facts that must have an OPEN clarification, with an optional scope_in.",
+    "must_not_code": "families that must have no READY selected proposal (a selected proposal there that is not excluded is reported as a warning).",
+    "incomplete_services": "families documented as incomplete: never silently dropped, and never presented as a ready code without an incompleteness signal (a non-pass check, a 52/53/incomplete modifier consideration, or needs_clarification).",
+    "review_plan.reject": "the ready selected proposal to reject instead of approve: the first in the family whose code is in prefer_codes, otherwise the last ready selected proposal in the family. Every other ready selected proposal is approved."
+  },
+  "documents": [
+    {
+      "id": "gi-01",
+      "title": "Office visit, established patient, total time and moderate MDM; EGD scheduled",
+      "source": "documents/gi-01-office-visit-established.txt",
+      "source_sha256": "585b1d0a02f6fa9d78657f6b897430f89fd85c67106c6d5c0e4366bae3048265",
+      "provenance": "The lead's draft, used verbatim (scratchpad fixture-draft/gi-office-visit-established.txt, same sha256).",
+      "delivery": {
+        "format": "docx",
+        "file": "gi-01-office-visit-established.docx"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "docx"
+        ],
+        "text_matches_source": "whitespace"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-21"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "office"
+          ]
+        },
+        "patient_status": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "established"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.office_em": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "em_basis": {}
+            },
+            "missing_excludes": [
+              "setting",
+              "patient_status",
+              "em_basis"
+            ],
+            "informational": {
+              "facts": {
+                "em_basis": {
+                  "value_contains_any": [
+                    "time",
+                    "mdm",
+                    "medical decision"
+                  ]
+                }
+              }
+            }
+          },
+          "gi.egd": {
+            "presence": "required",
+            "status_in": [
+              "planned"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.egd",
+          "gi.colonoscopy",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.egd",
+          "reason": "Upper endoscopy is scheduled for 2026-11-04; the note states no endoscopy was performed today."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99214",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Established patient office E/M; documented total time of 32 minutes meets the 30-minute threshold and moderate MDM is documented."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "43235",
+              "43239",
+              "43248",
+              "43249"
+            ],
+            "reason": "The EGD is scheduled, not performed."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-02",
+      "title": "EGD with cold forceps biopsy of the gastric antrum",
+      "source": "documents/gi-02-egd-antral-biopsy.txt",
+      "source_sha256": "b4f97387af3e5a9dccbeeb043210b2038db74ab2d880d91d7fb8e9c385858eeb",
+      "delivery": {
+        "format": "pdf",
+        "file": "gi-02-egd-antral-biopsy.pdf"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "pdf-text"
+        ],
+        "text_matches_source": "whitespace"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-14"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "asc"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.egd": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "duoden"
+                ]
+              }
+            }
+          },
+          "gi.office_em": {
+            "presence": "optional",
+            "status_in": [
+              "planned"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.colonoscopy",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M; the office follow-up is planned."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "43239",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "EGD to the second portion of the duodenum with biopsy (single or multiple)."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "43235"
+            ],
+            "reason": "Diagnostic EGD is included in the biopsy code."
+          },
+          {
+            "codes": [
+              "99212",
+              "99213",
+              "99214"
+            ],
+            "reason": "No separately identifiable E/M; the follow-up visit is planned."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-03",
+      "title": "Screening colonoscopy: cold snare polypectomy x2 (transverse) and cold forceps biopsy of a separate rectal lesion",
+      "source": "documents/gi-03-screening-colonoscopy-polypectomy-biopsy.txt",
+      "source_sha256": "ba4b04489f38279942208aea3939d26e7d84bb25bbadf6c697e13c1cb70631ca",
+      "delivery": {
+        "format": "scanned-pdf",
+        "file": "gi-03-screening-colonoscopy-polypectomy-biopsy.scanned.pdf"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "pdf-ocr"
+        ],
+        "ocr_pages_nonempty": true
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-09"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "hospital_outpatient"
+          ]
+        },
+        "billing_context": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "professional"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.colonoscopy": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "cecum",
+                  "cecal"
+                ]
+              }
+            },
+            "informational": {
+              "facts": {
+                "intent": {
+                  "value_contains_any": [
+                    "screening"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.egd",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": {
+          "family": "gi.colonoscopy",
+          "prefer_codes": [
+            "45380"
+          ],
+          "reason": "Exercise the reject path on a multi-code colonoscopy."
+        }
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence. NCCI PTP edits are not connected in this release.",
+        "codes": [
+          {
+            "code": "45385",
+            "units": 1,
+            "modifier_considerations": [
+              "PT (Medicare) or 33 (commercial) for a screening colonoscopy that became therapeutic"
+            ],
+            "basis": "Colonoscopy to the cecum with snare removal of two polyps (one unit per session)."
+          },
+          {
+            "code": "45380",
+            "units": 1,
+            "modifier_considerations": [
+              "59 or XS: biopsy of a separate lesion from the snared polyps",
+              "PT or 33 as above"
+            ],
+            "basis": "Cold forceps biopsy of a separate rectal lesion."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "45378",
+              "G0121",
+              "G0105"
+            ],
+            "reason": "Interventions were performed, so a diagnostic or screening-only code does not apply."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-04",
+      "title": "Bidirectional: EGD with biopsy and diagnostic colonoscopy to the terminal ileum with random biopsies",
+      "source": "documents/gi-04-bidirectional-egd-colonoscopy.txt",
+      "source_sha256": "3632107ecfa4838e053950de4dcf2f01e96fa0416126e4701b0674356353b3f6",
+      "delivery": {
+        "format": "paste",
+        "file": "gi-04-bidirectional-egd-colonoscopy.paste.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "paste"
+        ],
+        "text_matches_source": "exact"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-16"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "asc"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.egd": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "duoden"
+                ]
+              }
+            }
+          },
+          "gi.colonoscopy": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "ileum",
+                  "ileal"
+                ]
+              }
+            },
+            "informational": {
+              "facts": {
+                "intent": {
+                  "value_contains_any": [
+                    "diagnostic"
+                  ]
+                }
+              }
+            }
+          },
+          "gi.office_em": {
+            "presence": "optional",
+            "status_in": [
+              "planned"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M; the office return visit is planned."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": {
+          "family": "gi.colonoscopy",
+          "prefer_codes": [
+            "45380"
+          ],
+          "reason": "Exercise the reject path in a document with two families."
+        }
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence. Modifier needs, if any, are payer-dependent; NCCI PTP edits are not connected in this release.",
+        "codes": [
+          {
+            "code": "43239",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "EGD with biopsies of the duodenum and duodenal bulb."
+          },
+          {
+            "code": "45380",
+            "units": 1,
+            "modifier_considerations": [
+              "51 for the second endoscopy family, payer-dependent"
+            ],
+            "basis": "Colonoscopy to the terminal ileum with random biopsies (single or multiple)."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "45378",
+              "43235"
+            ],
+            "reason": "Biopsies were taken in both families."
+          },
+          {
+            "codes": [
+              "99212",
+              "99213",
+              "99214"
+            ],
+            "reason": "No separately identifiable E/M; the office visit is planned."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-05",
+      "title": "Office follow-up (MDM only); colonoscopy planned, prior colonoscopy in 2021 historical",
+      "source": "documents/gi-05-office-followup-colonoscopy-planned.txt",
+      "source_sha256": "264f4f115bc3cff73f9ad3219f06a09c0e711613dd6df7f8f923c8709b3d1554",
+      "delivery": {
+        "format": "txt",
+        "file": "gi-05-office-followup-colonoscopy-planned.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "txt"
+        ],
+        "text_matches_source": "exact"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-20"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "office"
+          ]
+        },
+        "patient_status": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "established"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.office_em": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "em_basis": {}
+            },
+            "missing_excludes": [
+              "setting",
+              "patient_status",
+              "em_basis"
+            ],
+            "informational": {
+              "facts": {
+                "em_basis": {
+                  "value_contains_any": [
+                    "mdm",
+                    "medical decision"
+                  ]
+                }
+              }
+            }
+          },
+          "gi.colonoscopy": {
+            "presence": "required",
+            "status_in": [
+              "planned",
+              "historical",
+              "negated"
+            ],
+            "informational": {
+              "mention_statuses_include": [
+                "planned",
+                "historical"
+              ]
+            }
+          }
+        },
+        "not_performed": [
+          "gi.colonoscopy",
+          "gi.egd",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.colonoscopy",
+          "reason": "The surveillance colonoscopy is planned and the 2021 colonoscopy is historical; only the office visit was performed."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "99213",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Established patient office E/M; low MDM documented; no time documented."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "45378",
+              "45380",
+              "45385",
+              "G0105",
+              "G0121"
+            ],
+            "reason": "Colonoscopy planned (future) or historical (2021); not performed at this encounter."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-06",
+      "title": "Incomplete diagnostic colonoscopy to the splenic flexure, inadequate preparation, repeat planned",
+      "source": "documents/gi-06-incomplete-colonoscopy-poor-prep.txt",
+      "source_sha256": "3b07fab3e0cf73d92fcb64bbab209ef2b4a424c8f0218461160d82a29705737a",
+      "delivery": {
+        "format": "pdf",
+        "file": "gi-06-incomplete-colonoscopy-poor-prep.pdf"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "pdf-text"
+        ],
+        "text_matches_source": "whitespace"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-13"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "hospital_outpatient"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.colonoscopy": {
+            "presence": "required",
+            "status_in": [
+              "incomplete"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "splenic"
+                ]
+              }
+            },
+            "informational": {
+              "mention_statuses_include": [
+                "incomplete",
+                "planned"
+              ]
+            }
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.egd",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M."
+        }
+      ],
+      "incomplete_services": [
+        {
+          "family": "gi.colonoscopy",
+          "reason": "Terminated at the splenic flexure for inadequate preparation; must be routed to review, not auto-completed or dropped."
+        }
+      ],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "45378",
+            "units": 1,
+            "modifier_considerations": [
+              "53: discontinued procedure (patient scheduled and prepared for a total colonoscopy, scope not advanced to the cecum)"
+            ],
+            "basis": "Incomplete diagnostic colonoscopy; no biopsy or polypectomy."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "45330"
+            ],
+            "reason": "Not a flexible sigmoidoscopy: the patient was scheduled and prepared for colonoscopy."
+          },
+          {
+            "codes": [
+              "45378"
+            ],
+            "reason": "A second unit for the planned repeat colonoscopy, which has not happened."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-07",
+      "title": "Short note missing date, setting, patient status and E/M basis",
+      "source": "documents/gi-07-note-missing-critical-information.txt",
+      "source_sha256": "f5c4fa9a20a60b6495f3a496bb006f491aa6f83209dd91d48902bea599295954",
+      "delivery": {
+        "format": "paste",
+        "file": "gi-07-note-missing-critical-information.paste.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "paste"
+        ],
+        "text_matches_source": "exact"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "missing"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "missing"
+          ]
+        },
+        "patient_status": {
+          "origin_in": [
+            "missing"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.office_em": {
+            "presence": "optional",
+            "status_in": [
+              "performed",
+              "uncertain"
+            ],
+            "missing_includes": [
+              "setting",
+              "patient_status",
+              "em_basis"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.egd",
+          "gi.colonoscopy",
+          "gi.flex_sig",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [
+        {
+          "fact": "service_date",
+          "scope_in": [
+            "encounter"
+          ]
+        },
+        {
+          "fact": "setting",
+          "scope_in": [
+            "service",
+            "proposal"
+          ]
+        },
+        {
+          "fact": "patient_status",
+          "scope_in": [
+            "service",
+            "proposal"
+          ]
+        },
+        {
+          "fact": "em_basis",
+          "scope_in": [
+            "service",
+            "proposal"
+          ]
+        }
+      ],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Date, setting, patient status and the E/M basis are not documented; a clarification is expected, not a ready code."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only. No code should be selected until the missing facts are clarified.",
+        "codes": [],
+        "not_expected": [
+          {
+            "codes": [
+              "99202",
+              "99203",
+              "99212",
+              "99213",
+              "99214"
+            ],
+            "reason": "New/established status, setting and the time or MDM basis are not documented."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-08",
+      "title": "Flexible sigmoidoscopy to 50 cm with cold forceps biopsy",
+      "source": "documents/gi-08-flexible-sigmoidoscopy-biopsy.txt",
+      "source_sha256": "dff9ffcee3bbe1bff59d4b02ed66f84ea9fd4cdbe226aaef4851267169f1ae4a",
+      "delivery": {
+        "format": "docx",
+        "file": "gi-08-flexible-sigmoidoscopy-biopsy.docx"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "docx"
+        ],
+        "text_matches_source": "whitespace"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-07"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "office"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.flex_sig": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "extent": {
+                "value_contains_any": [
+                  "50",
+                  "descending"
+                ]
+              }
+            }
+          },
+          "gi.colonoscopy": {
+            "presence": "optional",
+            "status_in": [
+              "historical"
+            ]
+          },
+          "gi.office_em": {
+            "presence": "optional",
+            "status_in": [
+              "planned"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.colonoscopy",
+          "gi.egd",
+          "gi.eus",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.colonoscopy",
+          "reason": "The colonoscopy two years ago is historical."
+        },
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M; the office follow-up is planned."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": {
+          "family": "gi.flex_sig",
+          "prefer_codes": [
+            "45331"
+          ],
+          "reason": "Exercise a reviewed report whose approved selections are empty."
+        }
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "45331",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "Flexible sigmoidoscopy with biopsy (single or multiple)."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "45330"
+            ],
+            "reason": "Biopsies were taken."
+          },
+          {
+            "codes": [
+              "45378",
+              "45380"
+            ],
+            "reason": "The colonoscopy is historical."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-09",
+      "title": "EUS of the pancreas with EUS-guided fine-needle biopsy",
+      "source": "documents/gi-09-eus-pancreas-fnb.txt",
+      "source_sha256": "db589041c9e4c29763f25d3283d4b1f105cc6909bda9896abd06c3894f7e3b85",
+      "delivery": {
+        "format": "pdf",
+        "file": "gi-09-eus-pancreas-fnb.pdf"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "pdf-text"
+        ],
+        "text_matches_source": "whitespace"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-19"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "hospital_outpatient"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.eus": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "target": {
+                "value_contains_any": [
+                  "pancrea"
+                ]
+              }
+            }
+          },
+          "gi.ercp": {
+            "presence": "optional",
+            "status_in": [
+              "planned",
+              "uncertain"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.colonoscopy",
+          "gi.flex_sig",
+          "gi.ercp"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.ercp",
+          "reason": "ERCP is conditional on future events; it was not performed."
+        },
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence.",
+        "codes": [
+          {
+            "code": "43242",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "EUS examination of the esophagus, stomach and duodenum with EUS-guided transmural fine-needle biopsy."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "43238"
+            ],
+            "reason": "The examination was not limited to one organ."
+          },
+          {
+            "codes": [
+              "43259",
+              "43235"
+            ],
+            "reason": "Included in the EUS-guided biopsy code."
+          },
+          {
+            "codes": [
+              "76942"
+            ],
+            "reason": "Ultrasound guidance is included."
+          },
+          {
+            "codes": [
+              "43260",
+              "43274"
+            ],
+            "reason": "ERCP was not performed."
+          }
+        ]
+      }
+    },
+    {
+      "id": "gi-10",
+      "title": "ERCP with biliary sphincterotomy and balloon stone extraction",
+      "source": "documents/gi-10-ercp-sphincterotomy-stone-extraction.txt",
+      "source_sha256": "99999dba54e0be5d8df643f7a067578246082c59f154d91454067b6bc40222e0",
+      "delivery": {
+        "format": "txt",
+        "file": "gi-10-ercp-sphincterotomy-stone-extraction.txt"
+      },
+      "upload": {
+        "service_date": null
+      },
+      "expected_extraction": {
+        "status_in": [
+          "ok"
+        ],
+        "method_in": [
+          "txt"
+        ],
+        "text_matches_source": "exact"
+      },
+      "expected_context": {
+        "service_date": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "2026-10-22"
+          ]
+        },
+        "setting": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "hospital_outpatient"
+          ]
+        },
+        "billing_context": {
+          "origin_in": [
+            "document"
+          ],
+          "value_in": [
+            "professional"
+          ]
+        }
+      },
+      "expected_routing": {
+        "families": {
+          "gi.ercp": {
+            "presence": "required",
+            "status_in": [
+              "performed"
+            ],
+            "facts": {
+              "cannulation": {
+                "value_contains_any": [
+                  "successful"
+                ]
+              }
+            }
+          },
+          "gi.office_em": {
+            "presence": "optional",
+            "status_in": [
+              "planned"
+            ]
+          }
+        },
+        "not_performed": [
+          "gi.office_em",
+          "gi.colonoscopy",
+          "gi.flex_sig",
+          "gi.eus"
+        ]
+      },
+      "expected_clarifications": [],
+      "must_not_code": [
+        {
+          "family": "gi.office_em",
+          "reason": "Procedure report with no separately identifiable E/M; the office follow-up is planned."
+        }
+      ],
+      "incomplete_services": [],
+      "review_plan": {
+        "reject": null
+      },
+      "author_expected_cpt": {
+        "adjudicated": false,
+        "note": "Document author's expectation only; not independent adjudication and not accuracy evidence. Whether 43262 is separately reportable with 43264 depends on NCCI PTP edits that are not connected in this release.",
+        "codes": [
+          {
+            "code": "43262",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "ERCP with biliary sphincterotomy."
+          },
+          {
+            "code": "43264",
+            "units": 1,
+            "modifier_considerations": [],
+            "basis": "ERCP with removal of calculi from the bile duct."
+          }
+        ],
+        "not_expected": [
+          {
+            "codes": [
+              "43260"
+            ],
+            "reason": "Diagnostic ERCP is included in the therapeutic codes."
+          },
+          {
+            "codes": [
+              "74328"
+            ],
+            "reason": "The radiology interpretation is reported separately by the radiologist."
+          },
+          {
+            "codes": [
+              "43274"
+            ],
+            "reason": "No stent was placed."
+          }
+        ]
+      }
+    }
+  ],
+  "expectation_corrections": [
+    {
+      "id": "gi-10",
+      "field": "expected_routing.families.gi.ercp.facts.cannulation",
+      "from": {
+        "value_contains_any": [
+          "bile",
+          "biliary",
+          "cbd"
+        ]
+      },
+      "to": {
+        "value_contains_any": [
+          "successful"
+        ]
+      },
+      "reason": "The routing contract (ARCHITECTURE 5.3) records cannulation as successful|failed; the duct is named by the evidence span, not the value. First local rehearsal 2026-10-23."
+    },
+    {
+      "id": "gi-05",
+      "field": "expected_routing.families.gi.colonoscopy.status_in",
+      "from": [
+        "planned",
+        "historical"
+      ],
+      "to": [
+        "planned",
+        "historical",
+        "negated"
+      ],
+      "reason": "The note states the colonoscopy was not performed today, is planned, and was done in 2021; negated is as accurate as planned or historical. The safety property (no ready colonoscopy code) is checked separately by must_not_code and is unchanged."
+    }
+  ]
+}

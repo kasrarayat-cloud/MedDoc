@@ -1,0 +1,50 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Gastroenterology Associates (fictional practice)
+Outpatient office visit - progress note
+
+Patient: Morgan Hale (fictional)
+Synthetic record: SYN-GI-0001
+Date of service: 2026-10-21
+Place of service: Office, in-person outpatient visit
+Clinician: Dr. Priya Ramos, MD, Gastroenterology (fictional)
+Patient status: Established patient. Last seen by Dr. Ramos in this practice on 2026-04-15 for reflux symptoms.
+
+Chief complaint
+Follow-up of reflux symptoms and new intermittent difficulty swallowing solid food.
+
+History of present illness
+52-year-old with gastroesophageal reflux disease previously controlled on omeprazole 20 mg once daily. Over the past 8 weeks the patient reports breakthrough heartburn 4 to 5 nights per week and an intermittent sensation of solid food sticking behind the lower sternum about twice weekly, resolving with water. Denies painful swallowing, vomiting blood, black stools or unintentional weight loss. Weight is stable. No NSAID use.
+
+Current medications
+Omeprazole 20 mg by mouth once daily.
+
+Allergies
+No known drug allergies.
+
+Review of systems
+Negative for fever, chest pain, vomiting, abdominal pain and change in bowel habits, except as noted above.
+
+Examination
+Blood pressure 128/78, heart rate 72, temperature 36.8 C, weight 81 kg.
+General: well appearing, in no distress.
+Oropharynx: clear.
+Abdomen: soft, non-tender, non-distended, normal bowel sounds, no hepatosplenomegaly.
+
+Assessment
+1. Gastroesophageal reflux disease with breakthrough symptoms on standard-dose proton pump inhibitor.
+2. Intermittent solid-food dysphagia, a new symptom that requires evaluation to exclude peptic stricture, eosinophilic esophagitis or malignancy.
+
+Plan
+1. Increase omeprazole to 40 mg twice daily before meals; prescription sent to the pharmacy.
+2. Upper endoscopy with possible biopsy and dilation is scheduled for 2026-11-04. Risks, benefits and alternatives were discussed and the patient agrees. No endoscopy or other procedure was performed today.
+3. Reflux precautions reviewed: avoid late meals and raise the head of the bed.
+4. Return visit two weeks after the endoscopy to review results.
+
+Medical decision making
+Moderate: one chronic illness with progression (reflux not controlled on current therapy) and one new problem with uncertain prognosis (dysphagia); prescription drug management (proton pump inhibitor dose change); decision for an elective endoscopic procedure discussed with the patient.
+
+Time
+Total time personally spent by me on the date of the encounter was 32 minutes, including review of prior records, history and examination, counselling, ordering and documentation. This time excludes separately reported services; no separately reported procedure was performed today.
+
+Electronically signed: Dr. Priya Ramos, MD (fictional), 2026-10-21 17:40

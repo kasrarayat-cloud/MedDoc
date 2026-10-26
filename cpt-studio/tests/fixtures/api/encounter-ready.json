@@ -1,0 +1,763 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000001",
+ "title": "Bidirectional endoscopy report",
+ "state": "needs_clarification",
+ "state_label": "Needs clarification",
+ "service_date": "2026-10-21",
+ "families": [
+  "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+  "Colonoscopy",
+  "Office / outpatient evaluation and management"
+ ],
+ "source_kind": "pdf",
+ "open_clarifications": 1,
+ "created_at": "2026-10-23T14:01:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000011",
+  "number": 1,
+  "kind": "upload",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": {
+   "name": "synthetic-bidirectional-endoscopy.pdf",
+   "media_type": "application/pdf",
+   "size": 48211,
+   "sha256": "fa055a9c101b7de325660a61cb2dc5010cb31ffc69884e5b85cd5519b311fc6a"
+  },
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "pdf-text",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 2,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nRiverside Endoscopy Center (fictional) · Ambulatory endoscopy center\nProcedure report\n\nPatient: Test Patient Delta (synthetic)\nDate of service: 2026-10-21\nPatient status: Established patient of the practice.\n\nProcedures performed: Esophagogastroduodenoscopy and colonoscopy, same session.\n\nIndications: Iron deficiency anemia and intermittent dyspepsia.\n\nPre-procedure history and physical was reviewed and is unchanged. Sedation was provided by the anesthesia service.\n\nUPPER ENDOSCOPY\nThe endoscope was advanced to the second portion of the duodenum. Mild erythema was seen in the gastric antrum. EGD with cold forceps biopsies of the gastric antrum was performed for Helicobacter pylori evaluation.\n\nCOLONOSCOPY\nThe colonoscope was advanced to the cecum. The cecum was identified by the appendiceal orifice and ileocecal valve. Bowel preparation was good (Boston Bowel Preparation Scale 7).\nAn 8 mm sessile polyp in the sigmoid colon was removed with a cold snare and retrieved.\nNo other lesions were seen.\n\nIMPRESSION\n1. Antral erythema, biopsied.\n2. Sigmoid polyp, removed by cold snare.\n\nPLAN\nAwait pathology. Repeat colonoscopy interval to be set after pathology review.",
+  "text_sha256": "30ae2a7f462c6ea6d0a03cceeb97729a194bec4975a75576400fb651257ea6a7",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 746
+   },
+   {
+    "page": 2,
+    "start": 748,
+    "end": 1222
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-21",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 172,
+      "end": 199,
+      "text": "Date of service: 2026-10-21",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": "asc",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 86,
+      "end": 113,
+      "text": "Ambulatory endoscopy center",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": "Professional versus facility billing is not documented."
+   },
+   "patient_status": {
+    "value": "established",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 216,
+      "end": 252,
+      "text": "Established patient of the practice.",
+      "exact": true
+     }
+    ],
+    "note": ""
+   }
+  },
+  "user_values": {}
+ },
+ "routing": {
+  "version": "gi-routing@1",
+  "document_kind": "procedure_report",
+  "families": [
+   {
+    "family": "gi.egd",
+    "label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   },
+   {
+    "family": "gi.colonoscopy",
+    "label": "Colonoscopy",
+    "supported": true,
+    "status": "performed",
+    "mentions": [],
+    "facts": [],
+    "missing": []
+   },
+   {
+    "family": "gi.office_em",
+    "label": "Office / outpatient evaluation and management",
+    "supported": true,
+    "status": "uncertain",
+    "mentions": [],
+    "facts": [],
+    "missing": [
+     "em_basis"
+    ]
+   }
+  ]
+ },
+ "pipeline": {
+  "can_resume": false,
+  "stopped_by_member": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [
+  {
+   "id": "e0000000-0000-4000-8000-000000000001",
+   "provider": "corti",
+   "mode": "live",
+   "state": "succeeded",
+   "http_status": 200,
+   "latency_ms": 6123.4,
+   "usage": {
+    "creditsConsumed": 0.0281
+   },
+   "usage_basis": "provider_reported_credits_not_usd",
+   "request_sha256": "19f1064b619d49d35392eac7261cd7266c720671fc594f4b226f32bf0bee74ba",
+   "response_sha256": "169b662cf059820589c145a0b6f3c99a078e6d5117c31b4082634cb40b19d6a9",
+   "reused_from": null,
+   "error": "",
+   "reconciled": false,
+   "created_at": "2026-10-23T14:02:20Z"
+  }
+ ],
+ "assessment": {
+  "id": "90000000-0000-4000-8000-000000000001",
+  "profiles_version": "gi-profiles@1",
+  "engine_version": "gi-validation@1",
+  "created_at": "2026-10-23T14:02:40Z",
+  "proposals": [
+   {
+    "id": "d0000000-0000-4000-8000-000000000101",
+    "key": "sel:0",
+    "bucket": "selected",
+    "code": "43239",
+    "code_kind": "cpt1",
+    "family": "gi.egd",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "eyebrow": "UPPER GI ENDOSCOPY",
+    "supported": true,
+    "profile_version": "gi.egd@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 254,
+      "end": 318,
+      "text": "Procedures performed: Esophagogastroduodenoscopy and colonoscopy",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 532,
+      "end": 597,
+      "text": "The endoscope was advanced to the second portion of the duodenum.",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 644,
+      "end": 710,
+      "text": "EGD with cold forceps biopsies of the gastric antrum was performed",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "Upper endoscopy to the second portion of the duodenum with cold forceps biopsies is documented as performed on the service date.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "43239 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000102",
+    "key": "sel:1",
+    "bucket": "selected",
+    "code": "45385",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "ready",
+    "status_label": "Ready for review",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 303,
+      "end": 333,
+      "text": "and colonoscopy, same session.",
+      "exact": true,
+      "page": 1
+     },
+     {
+      "start": 803,
+      "end": 875,
+      "text": "The cecum was identified by the appendiceal orifice and ileocecal valve.",
+      "exact": true,
+      "page": 2
+     },
+     {
+      "start": 939,
+      "end": 1011,
+      "text": "An 8 mm sessile polyp in the sigmoid colon was removed with a cold snare",
+      "exact": true,
+      "page": 2
+     }
+    ],
+    "rationale": "Colonoscopy to the cecum with cold snare removal of a sigmoid polyp is documented as performed.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "pass",
+      "detail": "The documented service is described as performed.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "45385 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     }
+    ],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "approve",
+     "reject"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000103",
+    "key": "sel:2",
+    "bucket": "selected",
+    "code": "99214",
+    "code_kind": "cpt1",
+    "family": "gi.office_em",
+    "family_label": "Office / outpatient evaluation and management",
+    "eyebrow": "EVALUATION & MANAGEMENT",
+    "supported": true,
+    "profile_version": "gi.office_em@1",
+    "status": "needs_clarification",
+    "status_label": "Needs clarification",
+    "exclusion_reason": "",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [
+     {
+      "start": 400,
+      "end": 465,
+      "text": "Pre-procedure history and physical was reviewed and is unchanged.",
+      "exact": true,
+      "page": 1
+     }
+    ],
+    "rationale": "The provider selected an office visit. The note documents only the routine pre-procedure assessment for same-day endoscopy.",
+    "units": 1,
+    "checks": [
+     {
+      "id": "evidence.exact",
+      "label": "Exact source evidence",
+      "status": "pass",
+      "detail": "Every linked passage matches the revision text exactly.",
+      "source": "cpt-studio:evidence@1"
+     },
+     {
+      "id": "routing.family",
+      "label": "Service family routing",
+      "status": "pass",
+      "detail": "The code routes to the documented service family.",
+      "source": "cpt-studio:routing@1"
+     },
+     {
+      "id": "service.status",
+      "label": "Service performed on this encounter",
+      "status": "warn",
+      "detail": "The documented status needs review.",
+      "source": "cpt-studio:status@1"
+     },
+     {
+      "id": "cpt.membership",
+      "label": "CPT code-set membership for the service date",
+      "status": "not_verified",
+      "detail": "No licensed CPT edition is connected, so code-set membership is not verified.",
+      "source": ""
+     },
+     {
+      "id": "cpt.descriptor",
+      "label": "CPT descriptor",
+      "status": "info",
+      "detail": "Withheld: no licensed CPT descriptor is connected.",
+      "source": ""
+     },
+     {
+      "id": "pfs.presence",
+      "label": "Present in the CMS fee schedule file",
+      "status": "pass",
+      "detail": "99214 is present in the installed fee schedule file for the service date (fixture).",
+      "source": "cms-pfs-rvu26d RVU26D"
+     },
+     {
+      "id": "mue.units",
+      "label": "Units within the practitioner MUE",
+      "status": "pass",
+      "detail": "1 unit is within the practitioner MUE (fixture).",
+      "source": "cms-mue-practitioner-2026q4 2026-Q4"
+     },
+     {
+      "id": "ncci.ptp",
+      "label": "NCCI procedure-to-procedure edits",
+      "status": "not_verified",
+      "detail": "NCCI PTP tables are not connected, so code-pair edits are not verified.",
+      "source": ""
+     },
+     {
+      "id": "em.same_day_procedure",
+      "label": "Separately identifiable E/M on a procedure day",
+      "status": "warn",
+      "detail": "Endoscopic procedures were performed on the same date; a significant, separately identifiable E/M service is not established by this document.",
+      "source": "cpt-studio:em-procedure@1"
+     }
+    ],
+    "modifier_considerations": [
+     "Modifier 25 would only be a consideration if a separately identifiable E/M service is documented; it is never assigned automatically."
+    ],
+    "clarification_ids": [
+     "70000000-0000-4000-8000-000000000011"
+    ],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": [
+     "reject"
+    ]
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000104",
+    "key": "alt:0",
+    "bucket": "alternative",
+    "code": "45380",
+    "code_kind": "cpt1",
+    "family": "gi.colonoscopy",
+    "family_label": "Colonoscopy",
+    "eyebrow": "COLONOSCOPY",
+    "supported": true,
+    "profile_version": "gi.colonoscopy@1",
+    "status": "informational",
+    "status_label": "Not selected",
+    "exclusion_reason": "Provider alternative to 45385; not selected. Alternatives cannot be approved.",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [],
+    "rationale": "",
+    "units": 1,
+    "checks": [],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": []
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000105",
+    "key": "alt:1",
+    "bucket": "alternative",
+    "code": "43235",
+    "code_kind": "cpt1",
+    "family": "gi.egd",
+    "family_label": "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "eyebrow": "UPPER GI ENDOSCOPY",
+    "supported": true,
+    "profile_version": "gi.egd@1",
+    "status": "informational",
+    "status_label": "Not selected",
+    "exclusion_reason": "Provider alternative to 43239; not selected. Alternatives cannot be approved.",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [],
+    "rationale": "",
+    "units": 1,
+    "checks": [],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": []
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000106",
+    "key": "exc:0",
+    "bucket": "excluded",
+    "code": "3017F",
+    "code_kind": "cpt2",
+    "family": "gi.unsupported",
+    "family_label": "Service outside the GI profiles",
+    "eyebrow": "OUTSIDE GI PROFILES",
+    "supported": false,
+    "profile_version": "gi.unsupported@1",
+    "status": "excluded",
+    "status_label": "Excluded",
+    "exclusion_reason": "CPT Category II code — performance-measurement codes are outside CPT-only coding results.",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [],
+    "rationale": "",
+    "units": 1,
+    "checks": [],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": []
+   },
+   {
+    "id": "d0000000-0000-4000-8000-000000000107",
+    "key": "exc:1",
+    "bucket": "excluded",
+    "code": "G0105",
+    "code_kind": "hcpcs",
+    "family": "gi.unsupported",
+    "family_label": "Service outside the GI profiles",
+    "eyebrow": "OUTSIDE GI PROFILES",
+    "supported": false,
+    "profile_version": "gi.unsupported@1",
+    "status": "excluded",
+    "status_label": "Excluded",
+    "exclusion_reason": "HCPCS Level II code — outside CPT-only results.",
+    "reinstatable": false,
+    "descriptor": {
+     "status": "withheld",
+     "label": "Description withheld — no licensed CPT descriptor is connected."
+    },
+    "evidence": [],
+    "rationale": "",
+    "units": 1,
+    "checks": [],
+    "modifier_considerations": [],
+    "clarification_ids": [],
+    "decision": null,
+    "decision_state": "undecided",
+    "allowed_actions": []
+   }
+  ],
+  "encounter_checks": [
+   {
+    "id": "extraction.status",
+    "label": "Text extraction",
+    "status": "pass",
+    "detail": "The document text was extracted completely.",
+    "source": "cpt-studio:extraction@1"
+   },
+   {
+    "id": "context.service_date",
+    "label": "Service date",
+    "status": "pass",
+    "detail": "A single service date is documented.",
+    "source": "cpt-studio:context@1"
+   },
+   {
+    "id": "services.unsupported",
+    "label": "Services outside the GI profiles",
+    "status": "pass",
+    "detail": "No performed service falls outside the GI profiles.",
+    "source": "cpt-studio:routing@1"
+   },
+   {
+    "id": "services.unproposed",
+    "label": "Performed services without a proposal",
+    "status": "pass",
+    "detail": "Every performed service has a selected proposal.",
+    "source": "cpt-studio:routing@1"
+   }
+  ],
+  "unsupported": [],
+  "reference_sources": [
+   {
+    "key": "cms-pfs-rvu26d",
+    "title": "CMS Physician Fee Schedule relative value file (fixture)",
+    "release": "RVU26D",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; code-keyed indicators only, descriptors dropped at import.",
+    "scope_note": "Medicare payment indicators only; not a CPT code-set reference."
+   },
+   {
+    "key": "cms-mue-practitioner-2026q4",
+    "title": "CMS practitioner MUE table (fixture)",
+    "release": "2026-Q4",
+    "effective_start": "2026-10-01",
+    "effective_end": "2026-12-31",
+    "applies": true,
+    "license_note": "Public CMS file; values keyed by code number.",
+    "scope_note": "Medically unlikely edits for practitioner services only."
+   }
+  ],
+  "summary": {
+   "selected": 3,
+   "alternatives": 2,
+   "excluded": 2
+  }
+ },
+ "clarifications": [
+  {
+   "id": "70000000-0000-4000-8000-000000000011",
+   "scope": "proposal",
+   "proposal_id": "d0000000-0000-4000-8000-000000000103",
+   "family": "gi.office_em",
+   "fact": "em_basis",
+   "question": "Was a significant, separately identifiable evaluation and management service performed on 21 October 2026, beyond the routine pre-procedure assessment? If so, add that documentation.",
+   "reason": "The note documents only the pre-procedure history and physical for same-day endoscopy.",
+   "state": "open"
+  }
+ ],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": true,
+  "reviewed": false,
+  "blockers": [
+   "43239 has no decision",
+   "45385 has no decision",
+   "99214 has an open clarification"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document uploaded (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "extraction.recorded",
+   "summary": "Text extracted from 2 PDF pages",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "provider.succeeded",
+   "summary": "Corti returned CPT proposals",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "assessment.created",
+   "summary": "Proposals checked against 2 reference sources",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

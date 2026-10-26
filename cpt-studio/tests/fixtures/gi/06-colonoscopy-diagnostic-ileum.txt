@@ -1,0 +1,29 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Hospital outpatient endoscopy unit (fictional)
+Colonoscopy procedure note
+
+Patient: Taylor Nakamura (fictional)
+Synthetic record: SYN-GI-3006
+DOS: 10/21/2026
+POS: 22
+Endoscopist: Dr. Ana Lucia Prieto, MD (fictional)
+
+Procedure performed
+Diagnostic colonoscopy with ileal intubation and biopsies.
+
+Indications
+Chronic diarrhea and abdominal cramping; evaluate for inflammatory bowel disease or microscopic colitis.
+
+Description of procedure
+The adult colonoscope was advanced through the colon to the cecum. The terminal ileum was intubated and examined for 10 cm. The bowel preparation was excellent.
+
+Findings
+The terminal ileum appeared normal; biopsies were obtained from the terminal ileum.
+The colonic mucosa appeared normal throughout. Random biopsies were taken from the right colon and left colon to evaluate for microscopic colitis.
+
+Impression
+Normal ileocolonoscopy; biopsies obtained.
+
+Plan
+Follow up biopsy results by phone in one week.

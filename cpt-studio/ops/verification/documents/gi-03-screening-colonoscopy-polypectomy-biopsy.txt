@@ -1,0 +1,47 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Community Hospital (fictional) - Endoscopy Unit
+Colonoscopy procedure report
+
+Patient: Thomas Brennan (fictional)
+Synthetic record: SYN-GI-0003
+Date of procedure: 2026-10-09
+Place of service: Hospital outpatient department, endoscopy unit
+Endoscopist: Dr. Aisha Rahman, MD, Gastroenterology (fictional)
+Billing: Professional services of the endoscopist; facility services are billed separately by the hospital.
+
+Procedure
+Colonoscopy with cold snare polypectomy and cold forceps biopsy.
+
+Indication
+Average-risk colorectal cancer screening at age 56. No prior colonoscopy. No gastrointestinal symptoms and no family history of colorectal cancer.
+
+Sedation
+Monitored anesthesia care by the anesthesia service (fictional). The endoscopist did not administer sedation.
+
+Bowel preparation
+Split-dose polyethylene glycol. Boston Bowel Preparation Scale 8 (right colon 3, transverse colon 3, left colon 2). Adequate for detection of polyps larger than 5 mm.
+
+Technique
+After informed consent was obtained, a digital rectal examination was normal. The adult colonoscope was inserted into the rectum and advanced under direct visualization to the cecum. Cecal intubation was confirmed by identification of the appendiceal orifice and the ileocecal valve, and was photodocumented. The colon was carefully examined during withdrawal. Withdrawal time was 14 minutes. Retroflexion was performed in the rectum.
+
+Findings
+1. Transverse colon: two sessile polyps, 5 mm and 7 mm in size, were each removed completely with a cold snare and retrieved (jar A).
+2. Rectum: a separate 4 mm flat, pale lesion 6 cm from the anal verge was sampled with cold forceps biopsy for histology (jar B). This lesion was not removed by snare.
+3. Small non-bleeding internal hemorrhoids were seen on retroflexion.
+4. The remaining colonic mucosa was normal to the cecum.
+
+Complications
+None. Estimated blood loss was minimal.
+
+Impression
+1. Two transverse colon polyps removed by cold snare polypectomy.
+2. Separate rectal lesion biopsied with cold forceps.
+3. Small internal hemorrhoids.
+
+Plan
+1. Await pathology.
+2. The surveillance colonoscopy interval will be set after pathology review.
+3. Resume a regular diet today.
+
+Electronically signed: Dr. Aisha Rahman, MD (fictional), 2026-10-09 11:47

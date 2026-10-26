@@ -1,0 +1,26 @@
+# Generated: install requirements-dev.in on top of requirements.txt in a clean Python 3.12 venv,
+# pin what it adds. Do not edit by hand; edit requirements-dev.in.
+-r requirements.txt
+boolean.py==5.0
+CacheControl==0.14.4
+cyclonedx-python-lib==11.12.0
+defusedxml==0.7.1
+filelock==4.2.1
+license-expression==30.4.4
+markdown-it-py==4.2.0
+mdurl==0.1.2
+msgpack==1.2.2
+packageurl-python==0.17.6
+pillow==13.0.0
+pip_api==0.0.35
+pip_audit==2.10.1
+pip-requirements-parser==32.0.1
+platformdirs==4.11.9
+Pygments==2.21.0
+pyparsing==3.3.2
+py-serializable==2.1.0
+reportlab==4.5.1
+rich==15.0.0
+sortedcontainers==2.4.0
+tomli==2.4.1
+tomli_w==1.2.0

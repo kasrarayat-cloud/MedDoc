@@ -1,0 +1,104 @@
+{
+ "encounters": [
+  {
+   "id": "c0000000-0000-4000-8000-000000000008",
+   "title": "Flexible sigmoidoscopy report",
+   "state": "stopped",
+   "state_label": "Stopped",
+   "service_date": "2026-10-17",
+   "families": [],
+   "source_kind": "paste",
+   "open_clarifications": 0,
+   "created_at": "2026-10-23T14:08:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000007",
+   "title": "<img src=x onerror=\"window.__xss=1\">Adversarial \"quotes\" & <b>tags</b>",
+   "state": "ready_for_review",
+   "state_label": "<img src=x onerror=\"window.__xss=5\">",
+   "service_date": "2026-10-18",
+   "families": [
+    "<b>Family</b>"
+   ],
+   "source_kind": "pdf",
+   "open_clarifications": 1,
+   "created_at": "2026-10-23T14:07:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000006",
+   "title": "Scanned procedure report",
+   "state": "extraction_failed",
+   "state_label": "Extraction failed",
+   "service_date": null,
+   "families": [],
+   "source_kind": "pdf",
+   "open_clarifications": 0,
+   "created_at": "2026-10-23T14:06:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000005",
+   "title": "Colonoscopy with biopsies",
+   "state": "reviewed",
+   "state_label": "Reviewed",
+   "service_date": "2026-10-19",
+   "families": [
+    "Colonoscopy",
+    "Office / outpatient evaluation and management"
+   ],
+   "source_kind": "docx",
+   "open_clarifications": 0,
+   "created_at": "2026-10-23T14:05:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000004",
+   "title": "Screening colonoscopy report",
+   "state": "provider_unknown",
+   "state_label": "Provider outcome unknown",
+   "service_date": "2026-10-20",
+   "families": [],
+   "source_kind": "txt",
+   "open_clarifications": 0,
+   "created_at": "2026-10-23T14:04:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000003",
+   "title": "Upper abdominal discomfort follow-up",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": null,
+   "families": [
+    "Office / outpatient evaluation and management",
+    "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"
+   ],
+   "source_kind": "paste",
+   "open_clarifications": 1,
+   "created_at": "2026-10-23T14:03:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000002",
+   "title": "Constipation follow-up visit",
+   "state": "processing",
+   "state_label": "Processing",
+   "service_date": "2026-10-22",
+   "families": [],
+   "source_kind": "paste",
+   "open_clarifications": 0,
+   "created_at": "2026-10-23T14:02:00Z"
+  },
+  {
+   "id": "c0000000-0000-4000-8000-000000000001",
+   "title": "Bidirectional endoscopy report",
+   "state": "needs_clarification",
+   "state_label": "Needs clarification",
+   "service_date": "2026-10-21",
+   "families": [
+    "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)",
+    "Colonoscopy",
+    "Office / outpatient evaluation and management"
+   ],
+   "source_kind": "pdf",
+   "open_clarifications": 1,
+   "created_at": "2026-10-23T14:01:00Z"
+  }
+ ]
+}

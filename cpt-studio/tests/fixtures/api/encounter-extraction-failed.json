@@ -1,0 +1,95 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000006",
+ "title": "Scanned procedure report",
+ "state": "extraction_failed",
+ "state_label": "Extraction failed",
+ "service_date": null,
+ "families": [],
+ "source_kind": "pdf",
+ "open_clarifications": 0,
+ "created_at": "2026-10-23T14:06:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000061",
+  "number": 1,
+  "kind": "upload",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": {
+   "name": "synthetic-scanned-report.pdf",
+   "media_type": "application/pdf",
+   "size": 912344,
+   "sha256": "ab4179e306c1cff4aed659676c3dac3009b47e632448d2e05957315eeed6d8d9"
+  },
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "failed",
+   "method": "pdf-ocr",
+   "messages": [
+    "Pages 1–3 have no text layer and OCR is not available in this environment; they were not read.",
+    "No text could be extracted, so no CPT proposals were requested."
+   ],
+   "ocr_pages": [],
+   "page_count": 0,
+   "engine": {}
+  },
+  "text": "",
+  "text_sha256": "",
+  "pages": []
+ },
+ "context": {
+  "facts": {},
+  "user_values": {}
+ },
+ "routing": null,
+ "pipeline": {
+  "can_resume": false,
+  "stopped_by_member": false,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "failed",
+    "error": "No text could be extracted from the PDF.",
+    "finished_at": "2026-10-23T14:02:10Z"
+   }
+  ]
+ },
+ "provider_runs": [],
+ "assessment": null,
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": false,
+  "reviewed": false,
+  "blockers": [
+   "No text was extracted"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document uploaded (synthetic attestation recorded)",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "extraction.failed",
+   "summary": "Extraction failed: no text layer and OCR unavailable",
+   "actor": "System",
+   "actor_kind": "system",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

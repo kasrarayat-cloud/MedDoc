@@ -1,0 +1,34 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health (fictional practice)
+Established patient visit - office progress note
+
+Patient: Sam Delacroix (fictional)
+Synthetic record: SYN-GI-1009
+Date of service: 2026-10-21
+Place of service: Office
+Patient status: Established patient.
+
+Chief complaint
+Intermittent bright red blood per rectum for two months.
+
+History of present illness
+58-year-old with intermittent small-volume bright red blood on the toilet paper after bowel movements, no change in stool caliber, no weight loss. Hemoglobin last week was normal.
+
+Examination
+Abdomen soft and non-tender. External inspection showed a small non-thrombosed external hemorrhoid; digital rectal examination showed no mass.
+
+Assessment
+Hematochezia, most likely hemorrhoidal; a colonic source must be excluded at this age.
+
+Plan
+1. Diagnostic colonoscopy is scheduled for 2026-11-12 with split-dose preparation; instructions were given.
+2. Fiber supplementation and sitz baths.
+
+Medical decision making
+Low: one acute uncomplicated problem; decision regarding an elective procedure without identified risk factors.
+
+Time
+Total time on the date of the encounter was 25 minutes.
+
+Electronically signed: Dr. Noor Haddad, MD (fictional), 2026-10-21 12:10

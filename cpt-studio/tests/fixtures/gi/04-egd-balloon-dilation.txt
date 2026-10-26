@@ -1,0 +1,25 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Hospital outpatient endoscopy unit (fictional)
+Upper endoscopy report
+
+Patient: Casey Moreau (fictional)
+Synthetic record: SYN-GI-2004
+Procedure date: October 19, 2026
+Setting: Hospital outpatient department
+Endoscopist: Dr. Ana Lucia Prieto, MD (fictional)
+
+Procedure
+EGD with through-the-scope balloon dilation of a distal esophageal stricture.
+
+Indication
+Progressive solid-food dysphagia; prior barium study showed a distal esophageal narrowing.
+
+Description of procedure
+The upper endoscope was passed into the esophagus. A smooth, benign-appearing stricture was found in the distal esophagus, 2 cm above the gastroesophageal junction, measuring about 12 mm. The endoscope traversed the stricture and was advanced to the second portion of the duodenum. A TTS balloon dilation was performed across the stricture, sequentially to 13.5, 15 and 16.5 mm, with a mild mucosal tear and no bleeding. No biopsies were taken because the stricture appeared benign and peptic.
+
+Impression
+Benign-appearing distal esophageal stricture, dilated with a balloon to 16.5 mm.
+
+Recommendations
+Continue twice-daily proton pump inhibitor. Repeat dilation may be needed if dysphagia recurs.

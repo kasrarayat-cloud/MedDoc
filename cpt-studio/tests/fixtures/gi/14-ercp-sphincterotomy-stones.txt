@@ -1,0 +1,27 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Hospital outpatient endoscopy unit (fictional)
+ERCP procedure report
+
+Patient: Alex Oyelaran (fictional)
+Synthetic record: SYN-GI-5014
+Date of service: 2026-10-22
+Place of service: Hospital outpatient department
+Endoscopist: Dr. Ana Lucia Prieto, MD (fictional)
+
+Procedure performed
+ERCP with biliary sphincterotomy and balloon stone extraction.
+
+Indications
+Choledocholithiasis on MRCP with mildly elevated liver tests.
+
+Technique
+The duodenoscope was advanced to the second part of the duodenum and the major papilla was identified. Deep biliary cannulation was achieved with a sphincterotome and guidewire. The cholangiogram showed a dilated common bile duct to 11 mm with two filling defects consistent with stones.
+A biliary sphincterotomy was performed with blended current.
+Two stones were extracted with an extraction balloon. The final occlusion cholangiogram showed no residual filling defects.
+
+Impression
+Choledocholithiasis, cleared after biliary sphincterotomy and balloon extraction.
+
+Recommendations
+Advance diet as tolerated. Laparoscopic cholecystectomy is recommended within 6 weeks.

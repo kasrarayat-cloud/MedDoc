@@ -1,0 +1,41 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health (fictional practice)
+Outpatient office visit - progress note
+
+Patient: Avery Lindqvist (fictional)
+Synthetic record: SYN-GI-1001
+Date of service: 2026-10-21
+Place of service: 11 - Office
+Clinician: Dr. Noor Haddad, MD, Gastroenterology (fictional)
+Patient status: Established patient, last seen in this practice on 2026-04-15.
+
+Chief complaint
+Follow-up of reflux symptoms with new intermittent difficulty swallowing solid food.
+
+History of present illness
+52-year-old with gastroesophageal reflux disease previously controlled on omeprazole 20 mg daily. Over the past 8 weeks the patient reports breakthrough heartburn four nights per week and solid food sticking behind the lower sternum about twice weekly. Prior EGD in 2023 showed mild esophagitis only. Denies vomiting blood, black stools or weight loss.
+
+Current medications
+Omeprazole 20 mg by mouth once daily.
+
+Examination
+Blood pressure 126/78, heart rate 70, weight 80 kg.
+Abdomen: soft, non-tender, non-distended, no hepatosplenomegaly.
+
+Assessment
+1. Gastroesophageal reflux disease with breakthrough symptoms on standard-dose proton pump inhibitor.
+2. Intermittent solid-food dysphagia, new, requiring evaluation for peptic stricture or eosinophilic esophagitis.
+
+Plan
+1. Increase omeprazole to 40 mg twice daily before meals; prescription sent.
+2. Upper endoscopy with possible biopsy and dilation is scheduled for 2026-11-04. Risks and benefits were discussed and the patient agrees.
+3. Return visit two weeks after the endoscopy to review results.
+
+Medical decision making
+Moderate: one chronic illness with progression and one new problem with uncertain prognosis; prescription drug management.
+
+Time
+Total time personally spent by me on the date of the encounter was 32 minutes, including record review, history, examination, counselling and documentation.
+
+Electronically signed: Dr. Noor Haddad, MD (fictional), 2026-10-21 17:40

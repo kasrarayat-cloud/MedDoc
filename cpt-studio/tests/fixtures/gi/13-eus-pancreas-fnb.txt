@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Riverside Hospital outpatient endoscopy unit (fictional)
+Endoscopic ultrasound report
+
+Patient: Morgan Tremblay (fictional)
+Synthetic record: SYN-GI-4013
+Date of procedure: 2026-10-21
+Place of service: 22
+Endosonographer: Dr. Ana Lucia Prieto, MD (fictional)
+
+Procedure
+Upper EUS with EUS-guided fine needle biopsy (FNB).
+
+Indications
+A 2.4 cm pancreatic head mass on CT; tissue diagnosis and staging.
+
+Technique
+The linear echoendoscope was passed through the mouth and advanced to the second part of the duodenum. The pancreas was examined from the duodenum and the stomach.
+
+Findings
+A 24 mm by 21 mm hypoechoic, irregular pancreatic head mass was seen abutting but not invading the portal vein. The pancreatic duct upstream measured 5 mm. The common bile duct measured 7 mm.
+EUS-guided fine needle biopsy of the pancreatic head mass was performed with a 22-gauge needle; three passes were made and material was sent for histology.
+No peripancreatic lymph nodes or ascites were seen.
+
+Impression
+Pancreatic head mass, sampled by EUS-guided FNB.
+
+Recommendations
+Await histology. Discuss at the multidisciplinary pancreas conference.

@@ -1,0 +1,143 @@
+{
+ "id": "c0000000-0000-4000-8000-000000000008",
+ "title": "Flexible sigmoidoscopy report",
+ "state": "stopped",
+ "state_label": "Stopped",
+ "service_date": "2026-10-17",
+ "families": [],
+ "source_kind": "paste",
+ "open_clarifications": 0,
+ "created_at": "2026-10-23T14:08:00Z",
+ "created_by": "Synthetic Reviewer",
+ "permissions": {
+  "can_review": true
+ },
+ "revision": {
+  "id": "f0000000-0000-4000-8000-000000000081",
+  "number": 1,
+  "kind": "paste",
+  "revisions_total": 1,
+  "created_at": "2026-10-23T14:01:58Z",
+  "source_file": null,
+  "addendum_text": "",
+  "addendum_offset": null,
+  "extraction": {
+   "status": "ok",
+   "method": "paste",
+   "messages": [],
+   "ocr_pages": [],
+   "page_count": 1,
+   "engine": {}
+  },
+  "text": "SYNTHETIC TEST DOCUMENT — NOT A REAL PATIENT\nFlexible sigmoidoscopy report (fictional)\nDate of service: 2026-10-17\n\nThe sigmoidoscope was advanced to 45 cm. No lesions were seen.",
+  "text_sha256": "d2dd542b028b22e787679fa4e8567718f6371f44bed353eb5f8a17e3400da20e",
+  "pages": [
+   {
+    "page": 1,
+    "start": 0,
+    "end": 178
+   }
+  ]
+ },
+ "context": {
+  "facts": {
+   "service_date": {
+    "value": "2026-10-17",
+    "origin": "document",
+    "evidence": [
+     {
+      "start": 87,
+      "end": 114,
+      "text": "Date of service: 2026-10-17",
+      "exact": true
+     }
+    ],
+    "note": ""
+   },
+   "setting": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "The care setting is not documented."
+   },
+   "billing_context": {
+    "value": "not_documented",
+    "origin": "missing",
+    "evidence": [],
+    "note": ""
+   },
+   "patient_status": {
+    "value": null,
+    "origin": "missing",
+    "evidence": [],
+    "note": "Patient status is not documented."
+   }
+  },
+  "user_values": {}
+ },
+ "routing": null,
+ "pipeline": {
+  "can_resume": true,
+  "stopped_by_member": true,
+  "busy": false,
+  "can_stop": false,
+  "stages": [
+   {
+    "kind": "extract",
+    "state": "succeeded",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:10Z"
+   },
+   {
+    "kind": "analyze",
+    "state": "cancelled",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:17Z"
+   },
+   {
+    "kind": "predict",
+    "state": "cancelled",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:24Z"
+   },
+   {
+    "kind": "assess",
+    "state": "cancelled",
+    "error": "",
+    "finished_at": "2026-10-23T14:02:31Z"
+   }
+  ]
+ },
+ "provider_runs": [],
+ "assessment": null,
+ "clarifications": [],
+ "decisions": {
+  "history": []
+ },
+ "readiness": {
+  "draft": false,
+  "reviewed": false,
+  "blockers": [
+   "Processing was stopped"
+  ]
+ },
+ "reports": [],
+ "activity": [
+  {
+   "event": "encounter.created",
+   "summary": "Document added",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  },
+  {
+   "event": "pipeline.stopped",
+   "summary": "Processing stopped",
+   "actor": "Synthetic Reviewer",
+   "actor_kind": "human",
+   "created_at": "2026-10-23T14:02:00Z",
+   "data": {}
+  }
+ ]
+}

@@ -1,0 +1,30 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Ambulatory Surgery Center (fictional)
+Endoscopy report - bidirectional endoscopy, same session
+
+Patient: Robin Achterberg (fictional)
+Synthetic record: SYN-GI-3008
+Date of service: 2026-10-23
+Place of service: ASC
+Endoscopist: Dr. Mei Tanaka, MD (fictional)
+
+Procedures performed
+1. EGD with cold forceps biopsy.
+2. Colonoscopy with hot snare polypectomy.
+
+Indications
+Iron deficiency anemia without overt bleeding; diagnostic EGD and colonoscopy.
+
+EGD findings
+The gastroscope was advanced to the second part of the duodenum. The esophagus and stomach were normal. Duodenal biopsies were obtained with cold forceps to evaluate for celiac disease.
+
+Colonoscopy findings
+The colonoscope was advanced to the cecum; the appendiceal orifice was photographed. The bowel preparation was adequate.
+A 12 mm pedunculated polyp in the sigmoid colon was removed with a hot snare and retrieved.
+
+Impression
+Normal EGD, duodenal biopsies taken. Sigmoid polyp removed with hot snare.
+
+Recommendations
+Await pathology. Continue iron supplementation.

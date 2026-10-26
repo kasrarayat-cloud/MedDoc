@@ -1,0 +1,8 @@
+# Test and CI tooling only (never installed in the service image).
+# requirements-dev.txt pins these plus their dependencies on top of requirements.txt.
+-r requirements.txt
+pillow==13.0.0
+reportlab==4.5.1
+pip_audit==2.10.1
+# 4.2.1 fixes GHSA-v4x8-3wr5-3wq8, GHSA-9vhv-jxww-xfm5 and GHSA-567q-5qvw-pf92 in 4.0.0.
+filelock==4.2.1

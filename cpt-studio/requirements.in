@@ -1,0 +1,16 @@
+# Runtime dependencies of the service (the container installs requirements.txt).
+# requirements.txt is the full pinned set generated from this file in a clean
+# Python 3.12 venv; versions match the rebuild's audited pins wherever the same
+# library is used, except where a published advisory required a newer release.
+Django==5.2.17
+psycopg==3.3.5
+psycopg-binary==3.3.5
+gunicorn==23.0.0
+whitenoise==6.12.0
+argon2-cffi==25.1.0
+requests==2.34.2
+# 6.21.2 fixes GHSA-6c7f-9265-g8fw, GHSA-jr96-gvgh-j3r4 and GHSA-gmh7-3g9r-mjh5 in 6.21.1 (uploads are parsed).
+pypdf==6.21.2
+# pypdf's AES provider: without it every AES-encrypted PDF fails to open.
+cryptography==50.0.1
+python-docx==1.2.0

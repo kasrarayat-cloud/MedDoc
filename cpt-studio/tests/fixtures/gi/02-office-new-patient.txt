@@ -1,0 +1,39 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Digestive Health (fictional practice)
+New patient visit - gastroenterology consultation
+
+Patient: Jordan Okafor (fictional)
+Synthetic record: SYN-GI-1002
+Visit date: 10/22/2026
+Place of service: Office
+Referring clinician: Dr. Elena Varga, MD, Internal Medicine (fictional)
+Patient status: New patient to this practice.
+
+Chief complaint
+Chronic watery diarrhea for four months.
+
+History of present illness
+41-year-old referred for four to six loose watery stools daily for four months without blood. No nocturnal stools. Stool studies for infection were negative last month. The patient has never had a colonoscopy.
+
+Past medical/surgical history
+Hypothyroidism. Appendectomy at age 19.
+
+Examination
+Weight 68 kg, stable. Abdomen soft, mildly tender in the lower quadrants, no masses.
+
+Assessment
+Chronic non-bloody diarrhea; microscopic colitis, celiac disease and bile acid diarrhea are considered.
+
+Plan
+1. Celiac serologies, thyroid studies and fecal calprotectin today.
+2. Colonoscopy with random biopsies is recommended and will be scheduled if the laboratory work is unrevealing.
+3. Follow-up visit in 3 weeks.
+
+Medical decision making
+Moderate complexity: one undiagnosed new problem with uncertain prognosis; review of external notes and ordering of tests.
+
+Time
+Total time spent on the date of the encounter: 48 minutes.
+
+Electronically signed: Dr. Samuel Achebe, MD (fictional), 2026-10-22 16:05

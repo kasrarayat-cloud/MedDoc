@@ -1,0 +1,51 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Harborview Endoscopy Center (fictional ambulatory surgery center)
+Procedure report - upper endoscopy
+
+Patient: Elena Vasquez (fictional)
+Synthetic record: SYN-GI-0002
+Date of procedure: 2026-10-14
+Place of service: Ambulatory surgery center
+Endoscopist: Dr. Marcus Feld, MD, Gastroenterology (fictional)
+Referring clinician: Dr. Hannah Cole, MD, Internal Medicine (fictional)
+
+Procedure
+Esophagogastroduodenoscopy (EGD) with cold forceps biopsy.
+
+Indication
+Epigastric pain for three months despite a four-week trial of a proton pump inhibitor; evaluation for peptic ulcer disease and Helicobacter pylori gastritis.
+
+Consent
+The nature of the procedure, its risks (including bleeding, perforation and aspiration), benefits and alternatives were explained, and written informed consent was obtained.
+
+Sedation
+Monitored anesthesia care was provided by a separate anesthesia professional (fictional). The endoscopist did not administer sedation.
+
+Technique
+The patient was placed in the left lateral decubitus position. The gastroscope was introduced through the mouth under direct visualization and advanced through the esophagus and stomach to the second portion of the duodenum. Retroflexion was performed in the stomach. The patient tolerated the procedure well.
+
+Findings
+Esophagus: normal mucosa. The Z-line was regular at 39 cm from the incisors. No esophagitis, Barrett-appearing mucosa or stricture.
+Stomach: patchy erythema of the gastric antrum without ulceration or mass. Two cold forceps biopsies were taken from the gastric antrum for histology and Helicobacter pylori assessment. The fundus and cardia were normal on retroflexion.
+Duodenum: normal bulb and second portion.
+
+Specimens
+Gastric antrum, cold forceps biopsy, two fragments, sent to pathology.
+
+Estimated blood loss
+Minimal.
+
+Complications
+None.
+
+Impression
+1. Antral erythema; cold forceps biopsies taken from the gastric antrum.
+2. Normal esophagus and duodenum.
+
+Plan
+1. Await pathology; treat Helicobacter pylori if present.
+2. Continue the proton pump inhibitor once daily before breakfast.
+3. Office follow-up in four weeks to review the pathology results.
+
+Electronically signed: Dr. Marcus Feld, MD (fictional), 2026-10-14 10:12

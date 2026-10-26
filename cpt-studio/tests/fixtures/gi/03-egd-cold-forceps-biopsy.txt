@@ -1,0 +1,33 @@
+SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE
+
+Lakeside Ambulatory Surgery Center (fictional)
+EGD procedure report
+
+Patient: Riley Brennan (fictional)
+Synthetic record: SYN-GI-2003
+Date of procedure: 2026-10-20
+Location: Lakeside Ambulatory Surgery Center, endoscopy room 2
+Endoscopist: Dr. Mei Tanaka, MD (fictional)
+
+Procedure performed
+Esophagogastroduodenoscopy with cold forceps biopsy.
+
+Indications
+Epigastric pain and dyspepsia not responding to a proton pump inhibitor; evaluate for Helicobacter pylori gastritis.
+
+Sedation
+Monitored anesthesia care provided by the anesthesia team.
+
+Technique
+After informed consent, the gastroscope was introduced through the mouth and advanced under direct vision to the second part of the duodenum. The examination was completed without difficulty and the patient tolerated the procedure well.
+
+Findings
+The esophagus was normal; the Z-line was regular at 39 cm.
+Patchy erythema was seen in the gastric antrum. Cold forceps biopsies were obtained from the gastric antrum and gastric body for Helicobacter pylori.
+The duodenal bulb and second part of the duodenum were normal.
+
+Impression
+Antral erythema, biopsied. Normal esophagus and duodenum.
+
+Recommendations
+Await pathology. Continue the proton pump inhibitor. Follow-up office visit in 4 weeks.
