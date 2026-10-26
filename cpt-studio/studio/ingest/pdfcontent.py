@@ -1002,10 +1002,12 @@ class _TextPlacement:
         """(the advance of the whitespace glyphs ``string`` opens with, of those it closes with, of one of them, and the
         widest run of whitespace glyphs between two glyphs that draw something, less one of its glyphs: the gap padding
         inside it shows, a word space allowed), in text space as advance measures it: where its first and last glyphs
-        that draw something lie, so a gap padded with spaces is read as the gap it shows, at its ends or inside it.
-        (0, 0, 0, 0) when its font gives no widths, when it cannot be read glyph by glyph, or when every glyph is
-        whitespace. Read once per font and string (only the ends are kept, and each distinct run inside it as its glyph
-        count, its spaces, its width and its widest glyphs)."""
+        that draw something lie, so a gap padded with spaces is read as the gap it shows, at its ends or inside it. The
+        one glyph allowed as a word space is allowed at its own width (word spacing beyond it is a gap: a single space
+        word spacing widens to a column's gap shows that gap), and never wider than it is drawn. (0, 0, 0, 0) when its
+        font gives no widths, when it cannot be read glyph by glyph, or when every glyph is whitespace. Read once per
+        font and string (only the ends are kept, and each distinct run inside it as its glyph count, its spaces, its
+        width and its widest glyphs)."""
         state = self.state
         key = (id(state.font), bytes(string) if isinstance(string, bytes) else string)
         if key not in self.trims:
@@ -1024,10 +1026,9 @@ class _TextPlacement:
                         if shown.isspace():
                             run.append((width, spaced))
                         elif run:
-                            if len(run) > 1:  # one whitespace glyph alone is a word space, never a gap
-                                runs.add((len(run), sum(1 for _, s in run if s), sum(w for w, _ in run),
-                                          max((w for w, s in run if s), default=-1.0),
-                                          max((w for w, s in run if not s), default=-1.0)))
+                            runs.add((len(run), sum(1 for _, s in run if s), sum(w for w, _ in run),
+                                      max((w for w, s in run if s), default=-1.0),
+                                      max((w for w, s in run if not s), default=-1.0)))
                             run = []
                     ends = (tuple((width, spaced) for _, spaced, width in glyphs[:first]),
                             tuple((width, spaced) for _, spaced, width in glyphs[last + 1:]),
@@ -1038,16 +1039,19 @@ class _TextPlacement:
             return 0.0, 0.0, 0.0, 0.0
         advances = [[(width / 1000 * state.size + state.char_spacing + (state.word_spacing if spaced else 0.0))
                      * state.scale for width, spaced in end] for end in ends[:2]]
+        own = [(width / 1000 * state.size + state.char_spacing) * state.scale for end in ends[:2] for width, _ in end]
         inner = 0.0
         for count, spaced, total, widest_spaced, widest_other in ends[2]:
             padded = ((total / 1000 * state.size + count * state.char_spacing + spaced * state.word_spacing)
                       * state.scale)
-            one = max((widest_spaced / 1000 * state.size + state.char_spacing + state.word_spacing) * state.scale
-                      if spaced else -math.inf,
-                      (widest_other / 1000 * state.size + state.char_spacing) * state.scale
-                      if count > spaced else -math.inf)
+            space_own = (widest_spaced / 1000 * state.size + state.char_spacing) * state.scale if spaced else -math.inf
+            other_own = ((widest_other / 1000 * state.size + state.char_spacing) * state.scale if count > spaced
+                         else -math.inf)
+            drawn = max(space_own + state.word_spacing * state.scale if spaced else -math.inf, other_own)
+            one = min(max(space_own, other_own), drawn)  # one glyph at its own width, never wider than it is drawn
             inner = max(inner, padded - one)
-        return sum(advances[0]), sum(advances[1]), max(advances[0] + advances[1], default=0.0), inner
+        space = min(max(advances[0] + advances[1], default=0.0), max(own, default=0.0))
+        return sum(advances[0]), sum(advances[1]), space, inner
 
     def inked(self, string) -> bool:
         """Whether ``string`` (measured by advance) shows anything but spaces."""

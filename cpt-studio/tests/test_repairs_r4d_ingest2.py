@@ -992,6 +992,13 @@ def _padded_tails():
             'Courier, 12 spaces': (COURIER, one(' ' * 12, '/ZA 11 Tf ')),
             'Courier, 3 spaces': (COURIER, one(' ' * 3, '/ZA 11 Tf ')),
             'no-break spaces': (None, one('\xa0' * 4)), 'word spacing 3, 3 spaces': (None, one(' ' * 3, '3 Tw ')),
+            'word spacing 3, 2 spaces': (None, one(' ' * 2, '3 Tw ')),
+            'one space, word spacing 40': (None, one(' ', '40 Tw ') + ' 0 Tw'),
+            'a trailing space at word spacing 40, then a string': (None, f'40 Tw (MAC ) Tj 0 Tw ({esc(SENTENCE)}) Tj'),
+            # negative word spacing never widens the word space allowed: the gap is at least what it was
+            'word spacing -0.8, 4 spaces': (None, one(' ' * 4, '-0.8 Tw ') + ' 0 Tw'),
+            'a trailing space at word spacing -2, then a TJ number': (
+                None, f'-2 Tw (MAC ) Tj 0 Tw [-650 ({esc(SENTENCE)})] TJ'),
             'a later string padded inside': (None, f'(MAC) Tj ({esc(" was given" + " " * 8 + SENTENCE)}) Tj'),
             'no widths, after a TJ number': (None, f'[(MAC) -3000] TJ /MG 11 Tf ({esc(SENTENCE)}) Tj'),
             'no widths, right after MAC': (None, f'(MAC ) Tj /MG 11 Tf ({esc(SENTENCE)}) Tj')}
@@ -1024,14 +1031,15 @@ class PaddingInsideAStringTests(unittest.TestCase):
         self.assertNotIn('☐ MAC', text)
 
     def test_word_spaces_inside_the_string_keep_the_glyph(self):
-        """Controls: padding no wider than 0.6 em past one word space (two extra Helvetica spaces, one extra Courier
-        space, two spaces at word spacing 3), and a measured string after a font change with no gap, keep '☐ MAC'."""
+        """Controls: padding no wider than 0.6 em past one word space at its own width (two extra Helvetica spaces,
+        one extra Courier space, one space at word spacing 3), and a measured string after a font change with no gap,
+        keep '☐ MAC'."""
         from tests.test_repairs_ingest_pdf import esc
         for name, za, tail in (('Helvetica, 3 spaces', None, f'({esc("MAC   sedation given")}) Tj'),
                                ('2 no-break spaces', None, f'({esc("MAC" + chr(0xa0) * 2 + "sedation given")}) Tj'),
                                ('a space and a no-break space', None, f'({esc("MAC " + chr(0xa0) + "sedation")}) Tj'),
                                ('Courier, 2 spaces', COURIER, f'/ZA 11 Tf ({esc("MAC  sedation given")}) Tj'),
-                               ('word spacing 3, 2 spaces', None, f'3 Tw ({esc("MAC  sedation given")}) Tj'),
+                               ('word spacing 3, one space', None, f'3 Tw ({esc("MAC sedation given")}) Tj 0 Tw'),
                                ('measured, after a font change', None, f'(MAC ) Tj /F1 11 Tf ({esc("sedation")}) Tj')):
             with self.subTest(name):
                 text = extracted(column_row(tail=tail, za=za)).text

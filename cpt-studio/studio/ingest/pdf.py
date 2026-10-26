@@ -743,10 +743,9 @@ class _I2_Places:
     there (the piece opens with whitespace and no measured ink starts it), one that starts a piece no operator placed
     (pypdf reports such a piece, after a font change with no move, where earlier text of its text object began), and
     one inside a piece, lie somewhere right of where each of the piece's operators draws, on that operator's baseline.
-    A box that no piece places is left to
-    _placed_boxes' own reading. Each piece is indexed once per baseline it draws on, and its boxes are looked up by
-    the piece (_I2_boxes), so a piece drawn on many baselines costs its baselines plus its boxes, never their
-    product."""
+    A box that no piece places is left to _placed_boxes' own reading. Each piece is indexed once per baseline it draws
+    on, and its boxes are looked up by the piece (_I2_boxes), so a piece drawn on many baselines costs its baselines
+    plus its boxes, never their product."""
 
     def __init__(self, layer: '_Layer', printed: list):
         text, firsts = layer.text, sorted(layer.drawn)
