@@ -1011,3 +1011,59 @@ class Repair2CutInAPlanLineTests(Case):
             text = self.PLAN.replace('Impression: Findings as described.\n', f'{line}\n')
             with self.subTest(line=line):
                 self.assertReady(real(text, ('46600', 'Procedure: Anoscopy'))[0]['46600'])
+
+
+class Repair2LeadNamingAPlaceOrSeasonTests(Case):
+    """validation:3 still open in its class (the verifier: not fixed). The comma arm's "in" and the introductory words
+    admitted leads that name a place, a season or an event, so "In the hospital, we banded two columns, and today they
+    look healed." made 46221 READY in a follow-up note (9a9f403 held every lead). A lead now introduces the act only when
+    every word of it is a word of today's procedure's own conduct (position, consent, instrument, guidance, anesthesia,
+    today), and an introduced act counts as stated today only when today is said in its lead or in its own statement,
+    never by a predicate after its clause break ("..., and today they look healed.")."""
+
+    LEADS = ('In the hospital,', 'In the emergency department,', 'In the ER,', 'In the operating room,', 'In the spring,',
+             'This spring,', 'Then, at the hospital,', 'With the patient admitted,', 'Under anesthesia in the hospital,',
+             'In clinic,', 'In the office,', 'Through the anoscope at the hospital,', 'Using the ligator in the ER,',
+             # a conduct lead with today owned by another predicate
+             'In the left lateral position,', 'After informed consent,', 'Using the McGivney ligator,')
+
+    def test_the_claimed_leads_hold_in_a_follow_up_note(self):
+        for lead in self.LEADS:
+            line = f'{lead} we banded two columns, and today they look healed.'
+            with self.subTest(lead=lead):
+                proposals, _ = real(FOLLOW_UP.format(line=line), ('46221', line))
+                self.assertEqual(proposals['46221'].status, 'needs_clarification')
+                self.assertNotIn('Documented as performed', check_of(proposals['46221'], 'service.status').detail)
+        for line in ('In the left lateral position, we banded two columns, which look healed today.',
+                     'After informed consent, we banded two columns; today the sites are healed.'):
+            with self.subTest(line=line):
+                self.assertEqual(real(FOLLOW_UP.format(line=line), ('46221', line))[0]['46221'].status,
+                                 'needs_clarification')
+
+    def test_a_conduct_lead_whose_today_is_another_predicate_s_tells_of_the_act(self):
+        # routing may read the act's mention done by that today (an office note with no chief complaint, a banding
+        # report): the act is told of, so it corroborates nothing
+        line = 'In the left lateral position, we banded two columns, and today they look healed.'
+        for text in (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nFindings: ' + line + '\n',
+                     BANDING.format(find=line)):
+            with self.subTest(text=text[len(HEAD):len(HEAD) + 40]):
+                self.assertEqual(real(text, ('46221', line))[0]['46221'].status, 'needs_clarification')
+
+    def test_a_place_lead_introduces_nothing_in_a_banding_report(self):
+        for lead in ('In the hospital,', 'In the spring,', 'With the patient admitted,', 'In the ER,'):
+            line = f'{lead} we banded two columns.'
+            with self.subTest(lead=lead):
+                self.assertEqual(real(BANDING.format(find=line), ('46221', line))[0]['46221'].status,
+                                 'needs_clarification')
+
+    def test_controls_a_conduct_lead_with_today_in_the_act_stays_ready(self):
+        for line in ('In the left lateral position, we banded two columns today.',
+                     'After informed consent, we banded the right posterior column today.',
+                     'Under moderate sedation, we banded two columns today.',
+                     'After topical lidocaine, we banded two columns today.', 'This morning, we banded two columns.'):
+            with self.subTest(line=line):
+                self.assertReady(real(FOLLOW_UP.format(line=line), ('46221', line))[0]['46221'])
+        for line in ('In the left lateral position, we banded the right posterior column.',
+                     'Under anoscopic guidance we banded the right posterior column.'):
+            with self.subTest(line=line, layout='banding report'):
+                self.assertReady(real(BANDING.format(find=line), ('46221', line))[0]['46221'])

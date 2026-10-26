@@ -1218,18 +1218,42 @@ _V2_LEAD_CLAUSE = re.compile(r'\b(?:she|he|they|you|i|was|were|is|are|had|has|ha
 # ... and a comma-ended phrase introduces the act only when it opens with a listed introductory word (_VAL_INTRO) or
 # "in" ("In the left lateral position, we banded ..."): "At that time,", "Back then,", "On referral," introduce nothing.
 _V2_IN_LEAD = re.compile(r'[ \t]*in\b', re.A | re.I)
+# Round 4d repair 2 (validation:3, not closed in its class: "In the hospital,", "In the spring,", "With the patient
+# admitted,", "Then, at the hospital," still introduced the act): every word of the lead must be a word of today's
+# procedure's own conduct - its position, consent, instrument, guidance, anesthesia or technique, or today itself ("In
+# the left lateral position,", "After informed consent,", "Using the McGivney ligator,", "Under direct anoscopic
+# visualization,", "This morning,"). A lead holding any other word - a place, a season, an event - introduces nothing
+# (fail-closed: an unlisted word holds, as 9a9f403 held every lead).
+_V2_LEAD_WORDS = frozenset((
+    'after', 'under', 'using', 'with', 'following', 'during', 'upon', 'through', 'via', 'this', 'then', 'subsequently',
+    'in', 'next', 'now', 'the', 'a', 'an', 'her', 'his', 'their', 'our', 'its', 'both', 'all', 'of', 'and',
+    'patient', "patient's", 'patients', 'informed', 'verbal', 'written', 'consent', 'consents', 'permission',
+    'discussion', 'explanation', 'risks', 'benefits', 'alternatives', 'mcgivney', 'ligator', 'ligation', 'suction',
+    'device', 'anoscope', 'anoscopic', 'anoscopy', 'scope', 'proctoscope', 'speculum', 'retractor', 'applicator',
+    'rubber', 'band', 'bands', 'banding', 'direct', 'visualization', 'visualisation', 'visual', 'vision', 'guidance',
+    'view', 'inspection', 'illumination', 'light', 'lighting', 'standard', 'sterile', 'aseptic', 'technique',
+    'fashion', 'usual', 'careful', 'gentle', 'adequate', 'good', 'appropriate', 'routine', 'left', 'right', 'lateral',
+    'prone', 'jackknife', 'jack-knife', 'lithotomy', 'decubitus', 'supine', 'position', 'positioning', 'knee-chest',
+    'local', 'topical', 'lidocaine', 'anesthetic', 'anaesthetic', 'anesthesia', 'anaesthesia', 'sedation', 'moderate',
+    'conscious', 'mac', 'monitored', 'care', 'minimal', 'intravenous', 'iv', 'gel', 'jelly', 'today', 'morning',
+    'afternoon', 'evening', 'digital', 'rectal', 'exam', 'examination', 'dre', 'lubrication', 'lubricant', 'time-out',
+    'timeout'))
+_V2_LEAD_WORD = re.compile(r"[A-Za-z][\w'-]*", re.A)
 
 
 def _VAL_introduced(text: str, start: int, m) -> bool:
     """Whether "we" / "I" of the act ``m`` follows an introductory phrase that opens its clause at ``start``, tells no
     other occasion (_VAL_INTRO_ELSEWHEN), is no clause of its own (_V2_TIME_WORD, _V2_LEAD_CLAUSE: round 4d
-    validation:3) and acts on an object (_VAL_INTRO, or a comma-ended phrase opening with "in"; _VAL_OBJECT)."""
+    validation:3), holds only words of today's procedure's own conduct (_V2_LEAD_WORDS: round 4d repair 2) and acts on
+    an object (_VAL_INTRO, or a comma-ended phrase opening with "in"; _VAL_OBJECT)."""
     if m.start() - start > _VAL_INTRO_REACH or not _VAL_OBJECT.match(text, m.end()):
         return False
     if _VAL_INTRO_ELSEWHEN.search(text, start, m.start()):
         return False
     if _V2_TIME_WORD.search(text, start, m.start()) or _V2_LEAD_CLAUSE.search(text, start, m.start()):
         return False
+    if any(word.group(0).lower() not in _V2_LEAD_WORDS for word in _V2_LEAD_WORD.finditer(text, start, m.start())):
+        return False  # round 4d repair 2: a word of no listed kind ("In the hospital,", "This spring,")
     if _VAL_INTRO.match(text, start, m.start()):
         return True
     return text[start:m.start()].rstrip().endswith(',') and bool(_V2_IN_LEAD.match(text, start, m.start()))
@@ -1252,11 +1276,36 @@ def _VAL_stated(an, text: str, m) -> bool:
     return True
 
 
+# Where an introduced act's own statement ends: a clause mark, a dash, a conjunction or the sentence's end ("In the left
+# lateral position, we banded two columns, and today they look healed.": its today belongs to "they look healed").
+_V2_ACT_END = re.compile(r'[,;:(]|\s[-\u2013\u2014]\s|\b(?:and|but|so|then|while|whereas|although|though|because|as|'
+                         r'since|when|after|before|until|which|that)\b|\.(?=\s|$)', re.A | re.I)
+
+
+def _V2_today_of_the_act(an, text: str, m) -> bool:
+    """For an _ACT_STATED match whose "we" / "I" an introductory phrase leads (_VAL_introduced), whether today is said
+    of that act itself: in the phrase ("This morning, we banded two columns.") or in the act's own statement up to its
+    first clause break ("After informed consent we banded the right posterior column today."). A today that another
+    predicate after the break owns is not (round 4d repair 2, validation:3: "In the left lateral position, we banded
+    two columns, and today they look healed." - 9a9f403 held every introduced act). Any other act: True (its clause's
+    today is read as before). Bounded: one search from the act to its clause's end."""
+    from studio.gi import cues as words
+    from studio.gi import detect
+    if m.group(0).split()[0].lower() not in ('we', 'i'):
+        return True
+    clause = detect._clause_at(an, m.start())
+    if not (clause[0] < m.start() - _VAL_WE_LEAD or len(text[clause[0]:m.start()].split()) > 1):
+        return True  # "we" opens its clause or follows one word ("Today we banded ..."): read as before
+    stop = _V2_ACT_END.search(text, m.end(), max(m.end(), clause[1]))
+    return bool(words.TODAY.search(text, clause[0], stop.start() if stop else clause[1]))
+
+
 def _VAL_told_act(text: str, start: int, end: int, service_date: Optional[date] = None) -> bool:
     """Whether the routed name at [start, end) holds an act its sentence only tells of (_VAL_stated): routing's stated-
     act mention "hemorrhoids that were banded", read done by a findings section, names no banding done today; nor does
     a stated act whose clause tells another time (_VAL_another_time, round 5 validation:4: "Two columns were banded at
     her last visit and look healed today.", read done because its clause says today)."""
+    from studio.gi import cues as words
     from studio.gi import detect
     an = detect._analysis(text, service_date)[0]
     for m in _ACT_STATED.finditer(text, max(0, start - 12), end):
@@ -1264,6 +1313,11 @@ def _VAL_told_act(text: str, start: int, end: int, service_date: Optional[date] 
             return True
         lo, hi = an.lay.window(detect._clause_at(an, m.start()), m.start(), m.end(), detect.CLAUSE_REACH)
         if _VAL_another_time(an, lo, hi):
+            return True
+        # round 4d repair 2 (validation:3): an introduced act whose clause says today only of another predicate is told
+        # of, not stated as today's ("In the left lateral position, we banded two columns, and today they look healed.",
+        # which routing may read done by that today)
+        if words.TODAY.search(text, lo, hi) and not _V2_today_of_the_act(an, text, m):
             return True
     return False
 
@@ -1373,7 +1427,7 @@ def _VAL_text_index(text: str, service_date: Optional[date]):
         lo, hi = an.lay.window(detect._clause_at(an, m.start()), m.start(), m.end(), detect.CLAUSE_REACH)
         sentence = sentences[index]
         scope = (max(sentence[0], m.start() - detect.CLAUSE_REACH), min(sentence[1], m.end() + detect.CLAUSE_REACH))
-        if (words.TODAY.search(text, lo, hi) and not _VAL_another_time(an, lo, hi)
+        if (words.TODAY.search(text, lo, hi) and not _VAL_another_time(an, lo, hi) and _V2_today_of_the_act(an, text, m)
                 and not detect._about_a_detected_family(an, *scope, detected)):
             acts.setdefault(participle, []).append(index)
     return (tuple(s for s, _ in sentences), sentences, tuple(opening),
