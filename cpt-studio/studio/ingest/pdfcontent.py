@@ -603,9 +603,11 @@ class _Run:
     rise: float
     size: float
     width: float  # COVER_WIDTH font sizes along the baseline, text space (horizontal scaling applied)
-    # (start, end) along the baseline, text space, of each string the operator shows; then where its first and its last
-    # glyph that is not whitespace start and end, and one whitespace glyph's advance among those it opens or closes
-    # with (0 when none, or when it cannot be read glyph by glyph: then the two equal start and end)
+    # (start, end) along the baseline, text space, of each string the operator shows (the first one's start is where
+    # the operator is, or left of it); then where its first glyph that is not whitespace starts, as drawn (past the
+    # TJ numbers and the strings of spaces before it), and where its last one ends, one whitespace glyph's advance among
+    # those it opens or closes with (0 when none, or when it cannot be read glyph by glyph: then the first starts where
+    # the string does and the last ends at its end), and whether whitespace glyphs open it
     spans: tuple = ()
     font: object = field(default=None, compare=False)  # the pypdf Font that measures its strings (None: unknown)
     strings: tuple = field(default=(), compare=False)  # (start along the baseline, string) of each string it shows
@@ -822,9 +824,9 @@ class PageContent:
     struck_text: bool = False  # text kept that a line painted over it strikes through
     paint: _Paint | None = field(default=None, repr=False, compare=False)
     # (baseline, start, end, font size, where its first and last glyphs that draw something start and end, one
-    # whitespace glyph's advance among those it opens or closes with) in page space of each string an upright text
-    # operator the page shows draws, in drawing order: where text ends, which the text layer does not say (pdf.py reads
-    # the gaps around check boxes, and where printed boxes are drawn)
+    # whitespace glyph's advance among those it opens or closes with, whether whitespace opens it) in page space of each
+    # string an upright text operator the page shows draws, in drawing order: where text ends, which the text layer does
+    # not say (pdf.py reads the gaps around check boxes, and where printed boxes are drawn)
     ink: list = field(default_factory=list, repr=False, compare=False)
 
     @property
@@ -957,8 +959,10 @@ class _TextPlacement:
                 strings.append((before, item))
                 if self.inked(item):  # a string of spaces draws nothing; the first is placed where the operator is
                     lead, trail, space = self._I2_trim(item)
-                    spans.append((before if spans else min(before, 0.0), x, before + lead if lead else
-                                  (before if spans else min(before, 0.0)), x - trail, space))
+                    # its glyphs are drawn where the TJ's numbers and the strings before it put them: its first glyph
+                    # that draws past its own opening whitespace, wherever the span itself is said to start
+                    spans.append((before if spans else min(before, 0.0), x, before + lead, x - trail, space,
+                                  lead > 0.0))
             else:  # a TJ adjustment, in thousandths of a text-space unit, moves the next glyph left
                 x -= number(item) / 1000 * state.size * state.scale
             low, high = min(low, x), max(high, x)
@@ -1218,8 +1222,8 @@ class _Walker:
         a, b, c, d, e, f = run.place
         if a > 0 and d > 0 and abs(b) <= 0.01 * a and abs(c) <= 0.01 * d and _ING_widths_known(run.font):
             # upright, as pdf._origin reads pieces, and measured by the font's own widths
-            self.content.ink.extend((f, e + start * a, e + end * a, run.size * d, e + low * a, e + high * a, space * a)
-                                    for start, end, low, high, space in run.spans)
+            self.content.ink.extend((f, e + start * a, e + end * a, run.size * d, e + low * a, e + high * a, space * a,
+                                     opens) for start, end, low, high, space, opens in run.spans)
         mode = graphics.text.mode
         if verdict == 'unknown':
             self.paint.obscured = True

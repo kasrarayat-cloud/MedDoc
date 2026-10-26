@@ -935,7 +935,8 @@ class _ING_Ink:
 
     def __init__(self, ink, starts: dict, near: dict, widgets: list, layer: '_Layer | None' = None):
         # each string: (baseline, start, end, (font size, where its first and last glyphs that draw start and end, one
-        # whitespace glyph's advance among those it opens or closes with)), as PageContent.ink records it
+        # whitespace glyph's advance among those it opens or closes with, whether whitespace opens it)), as
+        # PageContent.ink records it
         self.rows = _ING_Rows((y, x, end, rest) for y, x, end, *rest in ink)
         tied: dict[float, list] = {}  # baseline of a tied piece -> where the boxes tied on it start
         for i, offset in near.items():
@@ -985,9 +986,9 @@ class _ING_Ink:
         low = bisect_left(self.tied_baselines, y - 2 * BOX_SLACK)
         high = bisect_right(self.tied_baselines, y + 2 * BOX_SLACK)
         rows_of_boxes = [boxes for _, boxes in self.tied[low:high]]
-        end, (size, _, drawn_end, space) = first[1], first[2]
+        end, (size, _, drawn_end, space, _) = first[1], first[2]
         trailing = space if drawn_end < end - 1e-9 else 0.0  # whitespace follows the last glyph drawn so far
-        for count, (start, stop, (next_size, next_low, next_high, next_space)) in enumerate(found):
+        for count, (start, stop, (next_size, next_low, next_high, next_space, opens)) in enumerate(found):
             if count >= _ING_MAX_SCAN:
                 return True
             for boxes in rows_of_boxes:  # the next box of the row starts first: the line goes on with the next option
@@ -996,9 +997,9 @@ class _ING_Ink:
                     return False
             if start - end > _ING_COLUMN_GAP * size:
                 return True
-            word_space = max(trailing, next_space if next_low > start + 1e-9 else 0.0)
+            word_space = max(trailing, next_space if opens else 0.0)
             if next_low - drawn_end - word_space > _ING_COLUMN_GAP * size:
-                return True  # the gap the glyphs show, padded with spaces
+                return True  # the gap the glyphs show (padded with spaces, or moved by a TJ's numbers)
             if stop > end:
                 end, size = stop, next_size
             if next_high > drawn_end:

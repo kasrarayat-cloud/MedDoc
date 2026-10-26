@@ -272,13 +272,14 @@ def _width(text, size=11, font='Helvetica'):
 
 
 def column_row(mac_on=False, *, dy=0.0, right=None, pad='', lead='', font='F1', left_size=11, gap=30.0, one_bt=False,
-               right_first=False, right_x=None, row_x=48.69, moderate_on=True):
+               right_first=False, right_x=None, row_x=48.69, moderate_on=True, tail=None):
     """'Sedation:  [box] Moderate  [box] MAC' (each check box 4 pt before its word; Moderate checked) in a left
     column, and the next column's ``right`` lines ([(dy, text)], default the sentence at ``dy``) starting ``gap`` pt
     after 'MAC' ends. ``pad``/``lead``: spaces drawn after 'MAC' / before the next column's text in the same string;
     ``font``: the next column's font (MG: a TrueType font without /Widths); ``one_bt``: 'MAC' and the next column's
     first line drawn in one text object; ``right_first``: the next column drawn before the left one; ``right_x``: where
-    the next column starts instead; ``row_x``: where the row of options starts."""
+    the next column starts instead; ``row_x``: where the row of options starts; ``tail``: the operators that draw
+    'MAC' and the next column, in one text object at MAC's place (instead of the lines above)."""
     from tests.test_repairs_ingest_pdf import esc
     form = Form(NOTE_HEAD)
     form.objects[23] = NO_WIDTHS
@@ -298,6 +299,9 @@ def column_row(mac_on=False, *, dy=0.0, right=None, pad='', lead='', font='F1', 
         left.append(f'BT /F1 {left_size} Tf {mac} {ROW} Td ({esc("MAC" + pad)}) Tj {start - mac} {d0} Td '
                     f'({esc(lead + t0)}) Tj ET')
         ops = ops[1:]
+    elif tail is not None:
+        left.append(f'BT /F1 {left_size} Tf {mac} {ROW} Td {tail} ET')
+        ops = []
     else:
         left.append(f'BT /F1 {left_size} Tf {mac} {ROW} Td ({esc("MAC" + pad)}) Tj ET')
     for op in (ops + left if right_first else left + ops):
@@ -809,6 +813,166 @@ class PlacementLayerCostTests(unittest.TestCase):
         result = extracted(form.build())
         self.assertNotIn(UNREAD_NOTE, result.messages)
         self.assertIn('Biopsy [ ]\nCold snare polypectomy [ ]', result.text)
+
+
+# --- verification of round 4d (critical): glyphs are read where a TJ's numbers and strings of spaces draw them -------
+
+TJ_SHAPES = {'a TJ number': '[-2400 ({})] TJ', 'a string of spaces': '[(    ) ({})] TJ',
+             'spaces and a number': '[(  ) -1200 ({})] TJ'}
+
+
+def tj_indented(shape, *, wrap, tick=True, row='snare'):
+    """A plain-text checklist in Courier 10 whose rows are indented inside their TJ by ``shape`` (TJ_SHAPES: each puts
+    the snare's '[' at x 96, where pdf.js draws it); an ink tick over the snare's (or the biopsy's) brackets; the page
+    drawn through a form XObject (``wrap``) or by itself."""
+    from tests.test_repairs_ingest_pdf import esc
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    form = Form(NOTE_HEAD, wrap=wrap)
+    form.objects[6] = COURIER
+    form.line(text_line(72, 660, 'Interventions:', font='ZA', size=10))
+    for y, item in ((650, 'Biopsy'), (640, 'Cold snare polypectomy')):
+        form.line(f'BT /ZA 10 Tf 72 {y} Td ' + TJ_SHAPES[shape].format(esc('[ ] ' + item)) + ' ET')
+    if tick:
+        y = 640 if row == 'snare' else 650
+        annotate(form, 'tick', (97, y - 2, 108, y + 7.5))
+    return form.build()
+
+
+def _shown_field(form, rect, value):
+    """A text field whose appearance shows ``value``."""
+    from tests.test_repairs_ingest_pdf import esc, stream
+    ap = form.add(stream(f'/Tx BMC q BT /Helv 10 Tf 0 g 1 2 Td ({esc(value)}) Tj ET Q EMC',
+                         f'/Type /XObject /Subtype /Form /BBox [0 0 {rect[2] - rect[0]} {rect[3] - rect[1]}] '
+                         '/Resources << /Font << /Helv 4 0 R >> >>').decode('latin-1'))
+    form.annots.append(form.add(f'<< /Type /Annot /Subtype /Widget /FT /Tx /T (Text1) /Rect [{" ".join(map(str, rect))}]'
+                                f' /F 4 /P 3 0 R /DA (/Helv 10 Tf 0 g) /V ({esc(value)}) /AP << /N {ap} 0 R >> >>'))
+    form.fields.append(form.annots[-1])
+
+
+def tj_inset(kind, *, wrap=False, shape='a TJ number'):
+    """'[  ] Biopsy' / '[  ] Cold snare polypectomy' in Helvetica 11, each drawn right of its operator by a TJ number
+    ([-1000 (...)] TJ: pdf.js puts the snare's '[' at x 83) or by a string of three spaces, with a mark inside the
+    snare's brackets: a text field showing X, an ink tick, a checked check box, a typed X, or none."""
+    from tests.test_repairs_ingest_pdf import esc
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    form = Form(NOTE_HEAD, wrap=wrap)
+    op = '[-1000 ({})] TJ' if shape == 'a TJ number' else '[(   ) ({})] TJ'
+    form.line(text_line(72, 640, 'Interventions:'))
+    for y, item in ((BIOPSY_ROW, 'Biopsy'), (SNARE_ROW, 'Cold snare polypectomy')):
+        form.line(f'BT /F1 11 Tf 72 {y} Td ' + op.format(esc('[  ] ' + item)) + ' ET')
+    x = 72 + (11.0 if shape == 'a TJ number' else 3 * _width(' '))
+    rect = (round(x + 2.9, 2), SNARE_ROW - 3, round(x + 9.3, 2), SNARE_ROW + 9)
+    if kind == 'field X':
+        _shown_field(form, rect, 'X')
+    elif kind == 'tick':
+        annotate(form, 'tick', rect)
+    elif kind == 'check box on':
+        form.checkbox('Check Box1', rect, True)
+    elif kind == 'typed X':
+        form.freetext(rect, 'X')
+    return form.build()
+
+
+def _next_column_tails():
+    """'MAC' and the next column's sentence in one text object, the sentence moved 33 pt right by a TJ number (or 22 pt
+    by a number after a string of spaces), as pdf.js draws it: a column gap the text layer does not show."""
+    from tests.test_repairs_ingest_pdf import esc
+    return {'a TJ number': f'(MAC) Tj [-3000 ({esc(SENTENCE)})] TJ',
+            'a string of spaces, then a number': f'(MAC) Tj [(    ) -2000 ({esc(SENTENCE)})] TJ',
+            'both in TJs': f'[(MAC)] TJ [-3000 ({esc(SENTENCE)})] TJ'}
+
+
+class GlyphsPastTJNumbersTests(unittest.TestCase):
+    """An operator's first glyph that draws is read where the TJ's numbers and the strings of spaces before it put it,
+    never at the operator's own place: a mark over a printed box indented that way is over it, and the next column a
+    TJ number moves past a column gap is never governed by the unchecked box before the last option."""
+
+    def test_a_tick_over_a_box_indented_inside_its_tj_is_unread(self):
+        for shape in TJ_SHAPES:
+            for wrap in (True, False):
+                with self.subTest(shape=shape, wrap=wrap):
+                    result = extracted(tj_indented(shape, wrap=wrap))
+                    self.assertEqual(result.status, 'partial', result.messages)
+                    self.assertIn(UNREAD_NOTE, result.messages)
+                    self.assertIn(f'{UNREAD} Cold snare polypectomy', result.text)
+                    self.assertIn('[ ] Biopsy', result.text)
+                    self.assertEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'held')
+
+    def test_a_mark_inside_a_box_moved_right_holds_the_item(self):
+        for shape in ('a TJ number', 'a string of spaces'):
+            for kind in ('field X', 'tick', 'check box on', 'typed X'):
+                for wrap in (False, True):
+                    with self.subTest(shape=shape, kind=kind, wrap=wrap):
+                        result = extracted(tj_inset(kind, wrap=wrap, shape=shape))
+                        self.assertEqual(result.status, 'partial', result.messages)
+                        self.assertRegex(result.text, r'\n *\[\?\] ?(☒ )?Cold snare polypectomy')
+                        self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_controls_without_a_mark_over_the_box(self):
+        """No mark, or a tick over the other row's box: the snare's printed box reads as before."""
+        for shape in TJ_SHAPES:
+            for wrap in (True, False):
+                with self.subTest(shape=shape, wrap=wrap):
+                    text = extracted(tj_indented(shape, wrap=wrap, tick=False)).text
+                    self.assertIn('[ ] Cold snare polypectomy', text)
+                    self.assertNotIn(UNREAD, text)
+                    self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                    text = extracted(tj_indented(shape, wrap=wrap, row='biopsy')).text
+                    self.assertIn(f'{UNREAD} Biopsy', text)
+                    self.assertIn('[ ] Cold snare polypectomy', text)
+                    self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+        for shape in ('a TJ number', 'a string of spaces'):
+            with self.subTest(shape=shape, kind='none'):
+                result = extracted(tj_inset('none', shape=shape))
+                self.assertEqual(result.status, 'ok', result.messages)
+                self.assertIn('[  ] Cold snare polypectomy', result.text)
+
+    def test_the_next_column_a_tj_number_moves_is_never_negated(self):
+        import re
+        for name, tail in _next_column_tails().items():
+            with self.subTest(name):
+                result = extracted(column_row(tail=tail))
+                self.assertIsNone(re.search(r'☐ MAC[^\n]', result.text), result.text)
+                self.assertIn(f'{UNREAD} MAC', result.text)
+                self.assertIn('☒ Moderate', result.text)
+                self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                text = extracted(column_row(True, tail=tail)).text  # a checked option keeps its glyph
+                self.assertIn('☒ MAC', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'ready')
+
+    def test_a_word_space_after_the_option_is_not_a_column_gap(self):
+        """Control: the sentence a word space after 'MAC' (a TJ number of one space's width) is on the option's line:
+        the unchecked box keeps its glyph there, as before."""
+        from tests.test_repairs_ingest_pdf import esc
+        for number in (-278, -500):
+            with self.subTest(number=number):
+                text = extracted(column_row(tail=f'(MAC) Tj [{number} ({esc(SENTENCE)})] TJ')).text
+                self.assertIn('Sedation: ☒ Moderate ☐ MAC', text)
+
+    def test_a_column_gap_is_not_shrunk_by_whitespace_the_next_string_closes_with(self):
+        """A TJ number of 0.7 em before a sentence that ends with a space: the gap the glyphs show is 0.7 em (only
+        whitespace a string opens with may be the word space before it)."""
+        from tests.test_repairs_ingest_pdf import esc
+        text = extracted(column_row(tail=f'(MAC) Tj [-700 ({esc(SENTENCE + " ")})] TJ')).text
+        self.assertIn(f'{UNREAD} MAC', text)
+        self.assertNotEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_an_option_written_word_by_word_with_opening_spaces_keeps_its_glyph(self):
+        """Control: in Courier, words each drawn by a string that opens with two spaces: one of them is a word space,
+        the other 0.6 em, no column gap; the unchecked box keeps '☐'."""
+        from tests.test_repairs_ingest_pdf import esc
+        form = Form(NOTE_HEAD)
+        form.objects[6] = COURIER
+        form.line(text_line(72, ROW, 'Interventions:'))
+        box = 72 + _width('Interventions:') + 8
+        form.checkbox('Check Box1', (box, ROW - 3, box + 12, ROW + 9), True)
+        form.line(text_line(box + 16, ROW, 'Biopsy'))
+        second = box + 16 + _width('Biopsy') + 10
+        form.checkbox('Check Box2', (second, ROW - 3, second + 12, ROW + 9), False)
+        strings = ' '.join(f'({esc(word)}) Tj' for word in ('Cold', '  snare', '  polypectomy'))
+        form.line(f'BT /ZA 11 Tf {second + 16} {ROW} Td {strings} ET')
+        text = extracted(form.build()).text
+        self.assertIn('☐ Cold  snare  polypectomy', text)
 
 
 if __name__ == '__main__':
