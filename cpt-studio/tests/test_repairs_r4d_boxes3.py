@@ -640,5 +640,73 @@ class StrictRowsCostTests(unittest.TestCase):
                 self.assertNotIn(result.finding('gi.colonoscopy').status, NOT_TODAY)
 
 
+# --- bounded:0 and bounded:2 -- long one-line status rows ------------------------------------------------------------
+
+class Bounded0And2LongStatusRowTests(unittest.TestCase):
+    """bounded:0 (high): status_for_span over a cited passage across a 400,000-character one-line status row read every
+    box and option per unchecked option (_B2_label_state), and the assess stage overran its 60 s (9a9f403: 11 s).
+    bounded:2 (high): each status reference's hold split and joined the whole line to keep 160 characters, and the
+    analyze stage overran (9a9f403: 8 s). Now: the row is past B3_ROW_CHARS, or its line carries more than
+    B3_LINE_MARKS marks, so it is held without being read further; a status line is indexed once for its options'
+    text (_B3_line_index, _B3_line_remark); the shown line is read once per line (_B3_shown_line). Measured through
+    the real stages on the verifiers' inputs: assess 6.5 s, analyze 3.4 s."""
+
+    def long_text(self, unit, chars):
+        return HEAD + 'Procedure: Colonoscopy\nFindings: ' + (unit * (chars // len(unit) + 1))[:chars] + '\n'
+
+    def test_a_cited_passage_across_a_long_row_is_read_in_bounded_time(self):
+        import time
+        for unit in ('Colonoscopy: ☐ Cancelled ☒ Completed ', 'Colonoscopy: ☐ Cancelled ☒ Completed. ',
+                     'Procedure completed ☒ | Procedure cancelled ☐ ', 'Procedure completed ☒ | Procedure cancelled ☐. '):
+            with self.subTest(unit=unit):
+                text = self.long_text(unit, 300000)
+                start = text.index('Findings: ') + len('Findings: ')
+                started = time.monotonic()
+                result = detect.route(text)
+                for end in (len(text.rstrip()), start + 200000):
+                    self.assertEqual(detect.status_for_span(text, start, end)[0], 'uncertain')
+                self.assertLess(time.monotonic() - started, 12.0)
+                self.assertNotIn(result.finding('gi.colonoscopy').status, NOT_TODAY)
+
+    def test_a_long_status_line_is_indexed_once(self):
+        """The remark check of a 200,000-character status line, read straight (the predicate holds such a passage before
+        it is asked): by bisection, once per line (the scan took 0.5 s at 50,000 and grows with the square)."""
+        import time
+        text = self.long_text('Colonoscopy: ☐ Cancelled ☒ Completed ', 200000)
+        an = detect._analysis(text, None)[0]
+        lo = text.index('Findings: ') + len('Findings: ')
+        hi = len(text.rstrip('\n'))
+        line = detect._B2_status_line(an, lo, hi)
+        started = time.monotonic()
+        self.assertFalse(detect._B3_line_remark(an, line, lo, hi))
+        self.assertLess(time.monotonic() - started, 1.0)
+        index = detect._B3_line_index(an, line, lo, hi)
+        for (s, e), _ in list(zip(line[1], line[2]))[:200]:  # exactly what the scan reads
+            self.assertEqual(detect._B2_option_text(line, s, e, hi, index), detect._B2_option_text(line, s, e, hi))
+
+    def test_the_label_state_of_a_long_status_line_is_linear(self):
+        """bounded:0's own reader with the predicate out of the way (it holds such a passage first): a passage across a
+        200,000-character status row, opening in its label, read by _B2_label_state in well under a second (the loop
+        over every unchecked option, each scanning every box and option, took 8.7 s at 200,000)."""
+        import time
+        from unittest import mock
+        text = self.long_text('Colonoscopy: ☐ Cancelled ☒ Completed ', 200000)
+        an = detect._analysis(text, None)[0]
+        start = text.index('Colonoscopy: ☐')
+        end = len(text.rstrip())
+        with mock.patch.object(detect, '_B3_hold', return_value=None):
+            started = time.monotonic()
+            state = detect._B2_label_state(an, start, end)
+            self.assertLess(time.monotonic() - started, 2.0)
+        self.assertEqual(state, 'across')
+
+    def test_the_shown_line_is_exact(self):
+        text = HEAD + 'Procedure: EUS\n   Procedure  completed ☒ |\tProcedure cancelled ☐   \n'
+        an = detect._analysis(text, None)[0]
+        start = text.index('Procedure  completed')
+        self.assertEqual(detect._B3_shown_line(an, start, start + 5),
+                         ' '.join(text[text.index('   Procedure  completed'):len(text) - 1].split())[:160])
+
+
 if __name__ == '__main__':
     unittest.main()

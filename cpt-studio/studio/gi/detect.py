@@ -2892,10 +2892,7 @@ def _B3_declared_box_reading(an: Analysis, start: int, end: int) -> Optional[Rea
     if state == 'off' and _box_selected_denial(an, start, end):
         # round 4c-2 box2:H: a passage naming no item that selects a "Not performed" or "Not done" option ("☒ Not
         # performed") is held, as round 5 declared:8 holds the service it follows: it names nothing it could deny
-        line_start = an.text.rfind('\n', 0, start) + 1
-        line_end = an.text.find('\n', end)
-        shown = ' '.join(an.text[line_start:len(an.text) if line_end < 0 else line_end].split())[:160]
-        return Reading('uncertain', (BOX_STATUS_OPTION.format(shown),), 'cue', doubt=True)
+        return Reading('uncertain', (BOX_STATUS_OPTION.format(_B3_shown_line(an, start, end)),), 'cue', doubt=True)
     if state == 'off' or _unchecked_state(an, start, end):
         return Reading('negated', (UNCHECKED,), 'cue')
     held = _within(fields.held, fields.held_starts, start, end) if one_line else None
@@ -2904,10 +2901,7 @@ def _B3_declared_box_reading(an: Analysis, start: int, end: int) -> Optional[Rea
     if named is not None and named.state == 'off':
         return Reading('uncertain', (FIELD_PAGE.format(named.line),), 'cue', doubt=True)
     if one_line and not _box_tokens(an, start, max(end, start + 1))[0] and _box_own_option_off(an, start, end):
-        line_start = an.text.rfind('\n', 0, start) + 1
-        line_end = an.text.find('\n', end)
-        shown = ' '.join(an.text[line_start:len(an.text) if line_end < 0 else line_end].split())[:160]
-        return Reading('uncertain', (BOX_STATUS_UNSELECTED.format(shown),), 'cue', doubt=True)
+        return Reading('uncertain', (BOX_STATUS_UNSELECTED.format(_B3_shown_line(an, start, end)),), 'cue', doubt=True)
     if state == 'on' or (one_line and _within(fields.checked, fields.checked_starts, start, end) is not None):
         return None
     pages = fields.pages
@@ -4035,28 +4029,71 @@ def _B2_option_reading(an: Analysis, start: int, end: int) -> Optional[tuple]:
     if not own:
         return None
     found = {states[i] for i in own}
-    text_lo, text_hi = _B2_option_text(line, min(options[i][0] for i in own), max(options[i][1] for i in own), hi)
+    index = _B3_line_index(an, line, lo, hi)
+    text_lo, text_hi = _B2_option_text(line, min(options[i][0] for i in own), max(options[i][1] for i in own), hi,
+                                       index)
     if found & {'unknown', 'mixed', 'unclear'}:
         return 'unknown', text_lo, text_hi
     if found == {'off'}:
-        if _B2_has_remark(an.text, line, text_lo, text_hi):
+        if _B2_has_remark(an.text, line, text_lo, text_hi, index):
             return 'remark', text_lo, text_hi
         return ('off' if selected else 'blank'), text_lo, text_hi
     return None
 
 
-def _B2_option_text(line: tuple, option_start: int, option_end: int, hi: int) -> tuple[int, int]:
+def _B2_option_text(line: tuple, option_start: int, option_end: int, hi: int,
+                    index: Optional[tuple] = None) -> tuple[int, int]:
     """[start, end) of the text of the option at [option_start, option_end) on the status line ``line``: from the box
-    before it (or the line's label) to the box after it (or the end of the window ``hi``)."""
+    before it (or the line's label) to the box after it (or the end of the window ``hi``). ``index``: the line's sorted
+    box ends and starts (_B3_line_index), read by bisection instead of a scan of every box (round 6 bounded:0)."""
     label_end, boxes = line[0], line[5]
+    if index is not None:
+        ends, starts = index[0], index[1]
+        before = bisect.bisect_right(ends, option_start)
+        after = bisect.bisect_left(starts, option_end)
+        return (max(ends[before - 1], label_end) if before else label_end,
+                starts[after] if after < len(starts) else hi)
     return (max([b[1] for b in boxes if b[1] <= option_start] + [label_end]),
             min((b[0] for b in boxes if b[0] >= option_end), default=hi))
 
 
-def _B2_has_remark(text: str, line: tuple, text_lo: int, text_hi: int) -> bool:
+def _B2_has_remark(text: str, line: tuple, text_lo: int, text_hi: int, index: Optional[tuple] = None) -> bool:
     """Whether the option text [text_lo, text_hi) of the status line ``line`` holds more than one run of option
-    words, denying or completing (_B2_option_clusters): the later run may be a remark about the service."""
+    words, denying or completing (_B2_option_clusters): the later run may be a remark about the service. ``index``:
+    the line's option words sorted (_B3_line_index), the ones in the text found by bisection (round 6 bounded:0)."""
+    if index is not None:
+        words, word_starts = index[2], index[3]
+        spans = []
+        for at in range(bisect.bisect_left(word_starts, text_lo), len(words)):
+            if words[at][0] > text_hi:
+                break
+            if words[at][1] <= text_hi:
+                spans.append(words[at])
+        return _B2_option_clusters(text, spans) > 1
     return _B2_option_clusters(text, [o for o in line[1] + line[3] if text_lo <= o[0] and o[1] <= text_hi]) > 1
+
+
+def _B3_line_remark(an: Analysis, line: tuple, lo: int, hi: int) -> bool:
+    """Whether any unchecked denying option of the status line read in [lo, hi) holds a remark in its text
+    (_B2_has_remark), as _B2_label_state asks: read once per line window, each option by bisection (round 6 bounded:0:
+    asked again for every passage, each scanning every box and every option per unchecked option)."""
+    key = ('b3-line-remark', lo, hi)
+    if key not in an.memo:
+        index = _B3_line_index(an, line, lo, hi)
+        an.memo[key] = any(_B2_has_remark(an.text, line, *_B2_option_text(line, s, e, hi, index), index)
+                           for (s, e), state in zip(line[1], line[2]) if state == 'off')
+    return an.memo[key]
+
+
+def _B3_line_index(an: Analysis, line: tuple, lo: int, hi: int) -> tuple:
+    """(box ends, box starts, option words, their starts) of the status line read in the window [lo, hi), each
+    sorted, built once per window: the option readers find an option's text and the words in it by bisection, so a
+    long status line is never rescanned per option (round 6 bounded:0: 2,699 options x every box and option)."""
+    key = ('b3-line-index', lo, hi)
+    if key not in an.memo:
+        words = sorted(set(line[1] + line[3]))
+        an.memo[key] = (sorted(b[1] for b in line[5]), sorted(b[0] for b in line[5]), words, [w[0] for w in words])
+    return an.memo[key]
 
 
 def _B2_option_clusters(text: str, spans: list) -> int:
@@ -4093,9 +4130,7 @@ def _B2_label_state(an: Analysis, start: int, end: int) -> Optional[str]:
     if line is None or start >= line[0]:
         return None
     label_end, options, states, _, done_states, _, _, _, _ = line
-    if any(state in ('unknown', 'mixed', 'unclear') for state in states + done_states) or any(
-            _B2_has_remark(an.text, line, *_B2_option_text(line, s, e, hi))
-            for (s, e), state in zip(options, states) if state == 'off'):
+    if any(state in ('unknown', 'mixed', 'unclear') for state in states + done_states) or _B3_line_remark(an, line, lo, hi):
         return 'unknown'
     if all(state == 'off' for state in states) and 'on' in done_states:
         return 'on' if max(end, start + 1) <= label_end else 'across'
@@ -4249,6 +4284,7 @@ def _B3_label_end(text: str, lo: int, first_mark: int) -> int:
 # as before, and an unread mark holds what it may govern: the entry it marks (as before), a passage across it, and the
 # label of a row of options (read by every option: round 6 declared:0, declared:3).
 B3_ROW_CHARS = 1000  # a box row longer than this is never paired: it is held (bounds the work per row)
+B3_LINE_MARKS = 64  # a line with more marks than this is never paired, row by row: held (bounds the work per line)
 _B3_ROW_HOLD = ("uncertain: the check boxes on the line '{}' cannot be paired with its entries in exactly one way, so "
                 'what they say of it is held')
 _B3_HOLD_PREFIX = _B3_ROW_HOLD.split("'")[0]
@@ -4279,6 +4315,17 @@ def _B3_words(text: str, lo: int, hi: int, limit: int) -> int:
         if count > limit:
             break
     return count
+
+
+def _B3_shown_line(an: Analysis, start: int, end: int) -> str:
+    """The line from the start of the line of ``start`` to the end of the line of ``end``, its whitespace collapsed, at
+    most 160 characters: what the status-row holds quote. Memoised per line, its bounds found by bisection (round 6
+    bounded:2: every reference of a long one-line row split and joined the whole line again to keep 160 characters)."""
+    line_start, line_end = _B3_line(an, start)[0], _B3_line(an, end)[1]
+    key = ('b3-shown', line_start, line_end)
+    if key not in an.memo:
+        an.memo[key] = ' '.join(an.text[line_start:line_end].split())[:160]
+    return an.memo[key]
 
 
 def _B3_line(an: Analysis, pos: int) -> tuple[int, int]:
@@ -4490,12 +4537,30 @@ def _B3_row(an: Analysis, start: int, end: int) -> Optional[tuple]:
         result = None
         if hi > lo and (_BOX.search(text, lo, hi) or _BOX_UNREAD.search(text, lo, hi)
                         or _BOX_RADIO.search(text, lo, hi)):
-            result = _B3_row_read(an, lo, hi)
+            result = _B3_row_read(an, lo, hi, _B3_crowded(an, line_lo, line_hi))
         an.memo[key] = result
     return an.memo[key]
 
 
-def _B3_row_read(an: Analysis, lo: int, hi: int) -> Optional[tuple]:
+_B3_MARK_GLYPH = re.compile('(?:' + _BOX_TEXT + ')|' + _BOX_UNREAD.pattern + '|' + _BOX_RADIO.pattern)
+
+
+def _B3_crowded(an: Analysis, line_lo: int, line_hi: int) -> bool:
+    """Whether the line [line_lo, line_hi) carries more than B3_LINE_MARKS marks: counted once per line, up to the cap
+    (a long one-line paste of rows is never paired row by row: each row's readers read windows across its
+    neighbours, and pairing every one would cost a window read per option)."""
+    key = ('b3-crowded', line_lo)
+    if key not in an.memo:
+        count = 0
+        for _ in _B3_MARK_GLYPH.finditer(an.text, line_lo, line_hi):
+            count += 1
+            if count > B3_LINE_MARKS:
+                break
+        an.memo[key] = count > B3_LINE_MARKS
+    return an.memo[key]
+
+
+def _B3_row_read(an: Analysis, lo: int, hi: int, crowded: bool) -> Optional[tuple]:
     text = an.text
     cue = _B3_ROW_HOLD.format(' '.join(text[lo:min(hi, lo + 640)].split())[:160])
     if hi - lo > B3_ROW_CHARS:
@@ -4504,6 +4569,8 @@ def _B3_row_read(an: Analysis, lo: int, hi: int) -> Optional[tuple]:
     unread = any(state == 'unread' for _, _, state in marks)
     if not marks or (len(marks) == 1 and not unread):
         return None
+    if crowded:  # its line carries more than B3_LINE_MARKS marks: never paired (bounded), held
+        return lo, hi, lo, False, (), tuple(marks), unread, False, cue, True, lo
     # The row's option words: denying and completion words written beside a mark (as a hold word is an option only
     # there: _box_beside_a_mark), so a remark's prose ("... polyp was performed.") names none.
     options = [o for o in _box_denying_options(an, lo, hi) + [m.span() for m in _BOX_DONE_OPTION.finditer(text, lo, hi)]
