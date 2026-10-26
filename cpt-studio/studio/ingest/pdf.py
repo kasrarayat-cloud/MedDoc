@@ -735,7 +735,9 @@ class _I2_Places:
     width, else one em for a box glyph and 0.6 em for each character of a typed box); one whose glyph cannot be found
     there (the piece opens with whitespace and no measured ink starts it), and one inside a piece, lie somewhere right
     of where each of the piece's operators draws, on that operator's baseline. A box that no piece places is left to
-    _placed_boxes' own reading."""
+    _placed_boxes' own reading. Each piece is indexed once per baseline it draws on, and its boxes are looked up by
+    the piece (_I2_boxes), so a piece drawn on many baselines costs its baselines plus its boxes, never their
+    product."""
 
     def __init__(self, layer: '_Layer', printed: list):
         text, firsts = layer.text, sorted(layer.drawn)
@@ -743,8 +745,8 @@ class _I2_Places:
         origins, placed = dict(layer.pieces), dict(layer.placed_pieces)
         ink = _ING_Rows((y, x, end, rest) for y, x, end, *rest in layer.ink)
         fonts: dict = {}
-        leftmost: dict = {}  # piece -> {baseline: where its operators on it start, leftmost}, read once per piece
         exact, inside = [], []
+        self._I2_boxes: dict = {}  # piece -> the boxes inside it (or not found where it starts), in text order
         for match in printed:
             start = match.start()
             index = bisect_right(firsts, start) - 1
@@ -760,14 +762,15 @@ class _I2_Places:
                 x = max(origin[0], record[2][1]) if record is not None else origin[0]
                 exact.append((origin[1], x, start, (x + self._width(match.group(0), font, em, record, fonts), match)))
                 continue
-            if first not in leftmost:
+            if first not in self._I2_boxes:
+                self._I2_boxes[first] = []
                 lowest: dict = {}  # baseline -> where the piece's operators on it start, leftmost
                 for position in (origin, *shows):
                     if position is not None and position[2]:
                         key = round(position[1], 2)
                         lowest[key] = min(lowest.get(key, position[0]), position[0])
-                leftmost[first] = lowest
-            inside.extend((y, x, start, match) for y, x in leftmost[first].items())
+                inside.extend((y, x, first, None) for y, x in lowest.items())
+            self._I2_boxes[first].append(match)
         self.exact, self.inside = _ING_Rows(exact), _ING_Rows(inside)
         self.widest = max((right - x for _, x, _, (right, _) in exact), default=0.0)
 
@@ -813,10 +816,11 @@ class _I2_Places:
                 if right + BOX_SLACK > x0:
                     exact.append(match)
         for row in maybe:
-            count = bisect_right(self.inside.xs[row], x1)
-            if len(exact) + len(inside) + count > _ING_MAX_SCAN:
-                return None
-            inside.extend(item[2] for item in self.inside.rows[row][:count])
+            for position in range(bisect_right(self.inside.xs[row], x1)):  # the pieces drawing on it from x1 or left
+                boxes = self._I2_boxes[self.inside.rows[row][position][1]]
+                if len(exact) + len(inside) + len(boxes) > _ING_MAX_SCAN:  # each piece adds a box at least: bounded
+                    return None
+                inside.extend(boxes)
         return exact, inside
 
 

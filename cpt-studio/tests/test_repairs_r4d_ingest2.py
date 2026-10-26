@@ -721,5 +721,95 @@ class Extraction4OverlapWordingTests(unittest.TestCase):
         self.assertIn('☐ Biopsy\n☒ Cold snare polypectomy', result.text)
 
 
+# --- verification of round 4d (high): the placement layer costs what the readings before it cost ---------------------
+
+def stacked_boxes(count, *, step='0.01', tick=(500, 80, 510, 92)):
+    """'Checklist:' then ``count`` typed '[ ]' boxes in one text object, each drawn 0.02 pt right of and ``step`` pt
+    below the one before, so pypdf joins them into one line and one piece drawn on ``count`` baselines (``step`` None:
+    every box in the one string that shows 'Checklist:', one operator); an ink tick at ``tick``, by default at the page
+    foot, far from every box."""
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    form = Form(NOTE_HEAD)
+    if step is None:
+        form.line(text_line(72, 600, 'Checklist:' + ' [ ]' * count, size=1))
+    else:
+        form.line('BT /F1 11 Tf 72 600 Td (Checklist:) Tj ' + f'0.02 -{step} Td ([ ]) Tj ' * count + 'ET')
+    form.line(text_line(72, 200, 'Cold snare polypectomy of the sigmoid polyp was performed.'))
+    annotate(form, 'tick', tick)
+    return form.build()
+
+
+class PlacementLayerCostTests(unittest.TestCase):
+    """Where printed boxes are drawn is read once per piece and baseline: a piece of page text drawn on thousands of
+    baselines (each operator a hundredth of a point lower) costs about what the same boxes on one baseline cost, and
+    a page under the limits is never failed for memory."""
+
+    def _placement_time(self, data):
+        import gc
+        import time
+
+        from studio.ingest import pdf as pdf_module
+        from tests.test_repairs_r4_ingest import placement_inputs
+        layer, annotations = placement_inputs(data)
+        best = text = None
+        for _ in range(3):  # the best of three, each after a collection: a timing, not the collector's
+            gc.collect()
+            started = time.monotonic()
+            text = pdf_module._placed_boxes(layer, annotations)[0]
+            elapsed = time.monotonic() - started
+            best = elapsed if best is None else min(best, elapsed)
+        return best, text
+
+    def test_a_piece_on_many_baselines_costs_what_one_baseline_costs(self):
+        """Against the same boxes in one string (one operator, one baseline): drawn by an operator each on one
+        baseline, or on a baseline each."""
+        one, text = self._placement_time(stacked_boxes(1000, step=None))
+        self.assertEqual(text.count('[ ]'), 1000)
+        flat, text = self._placement_time(stacked_boxes(1000, step='0'))
+        self.assertEqual(text.count('[ ]'), 1000)
+        self.assertLess(flat, 3 * one + 0.1, (flat, one))
+        many, text = self._placement_time(stacked_boxes(1000))
+        self.assertEqual(text.count('[ ]'), 1000)  # the tick is far from every box
+        self.assertLess(many, 3 * one + 0.1, (many, one))
+        # a tick over the band those baselines fill: too many rows to read, so every printed box on the page is unread
+        crossed, text = self._placement_time(stacked_boxes(1000, tick=(200, 591, 210, 598)))
+        self.assertEqual(text.count(UNREAD), 1000)
+        self.assertLess(crossed, 3 * one + 0.1, (crossed, one))
+
+    def test_the_page_is_read_within_the_limits(self):
+        result = extracted(stacked_boxes(3000))
+        self.assertEqual(result.status, 'ok', result.messages)
+        self.assertEqual(result.text.count('[ ]'), 3000)
+
+    def test_too_many_boxes_under_one_mark_leave_every_printed_box_unread(self):
+        """The bound is the boxes a mark may lie over, counted per piece: a tick over a line pypdf joined from another
+        column whose piece holds more than _ING_MAX_SCAN typed boxes leaves every printed box on the page unread (the
+        snare's row too); one whose piece holds fewer leaves those boxes alone unread."""
+        from tests.test_repairs_r4c_ingest_marks import annotate
+        for count, snare in ((66, f'{UNREAD} Cold snare polypectomy'), (40, '[ ] Cold snare polypectomy')):
+            with self.subTest(count=count):
+                form = Form(NOTE_HEAD)
+                form.line(text_line(72, ROW - 2, 'Details', size=5))
+                form.line(text_line(150, ROW, 'Interventions: ' + ' '.join(['[ ]'] * count), size=5))
+                form.line(text_line(72, 600, '[ ] Cold snare polypectomy'))
+                x = 150 + _width('Interventions: ', 5)
+                annotate(form, 'tick', (x + 0.2, ROW - 0.5, x + 4.5, ROW + 5))  # above the line start's baseline
+                result = extracted(form.build())
+                self.assertIn(UNREAD_NOTE, result.messages)
+                self.assertEqual(result.text.count(UNREAD), count + (count == 66))
+                self.assertIn(snare, result.text)
+
+    def test_a_mark_left_of_a_line_is_not_over_the_boxes_inside_it(self):
+        """Control: a pen tick in the margin, left of where a line starts, on its baseline, is over none of the boxes
+        inside that line's piece of text (they lie right of where it draws)."""
+        from tests.test_repairs_r4c_ingest_marks import annotate
+        form = Form(NOTE_HEAD)
+        form.line(text_line(72, 620, 'Biopsy [ ]')).line(text_line(72, 600, 'Cold snare polypectomy [ ]'))
+        annotate(form, 'tick', (40, 597, 52, 609))
+        result = extracted(form.build())
+        self.assertNotIn(UNREAD_NOTE, result.messages)
+        self.assertIn('Biopsy [ ]\nCold snare polypectomy [ ]', result.text)
+
+
 if __name__ == '__main__':
     unittest.main()
