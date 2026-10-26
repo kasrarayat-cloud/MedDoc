@@ -43,10 +43,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 # collectstatic imports settings, which require a secret. This value exists for
 # this one step only; it is not in the image environment and signs nothing.
-# It also writes with the upload modes (0700/0600), which would leave the
-# public assets unreadable by the application user: make them root-owned 0755/0644.
+# It also writes with the upload modes (0700/0600), and COPY keeps the build
+# context's own modes (an archive extracted under umask 077 has 0700
+# directories). Either would leave code or assets unreadable by the application
+# user: make all of /app root-owned 0755/0644.
 RUN CPT_STUDIO_SECRET_KEY=collectstatic-build-step-only python manage.py collectstatic --noinput \
-    && chmod -R u=rwX,go=rX staticfiles
+    && chmod -R u=rwX,go=rX /app
 
 # Declared last so a new revision reuses every layer above.
 ARG REVISION=development-unrecorded

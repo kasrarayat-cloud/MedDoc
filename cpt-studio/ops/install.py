@@ -1586,6 +1586,11 @@ def extract_archive(data: bytes, destination: Path):
             if not (member.isfile() or member.isdir()):
                 raise InstallError(f'Unexpected member type in the source archive: {member.name!r}.')
         archive.extractall(destination, filter='data')
+    # The 'data' filter does not apply directory modes, so under main()'s umask 077 every directory came out
+    # 0700, Docker's COPY kept it, and the image user could not enter /app (the first image phase, 2026-10-26).
+    # Directories get git's 0755; the filter already gives files the archive's 0644/0755.
+    for directory, _, _ in os.walk(destination / APP):
+        os.chmod(directory, 0o755)
 
 
 def phase_image(ctx) -> dict:

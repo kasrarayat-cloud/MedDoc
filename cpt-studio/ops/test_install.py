@@ -613,6 +613,12 @@ class DockerArgumentTests(unittest.TestCase):
         self.assertIn(f'install -d -o {uid} -g {uid} -m 0700 /var/lib/cpt-studio', dockerfile)
         self.assertNotEqual(uid, 10001)
 
+    def test_image_makes_all_of_app_readable_after_copying_the_context(self):
+        # COPY keeps the context's modes; the first install's 0700 directories reached the image this way.
+        dockerfile = (DEPLOY / 'Dockerfile').read_text()
+        after_copy = dockerfile[dockerfile.index('COPY . .'):dockerfile.index('USER ')]
+        self.assertIn('chmod -R u=rwX,go=rX /app', after_copy)
+
     def test_database_container(self):
         argv = install.db_args()
         self.assertEqual(argv[-1], install.POSTGRES_IMAGE)
@@ -758,6 +764,19 @@ class ArchiveTests(TemporaryDirectoryTest):
     def test_safe_archive_extracts(self):
         install.extract_archive(self.archive([('cpt-studio', 'dir'), ('cpt-studio/a.py', 'file')]), self.tmp)
         self.assertEqual((self.tmp / 'cpt-studio' / 'a.py').read_bytes(), b'ok')
+
+    def test_directories_are_0755_under_the_installers_umask(self):
+        # main() runs under umask 077, and the 'data' filter leaves directory modes to it: every directory
+        # came out 0700 and the image user could not enter /app. The implicit parent is the case git archive
+        # never lists explicitly in a test, so it is covered too.
+        previous = os.umask(0o077)
+        try:
+            install.extract_archive(self.archive([('cpt-studio', 'dir'), ('cpt-studio/pkg/a.py', 'file')]), self.tmp)
+        finally:
+            os.umask(previous)
+        for relative in ('cpt-studio', 'cpt-studio/pkg'):
+            self.assertEqual(stat.S_IMODE((self.tmp / relative).stat().st_mode), 0o755, relative)
+        self.assertEqual(stat.S_IMODE((self.tmp / 'cpt-studio' / 'pkg' / 'a.py').stat().st_mode), 0o644)
 
     def test_unsafe_archives_are_refused(self):
         for members in ([('cpt-studio/../x', 'file')], [('/abs/x', 'file')], [('other/x', 'file')],
