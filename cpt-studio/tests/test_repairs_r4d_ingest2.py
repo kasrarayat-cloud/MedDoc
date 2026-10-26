@@ -272,17 +272,20 @@ def _width(text, size=11, font='Helvetica'):
 
 
 def column_row(mac_on=False, *, dy=0.0, right=None, pad='', lead='', font='F1', left_size=11, gap=30.0, one_bt=False,
-               right_first=False, right_x=None, row_x=48.69, moderate_on=True, tail=None):
+               right_first=False, right_x=None, row_x=48.69, moderate_on=True, tail=None, za=None):
     """'Sedation:  [box] Moderate  [box] MAC' (each check box 4 pt before its word; Moderate checked) in a left
     column, and the next column's ``right`` lines ([(dy, text)], default the sentence at ``dy``) starting ``gap`` pt
     after 'MAC' ends. ``pad``/``lead``: spaces drawn after 'MAC' / before the next column's text in the same string;
     ``font``: the next column's font (MG: a TrueType font without /Widths); ``one_bt``: 'MAC' and the next column's
     first line drawn in one text object; ``right_first``: the next column drawn before the left one; ``right_x``: where
     the next column starts instead; ``row_x``: where the row of options starts; ``tail``: the operators that draw
-    'MAC' and the next column, in one text object at MAC's place (instead of the lines above)."""
+    'MAC' and the next column, in one text object at MAC's place (instead of the lines above); ``za``: the font object
+    named /ZA (default Zapf Dingbats)."""
     from tests.test_repairs_ingest_pdf import esc
     form = Form(NOTE_HEAD)
     form.objects[23] = NO_WIDTHS
+    if za is not None:
+        form.objects[6] = za
     x = row_x
     left = [text_line(x, ROW, 'Sedation:', size=left_size)]
     first = x + _width('Sedation:', left_size) + 8
@@ -973,6 +976,79 @@ class GlyphsPastTJNumbersTests(unittest.TestCase):
         form.line(f'BT /ZA 11 Tf {second + 16} {ROW} Td {strings} ET')
         text = extracted(form.build()).text
         self.assertIn('☐ Cold  snare  polypectomy', text)
+
+
+# --- verification of round 4d (critical): padding inside one string, and a next column the page cannot measure --------
+
+def _padded_tails():
+    """(the /ZA font, the operators that draw 'MAC' and the next column at MAC's place): one string padded with
+    spaces, no-break spaces or word spacing, a later string of the line padded inside, or the next column in a font
+    without widths in MAC's text object (pypdf reports it at the text object's last move, where MAC's ink starts)."""
+    from tests.test_repairs_ingest_pdf import esc
+    one = lambda pad, prefix='': f'{prefix}({esc("MAC" + pad + SENTENCE)}) Tj'  # noqa: E731
+    return {'Helvetica, 25 spaces': (None, one(' ' * 25)), 'Helvetica, 4 spaces': (None, one(' ' * 4)),
+            'Courier, 12 spaces': (COURIER, one(' ' * 12, '/ZA 11 Tf ')),
+            'Courier, 3 spaces': (COURIER, one(' ' * 3, '/ZA 11 Tf ')),
+            'no-break spaces': (None, one('\xa0' * 4)), 'word spacing 3, 3 spaces': (None, one(' ' * 3, '3 Tw ')),
+            'a later string padded inside': (None, f'(MAC) Tj ({esc(" was given" + " " * 8 + SENTENCE)}) Tj'),
+            'no widths, after a TJ number': (None, f'[(MAC) -3000] TJ /MG 11 Tf ({esc(SENTENCE)}) Tj'),
+            'no widths, right after MAC': (None, f'(MAC ) Tj /MG 11 Tf ({esc(SENTENCE)}) Tj')}
+
+
+class PaddingInsideAStringTests(unittest.TestCase):
+    """The gap padding shows inside one string (less one whitespace glyph, a word space) is a gap between the glyphs
+    drawn, and a next column set in a font the page does not measure is text the box cannot be sure it governs: an
+    unchecked box before 'MAC' writes '[?]', never '☐' before the other column."""
+
+    def test_the_next_column_after_padding_or_unmeasured_is_never_negated(self):
+        import re
+        for name, (za, tail) in _padded_tails().items():
+            with self.subTest(name):
+                result = extracted(column_row(tail=tail, za=za))
+                self.assertIsNone(re.search(r'☐ MAC[^\n]', result.text), result.text)
+                self.assertIn(f'{UNREAD} MAC', result.text)
+                self.assertIn('☒ Moderate', result.text)
+                self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                text = extracted(column_row(True, tail=tail, za=za)).text  # a checked option keeps its glyph
+                self.assertIn('☒ MAC', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'ready')
+
+    def test_a_next_column_in_a_font_the_page_does_not_have_is_unread(self):
+        """The next column in MAC's text object set in a font the page's resources do not hold (nothing measures it):
+        '[?] MAC'."""
+        from tests.test_repairs_ingest_pdf import esc
+        text = extracted(column_row(tail=f'[(MAC) -3000] TJ /XX 11 Tf ({esc(SENTENCE)}) Tj')).text
+        self.assertIn(f'{UNREAD} MAC', text)
+        self.assertNotIn('☐ MAC', text)
+
+    def test_word_spaces_inside_the_string_keep_the_glyph(self):
+        """Controls: padding no wider than 0.6 em past one word space (two extra Helvetica spaces, one extra Courier
+        space, two spaces at word spacing 3), and a measured string after a font change with no gap, keep '☐ MAC'."""
+        from tests.test_repairs_ingest_pdf import esc
+        for name, za, tail in (('Helvetica, 3 spaces', None, f'({esc("MAC   sedation given")}) Tj'),
+                               ('2 no-break spaces', None, f'({esc("MAC" + chr(0xa0) * 2 + "sedation given")}) Tj'),
+                               ('a space and a no-break space', None, f'({esc("MAC " + chr(0xa0) + "sedation")}) Tj'),
+                               ('Courier, 2 spaces', COURIER, f'/ZA 11 Tf ({esc("MAC  sedation given")}) Tj'),
+                               ('word spacing 3, 2 spaces', None, f'3 Tw ({esc("MAC  sedation given")}) Tj'),
+                               ('measured, after a font change', None, f'(MAC ) Tj /F1 11 Tf ({esc("sedation")}) Tj')):
+            with self.subTest(name):
+                text = extracted(column_row(tail=tail, za=za)).text
+                self.assertIn('Sedation: ☒ Moderate ☐ MAC', text)
+
+    def test_an_item_and_its_detail_in_one_padded_string(self):
+        """The item's own detail padded inside its string ('Biopsy        Site: sigmoid colon') cannot be told from
+        another column: held (a declared over-hold); two spaces are a word space and keep '☐'; checked keeps '☒'."""
+        from tests.test_repairs_ingest_pdf import esc
+        for spaces, on, expected, outcome in ((8, False, f'{UNREAD} Biopsy', 'held'), (2, False, '☐ Biopsy', 'excluded'),
+                                              (8, True, '☒ Biopsy', 'ready')):
+            with self.subTest(spaces=spaces, on=on):
+                form = Form(NOTE_HEAD)
+                form.line(text_line(72, 640, 'Interventions:'))
+                form.checkbox('Check Box1', (72, 617, 84, 629), on)
+                form.line(f'BT /F1 11 Tf 88 620 Td ({esc("Biopsy" + " " * spaces + "Site: sigmoid colon")}) Tj ET')
+                text = extracted(form.build()).text
+                self.assertIn(expected, text)
+                self.assertEqual(codes(text, ('45380', 'Biopsy'))[0], outcome)
 
 
 if __name__ == '__main__':

@@ -947,6 +947,7 @@ class _ING_Ink:
         self.offsets = [offset for offset, _ in layer.pieces] if layer is not None else []
         self.origins = [origin for _, origin in layer.pieces] if layer is not None else []
         self.stops: set = set()  # offsets of the pieces a box is written before (set by _placed_boxes)
+        self._I2_fonts: dict = {}  # id(font dict) -> whether the page measures text set in it (_I2_measured)
 
     def left_gap(self, w, baseline: float) -> float | None:
         """How far right of the end of the text nearest to its left, on the row at ``baseline``, the box starts; None
@@ -981,14 +982,16 @@ class _ING_Ink:
         first = next(found, None)
         if first is None or first[0] > x + BOX_SLACK:
             return True  # the piece's text is not where the layer puts it
+        end, (size, _, drawn_end, space, _, inner) = first[1], first[2]
+        if inner > _ING_COLUMN_GAP * size:
+            return True  # padding inside the string the box is tied to: a gap between the glyphs drawn
         if self.layer is not None and self._I2_alone(offset):
             return False  # the line is one string alone: ink beyond it on the row is another line's
         low = bisect_left(self.tied_baselines, y - 2 * BOX_SLACK)
         high = bisect_right(self.tied_baselines, y + 2 * BOX_SLACK)
         rows_of_boxes = [boxes for _, boxes in self.tied[low:high]]
-        end, (size, _, drawn_end, space, _) = first[1], first[2]
         trailing = space if drawn_end < end - 1e-9 else 0.0  # whitespace follows the last glyph drawn so far
-        for count, (start, stop, (next_size, next_low, next_high, next_space, opens)) in enumerate(found):
+        for count, (start, stop, (next_size, next_low, next_high, next_space, opens, inner)) in enumerate(found):
             if count >= _ING_MAX_SCAN:
                 return True
             for boxes in rows_of_boxes:  # the next box of the row starts first: the line goes on with the next option
@@ -1000,6 +1003,8 @@ class _ING_Ink:
             word_space = max(trailing, next_space if opens else 0.0)
             if next_low - drawn_end - word_space > _ING_COLUMN_GAP * size:
                 return True  # the gap the glyphs show (padded with spaces, or moved by a TJ's numbers)
+            if inner > _ING_COLUMN_GAP * next_size:
+                return True  # padding inside a later string of the line
             if stop > end:
                 end, size = stop, next_size
             if next_high > drawn_end:
@@ -1048,11 +1053,28 @@ class _ING_Ink:
             origin = self.origins[index]
             if origin is None or strays([origin, *layer.drawn.get(start, ((),))[0]]):
                 return True
+            if not self._I2_measured(layer.drawn.get(start)):
+                return True  # a font that gives no widths: where the piece is drawn, past a gap or not, is unknown
             rows = self.rows.around(origin[1], origin[1])
             if rows is None or not any(len(self.rows.span(row, origin[0] - BOX_SLACK, origin[0] + BOX_SLACK))
                                        for row in rows):
                 return True  # no measured text where the piece starts
         return False
+
+    def _I2_measured(self, drawn) -> bool:
+        """Whether a piece (its _Layer.drawn entry) is set in a font the page measures, as PageContent.ink is: one that
+        gives its glyphs' widths. pypdf reports a piece that follows another in its text object (after a font change,
+        no move) at the place the text object was last moved to, which another piece's ink may start at; a piece whose
+        own ink is never recorded is not read there. Read once per font."""
+        font = drawn[2] if drawn else None
+        if font is None:
+            return False
+        if id(font) not in self._I2_fonts:
+            try:
+                self._I2_fonts[id(font)] = pdfcontent._ING_widths_known(Font.from_font_resource(font))
+            except Exception:
+                self._I2_fonts[id(font)] = False
+        return self._I2_fonts[id(font)]
 
     def _from(self, row: int, position: int):
         """The ink of ``row`` from ``position`` on, in x order."""
