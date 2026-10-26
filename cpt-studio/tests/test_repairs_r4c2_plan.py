@@ -695,9 +695,13 @@ class PlanD2ReachDenialTests(unittest.TestCase):
                 self.assertEqual(extent_of(report('EGD', UPPER_PROSE, label), 'gi.egd')[:2], ('incomplete', 'incomplete: esophagus'))
 
     def test_a_label_short_of_the_expected_depth(self):
-        # a shallower prose landmark never decides against a refused label, short of the cecum or not
+        # a shallower prose landmark never decides against a refused label, short of the cecum or not; round 4d
+        # sections:1 (second round): but a refused label short of the cecum is no reason to withhold - reached and no
+        # further, or not reached at all, the procedure is incomplete - so it reads incomplete at its own landmark, as
+        # every base reads it (this pin read ('performed', None): a [PASS] 'Documented as performed' for an incomplete
+        # colonoscopy)
         text = report('Colonoscopy', COLON_PROSE, 'Extent: transverse colon; no biopsies taken')
-        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('performed', None))
+        self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: transverse colon'))
         text = report('Colonoscopy', COLON_PROSE, 'Extent: transverse colon; not reached')
         self.assertEqual(extent_of(text, 'gi.colonoscopy')[:2], ('incomplete', 'incomplete: rectum'))
         # a deeper prose landmark still does, and one as deep as the label's

@@ -910,5 +910,102 @@ class S2R2Regression3ShallowCutLabelTests(unittest.TestCase):
         self.assertEqual(extent_status(text, 'gi.egd'), ('performed', None))  # at the depth called for: withheld
 
 
+# --- sections:1 (second round): an extent label short of the depth called for keeps the procedure incomplete ----------
+
+S1R2_TECH = 'Technique: The colonoscope was inserted into the rectum and advanced.'
+S1R2_EGD = 'Technique: The gastroscope was passed into the esophagus.'
+
+
+def s1r2_note(label, technique=S1R2_TECH, extra=''):
+    return (HEADER + 'Procedure: Colonoscopy\nIndication: Screening.\n' + technique + '\n' + label + '\nFindings: Sigmoid '
+            'diverticulosis.' + extra + '\nImpression: Sigmoid diverticulosis.\n')
+
+
+def s1r2_egd(label):
+    return (HEADER + 'Procedure: EGD with biopsy\n' + S1R2_EGD + '\n' + label + '\nFindings: Gastritis. Biopsies were taken '
+            'from the antrum.\nImpression: Gastritis.\n')
+
+
+class S2R2Sections1ShallowLabelTests(unittest.TestCase):
+    """sections:1, second round (high, the verifier's new problem 2) - the first round's rule sent a label refused for an
+    onward rest ("not advanced further", "not advanced beyond the <its own landmark>") to plan:D2's doubted list, and a
+    doubted label withheld the extent whatever its depth: "Extent: transverse colon; not advanced further due to looping"
+    beside "The colonoscope was inserted into the rectum" read performed with the extent withheld (a [PASS] 'Documented as
+    performed', no service.incomplete), though every base reads 'incomplete: transverse colon' (HEAD 'incomplete:
+    rectum'). A doubted label short of the depth the procedure calls for now reads the procedure incomplete at its own
+    landmark - reached and no further, or not reached at all, the procedure is incomplete - the bases' reading; plan:D2's
+    other doubts on such a label ("; no biopsies taken", "; prep fair?") read so too, where HEAD withheld. A label at or
+    beyond that depth still withholds; a reach denial, or a denial of the label's landmark elsewhere in the family's text,
+    still lets the shallower prose landmark decide."""
+
+    SHALLOW = ('sigmoid colon', 'descending colon', 'splenic flexure', 'transverse colon', 'hepatic flexure', 'ascending colon')
+    ONWARD = ('not advanced further', 'not advanced further due to looping', 'could not be advanced any further',
+              'scope not advanced farther due to angulation', 'not advanced beyond the {}',
+              'not advanced past the {} due to a stricture', 'not advanced further, cecum not reached')
+
+    def test_the_verifiers_inputs(self):
+        for label, extent in (
+                ('Extent: transverse colon; not advanced further due to looping', 'incomplete: transverse colon'),
+                ('Extent: transverse colon; not advanced past the transverse colon due to a stricture',
+                 'incomplete: transverse colon'),
+                ('Extent: transverse colon; not advanced further, cecum not reached', 'incomplete: transverse colon'),
+                ('Extent reached: splenic flexure; scope not advanced farther', 'incomplete: splenic flexure'),
+                ('Extent: sigmoid colon; not advanced further due to a stricture', 'incomplete: sigmoid colon'),
+                ('Extent: descending colon; scope not advanced farther due to angulation', 'incomplete: descending colon'),
+                ('Extent: splenic flexure; not advanced beyond the splenic flexure due to looping',
+                 'incomplete: splenic flexure')):
+            text = s1r2_note(label)
+            with self.subTest(label=label):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', extent))
+                proposal = run_engine(text, [('45378', 'Procedure: Colonoscopy')])['45378']
+                self.assertEqual(checks(proposal).get('service.incomplete'), 'warn')
+        text = s1r2_egd('Extent: stomach; not advanced further due to a pyloric stricture')
+        self.assertEqual(extent_status(text, 'gi.egd'), ('incomplete', 'incomplete: stomach'))
+        proposal = run_engine(text, [('43239', 'Biopsies were taken from the antrum.')])['43239']
+        self.assertEqual(checks(proposal).get('service.incomplete'), 'warn')
+
+    def test_every_onward_rest_on_every_shallow_label(self):
+        for landmark in self.SHALLOW:
+            for rest in self.ONWARD:
+                text = s1r2_note('Extent: ' + landmark + '; ' + rest.format(landmark))
+                with self.subTest(landmark=landmark, rest=rest):
+                    self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: ' + landmark))
+
+    def test_plan_d2s_other_doubts_on_a_shallow_label(self):
+        """The bases' reading, where HEAD withheld the extent of an incomplete colonoscopy."""
+        for rest in ('no biopsies taken', 'prep fair?', 'consent not signed', 'polypectomy not performed'):
+            for landmark in ('transverse colon', 'hepatic flexure'):
+                text = s1r2_note('Extent: ' + landmark + '; ' + rest)
+                with self.subTest(rest=rest, landmark=landmark):
+                    self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: ' + landmark))
+        self.assertEqual(extent_status(s1r2_egd('Extent: stomach; prep fair?'), 'gi.egd'), ('incomplete', 'incomplete: stomach'))
+        # two such labels: the deepest decides
+        text = s1r2_note('Extent: transverse colon; prep fair?\nFurthest extent reached: hepatic flexure; no biopsies taken')
+        self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: hepatic flexure'))
+
+    def test_a_reach_denial_or_a_denial_elsewhere_lets_the_prose_decide(self):
+        for label, extra in (('Extent: transverse colon; not reached', ''),
+                             ('Extent: transverse colon; not advanced beyond the sigmoid colon', ''),
+                             ('Extent: hepatic flexure; not advanced further than the splenic flexure', ''),
+                             ('Extent: transverse colon; could not be advanced to the transverse colon', ''),
+                             ('Extent: transverse colon; no biopsies taken', ' The transverse colon was not reached.'),
+                             ('Extent: transverse colon; not advanced further', ' The splenic flexure could not be reached.')):
+            text = s1r2_note(label, extra=extra)
+            with self.subTest(label=label, extra=extra):
+                self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: rectum'))
+
+    def test_a_label_at_the_depth_called_for_still_withholds(self):
+        self.assertEqual(extent_status(s1r2_note('Extent: cecum; not advanced further due to looping'), 'gi.colonoscopy'),
+                         ('performed', None))
+        for label in ('Extent: D2; not advanced further', 'Extent: duodenal bulb; not advanced past the duodenal bulb'):
+            with self.subTest(label=label):
+                self.assertEqual(extent_status(s1r2_egd(label), 'gi.egd'), ('performed', None))
+
+    def test_a_deeper_prose_landmark_still_decides(self):
+        text = s1r2_note('Extent: transverse colon; not advanced further',
+                         'Technique: The colonoscope was advanced to the hepatic flexure.')
+        self.assertEqual(extent_status(text, 'gi.colonoscopy'), ('incomplete', 'incomplete: hepatic flexure'))
+
+
 if __name__ == '__main__':
     unittest.main()

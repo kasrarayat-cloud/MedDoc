@@ -3896,6 +3896,23 @@ def _P2_doubted_withholds(doubted: list, hits: list, depth: int) -> bool:
     return any(hit[0] > depth and not any(depth < other[0] <= hit[0] for other in outside) for hit in doubted)
 
 
+def _S2_doubted_short(doubted: list, hits: list, depth: int, expected: int) -> tuple[bool, Optional[tuple]]:
+    """(withhold, label) for the extent labels plan:D refuses for no reach denial (``doubted``) beside ``depth``, the
+    deepest landmark read as reached, short of ``expected``, the depth the procedure calls for. A label counts when it
+    lies deeper than ``depth`` and the family's text outside its own sentence denies no landmark between the two
+    (_P2_doubted_withholds' guard). One at or beyond ``expected`` withholds the extent (plan:D2: it may be the extent
+    reached); otherwise the deepest one short of ``expected`` is returned: both of its readings - reached and no
+    further, or not reached at all - leave the procedure incomplete, so it reads the procedure incomplete at its own
+    landmark, as every base reads it (round 4d sections:1, second round: withholding it erased the incompleteness its
+    depth establishes - "Extent: transverse colon; not advanced further due to looping" beside "The colonoscope was
+    inserted into the rectum" read performed). Neither when none counts."""
+    outside = _P2_outside(hits, doubted)
+    clear = [hit for hit in doubted if hit[0] > depth and not any(depth < other[0] <= hit[0] for other in outside)]
+    if any(hit[0] >= expected for hit in clear):
+        return True, None
+    return False, max(clear, key=lambda hit: hit[0], default=None)
+
+
 def _P2_outside(hits: list, doubted: list) -> list:
     """The landmark hits whose clause does not start inside a doubted label's own sentence after its landmark (round
     4c-2 plan:D2): that sentence is read by the closed list of reach denials alone ("Extent: cecum; no view of the cecum
@@ -5072,8 +5089,11 @@ def _colon_extent(an: Analysis, sentences) -> Optional[Fact]:
     if depth < cues.CECUM_DEPTH:
         if _P2_unread_reaches(unread, cues.CECUM_DEPTH) and not _P2_denied_beyond(blocked + denied, depth):
             return None  # round 4c-2 plan:B: an unread label names the cecum or beyond
-        if _P2_doubted_withholds(doubted, blocked + denied, depth):
-            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
+        withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, cues.CECUM_DEPTH)
+        if withhold:
+            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the cecum
+        if short:
+            depth, label, span = short[:3]  # round 4d sections:1: one short of the cecum keeps the procedure incomplete
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
     return Fact('extent', label, 'document', (span,))
@@ -5111,8 +5131,12 @@ def _upper_extent(an: Analysis, sentences, incomplete: bool) -> Optional[Fact]:
     if depth < _expected_upper_depth(an) and _P2_unread_reaches(unread, _expected_upper_depth(an)) \
             and not _P2_denied_beyond(blocked + denied, depth):
         return None  # round 4c-2 plan:B: an unread label names the depth the procedure calls for
-    if depth < _expected_upper_depth(an) and _P2_doubted_withholds(doubted, blocked + denied, depth):
-        return None  # round 4c-2 plan:D2: a label refused for no reach denial lies deeper
+    if depth < _expected_upper_depth(an):
+        withhold, short = _S2_doubted_short(doubted, blocked + denied, depth, _expected_upper_depth(an))
+        if withhold:
+            return None  # round 4c-2 plan:D2: a label refused for no reach denial lies at or beyond the depth called for
+        if short:
+            depth, label, span = short[:3]  # round 4d sections:1: one short of it keeps the procedure incomplete
     if incomplete or depth < _expected_upper_depth(an):
         evidence = [span] + [b[2] for b in blocked if b[0] > depth]
         return Fact('extent', f'incomplete: {label}', 'document', tuple(dict.fromkeys(evidence)))
