@@ -517,3 +517,119 @@ class Bounded4DoubtGuardCostTests(Case):
                 item = real(text, ('46600', 'Grade 2 internal hemorrhoids were seen.'))[0]['46600']
                 self.assertLess(time.monotonic() - started, 40)  # route and assess; 60 s is the stage deadline
                 self.assertEqual(item.status, 'needs_clarification')
+
+
+# --- validation:7: a family named only in the history or the plan takes no same-day procedure, whatever its section ---
+
+def routed(text, day=DAY):
+    import json
+    from studio.gi.detect import route
+    from studio.types import RoutingResult, from_jsonable, to_jsonable
+    return from_jsonable(RoutingResult, json.loads(json.dumps(to_jsonable(route(text, day)))))
+
+
+OF7 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\nChief complaint: rectal bleeding.\n'
+       'History of present illness: {hpi}\n{statement}\nMedical decision making: moderate.\nTotal time: 32 minutes.\n')
+
+
+class Validation7SameDayProcedureOutsideProcedureSectionsTests(Case):
+    """validation:7 (high, regression against 9a9f403). An office note's 'Assessment: Anoscopy with rubber band ligation
+    of two internal hemorrhoids was performed today.' was no gi.other procedure beside 'EGD and colonoscopy last month
+    were unremarkable.' in the HPI: outside procedure, findings and technique sections an intervention went to any
+    detected family, so 99214 selected alone was ready ('No same-day procedure is detected.'). regression:5's rule now
+    applies in every other section to an intervention whose clause states a performance today; another intervention
+    there is read as before (accepted residual: 'Assessment: Rubber band ligation x3 was performed, ?fissure.' with no
+    today word beside an EGD named only in the history - widening it changed word-salad fuzz texts, gate)."""
+
+    HPI = ('EGD and colonoscopy last month were unremarkable.', 'She underwent EGD and colonoscopy 3 years ago.',
+           'EGD in 2020 was normal.', 'EGD last month was unremarkable.')
+    STATEMENTS = ('Assessment: Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.',
+                  'Impression: Rubber band ligation x3 was completed today.',
+                  'Assessment: Internal hemorrhoids, grade 2; rubber band ligation of two columns was performed today.',
+                  'Exam: Rubber band ligation x3 was completed today.',
+                  'Rubber band ligation x3 was completed today.')
+
+    def test_the_banding_is_a_same_day_procedure_beside_a_past_egd(self):
+        from tests.test_repairs_r3_validation_b import encounter_check
+        for hpi in self.HPI:
+            for statement in self.STATEMENTS:
+                text = OF7.format(hpi=hpi, statement=statement)
+                with self.subTest(hpi=hpi, statement=statement):
+                    other = routed(text).finding('gi.other')
+                    self.assertIsNotNone(other)
+                    self.assertIn(other.status, ('performed', 'uncertain'))
+                    proposals, result = real(text, ('99214', VISIT))
+                    self.assertVisitHeld(proposals, 'Other GI service is')
+                    if other.status == 'performed':
+                        self.assertEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_controls_the_history_s_own_banding_told_at_another_time_stays_the_family_s(self):
+        for hpi in ('EGD in 2020 was normal; rubber band ligation was done in 2021.',
+                    'EGD with band ligation of varices last month.', 'EGD and band ligation of varices in 2019.'):
+            text = OF7.format(hpi=hpi, statement='Assessment: Internal hemorrhoids.')
+            with self.subTest(hpi=hpi):
+                self.assertIsNone(routed(text).finding('gi.other'))
+                if 'last month' not in hpi:  # (a relative time the EGD may not own holds the visit: another rule)
+                    self.assertVisitReady(real(text, ('99214', VISIT))[0])
+
+
+# --- validation:11: a family named only by a mention of another encounter takes no same-day procedure ----------------
+
+O11 = (HEAD + 'Place of service: Office (POS 11)\nEstablished patient office visit.\n{lines}\nExam: Abdomen soft.\n'
+       'Procedure: {procedure}\nAssessment and plan: Internal hemorrhoids. Fiber. Return in 6 weeks.\n'
+       'Medical decision making: moderate.\n')
+
+
+class Validation11NamedOnlyAsAnotherEncounterTests(Case):
+    """validation:11 (high, declared misread; the same at every base). regression:5 was only partly repaired: an EGD
+    named in the chief complaint, indication, assessment, impression, medications, ROS or an unheaded line ('EGD in 2020
+    was normal.') still took an office note's same-day banding, so 99214 selected alone was READY. A family is named
+    for an intervention only through a mention outside history and plan sections that is not itself read as another
+    encounter's (planned, historical, cancelled or negated)."""
+
+    PLACES = ('Chief complaint: rectal bleeding; EGD 2020 normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Indication: Bleeding; EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Medications: omeprazole. EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Review of systems: negative. EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Impression: GERD, EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Assessment: GERD; EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'EGD in 2020 was normal.\nHistory of present illness: Two weeks of bleeding.',
+              'Reason for visit: rectal bleeding; EGD in 2020 was normal.\nHistory of present illness: Two weeks.',
+              'Diagnoses: GERD (EGD in 2020 was normal).\nHistory of present illness: Two weeks of bleeding.')
+    PROCEDURES = ('Anoscopy with rubber band ligation of two internal hemorrhoids was performed today.',
+                  'Hemorrhoid banding was performed today.',
+                  'Anoscopy with biopsy of an anal lesion was performed today.')
+
+    def test_the_banding_is_a_same_day_procedure_beside_a_past_egd_anywhere(self):
+        for lines in self.PLACES:
+            for procedure in self.PROCEDURES:
+                for control in (False, True):
+                    text = O11.format(lines=lines.replace('EGD', 'CT abdomen') if control else lines,
+                                      procedure=procedure)
+                    with self.subTest(lines=lines, procedure=procedure, control=control):
+                        other = routed(text).finding('gi.other')
+                        self.assertIsNotNone(other)
+                        self.assertEqual(other.status, 'performed')
+                        proposals, result = real(text, ('99214', VISIT))
+                        self.assertVisitHeld(proposals, 'Other GI service is documented as performed on the same date')
+                        self.assertEqual(encounter_check(result, 'services.unproposed').status, 'warn')
+
+    def test_controls_an_egd_named_for_today_still_takes_its_banding(self):
+        for text in (HEAD + 'Procedure: EGD\nIndication: Esophageal varices.\nFindings: Large esophageal varices.\n'
+                            'Band ligation of three columns was performed.\n',
+                     HEAD + 'Indication: Varices; EGD today.\nFindings: Large esophageal varices.\nBand ligation of three '
+                            'columns was performed.\n',
+                     HEAD + 'Procedure: EGD with band ligation of esophageal varices.\nFindings: Large varices.\n'):
+            with self.subTest(text=text[len(HEAD):len(HEAD) + 40]):
+                self.assertIsNone(routed(text).finding('gi.other'))
+
+
+class Validation7OwnCueTests(Case):
+    """validation:7's 'stated as performed today' is the intervention's own statement: another procedure's
+    'was performed' earlier in a word-salad list (the fuzz corpus's text 2851, synthetic) states nothing of the
+    polypectomy after it, so routing reads the text as before (no gi.other procedure, as at HEAD)."""
+
+    TEXT = 'SYNTHETIC TEST DOCUMENT\nDate of service: 2026-10-21\nImpression: risks, benefits, and alternatives of  diagnostic\tdiagnostic , gi\tcold  hot\tendoscopic ,  any capsule endoscopy,was attempted planned\tan\tcomplete   full,capsule endoscopy  was performed prior, an   anoscopy   today endoscopic,outside  diagnostic ,  polypectomy,last month\nPlan: previous, any her\nprocedure , a,and her ,  biopsy  : not performed.\ncold snare polypectomy ,  if needed s/p , colonoscopy ,  (attempted);\nPlan: instead of ,  her ,  2019  for\this\tfollow-up, EGD , if needed\nPlan: previous\nupper endoscopy , today nor ,  gastric his , anoscopy,if needed endoscopic  of\nanoscopy findings\nAssessment: his, follow-up\tprior ,  2019\nlower  any  capsule endoscopy, : not performed\n'
+
+    def test_another_procedure_s_cue_states_nothing_of_the_intervention(self):
+        self.assertIsNone(routed(self.TEXT).finding('gi.other'))

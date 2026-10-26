@@ -5297,14 +5297,51 @@ def _about_a_detected_family(an: Analysis, start: int, end: int, detected: list[
     somewhere other than a history or plan section (_VAL_named_beyond_history: "Procedure: EGD ... Band ligation of
     three columns was performed."): a family named only in the history or the plan ("History of present illness: EGD
     in 2020 was normal.", "Plan: EGD next month.") does not take an office note's "Procedure: Anoscopy with rubber band
-    ligation ... was performed today." (round 5 regression:5)."""
+    ligation ... was performed today." (round 5 regression:5). An intervention stated as performed today
+    (_V2_stated_today), in any section, is a detected family's only when that family is named for today
+    (_V2_named_for_today): outside the history and the plan, by a mention not read as another encounter's (round 4d
+    validation:7: "Assessment: Anoscopy with rubber band ligation ... was performed today." beside an EGD named only in
+    the HPI; validation:11: "Chief complaint: rectal bleeding; EGD 2020 normal."). Any other intervention outside a
+    procedure, findings or technique section is read as before ("rubber band ligation was done in 2021" stays the
+    historical EGD's)."""
     if an.services_in(start, end):
         return True
     if any(p.search(an.text, start, end) for family, p in cues.INSTRUMENTS if family in detected):
         return True
     named = _VAL_named_beyond_history(an)
-    return any(family in detected and (family in named or an.lay.section_at(iv.start).kind not in POSITIVE_SECTIONS)
-               for iv in an.interventions_in(start, end) for family in iv.families)
+    for iv in an.interventions_in(start, end):
+        families = [family for family in iv.families if family in detected]
+        if not families:
+            continue
+        if _V2_stated_today(an, iv.start, iv.end):
+            if any(family in _V2_named_for_today(an) for family in families):
+                return True
+        elif an.lay.section_at(iv.start).kind not in POSITIVE_SECTIONS or any(family in named for family in families):
+            return True
+    return False
+
+
+_V2_STATED_REACH = 60  # how far an intervention's own performance cue may stand from it (bounds the work per cue)
+
+
+def _V2_stated_today(an: Analysis, start: int, end: int) -> bool:
+    """Whether the intervention at [start, end) is stated as performed today (round 4d validation:7): its clause says
+    today (cues.TODAY) and holds an explicit performance cue (PERFORMED_CLAUSE) within _V2_STATED_REACH of it with no
+    other procedure word or service between them ("... rubber band ligation of two internal hemorrhoids was performed
+    today.", never another procedure's "was performed" earlier in a list). Both are read within twice that reach of
+    the intervention, inside its clause (bounds the work per intervention: a clause may be a whole pasted line)."""
+    cs, ce = _clause_at(an, start)
+    lo, hi = max(cs, start - 2 * _V2_STATED_REACH), min(ce, end + 2 * _V2_STATED_REACH)
+    if not cues.TODAY.search(an.text, lo, hi):
+        return False
+    for cue in an.cues_in(lo, hi):
+        if cue.status != 'performed':
+            continue
+        lo, hi = (end, cue.start) if cue.start >= end else (cue.end, start)
+        if hi - lo <= _V2_STATED_REACH and not _PROCEDURE_WORD.search(an.text, lo, max(lo, hi)) \
+                and not an.services_in(lo, max(lo, hi)):
+            return True
+    return False
 
 
 _VAL_ELSEWHERE_KINDS = ('history', 'plan')  # sections that tell a service of another encounter (round 5 regression:5)
@@ -5323,6 +5360,40 @@ def _VAL_named_beyond_history(an: Analysis) -> frozenset:
                 found.add(family)
         an.memo[key] = frozenset(found)
     return an.memo[key]
+
+
+def _V2_named_for_today(an: Analysis) -> frozenset:
+    """The families named for today: as _VAL_named_beyond_history, by a mention not itself read as another
+    encounter's - planned, historical, cancelled or negated (round 4d validation:11: "Chief complaint: rectal bleeding;
+    EGD 2020 normal." names no EGD of today). Read once per text: a reading per mention until its family is found.
+    Those readings are taken before the other procedures' names are known (an.other_names, which box readings
+    consult), so they are read in a copy of the memo and never kept. Bounded: at most _V2_NAMED_READS readings per
+    family and per instrument pattern; a family whose first ones all read another encounter's counts as named, as in
+    _VAL_named_beyond_history (no new procedure is read from a text that long)."""
+    key = ('v2-named-for-today',)
+    if key not in an.memo:
+        named = _VAL_named_beyond_history(an)
+        found: set = set()
+        reads: dict = {}
+        kept = an.memo
+        an.memo = dict(kept)
+        try:
+            candidates = [(m.family, m.start, m.end) for m in an.services]
+            candidates += [(family, m.start(), m.end()) for family, pattern in cues.INSTRUMENTS
+                           for m in pattern.finditer(an.text)]
+            for family, start, end in candidates:
+                if family in found or family not in named or an.lay.section_at(start).kind in _VAL_ELSEWHERE_KINDS:
+                    continue
+                reads[family] = reads.get(family, 0) + 1
+                if reads[family] > _V2_NAMED_READS or _generic_reading(an, start, end).status not in NOT_TODAY:
+                    found.add(family)
+        finally:
+            an.memo = kept
+        an.memo[key] = frozenset(found)
+    return an.memo[key]
+
+
+_V2_NAMED_READS = 50  # mentions of one family read for today's naming (bounds the work per text)
 
 
 def _procedure_name(an: Analysis, start: int, limit: int) -> Optional[tuple[int, int]]:
