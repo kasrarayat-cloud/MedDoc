@@ -32,7 +32,12 @@ What a page shows is read, or the result says what was not read:
   box's state is not plainly what the page shows (a widget its printed mark
   contradicts, any other mark over it, a position that cannot be read under a
   widget or mark, two candidates for one printed box) it is written as the
-  unread mark '[?]', which routing holds, and the result is 'partial'.
+  unread mark '[?]', which routing holds, and the result is 'partial'. A widget
+  or mark is also over a printed box where it overlaps the box as drawn: its
+  glyph across the box's width, past any whitespace its string opens with, on
+  its own piece's baseline (a box inside a piece of text lies somewhere right of
+  where that piece's operators draw); a check box or a mark that checks inside
+  a box whose printed state it agrees with keeps the box as printed.
   Otherwise a displayed check box is written as ☐ / ☒ before the piece of page
   text it sits beside, when it can be tied to exactly one: its baseline lies
   within the box's height and it starts just right of the box, and every other
@@ -80,6 +85,7 @@ import pypdf
 from pypdf import PasswordType
 from pypdf.errors import DependencyError
 from pypdf.generic import DictionaryObject, NullObject, StreamObject
+from pypdf.generic._font import Font
 
 from studio.types import ExtractionResult
 
@@ -452,7 +458,9 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
       line that runs on into another column (_ING_Ink.runs_on). Nothing is written on a row holding a button that is
       not tied, and a piece two buttons claim gets neither: ambiguity is never resolved by guessing.
     Pieces and printed boxes are indexed by row and by x within each row, so a button reads only what lies beside or
-    under it."""
+    under it. Last, every printed box is placed where it is drawn (_I2_Places: its glyph and width, or the piece that
+    draws it), and a widget or mark over one that the readings above left decided leaves it unread (_I2_under_marks):
+    holds only."""
     text, widgets = layer.text, annotations.widgets
     starts = {offset: origin for offset, origin in layer.pieces if origin is not None and origin[2]}
     pieces = _ING_Rows((origin[1], origin[0], offset, None) for offset, origin in starts.items())
@@ -562,7 +570,8 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         else:
             named = True  # two check boxes over one printed box at a known place: unread, its position was read
             unread(owners[0][1])
-    for rect in annotations.marks:
+    checked_by: dict[int, int] = {}  # mark index -> the printed box it checks
+    for k, rect in enumerate(annotations.marks):
         found = lying_under(rect)
         if found is None:
             everything = True
@@ -570,6 +579,7 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         boxes, hides, anywhere = found
         if len(boxes) == 1 and not hides and not anywhere:
             write(boxes[0], CHECKED_BOX)
+            checked_by[k] = boxes[0].start()
         elif boxes or hides or anywhere:
             named = True  # a mark over several boxes, or where a box's place cannot be read: no form check box
             unsettled_boxes(boxes, hides, anywhere)
@@ -646,6 +656,17 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
     if lose_all:
         for match in lost:
             unread(match)
+    printed = [item[2] for row in known.rows for item in row] + [item[2] for row in inside.rows for item in row] + lost
+    if printed and (widgets or annotations.marks or annotations.unread_marks):
+        # Where each printed box is drawn (its glyph, across its width; or somewhere right of where its piece's
+        # operators draw): a widget or mark over one that the readings above left decided leaves it unread, and so
+        # does the box a widget or mark had written its own state into (two candidates). Holds only.
+        held = {start for start, (_, replacement) in edits.items() if replacement == _ING_UNREAD_BOX}
+        own = {i: owners[0][1].start() for owners in claims.values() if len(owners) == 1 for i, _ in owners}
+        extra, more_named, more_overlap = _I2_under_marks(layer, printed, widgets, annotations, held, own, checked_by)
+        for match in extra:
+            unread(match)
+        named, overlap = named or more_named, overlap or more_overlap
     out, at, placed = [], 0, 0
     for start in sorted(edits):
         end, replacement = edits[start]
@@ -660,6 +681,133 @@ def _placed_boxes(layer: _Layer, annotations: PageAnnotations) -> tuple[str, int
         at = end
     out.append(text[at:])
     return ''.join(out), placed, overlap, named
+
+
+def _I2_under_marks(layer: '_Layer', printed: list, widgets: list, annotations: PageAnnotations, held: set,
+                    own: dict, checked: dict) -> tuple[list, bool, bool]:
+    """The printed boxes (``printed``: every PRINTED_BOX match on the page) that a widget or mark lies over by where the
+    box is drawn (_I2_Places), that _placed_boxes' own reading left decided (not in ``held``) and that are not the box
+    the widget or check mark itself decided (``own`` / ``checked``: widget / mark index -> that box's start): a mark
+    that is not a check over any of them, a check box or a mark that checks over one at a known place whose printed
+    state it denies (one that agrees with the box shows what the box shows), or over one whose place is not read
+    exactly; and the box the widget or mark decided, when such a box (held already or not) lies under it too: two
+    candidates. Also whether the page is named as unread (a box at a known place under a check box, any box under a
+    mark, a decided box withdrawn) or as OVERLAP (a box whose place is not read exactly under a check box). Where there
+    is too much to read, every printed box on the page."""
+    places = _I2_Places(layer, printed)
+    by_start = {match.start(): match for match in printed}
+    out: dict[int, object] = {}
+    named = overlap = False
+    rects = ([(w.rect, own.get(i), True, w.on) for i, w in enumerate(widgets)]
+             + [(rect, checked.get(k), False, True) for k, rect in enumerate(annotations.marks)]
+             + [(rect, None, False, None) for rect in annotations.unread_marks])
+    for rect, mine, widget, on in rects:
+        found = places.under(rect)
+        if found is None:  # too much to read: no printed box on the page is read as decided
+            out.update(by_start)
+            overlap, named = overlap or widget, named or not widget
+            continue
+        exact, inside = ([match for match in group if match.start() != mine] for group in found)
+        exact = [match for match in exact if on is None or _ING_printed_on(match) != on]
+        if mine is not None and (exact or inside):  # the box it decided has a second candidate under it
+            out[mine] = by_start[mine]
+            named = True
+        exact, inside = ([match for match in group if match.start() not in held] for group in (exact, inside))
+        if not exact and not inside:
+            continue
+        for match in exact + inside:
+            out[match.start()] = match
+        named = named or bool(exact) or not widget
+        overlap = overlap or (widget and bool(inside))
+    return list(out.values()), named, overlap
+
+
+class _I2_Places:
+    """Where each printed box is drawn, read from the pieces that draw it (_Layer.drawn) and the page's ink: a box that
+    starts a piece lies at the piece's first glyph drawn (after any whitespace its string opens with: the ink's first
+    glyph that draws), across the box's own width (measured by the piece's font where it gives every character's
+    width, else one em for a box glyph and 0.6 em for each character of a typed box); one whose glyph cannot be found
+    there (the piece opens with whitespace and no measured ink starts it), and one inside a piece, lie somewhere right
+    of where each of the piece's operators draws, on that operator's baseline. A box that no piece places is left to
+    _placed_boxes' own reading."""
+
+    def __init__(self, layer: '_Layer', printed: list):
+        text, firsts = layer.text, sorted(layer.drawn)
+        origins, placed = dict(layer.pieces), dict(layer.placed_pieces)
+        ink = _ING_Rows((y, x, end, rest) for y, x, end, *rest in layer.ink)
+        fonts: dict = {}
+        exact, inside = [], []
+        for match in printed:
+            start = match.start()
+            index = bisect_right(firsts, start) - 1
+            if index < 0 or '\n' in text[firsts[index]:start]:
+                continue
+            first = firsts[index]
+            shows, lead, font, em = layer.drawn[first]
+            origin = origins.get(first) or placed.get(first)
+            if origin is None or not origin[2]:
+                continue
+            record = self._ink_at(ink, origin) if first == start else None
+            if first == start and (record is not None or not lead):
+                x = max(origin[0], record[2][1]) if record is not None else origin[0]
+                exact.append((origin[1], x, start, (x + self._width(match.group(0), font, em, record, fonts), match)))
+                continue
+            lowest: dict = {}  # baseline -> where the piece's operators on it start, leftmost
+            for position in (origin, *shows):
+                if position is not None and position[2]:
+                    key = round(position[1], 2)
+                    lowest[key] = min(lowest.get(key, position[0]), position[0])
+            inside.extend((y, x, start, match) for y, x in lowest.items())
+        self.exact, self.inside = _ING_Rows(exact), _ING_Rows(inside)
+        self.widest = max((right - x for _, x, _, (right, _) in exact), default=0.0)
+
+    @staticmethod
+    def _ink_at(ink: '_ING_Rows', origin: tuple):
+        """The measured string that starts where a piece starts (within BOX_SLACK), or None."""
+        x, y, _ = origin
+        for row in ink.around(y, y) or ():
+            span = ink.span(row, x - BOX_SLACK, x + BOX_SLACK)
+            if len(span):
+                return ink.rows[row][span[0]]
+        return None
+
+    @staticmethod
+    def _width(box: str, font, em: float | None, record, fonts: dict) -> float:
+        """The width of a printed box drawn at ``em`` (one em, page space) in ``font``: its characters' widths where the
+        font gives each of them, else one em for a glyph and 0.6 em for each character of a typed box."""
+        size = em if em else (record[2][0] if record is not None else 12.0)
+        if font is not None and id(font) not in fonts:
+            try:
+                fonts[id(font)] = Font.from_font_resource(font)
+            except Exception:
+                fonts[id(font)] = None
+        widths = getattr(fonts.get(id(font)), 'character_widths', None) or {}
+        if box and all(char in widths and char != 'default' for char in box):
+            return sum(widths[char] for char in box) / 1000 * size
+        return size * (1.0 if len(box) == 1 else 0.6 * len(box))
+
+    def under(self, rect) -> tuple[list, list] | None:
+        """(the boxes whose drawn width ``rect`` overlaps on their baseline, the boxes that may lie under it somewhere
+        right of where their piece draws on a baseline its height holds), or None when there is too much to read."""
+        x0, y0, x1, y1 = rect
+        rows, maybe = self.exact.around(y0, y1), self.inside.around(y0, y1)
+        if rows is None or maybe is None:
+            return None
+        exact, inside = [], []
+        for row in rows:
+            span = self.exact.span(row, x0 - self.widest - BOX_SLACK, x1)
+            if len(span) > _ING_MAX_SCAN:
+                return None
+            for position in span:
+                _, _, (right, match) = self.exact.rows[row][position]
+                if right + BOX_SLACK > x0:
+                    exact.append(match)
+        for row in maybe:
+            count = bisect_right(self.inside.xs[row], x1)
+            if len(exact) + len(inside) + count > _ING_MAX_SCAN:
+                return None
+            inside.extend(item[2] for item in self.inside.rows[row][:count])
+        return exact, inside
 
 
 def _ING_printed_on(box) -> bool:

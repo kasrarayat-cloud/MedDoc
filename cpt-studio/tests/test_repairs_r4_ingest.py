@@ -410,12 +410,14 @@ class Extraction10WidgetOverTheBoxInkTests(unittest.TestCase):
 
     def test_a_widget_well_right_of_the_box_is_not_over_it(self):
         """A widget starting half its width right of the printed box's origin is not over it: it is tied beside the
-        label as before, and the two boxes the row then shows disagree (held)."""
+        label as before, and the two boxes the row then shows disagree (held). (Round 6 extraction:3: the checked
+        widget still overlaps the printed box's drawn width, which its state denies, so the printed box is written
+        unread rather than as the stale '☐'; the reading stays held.)"""
         form = Form()
         form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy', 'text font'))
         form.checkbox('Check Box1', widget_rect(SNARE_ROW, 72 + 6.5), True, tu='Cold snare polypectomy')
         text = text_of(form.build())
-        self.assertIn('Interventions:\n☐ ☒ Cold snare polypectomy\n', text)
+        self.assertIn('Interventions:\n[?] ☒ Cold snare polypectomy\n', text)
         self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'held')
         form = Form()  # unchecked: a printed box left of the box is not a label, and both boxes agree
         form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy', 'text font'))

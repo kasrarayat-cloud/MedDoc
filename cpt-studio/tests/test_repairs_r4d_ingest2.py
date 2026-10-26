@@ -369,6 +369,183 @@ class Extraction0ColumnOnAnotherBaselineTests(unittest.TestCase):
                 self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
 
 
+# --- extraction:2 -- a tick over a printed box placed by its own piece, not its line's start ---------------------------
+
+def joined_tick(*, wrap, dy=6.0, tick=True, size=10):
+    """'Details' in a left column at baseline 640 - dy, and 'Interventions: [ ] Cold snare polypectomy' in one text
+    object at (150, 640): pypdf joins them into one line that starts at 'Details'. An ink tick over the '[ ]' only. The
+    page is drawn through a form XObject (``wrap``) or by itself."""
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    form = Form(NOTE_HEAD, wrap=wrap)
+    form.line(text_line(72, ROW - dy, 'Details', size=size))
+    form.line(text_line(150, ROW, 'Interventions: [ ] Cold snare polypectomy', size=size))
+    x = 150 + _width('Interventions: ', size)
+    if tick:
+        annotate(form, 'tick', (x + 0.5, ROW - 2, x + 7.5, ROW + 9))
+    return form.build()
+
+
+def indented_tick(*, wrap, lead=4, tick=True, row='snare'):
+    """A plain-text note in Courier 10, one string per line, the checklist indented inside its strings ('    [ ] Cold
+    snare polypectomy'); an ink tick over the brackets of the snare's (or the biopsy's) box."""
+    from tests.test_repairs_r4c_ingest_marks import annotate
+    form = Form(NOTE_HEAD, wrap=wrap)
+    form.objects[6] = COURIER
+    form.line(text_line(72, 660, 'Interventions:', font='ZA', size=10))
+    form.line(text_line(72, 650, ' ' * lead + '[ ] Biopsy', font='ZA', size=10))
+    form.line(text_line(72, 640, ' ' * lead + '[ ] Cold snare polypectomy', font='ZA', size=10))
+    x, y = 72 + 6 * lead, 640 if row == 'snare' else 650
+    if tick:
+        annotate(form, 'tick', (x + 1, y - 2, x + 12, y + 7.5))  # within its own 10 pt line
+    return form.build()
+
+
+class Extraction2TickOverABoxInsideItsLineTests(unittest.TestCase):
+    """A pen tick over a printed box is placed where the box is drawn: by the piece that draws it (its own baseline,
+    from its own start), not by the start of a line pypdf joined from another column, and past the whitespace its
+    string opens with; on a page drawn through a form XObject and on the page itself."""
+
+    def test_a_tick_over_a_box_inside_a_joined_line_is_unread(self):
+        for wrap in (True, False):
+            for dy in (2.0, 4.0, 6.0, 8.0):
+                with self.subTest(wrap=wrap, dy=dy):
+                    result = extracted(joined_tick(wrap=wrap, dy=dy))
+                    self.assertEqual(result.status, 'partial', result.messages)
+                    self.assertIn(UNREAD_NOTE, result.messages)
+                    self.assertIn(f'Interventions: {UNREAD} Cold snare polypectomy', result.text)
+                    self.assertEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'held')
+
+    def test_a_tick_over_an_indented_box_is_unread(self):
+        for wrap in (True, False):
+            for lead in (1, 4):
+                with self.subTest(wrap=wrap, lead=lead):
+                    result = extracted(indented_tick(wrap=wrap, lead=lead))
+                    self.assertEqual(result.status, 'partial', result.messages)
+                    self.assertIn(UNREAD_NOTE, result.messages)
+                    self.assertIn(f'{UNREAD} Cold snare polypectomy', result.text)
+                    self.assertIn('[ ] Biopsy', result.text)
+                    self.assertEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'held')
+
+    def test_controls_without_a_tick_over_the_box(self):
+        """No tick: the printed boxes read as before; a tick over the biopsy's box leaves the snare's printed box."""
+        for wrap in (True, False):
+            with self.subTest(wrap=wrap):
+                text = extracted(joined_tick(wrap=wrap, tick=False)).text
+                self.assertIn('Interventions: [ ] Cold snare polypectomy', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                text = extracted(indented_tick(wrap=wrap, tick=False)).text
+                self.assertIn('    [ ] Cold snare polypectomy', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+                text = extracted(indented_tick(wrap=wrap, row='biopsy')).text
+                self.assertIn(f'{UNREAD} Biopsy', text)
+                self.assertIn('    [ ] Cold snare polypectomy', text)
+                self.assertEqual(codes(text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+
+# --- extraction:3 -- a mark drawn inside a printed box ------------------------------------------------------------------
+
+INSIDE = (74.9, SNARE_ROW - 3, 81.3, SNARE_ROW + 9)  # between the brackets of '[  ]' typed at x 72 in Helvetica 11
+
+
+def inset(kind, printed='[  ]', checked_box=False):
+    """'[  ] Biopsy' / '[  ] Cold snare polypectomy' (or Wingdings boxes, or a printed '[x]' snare) with a mark drawn
+    inside the snare's box: a text field showing X or ✔, an ink tick, a checked or unchecked check box, a typed X."""
+    from tests.test_repairs_r4c_ingest_marks import annotate, field_over_snare
+    rect = INSIDE if printed in ('[  ]', '[x]') else (74.0, SNARE_ROW - 2, 80.5, SNARE_ROW + 8)
+    if printed == '[ ]':
+        rect = (74.4, SNARE_ROW - 3, 77.8, SNARE_ROW + 9)
+    if kind in ('field X', 'field check', 'field empty'):
+        value, glyph, font = {'field X': ('X', None, 'Helv'), 'field check': ('✔', '4', 'ZaDb'),
+                              'field empty': ('', None, 'Helv')}[kind]
+        return field_over_snare(printed, value, rect=rect, glyph=glyph, font=font)
+    form = Form()
+    if printed in ('[  ]', '[ ]', '[x]'):
+        form.line(text_line(72, BIOPSY_ROW, f'{printed if printed != "[x]" else "[  ]"} Biopsy'))
+        form.line(text_line(72, SNARE_ROW, f'{printed} Cold snare polypectomy'))
+    else:
+        form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy', printed))
+        form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy', printed, checked=checked_box))
+    if kind == 'tick':
+        annotate(form, 'tick', rect)
+    elif kind in ('check box on', 'check box off'):
+        form.checkbox('Check Box1', rect, kind == 'check box on')
+    elif kind == 'typed X':
+        form.freetext(rect, 'X')
+    elif kind == 'tick beside':
+        annotate(form, 'tick', (98.0, SNARE_ROW - 2, 108.0, SNARE_ROW + 9))
+    return form.build()
+
+
+class Extraction3MarkInsideAPrintedBoxTests(unittest.TestCase):
+    """A mark drawn inside a printed box is over it: a field showing a value or a pen tick leaves it unread; a check box
+    or a typed mark whose state the printed box denies leaves it unread too (one that agrees keeps it)."""
+
+    def test_a_mark_inside_the_brackets_holds_the_item(self):
+        for printed in ('[  ]', '[ ]', 'wingdings', 'zapf'):
+            for kind in ('field X', 'field check', 'tick', 'check box on', 'typed X'):
+                with self.subTest(printed=printed, kind=kind):
+                    result = extracted(inset(kind, printed))
+                    self.assertEqual(result.status, 'partial', result.messages)
+                    self.assertIn(UNREAD_NOTE, result.messages)
+                    # the printed box unread (a check box tied beside the label keeps its own glyph after it)
+                    self.assertRegex(result.text, r'\n\[\?\] ?(☒ )?Cold snare polypectomy')
+                    self.assertNotEqual(codes(result.text, ('45385', 'Cold snare polypectomy'))[0], 'excluded')
+
+    def test_marks_that_agree_or_lie_beside_change_nothing(self):
+        """Controls: an empty field, an unchecked check box inside an empty box, a checked one inside a printed '[x]' or a
+        checked glyph, and a tick on the label beside the box: the printed boxes read as before."""
+        for printed, kind, expected in (('[  ]', 'field empty', '[  ] Cold snare'), ('[  ]', 'check box off', '[  ] Cold'),
+                                        ('wingdings', 'check box off', '☐ Cold'), ('[  ]', 'tick beside', '[  ] Cold'),
+                                        ('[x]', 'check box on', '[x] Cold'), ('wingdings', 'tick beside', '☐ Cold')):
+            with self.subTest(printed=printed, kind=kind):
+                result = extracted(inset(kind, printed))
+                self.assertNotIn(UNREAD_NOTE, result.messages)
+                self.assertIn(expected, result.text)
+        text = extracted(inset('check box on', 'wingdings', checked_box=True)).text
+        self.assertIn('☒ Cold snare polypectomy', text)
+
+    def test_a_check_box_straddling_two_printed_boxes_leaves_both_unread(self):
+        """Two Wingdings boxes side by side ('☐☐ Biopsy': yes / no columns) and a checked check box starting inside the
+        first and over the second: the second alone is under it by the widget geometry, but the first's drawn width
+        reaches under it too and its printed state is denied, so neither is read as decided."""
+        form = Form()
+        form.line(f'BT /WD 11 Tf 72 {BIOPSY_ROW} Td <A8> Tj ET').line(f'BT /WD 11 Tf 84 {BIOPSY_ROW} Td <A8> Tj ET')
+        form.line(text_line(102, BIOPSY_ROW, 'Biopsy'))
+        form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', (80, BIOPSY_ROW - 3, 92, BIOPSY_ROW + 9), True)
+        result = extracted(form.build())
+        self.assertIn(UNREAD_NOTE, result.messages)
+        self.assertNotIn(OVERLAP, result.messages)
+        self.assertRegex(result.text, r'\[\?\] ?\[\?\] Biopsy')
+        self.assertNotIn('☒', result.text.split('[PDF form')[0])
+
+    def test_a_second_box_held_for_another_mark_still_makes_two_candidates(self):
+        """The same straddling check box, with a pen tick over the first box (held for the tick already): the check box
+        still lies over two boxes, so the box it would decide is unread too."""
+        from tests.test_repairs_r4c_ingest_marks import annotate
+        form = Form()
+        form.line(f'BT /WD 11 Tf 72 {BIOPSY_ROW} Td <A8> Tj ET').line(f'BT /WD 11 Tf 84 {BIOPSY_ROW} Td <A8> Tj ET')
+        form.line(text_line(102, BIOPSY_ROW, 'Biopsy'))
+        form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', (80, BIOPSY_ROW - 3, 92, BIOPSY_ROW + 9), True)
+        annotate(form, 'tick', (71, BIOPSY_ROW - 2, 78, BIOPSY_ROW + 8))
+        result = extracted(form.build())
+        self.assertRegex(result.text, r'\[\?\] ?\[\?\] Biopsy')
+        self.assertNotIn('☒', result.text.split('[PDF form')[0])
+
+    def test_a_box_held_already_is_not_named_again(self):
+        """A check box over a box at a known place with an unread-position box on its row (OVERLAP, both held): the box
+        held already under it adds no second note."""
+        form = Form()
+        form.line(boxed_line(72, BIOPSY_ROW, 'Biopsy [ ]'))
+        form.line(boxed_line(72, SNARE_ROW, 'Cold snare polypectomy'))
+        form.checkbox('Check Box1', widget_rect(BIOPSY_ROW), True)
+        result = extracted(form.build())
+        self.assertIn(OVERLAP, result.messages)
+        self.assertNotIn(UNREAD_NOTE, result.messages)
+        self.assertIn(f'{UNREAD} Biopsy {UNREAD}', result.text)
+
+
 # --- extraction:4 -- the page note names what is true about boxes under form check boxes -----------------------------
 
 def _overlap_page(case, printed='wingdings'):
