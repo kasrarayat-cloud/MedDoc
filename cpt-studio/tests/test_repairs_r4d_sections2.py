@@ -686,7 +686,10 @@ class S2Bounded3LandmarkClauseCopiesTests(unittest.TestCase):
 
     def test_the_hits_of_one_clause_share_one_span(self):
         from studio.gi import cues, detect
-        text = b3_line('\u2610 Completed - aborted at the splenic flexure ', 5000)
+        # Round 4d integration: BOXES3's strict rows hold a box row longer than B3_ROW_CHARS whole, before any landmark
+        # is read, so the boxed shape no longer reaches _landmarks (it reads held); the same clause without its box
+        # still yields one denied hit per landmark, which is what the sharing is about
+        text = b3_line('Completed - aborted at the splenic flexure ', 5000)
         an, _ = detect._analysis(text)
         denied = []
         detect._landmarks(an, an.lay.sentences, cues.LOWER_LANDMARKS, None, denied, None)
