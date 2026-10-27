@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from studio import audit, jobs, models, review
 from tests.test_pipeline_api import drain
-from tests.test_repairs_pipeline import LIVE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
 
 class _WorkerDied(BaseException):
@@ -357,8 +357,10 @@ class ContextChangeAfterACancelledAssessTests(ApiHarness, TestCase):
         self.assert_failed_once(encounter_id)
 
     def test_a_billing_change_after_a_stopped_date_change_whose_send_failed(self):
-        encounter_id = self.create()
-        drain()  # succeeds for the document's date
+        # a note with no date of its own, its date supplied by the member at upload: a member date that differs from a
+        # documented one is a conflict and sends nothing (session interpretations 11 and 19)
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
+        drain()  # succeeds for the member's first date
         self.stop_during_the_send(encounter_id)
         self.change(encounter_id, {'service_date': '2026-10-19'})
         self.assertEqual(len(self.provider.requests), 2)
@@ -394,8 +396,10 @@ class ContextChangeAfterACancelledAssessTests(ApiHarness, TestCase):
         self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'ready_for_review')
 
     def test_a_changed_service_date_still_requests_new_proposals(self):
+        # a note with no date of its own, its date supplied by the member at upload: a member date that differs from a
+        # documented one is a conflict and sends nothing (session interpretations 11 and 19)
         self.provider.outcomes = ['failed']
-        encounter_id = self.create()
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         self.stop_during_the_send(encounter_id)
         drain()
         self.change(encounter_id, {'service_date': '2026-10-19'})

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from studio import jobs, models
 from tests.test_pipeline_api import drain
-from tests.test_repairs_pipeline import LIVE, ApiHarness
+from tests.test_repairs_pipeline import FIRST_DATE, LIVE, NO_DATE_NOTE, ApiHarness
 
 
 @override_settings(**LIVE)
@@ -109,7 +109,9 @@ class MetadataChangesNeverResendTests(ApiHarness, TestCase):
         self.assert_rechecked_with(encounter_id, 'provider_failed', models.ProviderRun.FAILED)
 
     def test_a_changed_service_date_still_requests_new_proposals(self):
-        encounter_id = self.create()
+        # a note with no date of its own, its date supplied by the member at upload: a member date that differs from a
+        # documented one is a conflict and sends nothing (session interpretations 11 and 19)
+        encounter_id = self.create(NO_DATE_NOTE, service_date=FIRST_DATE)
         drain()
         self.assertEqual(len(self.provider.requests), 1)
         self.change(encounter_id, {'service_date': '2026-10-19'})
