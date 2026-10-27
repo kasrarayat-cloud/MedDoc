@@ -367,3 +367,64 @@ class ReadInPartSpeaksForWhatWasReadTests(ApiCase, TestCase):
         (check_row,) = [c for c in detail['assessment']['encounter_checks'] if c['id'] == 'services.unresolved']
         self.assertEqual(check_row['status'], 'pass')
         self.assertTrue(check_row['detail'].startswith('Every documented act that the coverage catalogue reconciles'))
+
+
+# --- findings that no longer reproduce at 8985dde42: kept as guards ---------------------------------------------------
+
+EUS_BESIDE_COLONOSCOPY = (SYNTHETIC + 'Date of service: 2026-10-14\nEUS: Normal pancreas and common bile duct; no mass.\n'
+                          'Colonoscopy: The colonoscope was advanced to the cecum. ' + POLYP + '\n')
+
+
+@override_settings(**LIVE)
+class UnestablishedServiceKeepsCodingIncompleteTests(ApiCase, TestCase):
+    """report-1 (repaired by WIP 8p, 9086a4271; re-checked here): a findings-only EUS (or ERCP) section beside a coded
+    colonoscopy is read 'uncertain' with no proposal and no question. Coding completeness had said "Every documented
+    service has a proposal" in the draft, the reviewed TXT, the CSV and the screen. It says incomplete, naming the
+    service no proposal reads."""
+
+    def test_an_uncertain_service_no_proposal_reads_keeps_coding_incomplete(self):
+        for first in ('EUS: Normal pancreas and common bile duct; no mass.', 'ERCP: Normal cholangiogram; no stones.'):
+            with self.subTest(first=first):
+                text = EUS_BESIDE_COLONOSCOPY.replace('EUS: Normal pancreas and common bile duct; no mass.', first)
+                encounter_id = self.run_note(text, ('45385', POLYP))
+                services = self.detail(encounter_id)['assessment']['services']['services']
+                self.assertEqual([s['status'] for s in services], ['uncertain', 'performed'])
+                self.assertEqual(self.decide(encounter_id, '45385', 'approve').status_code, 201)
+                for kind in ('draft', 'reviewed'):
+                    coding = section(self.report_text(encounter_id, kind), 'CODING COMPLETENESS')
+                    self.assertIn('State: incomplete', coding)
+                    self.assertIn('1 documented service not established as performed and read by no proposal', coding)
+                    self.assertNotIn('Every documented service has a proposal', coding)
+                response = self.post(f'/api/encounters/{encounter_id}/reports', {'kind': 'reviewed', 'fmt': 'csv'})
+                csv_text = self.client.get(f'/api/reports/{response.json()["id"]}/download')
+                body = b''.join(csv_text.streaming_content if csv_text.streaming else [csv_text.content]).decode()
+                (row,) = [line for line in body.split('\r\n') if '"coding_completeness"' in line]
+                self.assertIn('"incomplete"', row)
+                banner = browser('app.codingBanner(data)', self.detail(encounter_id))
+                self.assertIn('Coding for this encounter is incomplete', banner)
+
+
+class CoverageClaimsOnlyWhatRunsTests(SimpleTestCase):
+    """report-4 and report-9 (repaired by WIP 8j, e9b7c5e23; re-checked here). COVERAGE.md had listed the EUS stations as
+    verification evidence "which separate limited from full examinations" while no code reads CodeProfile.exam; and the
+    catalogue's docstrings cited tests/fixtures/services and tests/test_services_catalogue.py, which never existed."""
+
+    def test_no_limited_against_full_verification_is_claimed_while_nothing_reads_the_exam_class(self):
+        from studio.gi import catalogue
+        studio = Path(settings.BASE_DIR) / 'studio'
+        readers = [str(path.relative_to(studio)) for path in studio.rglob('*.py')
+                   if path.name != 'catalogue.py' and '.exam' in path.read_text(encoding='utf-8').replace('.example', '')]
+        if readers:
+            self.skipTest(f'a module reads the examination class now: {readers}')  # then the claim may be checked there
+        coverage = catalogue.render_markdown()
+        self.assertNotIn('separate limited from full', coverage)
+        self.assertIn("whether the examination was limited or full is the reviewer's to judge; this catalogue does not "
+                      'check it', coverage)
+
+    def test_every_artifact_the_catalogue_cites_exists(self):
+        import re
+        from studio.gi import catalogue
+        root = Path(settings.BASE_DIR)
+        cited = set(re.findall(r'tests/[\w/.-]*\w', (catalogue.__doc__ or '') + (catalogue.render_markdown.__doc__ or '')))
+        self.assertTrue(cited)
+        self.assertEqual(sorted(path for path in cited if not (root / path).exists()), [])
