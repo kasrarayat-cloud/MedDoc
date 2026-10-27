@@ -2201,12 +2201,14 @@ def reflow(text: str, pages: Sequence = ()) -> str:
     """``text`` with each soft line break - a wrap inside a sentence - replaced by a space, one character for one.
 
     A break is soft only when the line before it is a long run of prose (25+ characters and 4+ words) that does not
-    end a sentence or a label and does not end in an answer of its own (_answered_line, the rule _sentences cuts at),
-    and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING), a comma, or
-    before a line opening with a parenthesis; never around a table row, a list item or a labelled field, never
-    inside an extraction block, and around a check-box or option row only where the row itself wraps (its option,
-    note or label going on in lower case on the next line, which has no row of its own). Headings, labels, fields and
-    short lines keep their breaks.
+    end a sentence or a label (a semicolon ends neither) and does not end in an answer of its own (_answered_line, the
+    rule _sentences cuts at), and the next line continues it in lower case, or after a word that cannot end a line
+    (_DANGLING), a comma, or before a line opening with a parenthesis; never around a table row, a list item or a
+    labelled field, never inside an extraction block, around a check-box or option row only where the row itself
+    wraps (its option, note or label going on in lower case on the next line, which has no row of its own), never
+    either side of a title written as a heading, and never where the join would change the answer a field row gives
+    on its own. One title set on two heading lines is one line (_title_wrapped). Headings, labels, fields and short
+    lines keep their breaks.
 
     A page join - the separator the extraction writes between two pages, after the earlier page's own last newline;
     ``pages`` are the text's page spans - is the line break it stands for, never a paragraph break of its own: when the
@@ -2258,6 +2260,8 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
         return False
     if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
         return False
+    if _title_wrapped(prev, nxt):
+        return True  # one title set on two lines (refutation r1, formats-5)
     if not _SOFT_NEXT.match(nxt) and not ((_DANGLING.search(prev) or prev.rstrip().endswith(',')
                                            or nxt.lstrip().startswith('(')) and nxt.strip()
                                           and not GENERIC_HEADING.match(nxt.strip())):
@@ -2274,6 +2278,11 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
         return False
     if _answered_line(text, ls, le, ns):
         return False  # "... and said no" / "Hiatal hernia - no": the answer ends its line
+    if _title_line(prev) or _title_line(nxt):
+        # refutation r1, formats-4: a title is decided on its own line, before any wrap is joined ("24-HOUR ESOPHAGEAL
+        # pH-IMPEDANCE MONITORING REPORT" / "pH sensor positioned ..." had lost its title to a next line in lower case
+        # by spelling, and the documented study read uncertain, historical or planned)
+        return False
     answer = _field_answer_kind(prev)
     if answer and answer != _field_answer_kind(prev.rstrip() + ' ' + nxt.strip()):
         # refutation r1, formats-3: a field row's own answer ends it ("Biopsies taken from the antrum: N" / "pt on
@@ -2334,6 +2343,58 @@ def _opens_a_sentence(text: str, i: int) -> bool:
     ne = text.find('\n', ns, ns + _sections.OWN_CLAUSE_REACH)
     ne = min(len(text), ns + _sections.OWN_CLAUSE_REACH) if ne < 0 else ne
     return _sections._own_clause(text[ns:ne]) and not _sections._soft_wrap(text, (ls, i), (ns, ne))
+
+
+def _title_line(line: str) -> bool:
+    """Whether ``line`` is a title written as a heading: on its own it opens a part of the document (a report title,
+    _report_title, or a role heading, as parts() reads them), and it is set off by a colon or a dash or written as a
+    heading (_heading_shaped: "ESOPHAGEAL pH IMPEDANCE MONITORING REPORT", "Esophageal pH-Impedance Monitoring
+    Report"). A prose line that happens to end in "report" ("... summarised in the attached colonoscopy report") is no
+    title. Bounded: one line of at most 100 characters, as parts() reads it."""
+    titled = _report_title(line)
+    if not titled and not any(pattern.match(line) for _, pattern in ROLE_HEADINGS):
+        return False
+    return titled == 'set off' or _heading_shaped(line)
+
+
+def _report_title(line: str) -> str:
+    """'set off' or 'title' when parts() would open a report part with ``line`` on its own (a report title naming one
+    service, with no plan or history word: REPORT_TITLE, or TITLE_FIELD or TITLE_REPORT_WORDS, whose title words a colon
+    or a dash sets off); else ''."""
+    if not line.strip() or len(line.strip()) > 100:
+        return ''
+    numbered = PART_NUMBER.match(line)
+    body = line[numbered.end():] if numbered else line
+    set_off = TITLE_FIELD.match(body) or TITLE_REPORT_WORDS.match(body)
+    if not set_off and not REPORT_TITLE.match(body):
+        return ''
+    if not _family_named(line)[0] or PLAN_WORDS.search(line) or HISTORY_WORDS.search(line):
+        return ''
+    return 'set off' if set_off else 'title'
+
+
+def _heading_shaped(line: str) -> bool:
+    """Whether ``line`` is written as a heading: most of its words carry a capital letter (upper case, title case, or a
+    mixed-case token such as "pH"), and it ends with no stop."""
+    stripped = line.strip()
+    words = re.findall(r"[A-Za-z][A-Za-z0-9/'-]*", stripped)
+    return bool(words) and not stripped.endswith(('.', '!', '?')) \
+        and 2 * sum(1 for word in words if any(c.isupper() for c in word)) > len(words)
+
+
+def _title_wrapped(prev: str, nxt: str) -> bool:
+    """Whether one title is set on the two lines ``prev`` and ``nxt`` ("BEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE" /
+    "REPLACEMENT", "SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND" / "REPORT"): both are written as headings, the
+    second has no label, box or cell of its own, and together - never apart - they are a report title or name a
+    service (refutation r1, formats-5: a scan's narrower lines set the title on two lines, and the service it names was
+    not read at all, so coding read complete)."""
+    if ':' in nxt or any(c in prev or c in nxt for c in '|\t') or BOX_MARK.search(prev) or BOX_MARK.search(nxt) \
+            or not _heading_shaped(prev) or not _heading_shaped(nxt):
+        return False
+    joined = prev.rstrip() + ' ' + nxt.strip()
+    if _report_title(joined) and not _report_title(prev) and not _report_title(nxt):
+        return True
+    return bool(_family_named(joined)[0]) and not _family_named(prev)[0] and not _family_named(nxt)[0]
 
 
 def _page_joins(text: str, pages: Sequence) -> dict:

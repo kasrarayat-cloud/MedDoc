@@ -348,3 +348,58 @@ class AnsweredFieldRowTests(SimpleTestCase):
         self.assertEqual(services.reflow(text).count('\n'), 1)
         text = 'Findings: no polyps in the gastric body; a 6 mm sessile polyp was removed in one\npiece.\n'
         self.assertEqual(services.reflow(text).count('\n'), 1)
+
+
+class TitleLineTests(SimpleTestCase):
+    """formats-4: reflow joined a report title to the next line when that line starts in lower case by spelling ("pH
+    sensor ...", "s/p ...", "pt ..."), so the title was lost and the documented study read uncertain, historical or
+    planned (a hidden missed service, coding read complete). A title written as a heading is never either side of a
+    soft wrap; a prose line that happens to end in "report" still wraps."""
+
+    def reading(self, text: str, codes=()):
+        text, pages = pdf(text)
+        result = run(text, codes, pages)[0]
+        return result
+
+    def test_a_title_keeps_its_break_before_a_lower_case_opener(self):
+        for opener in ('pH sensor placed at prior manometry.', 'pH catheter in place for 24 hours.',
+                       's/p transnasal catheter placement 5 cm above the LES; recording 24 hours off PPI.'):
+            with self.subTest(opener=opener):
+                head = f'{BANNER}\nDate of service: 2026-10-14\nESOPHAGEAL pH IMPEDANCE MONITORING REPORT\n'
+                control = self.reading(head + opener[0].upper() + opener[1:] + '\nAcid exposure 7.9%.\n')
+                result = self.reading(head + opener + '\nAcid exposure 7.9%.\n')
+                self.assertEqual(services_of(control), [('gi.reflux', 'performed', 'unknown')])
+                self.assertEqual(services_of(result), services_of(control))
+                self.assertEqual(result.completeness['state'], 'incomplete')
+                self.assertEqual([(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
+                                 [('gi.reflux', 'no_proposal')])
+
+    def test_a_title_case_title_keeps_its_break(self):
+        text = (f'{BANNER}\nDate of service: 2026-10-14\nEsophageal pH-Impedance Monitoring Report\n'
+                'pH catheter in place for 24 hours.\nAcid exposure 7.9%.\n')
+        result = self.reading(text, [('91038', 'Acid exposure 7.9%')])
+        self.assertEqual(services_of(result), [('gi.reflux', 'performed', 'unknown')])
+        self.assertNotIn('service.status', proposals_of(result)['91038'][1])
+
+    def test_a_prose_line_ending_in_report_still_wraps(self):  # control
+        text = ('The findings are summarised in the attached colonoscopy report\n'
+                'which the patient received.\n')
+        self.assertEqual(services.reflow(text).count('\n'), 1)
+
+    def test_a_title_set_on_two_lines_reads_as_one_title(self):
+        # formats-5 (d): a scan's narrower lines set the title on two lines; the feeding-tube replacement it names went
+        # unread (no service, coding read complete)
+        body = ('Date of service: 2026-10-18\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
+                'existing tract.\n')
+        one = self.reading(f'{BANNER}\nBEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT\n{body}')
+        two = self.reading(f'{BANNER}\nBEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE\nREPLACEMENT\n{body}')
+        self.assertEqual(services_of(one), [('gi.feeding_tube', 'performed', 'unknown')])
+        self.assertEqual(services_of(two), services_of(one))
+        self.assertEqual(two.completeness['state'], one.completeness['state'])
+        self.assertEqual(services.reflow('SMALL BOWEL CAPSULE ENDOSCOPY: INTERPRETATION AND\nREPORT\n').count('\n'), 1)
+
+    def test_two_headings_stay_two_headings(self):  # control
+        for text in ('COLONOSCOPY REPORT\nFINDINGS\n', 'UPPER ENDOSCOPY WITH BIOPSY\nIMPRESSION\n',
+                     'BEDSIDE PROCEDURE NOTE: GASTROSTOMY TUBE REPLACEMENT\nPatient: Synthetic Example (fictional)\n'):
+            with self.subTest(text=text):
+                self.assertEqual(services.reflow(text), text)
