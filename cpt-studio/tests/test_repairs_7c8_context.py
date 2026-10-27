@@ -146,13 +146,19 @@ class PrecedingFieldValueIsNotTheLabelsTests(DateAssertions, SimpleTestCase):
     date was sent. A capitalised label after a lower-case word opens its own field (rule C)."""
 
     def test_the_labelled_date_of_service_is_read(self):
-        for line in ('Indication: Personal history of colon polyps Date of service: 10/14/2026',
-                     'Indication: Recent rectal bleeding Procedure date: 10/14/2026'):
-            with self.subTest(line=line):
-                text = HEAD + line + '\n' + COLO_PLAIN
-                self.assert_document(text, '2026-10-14')
+        # Refutation round 3, sk:2: the field before the label is not the label's - but a qualifier there ("history
+        # of", "Recent") still holds the date, as one across a field break does, so these are asked (an over-hold, a
+        # known limit; this pin had them documented, and the same reading documented "Colonoscopy status: scheduled
+        # Procedure Date: 11/04/2026"). The member's 1998-01-01 is still a member conflict; the labelled date settles it.
+        for field, label in (('Indication: Personal history of colon polyps', 'Date of service: 10/14/2026'),
+                             ('Indication: Recent rectal bleeding', 'Procedure date: 10/14/2026')):
+            with self.subTest(field=field):
+                text = HEAD + field + ' ' + label + '\n' + COLO_PLAIN
+                self.assert_asked(text, label)
                 self.assert_member_conflict(text, ELENA_DATE)
                 self.assert_member_date(text, '2026-10-14')
+        # a field with no qualifier is still not the label's: its own date is read
+        self.assert_document(HEAD + 'Indication: screening Date of service: 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
 
     def test_beside_a_letter_date_it_is_a_conflict_never_the_letter_date(self):
         for letter in ('2026-10-27', '2026-10-16'):

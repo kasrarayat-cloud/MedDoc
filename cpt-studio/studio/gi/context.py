@@ -335,8 +335,9 @@ def _opens_field(text: str, label_start: int, label_end: int) -> bool:
     """Whether the label opens a field of its own where it stands (refutation round 2, c2:2): a label written with a
     capital and lower case ("Date of service", "Procedure date") one space after a word written in lower case ("...
     colon polyps Date of service:", as a flattened header row writes the value of the field before it). The words
-    before it are then that field's value, never the label's own. An all-capital label ("DOS") or a lower-case one says
-    nothing by its case."""
+    before it are then that field's value, never the label's own - but a qualifier among them still holds the date, as
+    one across a field break does (_line_reading; refutation round 3, sk:2). An all-capital label ("DOS") or a
+    lower-case one says nothing by its case."""
     label = text[label_start:label_end]
     if not label[:1].isupper() or label.upper() == label:
         return False
@@ -412,12 +413,14 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
     makes it another occurrence's date. Any other - across another field's label, a sentence end or a field break
     ("Visit type: Follow-up", "Planned procedure: EGD    Procedure date: ...") - may or may not be the date's own: the
     date is held as text this service cannot place. Before the label the history words count too ("Outside"), after the
-    date the date qualifiers and a bracket a history word opens. A label that opens a field of its own reads nothing
-    before it (round 2, c2:2). The scans stop 80 characters either side, so a long line costs each date only its
-    window."""
+    date the date qualifiers and a bracket a history word opens. Before a label that opens a field of its own (round 2,
+    c2:2: "... colon polyps Date of service:") the words are another field's, so a qualifier there is never attached to
+    it: it holds the date as one across a field break does (refutation round 3, sk:2: round 2 read nothing there, and
+    "Colonoscopy status: scheduled Procedure Date: 11/04/2026" or "Prior colonoscopy: yes Procedure Date: 05/01/2019"
+    gave the documented date, which was sent and an act done that day excluded against it). The scans stop 80
+    characters either side, so a long line costs each date only its window."""
     lo = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
-    if _opens_field(text, label_start, label_end):
-        lo = label_start
+    opens = _opens_field(text, label_start, label_end)
     hi = text.find('\n', date_end, date_end + 80)
     hi = min(len(text), date_end + 80) if hi < 0 else hi
     dates, starts = find_dates(text), _date_starts(text)
@@ -436,7 +439,7 @@ def _line_reading(text: str, label_start: int, label_end: int, date_start: int, 
         if other_dates(q.end(), label_start) or _qualifier_field(text, q.start(), q.end(), label_start,
                                                                  has_date) == 'else':
             continue
-        if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
+        if not opens and not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
             return 'another'
         reading = 'unplaced'
     bracket = _BRACKET_HISTORY.match(text, date_end, hi)

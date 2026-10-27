@@ -244,3 +244,90 @@ class MemberDateAgreesOnlyWithAStatedValueRequestTests(EndToEnd):
         self.set_context(e2, {'service_date': ELENA_DATE})
         self.assert_never_sent(e2, ELENA_DATE)
         self.assertEqual(self.dates_sent(e2), [[]])
+
+
+class QualifierInAnotherFieldHoldsTests(DateAssertions, SimpleTestCase):
+    """sk:2 (a regression of 0e639e79f's _opens_field): a capitalised date label one space after a lower-case word read
+    nothing before it, so a qualifier in the field before it ('Colonoscopy status: scheduled', 'Prior colonoscopy: yes',
+    'Next procedure: colonoscopy') was ignored and a planned or prior labelled date became the documented service date;
+    it was sent and an act done on the note's date was excluded against it. The words before such a label belong to
+    another field - they are not the label's own words, so they never make it another occurrence's date - but a
+    qualifier there still holds the date, as one across a field break always did: the date is asked."""
+
+    LINES = (
+        ('Colonoscopy status: scheduled Procedure Date: 11/04/2026', '2026-11-04'),
+        ('Prior colonoscopy: yes Procedure Date: 05/01/2019', '2019-05-01'),
+        ('Appointment: scheduled Visit Date: 11/24/2026', '2026-11-24'),
+        ('Scheduled: yes Procedure Date: 11/04/2026', '2026-11-04'),
+        ('Status: scheduled Procedure Date: 11/04/2026', '2026-11-04'),
+        ('Next procedure: colonoscopy Procedure Date: 10/14/2029', '2029-10-14'),
+        ('Previous colonoscopy: normal Procedure Date: 05/01/2019', '2019-05-01'),
+        ('Surveillance due: yes Procedure Date: 10/14/2029', '2029-10-14'),
+        ('Next appointment: follow-up Visit Date: 11/24/2026', '2026-11-24'),
+        ('Recall in 3 years, next Procedure Date: 10/14/2029', '2029-10-14'),
+        ('Indication: s/p polypectomy Procedure Date: 05/01/2019', '2019-05-01'),
+    )
+
+    def test_the_planned_or_prior_date_is_asked_never_documented(self):
+        for line, other in self.LINES:
+            for title in ('', 'GI office visit\n', 'Colonoscopy report\n'):
+                with self.subTest(line=line, title=title.strip()):
+                    text = HEAD + title + line + '\n' + VISIT_BODY
+                    self.assert_never(text, other)
+                    self.assert_asked(text, ' '.join(line.split()[-3:]))
+
+    def test_beside_a_dated_title_it_is_a_conflict(self):
+        for line, other in self.LINES[:4]:
+            with self.subTest(line=line):
+                text = HEAD + 'GI office visit - 10/20/2026\n' + line + '\n' + VISIT_BODY
+                self.assert_never(text, other)
+                self.assert_conflict(text, '2026-10-20', other)
+
+    def test_beside_another_labelled_date_it_is_a_conflict_never_set_aside(self):
+        # the words before the label are another field's, never the label's own: the date is held as one this service
+        # cannot place (a question beside the note's other labelled date), never set aside as another occurrence's
+        text = (HEAD + 'Visit date: 10/27/2026\nIndication: Personal history of colon polyps Date of service: 10/14/2026\n'
+                + COLO_PLAIN)
+        self.assert_conflict(text, '2026-10-27', '2026-10-14')
+
+    def test_a_history_word_in_the_field_before_holds_the_note_s_own_label_too(self):
+        # an over-hold (a known limit): the indication's history words may not date anything, but the reader cannot tell
+        for field, label in (('Indication: Personal history of colon polyps', 'Date of service: 10/14/2026'),
+                             ('Indication: Recent rectal bleeding', 'Procedure date: 10/14/2026')):
+            with self.subTest(field=field):
+                text = HEAD + field + ' ' + label + '\n' + COLO_PLAIN
+                self.assert_asked(text, label)
+                self.assert_member_date(text, '2026-10-14')
+
+    def test_controls_a_field_with_no_qualifier_or_about_something_else(self):
+        for line, value in (('Indication: screening Date of service: 10/14/2026', '2026-10-14'),
+                            ('Indication: abdominal pain Visit Date: 10/20/2026', '2026-10-20'),
+                            ('Last name: synthetic Date of Service: 10/14/2026', '2026-10-14'),
+                            ('Last colonoscopy: 05/01/2019 Procedure Date: 10/14/2026', '2026-10-14')):
+            with self.subTest(line=line):
+                text = HEAD + line + '\n' + COLO_PLAIN
+                self.assert_document(text, value)
+                self.assert_member_conflict(text, ELENA_DATE)
+
+
+class QualifierInAnotherFieldRequestTests(EndToEnd):
+    """sk:2 end to end (X1 .. X3): no planned or prior date is sent, and the act done on the note's date is never
+    excluded against one."""
+
+    def test_x1_a_scheduled_colonoscopy_s_date_under_an_egd_report(self):
+        text = (HEAD + 'EGD report\nIndication: dyspepsia.\nColonoscopy status: scheduled Procedure Date: 11/04/2026\n'
+                + EGD_BODY)
+        encounter_id = self.finished(text)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assertNotEqual(self.bucket(encounter_id, '43239'), 'excluded')
+
+    def test_x2_a_prior_colonoscopy_s_date(self):
+        encounter_id = self.finished(HEAD + 'Colonoscopy report\nPrior colonoscopy: yes Procedure Date: 05/01/2019\n'
+                                     + COLO_BODY)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.assertNotEqual(self.bucket(encounter_id, '45385'), 'excluded')
+
+    def test_x3_a_scheduled_appointment_s_date(self):
+        encounter_id = self.finished(HEAD + 'GI office visit\nAppointment: scheduled Visit Date: 11/24/2026\n'
+                                     + OFFICE_BODY)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
