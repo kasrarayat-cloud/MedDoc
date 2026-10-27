@@ -640,7 +640,9 @@ class UnsupportedExcludedTests(Case):
         from tests.test_repairs_r3_validation_b import encounter_check
         for plan, code in (('Plan: Rubber band ligation of the internal hemorrhoids.', '46221'),
                            ('Plan: Rubber band ligation of an internal hemorrhoid is scheduled for 2026-11-03.', '46221'),
-                           ('Plan: Barium enema next week.', '74270')):
+                           # 7c8 EXCL, sk:7: both readers must read the plan (the documented-service reader reads
+                           # no barium enema by its name alone; it reads the predicate)
+                           ('Plan: Barium enema will be performed next week.', '74270')):
             with self.subTest(code=code, plan=plan):
                 passage = plan[len('Plan: '):]
                 proposals, result = real(OFFICE.format(line=plan), ('99213', VISIT), (code, passage))

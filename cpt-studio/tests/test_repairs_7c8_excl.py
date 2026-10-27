@@ -9,8 +9,8 @@ from datetime import date
 
 from django.test import SimpleTestCase
 
-from tests.test_repairs_ec5_excl import (COLON_BASE, COLONOSCOPY, EGD, EGD_BASE, HEAD, assessed, proposal, statuses,
-                                         unresolved)
+from tests.test_repairs_ec5_excl import (COLON_BASE, COLONOSCOPY, DAY, EGD, EGD_BASE, HEAD, assessed, inventory,
+                                         proposal, statuses, unresolved)
 
 
 def _not_excluded(test, text, code, quote, day=date(2026, 10, 14)):
@@ -285,3 +285,133 @@ class DocumentationStampLabelTests(SimpleTestCase):
                               'planned')):
             with self.subTest(line=line):
                 self.assertEqual(statuses(EGD.format(x=line), 'biopsy'), [status])
+
+
+class BothReadersSameStatusTests(SimpleTestCase):
+    """sk:9: the engine counted any two not-performed readings as agreement - one reader's "negated" and the other's
+    "planned" about different words of the passage excluded a code both misread differently ("There was no bleeding and
+    biopsies were taken ... as planned and repeat endoscopy is planned in 8 weeks": the inventory read the biopsy
+    planned, routing read the passage negated). A code is excluded only when both readers read the same not-done status
+    (a plan, a history, or a denial) for its act in its own passage; otherwise it is held."""
+
+    def test_two_different_not_done_readings_hold_the_code(self):
+        for line, code in (
+                ('There was no bleeding and biopsies were taken from the ascending colon as planned and repeat endoscopy '
+                 'is planned in 8 weeks.', '45380'),
+                ('No bleeding occurred after biopsies were taken from the ascending colon as previously discussed and '
+                 'dilation was deferred.', '45380')):
+            with self.subTest(line=line):
+                held = _not_excluded(self, COLONOSCOPY.format(x=line), code, line)
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_the_rule_reads_the_status_not_only_the_state(self):
+        from studio.validation import checks, engine
+        line = 'A 6 mm sigmoid polyp was removed with a cold snare in 2019.'
+        text = COLONOSCOPY.format(x=line)
+        start = text.index(line)
+        service = next(s for s in inventory(text).services if s.family == 'gi.colonoscopy')
+        for status, agreed in (('historical', True), ('planned', False), ('negated', False)):
+            with self.subTest(status=status):
+                outcome = checks.StatusOutcome('not_performed', checks.Reading(
+                    status, (f'{status}: a routing-era cue',), 'evidence', line, start, start + len(line)))
+                self.assertEqual(engine._agreed_not_done('45385', outcome, service, text, DAY), agreed)
+
+    def test_a_denied_act_or_service_agrees_only_on_the_same_status(self):
+        from studio.validation import checks, engine, reconcile
+        for text, quote, code, family, agrees, differs in (
+                (EGD.format(x='No biopsies were taken.'), 'No biopsies were taken.', '43239', 'gi.egd', 'negated',
+                 'planned'),
+                (HEAD + 'Procedure date: 10/14/2026\nColonoscopy was cancelled because of a poor preparation.\n',
+                 'Colonoscopy was cancelled because of a poor preparation.', '45378', 'gi.colonoscopy', 'cancelled',
+                 'historical')):
+            found = reconcile.match(code, inventory(text), family)
+            self.assertEqual(found.state, 'not_performed')
+            start = text.index(quote)
+            for status, state in ((agrees, 'not_performed'), (differs, 'uncertain')):
+                with self.subTest(code=code, status=status):
+                    old = checks.StatusOutcome('not_performed', checks.Reading(
+                        status, (f'{status}: a routing-era cue',), 'evidence', quote, start, start + len(quote)))
+                    self.assertEqual(engine._second_opinion(old, found, code, text).state, state)
+
+    def test_controls_an_agreed_exclusion_stands(self):
+        for template, line, code in (
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare on 09/03/2026.', '45385'),
+                (COLONOSCOPY, 'The 6 mm polyp was removed with a cold snare and will be biopsied at the next EGD.',
+                 '45380'),
+                (EGD, 'Biopsies will be obtained at the next EGD.', '43239'),
+                (EGD, 'No biopsies were taken.', '43239'),
+                (EGD, 'Hemostasis will be achieved with hemoclips at the next EGD if the ulcer bleeds.', '43255')):
+            with self.subTest(line=line):
+                self.assertEqual(proposal(assessed(template.format(x=line), [(code, line)]), code).bucket, 'excluded')
+
+
+class NoDocumentedServiceReadsTheNameTests(SimpleTestCase):
+    """sk:7 (the c547ef33c guard): with no documented service of a code's family, the second reader read only the act
+    vocabulary, so a procedure named outside it ("Hemorrhoid banding was performed and will be repeated in 6 weeks",
+    "Anoscopy was performed ...", "Paracentesis was performed ...", "Rigid proctoscopy was performed ...") left routing's
+    reading to exclude the code alone. The second reader now reads the passage's procedure names and act predicates too;
+    routing's not-done reading excludes only where it reads the same status there - an act read done, another reading,
+    or nothing read at all holds the code."""
+
+    OFFICE = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Office anorectal procedure\nIndication: Bleeding internal '
+                     'hemorrhoids.\nFindings:\n{x}\nImpression: See findings.\n')
+
+    def test_a_done_procedure_outside_the_act_vocabulary_holds_the_code(self):
+        from tests.test_repairs_ec5_excl import NoDocumentedServiceTests
+        for template, line, code in (
+                (self.OFFICE, 'Hemorrhoid banding was performed and will be repeated in 6 weeks.', '46221'),
+                (self.OFFICE, 'Anoscopy was performed and will be repeated in 6 weeks.', '46600'),
+                (self.OFFICE, 'Paracentesis was performed and 3 liters will be sent for analysis.', '49083'),
+                (self.OFFICE, 'Rigid proctoscopy was performed and repeat proctoscopy is planned in 3 months.', '45300'),
+                (NoDocumentedServiceTests.ANOSCOPY, 'No bleeding occurred after hemorrhoid banding was performed.',
+                 '46221')):
+            with self.subTest(line=line):
+                held = _not_excluded(self, template.format(x=line), code, line)
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_a_passage_the_second_reader_reads_nothing_in_holds_the_code(self):
+        line = 'Rubber band ligation x2 today, recheck in 6 weeks.'
+        result = assessed(self.OFFICE.format(x=line), [('46221', line)])
+        self.assertNotEqual(proposal(result, '46221').bucket, 'excluded')
+
+    def test_controls_the_same_reading_by_both_still_excludes(self):
+        for line, code in (('Hemorrhoid banding will be performed at the next visit.', '46221'),
+                           ('Anoscopy was not performed.', '46600'),
+                           ('Hemorrhoid banding was cancelled.', '46221'),
+                           ('Two rubber bands were placed on the internal hemorrhoids on 09/03/2026.', '46221')):
+            with self.subTest(line=line):
+                self.assertEqual(proposal(assessed(self.OFFICE.format(x=line), [(code, line)]), code).bucket,
+                                 'excluded')
+
+
+class EarlierVisitReferenceTests(SimpleTestCase):
+    """sk:8 (the owner's historical-finding class): with no documented visit (routing reads no office E/M and the
+    inventory builds none), routing's reading of a cited "Last seen by Dr. Ramos on 2026-03-02." excluded 99213 alone as
+    historical. A reference to an earlier visit or service is no reading of this visit: the E/M code is held for the
+    reviewer, never excluded on it."""
+
+    NOTES = (
+        HEAD + 'Date of service: 10/20/2026\nThe patient returns for follow-up of constipation. Last seen by Dr. Ramos on '
+               '2026-03-02.\nShe reports one soft bowel movement daily on polyethylene glycol.\nAbdomen soft, '
+               'non-tender.\nAssessment: chronic constipation, controlled.\nPlan: continue polyethylene glycol; return '
+               'in 6 months.\n',
+        HEAD + 'Date of service: 10/20/2026\nFlexible sigmoidoscopy was performed today for rectal bleeding; the '
+               'sigmoidoscope was advanced to the descending colon. Internal hemorrhoids were seen.\nIn addition, the '
+               'patient was evaluated today for chronic constipation. Last seen by Dr. Ramos on 2026-03-02.\nAssessment '
+               'and plan: continue polyethylene glycol; high-fiber diet.\n',
+    )
+
+    def test_an_earlier_visit_never_excludes_the_e_m_code(self):
+        day = date(2026, 10, 20)
+        for text in self.NOTES:
+            for quote in ('Last seen by Dr. Ramos on 2026-03-02.',):
+                with self.subTest(note=text[70:120], quote=quote):
+                    held = _not_excluded(self, text, '99213', quote, day)
+                    self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+        # both readers read the earlier visit's own predicate as historical: still no reading of this visit
+        for line in ('Her prior evaluation was completed by Dr. Ramos on 2026-03-02.',
+                     'A fiber supplement was given at the last visit on 2026-03-02.'):
+            with self.subTest(line=line):
+                text = self.NOTES[0].replace('Last seen by Dr. Ramos on 2026-03-02.', line)
+                held = _not_excluded(self, text, '99213', line, day)
+                self.assertEqual(held.status, 'needs_clarification')

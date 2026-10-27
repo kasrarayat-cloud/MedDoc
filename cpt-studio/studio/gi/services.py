@@ -1615,7 +1615,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         checked = re.search(_box_symbols.BOX_ON_PATTERN, text[line_start:line_end])
         if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
             # no option on the row is marked: an unselected option alone says nothing (the box contract)
-            return Reading('uncertain', ('box: an unselected option alone says nothing',))
+            return Reading('uncertain', (BOX_UNSELECTED,))
         if status in ('performed', 'incomplete') and _under_an_empty_plan_heading(text, line_start):
             return Reading('planned', ('planned: listed under a plan heading',))
         label = _row_label(text, line_start, pos) if status == 'performed' and box_cues \
@@ -2086,6 +2086,10 @@ def held_under_denial(text: str, pos: int, reading: Reading, service_date: Optio
 FORM_FIELD_CHECKED = re.compile(r'[ \t]*(?P<label>[^:\n]{1,120}?)[ \t]*:[ \t]*(?P<answer>checked|yes)[ \t]*\.?[ \t]*',
                                 re.A | re.I)
 SILENT_READINGS = ('uncertain: no performance statement', 'uncertain: named without an act predicate')
+# An unchecked box this reader leaves to routing's box reader (read_clause; the box contract): it says nothing either way.
+BOX_UNSELECTED = 'box: an unselected option alone says nothing'
+# What says nothing either way about an item - neither done nor not done (passage_readings' silence).
+SAYS_NOTHING = SILENT_READINGS + (BOX_UNSELECTED, BOX_SILENT)
 
 
 def form_field_blocks(text: str) -> list[tuple[int, int]]:
@@ -2182,13 +2186,29 @@ def _act_frame(text: str, service_date: Optional[date]):
     return flow, dates, plist, [p.start for p in plist], _sentences(flow)
 
 
-def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[Span]:
-    """An act mention inside the passage [start, end) that this reader reads as done today - performed, or stated done
-    with its time in doubt (OTHER_TIME_CUE) - each in its own clause and section, as pass 3 reads acts, on the same
-    reflowed view as build(): the clause of the first one, or None. For a code whose family no documented service names,
-    the engine asks it of the code's own passage, so the routing-era reading alone never excludes an act this reader
-    reads as done there (ec5, cluster EXCL: both readers must agree). Bounded: the sentences that meet the passage."""
+# How many things the reader reads in one passage for passage_readings (bounds the work per code); past it the passage
+# is not read through, and what it says is not established.
+PASSAGE_READS = 64
+
+
+def done_today(reading: Reading) -> bool:
+    """A reading of something done today: performed, or stated done with its time in doubt (OTHER_TIME_CUE)."""
+    return reading.status == 'performed' or (reading.status == 'uncertain' and any(
+        cue.startswith(OTHER_TIME_CUE) for cue in reading.cues))
+
+
+def passage_readings(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[list]:
+    """What this reader reads in the passage [start, end), as pass 3 reads acts, on the same reflowed view as build():
+    every act mention, service name, procedure-shaped word (routing's own structural form, detect._PROCEDURE_WORD:
+    "Anoscopy", "Hemorrhoid banding", "Paracentesis") and act predicate ("was performed", "were placed") in it, each read
+    in its own clause and section - [(reading, clause span)], in order, stopping after the first one read as done today
+    (done_today). None when the passage holds more than PASSAGE_READS of them (not read through). The engine asks it of
+    a code's own deciding passage, so the routing-era reading alone never excludes a code (ec5 and 7c8, cluster EXCL:
+    both readers must read the same not-done status; 7c8 skeptic, sk:7 - an act outside the act vocabulary, read by its
+    name or its predicate). Bounded: the sentences that meet the passage, PASSAGE_READS reads."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
     flow, dates, plist, starts, sentences = _act_frame(text, service_date)
+    out: list = []
     token = _ORIGINAL.set(text)
     try:
         for ss, se in sentences:
@@ -2197,22 +2217,35 @@ def states_an_act_done(text: str, start: int, end: int, service_date: Optional[d
             if ss >= end:
                 break
             read_end = min(se, ss + SENTENCE_READ_CHARS)
-            mentions = _acts_in(flow, max(ss, start), min(read_end, end))
-            if not mentions:
+            lo, hi = max(ss, start), min(read_end, end)
+            if lo >= hi:
                 continue
+            spots = {(ms, me) for _kind, ms, me in _acts_in(flow, lo, hi)}
+            for pattern in [p for _, _, p in SERVICES] + [detect._PROCEDURE_WORD, ACT_VERB, BARE_PARTICIPLE]:
+                spots.update(m.span() for m in pattern.finditer(flow, lo, hi))
+            if not spots:
+                continue
+            if len(out) + len(spots) > PASSAGE_READS:
+                return None
             part = _part_at(plist, starts, ss)
             cls = clauses(flow, ss, read_end)
-            for _kind, ms, me in mentions:
+            for ms, me in sorted(spots):
                 clause = _clause_for(cls, ms)
                 reading = read_clause(flow, clause, ms, me, service_date=service_date, dates=dates, part=part,
                                       in_today_report=part.kind == 'report')
                 reading = held_under_denial(flow, ms, reading, service_date)
-                if reading.status == 'performed' or (reading.status == 'uncertain' and any(
-                        cue.startswith(OTHER_TIME_CUE) for cue in reading.cues)):
-                    return _span(text, *clause)
+                out.append((reading, _span(text, *clause)))
+                if done_today(reading):
+                    return out
     finally:
         _ORIGINAL.reset(token)
-    return None
+    return out
+
+
+def states_an_act_done(text: str, start: int, end: int, service_date: Optional[date]) -> Optional[Span]:
+    """The clause of the first thing passage_readings reads as done today in the passage [start, end), or None."""
+    readings = passage_readings(text, start, end, service_date) or []
+    return next((clause for reading, clause in readings if done_today(reading)), None)
 
 
 # --- the reader -----------------------------------------------------------------------------------------------------
