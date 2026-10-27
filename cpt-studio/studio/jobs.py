@@ -1116,8 +1116,12 @@ def _run_in_use(revision):
                 models.ProviderRun.UNKNOWN)
     reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
                            & ~Q(request_sha256=''))
+    # A held run (a member date conflict: scope.held) is a hold, not the outcome of any request: it carries none to
+    # compare, so standing as the run in use it let a cleared conflict re-send the byte-identical request that had
+    # FAILED before it (ec5 integration, from the REPORTRUNS skeptic; 5.4: never re-sent behind a metadata save).
+    held = Q(state=models.ProviderRun.NOT_SENT) & Q(scope__has_key='held')
     run = (revision.provider_runs.filter(state__in=finished, purpose=models.ProviderRun.PRIMARY)
-           .exclude(reserved_then_swept).order_by('-created_at').first())
+           .exclude(reserved_then_swept).exclude(held).order_by('-created_at').first())
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run

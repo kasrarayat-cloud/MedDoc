@@ -287,17 +287,22 @@ class MemberDateConflictIsHeldWhereDecidedTests(TestCase):
                                                                    scope__held__isnull=False).exists())
 
     def test_controls_clearing_the_conflict_queues_the_predict_for_the_documented_date(self):
+        """Clearing the conflict answers the documented date's request with its retained result and sends nothing.
+        Since the ec5 integration a held run is no request's outcome (jobs._run_in_use skips it: standing as the run
+        in use it had let a cleared conflict re-send a request that FAILED), so the re-check meets the documented run
+        itself and re-assesses with it, where it queued a predict that reused that run; nothing is sent either way."""
         encounter_id = self.finished()
         self.set_date(encounter_id, '1998-01-01')
         drain()
         self.set_date(encounter_id, '')
         queued = list(models.Job.objects.filter(encounter_id=encounter_id, state=models.Job.QUEUED))
-        self.assertEqual([job.kind for job in queued], [models.Job.PREDICT])
+        self.assertEqual([job.kind for job in queued], [models.Job.ASSESS])
         drain()
-        self.assertEqual(len(self.provider.sent), 1)  # the documented request's retained result is reused
-        latest = models.ProviderRun.objects.filter(encounter_id=encounter_id).latest('created_at')
-        self.assertEqual((latest.state, latest.sent, latest.service_date),
-                         (models.ProviderRun.SUCCEEDED, False, DOCUMENTED))
+        self.assertEqual(len(self.provider.sent), 1)  # the documented request's retained result answers it
+        assessment = models.Encounter.objects.get(pk=encounter_id).current_assessment
+        run = assessment.provider_run
+        self.assertEqual((run.state, run.service_date, (run.scope or {}).get('held')),
+                         (models.ProviderRun.SUCCEEDED, DOCUMENTED, None))
 
     def test_a_setting_change_beside_the_conflict_is_held_at_the_change(self):
         encounter_id = self.finished()
