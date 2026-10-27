@@ -54,6 +54,10 @@ class Provider(TwoPassProvider):
                                error='HTTP 500 from the provider (synthetic).')
         if outcome == 'unknown':
             return RawExchange(outcome='unknown', sent=True, error='Read timed out after the request was sent.')
+        if outcome == 'not_sent':
+            # the token endpoint refused: the live adapter records not_sent (sent=False) before the coding request
+            return RawExchange(outcome='not_sent', sent=False,
+                               error='Corti authentication was refused (HTTP 503); no coding request was sent.')
         text = request.contexts[0]
         data = response(text, [q for q in (self.first if BANNER in text else self.later) if q[1] in text])
         return RawExchange(outcome='succeeded', sent=True, http_status=200, response_bytes=data,
@@ -71,6 +75,41 @@ def body_bytes(text, day=None):
     """The canonical body size of the request the live adapter builds for ``text`` (as stored) and ``day``."""
     request = corti.build_coding_request('corti', corti.ADAPTER_VERSION, text, day, 10 ** 9)
     return len(canonical_body(request.body))
+
+
+def sized_text(limit):
+    """An undated synthetic report whose dateless request is at most ``limit`` bytes and whose request carrying
+    'Date of service: 2026-10-16' is over it: a legal paste of ruled handout lines."""
+    rule = '─' * 40  # a box-drawing rule: 40 characters, 120 bytes in UTF-8
+    head = UNDATED + 'Fictional patient handout follows: a printed ruled page for notes.\n'
+
+    def build(lines, pad):
+        return head + (rule + '\n') * lines + 'End of handout ' + 'a' * pad + '.\n'
+    target = limit - 10
+    lines = (target - body_bytes(canonical(build(0, 0)))) // (len((rule + '\n').encode()) + 2)
+    lines = max(lines, 0)
+    pad = target - body_bytes(canonical(build(lines, 0)))
+    text = build(lines, max(pad, 0))
+    stored = canonical(text)
+    assert body_bytes(stored) <= limit < body_bytes(stored, date.fromisoformat(DATE)), (body_bytes(stored), limit)
+    assert len(text) <= settings.MAX_PASTE_CHARS
+    return text
+
+
+def installed_run_in_use(revision):
+    """057a7d39's jobs._run_in_use, restated: the run whose outcome the installed revision reads as standing once a
+    rollback (or the failure path) restores it - the revision's newest finished run, whatever it was made for (that
+    revision has no purpose column), a reservation the stale sweep settled unsent excluded, and none when that run is
+    a reconciled unknown outcome. Its _run_answers is this revision's, unchanged: a run that carries no request
+    answers none."""
+    from django.db.models import Q
+    Run = models.ProviderRun
+    swept = Q(state=Run.NOT_SENT) & Q(started_at__isnull=True) & ~Q(request_sha256='')
+    run = (revision.provider_runs.filter(state__in=(Run.SUCCEEDED, Run.FAILED, Run.NOT_SENT, Run.UNKNOWN))
+           .exclude(swept).order_by('-created_at').first())
+    if run is None or (run.state == Run.UNKNOWN and run.reconciled_at is not None):
+        return None
+    return run
 
 
 class Steps(Base):
@@ -114,23 +153,7 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
     request stood as the run in use and answers no request (the sibling of the held run, ec5 integration)."""
 
     def sized_text(self, limit):
-        """An undated synthetic report whose dateless request is at most ``limit`` bytes and whose request carrying
-        'Date of service: 2026-10-16' is over it: a legal paste of ruled handout lines."""
-        rule = '─' * 40  # a box-drawing rule: 40 characters, 120 bytes in UTF-8
-        head = UNDATED + 'Fictional patient handout follows: a printed ruled page for notes.\n'
-
-        def build(lines, pad):
-            return head + (rule + '\n') * lines + 'End of handout ' + 'a' * pad + '.\n'
-        target = limit - 10
-        lines = (target - body_bytes(canonical(build(0, 0)))) // (len((rule + '\n').encode()) + 2)
-        lines = max(lines, 0)
-        pad = target - body_bytes(canonical(build(lines, 0)))
-        text = build(lines, max(pad, 0))
-        stored = canonical(text)
-        self.assertLessEqual(body_bytes(stored), limit)
-        self.assertGreater(body_bytes(stored, date.fromisoformat(DATE)), limit)
-        self.assertLessEqual(len(text), settings.MAX_PASTE_CHARS)
-        return text
+        return sized_text(limit)
 
     def test_a_date_whose_request_cannot_be_built_then_cleared_never_resends_the_failed_request(self):
         # the finding's smallest input: the live adapter's own limit, 512,000 bytes
@@ -494,3 +517,77 @@ class WhateverItWasMadeForTests(Steps):
                         models.ProviderRun.PRIMARY)
         self.context(encounter_id, service_date=DATE)
         self.assert_recorded_not_resent(encounter_id, sent=2)
+
+
+# --- round 7c8, the P1SENDS skeptic: a reuse is not a send, and the run in use is the outcome that stands ------------
+
+@override_settings(**LIVE)
+class RetainedSecondReviewIsReusedTests(Steps):
+    """Skeptic sk:1 (capability loss; 5.4 Reuse): the second-review blocker refused, as a request this document had
+    sent and that failed, an ask whose identical request another encounter of the workspace had since had answered - an
+    answer stage_review2 reuses with nothing sent, as b611b557a did. The refusal came before any retained answer was
+    considered, so the offer and the ask refused what the stage serves for free, and the biopsy stayed unresolved."""
+
+    def failed_here_answered_elsewhere(self, *, elsewhere='succeeded'):
+        first = self.create(TRAILED)
+        drain()
+        self.provider.outcomes = ['failed']
+        self.assertEqual(self.ask(first).status_code, 201)
+        drain()
+        [failed] = self.runs(first, purpose=models.ProviderRun.SECOND_REVIEW)
+        self.assertEqual((failed.state, failed.sent), (models.ProviderRun.FAILED, True))
+        other = self.create(TRAILED)  # the same report uploaded again: its primary answer is reused
+        drain()
+        self.provider.outcomes = [elsewhere]
+        self.assertEqual(self.ask(other).status_code, 201)
+        drain()
+        [answered] = self.runs(other, purpose=models.ProviderRun.SECOND_REVIEW)
+        self.assertEqual((answered.state, answered.sent, answered.request_sha256),
+                         (elsewhere, True, failed.request_sha256))
+        reply = self.post(f'/api/encounters/{first}/addenda', ADDENDUM)  # leaves the excerpt as it was
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(self.selected(first), {'45385': 'primary'})
+        return first, failed, answered
+
+    def test_an_ask_whose_request_was_answered_elsewhere_is_served_by_that_answer(self):
+        first, failed, answered = self.failed_here_answered_elsewhere()
+        sent = self.sent()
+        offered = self.detail(first)['second_review']
+        self.assertTrue(offered['available'], offered)
+        self.assertEqual(offered['reason'], '')
+        self.assertEqual(self.ask(first).status_code, 201)
+        drain()
+        self.assertEqual(self.sent(), sent)  # a reuse is not a send
+        reused = self.runs(first, purpose=models.ProviderRun.SECOND_REVIEW)[-1]
+        self.assertEqual((reused.state, reused.sent, reused.reused_from_id, reused.revision.number),
+                         (models.ProviderRun.SUCCEEDED, False, answered.pk, 2))
+        self.assertEqual(self.selected(first), {'45385': 'primary', '45380': 'second_review'})
+        self.assertEqual(self.shas().count(failed.request_sha256), 2)  # this encounter's attempt and the other's
+
+    def test_control_the_stage_serves_the_same_ask(self):
+        # held before the repair too: the stage, reached directly, reuses the retained answer and sends nothing
+        first, failed, answered = self.failed_here_answered_elsewhere()
+        sent = self.sent()
+        encounter = self.encounter(first)
+        job = jobs.enqueue(models.Job.REVIEW2, encounter=encounter, revision=encounter.current_revision,
+                           context=encounter.current_context, provider_run=encounter.current_assessment.provider_run,
+                           key='review2:queued-another-way', requested_by=self.reviewer)
+        drain()
+        job.refresh_from_db()
+        self.assertEqual(job.result.get('second_review'), 'reused', job.result)
+        self.assertEqual(self.sent(), sent)
+        self.assertEqual(self.selected(first), {'45385': 'primary', '45380': 'second_review'})
+
+    def test_control_an_answer_that_failed_elsewhere_releases_nothing(self):
+        # only an answer is reused: the other encounter's own attempt failed too, so nothing is retained to serve the
+        # ask, and the request that failed here is refused and never sent again
+        first, failed, other = self.failed_here_answered_elsewhere(elsewhere='failed')
+        sent = self.sent()
+        offered = self.detail(first)['second_review']
+        self.assertFalse(offered['available'], offered)
+        self.assertIn('failed', offered['reason'])
+        self.assertEqual(self.ask(first).status_code, 409)
+        drain()
+        self.assertEqual(self.sent(), sent)
+        self.assertEqual(self.runs(first, purpose=models.ProviderRun.SECOND_REVIEW), [failed])

@@ -1581,9 +1581,14 @@ had one, whatever its outcome (a reconciled unknown one releases another), only
 for the current assessment of a primary request that succeeded and was not
 refused whole, only with a known, agreed service date, never while an outcome
 is unknown, never when its request repeats one the provider already answered
-or one the encounter already sent that failed (on any revision: an addendum that
-leaves the excerpt as it was makes the identical request);
-`stage_review2` checks them again when it runs. It sends the
+as a primary request, and never when it repeats one the encounter already sent
+that failed (on any revision: an addendum that leaves the excerpt as it was
+makes the identical request) unless an answer to that identical second-review
+request is retained in the workspace: that answer is reused and nothing is sent
+(5.4 Reuse; a reuse is not a send), so the ask is accepted;
+`stage_review2` checks them again when it runs, in the same order (a retained
+answer reused, then an unknown outcome blocks, then a request that failed is
+never sent again). It sends the
 provider the text that documents those services (the services' report parts,
 ≤ 20,000 characters) with the date line, under the same send discipline as
 predict (`jobs._send`: single-flight advisory lock, the run written reserved

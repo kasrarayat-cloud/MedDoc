@@ -305,6 +305,17 @@ def _failed_before(encounter, provider, request):
         .order_by('-created_at').first())
 
 
+def _retained_second_review(encounter, provider, request):
+    """The workspace's retained answer to the second-review ``request`` (the original SUCCEEDED run, not a reuse of
+    one), which stage_review2 reuses with nothing sent; None when there is none. The blocker asks the same lookup, so
+    the offer and the stage never disagree about a reuse (round 7c8 skeptic: the offer refused, as a request that had
+    failed here, one another encounter's identical request had since had answered)."""
+    return models.ProviderRun.objects.filter(
+        encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
+        purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at').first()
+
+
 # --- stages ------------------------------------------------------------------
 
 def stage_extract(job):
@@ -782,8 +793,11 @@ def _second_review_blocker(encounter, revision, context, assessment):
             purpose=models.ProviderRun.PRIMARY).exists():
         return ('The text that documents the unresolved services is a request the provider already answered, so a '
                 'second review would ask nothing new.')
-    if _failed_before(encounter, provider, request) is not None:
-        # refutation p1, sends-1: the once-per-revision bound alone let an addendum re-offer the identical request
+    if (_failed_before(encounter, provider, request) is not None
+            and _retained_second_review(encounter, provider, request) is None):
+        # refutation p1, sends-1: the once-per-revision bound alone let an addendum re-offer the identical request.
+        # Only where no answer to it is retained: one is reused and nothing is sent, as stage_review2 does - reuse,
+        # then the unknown-outcome block, then this (round 7c8 skeptic: a reuse is not a send, 5.4).
         return ('The text that documents the unresolved services is a request already sent for this document that '
                 'failed, and an identical request is never sent again.')
     return ''
@@ -868,10 +882,7 @@ def stage_review2(job):
         # The excerpt is the whole text (a report that opens with its title): the request repeats a primary request
         # already answered, so it asks nothing new and is never sent (refutation r1: a byte-identical paid resend).
         return {'skipped': 'the second review would repeat a primary request already answered; nothing was sent'}
-    prior = models.ProviderRun.objects.filter(
-        encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
-        request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
-        purpose=models.ProviderRun.SECOND_REVIEW).order_by('created_at').first()
+    prior = _retained_second_review(encounter, provider, request)
     if prior is not None:
         run = models.ProviderRun.objects.create(
             encounter=encounter, revision=revision, provider=prior.provider, adapter_version=prior.adapter_version,
