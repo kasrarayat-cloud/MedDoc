@@ -2126,9 +2126,10 @@ def reflow(text: str, pages: Sequence = ()) -> str:
     A break is soft only when the line before it is a long run of prose (25+ characters and 4+ words) that does not
     end a sentence or a label and does not end in an answer of its own (_answered_line, the rule _sentences cuts at),
     and the next line continues it in lower case, or after a word that cannot end a line (_DANGLING), a comma, or
-    before a line opening with a parenthesis; never around a
-    check-box or option row, a table row, a list item or a labelled field, and never inside an extraction block.
-    Headings, labels, fields and short lines keep their breaks.
+    before a line opening with a parenthesis; never around a table row, a list item or a labelled field, never
+    inside an extraction block, and around a check-box or option row only where the row itself wraps (its option,
+    note or label going on in lower case on the next line, which has no row of its own). Headings, labels, fields and
+    short lines keep their breaks.
 
     A page join - the separator the extraction writes between two pages, after the earlier page's own last newline;
     ``pages`` are the text's page spans - is the line break it stands for, never a paragraph break of its own: when the
@@ -2186,7 +2187,13 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
         return False
     if '|' in prev or '|' in nxt or '\t' in prev or '\t' in nxt:
         return False
-    if BOX_MARK.search(prev) or BOX_MARK.search(nxt):
+    marked_before, marked_after = BOX_MARK.search(prev), BOX_MARK.search(nxt)
+    if (marked_before or marked_after) and (marked_before and marked_after or not _SOFT_NEXT.match(nxt)):
+        # refutation r1, formats-0 and formats-1: a check-box or option row is read over its logical extent, so its
+        # marked option, its note or its label wrapping onto the next line in lower case is one line with it ("[X] Not"
+        # / "performed", "[X] Not taken - not" / "sampled before resection", "... 3 cm distal to the" / "site) [ ]
+        # Performed [X] Not performed"); a row never runs on into another row or into a line that does not go on in
+        # lower case
         return False
     if _answered_line(text, ls, le, ns):
         return False  # "... and said no" / "Hiatal hernia - no": the answer ends its line

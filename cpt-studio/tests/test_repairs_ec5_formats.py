@@ -164,3 +164,75 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
                 self.assertEqual([(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
                                  [('gi.egd', 'no_proposal')])
                 self.assertEqual(result.completeness['state'], 'incomplete')
+
+
+class WrappedCheckBoxRowTests(SimpleTestCase):
+    """formats-0 and formats-1: a check-box row is read over its logical extent. A PDF line that wraps a row's marked
+    option ("[X] Not" / "performed"), its note ("[X] Not taken - not" / "sampled before resection") or its label ("...
+    3 cm distal to the" / "site) [ ] Performed [X] Not performed") had dropped the nursing row's "Not performed" (the
+    physician-vs-nursing tattoo conflict lost, 45381 READY: the Elena tattoo-conflict class) or read the note's tail as
+    a performed act. The row continues on a next line that goes on in lower case with no mark of its own, or on a row
+    line that opens with the lower-case tail of a label begun above; it never runs on into another row."""
+
+    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n'
+            'The colonoscope was advanced to the cecum. The examination was complete.\n'
+            'The colon wall distal to the lesion was tattooed with carbon-particle ink.\nNURSING CHECKLIST\n')
+    CITE = [('45381', 'The colon wall distal to the lesion was tattooed with carbon-particle ink.')]
+
+    def read(self, rows: str):
+        text, pages = pdf(self.HEAD + rows)
+        return run(text, self.CITE, pages)[0]
+
+    def assert_conflict(self, result):
+        self.assertIn(('tattoo', 'negated'), acts_of(result, 'tattoo'))
+        self.assertEqual([c['subject'] for c in result.services['conflicts']], ['tattoo'])
+        status, _ = proposals_of(result)['45381']
+        self.assertEqual(status, 'needs_clarification')
+        self.assertIn('conflict:tattoo', [q.fact for p in result.proposals for q in p.clarifications])
+
+    def test_the_unwrapped_row_keeps_its_conflict(self):  # control
+        self.assert_conflict(self.read('Tattoo injection [ ] Performed [X] Not performed\n'))
+
+    def test_a_marked_option_wrapped_onto_the_next_line(self):
+        self.assert_conflict(self.read('Tattoo injection            [ ] Performed   [X] Not\nperformed\n'))
+
+    def test_a_row_label_wrapped_onto_the_boxes_line(self):
+        self.assert_conflict(self.read('Tattoo injection (carbon-particle ink, 3 cm distal to the\n'
+                                       'site)   [ ] Performed   [X] Not performed\n'))
+
+    def test_an_agreeing_row_leaves_the_code_ready(self):  # control
+        result = self.read('Tattoo injection            [X] Performed   [ ] Not\nperformed\n')
+        self.assertEqual(result.services['conflicts'], [])
+        self.assertEqual(proposals_of(result)['45381'], ('ready', []))
+
+    def test_two_rows_stay_two_rows(self):  # control: a row never runs on into the next row
+        result = self.read('Tattoo injection [X] Performed [ ] Not performed\nBiopsy [ ] Performed [X] Not performed\n')
+        self.assertEqual(acts_of(result, 'tattoo'), [('tattoo', 'performed'), ('tattoo', 'performed')])
+        self.assertEqual(acts_of(result, 'biopsy'), [('biopsy', 'negated')])
+        flow = services.reflow('Tattoo injection [ ] Performed [X] Not\nperformed\nBiopsy [ ] Performed [X] Not '
+                               'performed\n[X] Biopsy\n[ ] Snare polypectomy\nTattoo injection [ ] Yes [X] No\n'
+                               'Colonoscopy was then performed.\n')
+        self.assertEqual(flow.count('\n'), 6)  # only the wrapped option is joined
+
+    def test_a_wrapped_note_is_read_under_its_row(self):
+        # formats-1: the note's tail was read as a performed biopsy (a phantom act, a conflict and an unresolved item)
+        text, pages = pdf(f'{BANNER}\nColonoscopy report (fictional)\nDate of service: 2026-10-02\n'
+                          'The colonoscope was advanced to the cecum.\nBiopsy:  [ ] Taken   [X] Not taken - not\n'
+                          'sampled before resection\n')
+        result = run(text, [('45378', 'The colonoscope was advanced to the cecum.')], pages)[0]
+        # the row's own reading denies the biopsy; the tail is read by the row's reader (routing's, over the text as
+        # written, holds it across the wrap) and never as a performed act of its own
+        self.assertIn(('biopsy', 'negated'), acts_of(result, 'biopsy'))
+        self.assertNotIn(('biopsy', 'performed'), acts_of(result, 'biopsy'))
+        self.assertEqual(result.services['conflicts'], [])
+        self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_wrapped_note_of_a_row_that_lists_nothing_done_holds(self):
+        # formats-1 H2: "Removed today: [ ] Yes [X] No - such lesions are" / "lifted and resected at the EMR unit" read
+        # a performed EMR (an unresolved item, and a paid second review at the time)
+        text, pages = pdf(f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n'
+                          'Colonoscopy was performed to the cecum.\nLesion 1\nDescription: 35 mm flat lesion\n'
+                          'Removed today:  [ ] Yes   [X] No - such lesions are\nlifted and resected at the EMR unit\n')
+        result = run(text, [('45378', 'Colonoscopy was performed to the cecum.')], pages)[0]
+        self.assertEqual(acts_of(result, 'emr'), [('emr', 'uncertain')])
+        self.assertEqual(result.completeness['unresolved_items'], [])
