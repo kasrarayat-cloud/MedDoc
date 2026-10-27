@@ -941,3 +941,25 @@ class NegationScopeTests(SimpleTestCase):
                         ('Cold snare polypectomy was performed because the polyp did not appear invasive.', 'snare')):
             with self.subTest(x=x):
                 self.assertIn(kind, kinds(one(read(self.REPORT.format(x=x))[1], 'gi.colonoscopy')))
+
+
+class UnestablishedServiceCompletenessTests(SimpleTestCase):
+    """Refutation r1 (report lens): a documented service not established as performed that no proposal reads keeps
+    coding incomplete; completeness never says every documented service has a proposal."""
+
+    def test_an_uncertain_service_without_a_proposal_keeps_coding_incomplete(self):
+        from studio.types import EvidenceSpan, ProviderCode
+        text = HEAD + ('Date of service: 2026-10-14\nEUS: Normal pancreas and common bile duct; no mass.\nColonoscopy: The '
+                       'colonoscope was advanced to the cecum. A 7 mm sessile polyp in the sigmoid colon was removed with '
+                       'a cold snare.\n')
+        quote = 'was removed with a cold snare'
+        start = text.index(quote)
+        day = date(2026, 10, 14)
+        result = assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, day),
+                        normalized=NormalizedResponse('replay', 'test@1', (ProviderCode(
+                            'selected', 'cpt', '45385', 'UNVERIFIED PROVIDER WORDING',
+                            (EvidenceSpan(0, start, start + len(quote), quote, True),)),)),
+                        reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
+        self.assertEqual(result.completeness['state'], 'incomplete')
+        self.assertIn('1 documented service not established as performed and read by no proposal',
+                      result.completeness['reasons'])

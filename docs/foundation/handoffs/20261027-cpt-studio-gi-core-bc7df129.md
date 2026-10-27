@@ -9,7 +9,9 @@ The live install is unchanged (2734a6f3, installed from 057a7d398).
 
 ## Where everything is
 - Code: the branch. Commits after the peer's WIP 2: WIP 3-7 (triage round 1 and 2 merges), WIP 8 (a7f2810c, round-2
-  skeptic repairs), WIP 8b (8f8a3b48, consent subject). Check `git log --oneline 057a7d398..HEAD`.
+  skeptic repairs), WIP 8b (8f8a3b48, consent subject; the refutation sandboxes' commit), then WIP 8c-8p: repairs of
+  the refutation findings verified so far (sends, context, upgrade, reports, cost) and two late field/box rules. Check
+  `git log --oneline 057a7d398..HEAD`; every commit message names the finding it repairs.
 - Scratch that survives the reboot (`/tmp` is cleared at boot on this host): `/home/claude/cpt-studio-gi-core-save-20261027/`
   (mode 0700). `bc7df129/gi-core/` = this session's tools, drafts (pr-body-draft.md, residuals-draft.md), triage NOTES,
   patches, probes, refute/workflow.js; `909be030/gi-core/` = the peer's dev env file (`cpt-dev-env.sh`), the held-out
@@ -27,10 +29,10 @@ The live install is unchanged (2734a6f3, installed from 057a7d398).
   exclusion, the snare "Site:" line). Interpretations 23-24 and ARCHITECTURE 5.12 record them. The facts_wording
   skeptic's batteries (six, in triage2/facts_wording-skeptic/probes) now read as before the modal fix except the
   intended hypothetical repairs.
-- Targeted runs green on WIP 8/8b: the 23 classes that had failed, the reader, corpus, formats, second-review, wording
-  and routing modules. Full suite: runs/wip8-a (snapshot taken before WIP 8's tests) and a run on 8f8a3b48 if it
-  finished before the stop - see the scratch runs/ directory. Known load-sensitive timing tests (r4c_validation
-  Bounded4, r4_validation CoverageCost) fail under host load; re-time them on a quiet host.
+- Full suites (scratch runs/): wip8-a, wip8-b (f6ba870b) and wip8-f (9771e11e) each failed only the Bounded4 timing
+  test (10,000 hedged lines, assess under 9 s). WIP 8l removed its two quadratic scans (services.build 5.4 s -> 1.3 s
+  at 10,000 lines); wip8-k (6e4c111b) and a run on the last commit may have finished before the stop - check runs/.
+  Every module touched since passes on its own (see the commit messages).
 - Refutation pass (mandatory, AGENTS.md): workflow run `wf_7881c326-ebd`, 10 lenses (release, missed, negtime, sends,
   report, cost, migrate, formats, context, boxes) in armed sandboxes `.lens-r1-<lens>` at 8f8a3b48 (ARMs 0-5 and 7-9
   green; ARM 6 checks a JS package and does not apply to this Python app). If it was stopped at the shutdown, do NOT
@@ -41,9 +43,20 @@ The live install is unchanged (2734a6f3, installed from 057a7d398).
   work only (args `{"commit": "8f8a3b48f263c58c4cfa68568d986bc58ca54c96"}`; the script's durable copy is in the save
   directory, `bc7df129/gi-core/refute/workflow.js`).
 
+- Refutation r1 at the stop: 96 findings from 10 lenses; the ledger with each finding's verdict and the commit that
+  repaired it is `bc7df129/gi-core/refute/r1-ledger.md` in the save directory (regenerate it from the journal). About
+  a third were still awaiting their skeptic at the stop. Structural repairs already in: a second review is sent only
+  for what the routing-era reader also reads as done today (engine._routing_agrees) - which closes the paid-send half of
+  most reader misreadings - and the identical-request, pre-upgrade-context, member-value, held-run wording and cost
+  repairs.
+
 ## Left (in order)
-1. Finish the refutation pass; verify every finding yourself; repair blocking ones by general rules; re-attack each
-   repair once (interpretation 21); record non-blocking misreadings in `cpt-studio/ACCURACY-RESIDUALS.md` (draft rows in
+1. Finish the refutation pass (continuation for the missing verifiers only), then triage every verified finding
+   against interpretation 6: blocking = approval or removal without a reviewer, report/export errors, data loss,
+   security, cost/memory limits, REGRESSIONS against 057a7d398, and misreadings of wording the code declares it reads;
+   everything else is a residual. Expect most blocking ones in the reader (negtime, missed, boxes, release) and in the
+   reflow (formats: soft-wrap joins around field rows, titles, page breaks). Repair by cluster with general rules, each
+   repair re-attacked once (interpretation 21); record residuals in `cpt-studio/ACCURACY-RESIDUALS.md` (draft rows in
    the save directory's residuals-draft.md) and the PR body.
 2. Full suite green on the final commit (one suite at a time; swap is high on this shared host).
 3. PR (body via file; draft in the save directory), CI (CI, cpt-studio, secrets-scan), `bash scripts/merge-pr.sh`.

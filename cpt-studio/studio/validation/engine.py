@@ -188,8 +188,12 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     clarifications = ((clarification,) if clarification else ()) + tuple(service_questions)
     clarifications += tuple(_member_conflict_questions(context, clarifications, proposals))
     open_questions = len(clarifications) + sum(len(p.clarifications) for p in proposals)
+    read = {s.evaluation.match.service.id for s in selections
+            if s.evaluation is not None and getattr(s.evaluation, 'match', None) is not None}
+    unestablished = sum(1 for svc in (usable or inventory).services if svc.status == 'uncertain' and svc.id not in read)
     complete = reconcile.completeness(usable or inventory, unresolved, open_questions,
-                                      provider_status == 'succeeded' and response is not None)
+                                      provider_status == 'succeeded' and response is not None,
+                                      unestablished=unestablished)
     if problems:
         complete['state'] = 'incomplete'
         complete['reasons'] = list(complete['reasons']) + ['the documented-service reading was inconsistent']

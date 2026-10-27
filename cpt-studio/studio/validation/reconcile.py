@@ -418,14 +418,19 @@ def documentation_clarifications(service: DocumentedService, context=None) -> li
 
 
 def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], open_questions: int,
-                 provider_ok: bool) -> dict:
-    """The encounter's coding completeness at assessment time (review decisions are added by review.readiness)."""
+                 provider_ok: bool, unestablished: int = 0) -> dict:
+    """The encounter's coding completeness at assessment time (review decisions are added by review.readiness).
+    ``unestablished``: documented services not established as performed that no proposal reads (refutation r1, report
+    lens: "EUS: Normal pancreas" beside a coded colonoscopy had let it say every documented service has a proposal)."""
     reasons = []
     if not provider_ok:
         reasons.append('the provider response was not available')
     if unresolved:
         reasons.append(f'{len(unresolved)} documented service{"s" if len(unresolved) != 1 else ""} or act'
                        f'{"s" if len(unresolved) != 1 else ""} without a supported proposal')
+    if unestablished:
+        reasons.append(f'{unestablished} documented service{"s" if unestablished != 1 else ""} not established as '
+                       'performed and read by no proposal')
     if inventory.conflicts:
         reasons.append(f'{len(inventory.conflicts)} conflict{"s" if len(inventory.conflicts) != 1 else ""} in the record')
     if open_questions:
