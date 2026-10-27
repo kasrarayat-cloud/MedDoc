@@ -368,6 +368,15 @@ CONSENT_AFTER = _rx(r'[ \t]+(?:consent|authori[sz]ation|approval)\b')
 CONSENT_SUBJECT = _rx(r'\b(?:informed\s+|written\s+|verbal\s+|procedural\s+)?(?:consent|permission|authori[sz]ation|'
                       r'approval)\b')
 CONSENT_PREDICATE = _rx(r'\b(?:signed|given|documented|reviewed|confirmed|verified|received|discussed)\b')
+# A consent governed by the preposition, participle or subordinator that opens its phrase ("After obtaining informed
+# consent, ...", "With the patient's consent, ...", "Per the patient's permission to proceed, ...", "Following anesthesia
+# clearance for the procedure, ...", "After consent was obtained, ..."): an adverbial, never the subject of the predicate
+# the clause goes on to, so that predicate is the item's own (refutation r1: "After obtaining informed consent, we
+# performed cold snare polypectomy" read the snare as what the consent was for: no unresolved item, no second review).
+CONSENT_GOVERNED = _rx(r'(?:after|with|per|following|upon|on|given|having|once|before|prior\s+to|pending|under)\b')
+# The predicate a consent can be the subject of: an auxiliary one ("was obtained", "were signed"), never an active one
+# whose subject is the endoscopist ("we performed", "I took").
+AUXILIARY_PREDICATE = _rx(r'(?:was|were|been|is|are)\b')
 CONSENT_CUE = 'uncertain: named as what a consent or an authorization is for'
 # What a referral is for ("tattooed for EMR referral", "for an advanced endoscopy referral"): the item inside the phrase
 # is planned, never done today; the rest of the clause keeps its own reading (refutation r1: read as an EMR done).
@@ -1250,18 +1259,33 @@ def hypothetical_reading(reading: Reading) -> bool:
     return any(cue.startswith(HYPOTHETICAL_CUE) for cue in reading.cues)
 
 
+def _consent_governed(text: str, cs: int, at: int) -> bool:
+    """Whether the consent noun at ``at`` of the clause starting at ``cs`` is governed by the word that opens its phrase
+    (CONSENT_GOVERNED), read from the last comma, colon, semicolon, stop or bracket before it ("Technique: After
+    obtaining informed consent"). Bounded: the phrase's last 80 characters."""
+    head = text[max(cs, at - 80):at]
+    cut = max(head.rfind(c) for c in ',;:.(\n')
+    return CONSENT_GOVERNED.match(head[cut + 1:].strip()) is not None
+
+
 def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
     """Whether the item at [pos, end) of the clause [cs, ce) is what a consent, an authorization or an approval in that
     clause is for (CONSENT_FOR, "Biopsy consent"), with no predicate of its own that states it done: a predicate between
     the consent and the item, or one after the item when the consent has its own ("Consent was obtained for colonoscopy
-    and biopsies were taken"), is the item's. Bounded: one pass over the clause."""
+    and biopsies were taken"), is the item's. A consent is the subject only of an auxiliary predicate, and only when no
+    word governs it (_consent_governed): "After obtaining informed consent, we performed cold snare polypectomy" and
+    "Informed consent was obtained and we then biopsied ..." state the act done by its own predicate, and after a
+    governed consent's phrase closes at a comma, the predicate that follows the item is the item's ("After anesthesia
+    clearance for the procedure, hot snare polypectomy ... was performed"). Bounded: one pass over the clause."""
     if CONSENT_AFTER.match(text, end, ce):
         return True
     subject = CONSENT_SUBJECT.search(text, cs, pos)
-    predicate_m = ACT_VERB.search(text, subject.end(), pos) if subject else None
-    if predicate_m is not None and predicate_m.start() - subject.end() <= 30 \
-            and not ACT_VERB.search(text, predicate_m.end(), pos) and not ACT_VERB.search(text, end, ce) \
-            and not BARE_PARTICIPLE.search(text, predicate_m.end(), pos) and not BARE_PARTICIPLE.search(text, end, ce):
+    predicate_m = ACT_VERB.search(text, subject.end(), pos) \
+        if subject and not _consent_governed(text, cs, subject.start()) else None
+    if predicate_m is not None and AUXILIARY_PREDICATE.match(predicate_m.group(0)) \
+            and predicate_m.start() - subject.end() <= 30 and ',' not in text[subject.end():predicate_m.start()] \
+            and not ACT_VERB.search(text, predicate_m.end(), end) and not ACT_VERB.search(text, end, ce) \
+            and not BARE_PARTICIPLE.search(text, predicate_m.end(), end) and not BARE_PARTICIPLE.search(text, end, ce):
         return True  # the clause's one predicate is the consent's ("Consent was obtained after explaining ...")
     found = None
     for m in CONSENT_FOR.finditer(text, cs, pos):
@@ -1277,6 +1301,8 @@ def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
                      tail, FLAGS)
     tail = tail[:stop.start()] if stop else tail
     own = ACT_VERB.search(tail) or BARE_PARTICIPLE.search(tail)
+    if own and ',' in between and _consent_governed(text, cs, found.start()):
+        return False  # the governed consent's phrase closed at the comma: the predicate after the item is the item's
     predicate = found.group('predicate')
     consent_said = ACT_VERB.search(predicate) or BARE_PARTICIPLE.search(predicate) or CONSENT_PREDICATE.search(predicate)
     return not (own and consent_said)
