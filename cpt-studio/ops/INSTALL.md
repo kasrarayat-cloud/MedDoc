@@ -229,9 +229,12 @@ revision over this one:
    outcome is unknown.
 
 Records this revision made stay as they are and are read by the older code as
-it reads them: its reports do not mark a bounded second review as used, its
-re-assessment does not read one, and it reads a hold as a provider request that
-failed. Encounter list states stay as this revision last derived them until an
+it reads them: its reports do not mark a bounded second review as used, and its
+re-assessment does not read one (a code only the second review proposed leaves
+the decision set at the encounter's next re-assessment there); it reads a hold
+as a provider request that failed; and it requests a member's service date that
+differs from the document's as the date (its own rule, which this revision
+holds). Encounter list states stay as this revision last derived them until an
 action on each encounter recomputes them.
 
 ## Recovery notes
