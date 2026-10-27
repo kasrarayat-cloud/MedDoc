@@ -9,8 +9,11 @@ persisted state. Refutation r1 findings re-checked at this branch's head, each t
 - sends-5: an unreconciled unknown second review left the encounter's state and the review queue saying nothing waited
   on a reconciliation, while the same runs left by a worker that died read "Provider outcome unknown";
 - report-10: the UI's provider runs did not say which run was the second review;
-- the second review a reviewer asks for (8985dde42): described truthfully while it waits, and once it was not sent or
-  its outcome is unknown.
+- the second review a reviewer asks for (8985dde42): described truthfully while it waits, runs, was stopped or failed,
+  and once it was not sent, skipped or its outcome is unknown; a stage of it that failed before sending never reads
+  "Provider not run";
+- found in this territory: the provider state cards explain themselves with the run or stage the state reads (the
+  latest predict; the run in use), never with an earlier one.
 Synthetic data only; no network: an in-process provider stands in for the live adapter.
 """
 import hashlib
