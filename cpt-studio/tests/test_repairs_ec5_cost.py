@@ -10,10 +10,15 @@ new:neg-opening - the opening a negation word may follow (spaces, dashes, bullet
 new:heading-date - the same in the words a heading's own date may stand among, "(?:[ \\t,...]+|<word>)*": a 204-character
   note whose procedure line reads "Procedure: Colonoscopy", 30 spaces, "x 2026-10-01" (and one with the run after the
   date) took the assess stage past its limit. Each repetition now reads one mark or one word.
+cost-6 (the clause cutter's half; the other half, one cut per sentence, is d3bb7a118) - a run of whitespace was tried as
+  a clause cut from each of its characters, and every try read the run to its end: one counted mention and 60,000
+  spaces in its sentence took the assess stage 94 s, 120,000 past its limit. A run is now tried from its first two
+  characters only, which finds the cuts the try from every character found.
 
 Each cost pin runs the stage's own code under a deadline well under the stage's and far over what the repaired code
 takes; the reading pins compare with the code before the repair. Synthetic data only; no network.
 """
+import random
 import re
 import time
 from datetime import date
@@ -173,3 +178,83 @@ class HeadingDateTests(SimpleTestCase):
             with self.subTest(line=line):
                 self.assertEqual(services._heading_time(text, ls, ls + len(line), DAY, dates,
                                                         [d.start for d in dates]), kind)
+
+
+# --- cost-6: a run of whitespace is tried as a clause cut from its first two characters only ----------------------
+
+def shipped_clauses(text, start, end):
+    """The clause cutter before the repair: _CLAUSE_CUT tried from every character of [start, end), with the EXCL
+    cluster's own-time rule as it stood on the integrated tree (ec5 integration: the two repairs met in clauses(); the
+    own_time cut is made only after an act predicate stated since the last cut)."""
+    out, pos = [], start
+    stated, scanned = False, start
+    for m in services._CLAUSE_CUT.finditer(text, start, end):
+        if m.lastgroup == 'own_time':
+            if not stated:
+                lo = max(pos, scanned - 60)
+                stated = bool(services.ACT_VERB.search(text, lo, m.start())
+                              or services.BARE_PARTICIPLE.search(text, lo, m.start()))
+                scanned = m.start()
+            if not stated:
+                continue
+        seg = services._trim(text, pos, m.start())
+        if seg:
+            out.append(seg)
+        pos = m.end()
+        stated, scanned = False, pos
+    seg = services._trim(text, pos, end)
+    if seg:
+        out.append(seg)
+    return out or [(start, end)]
+
+
+def one_run(spaces):
+    return HEAD + 'Date of service: 2026-10-14\nColonoscopy was performed with mucosa' + ' ' * spaces + 'pink.\n'
+
+
+class ClauseCutTests(SimpleTestCase):
+    def test_one_run_of_whitespace_is_cut_in_linear_time(self):
+        """20,000 spaces in one clause took about 9 s to cut before the repair (the time grew fourfold per doubling)."""
+        text = 'Colonoscopy was performed with mucosa' + ' ' * 20_000 + 'pink.'
+        started = time.perf_counter()
+        self.assertEqual(services.clauses(text, 0, len(text)), [(0, len(text))])
+        self.assertLess(time.perf_counter() - started, 1.0)
+
+    def test_a_note_with_a_long_run_is_assessed_within_the_limit(self):
+        """One counted mention and a run of 120,000 spaces in its sentence overran the assess stage."""
+        started = time.perf_counter()
+        proposals = assess_child(one_run(120_000), '45378', 'Colonoscopy was performed')
+        self.assertLess(time.perf_counter() - started, PIN_SECONDS)
+        self.assertIn('45378', proposals)
+
+    def test_the_cuts_are_the_ones_a_try_from_every_character_found(self):
+        texts = ['Biopsies were obtained and dilation was not performed',
+                 'A polyp was seen at 30  and the polyp was not removed',  # a digit before a run: cut at its second
+                 'A polyp was seen at 30 and the polyp was not removed',  # one space after a digit: no cut
+                 'A polyp was seen at 3.   and the polyp was not removed',
+                 'The polyp was removed;   biopsies were taken, but  the clip was not placed',
+                 'Snare polypectomy was done,   while the patient was sedated',
+                 'Tattoo was placed \t but\n\nbiopsies were not taken',
+                 'The colonoscope was advanced\t\tand was not withdrawn, and it was then removed',
+                 'mucosa' + ' ' * 50 + 'pink;' + ' ' * 7 + 'and the ring was not dilated',
+                 'x ,  the polyp was removed', '  and the polyp was not seen  ', ';;  ,,', '',
+                 # the own-time cut (EXCL, negtime-4) after an act predicate, and its absence before one
+                 'Cold forceps biopsies were obtained from the antrum   and will be sent to pathology',
+                 'Biopsy and polypectomy will be performed  and repeat EGD is planned',
+                 'The polyp was removed and   dilation was deferred, and the clip was placed and we will follow up']
+        rnd = random.Random(1027)
+        tokens = [' ', '  ', '\t', '\n', ';', ',', '.', '3', '30', 'and', 'And', 'but', 'whereas', 'although',
+                  'while', 'was', 'were', 'not', "n't", 'the', 'it', 'they', 'two', 'had', 'polyp', 'x',
+                  'will', 'removed', 'deferred', 'planned', 'obtained', 'is']
+        for _ in range(1500):
+            texts.append(''.join(rnd.choice(tokens) + rnd.choice(['', ' ', '  ', '\t'])
+                                 for _ in range(rnd.randint(1, 30))))
+        checked = 0
+        for text in texts:
+            windows = {(0, len(text))} | {tuple(sorted((rnd.randint(0, len(text)), rnd.randint(0, len(text)))))
+                                          for _ in range(3)}
+            for start, end in windows:
+                checked += 1
+                with self.subTest(text=text, start=start, end=end):
+                    self.assertEqual(services.clauses(text, start, end), shipped_clauses(text, start, end))
+        self.assertGreater(checked, 4000)

@@ -1200,24 +1200,44 @@ def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> t
     return lo, hi
 
 
+# Where a cut can begin: every _CLAUSE_CUT alternative opens with a semicolon, a comma or a run of whitespace.
+_CUT_START = re.compile(r'[;,]|\s+', re.A)
+
+
 def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
-    out, pos = [], start
+    """[start, end) cut at _CLAUSE_CUT into trimmed clauses. A run of whitespace is tried as a cut from its first
+    character and its second only (refutation r1, cost-6: tried from each of its characters, every try read the run to
+    its end again - one counted mention and a run of 60,000 spaces in its sentence took the assess stage to 94 s, and
+    120,000 past its limit). From any later character of the run a cut reads as from its second: the character before
+    it is whitespace (the lookbehind's "not after a digit" holds) and the run's end and the words after it are the same.
+    So the cuts are the ones a try from every character found."""
+    out, pos, at = [], start, start
     # A coordinated predicate with its own time (_CLAUSE_CUT's own_time) is cut only after an act predicate stated
     # since the last cut; the search for it resumes where it stopped (a 60-character overlap keeps a predicate that
     # straddles the stop), so a long sentence of such coordinations is read once, never again from its start.
     stated, scanned = False, start
-    for m in _CLAUSE_CUT.finditer(text, start, end):
+    while True:
+        lead = _CUT_START.search(text, at, end)
+        if lead is None:
+            break
+        m = _CLAUSE_CUT.match(text, lead.start(), end)
+        if m is None and lead.end() - lead.start() > 1:
+            m = _CLAUSE_CUT.match(text, lead.start() + 1, end)  # "at 30  and the polyp was": after a digit
+        if m is None:
+            at = lead.end()
+            continue
         if m.lastgroup == 'own_time':
             if not stated:
                 lo = max(pos, scanned - 60)
                 stated = bool(ACT_VERB.search(text, lo, m.start()) or BARE_PARTICIPLE.search(text, lo, m.start()))
                 scanned = m.start()
             if not stated:
+                at = m.end()  # not a cut: the search resumes after it, as finditer's did
                 continue
         seg = _trim(text, pos, m.start())
         if seg:
             out.append(seg)
-        pos = m.end()
+        pos = at = m.end()
         stated, scanned = False, pos
     seg = _trim(text, pos, end)
     if seg:
