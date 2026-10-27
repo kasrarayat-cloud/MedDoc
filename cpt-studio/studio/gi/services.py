@@ -2142,7 +2142,10 @@ _DANGLING = re.compile(r'\b(?:a|an|the|of|to|in|on|at|by|with|from|for|into|onto
                        r'using|measuring|approximately|about|its|their|his|her|this|that|these|those)[ \t]*$', re.I)
 _NEXT_ITEM = re.compile(r'[ \t]*(?:[-*\u2022]|\d{1,2}[.)]\s|[A-Z][A-Za-z /&()\-]{1,40}:(?:\s|$))')
 _LIST_ITEM = re.compile(r'[ \t]*(?:[a-z][.)]|[ivx]{1,4}[.)])\s')
-_TERMINAL = re.compile(r'[.:;!?]["\')\]]*[ \t]*$')
+# What ends a sentence or a label at the end of a line. A semicolon does not (_sentences never cuts there): a line that
+# ends at one and goes on in lower case is a wrap (refutation r1, formats-5: "... candidate for surgery;" / "prior
+# studies have been inconclusive." had opened a history part at the wrapped line and dated the study as history).
+_TERMINAL = re.compile(r'[.:!?]["\')\]]*[ \t]*$')
 
 
 def reflow(text: str, pages: Sequence = ()) -> str:

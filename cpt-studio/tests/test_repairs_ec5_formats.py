@@ -236,3 +236,31 @@ class WrappedCheckBoxRowTests(SimpleTestCase):
         result = run(text, [('45378', 'Colonoscopy was performed to the cecum.')], pages)[0]
         self.assertEqual(acts_of(result, 'emr'), [('emr', 'uncertain')])
         self.assertEqual(result.completeness['unresolved_items'], [])
+
+
+class SemicolonWrapTests(SimpleTestCase):
+    """formats-5 (a): a PDF line that ends at a semicolon inside a sentence ("... candidate for surgery;" / "prior
+    studies have been inconclusive.") kept its break, so the next line, starting with a history word, opened a history
+    part that dated the documented pH study as history: no unresolved item, coding read complete. A semicolon does not
+    end a sentence (_sentences never cuts there), so a lower-case line after it is a soft wrap."""
+
+    INDICATION = 'Indication: Heartburn refractory to PPI; candidate for surgery; prior studies have been inconclusive.'
+    PLACEMENT = 'The wireless pH capsule was placed transorally without endoscopy.'
+
+    def reading(self, indication: str):
+        text, pages = pdf(f'{BANNER}\nDate of service: 2026-10-05\n{indication}\n{self.PLACEMENT}')
+        result = run(text, (), pages)[0]
+        return (services_of(result), [(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
+                result.completeness['state'])
+
+    def test_a_line_wrapped_after_a_semicolon_reads_as_one_sentence(self):
+        expected = ([('gi.reflux', 'performed', 'unknown')], [('gi.reflux', 'no_proposal')], 'incomplete')
+        self.assertEqual(self.reading(self.INDICATION), expected)  # control: one line
+        self.assertEqual(self.reading(self.INDICATION.replace('surgery; prior', 'surgery;\nprior')), expected)
+
+    def test_after_a_semicolon_only_a_lower_case_line_is_joined(self):  # control
+        text = 'The colonoscope was advanced to the cecum; the preparation was good;\nPlan: repeat in five years.\n'
+        self.assertEqual(services.reflow(text), text)
+        text = 'Medications held before the procedure: apixaban for two days;\nprior history of GI bleeding.\n'
+        self.assertEqual(services.reflow(text).count('\n'), 1)  # one sentence: the wrap is joined
+
