@@ -1559,6 +1559,11 @@ and fact. `Assessment.completeness` records the unresolved, bundled and covered
 items and the reasons; `review.coding_completeness` adds the review state:
 `incomplete` (unresolved services, open conflicts or open questions — the
 supported proposals stay available for review), `pending_review`, `reviewed`.
+A documented service performed with no proposal that is not listed as
+unresolved (the office visit beside a same-day procedure) is recorded in
+`completeness.not_listed`, named, and keeps coding `incomplete`: no surface
+says every documented service has a proposal while one has none (refutation
+7c8, reports-1).
 It is never "verified": CPT membership and NCCI edits are not connected. A
 proposal being ready for review and the encounter's coding being complete are
 separate statements everywhere (UI banner, both reports, CSV row).

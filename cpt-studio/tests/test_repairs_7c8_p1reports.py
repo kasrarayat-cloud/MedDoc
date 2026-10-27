@@ -265,3 +265,96 @@ class SecondReviewCheckNamesWhatItAccountsForTests(Harness):
         self.assertIn('selected 45380, 45386, which account for forceps biopsy', check['detail'])
         self.assertIn('dilation (balloon)', check['detail'])
         self.assertNotIn('Still unresolved', check['detail'])
+
+
+# --- reports-1: a documented visit no proposal accounts for --------------------------------------------------------
+
+EM_AND_COLONOSCOPY = SYNTHETIC + """Riverbend Digestive Health (fictional)
+Date of service: 2026-10-20
+Place of service: Office, in-person outpatient visit
+Patient status: Established patient, last seen 2026-03-02.
+
+Clinic visit
+Chief complaint: change in bowel habit. History and examination were performed and documented.
+A significant, separately identifiable evaluation and management service was provided today.
+Medical decision making: moderate.
+Total time on the date of the encounter was 32 minutes.
+
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the examination was completed. No polyps were found.
+"""
+SEPARATE_EM = 'A significant, separately identifiable evaluation and management service was provided today.\n'
+SCOPE = ('45378', 'The colonoscope was advanced to the cecum and the examination was completed.')
+VISIT = ('99214', 'Total time on the date of the encounter was 32 minutes.')
+EVERY_SERVICE = 'Every documented service has a proposal'
+COLONOSCOPY_ALONE = SYNTHETIC + """Colonoscopy report (fictional)
+Date of service: 2026-10-21
+Place of service: Hospital outpatient department
+Procedure: Colonoscopy
+The colonoscope was advanced to the cecum and the examination was completed.
+No polyps were seen.
+"""
+
+
+class DocumentedVisitWithoutAProposalTests(Harness):
+    """reports-1: an office visit (documented as performed, with or without a significant, separately identifiable E/M)
+    beside a same-day colonoscopy; the provider selected only 45378. The reconciliation does not list the visit as
+    unresolved beside a same-day procedure (and makes no second review for it), so coding completeness said "Every
+    documented service has a proposal with a reviewer's decision" in the reviewed TXT, the CSV and the screen banner,
+    and UNRESOLVED closed with "every documented act ... has a selected proposal or is not separately reported". A
+    documented service no proposal accounts for keeps coding incomplete, named, on every surface."""
+
+    def reviewed(self, text, *selections):
+        from tests.test_pipeline_api import FakeProvider
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        for code, _ in selections:
+            self.decide(encounter_id, code, 'approve')
+        return encounter_id
+
+    def test_a_visit_beside_a_same_day_procedure_with_no_proposal_keeps_coding_incomplete(self):
+        for index, text in enumerate((EM_AND_COLONOSCOPY, EM_AND_COLONOSCOPY.replace(SEPARATE_EM, ''))):
+            with self.subTest(separate_em=index == 0):
+                self.fresh(f'Synthetic workspace {index}')
+                encounter_id = self.reviewed(text, SCOPE)
+                assessment = self.assessment(encounter_id)
+                visit = next(s for s in assessment.services['services'] if s['family'] == 'gi.office_em')
+                self.assertEqual((visit['status'], visit['separate_em']), ('performed', index == 0))
+                self.assertEqual(assessment.completeness['covered'][visit['id']], [])
+                self.assertEqual(assessment.completeness['unresolved_items'], [])  # still never pushed as unresolved
+                detail = self.detail(encounter_id)
+                self.assertTrue(detail['readiness']['reviewed'])  # the reviewed report can still be produced
+                coding = detail['coding']
+                self.assertEqual(coding['state'], 'incomplete')
+                self.assertNotIn(EVERY_SERVICE, coding['statement'])
+                self.assertIn('office / outpatient visit beside a same-day procedure', coding['statement'])
+                reviewed = self.txt(encounter_id, 'reviewed')
+                self.assertIn('State: incomplete', section(reviewed, 'CODING COMPLETENESS'))
+                self.assertNotIn(EVERY_SERVICE, reviewed)
+                closing = section(reviewed, 'UNRESOLVED')
+                self.assertIn('except office / outpatient visit beside a same-day procedure', closing)
+                self.assertNotIn('[', closing)  # never read as an unresolved item by the download verifier
+                (row,) = [line for line in self.csv_text(encounter_id, 'reviewed').split('\r\n')
+                          if '"coding_completeness"' in line]
+                self.assertIn('"incomplete"', row)
+                self.assertNotIn(EVERY_SERVICE, row)
+                self.assertIn('Coding for this encounter is incomplete', page(detail)['codes'])
+                self.assertEqual(self.post(f'/api/encounters/{encounter_id}/reports',
+                                           {'kind': 'reviewed', 'fmt': 'csv'}).status_code, 201)
+
+    def test_control_a_visit_with_its_own_proposal_and_a_procedure_alone_stay_as_they_were(self):
+        encounter_id = self.reviewed(EM_AND_COLONOSCOPY, SCOPE, VISIT)
+        assessment = self.assessment(encounter_id)
+        visit = next(s for s in assessment.services['services'] if s['family'] == 'gi.office_em')
+        self.assertEqual(assessment.completeness['covered'][visit['id']], ['99214'])
+        self.assertEqual(assessment.completeness['state'], 'complete_pending_review')
+        self.assertEqual(self.detail(encounter_id)['coding']['state'], 'reviewed')
+        self.fresh('Synthetic workspace alone')
+        alone = self.reviewed(COLONOSCOPY_ALONE, SCOPE)
+        coding = self.detail(alone)['coding']
+        self.assertEqual(coding['state'], 'reviewed')
+        self.assertTrue(coding['statement'].startswith(f"{EVERY_SERVICE} with a reviewer's decision."))
+        closing = section(self.txt(alone, 'reviewed'), 'UNRESOLVED')
+        self.assertEqual(closing, '  - none: every documented act the catalogue reconciles has a selected proposal or '
+                                  'is not separately reported')

@@ -196,9 +196,10 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     read = {s.evaluation.match.service.id for s in selections
             if s.evaluation is not None and getattr(s.evaluation, 'match', None) is not None}
     unestablished = sum(1 for svc in (usable or inventory).services if svc.status == 'uncertain' and svc.id not in read)
+    not_listed = reconcile.uncounted(usable, unresolved, covered) if usable else []
     complete = reconcile.completeness(usable or inventory, unresolved, open_questions,
                                       provider_status == 'succeeded' and response is not None,
-                                      unestablished=unestablished)
+                                      unestablished=unestablished, not_listed=not_listed)
     if problems:
         complete['state'] = 'incomplete'
         complete['reasons'] = list(complete['reasons']) + ['the documented-service reading was inconsistent']
@@ -207,6 +208,8 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                                                   and _routing_agrees(u, usable or inventory, routing, text, service_date))
                              for i, u in enumerate(unresolved)],
         'bundled': [{'service': b.service, 'act': b.act, 'label': b.label, 'why': b.why} for b in bundled],
+        # documented services performed with no proposal and not listed as unresolved (refutation 7c8, reports-1)
+        'not_listed': [{'service': s.id, 'family': s.family, 'label': reconcile.uncounted_label(s)} for s in not_listed],
         'covered': covered, 'catalogue_version': reconcile.catalogue.CATALOGUE_VERSION,
         'inventory_problems': list(problems)})
     return AssessmentResult(

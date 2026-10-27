@@ -494,11 +494,27 @@ def documentation_clarifications(service: DocumentedService, context=None) -> li
     return out
 
 
+def uncounted(inventory: ServiceInventory, unresolved: Sequence[Unresolved], covered: dict[str, list[str]]
+              ) -> list[DocumentedService]:
+    """The documented services performed today that no selected proposal accounts for and that the reconciliation
+    neither lists as unresolved nor reads as included in another: an office visit beside a same-day procedure, which is
+    never pushed as unresolved (nor sent for a second review), is still a documented service without a proposal, so
+    coding completeness names it and never says every documented service has one (refutation 7c8, reports-1)."""
+    listed = {u.service for u in unresolved}
+    return [s for s in inventory.services if s.status in ('performed', 'incomplete') and s.id in covered
+            and not covered[s.id] and not s.included_in and s.id not in listed]
+
+
+def uncounted_label(service: DocumentedService) -> str:
+    return service_label(service) + (' beside a same-day procedure' if service.family == 'gi.office_em' else '')
+
+
 def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], open_questions: int,
-                 provider_ok: bool, unestablished: int = 0) -> dict:
+                 provider_ok: bool, unestablished: int = 0, not_listed: Sequence[DocumentedService] = ()) -> dict:
     """The encounter's coding completeness at assessment time (review decisions are added by review.readiness).
     ``unestablished``: documented services not established as performed that no proposal reads (refutation r1, report
-    lens: "EUS: Normal pancreas" beside a coded colonoscopy had let it say every documented service has a proposal)."""
+    lens: "EUS: Normal pancreas" beside a coded colonoscopy had let it say every documented service has a proposal).
+    ``not_listed``: documented services performed with no proposal that are not listed as unresolved (uncounted)."""
     reasons = []
     if not provider_ok:
         reasons.append('the provider response was not available')
@@ -508,6 +524,9 @@ def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], 
     if unestablished:
         reasons.append(f'{unestablished} documented service{"s" if unestablished != 1 else ""} not established as '
                        'performed and read by no proposal')
+    if not_listed:
+        reasons.append(f'{len(not_listed)} documented service{"s" if len(not_listed) != 1 else ""} without a proposal '
+                       'and not listed as unresolved: ' + ', '.join(uncounted_label(s) for s in not_listed))
     if inventory.conflicts:
         reasons.append(f'{len(inventory.conflicts)} conflict{"s" if len(inventory.conflicts) != 1 else ""} in the record')
     if open_questions:

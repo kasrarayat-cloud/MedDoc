@@ -259,6 +259,7 @@ def _services(assessment, text, rejected=frozenset()):
     return {
         'services': out,
         'unresolved': [_unresolved_item(u, text) for u in completeness.get('unresolved_items') or []],
+        'not_listed': [n.get('label', '') for n in completeness.get('not_listed') or [] if n.get('label')],
         'bundled': [{'label': b.get('label', ''), 'why': b.get('why', '')} for b in completeness.get('bundled') or []],
         'conflicts': [{'service': c.get('service', ''), 'subject': c.get('subject', ''),
                        'sides': [_conflict_side(side, text) for side in c.get('sides') or []]}
@@ -781,8 +782,12 @@ def _unresolved_section(snap):
     closing = _unestablished(documented, 0, lines)
     if closing:
         return lines + [closing]
+    # A documented service no proposal accounts for that is not listed as unresolved (an office visit beside a same-day
+    # procedure) is named, never covered by "every documented act" (refutation 7c8, reports-1)
+    others = (', except ' + ', '.join(documented['not_listed']) + ', which no proposal accounts for and which is not '
+              'listed as unresolved') if documented.get('not_listed') else ''
     return lines or ['  - none: every documented act the catalogue reconciles has a selected proposal or is not '
-                     'separately reported']
+                     f'separately reported{others}']
 
 
 def _conflicts_section(snap):
