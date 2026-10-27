@@ -1334,6 +1334,13 @@ def _row_hold(reading: Reading) -> bool:
 FIELD_REACH = 160  # a field line is short: a longer line is prose, read by its words (bounds the work per mention)
 FIELD_BOTH_OPTIONS = re.compile(r'[ \t]*(?:yes|no)(?:[ \t]*[/|,]?[ \t]*(?:yes|no))+[ \t.]*', FLAGS)
 FIELD_HOLD_PREFIX = "uncertain: the form field '"  # routing's cues for a field that holds its item or its page
+# An answer this reader cannot read as done or not done: a denial or a doubt among other words, or several printed
+# options ("None obtained", "zero", "no biopsy", "none needed", "Yes ___ No ___", "Yes / No (circle one)", "Y  N",
+# "Yes   No   N/A"). It holds its item, never letting a participle in the label ("taken", "placed") state it done.
+ANSWER_DOUBT = _rx(r"\b(?:no|none|never|nil|zero|neither|nor|n/?a|unknown|unsure|unclear|declined|deferred|pending)\b"
+                   r"|(?:^|\s)0(?:\s|$)|\?|_{2,}|\(\s*circle|\b(?:yes|y)\b.*\b(?:no|n)\b|\b(?:no|n)\b.*\b(?:yes|y)\b")
+# A negated predicate as the answer ("not placed", "not obtained"): read by its words, which deny the item (NOT_VERB).
+ANSWER_NEGATED_PREDICATE = _rx(r'(?:was\s+|were\s+)?not\s+\w+')
 # An option line an extraction block writes for a printed question: "<question>: <option>: checked|not checked".
 FORM_OPTION_STATE = re.compile(r'(?P<option>yes|no|none|n/?a|not\s+done|not\s+performed)[ \t]*:[ \t]*'
                                r'(?P<state>checked|not\s+checked|unchecked)[ \t]*\.?', FLAGS)
@@ -1421,6 +1428,10 @@ def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -
                                          'other words',))
         return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is not read as done or not done',))
     both = FIELD_BOTH_OPTIONS.fullmatch(value) is not None
+    if value and not both and ANSWER_DOUBT.search(value) and not ANSWER_NEGATED_PREDICATE.fullmatch(value):
+        # triage round 2 skeptic: "Biopsy taken: None obtained" and "Biopsy taken: Yes ___ No ___" read as a done biopsy
+        # through the label's participle, which also queued a paid second review
+        return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is not read as done or not done',))
     if value and not both:
         return None
     if end > pos:  # a passage read whole (current_statement) names no item to tie

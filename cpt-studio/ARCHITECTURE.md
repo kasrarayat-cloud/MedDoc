@@ -1630,8 +1630,10 @@ rule, never a sentence patch). The rules this added, by module:
     printed item it names on its page (routing's tie, `detect.checked_field_ties`) when that item is in such a list
     (`_checked_field_in_a_procedure_list`); a field whose label alone names the act ("Biopsy: Yes" under a printed
     "Biopsy recommended at follow-up?") is a doubt for the reviewer. A field's answer - never a participle in its
-    label - states its item, and a bare object noun answered with nothing ("Stones: None", "Stent: None") reports a
-    finding, not a denied act. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
+    label - states its item: an answer with a denial or a doubt among other words, or with several printed options
+    ("None obtained", "zero", "Yes ___ No ___", "Yes / No (circle one)"), holds it (`ANSWER_DOUBT`); details ("3 from
+    the sigmoid colon") still state the act and a negated predicate ("not placed") still denies it. A bare object noun
+    answered with nothing ("Stones: None", "Stent: None") reports a finding, not a denied act. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
     checked option.
   - **Consent** (`_consent_object`): what a consent, an authorization or an approval is for is named, never stated done
     ("Consent was obtained for biopsy and cold snare polypectomy", "Written consent for EGD with dilation was

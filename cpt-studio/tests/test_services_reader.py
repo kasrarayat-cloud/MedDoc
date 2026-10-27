@@ -855,3 +855,28 @@ class ModalPredicateScopeTests(SimpleTestCase):
                          'done today had the patient fasted.\n')
         _, inv = read(office)
         self.assertEqual([s.family for s in inv.services if s.status in services.POSITIVE], ['gi.office_em'])
+
+
+class UnreadableFieldAnswerTests(SimpleTestCase):
+    """A field answer this reader cannot read as done or not done holds its item; a participle in the label never states
+    it done (triage round 2 skeptic: "Biopsy taken: None obtained" and printed option pairs read as a done biopsy and
+    queued a paid second review). Details stay a statement of the act; a negated predicate still denies it."""
+
+    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+                     'the cecum. No polyps were seen.\n{line}\n')
+
+    def test_an_unreadable_answer_holds(self):
+        for line, kind in (('Biopsy taken: None obtained', 'biopsy'), ('Biopsies taken: zero', 'biopsy'),
+                           ('Biopsy taken: no biopsy', 'biopsy'), ('Tattoo placed: none needed', 'tattoo'),
+                           ('Biopsy taken:   Yes   No   N/A', 'biopsy'), ('Biopsy taken:  Y  N', 'biopsy'),
+                           ('Biopsy taken: Yes ___ No ___', 'biopsy'), ('Biopsy taken: Yes / No (circle one)', 'biopsy'),
+                           ('Tattoo placed: Yes __ No __', 'tattoo')):
+            with self.subTest(line=line):
+                colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
+                self.assertNotIn(kind, kinds(colon))
+
+    def test_details_state_the_act_and_a_negated_predicate_denies_it(self):
+        colon = one(read(self.REPORT.format(line='Biopsies taken: 3 from the sigmoid colon'))[1], 'gi.colonoscopy')
+        self.assertIn('biopsy', kinds(colon))
+        colon = one(read(self.REPORT.format(line='Tattoo placed: not placed'))[1], 'gi.colonoscopy')
+        self.assertNotIn('tattoo', kinds(colon))

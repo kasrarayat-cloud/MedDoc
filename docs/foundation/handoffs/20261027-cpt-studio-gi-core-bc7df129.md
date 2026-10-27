@@ -1,54 +1,61 @@
-# Handoff: CPT Studio GI core, session bc7df129 (meddoc-pro-01), stopped at the usage limit 2026-10-27 ~04:40Z
+# Handoff: CPT Studio GI core, session bc7df129 (meddoc-pro-01), paused for host maintenance 2026-10-27
+
+The owner announced a host maintenance shutdown at 04:00 Pacific (11:00Z) on 27 October 2026 and asked for everything
+to be saved by 03:30 Pacific (10:30Z) and work to stop until the host is back. This note is the state at that stop.
 
 Owner chose "Take over now"; 909be030 was stopped at 02:50:59Z (ruling file interpretation 18). Branch
-fix/cpt-studio-gi-service-core-20261027, local only, NOTHING PUSHED. Live install unchanged (2734a6f3).
+`fix/cpt-studio-gi-service-core-20261027`, PUSHED to origin (no PR yet; feature-branch pushes trigger no workflow).
+The live install is unchanged (2734a6f3, installed from 057a7d398).
 
-## State of this commit (WIP 4, NOT a green tree)
-- WIP 3 (4db8b7ab) = the peer's leftovers. Full suite on WIP 3: 291 failing records / 129 tests (runs/wip3-a).
-- Triage workflow wf_a5737261-c1a (9 read-only clusters + skeptics) - reports in
-  /tmp/claude-1000/-opt-meddoc-pro/bc7df129-c1e5-42ac-bc52-4068c37c67be/scratchpad/gi-core/triage/<cluster>-triage/
-  (patches) and the journal under ~/.claude/projects/-opt-meddoc-pro/bc7df129-.../subagents/workflows/wf_a5737261-c1a.
-- MERGED here (3-way, conflicts resolved as unions; 993 tests in the merged clusters' modules: only expected fails):
-  routing_level (combined-all), dates fix-1 + test edits (fix-2 REVERTED: refuted by its skeptic), hedges (all),
-  reports (all), coverage (all + test edits), time_plan (fix-all), Release2 test kept with both procedure-line cases,
-  no-send on a member-vs-document date conflict (jobs/models/review + test; interpretation 19 draft), reflow (reader
-  reads soft line wraps as spaces; shares _answered_line and the extraction-block rule).
-- UNTESTED in this commit: studio/gi/context.py T1 (only the FIRST dated title line can be the note's own date; a
-  qualified first title gives no date) and T2 (a member value settles a document-internal conflict only by choosing a
-  documented value). Probes for T1 passed; no suite run yet.
-- NOT MERGED: boxes_pdf, boxes_text, facts_wording (their triage stopped before reporting; patches exist in their
-  scratch dirs - read and verify them, do not trust unreported patches). Skeptic verdicts for reports, hedges,
-  routing_level, coverage, time_plan were not received (only dates').
+## Where everything is
+- Code: the branch. Commits after the peer's WIP 2: WIP 3-7 (triage round 1 and 2 merges), WIP 8 (a7f2810c, round-2
+  skeptic repairs), WIP 8b (8f8a3b48, consent subject). Check `git log --oneline 057a7d398..HEAD`.
+- Scratch that survives the reboot (`/tmp` is cleared at boot on this host): `/home/claude/cpt-studio-gi-core-save-20261027/`
+  (mode 0700). `bc7df129/gi-core/` = this session's tools, drafts (pr-body-draft.md, residuals-draft.md), triage NOTES,
+  patches, probes, refute/workflow.js; `909be030/gi-core/` = the peer's dev env file (`cpt-dev-env.sh`), the held-out
+  set (`heldout/`, `heldout-out/`: do NOT read its documents or tune on them), the live-dump evidence of the 11 original
+  encounters (`live-dump/`), and corpus/eval files. It holds synthetic clinical text: reap it at session close
+  (`scripts/reap-session-scratch.sh`), never commit it.
+- After the reboot, restore the scratch paths the tools expect, e.g.
+  `rsync -a /home/claude/cpt-studio-gi-core-save-20261027/bc7df129/ /tmp/claude-1000/-opt-meddoc-pro/bc7df129-c1e5-42ac-bc52-4068c37c67be/scratchpad/`
+  and the same for 909be030's scratchpad; then check the dev test database (container `cpt-studio-test-pg`,
+  127.0.0.1:55452) is up.
+
+## State at the stop
+- Round-2 skeptics (wf_c8621dd8-f03): every refuted repair was replaced by a general rule with regression tests (WIP 8:
+  strict boxes and form fields, consent, modal scope, label-line headings, engine status signal and own-mark
+  exclusion, the snare "Site:" line). Interpretations 23-24 and ARCHITECTURE 5.12 record them. The facts_wording
+  skeptic's batteries (six, in triage2/facts_wording-skeptic/probes) now read as before the modal fix except the
+  intended hypothetical repairs.
+- Targeted runs green on WIP 8/8b: the 23 classes that had failed, the reader, corpus, formats, second-review, wording
+  and routing modules. Full suite: runs/wip8-a (snapshot taken before WIP 8's tests) and a run on 8f8a3b48 if it
+  finished before the stop - see the scratch runs/ directory. Known load-sensitive timing tests (r4c_validation
+  Bounded4, r4_validation CoverageCost) fail under host load; re-time them on a quiet host.
+- Refutation pass (mandatory, AGENTS.md): workflow run `wf_7881c326-ebd`, 10 lenses (release, missed, negtime, sends,
+  report, cost, migrate, formats, context, boxes) in armed sandboxes `.lens-r1-<lens>` at 8f8a3b48 (ARMs 0-5 and 7-9
+  green; ARM 6 checks a JS package and does not apply to this Python app). If it was stopped at the shutdown, do NOT
+  simply resume it: a resume replays only the longest unchanged PREFIX of agent calls, so one unfinished early lens
+  re-runs every later one live. Read the journal under
+  `~/.claude/projects/-opt-meddoc-pro/bc7df129-c1e5-42ac-bc52-4068c37c67be/subagents/workflows/wf_7881c326-ebd`
+  (journal.jsonl), keep the finished lenses' and verifiers' results, and run a continuation script for the missing
+  work only (args `{"commit": "8f8a3b48f263c58c4cfa68568d986bc58ca54c96"}`; the script's durable copy is in the save
+  directory, `bc7df129/gi-core/refute/workflow.js`).
 
 ## Left (in order)
-1. Lead repairs T3-T9: see the TODO list (copied below). T4/T6 are send-discipline must-fixes; T5 (NOT_VERB scope:
-   "was tattooed and not removed" negates the tattoo, hiding a missed act) was found by two agents.
-2. Merge boxes_pdf/boxes_text/facts_wording after verifying their patches; full suite (tools/full_suite.sh), corpus,
-   format harness (ocr/tools/formats_harness.py in the dev image cpt-studio:dev-build; at WIP 3 PDF 13/43 and scan
-   38/43 documents read differently from text; with reflow 6 and 23), then tests/test_services_formats_corpus.py
-   (draft in scratch gi-core/newtests) with format_known_differences.json, and the OCR test (ocr/ocr-test.patch).
-3. Record interpretations 19-21 (draft: scratch gi-core/ruling-additions.md) + ARCHITECTURE + ACCURACY-RESIDUALS.
-4. Refutation pass on the finished diff (9 lenses; template scratch gi-core/refute/peer-original.js), repairs re-attacked.
-5. PR (body via file), CI (CI, cpt-studio, secrets-scan), merge-pr.sh; declaration
-   docs/foundation/mutations/20261027-cpt-studio-gi-core-upgrade.md in its own PR (counts baseline: tools/live_counts.sh,
-   03:23Z: encounters 11, proposals 134, decisions 15, audit 108, jobs 44/0 active, migrations 5, credits 0.504880);
-   install phases preflight, image, app (--provider-mode live --authorization-ref the ruling file), verify.
-6. Live walk with the held-out set (scratch of 909be030: gi-core/heldout + heldout-out, integrity verified), then
-   ops/verify_downloads.py, usage, final report.
-# Lead repairs after the triage merges (bc7df129)
-T1 dates: fix-2 reverted (skeptic: it drops the note's own qualified title and keeps another document's date).
-   Replace with: only the FIRST title-like line in the top lines can be the note's own dated title; a qualified first
-   title gives no title date; any other dated title-like line makes the date a question, never a value.
-   Closes HEAD's 'GI follow-up visit: 2026-10-20' + 'Pathology report: 2026-10-14' -> 2026-10-14 sent to the provider.
-T2 dates: a member value against a DOCUMENT-INTERNAL conflict must equal one documented value; otherwise a member
-   conflict (both sides kept). Elena-class: member 1998-01-01 vs two documented dates -> ready with 1998 sent.
-T3 dates fix-1 scope: member-conflict wording also in services._em_service and reconcile.documentation_clarifications.
-T4 sends: no second review while the service date is unknown; a dated act clause with no known service date reads
-   uncertain (a phantom performed colonoscopy from 'Colonoscopy 2026-09-03: ...' triggered a paid second review).
-T5 reader: NOT_VERB scope - a 'not' on another predicate never negates the act ('was tattooed and not removed',
-   'if intake does not improve'); hidden missed acts (hedges + time_plan agents).
-T6 sends: no second review after a primary response that was refused whole (reports triage residual, jobs.py
-   _maybe_second_review checks only run.state).
-T7 Declared6 (neutral 'Additional procedures:' label): UNCLEAR, over-hold kept; record as a known limit.
-T8 formats: rerun the harness on the integrated tree; write format_known_differences.json; add the format tests.
-T9 docs: interpretations 19-21 (+ any for T1-T6), ARCHITECTURE, ACCURACY-RESIDUALS.
+1. Finish the refutation pass; verify every finding yourself; repair blocking ones by general rules; re-attack each
+   repair once (interpretation 21); record non-blocking misreadings in `cpt-studio/ACCURACY-RESIDUALS.md` (draft rows in
+   the save directory's residuals-draft.md) and the PR body.
+2. Full suite green on the final commit (one suite at a time; swap is high on this shared host).
+3. PR (body via file; draft in the save directory), CI (CI, cpt-studio, secrets-scan), `bash scripts/merge-pr.sh`.
+4. Declaration `docs/foundation/mutations/20261027-cpt-studio-gi-core-upgrade.md` in its own PR, naming the merged
+   revision; counts baseline from `tools/live_counts.sh` (03:23Z: encounters 11, proposals 134, decisions 15, audit 108,
+   jobs 44/0 active, studio migrations 5, credits 0.504880 - re-take it before the act). Install via
+   `scripts/run-ruled-mutation.sh` (phases preflight, image, app with `--provider-mode live --authorization-ref` the
+   ruling file, verify; receipts in /home/claude/cpt-studio-install-20261023; the app phase parks the old pair and
+   applies migration 0006).
+5. Live HTTPS walk with the held-out set (`ops/verify_browser.cjs` against https://cpt.quillmd.com with the agent
+   credentials file, `--allow-live-provider`), then `ops/verify_downloads.py`, usage, and the final report the owner's
+   directive lists (installed revision, root causes, repairs, coverage matrix, acceptance results, preserved failures,
+   usage, dependencies; no accuracy percentages).
+6. Reap: the lens sandboxes (`scripts/reap-lens-sandbox.sh`, including the peer's stale `.lens-cptgi-*` at 9eb82f0d),
+   the save directory and the session scratch.
