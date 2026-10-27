@@ -592,6 +592,10 @@ test('a second review asked for is described until its outcome is recorded, and 
   assert.ok(stopped.includes('<strong>Second provider review stopped</strong><p>It was stopped before anything was sent: Stopped by a workspace member. Resume processing runs it once. Unresolved: forceps biopsy.</p>'));
   assert.equal(count(stopped, 'data-action="second-review"'), 0);
   assert.ok(!view([{ kind: 'review2', state: 'cancelled', error: '' }], { available: true }).includes('Resume processing'));
+  // Resume re-runs the latest stage: a later cancelled stage is what it would run, not this review
+  const behind = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }, { kind: 'predict', state: 'cancelled', error: '' }],
+    { available: true }, { can_resume: true });
+  assert.ok(behind.includes('It was stopped before anything was sent: Stopped by a workspace member. Unresolved'));
   const failed = view([{ kind: 'review2', state: 'failed', error: 'Only an owner or reviewer of this workspace can start a live provider request.' }],
     { available: true, reason: '' });
   assert.ok(failed.includes('<strong>Second provider review did not complete</strong><p>It did not complete: Only an owner or reviewer of this workspace can start a live provider request. Unresolved: forceps biopsy.</p>'));

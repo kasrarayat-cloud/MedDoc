@@ -660,7 +660,8 @@ function secondReviewItem(doc) {
     const [title, said] = {
       queued: ['Second provider review requested', 'A reviewer asked for it; it is waiting to run, and nothing has been sent yet.'],
       running: ['Second provider review requested', 'A reviewer asked for it; it is running now.'],
-      cancelled: ['Second provider review stopped', `It was stopped before anything was sent${asked.error ? `: ${sentence(asked.error)}` : '.'}${doc.pipeline?.can_resume ? ' Resume processing runs it once.' : ''}`],
+      // Resume re-runs the latest stage only, so it runs this one only when nothing came after it
+      cancelled: ['Second provider review stopped', `It was stopped before anything was sent${asked.error ? `: ${sentence(asked.error)}` : '.'}${doc.pipeline?.can_resume && doc.pipeline.stages.at(-1) === asked ? ' Resume processing runs it once.' : ''}`],
       failed: ['Second provider review did not complete', `It did not complete${asked.error ? `: ${sentence(asked.error)}` : '.'}`],
     }[asked.state];
     return checkItem(asked.state === 'failed' ? 'pending' : 'muted', 'info', title, `${said} Unresolved: ${what}.`);
