@@ -117,7 +117,6 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
             ('Procedure date: 10/14/2026    Next colonoscopy: 10/2029\nPROCEDURE NOTE: Colonoscopy\n', '2026-10-14'),
             ('Date of service: 10/14/2026 (recall due 10/2029)\n', '2026-10-14'),
             ('Last name: Synthetic    First name: Alex    DOS: 10/14/2026\n', '2026-10-14'),
-            ('Date of visit: 10/20/2026    Visit type: Follow-up\n', '2026-10-20'),
             ('Next colonoscopy 10/2029, procedure date: 10/14/2026\n', '2026-10-14'),
         )
         for body, value in cases:
@@ -130,8 +129,6 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
              'Colonoscopy\n', '2026-10-14', '2026-10-16'),
             ('Colonoscopy report - 10/16/2026\nProcedure date: 10/14/2026    Next colonoscopy: 10/2029\n',
              '2026-10-14', '2026-10-16'),
-            ('Date: 10/27/2026\nRe: GI office visit\nDate of visit: 10/20/2026    Visit type: Follow-up\n',
-             '2026-10-20', '2026-10-27'),
             ('GI procedure report - 10/15/2026\nLast name: Synthetic    First name: Alex    DOS: 10/14/2026\n',
              '2026-10-14', '2026-10-15'),
         )
@@ -140,11 +137,36 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
                 self.assert_never(HEAD + body, other)
                 self.assert_document(HEAD + body, value)
 
-    def test_controls_a_qualifier_of_the_date_itself_still_drops_it(self):
+    def test_a_qualifier_that_may_be_the_date_s_own_holds_it(self):
+        # "Visit type: Follow-up" may or may not qualify the visit date: the date is held - never dropped so that the
+        # letter's "Date:" is taken, never taken itself; the member settles it by choosing the labelled date.
+        letter = HEAD + 'Date: 10/27/2026\nRe: GI office visit\nDate of visit: 10/20/2026    Visit type: Follow-up\n'
+        self.assert_never(letter, '2026-10-27')
+        fact = date_fact(letter)
+        self.assertEqual((fact.origin, set(context.documented_values(fact))), ('conflict', {'2026-10-27', '2026-10-20'}))
+        self.assert_member_date(letter, '2026-10-20')
+        alone = HEAD + 'Date of visit: 10/20/2026    Visit type: Follow-up\n' + VISIT_BODY
+        self.assertEqual((date_fact(alone).origin, [e.text for e in date_fact(alone).evidence]),
+                         ('missing', ['Date of visit: 10/20/2026']))
+        self.assert_member_date(alone, '2026-10-20')
+        self.assert_member_conflict(alone, '1998-01-01')
+
+    def test_controls_a_qualifier_of_the_date_itself_is_never_passed_over(self):
         for line in ('Procedure date: 2026-11-04 (scheduled)', 'Date of service: 10/14/2026, scheduled',
                      'Procedure date: 2026-11-04 - planned', 'Date of service | 10/14/2026 | scheduled'):
             with self.subTest(line=line):
                 self.assertEqual(date_fact(HEAD + line + '\n').origin, 'missing')
+        # a qualifier across a sentence or a field may be the date's own: never read as the documented date
+        titled = HEAD + 'Colonoscopy report - 10/14/2026\n'
+        for line in ('Status: scheduled    Procedure date: 11/04/2026', 'Procedure date: 11/04/2026 - Status: scheduled',
+                     'Colonoscopy scheduled. Procedure date: 11/04/2026.', 'Procedure date: 11/04/2026. Scheduled.'):
+            with self.subTest(line=line):
+                self.assert_never(HEAD + line + '\n', '2026-11-04')
+                self.assert_never(titled + line + '\n', '2026-11-04', '2026-10-14')  # held beside the title: asked
+        self.assert_never(titled + 'Outside colonoscopy    Procedure date    2021-05-03\n', '2021-05-03', '2026-10-14')
+        # a plan field's date is a planned date (sections): never the service date, and the report's own title is
+        self.assert_never(HEAD + 'Follow-up: Procedure date: 11/04/2026\n', '2026-11-04')
+        self.assert_document(titled + 'Follow-up: Procedure date: 11/04/2026\n', '2026-10-14')
         self.assert_document(HEAD + 'Procedure date: 10/14/2026    Endoscopist: Dr. A. Synthetic\n', '2026-10-14')
 
 

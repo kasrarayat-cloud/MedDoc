@@ -282,9 +282,10 @@ class _ServiceDates:
 
 
 _LABEL_WORDS = re.compile(r"(?<![A-Za-z'’-])((?:[A-Za-z][A-Za-z'’-]* ){1,4})$")
-_FIELD_OR_SENTENCE = re.compile(r'[:=]|[.;!?](?:\s|$)')
-_FIELD_BREAK = re.compile(r'\t| {2,}')
-_HEADS_FIELD = re.compile(r"[A-Za-z0-9 '’/-]{0,40}?[ \t]*[:=]")
+_NOT_ATTACHED = re.compile(r'[:=]|[.;!?](?:\s|$)|\t| {2,}')  # another field's label, a sentence end, a field break
+_ROW_BAR = re.compile(r'[ \t]*\|[ \t]*')  # a table row's cell bar keeps the row's words on one item
+_HEADS_FIELD = re.compile(r"[A-Za-z0-9 '’/-]{0,40}?[ \t]*[:=]")  # "Next colonoscopy:" - a label of its own
+_COMPLETE_FIELD = re.compile(r"[A-Za-z0-9 '’/-]{0,40}?[ \t]*[:=][ \t]*[^\s:=|][^:=|\n]*?(?:\t| {2,}|\|)")
 _LEFTOVER_WORD = re.compile(r'[A-Za-z]{2,}')
 _THIS_SERVICE = tuple(p for _, p in cues.SERVICE_PATTERNS) + (cues.EM_VISIT, cues.TODAY)
 
@@ -316,58 +317,66 @@ def _date_starts(text: str) -> tuple[int, ...]:
     return tuple(d.start for d in find_dates(text))
 
 
-def _qualified_on_line(text: str, label_start: int, date_start: int, date_end: int) -> bool:
-    """Whether a qualifier on the labelled date's line belongs to that date (refutation r1, negtime-15: one that
-    belongs to another field or another date discarded the real date, and a letter or title date was then sent).
+def _line_reading(text: str, label_start: int, date_start: int, date_end: int, value: Optional[date]) -> str:
+    """How the qualifiers on a labelled date's line read it: 'own', 'another' or 'unplaced' (refutation r1,
+    negtime-15: a qualifier of another field or another date discarded the real date, and a letter or title date was
+    then taken and sent).
 
-    Before the label, a date qualifier or history word qualifies it ("Prior DOS", "Outside colonoscopy | Procedure
-    date | ...") unless another field's label (":", "="), a sentence end or another date lies between them, or it is
-    another labelled field's value set off by a field break ("Visit type: Follow-up    Date of service: ...").
-    After the date, a date qualifier qualifies it ("... (scheduled)") unless another field, sentence or date lies
-    between them, it heads a labelled field of its own ("Next colonoscopy: 10/2029"), or a date of its own is nearer to
-    it than this one ("(recall due 10/2029)")."""
-    # The line within 80 characters either side; the scans stop there, so a long line costs each date only its window.
+    A qualifier that clearly belongs elsewhere is passed over: one heading a field of its own ("Last name: Synthetic",
+    "Next colonoscopy: 10/2029") or one with another date of its own nearer to it ("recall due 10/2029"). One attached
+    to the date - nothing but words, single spaces, commas, hyphens, brackets or a row's cell bars between them ("Prior
+    DOS", "Outside colonoscopy | Procedure date | ...", "... (scheduled)") - makes it another occurrence's date. Any
+    other - across another field's label, a sentence end or a field break ("Visit type: Follow-up", "Colonoscopy
+    scheduled. Procedure date: ...") - may or may not be the date's own: the date is held as text this service cannot
+    place, never dropped for a title date and never taken. Before the label the history words count too ("Outside"),
+    after the date the date qualifiers only. The scans stop 80 characters either side, so a long line costs each date
+    only its window."""
     lo = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
     hi = text.find('\n', date_end, date_end + 80)
     hi = min(len(text), date_end + 80) if hi < 0 else hi
     dates, starts = find_dates(text), _date_starts(text)
 
-    def date_between(a: int, b: int) -> bool:
-        i = bisect.bisect_left(starts, a)
-        return any(not (date_start <= dates[j].start < date_end) for j in range(i, bisect.bisect_left(starts, b)))
+    def other_dates(a: int, b: int) -> list:
+        """The dates in [a, b) other than this one (another day than ``value`` when it is known)."""
+        return [dates[j] for j in range(bisect.bisect_left(starts, a), bisect.bisect_left(starts, b))
+                if not date_start <= dates[j].start < date_end
+                and (value is None or compare_to_service(dates[j], value) != 0)]
 
+    reading = 'own'
     for q in _OTHER_OCCURRENCE.finditer(text, lo, label_start):
-        between = text[q.end():label_start]
-        if _FIELD_OR_SENTENCE.search(between) or date_between(q.end(), label_start):
+        if _COMPLETE_FIELD.match(text, q.end(), label_start) or other_dates(q.end(), label_start):
             continue
-        if _FIELD_BREAK.search(between) and ':' in text[lo:q.start()]:
-            continue
-        return True
+        if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[q.end():label_start])):
+            return 'another'
+        reading = 'unplaced'
     for q in DATE_QUALIFIER.finditer(text, date_end, hi):
-        between = text[date_end:q.start()]
-        if _FIELD_OR_SENTENCE.search(between) or date_between(date_end, q.start()):
+        if other_dates(date_end, q.start()):
             continue
-        i = bisect.bisect_left(starts, q.end())
-        own = dates[i] if i < len(dates) and dates[i].start < hi else None
-        if _HEADS_FIELD.match(text, q.end(), own.start if own else hi):
+        own = other_dates(q.end(), hi)
+        if _HEADS_FIELD.match(text, q.end(), own[0].start if own else hi):
             continue
-        if own is not None and own.start - q.end() < q.start() - date_end:
+        if own and own[0].start - q.end() < q.start() - date_end:
             continue
-        return True
-    return False
+        if not _NOT_ATTACHED.search(_ROW_BAR.sub(' ', text[date_end:q.start()])):
+            return 'another'
+        reading = 'unplaced'
+    return reading
 
 
-def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int, date_end: int) -> tuple[str, int]:
+def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int, date_end: int,
+                   value: Optional[date]) -> tuple[str, int]:
     """('own' | 'another' | 'unplaced', where the label's phrase starts). A label carrying a word of another occurrence
-    ("Outside procedure date", "Index procedure date") or qualified on its line is another occurrence's date and is not
-    read. A label carrying any other word this service cannot place ("Initial visit date", "Referring visit date") is
-    not the plain date-of-service label: its date is never taken by itself (refutation r1, negtime-8)."""
+    ("Outside procedure date", "Index procedure date"), or qualified on its line by a word attached to it, is another
+    occurrence's date and is not read. A label carrying any other word this service cannot place ("Initial visit
+    date", "Referring visit date"), or one its line may qualify, is not the plain date-of-service label: its date is
+    never taken by itself (refutation r1, negtime-8 and negtime-15)."""
     words, start = _label_words(text, label_start)
     if words and _OTHER_OCCURRENCE.search(words):
         return 'another', start
-    if _qualified_on_line(text, label_start, date_start, date_end):
+    reading = _line_reading(text, label_start, date_start, date_end, value)
+    if reading == 'another':
         return 'another', start
-    if words and not _names_this_service(words, words + ' ' + text[label_start:label_end]):
+    if reading == 'unplaced' or (words and not _names_this_service(words, words + ' ' + text[label_start:label_end])):
         return 'unplaced', start
     return 'own', label_start
 
@@ -381,10 +390,10 @@ def _service_dates(text: str, lay: Layout) -> _ServiceDates:
         labelled.add(m.start())
         if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
-        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end())
+        value = date_from_match(m)
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end(), value)
         if kind == 'another':
             continue
-        value = date_from_match(m)
         span = _span(text, start, m.end())
         if value is None:
             out.invalid.append(span)
@@ -394,7 +403,7 @@ def _service_dates(text: str, lay: Layout) -> _ServiceDates:
         # refutation r1, context-3: a labelled date the reader does not read is still documented date text
         if m.start() in labelled or lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
             continue
-        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end('date'))
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end('date'), None)
         if kind != 'another':
             out.unread.append(_span(text, start, m.end('date')))
     if not out.own and not out.invalid and not out.unread:
