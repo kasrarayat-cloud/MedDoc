@@ -366,8 +366,14 @@ BIRTH_LABEL = _rx(r'(?:\bDOB|\bD\.O\.B\.?|\bdate\s+of\s+birth|\bbirth\s*date|\bb
 # The date that stamps when text was written - the app's own addendum header ("ADDENDUM (revision 2, added 2026-10-27
 # 08:15 UTC)", jobs.addendum_block_text), a signature's or a dictation's date - is the document's time, never an act's
 # (refutation r1, negtime-10: the stamp had made the act an addendum adds "planned" and excluded its code).
-STAMP_LABEL = _rx(r'(?:\badded|\b(?:e-?|electronically\s+|co-?)?signed|\bdictated|\btranscribed|\bamended|\baddended|'
-                  r'\bfaxed|\bprinted)(?:\s+(?:on|at))?[ \t]*[:#=-]?[ \t]*$')
+# 7c8 skeptic, sk:6: by its structure, not a closed list of participles - a word naming when the text was written (an
+# addendum, a late entry, an entry, an update, a correction, a revision, an edit, a signature, a dictation; the list is
+# only that structure's vocabulary), optionally its author ("by Dr. Ramos") and "on" / "at", right before the date or
+# the bracket that opens it ("Addendum 10/16/2026:", "(entered 10/16/2026)", "signed by Dr. Ramos on 10/16/2026").
+STAMP_LABEL = _rx(r'(?:\badded|\baddendum|\blate\s+entry|\b(?:re-?)?entered|\bupdated|\bcorrected|\brevised|\bedited|'
+                  r'\bfinali[sz]ed|\bauthenticated|\battested|\b(?:e-?|electronically\s+|co-?)?signed|\bdictated|'
+                  r'\btranscribed|\bamended|\baddended|\bfaxed|\bprinted)'
+                  r"(?:\s+by\s+(?:[\w.'-]+,?\s+){1,5}?)?(?:\s*(?:on|at))?[ \t]*[:#=(-]?[ \t]*$")
 # A clock time: "at 2015", "@ 2015", "at approximately 2015" (7c8 skeptic, sk:3: an approximation had read as a year).
 CLOCK_TIME = _rx(r'(?:\bat|@)[ \t]*(?:(?:approximately|approx\.?|about|around|roughly|~)[ \t]*)?$')
 # What may stand before a date in a parenthesis that dates the act itself ("(09/03/2026)", "(on 09/03/2026)"); any other
@@ -1545,8 +1551,9 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
     (it dates the act), 'none' no act's (a birth date, a documentation stamp, a clock time), 'other' another clause's or
     event's (BIRTH_LABEL, STAMP_LABEL, CLOCK_TIME, OTHER_EVENT). Bounded: the clause up to the date, once."""
     # A label stands right before its date (each pattern is anchored there), so it is read even across a clause or
-    # sentence start an abbreviation's period made ("Alex Synthetic (b. 03/04/1961) underwent ...": 7c8 skeptic, sk:3).
-    head = text[max(0, d.start - 30):d.start]
+    # sentence start an abbreviation's period made ("Alex Synthetic (b. 03/04/1961) underwent ...": 7c8 skeptic, sk:3),
+    # up to 60 characters back (a stamp's author: "signed by Alex Q. Synthetic, MD on", sk:6).
+    head = text[max(0, d.start - 60):d.start]
     if BIRTH_LABEL.search(head) or STAMP_LABEL.search(head) \
             or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
         return 'none'

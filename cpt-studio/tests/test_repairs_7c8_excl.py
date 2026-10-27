@@ -248,3 +248,40 @@ class TimeOfAnotherNounTests(SimpleTestCase):
                  'snare', 'planned')):
             with self.subTest(line=line, kind=kind):
                 self.assertEqual(statuses(template.format(x=line), kind), [status])
+
+
+class DocumentationStampLabelTests(SimpleTestCase):
+    """sk:6 (negtime-10, claimed fixed by 842698be0): a documentation stamp outside STAMP_LABEL's closed list still dated
+    the act an addendum adds ("Addendum <date>:", "Late entry <date>:", "(entered <date>)", "(updated <date>)",
+    "(corrected <date>)", "(note revised <date>)", "signed by Dr. <name> on <date>"), so 43239 was excluded as planned. A
+    date stamping when the text was written - a documentation word, optionally its author ("by <name>") and "on", right
+    before the date - is no act's time: the act reads by its own words, or is held, never excluded."""
+
+    LINES = ('Addendum 10/16/2026: cold forceps biopsies were also taken from the duodenum.',
+             'Late entry 10/16/2026: cold forceps biopsies were also taken from the duodenum.',
+             'Cold forceps biopsies were also taken from the duodenum (entered 10/16/2026).',
+             'Cold forceps biopsies were also taken from the duodenum (updated 10/16/2026).',
+             'Cold forceps biopsies were also taken from the duodenum (corrected 10/16/2026).',
+             'Cold forceps biopsies were also taken from the duodenum (note revised 10/16/2026).',
+             'Cold forceps biopsies were also taken from the duodenum, signed by Dr. Ramos on 10/16/2026.',
+             'Cold forceps biopsies were also taken from the duodenum, electronically signed by Alex Q. Synthetic, MD '
+             'on 10/16/2026.',
+             'Addendum (10/16/2026): cold forceps biopsies were also taken from the duodenum.')
+
+    def test_a_stamp_never_dates_the_act(self):
+        for line in self.LINES:
+            with self.subTest(line=line):
+                text = EGD.format(x=line)
+                self.assertIn(statuses(text, 'biopsy'), (['performed'], ['uncertain']))
+                _not_excluded(self, text, '43239', line)
+        for line in self.LINES[:2] + self.LINES[6:]:
+            with self.subTest(line=line):
+                self.assertEqual(statuses(EGD.format(x=line), 'biopsy'), ['performed'])
+
+    def test_controls_a_date_that_is_no_stamp_still_dates_the_act(self):
+        for line, status in (('Cold forceps biopsies were taken from the duodenum on 10/16/2026.', 'planned'),
+                             ('On 09/03/2026 cold forceps biopsies were taken from the duodenum.', 'historical'),
+                             ('Cold forceps biopsies of the duodenum were entered in the plan for 11/20/2026.',
+                              'planned')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(EGD.format(x=line), 'biopsy'), [status])
