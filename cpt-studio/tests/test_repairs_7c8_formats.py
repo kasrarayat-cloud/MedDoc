@@ -444,3 +444,36 @@ class HistoryWordsOpeningASentenceTests(SimpleTestCase):
                 'Polypectomy.\nHemorrhoid banding.\n')
         item = text.index('Polypectomy.')
         self.assertTrue(any(p.kind == 'history' and p.start <= item < p.end for p in services.parts(text)))
+
+
+class LabelAnsweredOnTheNextLineTests(SimpleTestCase):
+    """sk:10 (formats-3): the PDF writer wrapped a field row right after its colon ("Biopsies taken from the gastric
+    antrum and the gastric body for Helicobacter pylori (CLO):" / "no, pt on apixaban."), the label line kept its
+    break, and the label's participle read the biopsy done: 43239 READY, where the text on one line holds it. A field
+    label that names an act, with no answer on its line, is answered by the next line when that line opens with a short
+    answer: the two are one line."""
+
+    EGD = 'The upper endoscope was advanced to the second portion of the duodenum.'
+    LABEL = 'Biopsies taken from the gastric antrum and the gastric body for Helicobacter pylori (CLO):'
+
+    def read(self, text, pages=()):
+        result = run(text, [('43239', self.EGD)], pages)[0]
+        return acts_of(result, 'biopsy'), proposals_of(result)['43239'][0]
+
+    def test_the_pdf_reads_as_the_one_line_text(self):
+        for answer in ('no, pt on apixaban.', 'No, pt on apixaban.', 'no', 'No', 'N', 'none'):
+            with self.subTest(answer=answer):
+                source = f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n{self.EGD}\n{self.LABEL} {answer}\n'
+                control = self.read(source)
+                self.assertNotIn(('biopsy', 'performed'), control[0])
+                self.assertNotEqual(control[1], 'ready')
+                text, pages = pdf(source)
+                self.assertIn('(CLO):\n', text)  # the PDF writer's wrap after the colon
+                self.assertEqual(self.read(text, pages), control)
+
+    def test_a_label_over_its_paragraph_keeps_its_break(self):  # controls
+        for text in ('Findings:\nNo polyps were seen in the colon.\n',
+                     'Biopsies taken:\nNone of the three polyps could be retrieved for histology.\n',
+                     'Biopsies taken from the gastric antrum for CLO:\nThe rapid urease test was negative.\n'):
+            with self.subTest(text=text):
+                self.assertEqual(services.reflow(text), text)

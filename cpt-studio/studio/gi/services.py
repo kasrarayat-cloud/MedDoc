@@ -2558,7 +2558,7 @@ def reflow(text: str, pages: Sequence = ()) -> str:
 def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bool:
     """Whether the break after the line ``prev`` ([ls, le)) is soft before the line ``nxt`` starting at ``ns`` (see
     reflow)."""
-    if _row_goes_on(prev, nxt):
+    if _row_goes_on(prev, nxt) or _label_answered_below(prev, nxt):
         return True
     stripped = prev.strip()
     if _TERMINAL.search(prev) or _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
@@ -2666,6 +2666,30 @@ def _row_goes_on(prev: str, nxt: str) -> bool:
     if _TITLE_STOP.search(words) or name:
         return after.startswith('(') or (after[:1].isupper() and not _sections._own_clause(after))
     return False
+
+
+# A short field answer opening a line, in the field readers' own vocabulary (detect._FIELD_DENIED's and _FIELD_CHECKED's
+# answers, and the doubt words ANSWER_DOUBT reads), alone or before a comma, a stop, a dash or a parenthesis.
+_ANSWER_OPENING = _rx(r'[ \t]*(?:no|none|nil|n|yes|y|n/?a|not[ \t]+(?:done|performed|taken|obtained|checked)|unchecked|'
+                      r'checked|declined|deferred)(?=[ \t]*(?:$|[,.;(]|[-\u2013\u2014][ \t]))')
+
+
+def _label_answered_below(prev: str, nxt: str) -> bool:
+    """Whether ``prev`` is a field's label alone - it ends at its one colon, names an act and carries the participle or
+    the verb that would state it done ("Biopsies taken from the gastric antrum and the gastric body for Helicobacter
+    pylori (CLO):") - and ``nxt`` opens with that field's short answer ("no, pt on apixaban.", "N", "none"): the two are
+    one field line, as the text sets it (refutation 7c8, formats-3: a PDF writer wrapped the row right after its colon,
+    the label kept its break, and its participle read the biopsy done, 43239 READY where the text holds it). A label
+    over a paragraph ("Findings:" / "No polyps were seen.") or over prose that opens with an answer word ("None of the
+    three polyps ...") keeps its break. Bounded: one line of FIELD_REACH."""
+    stripped = prev.strip()
+    if not stripped.endswith(':') or stripped.count(':') != 1 or len(stripped) > FIELD_REACH \
+            or BOX_MARK.search(prev) or any(c in prev for c in '|\t'):
+        return False
+    label = stripped[:-1]
+    if not (BARE_PARTICIPLE.search(label) or ACT_VERB.search(label)) or not _acts_in(label, 0, len(label)):
+        return False
+    return _ANSWER_OPENING.match(nxt) is not None and not _NEXT_ITEM.match(nxt)
 
 
 def _field_answer_kind(line: str) -> str:
