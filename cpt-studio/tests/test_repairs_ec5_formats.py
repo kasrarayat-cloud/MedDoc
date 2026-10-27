@@ -264,3 +264,52 @@ class SemicolonWrapTests(SimpleTestCase):
         text = 'Medications held before the procedure: apixaban for two days;\nprior history of GI bleeding.\n'
         self.assertEqual(services.reflow(text).count('\n'), 1)  # one sentence: the wrap is joined
 
+
+
+class ParagraphWithoutBlankLineTests(SimpleTestCase):
+    """formats-7: a PDF's text layer (and a Word document whose paragraphs are spaced, not separated by empty ones) has
+    no blank line between paragraphs, so a findings paragraph without a final stop ran on into the next one: "No
+    polyps; no masses" / "Biopsies were taken." read as one sentence whose "no" denied the biopsy (45380 held with a
+    'not performed' statement; with 45378 alone, the biopsy hidden and 45378 READY). A line break the reader keeps
+    before a line that opens with a capital and a clause of its own ends the sentence, as a blank line does."""
+
+    M1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to the cecum.\n\n'
+          'No polyps; no masses\n\nBiopsies were taken.\n')
+
+    def test_the_pdf_reads_the_biopsy_paragraph_as_the_text_does(self):
+        text, pages = pdf('\n'.join(line for line in self.M1.split('\n') if line))  # the text layer has no blank line
+        self.assertIn('no masses\nBiopsies were taken.', text)
+        for source, page_spans in ((self.M1, ()), (text, pages)):
+            with self.subTest(pdf=bool(page_spans)):
+                result = run(source, [('45380', 'Biopsies were taken.')], page_spans)[0]
+                self.assertEqual(acts_of(result, 'biopsy'), [('biopsy', 'performed')])
+                self.assertEqual(proposals_of(result)['45380'][0], 'ready')
+                missed = run(source, [('45378', 'The colonoscope was advanced to the cecum.')], page_spans)[0]
+                self.assertEqual([(u['family'], u['act'], u['reason']) for u in missed.completeness['unresolved_items']],
+                                 [('gi.colonoscopy', 'biopsy', 'not_covered')])
+                self.assertNotEqual(proposals_of(missed)['45378'][0], 'ready')
+
+    def test_paraphrases_of_the_same_layout(self):
+        for paragraph in ('No polyps, masses, ulcers or vascular lesions seen anywhere in the colon or the rectum',
+                          'Retroflexion in the rectum was performed; no hemorrhoids',
+                          'No polyps or masses were seen in the colon or the rectum, no diverticula'):
+            with self.subTest(paragraph=paragraph):
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                        f'the cecum.\n{paragraph}\nRandom biopsies were obtained from the right and left colon.\n')
+                result = run(text, [('45380', 'Random biopsies were obtained')])[0]
+                self.assertEqual(acts_of(result, 'biopsy'), [('biopsy', 'performed')])
+                self.assertEqual(proposals_of(result)['45380'][0], 'ready')
+
+    def test_a_wrap_and_a_denied_list_stay_one_sentence(self):  # controls
+        cases = (('No biopsy, polypectomy or tattoo was\nperformed today.', 'negated'),  # a lower-case wrap
+                 ('No polyp was seen, and no biopsy was taken from the\nSigmoid colon either.', 'negated'),
+                 ('Biopsies were sent to Dr.\nSmith Laboratory (fictional) for review.', None))  # no predicate of its own
+        for sentence, status in cases:
+            with self.subTest(sentence=sentence):
+                text = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\nThe colonoscope was advanced to '
+                        f'the cecum.\n{sentence}\n')
+                cuts = services._sentences(services.reflow(text))
+                start = text.index(sentence.split('\n')[0])
+                self.assertTrue(any(s <= start and text.index(sentence.split('\n')[1]) < e for s, e in cuts))
+                if status:
+                    self.assertIn(('biopsy', status), acts_of(run(text)[0], 'biopsy'))

@@ -89,12 +89,17 @@ class ClausesOncePerSentenceTests(SimpleTestCase):
     def test_the_mentions_of_one_long_sentence_cut_it_once(self):
         """The finding's input: before the repair the 51,269-character note was cut 301 times (15.4 million
         characters); the reader's whole document is now cut a few times at most."""
-        for text in (egd_tail(50_000), egd_tail(50_000, names=150, name='upper endoscopy'),
-                     egd_tail(20_000, names=60, name='EGD.') + 'Biopsies were taken from the antrum.\n'):
+        # ec5 (refutation r1, formats-7): the last line opens a sentence of its own after a line with no stop, so its
+        # biopsy is read (it had been lost past the first SENTENCE_READ_CHARS of one 20,000-character sentence) and the
+        # EGD reads performed; the cost pin is unchanged
+        for text, status in ((egd_tail(50_000), 'uncertain'),
+                             (egd_tail(50_000, names=150, name='upper endoscopy'), 'uncertain'),
+                             (egd_tail(20_000, names=60, name='EGD.') + 'Biopsies were taken from the antrum.\n',
+                              'performed')):
             inv, cut = clause_work(text)
             with self.subTest(text=text[len(HEAD):40]):
                 self.assertLess(cut, 4 * len(text))
-                self.assertIn(('gi.egd', 'uncertain'), summary(inv)[0])
+                self.assertIn(('gi.egd', status), summary(inv)[0])
 
     def test_the_instruments_of_one_long_sentence_cut_it_once(self):
         """'The colonoscope was advanced and the colonoscope ...': each instrument cut the whole sentence again

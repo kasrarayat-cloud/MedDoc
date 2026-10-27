@@ -1109,6 +1109,8 @@ def _sentences(text: str) -> list[tuple[int, int]]:
                 cut = i
             elif _answered_line(text, text.rfind('\n', 0, i) + 1, i, i + 1):
                 cut = i  # "Hiatal hernia \u2013 no" / "Biopsies were taken ...": the answer ends its line's sentence
+            elif _opens_a_sentence(text, i):
+                cut = i  # "No polyps; no masses" / "Biopsies were taken.": a paragraph with no blank line before it
             else:
                 prev_line = text[text.rfind('\n', 0, i) + 1:i].strip()
                 if prev_line and (prev_line.endswith(':') or GENERIC_HEADING.match(prev_line)) \
@@ -2226,6 +2228,26 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
     if _answered_line(text, ls, le, ns):
         return False  # "... and said no" / "Hiatal hernia - no": the answer ends its line
     return True
+
+
+def _opens_a_sentence(text: str, i: int) -> bool:
+    """Whether the line after the newline at ``i`` opens a sentence of its own, although the line before it ends with
+    no stop: the break is no wrap by routing's own test (sections._soft_wrap: no lower-case continuation, no word a
+    sentence cannot end on) and the next line opens with a capital and a clause of its own (sections._own_clause: a
+    finite verb or a participle predicate after its first word). A digital PDF's text layer, a scan's OCR and a Word
+    document whose paragraphs are spaced carry no blank line between paragraphs (refutation r1, formats-7: "No polyps;
+    no masses" / "Biopsies were taken." had been read as one sentence whose "no" denied the biopsy). Bounded: the end
+    of the line before (WRAP_TAIL) and the start of the line after (OWN_CLAUSE_REACH)."""
+    ns = i + 1
+    first = re.match(r'[ \t]{0,40}', text[ns:ns + 41]).end() + ns
+    if first >= len(text) or not text[first].isupper():
+        return False
+    ls = max(text.rfind('\n', 0, i) + 1, i - _sections.WRAP_TAIL)
+    if not text[ls:i].strip():
+        return False
+    ne = text.find('\n', ns, ns + _sections.OWN_CLAUSE_REACH)
+    ne = min(len(text), ns + _sections.OWN_CLAUSE_REACH) if ne < 0 else ne
+    return _sections._own_clause(text[ns:ne]) and not _sections._soft_wrap(text, (ls, i), (ns, ne))
 
 
 def _page_joins(text: str, pages: Sequence) -> dict:
