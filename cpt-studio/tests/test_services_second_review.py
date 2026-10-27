@@ -207,6 +207,25 @@ class SecondReviewTests(TestCase):
         self.assertEqual((run.sent, run.state), (False, models.ProviderRun.SUCCEEDED))
         self.assertIsNotNone(run.reused_from_id)
 
+    def test_clearing_a_member_date_conflict_keeps_the_paid_second_review(self):
+        """Refutation r1 (context lens): the recovery interpretation 19 prescribes - clear the member's date - reuses the
+        identical primary result; the second review made for it is used again, never lost and never paid twice."""
+        import json
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+        for value in ('2026-10-22', ''):
+            with self.captureOnCommitCallbacks(execute=True):
+                reply = self.client.post(f'/api/encounters/{encounter_id}/context',
+                                         data=json.dumps({'service_date': value}), content_type='application/json')
+            self.assertEqual(reply.status_code, 201, reply.content)
+            drain()
+        self.assertEqual(len(self.provider.requests), 2)
+        assessment = models.Encounter.objects.get(pk=encounter_id).current_assessment
+        codes = {p.code: p.support.get('origin') for p in assessment.proposals.filter(bucket='selected')}
+        self.assertEqual(codes, {'45380': 'second_review', '45385': 'primary'})
+        self.assertEqual(assessment.completeness['unresolved_items'], [])
+
     def test_no_second_review_when_every_documented_service_is_accounted_for(self):
         self.provider.first = [('45385', 'was removed with a cold snare'),
                                ('45380', 'was sampled with cold biopsy forceps')]

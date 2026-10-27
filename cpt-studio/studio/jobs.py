@@ -548,13 +548,16 @@ def _second_review_items(assessment):
 
 
 def _second_run_for(revision, run):
-    """The second review made for ``run`` (the primary run in use), if one succeeded."""
+    """The second review made for ``run`` (the primary run in use), if one succeeded - or made for the retained run
+    ``run`` reuses for the identical request on this revision (refutation r1: after a member date conflict was cleared,
+    the reused primary never found the paid second review, so its code disappeared from the decision set)."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
         return None
+    primaries = {str(run.pk)} | ({str(run.reused_from_id)} if run.reused_from_id else set())
     for second in (models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
                                                      state=models.ProviderRun.SUCCEEDED, service_date=run.service_date)
                    .order_by('-created_at')):
-        if (second.scope or {}).get('primary_run') == str(run.pk):
+        if (second.scope or {}).get('primary_run') in primaries:
             return second
     return None
 
