@@ -386,11 +386,11 @@ def stage_predict(job):
         next_assess(run)
         return {'provider': 'not_sent'}
 
-    # Reuse a retained result for the identical request instead of paying twice.
+    # Reuse a retained result for the identical request instead of paying twice - whatever the run was made for: a
+    # second review's excerpt pasted as a note of its own is the same question (refutation r1: it was resent).
     prior = models.ProviderRun.objects.filter(
         encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,
-        purpose=models.ProviderRun.PRIMARY,
     ).order_by('created_at').first()
     if prior is not None:
         run = models.ProviderRun.objects.create(
@@ -639,6 +639,13 @@ def stage_review2(job):
             purpose=models.ProviderRun.SECOND_REVIEW, scope=scope, finished_at=timezone.now())
         next_assess(run)
         return {'second_review': 'not_sent'}
+    if request.canonical_sha256 == primary.request_sha256 or models.ProviderRun.objects.filter(
+            encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
+            request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED,
+            purpose=models.ProviderRun.PRIMARY).exists():
+        # The excerpt is the whole text (a report that opens with its title): the request repeats a primary request
+        # already answered, so it asks nothing new and is never sent (refutation r1: a byte-identical paid resend).
+        return {'skipped': 'the second review would repeat a primary request already answered; nothing was sent'}
     prior = models.ProviderRun.objects.filter(
         encounter__workspace=encounter.workspace, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.SUCCEEDED, reused_from__isnull=True,

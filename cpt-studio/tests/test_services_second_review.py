@@ -185,6 +185,28 @@ class SecondReviewTests(TestCase):
         drain()
         self.assertEqual(len(self.provider.requests), 2)
 
+    def test_no_second_review_that_repeats_the_primary_request(self):
+        """A report that opens with its title is documented from its first character, so the excerpt is the whole text
+        and the request would be byte-identical to the primary's (refutation r1, lenses sends and migrate)."""
+        text = REPORT[REPORT.index('Colonoscopy report'):]
+        encounter_id = self.create(text)
+        drain()
+        self.assertEqual(len(self.provider.requests), 1)
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id).values_list('purpose', 'sent'))
+        self.assertEqual(runs, [('primary', True)])
+
+    def test_an_excerpt_pasted_as_its_own_note_reuses_the_answered_request(self):
+        first = self.create()
+        drain()
+        excerpt = models.ProviderRun.objects.get(encounter_id=first, purpose='second_review').contexts[0]
+        self.assertEqual(len(self.provider.requests), 2)
+        second = self.create(excerpt)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)  # the identical request is reused, never resent
+        run = models.ProviderRun.objects.get(encounter_id=second, purpose='primary')
+        self.assertEqual((run.sent, run.state), (False, models.ProviderRun.SUCCEEDED))
+        self.assertIsNotNone(run.reused_from_id)
+
     def test_no_second_review_when_every_documented_service_is_accounted_for(self):
         self.provider.first = [('45385', 'was removed with a cold snare'),
                                ('45380', 'was sampled with cold biopsy forceps')]
