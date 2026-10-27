@@ -208,13 +208,15 @@ class IdenticalRequestTests(Base):
         self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose='second_review').exists())
 
     def test_reverse_a_primary_identical_to_an_answered_second_review_reuses_it(self):
-        first = self.create()
+        source = f'{BANNER}\n{self.TITLE_FIRST[0]}'  # its report part, the excerpt, opens with the banner too
+        first = self.create(source)
         drain()
         self.assertEqual(self.ask(first).status_code, 201)
         drain()
         self.assertEqual(self.sent(), 2)
         excerpt = models.ProviderRun.objects.get(encounter_id=first, purpose='second_review').contexts[0]
-        twin = self.create()  # the same report again: its primary and, asked for, its second review are reused
+        self.assertTrue(excerpt.startswith(BANNER))
+        twin = self.create(source)  # the same report again: its primary and, asked for, its second review are reused
         drain()
         self.assertEqual(self.ask(twin).status_code, 201)
         drain()
@@ -421,6 +423,51 @@ class SecondReviewAcrossReuseTests(Base):
         drain()
         self.round_trip(encounter_id, ('2026-10-17', '2026-10-16'))
         self.assert_kept(encounter_id, 3)  # the primary for 2026-10-17 is a new request; nothing else is
+
+    def test_a_second_review_made_for_a_reused_primary(self):
+        # the same report twice in one workspace: the second's primary reuses the first's; its reviewer asks
+        self.create()
+        drain()
+        twin = self.create()
+        drain()
+        self.assertEqual(self.sent(), 1)
+        self.assertEqual(self.ask(twin).status_code, 201)
+        drain()
+        self.assertEqual(self.sent(), 2)
+        self.round_trip(twin)
+        self.assert_kept(twin, 2)
+
+    def test_a_reused_second_review_made_for_a_reused_primary(self):
+        first = self.create()
+        drain()
+        self.assertEqual(self.ask(first).status_code, 201)
+        drain()
+        twin = self.create()
+        drain()
+        self.assertEqual(self.ask(twin).status_code, 201)
+        drain()
+        self.assertEqual(self.sent(), 2)
+        self.round_trip(twin)
+        self.assert_kept(twin, 2)
+        self.round_trip(twin, ('2026-10-22', '2026-10-16'))  # a member date that agrees with the document's
+        self.assert_kept(twin, 2)
+
+    def test_controls_another_answer_to_the_same_request_or_an_unreadable_scope_never_reads_it(self):
+        import uuid
+        encounter_id = self.create()
+        drain()
+        self.assertEqual(self.ask(encounter_id).status_code, 201)
+        drain()
+        encounter = self.encounter(encounter_id)
+        revision, primary = encounter.current_revision, encounter.current_assessment.provider_run
+        second = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        self.assertEqual(jobs._second_run_for(revision, primary).pk, second.pk)
+        other = models.ProviderRun.objects.get(pk=primary.pk)  # the same request answered otherwise
+        other.pk, other.run_identity, other.response_sha256 = None, uuid.uuid4(), '0' * 64
+        other.save()
+        self.assertIsNone(jobs._second_run_for(revision, other))
+        models.ProviderRun.objects.filter(pk=second.pk).update(scope={**second.scope, 'primary_run': 'not-a-run'})
+        self.assertIsNone(jobs._second_run_for(revision, primary))
 
     def test_control_a_second_review_for_another_date_is_never_read(self):
         undated = REPORT.replace('Date of service: 2026-10-16\n', '')

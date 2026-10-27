@@ -608,17 +608,33 @@ def _second_review_items(assessment):
     return items, (min(a for a, _ in spans), max(b for _, b in spans))
 
 
+def _answer_of(run):
+    """What a primary run's outcome is: the provider's answer (the same response) to the same request."""
+    return (run.provider, run.adapter_version, run.request_sha256, run.response_sha256)
+
+
 def _second_run_for(revision, run):
-    """The second review made for ``run`` (the primary run in use), if one succeeded - or made for the retained run
-    ``run`` reuses for the identical request on this revision (refutation r1: after a member date conflict was cleared,
-    the reused primary never found the paid second review, so its code disappeared from the decision set)."""
+    """The second review that succeeded on this revision and date for the primary answer ``run`` carries: made for
+    ``run`` itself or for any run carrying the same answer to the same request - the retained run it reuses, or another
+    run reusing that same retained run (refutation r1, sends-2 / context-2: after a member date conflict was cleared, or
+    a date changed and changed back, the reused primary never found the paid second review, so its code disappeared from
+    the decision set and another could not be asked for; ec5: also when that second review had been made for a primary
+    that was itself a reuse, as when the same report is uploaded twice in a workspace)."""
     if run is None or run.state != models.ProviderRun.SUCCEEDED or run.purpose != models.ProviderRun.PRIMARY:
         return None
-    primaries = {str(run.pk)} | ({str(run.reused_from_id)} if run.reused_from_id else set())
-    for second in (models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
+    seconds = list(models.ProviderRun.objects.filter(revision=revision, purpose=models.ProviderRun.SECOND_REVIEW,
                                                      state=models.ProviderRun.SUCCEEDED, service_date=run.service_date)
-                   .order_by('-created_at')):
-        if (second.scope or {}).get('primary_run') in primaries:
+                   .order_by('-created_at'))
+    made_for = set()
+    for second in seconds:
+        try:
+            made_for.add(uuid.UUID(str((second.scope or {}).get('primary_run'))))
+        except ValueError:
+            continue
+    answers = {str(primary.pk): _answer_of(primary) for primary in models.ProviderRun.objects.filter(
+        pk__in=made_for, revision=revision, purpose=models.ProviderRun.PRIMARY, state=models.ProviderRun.SUCCEEDED)}
+    for second in seconds:
+        if answers.get(str((second.scope or {}).get('primary_run'))) == _answer_of(run):
             return second
     return None
 
