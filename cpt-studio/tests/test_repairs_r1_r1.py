@@ -3,6 +3,9 @@
 missed-1  a staff field naming a nurse ("Nurse: Jo Rowe, RN") opened a nursing part over the physician's report, so
           every later act of the report was read as nursing and skipped by reconciliation (a hidden missed service and
           a false "every documented service has a proposal").
+missed-2  a nursing or anesthesia signature anywhere in a sentence ("..., placed in formalin and documented by Jo Rowe,
+          RN", "Under propofol sedation given by the CRNA and documented in the anesthesia record, ...") relabelled the
+          physician's act in it, which hid the act and dropped the base-code hold.
 
 Each text is a fresh synthetic paraphrase written for the case under test; the expected readings are written here,
 outside the reader.
@@ -145,3 +148,84 @@ class StaffFieldIsNoNursingPartTests(SimpleTestCase):
             with self.subTest(heading=heading):
                 text = HEAD + 'Colonoscopy report\n' + heading + '\nSome entry text.\n'
                 self.assertIn(role, {p.role for p in services.parts(text)})
+
+
+EGD_WITH = HEAD + """UPPER ENDOSCOPY REPORT
+Date of service: 10/14/2026
+Patient: Test Patient (fictional)
+Endoscopist: Dana Example, MD (fictional)
+Procedure: Esophagogastroduodenoscopy
+Indication: Dyspepsia; evaluate for Helicobacter pylori.
+Description: The gastroscope was advanced to the second portion of the duodenum. The esophagus and duodenum were normal. \
+Mild erythema was seen in the gastric antrum.
+{sentence}
+Impression: Antral gastritis.
+"""
+COLON_WITH = HEAD + """COLONOSCOPY REPORT
+Date of service: 10/14/2026
+Patient: Test Patient (fictional)
+Endoscopist: Dana Example, MD (fictional)
+Indication: Surveillance after prior adenoma.
+Findings: The colonoscope was advanced to the cecum; the appendiceal orifice and ileocecal valve were identified. \
+{sentence}
+Impression: One small polyp removed.
+"""
+
+
+class SignatureSpeaksOnlyAsItsEntrysLabelTests(SimpleTestCase):
+    """missed-2: a signature speaks for an act only as the label its sentence opens with, closed by a colon before the
+    act ("Recorded by Jo Fictional RN: India ink tattoo [X] Performed"). Anywhere else it names who recorded something
+    else - a specimen, the sedation, the vital signs - never who documented the physician's act."""
+
+    def test_the_specimen_signature_leaves_the_biopsy_to_the_physician(self):
+        text = EGD_WITH.format(sentence='Cold forceps biopsies were obtained from the gastric antrum and body, placed in '
+                                        'formalin and documented by Jo Rowe, RN (fictional).')
+        self.assertEqual(acts(read(text), 'gi.egd'), [('biopsy', 'performed', 'physician')])
+        result = run(text, [sel('43235', span(text, 'The gastroscope was advanced to the second portion'))])
+        self.assertEqual(unresolved(result), [('gi.egd', 'biopsy', 'not_covered')])
+        base = proposal(result, '43235')
+        self.assertEqual(base.status, 'needs_clarification')
+        self.assertIn('services.base_included', {c.id for c in base.checks})
+        self.assertEqual(result.completeness['state'], 'incomplete')
+
+    def test_the_sedation_signature_leaves_the_snare_to_the_physician_and_keeps_the_attribution(self):
+        text = COLON_WITH.format(sentence='Under propofol sedation given by the CRNA and documented in the anesthesia '
+                                          'record, a 6 mm sigmoid colon polyp was removed with cold snare.')
+        inv = read(text)
+        self.assertEqual(acts(inv, 'gi.colonoscopy'), [('snare', 'performed', 'physician')])
+        self.assertIn('anesthesia', [a.role for a in inv.attributions])
+        result = run(text, [sel('45378', span(text, REACHED))])
+        self.assertEqual(unresolved(result), [('gi.colonoscopy', 'snare', 'not_covered')])
+        self.assertEqual(proposal(result, '45378').status, 'needs_clarification')
+
+    def test_a_signature_in_another_clause_a_parenthesis_or_a_phrase_signs_nothing_of_the_act(self):
+        for sentence in ('A 6 mm sigmoid colon polyp was removed with cold snare; the specimen was retrieved and charted '
+                         'by the endoscopy nurse.',
+                         'A 6 mm sigmoid colon polyp was removed with cold snare and retrieved per the nursing checklist.',
+                         'A 6 mm sigmoid colon polyp was removed with cold snare (specimen count recorded by the RN).',
+                         'While the CRNA documented vital signs, a 6 mm sigmoid colon polyp was removed with cold snare.',
+                         'With deep sedation by the anesthesiologist, recorded separately, an 8 mm cecal polyp was '
+                         'removed with hot snare.',
+                         'A 6 mm sigmoid colon polyp was removed with cold snare (nursing handoff completed).',
+                         'Polypectomy note: a 6 mm sigmoid colon polyp was removed with cold snare, charted by Jo Rowe, '
+                         'RN (fictional).'):
+            with self.subTest(sentence=sentence):
+                text = COLON_WITH.format(sentence=sentence)
+                self.assertIn(('snare', 'performed', 'physician'), acts(read(text), 'gi.colonoscopy'))
+                result = run(text, [sel('45378', span(text, REACHED))])
+                self.assertIn(('gi.colonoscopy', 'snare', 'not_covered'), unresolved(result))
+                self.assertEqual(result.completeness['state'], 'incomplete')
+
+    def test_a_signature_that_labels_its_entry_still_speaks_for_it(self):
+        # the other direction: the nurse's own entry, signed as its label, stays the nurse's and keeps the conflict
+        for entry in ('Recorded by Jo Rowe, RN (fictional): India ink tattoo [X] Performed [ ] Not performed.',
+                      'Intra-procedure checklist charted by Lee Park, RN (fictional): Tattoo [X] Performed [ ] Not '
+                      'performed.',
+                      'Nursing checklist: Tattoo [X] Performed [ ] Not performed.'):
+            with self.subTest(entry=entry):
+                text = COLON_WITH.format(sentence='No tattoo was placed.\n' + entry)
+                inv = read(text)
+                self.assertIn(('tattoo', 'performed', 'nursing'), acts(inv, 'gi.colonoscopy'))
+                self.assertEqual([(c.subject, sorted({(side.role, side.status) for side in c.sides}))
+                                  for c in inv.conflicts],
+                                 [('tattoo', [('nursing', 'performed'), ('physician', 'negated')])])

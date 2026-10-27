@@ -2277,9 +2277,17 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if labelled:
                     role = labelled
                 elif role == 'physician':
-                    for sig_role, sig in ROLE_SIGNATURE:
-                        if sig.search(text, ss, se):
-                            role = sig_role
+                    # A signature speaks for an act only as the label its sentence opens with, closed by a colon before
+                    # the act and naming no act itself ("Recorded by Jo Fictional RN: India ink tattoo [X] Performed").
+                    # Anywhere else it names who recorded something else - the specimen, the sedation ("..., placed in
+                    # formalin and documented by Jo Rowe, RN", "Under propofol sedation given by the CRNA and
+                    # documented in the anesthesia record, a polyp was removed") - never who documented the act, which
+                    # it had hidden from reconciliation (refutation r1, missed-2).
+                    label_end = text.rfind(':', ss, ms)
+                    if label_end >= 0 and not any(ss <= other < label_end for _, other, _ in mentions):
+                        for sig_role, sig in ROLE_SIGNATURE:
+                            if sig.search(text, ss, label_end):
+                                role = sig_role
                 act_count += 1
                 if act_count > MAX_ACTS:
                     raise _Capped(f'More than {MAX_ACTS:,} acts are documented; the rest were not inventoried.')
