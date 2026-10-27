@@ -1007,9 +1007,16 @@ reused (`reused_from`) and no paid call is made. **Never re-sent after a
 failure**: a request the encounter already sent (any revision, whatever it was
 made for) whose outcome was `failed` is never sent again, so a date round trip,
 a cleared date or a reconciliation's released attempt ends as that request did
-(the predict re-assesses with its run: provider_failed) and a second review
-that would repeat it is refused (`jobs._failed_before`; round 7c8, refutation
-p1 sends-0..2). Context-only changes that do
+(provider_failed) and a second review that would repeat it is refused unless an
+answer to it is retained and reused (`jobs._failed_before`; round 7c8,
+refutation p1 sends-0..2). The predict that meets such a request records a
+`not_sent` run of its own carrying that request (`jobs._not_resent_run`: nothing
+sent, its error names the earlier failure) and re-assesses with it, as a
+predict that reuses an answer, sends, or cannot build its request ends with a
+run of its own: so the run the assessment reads is the revision's newest
+finished run, the run in use below and the run the installed revision reads
+after a rollback, and no later save on either sends that request (round 7c8
+skeptic: re-assessing with the older failed run left a newer one standing). Context-only changes that do
 not change the request (setting, billing context) never re-predict; whether the
 request changed is decided against the run in use, never the previous
 context. The run in use is the revision's newest request that finished,
@@ -1017,8 +1024,11 @@ whether or not an assessment was made with it (a Stop during the send or a
 swept or expired assess cancels that assess); a reconciled unknown outcome no
 longer stands, so its one released attempt is made, and neither does a reserved
 run the stale sweep settled as not sent (no started_at: it was never sent), nor
-a not-sent run that carries no request (a member date hold, or a request that
-could not be built). Every member action that can queue a stage runs under the encounter
+a member date hold (`scope.held`: no request's outcome). A not-sent run recorded
+because no request could be built stands (it answers no request, so the next
+change re-predicts, and the send door keeps a request that failed unsent), as
+does the not-sent run a predict records for a request that failed (it carries
+that request). Every member action that can queue a stage runs under the encounter
 row lock and is refused while a stage is queued or running. The predict stage
 sends only the current revision's text with that revision's current context;
 each run records the service date it was built with, and assessment refuses
@@ -1586,9 +1596,9 @@ that failed (on any revision: an addendum that leaves the excerpt as it was
 makes the identical request) unless an answer to that identical second-review
 request is retained in the workspace: that answer is reused and nothing is sent
 (5.4 Reuse; a reuse is not a send), so the ask is accepted;
-`stage_review2` checks them again when it runs, in the same order (a retained
-answer reused, then an unknown outcome blocks, then a request that failed is
-never sent again). It sends the
+`stage_review2` checks them again when it runs: a retained answer is reused
+first, then an unknown outcome blocks, then a request that failed is never sent
+again. It sends the
 provider the text that documents those services (the services' report parts,
 ≤ 20,000 characters) with the date line, under the same send discipline as
 predict (`jobs._send`: single-flight advisory lock, the run written reserved

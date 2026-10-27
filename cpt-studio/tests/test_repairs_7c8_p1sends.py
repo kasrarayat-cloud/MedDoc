@@ -133,15 +133,29 @@ class Steps(Base):
     def runs(self, encounter_id, **filters):
         return list(models.ProviderRun.objects.filter(encounter_id=encounter_id, **filters).order_by('created_at'))
 
-    def assert_failed_run_stands(self, encounter_id, run):
-        """The re-check met the request that failed and re-assessed with it: provider_failed, and the screen names that
-        run (nothing new was recorded for it, nothing was sent)."""
+    def assert_failed_run_stands(self, encounter_id, failed):
+        """The send door met the request that failed and sent nothing: the predict recorded a run of its own - not
+        sent, carrying that request, saying so with the failure's error - and the encounter is re-assessed with it
+        (provider_failed; the screen names it). That run is the revision's newest finished run as this revision and the
+        installed one (057a7d39, after a rollback) read it, and it answers the current context's request on both, so no
+        later save on either sends the request again (round 7c8 skeptic, sk:2: re-assessing with the older failed run
+        itself left a newer run standing)."""
         encounter = self.encounter(encounter_id)
+        revision, assessment = encounter.current_revision, encounter.current_assessment
+        run = assessment.provider_run
         self.assertEqual(encounter.state, 'provider_failed')
-        self.assertEqual(encounter.current_assessment.provider_run_id, run.pk)
-        self.assertEqual(encounter.current_assessment.context_id, encounter.current_context_id)
+        self.assertEqual((run.state, run.sent, run.request_sha256, run.revision_id, run.purpose),
+                         (models.ProviderRun.NOT_SENT, False, failed.request_sha256, revision.pk,
+                          models.ProviderRun.PRIMARY))
+        self.assertTrue(run.error.startswith(jobs.FAILED_BEFORE_MESSAGE), run.error)
+        self.assertIn(failed.error, run.error)
+        self.assertEqual(assessment.context_id, encounter.current_context_id)
+        self.assertEqual(jobs._run_in_use(revision), run)
+        self.assertEqual(installed_run_in_use(revision), run)
+        self.assertTrue(jobs._run_answers(run, revision, encounter.current_context))
         self.assertEqual(self.detail(encounter_id)['state_run'], str(run.pk))
         self.assertEqual(review.latest_job(encounter).kind, models.Job.ASSESS)
+        return run
 
 
 # --- sends-0: a run that carries no request is no request's outcome --------------------------------------------------
@@ -171,8 +185,8 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
         self.context(encounter_id, service_date='')  # cleared: the request is the failed one, byte for byte
         self.assertEqual(self.sent(), 1)
         self.assertEqual(self.shas(), [failed.request_sha256])
-        self.assert_failed_run_stands(encounter_id, failed)
-        self.assertEqual(len(self.runs(encounter_id)), 2)
+        run = self.assert_failed_run_stands(encounter_id, failed)
+        self.assertEqual(self.runs(encounter_id), [failed, unbuilt, run])
 
     def test_the_context_dialogs_whole_body(self):
         # the same steps posted as the context dialog posts them: every field, every time; a smaller limit on the
@@ -186,17 +200,6 @@ class RunWithoutARequestIsNoOutcomeTests(Steps):
         self.context(encounter_id, service_date='', setting='', billing_context='')
         self.assertEqual(self.sent(), 1)
         self.assert_failed_run_stands(encounter_id, self.runs(encounter_id)[0])
-
-    def test_the_run_without_a_request_is_not_the_run_in_use(self):
-        text = self.sized_text(4_000)
-        self.provider.max_request_bytes = 4_000
-        self.provider.outcomes = ['failed']
-        encounter_id = self.create(text)
-        drain()
-        self.context(encounter_id, service_date=DATE)
-        failed, unbuilt = self.runs(encounter_id)
-        self.assertEqual(unbuilt.request_sha256, '')
-        self.assertEqual(jobs._run_in_use(self.encounter(encounter_id).current_revision), failed)
 
     def test_control_a_request_never_sent_is_sent_once_its_date_is_cleared(self):
         # a run without a request before any request was sent: clearing the date makes the one attempt, once
@@ -485,24 +488,19 @@ class WhateverItWasMadeForTests(Steps):
         self.assertEqual(self.sent(), 1)
         self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id, purpose='second_review').exists())
 
-    def assert_recorded_not_resent(self, encounter_id, sent):
+    def assert_recorded_not_resent(self, encounter_id, sent, failed):
         self.assertEqual(self.sent(), sent)  # nothing new
-        encounter = self.encounter(encounter_id)
-        run = encounter.current_assessment.provider_run
-        self.assertEqual((run.state, run.request_sha256, run.sent, run.revision_id),
-                         (models.ProviderRun.NOT_SENT, '', False, encounter.current_revision_id))
-        self.assertEqual(run.error, jobs.FAILED_BEFORE_MESSAGE)
-        self.assertEqual(encounter.state, 'provider_failed')
-        self.assertEqual(self.detail(encounter_id)['state_run'], str(run.pk))
+        # the predict's own not-sent run, on this revision, as for a failed primary request of this revision
+        self.assert_failed_run_stands(encounter_id, failed)
 
     def test_a_primary_whose_request_a_failed_second_review_carried(self):
         encounter_id = self.create(UNDATED)
         drain()
         revision = self.encounter(encounter_id).current_revision
         dated = self.provider.build_request(revision.text, date.fromisoformat(DATE))
-        self.failed_run(revision, dated, models.ProviderRun.SECOND_REVIEW)
+        failed = self.failed_run(revision, dated, models.ProviderRun.SECOND_REVIEW)
         self.context(encounter_id, service_date=DATE)
-        self.assert_recorded_not_resent(encounter_id, sent=1)
+        self.assert_recorded_not_resent(encounter_id, sent=1, failed=failed)
 
     def test_a_primary_whose_request_failed_on_an_earlier_revision(self):
         encounter_id = self.create(UNDATED)
@@ -513,10 +511,10 @@ class WhateverItWasMadeForTests(Steps):
         drain()
         self.assertEqual(self.sent(), 2)  # the upload's request and the addendum revision's
         revision = self.encounter(encounter_id).current_revision
-        self.failed_run(first, self.provider.build_request(revision.text, date.fromisoformat(DATE)),
-                        models.ProviderRun.PRIMARY)
+        failed = self.failed_run(first, self.provider.build_request(revision.text, date.fromisoformat(DATE)),
+                                 models.ProviderRun.PRIMARY)
         self.context(encounter_id, service_date=DATE)
-        self.assert_recorded_not_resent(encounter_id, sent=2)
+        self.assert_recorded_not_resent(encounter_id, sent=2, failed=failed)
 
 
 # --- round 7c8, the P1SENDS skeptic: a reuse is not a send, and the run in use is the outcome that stands ------------
@@ -591,3 +589,109 @@ class RetainedSecondReviewIsReusedTests(Steps):
         drain()
         self.assertEqual(self.sent(), sent)
         self.assertEqual(self.runs(first, purpose=models.ProviderRun.SECOND_REVIEW), [failed])
+
+
+@override_settings(**LIVE)
+class TheRunInUseIsTheOutcomeThatStandsTests(Steps):
+    """Skeptic sk:2 (rollback safety; class 1 through a rollback) and sk:3: where the send door met a request that had
+    FAILED, the predict re-assessed with that OLDER run and recorded nothing; and a cleared date whose newest run
+    carried no request re-assessed past it. Either way the revision's newest finished run - the run in use this
+    revision reads at every later save, and the one the installed revision 057a7d39 reads once a rollback restores
+    it - was not the run whose outcome stood. There, a member's setting save SENT the byte-identical request that had
+    failed; here, a member date whose request never reached the provider was never attempted again."""
+
+    def assert_a_setting_save_sends_nothing(self, encounter_id, run):
+        sent = self.sent()
+        self.context(encounter_id, setting='office')
+        self.assertEqual(self.sent(), sent)
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, run.pk)
+
+    def test_a_cleared_date_after_an_answered_one(self):
+        # the skeptic's shape A: the dateless request FAILED, the member's date was sent and answered, then cleared
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create(UNDATED)
+        drain()
+        [failed] = self.runs(encounter_id)
+        self.context(encounter_id, service_date=DATE)
+        self.assertEqual(self.runs(encounter_id)[-1].state, models.ProviderRun.SUCCEEDED)
+        self.context(encounter_id, service_date='')
+        self.assertEqual(self.sent(), 2)
+        run = self.assert_failed_run_stands(encounter_id, failed)
+        self.assert_a_setting_save_sends_nothing(encounter_id, run)
+
+    def test_a_cleared_date_whose_request_could_not_be_built(self):
+        # the skeptic's shape B (sends-0's rows): the dated request was over the byte limit, so its run carries none
+        self.provider.max_request_bytes = 4_000
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create(sized_text(4_000))
+        drain()
+        [failed] = self.runs(encounter_id)
+        self.context(encounter_id, service_date=DATE)
+        unbuilt = self.runs(encounter_id)[-1]
+        self.assertEqual((unbuilt.state, unbuilt.request_sha256), (models.ProviderRun.NOT_SENT, ''))
+        self.context(encounter_id, service_date='')
+        self.assertEqual(self.sent(), 1)
+        run = self.assert_failed_run_stands(encounter_id, failed)
+        self.assert_a_setting_save_sends_nothing(encounter_id, run)
+
+    def test_a_cleared_date_after_a_second_review(self):
+        # a second review newer than every primary run (the installed revision has no purpose column)
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create(UNDATED)
+        drain()
+        [failed] = self.runs(encounter_id)
+        self.context(encounter_id, service_date=DATE)
+        self.assertEqual(self.ask(encounter_id).status_code, 201)
+        drain()
+        self.assertEqual(self.runs(encounter_id)[-1].purpose, models.ProviderRun.SECOND_REVIEW)
+        self.context(encounter_id, service_date='')
+        self.assertEqual(self.sent(), 3)
+        run = self.assert_failed_run_stands(encounter_id, failed)
+        self.assert_a_setting_save_sends_nothing(encounter_id, run)
+
+    def test_a_member_date_never_sent_is_attempted_when_it_is_set_again(self):
+        # sk:3: the dated request never reached the provider (the token endpoint refused); after the round trip the
+        # outcome that stands is the dateless request's, so the member's date is a request still to be made
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create(UNDATED)
+        drain()
+        [failed] = self.runs(encounter_id)
+        self.provider.outcomes = ['not_sent']
+        self.context(encounter_id, service_date=DATE)
+        refused = self.runs(encounter_id)[-1]
+        self.assertEqual((refused.state, refused.sent, refused.service_date),
+                         (models.ProviderRun.NOT_SENT, False, date.fromisoformat(DATE)))
+        self.context(encounter_id, service_date='')
+        self.assertEqual(self.sent(), 2)
+        self.context(encounter_id, service_date=DATE)  # the provider answers from here on
+        dated = [request.canonical_sha256 for request in self.provider.requests if len(request.contexts) == 2]
+        self.assertEqual(dated, [refused.request_sha256] * 2)
+        run = self.encounter(encounter_id).current_assessment.provider_run
+        self.assertEqual((run.state, run.sent, run.service_date),
+                         (models.ProviderRun.SUCCEEDED, True, date.fromisoformat(DATE)))
+        self.assertEqual(self.shas().count(failed.request_sha256), 1)
+
+    def test_control_the_same_steps_after_an_answered_dateless_request(self):
+        # held before the repair too: whether the member's date is attempted never depends on another request's outcome
+        encounter_id = self.create(UNDATED)
+        drain()
+        self.provider.outcomes = ['not_sent']
+        self.context(encounter_id, service_date=DATE)
+        self.context(encounter_id, service_date='')
+        self.context(encounter_id, service_date=DATE)
+        self.assertEqual(len([request for request in self.provider.requests if len(request.contexts) == 2]), 2)
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run.state,
+                         models.ProviderRun.SUCCEEDED)
+
+    def test_a_run_without_a_request_stands_as_the_installed_revision_reads_it(self):
+        # the round-4 pin, restored (sk:2's second place): the not-built run is the newest finished run on both
+        # revisions; nothing it answers, and the send door - not the run in use - keeps the failed request unsent
+        self.provider.max_request_bytes = 4_000
+        self.provider.outcomes = ['failed']
+        encounter_id = self.create(sized_text(4_000))
+        drain()
+        self.context(encounter_id, service_date=DATE)
+        unbuilt = self.runs(encounter_id)[-1]
+        revision = self.encounter(encounter_id).current_revision
+        self.assertEqual(jobs._run_in_use(revision), unbuilt)
+        self.assertEqual(installed_run_in_use(revision), unbuilt)

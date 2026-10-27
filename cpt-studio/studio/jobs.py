@@ -287,6 +287,7 @@ def _unreconciled_unknown(encounter):
 
 FAILED_BEFORE_MESSAGE = ('Nothing was sent: this request was sent before for this document and failed, and an '
                          'identical request is never sent again.')
+FAILED_BEFORE_ERROR = ' Its error then: {error}'
 
 
 def _failed_before(encounter, provider, request):
@@ -296,13 +297,29 @@ def _failed_before(encounter, provider, request):
     Such a request is never sent again (refutation p1, sends-0..2: a date round trip, a cleared date after one whose
     request could not be built, a reconciliation's released attempt and an addendum that left a second review's excerpt
     as it was each re-sent one byte-identical). Each send door asks it after reusing a retained answer to the same
-    request and after the unknown-outcome block, and before anything that sends: the predict re-assesses with the
-    failed run, the second review sends nothing and is refused when asked for. Another encounter's runs are not read:
-    an upload is a member's new request."""
+    request and after the unknown-outcome block, and before anything that sends: the predict records a not-sent run
+    carrying the request (_not_resent_run) and re-assesses with it, the second review sends nothing and is refused when
+    asked for. Another encounter's runs are not read: an upload is a member's new request."""
     return (models.ProviderRun.objects.filter(
         encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
         request_sha256=request.canonical_sha256, state=models.ProviderRun.FAILED, sent=True)
         .order_by('-created_at').first())
+
+
+def _not_resent_run(job, encounter, revision, provider, request, service_date, failed):
+    """The run a predict records where the send door met ``request`` already sent for this encounter that FAILED
+    (``failed``): nothing is sent, and the run says so and gives that failure's error. It carries the request, so it
+    answers it as the run in use - this revision's, and the installed revision's after a rollback: both read the
+    revision's newest finished run, so neither sends that request behind a later save. Its start is recorded, as a
+    reused run's is: it went through the send door, so no revision reads it as a reservation the stale sweep settled
+    unsent, which still owes its attempt (round 7c8 skeptic, sk:2 and sk:3)."""
+    now = timezone.now()
+    error = FAILED_BEFORE_MESSAGE + (FAILED_BEFORE_ERROR.format(error=failed.error) if failed.error else '')
+    return models.ProviderRun.objects.create(
+        encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, request_body=request.body, contexts=list(request.contexts),
+        state=models.ProviderRun.NOT_SENT, sent=False, error=error, authorization_ref=settings.AUTHORIZATION_REF,
+        requested_by=job.requested_by, service_date=service_date, started_at=now, finished_at=now)
 
 
 def _retained_second_review(encounter, provider, request):
@@ -537,19 +554,14 @@ def stage_predict(job):
     if failed is not None:
         # Refutation p1, sends-0 and sends-2: this request was sent before and FAILED, so it is never sent again - not
         # after a date round trip or a cleared date, and not as a reconciliation's released attempt. The stage ends as
-        # that request did: re-assessed with its run (provider_failed), under a key of this predict's own.
-        if failed.revision_id != revision.pk or failed.purpose != models.ProviderRun.PRIMARY:
-            # Not reachable today (an addendum's text extends its parent's, and a second review never repeats its own
-            # primary request), but never sent either way: the not-sent run says why.
-            failed = models.ProviderRun.objects.create(
-                encounter=encounter, revision=revision, provider=provider.name,
-                adapter_version=provider.adapter_version, request_sha256='', request_body={}, contexts=[],
-                state=models.ProviderRun.NOT_SENT, error=FAILED_BEFORE_MESSAGE,
-                authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by,
-                service_date=service_date, finished_at=timezone.now())
-        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=failed,
-                key=f'{assess_key}:{failed.pk}:{job.pk.hex[:12]}', requested_by=job.requested_by)
-        return {'provider': 'not_resent', 'run': str(failed.pk)}
+        # that request did (provider_failed), with a run of its own, as a predict that reuses, sends or cannot build
+        # its request ends: re-assessing with the OLDER failed run left a newer one as the revision's newest finished
+        # run, which is the run in use for every later save here (a member date never sent was then never attempted
+        # again) and for the installed revision after a rollback (its setting save re-sent the failed request; round
+        # 7c8 skeptic, sk:2 and sk:3).
+        run = _not_resent_run(job, encounter, revision, provider, request, service_date, failed)
+        next_assess(run)
+        return {'provider': 'not_resent', 'run': str(run.pk)}
 
     _live_gate(job, provider, revision, encounter)
     if job.idempotency_key == _upgrade_predict_key(context):
@@ -1167,8 +1179,11 @@ def _run_in_use(revision):
 
     A run the stale-stage sweep settled as not sent because its worker stopped after reserving it is no outcome at
     all: it carries its request but never reached the send (no started_at), so the attempt it reserved still has to
-    be made, as a Resume of that predict makes it (round 4, pipeline:2). Neither is a not-sent run that carries no
-    request (below). Every other not-sent run stands: one the provider exchange answered went through the send.
+    be made, as a Resume of that predict makes it (round 4, pipeline:2). Neither is a hold (below). Every other
+    not-sent run stands: one the provider exchange answered went through the send, one recorded when no request could
+    be built carries no request to compare (a save after it re-predicts, and the predict's send door, not this reading,
+    keeps a request that failed unsent), and one a predict recorded where that door met a request that FAILED carries
+    that request (_not_resent_run).
     """
     from django.db.models import Q
 
@@ -1176,14 +1191,17 @@ def _run_in_use(revision):
                 models.ProviderRun.UNKNOWN)
     reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
                            & ~Q(request_sha256=''))
-    # A not-sent run that carries no request - a hold (a member date conflict: scope.held), or one recorded when no
-    # request could be built - is no request's outcome: it has none to compare, so standing as the run in use it let a
-    # later metadata save re-send the byte-identical request that had FAILED before it (ec5 integration, from the
-    # REPORTRUNS skeptic, for the hold; refutation p1, sends-0, for a date whose request was over the byte limit; 5.4:
-    # never re-sent behind a metadata save).
-    no_request = Q(state=models.ProviderRun.NOT_SENT) & (Q(request_sha256='') | Q(scope__has_key='held'))
+    # A held run (a member date conflict: scope.held) is a hold, not the outcome of any request: it carries none to
+    # compare, so standing as the run in use it let a cleared conflict re-send the byte-identical request that had
+    # FAILED before it (ec5 integration, from the REPORTRUNS skeptic; 5.4: never re-sent behind a metadata save). The
+    # installed revision (057a7d39) reads a hold, like a second review, as its run in use (it skips neither); what a
+    # rollback does about rows only this revision writes is the installer's (refutation p1, migrate-1). Refutation
+    # p1's first repair skipped every run without a request the same way; that let a cleared date re-assess past the
+    # revision's newest run, rows the installed revision misread after a rollback (round 7c8 skeptic, sk:2), so only
+    # the hold is skipped.
+    held = Q(state=models.ProviderRun.NOT_SENT) & Q(scope__has_key='held')
     run = (revision.provider_runs.filter(state__in=finished, purpose=models.ProviderRun.PRIMARY)
-           .exclude(reserved_then_swept).exclude(no_request).order_by('-created_at').first())
+           .exclude(reserved_then_swept).exclude(held).order_by('-created_at').first())
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run

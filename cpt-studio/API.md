@@ -180,14 +180,14 @@ boolean, a list, an object) answers 400. A service date is a string in `YYYY-MM-
 (also on upload). Re-assesses with the provider run in use only when that run answers
 exactly the request the new context would send; otherwise re-predicts (an
 identical retained result is reused at no cost; a request this document already
-sent that failed is never sent again, and the predict re-assesses with that
-run instead). The run in use is the current
+sent that failed is never sent again: the predict records a `not_sent` run that
+carries that request and names the failure, and re-assesses with it). The run in
+use is the current
 revision's newest finished request, also when a Stop or an expired stage
 cancelled the assess that would have used it; a reconciled unknown outcome is
 not, so the attempt the reconciliation released is still made, and neither is a
 reserved run the stale sweep settled as not sent (it was never sent), nor a
-not-sent run that carries no request (none could be built, or a member date
-conflict held it). The
+member date conflict's hold. The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text

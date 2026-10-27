@@ -180,8 +180,7 @@ class SweptReservedRunIsNoOutcomeTests(ApiHarness, TestCase):
 @override_settings(**LIVE)
 class RunInUseTests(ApiHarness, TestCase):
     """Round 4, pipeline:2 — exactly the runs the sweep settled from reserved stop standing; every other finished
-    run stands as before (cc78bc4c4), whatever it is newer than, except a not-sent run that carries no request
-    (refutation p1, sends-0, round 7c8: it answers no request)."""
+    run stands as before (cc78bc4c4), whatever it is newer than."""
 
     def setUp(self):
         super().setUp()
@@ -208,12 +207,13 @@ class RunInUseTests(ApiHarness, TestCase):
         answered = self.make_run(started_at=timezone.now(), finished_at=timezone.now(), error='Authentication failed.')
         self.assertEqual(jobs._run_in_use(self.revision), answered)
 
-    def test_a_run_recorded_without_a_request_is_no_outcome(self):
-        # Round 7c8 (refutation p1, sends-0) updated this pin, which pinned the defect: the run stood, and having no
-        # request to compare it let a later metadata save re-send the byte-identical request that FAILED before it.
-        self.make_run(request_sha256='', request_body={}, contexts=[], error='No credentials are configured.',
-                      finished_at=timezone.now())
-        self.assertEqual(jobs._run_in_use(self.revision), self.failed)
+    def test_a_run_recorded_without_a_request_stands(self):
+        # Restored in round 7c8 (the P1SENDS skeptic, sk:2): refutation p1's first repair made this run no outcome, so a
+        # cleared date re-assessed past the revision's newest run, rows the installed revision misread after a rollback.
+        # The run stands, as the installed revision reads it; the predict's send door keeps a failed request unsent.
+        unbuilt = self.make_run(request_sha256='', request_body={}, contexts=[], error='No credentials are configured.',
+                                finished_at=timezone.now())
+        self.assertEqual(jobs._run_in_use(self.revision), unbuilt)
 
     def test_other_finished_states_without_a_start_still_stand(self):
         for state in (models.ProviderRun.FAILED, models.ProviderRun.SUCCEEDED, models.ProviderRun.UNKNOWN):
