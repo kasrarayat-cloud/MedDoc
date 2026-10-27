@@ -163,8 +163,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                              for index, item in enumerate(alternatives))
                      + tuple(second_alternatives))
         reconciled = {s.family for s in usable.services if s.status in checks.POSITIVE} if usable else set()
+        documented_em = any(checks.separate_em_statement(f) for f in routing.findings if f.family in checks.EM_FAMILIES)
         coverage.append(checks.unproposed_check(*_missed(routing, selections, encounter.procedure_day,
-                                                         reconciled if usable else set())))
+                                                         reconciled if usable else set()), separate_em=documented_em))
     else:
         procedure_day = _encounter('', context, routing, sources, date_state, selections).procedure_day
     active = [(s.code, s.family) for s in selections if not s.excluded]

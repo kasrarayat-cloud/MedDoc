@@ -1122,8 +1122,14 @@ def extraction_check(status: Optional[str], messages: Sequence[str]) -> Check:
     raise ValueError(f'Unknown extraction status {status!r}.')
 
 
-VISIT_NOT_MISSED = ('An E/M mention beside a same-day procedure is not counted as a missed service: a separate E/M '
-                    'needs significant, separately identifiable documentation.')
+# An E/M is not counted on a procedure day the engine sees: a procedure done today, or one whose performance today is
+# not established - so neither line says the procedure was done; and where the document states a significant,
+# separately identifiable E/M, that documentation is not what is missing (refutation 7c8, reports-1).
+VISIT_NOT_MISSED = ('An E/M mention beside a procedure done or possibly done the same day is not counted as a missed '
+                    'service: a separate E/M needs significant, separately identifiable documentation.')
+VISIT_NOT_MISSED_DOCUMENTED = ('An E/M beside a procedure done or possibly done the same day is not counted as a missed '
+                               'service, although the document states a significant, separately identifiable E/M: no '
+                               'selected proposal accounts for it.')
 # What routing recognises in document text. Coverage is never claimed beyond it: a service of another kind is
 # detected only from a selected code or where routing happens to recognise it.
 RECOGNISED = _join([PROFILES[family].label for family in DETECTED_FAMILIES])
@@ -1150,17 +1156,19 @@ def uncited_label(label: str, names: Sequence[str]) -> str:
     return f'{label} ({_join([f"“{excerpt(name)}”" for name in dict.fromkeys(names)])})'
 
 
-def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool) -> Check:
-    """``visit_beside_procedure``: routing found an E/M service on a procedure day that was not counted as missed."""
+def unproposed_check(missed: Sequence[str], visit_beside_procedure: bool, separate_em: bool = False) -> Check:
+    """``visit_beside_procedure``: routing found an E/M service on a procedure day that was not counted as missed;
+    ``separate_em``: the document states a significant, separately identifiable E/M (separate_em_statement)."""
     label = 'Performed services without a proposal'
+    not_missed = VISIT_NOT_MISSED_DOCUMENTED if separate_em else VISIT_NOT_MISSED
     if missed:
         verb = 'is' if len(missed) == 1 else 'are'
         detail = f'Possible missed service: {_join(missed)} {verb} documented as performed with no selected proposal.'
         if visit_beside_procedure:
-            detail += f' {VISIT_NOT_MISSED}'
+            detail += f' {not_missed}'
         return Check('services.unproposed', label, 'warn', detail, COVERAGE_SOURCE)
     if visit_beside_procedure:
-        return Check('services.unproposed', label, 'info', VISIT_NOT_MISSED, COVERAGE_SOURCE)
+        return Check('services.unproposed', label, 'info', not_missed, COVERAGE_SOURCE)
     return Check('services.unproposed', label, 'pass', UNPROPOSED_PASS, COVERAGE_SOURCE)
 
 

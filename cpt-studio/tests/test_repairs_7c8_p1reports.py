@@ -381,6 +381,38 @@ class UncountedVisitIsNamedWithoutOverstatingTests(SimpleTestCase):
         self.assertNotIn('same-day procedure', ' '.join(result.completeness['reasons']))
 
 
+class VisitNotCountedSaysWhyTruthfullyTests(SimpleTestCase):
+    """reports-1, the services.unproposed line printed beside it (TXT CHECKS, Checks tab): "An E/M mention beside a
+    same-day procedure is not counted as a missed service: a separate E/M needs significant, separately identifiable
+    documentation" - its reason is false of a note that states that documentation (the verifier's reading), and it is
+    also printed on a day whose procedure is only possibly done. The line says so of a documented separate E/M, and
+    never says a procedure was done when the record leaves it possible."""
+
+    def unproposed(self, text):
+        from tests.test_services_reconcile import check_encounter, run, sel, span
+        result = run(text, [sel('45378', span(text, SCOPE[1]))] if SCOPE[1] in text else [])
+        return check_encounter(result, 'services.unproposed')
+
+    def test_a_documented_separate_e_m_is_never_told_it_needs_that_documentation(self):
+        line = self.unproposed(EM_AND_COLONOSCOPY)
+        self.assertEqual(line.status, 'info')
+        self.assertNotIn('needs significant, separately identifiable documentation', line.detail)
+        self.assertIn('although the document states a significant, separately identifiable E/M', line.detail)
+        self.assertNotIn('same-day procedure', line.detail)
+
+    def test_control_without_that_statement_the_rule_is_given_and_a_possible_procedure_is_not_called_done(self):
+        from studio.validation import checks
+        for text in (EM_AND_COLONOSCOPY.replace(SEPARATE_EM, ''),
+                     SYNTHETIC + 'Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office '
+                     'visit for rectal bleeding.\nMedical decision making: moderate.\nTotal time on the date of the '
+                     'encounter was 32 minutes.\nIt is unclear whether a colonoscopy was performed today.\n'):
+            with self.subTest(text=text[-60:]):
+                line = self.unproposed(text)
+                self.assertEqual((line.status, line.detail), ('info', checks.VISIT_NOT_MISSED))
+                self.assertIn('a separate E/M needs significant, separately identifiable documentation', line.detail)
+                self.assertNotIn('same-day procedure', line.detail)
+
+
 # --- reports-3: "each still needs a reviewer's decision" -------------------------------------------------------------
 
 STILL_NEEDS = "each still needs a reviewer's decision"
