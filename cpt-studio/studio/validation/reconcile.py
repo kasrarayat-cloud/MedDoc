@@ -506,7 +506,10 @@ def uncounted(inventory: ServiceInventory, unresolved: Sequence[Unresolved], cov
 
 
 def uncounted_label(service: DocumentedService) -> str:
-    return service_label(service) + (' beside a same-day procedure' if service.family == 'gi.office_em' else '')
+    """An office visit is not listed on a procedure day the engine sees: a procedure done today, or one whose
+    performance today is not established - so the label never says the procedure was done."""
+    return service_label(service) + (' beside a procedure done or possibly done the same day'
+                                     if service.family == 'gi.office_em' else '')
 
 
 def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], open_questions: int,
@@ -525,8 +528,8 @@ def completeness(inventory: ServiceInventory, unresolved: Sequence[Unresolved], 
         reasons.append(f'{unestablished} documented service{"s" if unestablished != 1 else ""} not established as '
                        'performed and read by no proposal')
     if not_listed:
-        reasons.append(f'{len(not_listed)} documented service{"s" if len(not_listed) != 1 else ""} without a proposal '
-                       'and not listed as unresolved: ' + ', '.join(uncounted_label(s) for s in not_listed))
+        reasons.append(f'{len(not_listed)} documented service{"s" if len(not_listed) != 1 else ""} without a supported '
+                       'proposal and not listed as unresolved: ' + ', '.join(uncounted_label(s) for s in not_listed))
     if inventory.conflicts:
         reasons.append(f'{len(inventory.conflicts)} conflict{"s" if len(inventory.conflicts) != 1 else ""} in the record')
     if open_questions:

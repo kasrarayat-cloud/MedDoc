@@ -12,7 +12,7 @@ from pathlib import Path
 from unittest import mock
 
 from django.conf import settings
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 
 from studio import models, reports
 from studio.types import RawExchange
@@ -328,12 +328,14 @@ class DocumentedVisitWithoutAProposalTests(Harness):
                 coding = detail['coding']
                 self.assertEqual(coding['state'], 'incomplete')
                 self.assertNotIn(EVERY_SERVICE, coding['statement'])
-                self.assertIn('office / outpatient visit beside a same-day procedure', coding['statement'])
+                self.assertIn('without a supported proposal and not listed as unresolved: office / outpatient visit '
+                              'beside a procedure done or possibly done the same day', coding['statement'])
                 reviewed = self.txt(encounter_id, 'reviewed')
                 self.assertIn('State: incomplete', section(reviewed, 'CODING COMPLETENESS'))
                 self.assertNotIn(EVERY_SERVICE, reviewed)
                 closing = section(reviewed, 'UNRESOLVED')
-                self.assertIn('except office / outpatient visit beside a same-day procedure', closing)
+                self.assertIn('except office / outpatient visit beside a procedure done or possibly done the same '
+                              'day, which no proposal accounts for', closing)
                 self.assertNotIn('[', closing)  # never read as an unresolved item by the download verifier
                 (row,) = [line for line in self.csv_text(encounter_id, 'reviewed').split('\r\n')
                           if '"coding_completeness"' in line]
@@ -358,6 +360,25 @@ class DocumentedVisitWithoutAProposalTests(Harness):
         closing = section(self.txt(alone, 'reviewed'), 'UNRESOLVED')
         self.assertEqual(closing, '  - none: every documented act the catalogue reconciles has a selected proposal or '
                                   'is not separately reported')
+
+
+class UncountedVisitIsNamedWithoutOverstatingTests(SimpleTestCase):
+    """reports-1, the wording: the reconciliation also leaves unlisted a visit beside a procedure whose performance today
+    is not established (the engine's possible procedure day), so the reason names the visit without saying that a
+    procedure was done."""
+
+    def test_a_visit_beside_a_possible_procedure_is_named_without_saying_it_was_done(self):
+        from tests.test_services_reconcile import run
+        text = (SYNTHETIC + 'Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office visit '
+                'for rectal bleeding.\nMedical decision making: moderate.\nTotal time on the date of the encounter was '
+                '32 minutes.\nIt is unclear whether a colonoscopy was performed today.\n')
+        result = run(text, [])
+        statuses = {s['family']: s['status'] for s in result.services['services']}
+        self.assertEqual(statuses, {'gi.colonoscopy': 'uncertain', 'gi.office_em': 'performed'})
+        self.assertEqual([n['label'] for n in result.completeness['not_listed']],
+                         ['office / outpatient visit beside a procedure done or possibly done the same day'])
+        self.assertEqual(result.completeness['state'], 'incomplete')
+        self.assertNotIn('same-day procedure', ' '.join(result.completeness['reasons']))
 
 
 # --- reports-3: "each still needs a reviewer's decision" -------------------------------------------------------------
