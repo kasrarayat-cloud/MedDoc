@@ -409,3 +409,38 @@ class TitleNamingAServiceTests(SimpleTestCase):
                      'UPPER ENDOSCOPY\nCOLONOSCOPY\n'):
             with self.subTest(text=text):
                 self.assertEqual(services.reflow(text), text)
+
+
+class HistoryWordsOpeningASentenceTests(SimpleTestCase):
+    """sk:8 (formats-5 a): the PDF writer's wrap put "Prior studies have been inconclusive." at the start of a line,
+    where it opened a history part, so the pH capsule placed today read historical (no unresolved item, coding
+    complete); the text, with the sentence mid-line, reads it performed. A line opens a history part only as a
+    heading: a sentence whose history words are its own subject is no heading of what follows."""
+
+    PLACEMENT = 'The wireless pH capsule was placed transorally without endoscopy.'
+
+    def reading(self, text, pages=()):
+        result = run(text, (), pages)[0]
+        return services_of(result), [(u['family'], u['reason']) for u in result.completeness['unresolved_items']], \
+            result.completeness['state']
+
+    def test_the_pdf_reads_as_the_text(self):
+        source = (f'{BANNER}\nDate of service: 2026-10-05\nIndication: Heartburn refractory to proton pump inhibitor '
+                  f'therapy; candidate for surgery. Prior studies have been inconclusive.\n{self.PLACEMENT}\n')
+        expected = ([('gi.reflux', 'performed', 'unknown')], [('gi.reflux', 'no_proposal')], 'incomplete')
+        self.assertEqual(self.reading(source), expected)
+        text, pages = pdf(source)
+        self.assertIn('surgery.\nPrior studies have been inconclusive.', text)  # the PDF writer's wrap
+        self.assertEqual(self.reading(text, pages), expected)
+
+    def test_a_history_heading_still_opens_a_history_part(self):  # control
+        text = (f'{BANNER}\nDate of service: 2026-10-05\nPrior studies:\nWireless pH capsule placed in 2024; acid '
+                f'exposure 9%.\nToday: {self.PLACEMENT}\n')
+        parts = services.parts(text)
+        heading = text.index('Prior studies:')
+        self.assertTrue(any(p.kind == 'history' and p.start <= heading < p.end for p in parts))
+        # a history sentence that opens no labelled section's paragraph still heads the lines after it, as before
+        text = (f'{BANNER}\nDate of service: 2026-10-05\nPast medical history is notable for the following.\n'
+                'Polypectomy.\nHemorrhoid banding.\n')
+        item = text.index('Polypectomy.')
+        self.assertTrue(any(p.kind == 'history' and p.start <= item < p.end for p in services.parts(text)))

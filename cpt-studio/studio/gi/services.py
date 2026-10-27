@@ -898,7 +898,12 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
     when today's report goes on under it ("Procedure: Colonoscopy with cold snare polypectomy." after "History:", then a
     findings, technique or impression heading: _opens_todays_report), and an extraction block ("[PDF form fields on
     page 1]") interrupts a history or plan part as text of no time, its lines opening no part, until the blank line
-    that ends the block, where the part resumes (routing reads both the same way: gi/sections layout)."""
+    that ends the block, where the part resumes (routing reads both the same way: gi/sections layout). A sentence
+    whose history words are its own subject ("Prior studies have been inconclusive.") opens a history part only where
+    the layout opens a section on its line: it is no heading of what follows (refutation 7c8, formats-5 a)."""
+    lay = _sections.layout(text)
+    by_start = sorted(lay.sections, key=lambda section: section.start)
+    layout_starts = [section.start for section in by_start]
     cuts: list[tuple[int, str, str, Optional[Span], str]] = [(0, '', 'physician', None, 'other')]
     family, kind_now = '', 'other'
     resume_after_block = None  # the history or plan part an extraction block interrupted
@@ -959,6 +964,13 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
                 cuts.append((ls, family, 'physician', None, kind_now if family else 'other'))
                 continue
         if HISTORY_HEADING.match(line):
+            if stripped.endswith(('.', '!', '?')) and _sections._own_clause(stripped) \
+                    and _inside_a_labelled_section(by_start, layout_starts, ls, le):
+                # refutation 7c8, formats-5 (a): the PDF writer's wrap set "Prior studies have been inconclusive." at
+                # the start of a line inside an indication, and it opened a history part that dated the pH capsule
+                # placed today as history (no unresolved item, coding complete); a complete sentence routing's layout
+                # reads inside a labelled section that goes on across it heads nothing
+                continue
             cuts.append((ls, family, 'physician', None, 'history'))
             continue
         if PLAN_HEADING.match(line) and not family:
@@ -974,10 +986,20 @@ def parts(text: str, *, service_date: Optional[date] = None, dates=None) -> tupl
             kind = 'report'
         if end > start:
             out.append(_Part(start, end, fam, role, title, 'report' if kind == 'role' and fam else kind))
-    return _time_parts(text, out)
+    return _time_parts(text, out, lay)
 
 
-def _time_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
+def _inside_a_labelled_section(by_start, starts: Sequence[int], ls: int, le: int) -> bool:
+    """Whether routing's layout reads the line [ls, le) inside a section a heading opened above it (an
+    "Indication:" paragraph) that goes on across the line, with no section of its own opening on it (one bisection)."""
+    at = bisect.bisect_right(starts, le) - 1
+    if at < 0:
+        return False
+    section = by_start[at]
+    return section.start < ls and section.end > le and section.heading is not None and section.kind != 'other'
+
+
+def _time_parts(text: str, plist: Sequence[_Part], lay=None) -> tuple[_Part, ...]:
     """The parts with their history and plan sections where routing's section layout (studio.gi.sections, the structure
     the refutation rounds hardened: inline and wrapped labels, field labels, held lines) puts them, from where such a
     section opens to where it ends. "Prior colonoscopies:", "Past history:", "Impression and Recommendations:",
@@ -986,7 +1008,7 @@ def _time_parts(text: str, plist: Sequence[_Part]) -> tuple[_Part, ...]:
     line already carries a complete statement ("History: an outside EUS-guided biopsy showed adenocarcinoma.") speaks
     for that line only, as a field does. A part keeps its family, role and title; a role part keeps its reading, and a
     plan section inside a titled report stays that report's (its title owns its subsections, as PLAN_HEADING has it)."""
-    lay = _sections.layout(text)
+    lay = _sections.layout(text) if lay is None else lay
     timed = [(s.start, _time_end(text, s), s.kind) for s in lay.sections if s.kind in ('history', 'plan')]
     timed += [(s.start, min(_time_end(text, s), _paragraph_end(text, s)), s.kind) for s in lay.sections
               if s.kind == 'indication']
