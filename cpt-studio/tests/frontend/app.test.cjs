@@ -258,7 +258,7 @@ test('ready fixture: one combined list of selected codes, separate alternatives 
   for (const eyebrow of ['UPPER GI ENDOSCOPY', 'COLONOSCOPY', 'EVALUATION &amp; MANAGEMENT']) assert.ok(html.includes(eyebrow), eyebrow);
   assert.equal(count(html, 'data-decision="approve"'), 2);
   assert.equal(count(html, 'data-decision="reject"'), 3);
-  assert.ok(html.includes('Alternatives (not selected)'));
+  assert.ok(html.includes('Alternatives (never selectable)'));
   assert.ok(html.includes('Excluded candidates'));
   assert.equal(count(html, 'class="check-item muted"'), 4);
   assert.equal(count(html, '<h3>Description withheld</h3>'), 3);

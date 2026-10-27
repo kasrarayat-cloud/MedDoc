@@ -222,7 +222,7 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
     open_items = [(u.service, u.family, u.act) for u in unresolved if u.reason in ('no_proposal', 'not_covered')]
     have = {s.code for s in selections}
     listable = [c for c in second.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
-    added, listed = [], []
+    added, listed = [], []  # listed: (a code it selected that is not added, why it is not added)
     for group in _merge_selected(listable):
         code = group[0].code
         if code in have:
@@ -242,11 +242,27 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         if accounts and candidate.evaluation is not None and not candidate.excluded:
             added.append(replace(candidate, origin='second_review'))
             have.add(code)
+        elif profile is None:
+            listed.append((group[0], 'the coverage catalogue does not establish which documented act it accounts for'))
+        elif not accounts and any(family == candidate.family and act == '' for _, family, act in open_items):
+            listed.append((group[0], 'the act it accounts for is not documented as done in the service left '
+                                     'unresolved'))
+        elif not accounts:
+            listed.append((group[0], 'it accounts for no documented service or act the primary proposals left '
+                                     'unresolved'))
+        elif candidate.evaluation is None:
+            listed.append((group[0], (candidate.scope_reason or NO_EVIDENCE).rstrip('.')))
         else:
-            listed.append(group[0])
-    alternatives = [_alternative(index, replace(item, role='candidate'), text, pages, f'{second.provider} (second review)')
-                    for index, item in enumerate(listed + [c for c in listable if c.role != 'selected'])]
-    alternatives = [replace(a, key=f'alt2:{index}') for index, a in enumerate(alternatives)]
+            listed.append((group[0], 'the document reads what it accounts for as not performed on the date of '
+                                     'service'))
+    # A code it selected keeps its role, shown with why it is not added - never as a candidate the provider did not select
+    # (refutation r1, report lens: the TXT, the CSV and the UI had said "Provider candidate; not selected" of it) - and
+    # every code it lists carries the second review as its origin.
+    alternatives = [_alternative(index, item, text, pages, f'{second.provider} (second review)', not_added=why)
+                    for index, (item, why) in enumerate(listed + [(c, '') for c in listable if c.role != 'selected'])]
+    alternatives = [replace(a, key=f'alt2:{index}', support={'origin': 'second_review'})
+                    for index, a in enumerate(alternatives)]
+    listed = [item for item, _ in listed]
     what = '; '.join(scope.get('items', [])[:4]) or 'the unresolved documented services'
     if second.refused:
         # Refused whole, unread: a failed provider check, as provider.status records a refused primary response (round
@@ -1295,7 +1311,10 @@ def _excluded_early(s: _Selection, key: str, provider: str) -> ProposalAssessmen
         fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found, {}, s.units, 'excluded'))
 
 
-def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str) -> ProposalAssessment:
+def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str,
+                 not_added: str = '') -> ProposalAssessment:
+    """An informational code. ``not_added``: why a code the bounded second review selected is not added as a proposal
+    (it is worded as selected, never as a candidate the provider did not select)."""
     code_kind, scope_reason = checks.code_scope(item.code)
     kept, _ = checks.exact_evidence(item.evidence, text, pages)
     family = family_for_code(item.code)
@@ -1308,10 +1327,12 @@ def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str
     return ProposalAssessment(
         key=f'alt:{index}', bucket='alternative', code=item.code, code_kind=code_kind, family=family,
         profile_version=profile_version, status='informational',
-        exclusion_reason=rationale.alternative_note(item.role, parent, unlisted_parent=unlisted_parent),
+        exclusion_reason=rationale.alternative_note(item.role, parent, unlisted_parent=unlisted_parent,
+                                                    not_added=not_added),
         reinstatable=False, provider_display=item.display, evidence=kept,
         rationale=rationale.alternative_rationale(provider=provider, role=item.role, parent_code=parent,
-                                                  evidence_count=len(kept), unlisted_parent=unlisted_parent),
+                                                  evidence_count=len(kept), unlisted_parent=unlisted_parent,
+                                                  not_added=not_added),
         checks=found, modifier_considerations=(), units=1,
         fingerprint=_fingerprint(item.code, family, profile_version, kept, found, {}, 1, 'informational'))
 

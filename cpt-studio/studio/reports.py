@@ -69,6 +69,9 @@ REFERENCE_KEYS = ('key', 'kind', 'publisher', 'title', 'release', 'url', 'sha256
                   'effective_end', 'applies', 'connected', 'note', 'license_note', 'scope_note')
 ORIGIN_WORDING = {'document': 'documented', 'user': 'member-supplied encounter metadata, not a clinical fact',
                   'missing': 'not documented', 'conflict': 'conflicting documentation'}
+# Informational codes: provider candidates and alternatives, and codes the bounded second review selected that account
+# for no unresolved service - none of them selectable, not all of them "never selected" (refutation r1, report lens).
+ALTERNATIVES_TITLE = 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'
 
 
 class ReportNotReady(ValueError):
@@ -554,7 +557,12 @@ def _excluded_section(snap):
 
 
 def _alternatives_section(snap):
-    lines = [f'{_short_line(item)} — provider alternative, never selectable'
+    """Every informational code, never selectable. A code the bounded second review listed says so: one it SELECTED
+    and CPT Studio did not add is worded as selected (its stored reason), never as a candidate the provider did not
+    select (refutation r1, report lens)."""
+    lines = [f'{_short_line(item)} — '
+             + ('second-review alternative' if (item.get('support') or {}).get('origin') == 'second_review'
+                else 'provider alternative') + ', never selectable'
              + (f': {item["exclusion_reason"]}' if item['exclusion_reason'] else '')
              for item in snap['proposals'] if item['list'] == 'alternative']
     return lines or ['  None.']
@@ -830,7 +838,7 @@ def render_txt(snap) -> bytes:
                  else 'UNDECIDED — REVIEW NOT COMPLETE')
         sections.append((title, _numbered(snap, 'undecided', kind)))
     sections += [('EXCLUDED CANDIDATES', _excluded_section(snap)),
-                 ('ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED', _alternatives_section(snap)),
+                 (ALTERNATIVES_TITLE, _alternatives_section(snap)),
                  ('CHECKS', _checks_section(snap)),
                  ('OPEN CLARIFICATIONS', _clarifications_section(snap)),
                  ('NOT VERIFIED', _not_verified_section(snap)),

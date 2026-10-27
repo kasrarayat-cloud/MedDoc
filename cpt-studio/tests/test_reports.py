@@ -21,7 +21,7 @@ UNDECIDED = 'UNDECIDED — REVIEW NOT COMPLETE'
 TITLES = ('CODING COMPLETENESS', 'ENCOUNTER, SOURCE AND REVISION', 'ENCOUNTER CONTEXT', 'DOCUMENTED SERVICES',
           'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL', 'CONFLICTS IN THE RECORD', APPROVED, REJECTED,
           UNDECIDED, 'EXCLUDED CANDIDATES',
-          'ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED', 'CHECKS', 'OPEN CLARIFICATIONS', 'NOT VERIFIED',
+          'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE', 'CHECKS', 'OPEN CLARIFICATIONS', 'NOT VERIFIED',
           'PROVIDER USAGE', 'REFERENCE SOURCES', 'AUDIT — DECISION HISTORY')
 
 
@@ -134,7 +134,7 @@ class TxtReportTests(ReportCase):
                       'date. (a reviewer may reinstate it; no reviewer has confirmed this exclusion)',
                       section(text, 'EXCLUDED CANDIDATES'))
         self.assertIn('45380 · Colonoscopy — provider alternative, never selectable',
-                      section(text, 'ALTERNATIVES — PROVIDER CANDIDATES, NEVER SELECTED'))
+                      section(text, 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'))
         checks = section(text, 'CHECKS')
         self.assertIn('  43239 (undecided)\n    [PASS] evidence.exact — Exact source evidence', checks)
         self.assertIn('[NOT_VERIFIED] ncci.ptp', checks)

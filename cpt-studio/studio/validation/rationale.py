@@ -55,14 +55,23 @@ def _listing(role: str, parent_code: Optional[str], unlisted_parent: bool = Fals
 
 
 def alternative_rationale(*, provider: str, role: str, parent_code: Optional[str], evidence_count: int,
-                          unlisted_parent: bool = False) -> str:
-    text = (f'Listed by {provider} as {_listing(role, parent_code, unlisted_parent)}; the provider did not select '
-            'it. Informational only.')
+                          unlisted_parent: bool = False, not_added: str = '') -> str:
+    """``not_added``: why a code the bounded second review SELECTED is not added as a proposal - it is said to be
+    selected, never listed as a code the provider did not select (refutation r1, report lens)."""
+    if role == 'selected' and not_added:
+        text = f'Selected by {provider}; not added as a proposal: {not_added}. Informational only.'
+    else:
+        text = (f'Listed by {provider} as {_listing(role, parent_code, unlisted_parent)}; the provider did not select '
+                'it. Informational only.')
     if evidence_count:
         text += f' {plural(evidence_count, "exact evidence passage")}.'
     return text
 
 
-def alternative_note(role: str, parent_code: Optional[str], *, unlisted_parent: bool = False) -> str:
+def alternative_note(role: str, parent_code: Optional[str], *, unlisted_parent: bool = False,
+                     not_added: str = '') -> str:
+    if role == 'selected' and not_added:
+        return (f'Selected by the provider in the bounded second review, but not added as a proposal: {not_added}. '
+                'Candidates and alternatives cannot be approved.')
     return (f'Provider {_listing(role, parent_code, unlisted_parent)}; not selected. Candidates and alternatives '
             'cannot be approved.')
