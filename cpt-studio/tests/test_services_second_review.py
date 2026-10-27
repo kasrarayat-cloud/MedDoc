@@ -226,6 +226,23 @@ class SecondReviewTests(TestCase):
         self.assertEqual(codes, {'45380': 'second_review', '45385': 'primary'})
         self.assertEqual(assessment.completeness['unresolved_items'], [])
 
+    def test_a_code_for_an_undocumented_act_never_fills_a_missing_service(self):
+        """Refutation r1 (sends lens): a whole service left without a proposal is accounted for only by a code the
+        document supports as done; a biopsy code where no biopsy is documented stays an alternative, and the missing
+        EGD stays unresolved instead of hiding behind a held proposal."""
+        text = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nUpper endoscopy report (fictional)\n'
+                'Date of service: 2026-10-16\nPlace of service: Hospital outpatient department\nThe gastroscope was '
+                'advanced to the second portion of the duodenum. The mucosa was normal throughout.\n')
+        self.provider.first = []
+        self.provider.later = [('43239', 'The mucosa was normal throughout.')]
+        encounter_id = self.create(text)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)
+        assessment = models.Encounter.objects.get(pk=encounter_id).current_assessment
+        self.assertFalse(assessment.proposals.filter(bucket='selected', code='43239').exists())
+        self.assertIn(('gi.egd', '', 'no_proposal'),
+                      [(u['family'], u['act'], u['reason']) for u in assessment.completeness['unresolved_items']])
+
     def test_no_second_review_when_every_documented_service_is_accounted_for(self):
         self.provider.first = [('45385', 'was removed with a cold snare'),
                                ('45380', 'was sampled with cold biopsy forceps')]

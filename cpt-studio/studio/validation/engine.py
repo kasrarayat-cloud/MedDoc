@@ -225,8 +225,13 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
             continue
         candidate = _select(group, text, pages, routing, reference, day, inventory)
         profile = reconcile.catalogue.code_profile(code)
+        match = candidate.evaluation.match if candidate.evaluation is not None else None
+        # a whole service left without a proposal is accounted for only by a code the document supports as done (its
+        # base code, or an act it documents) - never by a code for an act nothing documents, which would hide the
+        # missing service behind a held proposal (refutation r1, sends lens)
+        supported = match is not None and match.state in ('performed', 'incomplete')
         accounts = profile is not None and any(
-            family == candidate.family and (act == '' or act in profile.covers
+            family == candidate.family and ((act == '' and supported) or act in profile.covers
                                             or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
                                                 & set(profile.covers)))
             for _, family, act in open_items)
@@ -280,13 +285,13 @@ def _routing_agrees(u: reconcile.Unresolved, inventory, routing: Optional[Routin
     """Whether the routing-era reader also reads the unresolved item as done today (see SECOND_REVIEW_CHECKED)."""
     if u.reason not in ('no_proposal', 'not_covered') or routing is None:
         return False
-    if not u.act:
-        families = {u.family, legacy_family(u.family)}
-        return any(f.family in families and f.status in ('performed', 'incomplete') for f in routing.findings)
+    families = {u.family, legacy_family(u.family)}
+    if not u.act and any(f.family in families and f.status in ('performed', 'incomplete') for f in routing.findings):
+        return True
     from studio.gi import detect  # the analysis is cached per text: one routing analysis for every item
     service = next((s for s in inventory.services if s.id == u.service), None)
-    strict = any(c in STRICT_PROMOTIONS for a in (service.acts if service is not None else ())
-                 if a.kind == u.act and a.status == 'performed' for c in a.cues)
+    strict = bool(u.act) and any(c in STRICT_PROMOTIONS for a in (service.acts if service is not None else ())
+                                 if a.kind == u.act and a.status == 'performed' for c in a.cues)
     for ev in u.evidence:
         if not (0 <= ev.start < ev.end <= len(text)):
             continue
