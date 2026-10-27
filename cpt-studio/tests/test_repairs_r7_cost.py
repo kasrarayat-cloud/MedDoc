@@ -199,8 +199,16 @@ class EgdLocationOnceTests(SimpleTestCase):
                                  egd_location_before(an, facts['interventions']))
 
     def test_an_egd_report_listing_band_ligations_is_read_within_the_analyze_limits(self):
-        """The round's input at 75,000 characters, which overran the analyze child's memory."""
-        text = sized('Procedure: EGD\nFindings: ', 'band ligation of the distal esophageal varix and ', 75_000,
+        """The round's input at 75,000 characters, which overran the analyze child's memory. It names the ligation
+        about 1,500 times, past MAX_SERVICE_MENTIONS, so since WIP 8k the child refuses it with the count, in time
+        and memory (refutation r1 reran this pin at 9086a427: it had unpacked the count as a reading). A list just
+        under the cap is still read, and its location is still the esophagus."""
+        unit = 'band ligation of the distal esophageal varix and '
+        text = sized('Procedure: EGD\nFindings: ', unit, 75_000, 'was performed today.\n')
+        refused = analyze_child(text)
+        self.assertIsInstance(refused, int)
+        self.assertGreater(refused, settings.MAX_SERVICE_MENTIONS)
+        text = sized('Procedure: EGD\nFindings: ', unit, len(unit) * (settings.MAX_SERVICE_MENTIONS // 2),
                      'was performed today.\n')
         facts, _, data = analyze_child(text)
         egd = from_jsonable(RoutingResult, data).finding('gi.egd')

@@ -1354,7 +1354,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return Reading(BOX_STATUS.get(status, 'uncertain'), ('box: ' + (box_cues[0] if box_cues else status),)
                        + tuple(box_cues[1:3]))
     # Check boxes on the row, never another line's: "[X] Performed [ ] Not performed".
-    for m in BOX_ROW.finditer(text, max(cs, pos - 90, line_start), min(ce + 60, line_end)):
+    for m in BOX_ROW.finditer(text, max(cs, pos - 90, line_start), min(ce + 60, line_end)) if has_bracket else ():
         a, b = m.group('a').strip(), m.group('b').strip()
         if a and not b:
             return Reading('performed', ('box: performed checked',))
@@ -2141,6 +2141,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     performed_families: list[str] = []  # families with a performed reading (a title, a statement, an instrument)
     encounter_intents: list[str] = []
     routine_em: list[Span] = []
+    # A sentence (or its first SENTENCE_READ_CHARS) is cut into clauses once, and every mention read in it shares the
+    # cut (refutation r1, cost-6: each named service and each instrument cut its whole sentence again - 299 names at
+    # the head of one 196,000-character sentence took 13 s).
+    cuts: dict[tuple[int, int], list[tuple[int, int]]] = {}
+
+    def clauses_of(start: int, end: int) -> list[tuple[int, int]]:
+        if (start, end) not in cuts:
+            cuts[(start, end)] = clauses(text, start, end)
+        return cuts[(start, end)]
+
     # Pass 1: services named, other providers' services, encounter-wide statements.
     named: list[tuple[str, str, int, int, int, int]] = []
     for ss, se in sentences:
@@ -2172,7 +2182,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     try:
         for family, kind, ms, me, ss, se in sorted(named, key=lambda x: x[2]):
             part = _part_at(plist, starts, ss)
-            cls = clauses(text, ss, se)
+            cls = clauses_of(ss, se)
             clause = _clause_for(cls, ms)
             title = part.title is not None and part.title.start <= ms < part.title.end and part.family == family
             in_report = part.kind == 'report' and part.family == family
@@ -2215,7 +2225,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     or (_upper_only(text, ss, se) if word == 'endoscope' else '')
                 if not family:
                     continue
-                clause = _clause_for(clauses(text, ss, se), m.start())
+                clause = _clause_for(clauses_of(ss, se), m.start())
                 reading = read_clause(text, clause, m.start(), m.end(), service_date=service_date, dates=dates,
                                       part=part, in_today_report=part.kind == 'report' and part.family == family)
                 reading = held_under_denial(text, m.start(), reading, service_date)
@@ -2259,7 +2269,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             if not fam or part.kind in ('history', 'plan'):
                 continue
             d = drafts[fam]
-            for cs, ce in clauses(text, ss, se):
+            for cs, ce in clauses_of(ss, se):
                 clause_text = text[cs:ce]
                 if HISTORY_WORDS.search(clause_text) or re.search(r'\b(?:if|unless|whether)\b', clause_text, FLAGS):
                     continue
@@ -2298,7 +2308,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             lesion_matches = list(LESION.finditer(text, ss, read_end))
             if not mentions and not lesion_matches:
                 continue
-            cls = clauses(text, ss, read_end)
+            cls = clauses_of(ss, read_end)
             anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
             part_family = part.family if part.family in drafts and part.kind == 'report' else ''
