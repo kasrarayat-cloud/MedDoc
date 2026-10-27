@@ -570,12 +570,29 @@ def inventory_check(inventory: ServiceInventory, problems: Sequence[str]) -> Che
                           'recognise.', INVENTORY_SOURCE)
 
 
-def unresolved_check(unresolved: Sequence[Unresolved], problems: Sequence[str] = ()) -> Check:
+def unresolved_check(unresolved: Sequence[Unresolved], problems: Sequence[str] = (),
+                     not_listed: Sequence[DocumentedService] = ()) -> Check:
     """``problems``: the reading problems the inventory recorded (a cap, a sentence read in part). Such a reading speaks
     only for what it read, which can be part of a service it read: the check then never claims every documented act
-    (refutation r1, report-8: it passed with that claim beside an unread act of a service it had read)."""
+    (refutation r1, report-8: it passed with that claim beside an unread act of a service it had read).
+    ``not_listed``: the documented services performed with no supported proposal that the reconciliation does not list
+    as unresolved (uncounted: an office visit beside a procedure done or possibly done the same day). The check names
+    them, as coding completeness and UNRESOLVED do, and never passes beside one nor says every act has a proposal
+    (skeptic of refutation 7c8 reports-1: it passed with "Every documented act ... has a selected proposal" beside an
+    office visit no proposal accounts for, and read in part it said so "among what was read" of a visit it had read)."""
     partial = (' The documented-service reading reported a problem (see services.inventory), so a service or act in '
                'the part it did not read is not covered by this check.') if problems else ''
+    one = len(not_listed) == 1
+    named = (f'{len(not_listed)} documented service{"" if one else "s"} {"has" if one else "have"} no supported '
+             f'proposal and {"is" if one else "are"} not listed as unresolved: '
+             + ', '.join(uncounted_label(s) for s in not_listed)
+             + f'; no proposal accounts for {"it" if one else "them"}.') if not_listed else ''
+    if not unresolved and named:
+        return Check('services.unresolved', 'Documented services without a supported proposal', 'warn',
+                     ('Among what was read, ' if partial else '') + named + ' Every other documented act that the '
+                     'coverage catalogue reconciles has a selected proposal, or is not separately reported under a '
+                     'profile rule.' + (partial or ' Wording the reader does not recognise is not covered by this '
+                                                   'check.'), SOURCE)
     if not unresolved and partial:
         return Check('services.unresolved', 'Documented services without a supported proposal', 'warn',
                      'Among what was read, every documented act that the coverage catalogue reconciles has a selected '
@@ -588,8 +605,8 @@ def unresolved_check(unresolved: Sequence[Unresolved], problems: Sequence[str] =
     items = '; '.join(f'{u.label}' + (f' ({quote(u.evidence[0], 100)})' if u.evidence else '') for u in unresolved[:6])
     more = f' and {len(unresolved) - 6} more' if len(unresolved) > 6 else ''
     return Check('services.unresolved', 'Documented services without a supported proposal', 'warn',
-                 f'Unresolved: {items}{more}. No code is added for them and no alternative is promoted.' + partial,
-                 SOURCE)
+                 f'Unresolved: {items}{more}. No code is added for them and no alternative is promoted.'
+                 + (f' {named}' if named else '') + partial, SOURCE)
 
 
 def conflicts_check(inventory: ServiceInventory) -> Check:

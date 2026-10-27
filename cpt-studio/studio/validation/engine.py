@@ -177,13 +177,16 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     if second_merge is not None:
         # worded once the reconciliation this assessment records is known (refutation 7c8, reports-2)
         provider.append(_second_review_check(second_merge, unresolved))
+    # documented services performed with no proposal that the reconciliation does not list (refutation 7c8, reports-1):
+    # recorded in completeness and named by the services.unresolved check, which never passes beside one (its skeptic)
+    not_listed = reconcile.uncounted(usable, unresolved, covered) if usable else []
     service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
                         checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
                         *coverage]
     if usable and response is not None:
-        encounter_checks.append(reconcile.unresolved_check(unresolved, usable.problems))
+        encounter_checks.append(reconcile.unresolved_check(unresolved, usable.problems, not_listed))
     if usable:
         encounter_checks.append(reconcile.conflicts_check(usable))
         attribution = reconcile.attribution_check(usable, [code for code, _ in active])
@@ -197,7 +200,6 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     read = {s.evaluation.match.service.id for s in selections
             if s.evaluation is not None and getattr(s.evaluation, 'match', None) is not None}
     unestablished = sum(1 for svc in (usable or inventory).services if svc.status == 'uncertain' and svc.id not in read)
-    not_listed = reconcile.uncounted(usable, unresolved, covered) if usable else []
     complete = reconcile.completeness(usable or inventory, unresolved, open_questions,
                                       provider_status == 'succeeded' and response is not None,
                                       unestablished=unestablished, not_listed=not_listed)

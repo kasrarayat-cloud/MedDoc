@@ -607,3 +607,109 @@ class NothingIsSaidOfAResponseNeverReadTests(Harness):
         drain()
         self.assertEqual(self.assessment(encounter_id).summary['provider_status'], 'succeeded')
         self.assertIn(NONE_PROPOSED, self.codes_tab(encounter_id))
+
+
+# --- skeptic of the first repair, reports-1: the services.unresolved check beside a visit no proposal accounts for ---
+
+UNLISTED_VISIT = 'office / outpatient visit beside a procedure done or possibly done the same day'
+EVERY_ACT = 'Every documented act that the coverage catalogue reconciles has a selected proposal'
+NAMED_VISIT = (f'1 documented service has no supported proposal and is not listed as unresolved: {UNLISTED_VISIT}; no '
+               'proposal accounts for it.')
+FLAT_LESION_BIOPSY = 'A 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps.\n'
+
+
+def visit_beside_findings_read_in_part():
+    """The reports-1 visit, then a colonoscopy whose findings sentence is longer than the 1,200 characters read for
+    acts (the ec5 REPORTFACTS report-8 shape): the reading records a problem, and the visit is read."""
+    from tests.test_repairs_ec5_reportfacts import LONG_FINDINGS
+    return EM_AND_COLONOSCOPY.split('Procedure: Colonoscopy')[0] + 'Procedure: Colonoscopy\n' + LONG_FINDINGS + '\n'
+
+
+CECUM = ('45378', 'The colonoscope was advanced to the cecum')
+
+
+class UnresolvedCheckNamesTheUnlistedVisitTests(Harness):
+    """Skeptic of the reports-1 repair (bc261aee3): completeness.not_listed held the office visit (covered [], never
+    listed as unresolved beside a same-day procedure), and coding completeness and UNRESOLVED named it - yet the stored
+    services.unresolved check passed with "Every documented act that the coverage catalogue reconciles has a selected
+    proposal, or is not separately reported under a profile rule" (reviewed TXT CHECKS, the Checks tab), and over a
+    reading read in part it warned "Among what was read, every documented act ... has a selected proposal" of a visit
+    that was read. The check is about documented services without a supported proposal: it names one no proposal
+    accounts for, never passes beside it and never says every act has one."""
+
+    def assessed(self, text, *selections):
+        from tests.test_pipeline_api import FakeProvider
+        self.use(FakeProvider(selections=list(selections)))
+        encounter_id = self.create(text)
+        drain()
+        return encounter_id
+
+    def reviewed(self, text, *selections):
+        encounter_id = self.assessed(text, *selections)
+        for code, _ in selections:
+            self.decide(encounter_id, code, 'approve')
+        return encounter_id
+
+    def not_listed(self, encounter_id):
+        return [n['label'] for n in self.assessment(encounter_id).completeness['not_listed']]
+
+    def test_the_check_never_passes_beside_an_unlisted_visit_and_names_it(self):
+        for index, text in enumerate((EM_AND_COLONOSCOPY, EM_AND_COLONOSCOPY.replace(SEPARATE_EM, ''))):
+            with self.subTest(separate_em=index == 0):
+                self.fresh(f'Synthetic workspace {index}')
+                encounter_id = self.reviewed(text, SCOPE)
+                self.assertEqual(self.not_listed(encounter_id), [UNLISTED_VISIT])
+                self.assertEqual(self.assessment(encounter_id).completeness['unresolved_items'], [])
+                check = self.encounter_check(encounter_id, 'services.unresolved')
+                self.assertEqual(check['status'], 'warn')
+                self.assertNotIn(EVERY_ACT, check['detail'])
+                self.assertTrue(check['detail'].startswith(NAMED_VISIT), check['detail'])
+                self.assertIn('Every other documented act that the coverage catalogue reconciles has a selected '
+                              'proposal', check['detail'])
+                reviewed = self.txt(encounter_id, 'reviewed')
+                self.assertIn('[WARN] services.unresolved — Documented services without a supported proposal: '
+                              + check['detail'], reviewed)
+                self.assertNotIn('[PASS] services.unresolved', reviewed)
+                checks_tab = page(self.detail(encounter_id))['checks'].replace('&#x27;', "'")
+                self.assertIn(check['detail'], checks_tab)
+                self.assertNotIn(EVERY_ACT, checks_tab)
+
+    def test_a_reading_read_in_part_names_the_visit_it_read(self):
+        encounter_id = self.reviewed(visit_beside_findings_read_in_part(), CECUM)
+        assessment = self.assessment(encounter_id)
+        self.assertTrue(any('was read for acts only in its first 1,200 characters' in p
+                            for p in assessment.services['problems']), assessment.services['problems'])
+        self.assertEqual(self.not_listed(encounter_id), [UNLISTED_VISIT])
+        check = self.encounter_check(encounter_id, 'services.unresolved')
+        self.assertEqual(check['status'], 'warn')
+        self.assertNotIn('Among what was read, every documented act', check['detail'])
+        self.assertTrue(check['detail'].startswith(f'Among what was read, {NAMED_VISIT}'), check['detail'])
+        self.assertIn('so a service or act in the part it did not read is not covered by this check', check['detail'])
+        self.assertIn(check['detail'], self.txt(encounter_id, 'reviewed'))
+
+    def test_an_item_listed_beside_the_visit_is_named_with_it(self):
+        encounter_id = self.assessed(EM_AND_COLONOSCOPY + FLAT_LESION_BIOPSY, SCOPE)  # 45378 is held beside it
+        listed = [u['label'] for u in self.assessment(encounter_id).completeness['unresolved_items']]
+        self.assertEqual(len(listed), 1)
+        self.assertTrue(listed[0].startswith('forceps biopsy'), listed)
+        self.assertEqual(self.not_listed(encounter_id), [UNLISTED_VISIT])
+        check = self.encounter_check(encounter_id, 'services.unresolved')
+        self.assertEqual(check['status'], 'warn')
+        self.assertTrue(check['detail'].startswith(f'Unresolved: {listed[0]}'), check['detail'])
+        self.assertIn(f'No code is added for them and no alternative is promoted. {NAMED_VISIT}', check['detail'])
+
+    def test_control_without_an_unlisted_service_the_check_reads_as_before(self):
+        encounter_id = self.reviewed(EM_AND_COLONOSCOPY, SCOPE, VISIT)  # the visit has its own proposal
+        self.assertEqual(self.not_listed(encounter_id), [])
+        check = self.encounter_check(encounter_id, 'services.unresolved')
+        self.assertEqual(check['status'], 'pass')
+        self.assertTrue(check['detail'].startswith(EVERY_ACT), check['detail'])
+        self.fresh('Synthetic workspace alone')
+        alone = self.reviewed(COLONOSCOPY_ALONE, SCOPE)
+        self.assertEqual(self.encounter_check(alone, 'services.unresolved')['status'], 'pass')
+        self.fresh('Synthetic workspace listed alone')
+        listed = self.assessed(COLONOSCOPY_ALONE + FLAT_LESION_BIOPSY, SCOPE)
+        check = self.encounter_check(listed, 'services.unresolved')
+        self.assertEqual(check['status'], 'warn')
+        self.assertTrue(check['detail'].endswith('No code is added for them and no alternative is promoted.'),
+                        check['detail'])
