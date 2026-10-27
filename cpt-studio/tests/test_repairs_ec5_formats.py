@@ -313,3 +313,38 @@ class ParagraphWithoutBlankLineTests(SimpleTestCase):
                 self.assertTrue(any(s <= start and text.index(sentence.split('\n')[1]) < e for s, e in cuts))
                 if status:
                     self.assertIn(('biopsy', status), acts_of(run(text)[0], 'biopsy'))
+
+
+class AnsweredFieldRowTests(SimpleTestCase):
+    """formats-3: reflow joined an answered field row to a following lower-case line ("Biopsies taken from the antrum:
+    N" / "pt on apixaban."), so the field's answer was lost and the participle in its label stated the biopsy done (a
+    false READY 43239, an unresolved biopsy). A break after a field row is soft only where the join leaves the answer
+    the row gives on its own unchanged; a value that genuinely wraps is still joined."""
+
+    EGD = 'The upper endoscope was advanced to the second portion of the duodenum.'
+
+    def read(self, row: str):
+        text, pages = pdf(f'{BANNER}\nUPPER ENDOSCOPY REPORT\nDate of service: 2026-10-14\n{self.EGD}\n{row}')
+        return run(text, [('43239', self.EGD)], pages)[0]
+
+    def test_an_answered_field_row_keeps_its_break_before_a_lower_case_line(self):
+        for answer in ('N', 'n', 'no', 'unchecked', 'not checked', 'None'):
+            with self.subTest(answer=answer):
+                control = self.read(f'Biopsies taken from the antrum: {answer}\nPt on apixaban.')
+                result = self.read(f'Biopsies taken from the antrum: {answer}\npt on apixaban.')
+                self.assertEqual(acts_of(result, 'biopsy'), acts_of(control, 'biopsy'))
+                self.assertNotIn(('biopsy', 'performed'), acts_of(result, 'biopsy'))
+                self.assertNotEqual(proposals_of(result)['43239'][0], 'ready')
+                self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_dash_field_keeps_its_break_too(self):
+        result = self.read('Biopsy taken from the gastric antrum - N\npt on apixaban.')
+        self.assertNotIn(('biopsy', 'performed'), acts_of(result, 'biopsy'))
+        self.assertNotEqual(proposals_of(result)['43239'][0], 'ready')
+
+    def test_a_field_value_that_wraps_is_still_joined(self):  # control (ARCHITECTURE 5.9)
+        text = ('Findings: a 6 mm sessile polyp in the gastric antrum was removed in one piece\n'
+                'with a cold snare and retrieved.\n')
+        self.assertEqual(services.reflow(text).count('\n'), 1)
+        text = 'Findings: no polyps in the gastric body; a 6 mm sessile polyp was removed in one\npiece.\n'
+        self.assertEqual(services.reflow(text).count('\n'), 1)

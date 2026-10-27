@@ -2254,7 +2254,46 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
         return False
     if _answered_line(text, ls, le, ns):
         return False  # "... and said no" / "Hiatal hernia - no": the answer ends its line
+    answer = _field_answer_kind(prev)
+    if answer and answer != _field_answer_kind(prev.rstrip() + ' ' + nxt.strip()):
+        # refutation r1, formats-3: a field row's own answer ends it ("Biopsies taken from the antrum: N" / "pt on
+        # apixaban." had lost its answer, and the label's participle stated the biopsy done): a join never changes the
+        # answer a field row gives on its own, so a value that wraps is still one line ("Findings: a 6 mm sessile polyp
+        # ... in one piece" / "with a cold snare and retrieved.")
+        return False
     return True
+
+
+def _field_answer_kind(line: str) -> str:
+    """The answer a field line ("Label: answer", or "Label - answer" with no colon on it) gives when it is read alone,
+    as a whole short answer in the field readers' own vocabulary (_field_answer_read): a box state, a denial or a short
+    answer read as neither (detect._FIELD_DENIED), a checked or "yes" answer, both options printed, or a negated
+    predicate; '' when the line is no field, or its value is prose (a doubt word among other words is read the same
+    on one line as on two). Bounded: one line of FIELD_REACH."""
+    line = line.strip()
+    if not line or len(line) > FIELD_REACH:
+        return ''
+    colon = line.find(':')
+    if colon >= 0:
+        label, value = line[:colon], line[colon + 1:]
+    else:
+        dash = FIELD_DASH.search(line)
+        if dash is None:
+            return ''
+        label, value = line[:dash.start()], line[dash.end():]
+    if not label.strip():
+        return ''
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    field = label + ':' + value
+    denied = detect._FIELD_DENIED.fullmatch(field)
+    if denied is not None and denied.end('label') == len(label):
+        return denied.lastgroup or 'denied'
+    if detect._FIELD_CHECKED.fullmatch(field) is not None:
+        return 'checked'
+    value = value.strip()
+    if FIELD_BOTH_OPTIONS.fullmatch(value):
+        return 'both options'
+    return 'negated predicate' if ANSWER_NEGATED_PREDICATE.fullmatch(value) else ''
 
 
 def _opens_a_sentence(text: str, i: int) -> bool:
