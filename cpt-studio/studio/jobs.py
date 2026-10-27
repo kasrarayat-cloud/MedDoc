@@ -35,6 +35,9 @@ from .validation.engine import assess as run_assessment
 log = logging.getLogger(__name__)
 
 CONTEXT_VERSION = 'gi-context@2'
+# Context versions recorded under other merge rules (gi-context@1, the installed revision 057a7d39, kept a member's value
+# as plain metadata): a stage remakes such a context before it sends or assesses anything (_remade_context).
+EARLIER_CONTEXT_VERSIONS = ('gi-context@1',)
 MEMBER_DATE_CONFLICT_MESSAGE = ('Nothing was sent: the service date entered as encounter metadata differs from the '
                                 'documented one. Correct or clear the metadata (or add an addendum), and the request is '
                                 'made for the agreed date.')
@@ -337,6 +340,34 @@ def _finish_run(run, exchange):
     run.save()
 
 
+def _remade_context(job):
+    """A stage given a context an earlier version recorded (gi-context@1 kept a member's value as plain metadata, where
+    the current rules keep a differing value as a conflict) remakes it under the current rules - bounded, as a member's
+    change does - makes it current and starts again from it; nothing is sent or assessed on the old one (refutation r1:
+    after the upgrade a queued, resumed or swept encounter sent a member date the current rules hold as a conflict).
+    Returns the job's result, or None when the context is current."""
+    context, encounter, revision = job.context, job.encounter, job.revision
+    if context is None or context.version not in EARLIER_CONTEXT_VERSIONS or context.revision_id != revision.pk:
+        return None
+    fresh = make_context(encounter, revision)
+    with transaction.atomic():
+        locked = models.Encounter.objects.select_for_update().get(pk=encounter.pk)
+        if locked.current_revision_id != revision.pk or locked.current_context_id != context.pk:
+            return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+        locked.current_context = fresh
+        locked.save(update_fields=['current_context', 'updated_at'])
+    audit.record(encounter.workspace, 'context.remade', encounter=encounter, context=str(fresh.pk),
+                 previous=str(context.pk), previous_version=context.version)
+    last_run = _run_in_use(revision)
+    if _run_answers(last_run, revision, fresh):
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
+                key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
+    else:
+        enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=fresh, key=f'predict:{fresh.pk}',
+                requested_by=job.requested_by)
+    return {'skipped': f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'}
+
+
 def stage_predict(job):
     revision, encounter, context = job.revision, job.encounter, job.context
     encounter.refresh_from_db()
@@ -345,6 +376,9 @@ def stage_predict(job):
     if context is None or context.revision_id != revision.pk or encounter.current_context_id != context.pk:
         # Provider input is only ever the current revision's text with that revision's current context.
         return {'skipped': 'the context is not the current one for this revision; nothing was sent'}
+    remade = _remade_context(job)
+    if remade is not None:
+        return remade
     provider = get_provider()
     service_date = context_service_date(context)
     assess_key = f'assess:{context.pk}'
@@ -489,6 +523,10 @@ def stage_assess(job):
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists'}
+    if context is not None and encounter.current_context_id == context.pk:
+        remade = _remade_context(job)
+        if remade is not None:
+            return remade
     revision.refresh_from_db()
     if run is not None and run_service_date(run) != context_service_date(context):
         raise StageFailure('The provider result was requested for a different service date than this context; '
@@ -611,7 +649,7 @@ def stage_review2(job):
     encounter.refresh_from_db()
     if encounter.current_revision_id != revision.pk:
         return {'skipped': 'a newer revision exists; nothing was sent'}
-    if context is None or encounter.current_context_id != context.pk:
+    if context is None or encounter.current_context_id != context.pk or context.version in EARLIER_CONTEXT_VERSIONS:
         return {'skipped': 'the context changed; nothing was sent'}
     assessment = encounter.current_assessment
     if (assessment is None or assessment.revision_id != revision.pk or assessment.context_id != context.pk

@@ -1690,6 +1690,9 @@ rule, never a sentence patch). The rules this added, by module:
 - Reader, refutation r1: a "can/could be" possibility governed by a time still to come ("once anticoagulation is
   held", "at a repeat colonoscopy") stays a possibility; a check-box run under a label that sits directly under an empty
   plan heading ("Plan:" / "Procedure:" / "[x] ...") lists what is planned.
+- Upgrade, refutation r1 (migrate lens): a context the installed revision recorded (`gi-context@1`, which kept a
+  member's value as plain metadata) is remade under the current rules - bounded, as a member's change does - before any
+  stage sends or assesses with it (`jobs._remade_context`, audit `context.remade`); a second review never runs on it.
 - Jobs (`studio/jobs.py`): nothing is built, reused or sent while the service date is a member-vs-document conflict
   (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question);
   no second review after a primary response refused whole, nor without a known service date.

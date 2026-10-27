@@ -327,3 +327,50 @@ class NoSecondReviewForWhatWasNotDoneTests(TestCase):
     def test_control_a_checked_box_under_interventions_is_sent(self):
         text = REPORT_LIST.format(block='Interventions:\n\u2612 Biopsy')
         self.assertEqual(self.sends(text, '45378', CECUM_LINE), (2, ['primary', 'second_review']))
+
+
+@override_settings(**LIVE)
+class PreUpgradeContextTests(TestCase):
+    """Refutation r1 (migrate lens): a context the installed revision recorded (gi-context@1) keeps a member's date as
+    plain metadata, where the current rules keep a date that differs from the document as a conflict. A stage given
+    such a context remakes it first (jobs._remade_context), so nothing is ever sent with the member's date."""
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer'))
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.reviewer)
+        self.provider = TwoPassProvider(first=[('45385', 'was removed with a cold snare')], later=[])
+        patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_a_member_date_kept_by_the_earlier_version_is_never_sent(self):
+        from studio.gi.context import USER_NOTE, is_member_conflict
+        reply = self.client.post('/api/encounters', {'text': REPORT, 'synthetic_attestation': 'yes'})
+        encounter_id = reply.json()['id']
+        drain()
+        sent_before = len(self.provider.requests)
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        current = encounter.current_context
+        facts = dict(current.facts)
+        facts['service_date'] = {'name': 'service_date', 'value': '1998-01-01', 'origin': 'user', 'evidence': [],
+                                 'note': USER_NOTE}
+        old = models.EncounterContext.objects.create(
+            encounter=encounter, revision=encounter.current_revision, facts=facts,
+            user_values={'service_date': '1998-01-01'}, version='gi-context@1', sha256='0' * 64)
+        encounter.user_values = {'service_date': '1998-01-01'}
+        encounter.current_context = old
+        encounter.save(update_fields=['user_values', 'current_context', 'updated_at'])
+        jobs.enqueue(models.Job.PREDICT, encounter=encounter, revision=encounter.current_revision, context=old,
+                     key=f'predict:{old.pk}', requested_by=None)
+        drain()
+        dates = [c for request in self.provider.requests for c in request.contexts if c.startswith('Date of service')]
+        self.assertNotIn('Date of service: 1998-01-01', dates)
+        self.assertEqual(len(self.provider.requests), sent_before)
+        encounter.refresh_from_db()
+        self.assertEqual(encounter.current_context.version, jobs.CONTEXT_VERSION)
+        self.assertTrue(is_member_conflict(encounter.current_context.facts['service_date']))
+        held = models.ProviderRun.objects.filter(encounter_id=encounter_id, state=models.ProviderRun.NOT_SENT)
+        self.assertTrue(any((run.scope or {}).get('held') == models.ProviderRun.HELD_MEMBER_DATE_CONFLICT
+                            for run in held))
