@@ -49,7 +49,13 @@ class ServiceDateTests(SimpleTestCase):
 
     def test_a_dated_title_never_beats_a_labelled_date_and_a_qualified_one_is_no_date(self):
         facts, _ = read(HEAD + 'Office visit - 2026-09-01\nDate of service: 2026-09-02\nSeen today.\n')
-        self.assertEqual(facts['service_date'].value, '2026-09-02')
+        # Refutation round 2 (rule B, c2:1): the note's own dated title and its labelled date that differs are a
+        # conflict - asked, both kept - never a silent choice of either (a planned procedure's labelled date had won
+        # over a report's title this way, was sent, and an act done that day was excluded against it). This pin had
+        # the labelled date win silently; the title still never beats it.
+        fact = facts['service_date']
+        self.assertEqual((fact.origin, set(gi_context.documented_values(fact))),
+                         ('conflict', {'2026-09-01', '2026-09-02'}))
         facts, _ = read(HEAD + 'Previous visit - 2026-03-01\nSeen today for follow-up.\n')
         self.assertEqual(facts['service_date'].origin, 'missing')
 

@@ -6,6 +6,10 @@ or a member value for a document that states none. A labelled date for another o
 document, or a qualifier of another field never supplies the date; a labelled date the reader cannot read or cannot
 place, or a qualified first title, is kept as documented text a member value must agree with (else a member conflict,
 interpretations 11, 19 and 22). Synthetic text only; no network (the suite's FakeProvider).
+
+Refutation round 2 (tests/test_repairs_7c8_context.py) changed six pins here, each marked where it stands: a dated title
+and a labelled date that differs from it are a conflict - never the title silently, never the label silently - and
+another document's title is kept as evidence a member date must agree with.
 """
 import json
 from unittest import mock
@@ -48,6 +52,15 @@ class DateAssertions:
         fact = merged_date(text, value)
         self.assertEqual((fact.origin, fact.value), ('user', value), fact.note)
 
+    def assert_title_conflict(self, text, own, other):
+        """Refutation round 2, rule B: a dated title and a labelled date that differs from it are a conflict - asked,
+        both listed - never a silent choice of either; the member settles it by choosing the note's own date."""
+        fact = date_fact(text)
+        self.assertEqual((fact.origin, set(context.documented_values(fact))), ('conflict', {own, other}),
+                         [e.text for e in fact.evidence])
+        self.assert_member_date(text, own)
+        self.assert_member_conflict(text, '1998-01-01')
+
 
 class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
     """negtime-8: a labelled date whose label names another occurrence ("Outside procedure date", "Index procedure
@@ -69,7 +82,10 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
         for text, other in cases:
             with self.subTest(text=text.splitlines()[2][:60]):
                 self.assert_never(text, other)
-                self.assert_document(text, '2026-10-14')  # the note's own dated title
+                # Refutation round 2, rule B: the title gives the date only when every labelled date agrees with it -
+                # the reader's "another occurrence" may be a misreading (c2:2, c2:5) - so the two are a conflict, which
+                # the member settles by choosing the title's date (this pin had the title win silently).
+                self.assert_title_conflict(text, '2026-10-14', other)
         widened = HEAD + ('PROCEDURE NOTE: Colonoscopy - 14-Oct-2026\nIndication: surveillance. Outside procedure date: '
                           '03-Sep-2026\n')
         self.assert_never(widened, '2026-09-03')
@@ -92,8 +108,9 @@ class LabelledDateOfAnotherOccurrenceTests(DateAssertions, SimpleTestCase):
                 self.assert_member_conflict(alone, '2026-10-20')
 
     def test_controls_the_note_s_own_labels_are_read(self):
-        self.assert_document(self.TITLED + 'Prior procedure date: 09/03/2026\n', '2026-10-14')
-        self.assert_document(self.TITLED + 'Last procedure date: 09/03/2026\n', '2026-10-14')
+        # refutation round 2, rule B: beside the title these are a conflict the member settles (the title won silently)
+        self.assert_title_conflict(self.TITLED + 'Prior procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
+        self.assert_title_conflict(self.TITLED + 'Last procedure date: 09/03/2026\n', '2026-10-14', '2026-09-03')
         for text, value in ((HEAD + 'Colonoscopy procedure date: 10/14/2026\n', '2026-10-14'),
                             (HEAD + 'Office visit date: 10/20/2026\n' + VISIT_BODY, '2026-10-20'),
                             (HEAD + "Today's visit date: 10/20/2026\n" + VISIT_BODY, '2026-10-20'),
@@ -135,7 +152,16 @@ class QualifierOfAnotherFieldTests(DateAssertions, SimpleTestCase):
         for body, value, other in cases:
             with self.subTest(body=body.splitlines()[0]):
                 self.assert_never(HEAD + body, other)
-                self.assert_document(HEAD + body, value)
+                if body.startswith('GI procedure report'):
+                    # a report naming no service this release codes is never the note's heading (refutation round 2,
+                    # c2:7): the labelled date stands
+                    self.assert_document(HEAD + body, value)
+                else:
+                    # Refutation round 2, rule B: the note's own labelled date and its own dated title (or "Date:"
+                    # line) that differs are a conflict, never a silent choice: c2:1 had a planned procedure's
+                    # labelled date win over the report's title this way, sent, and an act done that day excluded
+                    # against it (this pin had the labelled date win silently).
+                    self.assert_title_conflict(HEAD + body, value, other)
 
     def test_a_qualifier_that_may_be_the_date_s_own_holds_it(self):
         # "Visit type: Follow-up" may or may not qualify the visit date: the date is held - never dropped so that the
@@ -182,12 +208,20 @@ class TitleOfAnotherDocumentTests(DateAssertions, SimpleTestCase):
         appended = (HEAD + 'PROCEDURE NOTE: EGD\nFindings: Biopsies were taken from the antrum.\n'
                            'Surgical pathology report: 10/17/2026\nSpecimen A: gastric antrum.\n')
         imaging = HEAD + 'CT abdomen and pelvis report: 10/09/2026\nNo acute findings.\nPROCEDURE NOTE: EGD\n'
-        for text, other in ((self.PATHOLOGY_FIRST, '2026-10-17'), (appended, '2026-10-17'), (imaging, '2026-10-09')):
+        pathology, ct = 'Surgical pathology report: 10/17/2026', 'CT abdomen and pelvis report: 10/09/2026'
+        for text, other, title in ((self.PATHOLOGY_FIRST, '2026-10-17', pathology), (appended, '2026-10-17', pathology),
+                                   (imaging, '2026-10-09', ct)):
             with self.subTest(text=text.splitlines()[1][:40]):
                 fact = date_fact(text)
-                self.assertEqual((fact.origin, fact.value, fact.evidence), ('missing', None, ()))
-                self.assert_member_date(text, '2026-10-14')  # the member's date answers the question
-                self.assertNotEqual(merged_date(text, '2026-10-14').origin, 'conflict', other)
+                # Refutation round 2, rule A (c2:3, c2:7): another document's title is never the date, but it is kept
+                # as documented evidence, never dropped with nothing left behind - a visit title misread as another
+                # discipline's let a member's 1998-01-01 be sent. A member date must agree with it: the date asked
+                # is answered by the date the evidence reads, and any other member date is a conflict (an over-hold
+                # for a member who knows the procedure's own date; this pin had no evidence kept).
+                self.assertEqual((fact.origin, fact.value, [e.text for e in fact.evidence]), ('missing', None, [title]))
+                self.assert_member_date(text, other)
+                for member in ('2026-10-14', '1998-01-01'):
+                    self.assert_member_conflict(text, member)
 
     def test_a_letter_date_beside_the_encounter_it_names_is_asked(self):
         letter = HEAD + ('Date: 10/27/2026\nRe: GI consultation of 10/20/2026\nDear Dr. Synthetic,\nThank you for '
@@ -316,19 +350,31 @@ class RequestDateTests(TestCase):
                        '(two adenomas removed).\nTechnique: The colonoscope was advanced to the cecum.\nFindings: A 5 mm '
                        'sigmoid polyp was removed with a cold snare.\n')
         encounter_id = self.finished(text)
-        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-14']])
+        # refutation round 2, rule B: the outside date beside the report's title is a conflict: asked, no date sent
+        # (this pin sent the title's date while the labelled date was set aside)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-14'})  # the member chooses the report's date
+        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
 
     def test_negtime_14_a_pathology_title_date_is_never_sent_and_the_member_date_answers(self):
         encounter_id = self.finished(TitleOfAnotherDocumentTests.PATHOLOGY_FIRST)
         self.assertEqual(self.dates_sent(encounter_id), [[]])  # no documented date: the date is asked
+        # refutation round 2, rule A: the pathology report's date is kept as evidence, so a member date that differs
+        # from it is a member conflict and is never sent (this pin sent it): an over-hold, the date stays asked
         self.set_context(encounter_id, {'service_date': '2026-10-14'})
-        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertTrue(context.is_member_conflict(encounter.current_context.facts['service_date']))
 
     def test_negtime_15_the_labelled_date_is_sent_not_the_letter_date(self):
         text = HEAD + ('Date: 10/16/2026\nProcedure date: 10/14/2026    Next colonoscopy: 10/2029\nPROCEDURE NOTE: '
                        'Colonoscopy\nFindings: A 5 mm sigmoid polyp was removed with a cold snare.\n')
         encounter_id = self.finished(text)
-        self.assertEqual(self.dates_sent(encounter_id), [['Date of service: 2026-10-14']])
+        # refutation round 2, rule B: the labelled date and the "Date:" line that differs are a conflict: asked, no
+        # date sent, never the letter's (this pin sent the labelled date over the differing "Date:" silently)
+        self.assertEqual(self.dates_sent(encounter_id), [[]])
+        self.set_context(encounter_id, {'service_date': '2026-10-14'})  # the member chooses the labelled date
+        self.assertEqual(self.dates_sent(encounter_id), [[], ['Date of service: 2026-10-14']])
 
     def test_context_3_a_member_date_against_an_unread_documented_date_is_held(self):
         text = OFFICE_NOTE.replace('Date of service: 2026-10-20', 'Date of service: Tuesday, October 20, 2026')
