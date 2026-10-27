@@ -1210,6 +1210,26 @@ def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> t
 _CUT_START = re.compile(r'[;,]|\s+', re.A)
 
 
+class _Clause(tuple):
+    """A clause (start, end) that an own_time cut (_CLAUSE_CUT) joins to coordinated predicates of its sentence, with
+    ``joined``: the span of those joined clauses together. The cut gives each predicate its own time, plan and cancel
+    words, never the sentence's TODAY word: whether the sentence says today is read over the joined span (read_clause;
+    7c8 skeptic, sk:1: "Biopsies were taken as recommended and will be sent to pathology today" had lost "today" to the
+    cut, so "as recommended" dated the biopsy and 43239 was newly excluded)."""
+
+    joined: Optional[tuple[int, int]] = None
+
+
+def _join(out: list, first: int) -> None:
+    """Mark the clauses out[first:] as one own_time-joined run (_Clause.joined), when there are two or more."""
+    if len(out) - first < 2:
+        return
+    span = (out[first][0], out[-1][1])
+    for i in range(first, len(out)):
+        out[i] = _Clause(out[i])
+        out[i].joined = span
+
+
 def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
     """[start, end) cut at _CLAUSE_CUT into trimmed clauses. A run of whitespace is tried as a cut from its first
     character and its second only (refutation r1, cost-6: tried from each of its characters, every try read the run to
@@ -1222,6 +1242,7 @@ def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
     # since the last cut; the search for it resumes where it stopped (a 60-character overlap keeps a predicate that
     # straddles the stop), so a long sentence of such coordinations is read once, never again from its start.
     stated, scanned = False, start
+    joined = None  # the index in ``out`` of the first clause of a run an own_time cut joins (_Clause)
     while True:
         lead = _CUT_START.search(text, at, end)
         if lead is None:
@@ -1243,11 +1264,19 @@ def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
         seg = _trim(text, pos, m.start())
         if seg:
             out.append(seg)
+        if m.lastgroup == 'own_time':
+            if joined is None and seg:
+                joined = len(out) - 1
+        elif joined is not None:
+            _join(out, joined)
+            joined = None
         pos = at = m.end()
         stated, scanned = False, pos
     seg = _trim(text, pos, end)
     if seg:
         out.append(seg)
+    if joined is not None:
+        _join(out, joined)
     return out or [(start, end)]
 
 
@@ -1539,6 +1568,13 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     if CANCEL_WORDS.search(whole):
         return Reading('cancelled', ('cancelled: ' + CANCEL_WORDS.search(whole).group(0).lower(),))
     # Time: a date in the clause - the act's own; a date of something else never dates it (_date_owner).
+    # Whether the sentence says today is read over the coordinated predicates an own_time cut joins to this clause
+    # (_Clause.joined), as before that cut: the cut moves another predicate's time words, never the sentence's TODAY
+    # word (7c8 skeptic, sk:1). Every other time word below is still the clause's own.
+    joined = getattr(clause, 'joined', None)
+    said = text[slice(*_bounded_clause(text, joined, pos, end))] if joined else whole
+    today = bool(TODAY_WORDS.search(said))
+    act_said = bool(ACT_VERB.search(said))
     other_time = ''
     for d in _dates_in(dates, cs, ce):
         owner = _date_owner(text, d, cs, pos)
@@ -1565,10 +1601,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     elsewhere = _elsewhere_time_words(text, cs, ce, pos)
     hist = next((h for h in HISTORY_WORDS.finditer(whole) if cs + h.start() not in elsewhere
                  and not REVIEW_OF_RECORDS.search(whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
-    if hist and not TODAY_WORDS.search(whole):
+    if hist and not today:
         return Reading('historical', ('historical: ' + hist.group(0).lower(),))
     plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere), None)
-    if plan and not (TODAY_WORDS.search(whole) and ACT_VERB.search(whole)):
+    if plan and not (today and act_said):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
     skipped = next((cs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(whole)
                     if cs + m.start() in elsewhere), None) if elsewhere else None
@@ -1577,9 +1613,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
     # still planned ("1. Dysphagia, likely peptic stricture - upper endoscopy with dilation at the hospital"), never a
     # doubt about a service done today.
-    if part.kind == 'history' and not TODAY_WORDS.search(whole):
+    if part.kind == 'history' and not today:
         return Reading('historical', ('historical: in a history section',))
-    if part.kind == 'plan' and not TODAY_WORDS.search(whole):
+    if part.kind == 'plan' and not today:
         return Reading('planned', ('planned: in a plan section',))
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
@@ -1587,7 +1623,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     hypothetical = _hypothetical(text, cs, ce, pos, end, report=in_today_report or part.kind in ('report', 'section'))
     if hypothetical:
         return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
-    if part.kind == 'indication' and not TODAY_WORDS.search(whole):
+    if part.kind == 'indication' and not today:
         # An indication says why the patient came: a performance stated there and not said to be today's is not
         # established as today's ("Indication: Anemia. An EGD was performed last month at an outside hospital; the
         # endoscope was advanced to the duodenum") - held, as routing holds it, never read as done today.
@@ -1600,10 +1636,10 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         return answered
     if ACT_VERB.search(whole) or BARE_PARTICIPLE.search(after) or BARE_PARTICIPLE.search(before[-40:]) \
             or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()) or _nominal_act(text, before, pos):
-        if other_time and not TODAY_WORDS.search(whole):
+        if other_time and not today:
             # stated done, but a time in its clause is something else's: its own time is not established (held)
             return Reading('uncertain', (OTHER_TIME_CUE + other_time,))
-        if in_today_report or TODAY_WORDS.search(whole) or part.kind == 'report':
+        if in_today_report or today or part.kind == 'report':
             return Reading('performed', ('performed: an act predicate in a current report',))
         return Reading('performed', ('performed: an act predicate',))
     if in_today_report:
