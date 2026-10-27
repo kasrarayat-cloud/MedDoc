@@ -1010,3 +1010,40 @@ class RefusedResponseStateTests(Harness):
         codes = page(detail)['codes']
         self.assertIn('The provider request<br>failed.', codes)
         self.assertIn('<p>Error: HTTP 500 from the provider.</p>', codes)
+
+
+# --- found while refuting the reports-5 repairs: the readiness blocker beside a second review never read ------------
+
+READ_NONE = 'No CPT code was proposed in the response that was read'
+
+
+class SecondReviewOutcomeBlockerTests(Harness):
+    """Found while refuting the two repairs above: with the primary response read with nothing selected and the second
+    review's outcome unknown (sent, no response read) or failed, the readiness blocker - in the API, the draft TXT's
+    review status and the export dialog - still said "No CPT code was proposed", of a document whose second review was
+    never read. It says that no code was proposed in the response that was read, and how the second review ended."""
+
+    def asked(self, second, later=(('45378', SCOPE_SENTENCE),)):
+        self.use(SecondOutcome([], list(later), second))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        return encounter_id
+
+    def test_a_second_review_never_read_is_named_in_the_blocker(self):
+        for second, ended in (('unknown', 'has an unknown outcome'), ('failed', 'failed')):
+            with self.subTest(second):
+                self.fresh(f'Synthetic workspace {second}')
+                encounter_id = self.asked(second)
+                blockers = self.detail(encounter_id)['readiness']['blockers']
+                expected = f'{READ_NONE}; the second review {ended}'
+                self.assertIn(expected, blockers)
+                self.assertNotIn('No CPT code was proposed', blockers)
+                self.assertIn(f'  - {expected}', self.txt(encounter_id))
+
+    def test_control_a_second_review_read_that_proposed_nothing_keeps_the_blocker(self):
+        encounter_id = self.asked('read', later=())
+        blockers = self.detail(encounter_id)['readiness']['blockers']
+        self.assertIn('No CPT code was proposed', blockers)
+        self.assertFalse(any(b.startswith(READ_NONE) for b in blockers), blockers)

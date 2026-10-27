@@ -653,8 +653,28 @@ def _assessment_blockers(encounter, assessment):
         # codes were never read, so nothing may say that none was proposed (round 7 bypass:1) - the merged second
         # review's as the primary's (skeptic of refutation 7c8 reports-5).
         refused = _refused_run(assessment) is not None
-        blockers.append('The provider response was not used' if refused else 'No CPT code was proposed')
+        # Nor while the second review made for this answer was not read: none was proposed in what was read only
+        # (found while refuting the reports-5 repairs: "No CPT code was proposed" beside an unknown or failed one).
+        unread = '' if refused else _second_review_unread(assessment)
+        blockers.append('The provider response was not used' if refused else
+                        f'No CPT code was proposed in the response that was read; the second review {unread}' if unread
+                        else 'No CPT code was proposed')
     return blockers
+
+
+SECOND_REVIEW_ENDED = {ProviderRun.UNKNOWN: 'has an unknown outcome', ProviderRun.FAILED: 'failed',
+                       ProviderRun.NOT_SENT: 'was not sent', ProviderRun.CANCELLED: 'was not sent',
+                       ProviderRun.SUCCEEDED: 'has not been read yet'}
+
+
+def _second_review_unread(assessment):
+    """How the second review made for the answer the assessment reads ended (jobs._second_run_for, whatever its outcome)
+    when the assessment did not read it; '' when none was made or the assessment read it."""
+    from .jobs import _second_run_for  # local import: jobs imports this module
+    second = _second_run_for(assessment.revision, assessment.provider_run, any_outcome=True)
+    if second is None or second.pk == assessment.second_run_id:
+        return ''
+    return SECOND_REVIEW_ENDED.get(second.state, 'has not finished')
 
 
 def _refused_run(assessment):
