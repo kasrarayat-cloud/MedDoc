@@ -425,8 +425,20 @@ PROCEDURE_LABELS = (r'(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|int
 PROCEDURE_FIELD = _rx(r'^[\s\-*#]*' + PROCEDURE_LABELS + r'\s*[:\-–]\s*'
                       r'(?P<value>\S[^\n]*)$')
 PROCEDURE_LIST_LABEL = _rx(r'[\s\-*#]*' + PROCEDURE_LABELS + r'[ \t]*:?[ \t]*')
-ROLE_HEADINGS = (('nursing', _rx(r'^[\s\-*#]*(?:nursing|nurse|RN|recovery\s+nurse|procedure\s+checklist|nursing\s+'
-                                 r'checklist|pre-?procedure\s+nursing|intra-?procedure\s+nursing)\b[^\n]{0,60}$')),
+# A nursing heading names the nursing role's own entry ("Nursing record", "NURSING PROCEDURE RECORD (Delphine Oakes,
+# LPN)", "Nurse's notes", "Procedure checklist", "Nursing note: 10/14/2026 08:30"), as the other roles' headings name
+# their record, note or report, or it is the role's name alone on its line ("NURSING", "Nursing:"). A staff field that
+# names a nurse ("Nurse: Jo Rowe, RN", "RN: Jo Rowe", "Nursing staff: Jo Rowe, RN; Sam Lee, LPN") or a line of prose
+# about one ("Nurse present throughout the procedure.") heads no entry: it had opened a nursing part over the rest of
+# the physician's report, whose acts reconciliation then skipped (refutation r1, missed-1). Its own line still reads
+# through ROLE_LABEL. The lookahead keeps the line's earlier bound, so no line that was no heading becomes one.
+_NURSE = r'(?:(?:pre|intra)-?procedure\s+|recovery\s+)?(?:nursing|nurse(?:[\'’]?s)?|RN)'
+_NURSING_ENTRY = (r'(?:(?:pre-?|intra-?)?procedure\s+)?(?:record|records|note|notes|checklist|documentation|assessment|'
+                  r'flowsheet|flow\s+sheet|entry|entries|report|summary)')
+ROLE_HEADINGS = (('nursing', _rx(r'^[\s\-*#]*(?=(?:nursing|nurse|RN|recovery\s+nurse|procedure\s+checklist|nursing\s+'
+                                 r'checklist|pre-?procedure\s+nursing|intra-?procedure\s+nursing)\b[^\n]{0,60}$)'
+                                 r'(?:' + _NURSE + r'\s+' + _NURSING_ENTRY + r'\b|procedure\s+checklist\b'
+                                 r'|' + _NURSE + r'[ \t]*:?[ \t]*$)')),
                  ('anesthesia', _rx(r'^[\s\-*#]*(?:anesthesia|anaesthesia|sedation\s+record)\s+(?:record|note|report)\b[^\n]{0,60}$')),
                  ('pathology', _rx(r'^[\s\-*#]*(?:surgical\s+)?pathology\s+(?:report|result|results|addendum)\b[^\n]{0,60}$')),
                  ('radiology', _rx(r'^[\s\-*#]*(?:radiology|imaging)\s+(?:report|result|results)\b[^\n]{0,60}$')))
