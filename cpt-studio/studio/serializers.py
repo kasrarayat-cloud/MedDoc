@@ -278,6 +278,7 @@ def encounter_detail(encounter, membership):
     assessment, clarifications = _assessment_json(encounter, membership)
     revision = encounter.current_revision
     jobs = list(encounter.jobs.filter(revision=revision).order_by('created_at')) if revision else []
+    state_run = review.state_run(encounter)
     return {
         **encounter_summary(encounter),
         'created_by': encounter.created_by.label(),
@@ -293,6 +294,8 @@ def encounter_detail(encounter, membership):
                      'stages': [{'kind': j.kind, 'state': j.state, 'error': j.error,
                                  'finished_at': _iso(j.finished_at)} for j in jobs]},
         'provider_runs': [_provider_run_json(r) for r in encounter.provider_runs.order_by('created_at')],
+        # The run the provider_failed state reads, named so the page never picks one by recency (ec5 skeptic).
+        'state_run': str(state_run.pk) if state_run is not None else None,
         'second_review': {**second_review_status(encounter),
                           'can_request': membership.can_review},
         'assessment': assessment,

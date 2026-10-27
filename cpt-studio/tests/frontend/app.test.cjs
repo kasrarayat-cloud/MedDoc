@@ -631,12 +631,21 @@ test('the provider-not-run card gives the reason of the latest predict, not of o
   assert.ok(!html.includes('did not run for this revision'));
 });
 
-test('the provider-failed card gives the reason of the latest primary request, the run in use', () => {
+test('the provider-failed card gives the reason of the run the state reads (state_run), never one picked by recency', () => {
   const ready = fixture('encounter-ready.json');
   const old = { ...ready.provider_runs[0], state: 'failed', http_status: 500, error: 'HTTP 500 from the provider.', purpose: 'primary' };
   const refused = { ...old, id: UUID, state: 'not_sent', http_status: null, error: 'The credentials could not be read; nothing was sent.' };
-  const html = render({ ...ready, state: 'provider_failed', provider_runs: [old, refused] });
+  const html = render({ ...ready, state: 'provider_failed', provider_runs: [old, refused], state_run: refused.id });
   assert.ok(html.includes('<p>Error: The credentials could not be read; nothing was sent.</p>'));
   assert.ok(!html.includes('<p>Error: HTTP 500 from the provider.</p>'));
-  assert.ok(render({ ...ready, state: 'provider_failed', provider_runs: [old] }).includes('<p>Error: HTTP 500 from the provider.</p>'));
+  assert.ok(render({ ...ready, state: 'provider_failed', provider_runs: [old], state_run: old.id }).includes('<p>Error: HTTP 500 from the provider.</p>'));
+  // a newer request a Stop cancelled (or the sweep settled) before sending is not the run the state reads
+  const stopped = { ...old, id: '00000000-0000-4000-8000-000000000002', state: 'cancelled', http_status: null, error: 'Stopped before sending; nothing was sent.' };
+  const back = render({ ...ready, state: 'provider_failed', provider_runs: [old, stopped], state_run: old.id });
+  assert.ok(back.includes('<p>Error: HTTP 500 from the provider.</p>'));
+  assert.ok(!back.includes('Stopped before sending'));
+  // no run named: the card names none, never a guess
+  const unnamed = render({ ...ready, state: 'provider_failed', provider_runs: [old, stopped], state_run: null });
+  assert.ok(unnamed.includes('<p>The provider did not return proposals.</p>'));
+  assert.ok(!unnamed.includes('<p>Error:'));
 });

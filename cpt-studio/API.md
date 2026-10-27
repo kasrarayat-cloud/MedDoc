@@ -84,6 +84,7 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
                      "latency_ms": 6123.4, "usage": {"creditsConsumed": 0.0281}, "usage_basis": "provider_reported_credits_not_usd",
                      "request_sha256": "...", "response_sha256": "...", "reused_from": null, "error": "",
                      "reconciled": false, "created_at": "..."}],
+  "state_run": null,
   "assessment": {
     "id": "uuid", "profiles_version": "gi-profiles@2", "engine_version": "...", "created_at": "...",
     "proposals": [{
@@ -129,6 +130,10 @@ needs_clarification | excluded | informational (alternatives). `decision_state`
 the server and is the only source of truth for which buttons are enabled. `approve_withheld_by` is the
 same for every member: on a reinstated exclusion it names the check that withholds approve
 (`review.reinstatement` or `em.same_day_if_reinstated`), and it is null otherwise.
+
+`state_run` is the id of the provider run a `provider_failed` state reads (the failed stage's own request, else the
+run the current assessment read), and null in every other state. The page explains the failure with that run's error,
+never with a run picked by recency: a newer request stopped or settled before sending is not the run in use.
 
 ## POST /api/encounters/{id}/decisions
 

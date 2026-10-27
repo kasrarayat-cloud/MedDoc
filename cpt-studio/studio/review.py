@@ -698,12 +698,14 @@ def readiness(encounter):
 
 
 def _failed_stage_state(encounter, revision, job):
+    """(state, run): the state a failed or unknown stage leaves, with the stage's own request when that state is
+    provider_failed (else None); (None, None) when the assessment's own state stands."""
     if job.kind == Job.EXTRACT:
-        return 'extraction_failed'
+        return 'extraction_failed', None
     if job.kind not in (Job.PREDICT, Job.REVIEW2):
-        return 'processing_failed'
+        return 'processing_failed', None
     if job.state == Job.UNKNOWN:
-        return 'provider_unknown'
+        return 'provider_unknown', None
     purpose = ProviderRun.PRIMARY if job.kind == Job.PREDICT else ProviderRun.SECOND_REVIEW
     run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=purpose)
            .order_by('-created_at', '-pk').first())
@@ -711,10 +713,12 @@ def _failed_stage_state(encounter, revision, job):
         # A second review that failed before recording its run sent nothing and left the assessment as it was: the
         # assessment's own state stands, and the second-review card says why it did not complete (ec5 re-check: it read
         # "Provider not run" beside the primary request's proposals). None: derive the state from the assessment.
-        return None if job.kind == Job.REVIEW2 else 'provider_not_run'
+        return (None if job.kind == Job.REVIEW2 else 'provider_not_run'), None
     if run.state in UNSETTLED_RUN_STATES:
-        return 'provider_unknown'
-    return 'processing_failed' if run.state == ProviderRun.SUCCEEDED else 'provider_failed'
+        return 'provider_unknown', None
+    if run.state == ProviderRun.SUCCEEDED:
+        return 'processing_failed', None
+    return 'provider_failed', run
 
 
 def _review_state(encounter, assessment):
@@ -768,38 +772,55 @@ def can_resume(encounter):
 
 
 def _derive_state(encounter):
+    return _state_and_run(encounter)[0]
+
+
+def _state_and_run(encounter):
+    """(state, run): the derived state and, for provider_failed, the provider run that state reads - the failed stage's
+    own request, else the run the live assessment read - so a screen explains the failure with that run, never with one
+    picked by recency (ec5 skeptic, new:provider-failed-card-older-run: a request stopped or swept before sending is
+    newer than the run in use). None for every other state."""
     revision = encounter.current_revision
     if revision is None or _active_jobs(encounter):
-        return 'processing'
+        return 'processing', None
     if revision.extraction_status == SourceRevision.FAILED:
-        return 'extraction_failed'
+        return 'extraction_failed', None
     latest = encounter.jobs.filter(revision=revision).order_by('-created_at', '-pk').first()
     if latest is not None and latest.state == Job.CANCELLED:
-        return 'stopped'
+        return 'stopped', None
     if revision.extraction_status == SourceRevision.PENDING:
-        return 'processing' if latest is None else 'extraction_failed'
+        return ('processing' if latest is None else 'extraction_failed'), None
     if latest is not None and latest.state in (Job.FAILED, Job.UNKNOWN):
-        failed = _failed_stage_state(encounter, revision, latest)
+        failed, run = _failed_stage_state(encounter, revision, latest)
         if failed is not None:
-            return failed
+            return failed, run
     assessment = live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
-        return 'provider_unknown' if _unreconciled_unknown(encounter) else 'processing'
+        return ('provider_unknown' if _unreconciled_unknown(encounter) else 'processing'), None
     run = assessment.provider_run
     if run is None:
-        return 'provider_not_run'
+        return 'provider_not_run', None
     if run.state in UNSETTLED_RUN_STATES or _unreconciled_unknown(encounter):
         # An outcome still unknown - the second review's included - blocks every further send until a member reconciles
         # it, so the encounter waits on that, whatever the run in use says (refutation r1, sends-5: a second review the
         # provider never answered left "Ready for review", then "Reviewed" and off the review queue, while the same
         # runs left by a worker that died mid-send read "Provider outcome unknown").
-        return 'provider_unknown'
+        return 'provider_unknown', None
     if run.state == ProviderRun.NOT_SENT and (run.scope or {}).get('held') == ProviderRun.HELD_MEMBER_DATE_CONFLICT:
         # nothing was sent on purpose: the date question is open, and the encounter waits on it, not on the provider
-        return _review_state(encounter, assessment)
+        return _review_state(encounter, assessment), None
     if run.state != ProviderRun.SUCCEEDED:
-        return 'provider_failed'
-    return _review_state(encounter, assessment)
+        return 'provider_failed', run
+    return _review_state(encounter, assessment), None
+
+
+def state_run(encounter):
+    """The provider run the encounter's provider_failed state reads, or None: also when the stored state (the one the
+    API serves) is not provider_failed, so the run named always explains the state shown."""
+    if encounter.state != 'provider_failed':
+        return None
+    state, run = _state_and_run(encounter)
+    return run if state == 'provider_failed' else None
 
 
 def refresh_state(encounter):

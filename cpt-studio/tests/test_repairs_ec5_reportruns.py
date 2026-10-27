@@ -13,7 +13,8 @@ persisted state. Refutation r1 findings re-checked at this branch's head, each t
   and once it was not sent, skipped or its outcome is unknown; a stage of it that failed before sending never reads
   "Provider not run";
 - found in this territory: the provider state cards explain themselves with the run or stage the state reads (the
-  latest predict; the run in use), never with an earlier one.
+  latest predict; the run the API names as the one provider_failed reads), never with an earlier one, nor with a newer
+  run that is not in use (skeptic, new:provider-failed-card-older-run: a request stopped or swept before sending).
 Synthetic data only; no network: an in-process provider stands in for the live adapter.
 """
 import hashlib
@@ -562,7 +563,128 @@ class FailedCardNamesTheRunInUseTests(Pipeline):
         self.assertEqual([r.state for r in self.runs(encounter_id)], ['failed', 'not_sent'])
         detail = self.detail(encounter_id)
         self.assertEqual(detail['state'], 'provider_failed')
+        self.assertEqual(detail['state_run'], str(self.runs(encounter_id)[1].pk))
         shown = page(detail)['codes']
         self.assertIn('The provider request | failed. | Error: The credentials could not be read; nothing was sent.',
                       shown)
         self.assertNotIn('HTTP 500 from the provider', shown)
+
+
+class SucceedsThenFails(FakeProvider):
+    """The first request is answered; every later one is sent and fails."""
+
+    def send(self, request, *, deadline_s):
+        if not self.sent:
+            return super().send(request, deadline_s=deadline_s)
+        self.sent.append(request.canonical_sha256)
+        return RawExchange(outcome='failed', sent=True, http_status=500,
+                           error='HTTP 500 from the provider (synthetic).')
+
+
+class FailedCardNamesTheRunTheStateReadsTests(Pipeline):
+    """The card explains provider_failed with the run that state reads, which the API names (state_run). Re-check of
+    the repair above (skeptic, new:provider-failed-card-older-run): it took the latest primary row whatever its state,
+    but the run in use is the newest FINISHED request (jobs._run_in_use); a request a Stop cancelled before sending, or
+    one the stale-stage sweep settled unsent after its worker died, is newer and is never the run in use. A member who
+    went back to the failed request's date re-assessed with it (nothing was resent) and the card gave the newer run's
+    "nothing was sent" instead of the HTTP 500 the state reports."""
+
+    UNDATED = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+    CARD = 'The provider request | failed. | Error: HTTP 500 from the provider (synthetic).'
+
+    def failed_then_redated(self):
+        self.use(FailingProvider(selections=[VISIT]))
+        encounter_id = self.create(self.UNDATED, service_date='2026-10-20')
+        drain()
+        self.assertEqual(self.detail(encounter_id)['state'], 'provider_failed')
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        while True:
+            job = jobs.claim_next()
+            if job.kind == models.Job.PREDICT:
+                return encounter_id, job
+            jobs.run_job(job)
+
+    def back_to_the_failed_date(self, encounter_id):
+        self.assertEqual(self.detail(encounter_id)['state'], 'stopped')
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-20'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)  # the failed request was re-read, never resent
+        failed = self.runs(encounter_id)[0]
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        self.assertEqual((failed.state, encounter.current_assessment.provider_run_id),
+                         (models.ProviderRun.FAILED, failed.pk))
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'provider_failed')
+        self.assertEqual(detail['state_run'], str(failed.pk))
+        return page(detail)['codes']
+
+    def test_a_request_stopped_before_sending_never_explains_the_failure(self):
+        encounter_id, job = self.failed_then_redated()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        jobs.run_job(models.Job.objects.get(pk=job.pk))
+        self.assertEqual([(r.state, r.error) for r in self.runs(encounter_id)][1:],
+                         [(models.ProviderRun.CANCELLED, 'Stopped before sending; nothing was sent.')])
+        shown = self.back_to_the_failed_date(encounter_id)
+        self.assertIn(self.CARD, shown)
+        self.assertNotIn('Stopped before sending', shown)
+
+    def test_a_request_the_sweep_settled_unsent_never_explains_the_failure(self):
+        encounter_id, job = self.failed_then_redated()
+
+        def dies(_pk):
+            raise SystemExit('the worker died after reserving the run (synthetic)')
+        with mock.patch('studio.jobs.is_stopped', dies), self.assertRaises(SystemExit):
+            jobs.run_job(job)
+        with override_settings(STALE_RUNNING_SECONDS=-5):  # old enough to be swept; nothing is backdated
+            jobs.mark_stale()
+        self.assertEqual([(r.state, r.error) for r in self.runs(encounter_id)][1:],
+                         [(models.ProviderRun.NOT_SENT, 'The worker stopped before sending.')])
+        shown = self.back_to_the_failed_date(encounter_id)
+        self.assertIn(self.CARD, shown)
+        self.assertNotIn('The worker stopped before sending', shown)
+
+    def test_control_a_predict_that_failed_after_its_request_names_that_request(self):
+        """The state reads the failed stage's own request, not the assessment's (an answered request for the earlier
+        date): the predict sent and failed, then could not queue its assess."""
+        self.use(SucceedsThenFails(selections=[VISIT]))
+        encounter_id = self.create(self.UNDATED, service_date='2026-10-20')
+        drain()
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        queue = jobs.enqueue
+
+        def no_assess(kind, **values):
+            if kind == models.Job.ASSESS:
+                raise RuntimeError('the assess could not be queued (synthetic)')
+            return queue(kind, **values)
+        with mock.patch('studio.jobs.enqueue', no_assess), self.assertLogs('studio.jobs', 'ERROR'):
+            drain()
+        answered, failed = self.runs(encounter_id)
+        self.assertEqual((answered.state, failed.state), (models.ProviderRun.SUCCEEDED, models.ProviderRun.FAILED))
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).current_assessment.provider_run_id, answered.pk)
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'provider_failed')
+        self.assertEqual(detail['state_run'], str(failed.pk))
+        self.assertIn(self.CARD, page(detail)['codes'])
+
+    def test_control_no_run_is_named_outside_provider_failed(self):
+        self.use(FakeProvider(selections=[VISIT]))
+        encounter_id = self.create(self.UNDATED, service_date='2026-10-20')
+        drain()
+        detail = self.detail(encounter_id)
+        self.assertNotEqual(detail['state'], 'provider_failed')
+        self.assertIsNone(detail['state_run'])
+
+    def test_control_a_run_is_named_only_beside_the_state_served(self):
+        """The API serves the stored state; while it is not provider_failed (it lags the derivation), no run is named
+        for a state the page does not show."""
+        self.use(FailingProvider(selections=[VISIT]))
+        encounter_id = self.create(self.UNDATED, service_date='2026-10-20')
+        drain()
+        (failed,) = self.runs(encounter_id)
+        self.assertEqual(self.detail(encounter_id)['state_run'], str(failed.pk))
+        models.Encounter.objects.filter(pk=encounter_id).update(state='processing')
+        detail = self.detail(encounter_id)
+        self.assertEqual((detail['state'], detail['state_run']), ('processing', None))
