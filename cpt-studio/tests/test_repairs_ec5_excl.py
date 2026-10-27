@@ -205,3 +205,55 @@ class DateOwnershipTests(SimpleTestCase):
         text = COLONOSCOPY.format(x='A 6 mm sigmoid polyp was removed with a cold snare on 09/03/2026.')
         self.assertEqual(proposal(assessed(text, [('45385', 'A 6 mm sigmoid polyp was removed with a cold snare')]),
                                   '45385').bucket, 'excluded')
+
+
+class AttributiveTimeWordTests(SimpleTestCase):
+    """negtime-5: a history or plan word inside a noun phrase that names a site, a lesion or a finding ("the prior
+    polypectomy site", "the previous EMR scar", "the previously tattooed polyp", "old blood", "the next polyp") is the
+    time of what that phrase names, never of an act outside it: the act's time is left in doubt, so its code is held
+    with a question, never excluded. A time word on an occasion ("at the prior colonoscopy") still dates the act."""
+
+    def test_a_time_word_on_another_noun_holds_the_act_never_excludes_it(self):
+        for template, line, kind, code in (
+                (COLONOSCOPY, 'Biopsies were obtained from the prior polypectomy site in the ascending colon.', 'biopsy',
+                 '45380'),
+                (COLONOSCOPY, 'The previous EMR scar in the ascending colon was biopsied with cold forceps.', 'biopsy',
+                 '45380'),
+                (COLONOSCOPY, 'The previously tattooed polyp in the ascending colon was removed with a hot snare.',
+                 'snare', '45385'),
+                (EGD, 'The prior biopsy site in the antrum was oozing and hemostasis was achieved with one hemoclip.',
+                 'bleeding_control', '43255'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare at the prior polypectomy site.',
+                 'snare', '45385'),
+                (EGD, 'An ulcer with old blood in its base was treated with two hemoclips.', 'clip', '43255'),
+                (COLONOSCOPY, 'The next polyp, a 5 mm sessile polyp in the transverse colon, was removed with a cold '
+                              'snare.', 'snare', '45385')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['uncertain'])
+                held = proposal(assessed(text, [(code, line)]), code)
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_controls_a_time_word_on_its_own_noun_or_an_occasion_still_dates(self):
+        for template, line, kind, status in (
+                # the phrase's own act keeps the time word
+                (COLONOSCOPY, 'The previous EMR scar in the ascending colon was biopsied with cold forceps.', 'emr',
+                 'historical'),
+                (COLONOSCOPY, 'The previously tattooed polyp in the ascending colon was removed with a hot snare.',
+                 'tattoo', 'historical'),
+                (EGD, 'The prior biopsy site in the antrum was oozing and hemostasis was achieved with one hemoclip.',
+                 'biopsy', 'historical'),
+                # an occasion, an adverb on the act's own predicate, or no phrase at all
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare at the prior colonoscopy.', 'snare',
+                 'historical'),
+                (EGD, 'Biopsies were taken at the previous EGD.', 'biopsy', 'historical'),
+                (COLONOSCOPY, 'A polyp was previously removed from the sigmoid colon with a cold snare.', 'snare',
+                 'historical'),
+                (COLONOSCOPY, 'Prior polyps were removed with a cold snare.', 'snare', 'historical')):
+            with self.subTest(line=line, kind=kind):
+                self.assertEqual(statuses(template.format(x=line), kind), [status])
+        for template, line, code in (
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare at the prior colonoscopy.', '45385'),
+                (EGD, 'Biopsies were taken at the previous EGD.', '43239')):
+            with self.subTest(line=line):
+                self.assertEqual(proposal(assessed(template.format(x=line), [(code, line)]), code).bucket, 'excluded')

@@ -1344,6 +1344,24 @@ def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
     return not (own and consent_said)
 
 
+# A history or plan word inside a noun phrase that names a site, a lesion or a finding - "the prior polypectomy site",
+# "the previous EMR scar", "the previously tattooed polyp", "old blood", "the next polyp" - is the time of what that
+# phrase names ("previous EMR", "previously tattooed"), never of an act outside it, whose time it leaves in doubt
+# (refutation r1, negtime-5: "Biopsies were obtained from the prior polypectomy site" had excluded 45380 as
+# historical). A time word on an occasion ("at the prior colonoscopy", "at the previous EGD") still dates the act.
+ATTRIBUTIVE_TIME = _rx(r'\b(?:the|a|an|this|that|its|their|his|her|with|from|of|on|at|in|into|near|beside|around)\s+'
+                       r'(?P<w>prior|previous(?:ly)?|old|earlier|remote|former|next)\s+(?:[\w-]+\s+){0,2}?'
+                       r'(?:sites?|scars?|beds?|base|margins?|areas?|anastomos[ie]s|tattoos?|clips?|blood|clots?|'
+                       + LESION_NOUN + r')\b')
+
+
+def _elsewhere_time_words(text: str, cs: int, ce: int, pos: int) -> dict[int, str]:
+    """The time words of the clause [cs, ce) that describe another noun than the mention at ``pos`` (ATTRIBUTIVE_TIME,
+    the mention outside the phrase): their positions, with the phrase each describes."""
+    return {m.start('w'): ' '.join(text[m.start('w'):m.end()].split()) for m in ATTRIBUTIVE_TIME.finditer(text, cs, ce)
+            if not m.start('w') <= pos < m.end()}
+
+
 def _date_owner(text: str, d, cs: int, pos: int) -> str:
     """Whose time the date ``d`` in the clause starting at ``cs`` is, for the mention at ``pos``: '' the clause's own
     (it dates the act), 'none' no act's (a birth date, a clock time), 'other' another clause's or event's (BIRTH_LABEL,
@@ -1486,13 +1504,20 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             return Reading('historical', (f'historical: {text[d.start:d.end]} is before the service date',))
         if rel > 0:
             return Reading('planned', (f'planned: {text[d.start:d.end]} is after the service date',))
-    hist = next((h for h in HISTORY_WORDS.finditer(whole) if not REVIEW_OF_RECORDS.search(
-        whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
+    # A history or plan word dates the act unless it describes another noun of the clause (ATTRIBUTIVE_TIME): that one
+    # leaves the act's time in doubt (refutation r1, negtime-5).
+    elsewhere = _elsewhere_time_words(text, cs, ce, pos)
+    hist = next((h for h in HISTORY_WORDS.finditer(whole) if cs + h.start() not in elsewhere
+                 and not REVIEW_OF_RECORDS.search(whole, max(0, h.start() - 30), min(len(whole), h.end() + 40))), None)
     if hist and not TODAY_WORDS.search(whole):
         return Reading('historical', ('historical: ' + hist.group(0).lower(),))
-    plan = PLAN_WORDS.search(whole)
+    plan = next((m for m in PLAN_WORDS.finditer(whole) if cs + m.start() not in elsewhere), None)
     if plan and not (TODAY_WORDS.search(whole) and ACT_VERB.search(whole)):
         return Reading('planned', ('planned: ' + plan.group(0).lower(),))
+    skipped = next((cs + m.start() for words in (HISTORY_WORDS, PLAN_WORDS) for m in words.finditer(whole)
+                    if cs + m.start() in elsewhere), None) if elsewhere else None
+    if skipped is not None and not other_time:
+        other_time = f'it describes \u201c{elsewhere[skipped]}\u201d, not this act'
     # A history or plan section dates what it names before a hedge in the clause is read: a hedged item of a plan is
     # still planned ("1. Dysphagia, likely peptic stricture - upper endoscopy with dilation at the hospital"), never a
     # doubt about a service done today.
