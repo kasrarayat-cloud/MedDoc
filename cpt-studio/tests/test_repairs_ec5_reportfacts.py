@@ -473,3 +473,126 @@ class BillingContextIsWordedByItsOriginTests(SimpleTestCase):
                          'facility, entered by a workspace member as encounter metadata')
         self.assertEqual(self.considerations(MANOMETRY), 'professional')
         self.assertEqual(self.considerations(alone), 'not documented')
+
+
+# --- the skeptic round on these repairs (ec5): what the repairs above left out -----------------------------------------
+
+GASTROSCOPY = ('Upper endoscopy report\nThe gastroscope was advanced to the second portion of the duodenum. Cold forceps '
+               'biopsies were taken from the gastric antrum.\n')
+RECTAL_EUS = ('Rectal endoscopic ultrasound report\nThe radial echoendoscope was advanced into the rectum. A 3 cm rectal '
+              'mass was staged as uT2N0. A 9 mm perirectal lymph node was sampled by fine-needle aspiration with two '
+              'passes. Cold forceps biopsies were taken from the rectal mass.\n')
+UPPER_EUS = ('Endoscopic ultrasound report\nThe linear echoendoscope was advanced to the second portion of the duodenum. '
+             'A 2 cm hypoechoic mass in the pancreatic head was sampled by fine-needle aspiration with three passes. Cold '
+             'forceps biopsies were taken from the duodenal bulb.\n')
+SESSION = SYNTHETIC + 'Date of service: 2026-10-14\nPlace of service: Ambulatory surgery center\n'
+ANTRAL = 'Cold forceps biopsies were taken from the gastric antrum.'
+NODE_FNA = 'was sampled by fine-needle aspiration with two passes'
+NOT_UPPER = ('the document does not place it at an upper GI site of an upper GI examination, so no upper GI endoscopy of '
+             'this encounter reads it, and no code profile of this service accounts for it')
+
+
+@override_settings(**LIVE)
+class LowerEusBiopsyIsNeverReadUnderTheUpperFamilyTests(ApiCase, TestCase):
+    """skeptic of the report-0 repair (9d9fb8e17): an upper endoscopy report (antral forceps biopsy, 43239 selected) beside
+    a rectal EUS (perirectal node FNA, 45392 selected, and cold forceps biopsies of the rectal mass). The rectal biopsy
+    was filed as "not separately reported - A forceps biopsy at the same upper examination is read under the upper GI
+    family ..." because the rule asked only whether SOME upper GI service documented a biopsy: UNRESOLVED said none and
+    coding reached "reviewed" - false of the persisted inventory (a biopsy at the rectum, during a lower EUS; no upper
+    GI service reads it). The rule holds only for an act at an upper GI site of an upper examination, beside an upper
+    endoscopy that documents a biopsy of its own; any other is listed for the reviewer."""
+
+    def test_a_forceps_biopsy_at_a_rectal_eus_is_listed_never_read_under_the_upper_family(self):
+        encounter_id = self.run_note(SESSION + GASTROSCOPY + RECTAL_EUS, ('43239', ANTRAL), ('45392', NODE_FNA))
+        assessment = self.detail(encounter_id)['assessment']
+        (eus,) = [s for s in assessment['services']['services'] if s['family'] == 'gi.eus']
+        self.assertIn((['rectum'], 'forceps', 'performed'), [(a['anatomy'], a['technique'], a['status'])
+                                                              for a in eus['acts'] if a['kind'] == 'biopsy'])
+        done = assessment['completeness']
+        self.assertEqual(done['bundled'], [])
+        self.assertEqual([(u['service'], u['act'], u['reason'], u['label']) for u in done['unresolved_items']],
+                         [(eus['id'], 'biopsy', 'unsupported',
+                           f'forceps biopsy at the rectum in the endoscopic ultrasound: {NOT_UPPER}')])
+        self.assertEqual(done['state'], 'incomplete')
+        (row,) = [c for c in assessment['encounter_checks'] if c['id'] == 'services.unresolved']
+        self.assertEqual(row['status'], 'warn')
+        for code in ('43239', '45392'):
+            self.assertEqual(self.proposal(encounter_id, code)['status'], 'ready', code)  # unchanged
+            self.assertEqual(self.decide(encounter_id, code, 'approve').status_code, 201)
+        reviewed = self.report_text(encounter_id, 'reviewed')
+        self.assertNotIn('read under the upper GI family', section(reviewed, 'DOCUMENTED SERVICES'))
+        self.assertIn(f'  - forceps biopsy at the rectum in the endoscopic ultrasound: {NOT_UPPER} [unsupported]',
+                      section(reviewed, UNRESOLVED_TITLE))
+        coding = section(reviewed, 'CODING COMPLETENESS')
+        self.assertIn('State: incomplete', coding)
+        self.assertNotIn('State: reviewed', coding)
+        self.assertNotIn('read under the upper GI family', browser('app.documentedServices(data)',
+                                                                   self.detail(encounter_id)))
+
+
+class ReadUnderOnlyWhereTheOtherFamilyCouldReadTests(SimpleTestCase):
+    """The same rule on the reading and on hand-built inventories: the act's own site (its anatomy, its lesion) and the
+    sites its examination documents (the service's passages, extent, lesions and acts) decide whether the upper GI
+    family could read it; with no site at all it is not placed there (fail closed: listed, never bundled)."""
+
+    def test_control_a_biopsy_at_an_upper_site_of_an_upper_eus_is_still_read_under_the_egd(self):
+        text = SESSION + GASTROSCOPY + UPPER_EUS
+        result = run(text, [sel('43239', span(text, ANTRAL)),
+                            sel('43242', span(text, 'was sampled by fine-needle aspiration with three passes'))])
+        done = result.completeness
+        self.assertEqual([(b['act'], b['label']) for b in done['bundled']],
+                         [('biopsy', 'forceps biopsy at the duodenal bulb')])
+        self.assertIn(UPPER_GI, done['bundled'][0]['why'])
+        self.assertEqual(done['unresolved_items'], [])
+        # the rectal EUS alone, and beside the upper endoscopy: listed, never bundled
+        for text in (SESSION + RECTAL_EUS, SESSION + GASTROSCOPY + RECTAL_EUS):
+            with self.subTest(text=text[len(SESSION):len(SESSION) + 30]):
+                codes = [sel('45392', span(text, NODE_FNA))] + ([sel('43239', span(text, ANTRAL))] if ANTRAL in text
+                                                                 else [])
+                done = run(text, codes).completeness
+                self.assertEqual(done['bundled'], [])
+                self.assertEqual([(u['act'], u['reason'], u['label']) for u in done['unresolved_items']],
+                                 [('biopsy', 'unsupported',
+                                   f'forceps biopsy at the rectum in the endoscopic ultrasound: {NOT_UPPER}')])
+                self.assertEqual(done['state'], 'incomplete')
+
+    def test_the_act_and_its_examination_must_both_be_upper(self):
+        from studio.gi.services import Act, DocumentedService, Lesion, ServiceInventory
+        from studio.types import Span
+        from studio.validation import reconcile
+
+        def outcome(eus):
+            egd = DocumentedService('S2', 'gi.egd', 'egd', 'performed', included_in='S1', acts=(
+                Act('S2-A1', 'S2', 'biopsy', 'performed', 'physician', ('gastric antrum',), technique='forceps'),))
+            unresolved, bundled, _ = reconcile.reconcile(ServiceInventory('test', services=(eus, egd)),
+                                                         [('43239', 'gi.egd'), ('43242', 'gi.eus')])
+            return ([(b.service, b.act) for b in bundled],
+                    [(u.service, u.act, u.reason, u.label.split(': ', 1)[1]) for u in unresolved])
+
+        def eus(*acts, evidence=(), lesions=()):
+            return DocumentedService('S1', 'gi.eus', 'eus', 'performed', acts=acts, lesions=lesions,
+                                     evidence=tuple(Span(0, len(t), t) for t in evidence))
+
+        def biopsy(*anatomy, lesion=''):
+            return Act('S1-A1', 'S1', 'biopsy', 'performed', 'physician', anatomy, technique='forceps', lesion=lesion)
+
+        listed = ([], [('S1', 'biopsy', 'unsupported', NOT_UPPER)])
+        held = ([('S1', 'biopsy')], [])
+        upper = ('The echoendoscope was advanced to the second portion of the duodenum.',)
+        rectal = ('The radial echoendoscope was advanced into the rectum.',)
+        cases = {
+            'an upper site, an upper examination': (eus(biopsy('gastric antrum'), evidence=upper), held),
+            'a lower site': (eus(biopsy('rectum'), evidence=upper), listed),
+            'an upper site and a lower one': (eus(biopsy('gastric antrum', 'rectum'), evidence=upper), listed),
+            'an upper site, a lower examination': (eus(biopsy('gastric antrum'), evidence=rectal), listed),
+            'an upper site, an examination with a lower act': (eus(biopsy('gastric antrum'), Act(
+                'S1-A2', 'S1', 'snare', 'performed', 'physician', ('sigmoid colon',)), evidence=upper), listed),
+            'no site, an upper examination': (eus(biopsy(), evidence=upper), held),
+            'no site anywhere': (eus(biopsy()), listed),
+            'a site off the upper GI lumen': (eus(biopsy('pancreatic head'), evidence=upper), listed),
+            'a lesion at a lower site': (eus(biopsy(lesion='S1-L1'), evidence=upper, lesions=(
+                Lesion('S1-L1', 'S1', 'mass', anatomy='rectum', region='rectum'),)), listed),
+        }
+        for name, (service, expected) in cases.items():
+            with self.subTest(name):
+                self.assertEqual(outcome(service), expected)

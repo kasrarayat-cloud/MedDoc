@@ -19,8 +19,8 @@ from typing import Optional, Sequence
 
 from studio.gi import catalogue
 from studio.gi.context import is_member_conflict
-from studio.gi.services import (ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService,
-                                 ServiceInventory)
+from studio.gi.services import (ANATOMY, LOWER, ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, UPPER, Act,
+                                 Conflict, DocumentedService, ServiceInventory)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
 from studio.validation import checks
 
@@ -318,18 +318,50 @@ def _needle_sampling(service: DocumentedService, act: Act) -> Optional[Act]:
     return replace(act, kind='fna') if 'needle' in act.technique or sampled else None
 
 
+# The reader's anatomy vocabulary (canonical name -> region) and the regions of the GI lumen, where an endoscope's
+# forceps act: what a READ_UNDER rule reads an act's site and its examination's sites with.
+REGION_OF = {name: region for name, region, _ in ANATOMY}
+LUMEN = UPPER | LOWER | {'small_bowel'}
+
+
+def _act_sites(service: DocumentedService, act: Act) -> set:
+    """The regions an act names: its anatomy's, and the lesion's it is directed at."""
+    lesion = next((les for les in service.lesions if les.id == act.lesion), None) if act.lesion else None
+    sites = {REGION_OF.get(name, '') for name in act.anatomy} | {act.region}
+    if lesion is not None:
+        sites |= {lesion.region, REGION_OF.get(lesion.anatomy, '')}
+    return sites - {''}
+
+
+def _exam_sites(service: DocumentedService) -> set:
+    """The regions a service's own documentation names: its passages, its extent, its lesions and its acts done."""
+    texts = [span.text for span in (*service.evidence, *service.completion_evidence)] + [service.extent]
+    sites = {region for text in texts if text for _, region, pattern in ANATOMY if pattern.search(text)}
+    sites |= {site for lesion in service.lesions for site in (lesion.region, REGION_OF.get(lesion.anatomy, ''))}
+    sites |= {site for act in service.acts if act.status == 'performed' for site in _act_sites(service, act)}
+    return sites - {''}
+
+
 def _read_under(inventory: ServiceInventory, service: DocumentedService, act: Act) -> Optional[str]:
-    """For an act a profile rule reads under ANOTHER family (catalogue.READ_UNDER): '' when a service of that family
-    done at this encounter documents such an act (the rule holds), else that family's label (nothing reads it). None
-    for any other act."""
+    """For an act a profile rule reads under ANOTHER family (catalogue.READ_UNDER): '' when the rule holds, else why
+    nothing of this encounter reads it. None for any other act. The other family reads the act only where the document
+    places it at one of that family's sites (its anatomy and its lesion's; none named is not a place elsewhere) during
+    an examination of that family's tract - every GI-lumen site the service documents is one of them, and it documents
+    one (the ec5 skeptic: a rectal EUS's forceps biopsy of the rectal mass was "read under the upper GI family" beside an
+    upper endoscopy's own gastric biopsy) - and only when a service of that family done at this encounter documents
+    such an act (refutation r1, report-0)."""
     under = catalogue.READ_UNDER.get((service.family, act.kind))
     if under is None:
         return None
-    family, label = under
+    family, label, tract, regions = under
+    examined = _exam_sites(service) & LUMEN
+    if not (_act_sites(service, act) <= set(regions) and examined and examined <= set(regions)):
+        return (f'the document does not place it at an {tract} site of an {tract} examination, so no {label} of this '
+                'encounter reads it')
     reads = any(other.id != service.id and other.family == family and other.status in ('performed', 'incomplete')
                 and any(a.kind == act.kind and a.status == 'performed' for a in other.acts)
                 for other in inventory.services)
-    return '' if reads else label
+    return '' if reads else f'no {label} documented at this encounter reads it'
 
 
 def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], procedure_day: bool = False
@@ -384,13 +416,14 @@ def reconcile(inventory: ServiceInventory, selected: Sequence[tuple[str, str]], 
             why = _bundled(service, act)
             missing = _read_under(inventory, service, act) if why and why == dict(entry.bundled).get(act.kind) else None
             if missing:
-                # refutation r1, report-0: a rule that reads the act under another family holds only when a service
-                # of that family documents it; otherwise no code of this encounter can account for it - listed for
+                # refutation r1, report-0 (and the ec5 skeptic): a rule that reads the act under another family holds
+                # only for an act that family could read (its site, its examination's tract) when a service of that
+                # family documents such an act; otherwise no code of this encounter can account for it - listed for
                 # the reviewer (never bundled, never sent for a second review: these codes cannot account for it)
                 unresolved.append(Unresolved(service.id, service.family, act.kind,
-                                             f'{describe_act(service, act)} in the {service_label(service)}: no '
-                                             f'{missing} documented at this encounter reads it, and no code profile '
-                                             'of this service accounts for it', act.evidence[:2], 'unsupported'))
+                                             f'{describe_act(service, act)} in the {service_label(service)}: '
+                                             f'{missing}, and no code profile of this service accounts for it',
+                                             act.evidence[:2], 'unsupported'))
                 continue
             if why:
                 bundled.append(Bundled(service.id, act.kind, describe_act(service, act), why))

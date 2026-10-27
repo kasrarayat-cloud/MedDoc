@@ -170,7 +170,7 @@ The code lists are internal reconciliation profiles (which documented act a code
 **Clarification questions (asked together, when not documented):**
 - `target`: What was examined, and what (if anything) was sampled with the needle?
 **Not separately reported (internal profile rules):**
-- `biopsy`: A forceps biopsy at the same upper examination is read under the upper GI family when the document records that upper endoscopy with a biopsy of its own; with no such upper endoscopy documented it is listed for the reviewer, never bundled.
+- `biopsy`: A forceps biopsy at an upper GI site of the same upper examination is read under the upper GI family when the document records that upper endoscopy with a biopsy of its own; one the document does not place at an upper GI site of an upper examination (a rectal EUS), or with no such upper endoscopy documented, is listed for the reviewer, never bundled.
 **Unsupported within the family:**
 - `drainage`: EUS-guided drainage other than of a pseudocyst (biliary, gallbladder, gastroenterostomy) has no profiled code.
 
