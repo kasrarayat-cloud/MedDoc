@@ -4,7 +4,9 @@ context and new/established patient status. See ARCHITECTURE.md section 5.2.
 Only explicit statements count. Different documented values are a conflict
 (value None, every statement kept as evidence), never a silent choice. A date
 or setting written in a plan or history section, or qualified as previous /
-next / scheduled, describes another encounter and is not read.
+next / scheduled, describes another encounter and is not read. Dated text the
+reader does not read as the date, or cannot place, never supplies the date: it
+is kept as evidence a member value must agree with.
 """
 from __future__ import annotations
 
@@ -48,21 +50,56 @@ MONTH_YEAR = cues.rx(r'(?<![\w/-])(?:(?P<mm>' + _MONTH + r')\.?,?[ \t]+(?P<my>(?
 YEAR = cues.rx(r'(?:\b(?P<lead>in|since|from|during|until|by|circa)[ \t]+|(?P<bracket>\()|(?<![\w/.:-]))(?P<year>(?:19[5-9]|20\d)\d)\b'
                r'(?![/.:-]?\d)(?![ \t]*(?:mg|mcg|g|ml|cc|units?|iu|kcal|mm|cm|kg|lbs?|%|x|hours?|hrs?)\b)')
 
-SERVICE_DATE = cues.rx(r'(?<![\w/-])(?:date[ \t]+of[ \t]+service|DOS|service[ \t]+date|procedure[ \t]+date'
-                       r'|date[ \t]+of[ \t]+procedure|visit[ \t]+date|date[ \t]+of[ \t]+visit|encounter[ \t]+date'
-                       r'|date[ \t]+of[ \t]+encounter)\b[ \t]*(?:\([ \t]*DOS[ \t]*\)[ \t]*)?[:#=\u2013|-]?[ \t]*'
-                       r'(?:' + _FULL_DATE + r')(?![\w/-])')
+_DATE_LABEL = (r'(?:date[ \t]+of[ \t]+service|DOS|service[ \t]+date|procedure[ \t]+date|date[ \t]+of[ \t]+procedure'
+               r'|visit[ \t]+date|date[ \t]+of[ \t]+visit|encounter[ \t]+date|date[ \t]+of[ \t]+encounter)')
+_DATE_LABEL_SEP = r'\b[ \t]*(?:\([ \t]*DOS[ \t]*\)[ \t]*)?[:#=\u2013|-]?[ \t]*'
+SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
+                       + r'(?P<date>' + _FULL_DATE + r')(?![\w/-])')
+# Date-shaped text this reader does not read as a date (refutation r1, context-3): a weekday before a date, a
+# two-digit year, dashes, dots or year-first slashes, "20th of October". Beside a date-of-service label, or as a title's
+# date, it is documented date text a member value must agree with - never a gap a member value silently fills.
+_WEEKDAY = r'(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tues?|wed|thu(?:rs?)?|fri|sat|sun)\.?'
+_FULL_DATE_SHAPE = re.sub(r'\(\?P<\w+>', '(?:', _FULL_DATE)
+DATE_SHAPE = (r'(?:' + _WEEKDAY + r',?[ \t]+(?:' + _FULL_DATE_SHAPE + r')'
+              r'|\d{1,4}[-/.]\d{1,2}[-/.]\d{2,4}'
+              r'|\d{1,2}(?:st|nd|rd|th)?[ \t]+of[ \t]+' + _MONTH + r'\.?,?[ \t]+\d{2,4}'
+              r'|' + _MONTH + r'\.?[ \t]+\d{1,2}(?:st|nd|rd|th)?,?[ \t]+\d{2}'
+              r'|' + _FULL_DATE_SHAPE + r')(?![\w/])')
+# A date-of-service label whose value is date-shaped text SERVICE_DATE does not read: on the label's own line, or on
+# the line under a label that ends its line ("Date of service:" above "10/20/2026", as forms are extracted).
+UNREAD_SERVICE_DATE = cues.rx(r'(?<![\w/-])(?P<label>' + _DATE_LABEL + r')' + _DATE_LABEL_SEP
+                              + r'(?:(?:[ \t]*\n){1,2}[ \t]*)?(?P<date>' + DATE_SHAPE + r')')
 # A note's own dated title line ("GI visit - 10/20/2026", "Colonoscopy report: 14 Oct 2026") or its bare header
 # "Date:" field: read only near the top
-# of the document and only when no labelled service date exists, never in a plan or history section.
-TITLE_DATE = cues.rx(r'[ \t]*(?:[A-Za-z][A-Za-z /&,()\-]{0,60}?\b(?:visit|encounter|consultation|consult|note|report)'
-                     r'[ \t]*(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?|date[ \t]*[:|\u2013-])[ \t]*(?:' + _FULL_DATE + r')[ \t]*$')
+# of the document and only when no labelled service date exists, never in a plan or history section. A title may
+# carry a field label of its own ("Re: GI consultation of 10/20/2026"); such a line is a candidate, never the
+# document's heading (refutation r1, negtime-14: a letter's "Date:" beside the consultation it names).
+TITLE_DATE = cues.rx(r'[ \t]*(?P<field>[A-Za-z]{2,12}[ \t]*:[ \t]*(?=[A-Za-z]))?'
+                     r'(?:(?P<words>[A-Za-z][A-Za-z /&,()\-]{0,60}?)\b(?:visit|encounter|consultation|consult|note|report)'
+                     r'[ \t]*(?:[-\u2013\u2014:|,]|\bon\b|\bof\b)?|date[ \t]*[:|\u2013-])[ \t]*'
+                     r'(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*$')
+# A title whose date stands alone on the next line ("Colonoscopy Report" above "10/20/2026").
+TITLE_HEAD = cues.rx(r'[ \t]*(?P<words>[A-Za-z][A-Za-z /&,()\-]{0,60}?)\b(?:visit|encounter|consultation|consult|note'
+                     r'|report)[ \t]*[-\u2013\u2014:|,]?[ \t]*$')
+DATE_LINE = cues.rx(r'[ \t]*' + DATE_SHAPE + r'[ \t]*$')
 TITLE_LINES = 12  # non-empty lines from the top in which a dated title is read
-_HISTORY_TITLE = tuple((name, cues.rx(r'\b(?:' + words + r')\b')) for name, words in (
-    ('history of', r'history\s+of|hx\s+of|h/o|s/p|status\s+post'),
-    ('prior', r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index|outside')))
-DATE_QUALIFIER = cues.rx(r'\b(?:previous|prior|last|next|planned|scheduled|future|follow-?up|repeat|anticipated'
-                         r'|tentative|proposed|requested|rescheduled|upcoming|due)\b')
+_HISTORY_WORDS = (('history of', r'history\s+of|hx\s+of|h/o|s/p|status\s+post'),
+                  ('prior', r'prior|previous|previously|last|most\s+recent|recent|recently|remote|earlier|past|index'
+                            r'|outside'))
+_HISTORY_TITLE = tuple((name, cues.rx(r'\b(?:' + words + r')\b')) for name, words in _HISTORY_WORDS)
+_DATE_QUALIFIER_WORDS = (r'previous|prior|last|next|planned|scheduled|future|follow-?up|repeat|anticipated'
+                         r'|tentative|proposed|requested|rescheduled|upcoming|due')
+DATE_QUALIFIER = cues.rx(r'\b(?:' + _DATE_QUALIFIER_WORDS + r')\b')
+# The words that make a date another occurrence's: the date qualifiers and the history words the title reader already
+# reads ("Outside", "Index"), one vocabulary for labels and titles (refutation r1, negtime-8).
+_OTHER_OCCURRENCE = cues.rx(r'\b(?:' + _DATE_QUALIFIER_WORDS + '|' + '|'.join(w for _, w in _HISTORY_WORDS) + r')\b')
+# The documents other disciplines write - the services reader's roles (pathology, radiology and its imaging,
+# anesthesia, nursing). The rule is structural - a dated title names the document it heads - and this is only the
+# vocabulary for "another discipline's document" (refutation r1, negtime-14: a pathology report's own date was read
+# as the visit's and sent). A title naming a GI service is checked first ("Endoscopic ultrasound report").
+_OTHER_DOCUMENT = cues.rx(r'\b(?:pathology|histopathology|histology|cytology|radiology|imaging|CT|MRI|x-?ray'
+                          r'|ultrasound|sonography|anesthesia|anaesthesia|nursing|nurse)\b')
+_NEUTRAL_WORDS = frozenset(('the', 'this', 'a', 'an'))
 
 POS = cues.rx(r'(?<![\w/-])(?:place[ \t]+of[ \t]+service|POS)\b[ \t]*(?:\([ \t]*POS[ \t]*\)[ \t]*)?(?:code[ \t]*)?'
               r'[:#=\u2013-]?[ \t]*(?P<code>\d{2})(?![\w/-])')
@@ -235,46 +272,198 @@ def _fact(name: str, found: list[tuple[str, Span]]) -> Fact:
     return Fact(name, None, 'conflict', evidence, DOCUMENT_CONFLICT_NOTE + ', '.join(values) + '.')
 
 
-def _service_dates(text: str, lay: Layout) -> tuple[list[tuple[str, Span]], list[Span]]:
-    """(valid labelled service dates, labelled dates that are not calendar dates)."""
-    found, invalid = [], []
+@dataclass
+class _ServiceDates:
+    """What the document says about its date of service, before it becomes one fact (_service_date_fact)."""
+    own: list  # (iso value, span): the note's own dates - a plain labelled date, the note's own dated title
+    unplaced: list  # (iso value, span): dated text this service cannot place - never the date by itself
+    invalid: list  # spans: labelled dates that are no calendar date
+    unread: list  # spans: labelled dates in a form this reader does not read
+
+
+_LABEL_WORDS = re.compile(r"(?<![A-Za-z'’-])((?:[A-Za-z][A-Za-z'’-]* ){1,4})$")
+_FIELD_OR_SENTENCE = re.compile(r'[:=]|[.;!?](?:\s|$)')
+_FIELD_BREAK = re.compile(r'\t| {2,}')
+_HEADS_FIELD = re.compile(r"[A-Za-z0-9 '’/-]{0,40}?[ \t]*[:=]")
+_LEFTOVER_WORD = re.compile(r'[A-Za-z]{2,}')
+_THIS_SERVICE = tuple(p for _, p in cues.SERVICE_PATTERNS) + (cues.EM_VISIT, cues.TODAY)
+
+
+def _label_words(text: str, label_start: int) -> tuple[str, int]:
+    """The label's own words before it ("Outside" in "Outside procedure date") and where they start: words joined by
+    single spaces only, so a field break (two spaces, a tab), punctuation, a digit or the line start ends them."""
+    lo = max(text.rfind('\n', max(0, label_start - 60), label_start) + 1, label_start - 60, 0)
+    m = _LABEL_WORDS.search(text, lo, label_start)
+    if m is None:
+        return '', label_start
+    return m.group(1).strip(), m.start()
+
+
+def _names_this_service(words: str, phrase: str) -> bool:
+    """Whether every word a label carries is part of a name of a service this release codes or of today ("Colonoscopy
+    procedure date", "Office visit date", "Today's visit date"): no word is left that could name another occurrence.
+    ``phrase`` is ``words`` followed by the label."""
+    covered = [(m.start(), m.end()) for pattern in _THIS_SERVICE for m in pattern.finditer(phrase)]
+    for w in _LEFTOVER_WORD.finditer(phrase, 0, len(words)):
+        if w.group().lower() not in _NEUTRAL_WORDS and not any(s <= w.start() and w.end() <= e for s, e in covered):
+            return False
+    return True
+
+
+@functools.lru_cache(maxsize=16)
+def _date_starts(text: str) -> tuple[int, ...]:
+    """find_dates' starts, once per text: every labelled date bisects them (never a list rebuilt per date)."""
+    return tuple(d.start for d in find_dates(text))
+
+
+def _qualified_on_line(text: str, label_start: int, date_start: int, date_end: int) -> bool:
+    """Whether a qualifier on the labelled date's line belongs to that date (refutation r1, negtime-15: one that
+    belongs to another field or another date discarded the real date, and a letter or title date was then sent).
+
+    Before the label, a date qualifier or history word qualifies it ("Prior DOS", "Outside colonoscopy | Procedure
+    date | ...") unless another field's label (":", "="), a sentence end or another date lies between them, or it is
+    another labelled field's value set off by a field break ("Visit type: Follow-up    Date of service: ...").
+    After the date, a date qualifier qualifies it ("... (scheduled)") unless another field, sentence or date lies
+    between them, it heads a labelled field of its own ("Next colonoscopy: 10/2029"), or a date of its own is nearer to
+    it than this one ("(recall due 10/2029)")."""
+    # The line within 80 characters either side; the scans stop there, so a long line costs each date only its window.
+    lo = max(text.rfind('\n', max(0, label_start - 80), label_start) + 1, label_start - 80, 0)
+    hi = text.find('\n', date_end, date_end + 80)
+    hi = min(len(text), date_end + 80) if hi < 0 else hi
+    dates, starts = find_dates(text), _date_starts(text)
+
+    def date_between(a: int, b: int) -> bool:
+        i = bisect.bisect_left(starts, a)
+        return any(not (date_start <= dates[j].start < date_end) for j in range(i, bisect.bisect_left(starts, b)))
+
+    for q in _OTHER_OCCURRENCE.finditer(text, lo, label_start):
+        between = text[q.end():label_start]
+        if _FIELD_OR_SENTENCE.search(between) or date_between(q.end(), label_start):
+            continue
+        if _FIELD_BREAK.search(between) and ':' in text[lo:q.start()]:
+            continue
+        return True
+    for q in DATE_QUALIFIER.finditer(text, date_end, hi):
+        between = text[date_end:q.start()]
+        if _FIELD_OR_SENTENCE.search(between) or date_between(date_end, q.start()):
+            continue
+        i = bisect.bisect_left(starts, q.end())
+        own = dates[i] if i < len(dates) and dates[i].start < hi else None
+        if _HEADS_FIELD.match(text, q.end(), own.start if own else hi):
+            continue
+        if own is not None and own.start - q.end() < q.start() - date_end:
+            continue
+        return True
+    return False
+
+
+def _labelled_kind(text: str, label_start: int, label_end: int, date_start: int, date_end: int) -> tuple[str, int]:
+    """('own' | 'another' | 'unplaced', where the label's phrase starts). A label carrying a word of another occurrence
+    ("Outside procedure date", "Index procedure date") or qualified on its line is another occurrence's date and is not
+    read. A label carrying any other word this service cannot place ("Initial visit date", "Referring visit date") is
+    not the plain date-of-service label: its date is never taken by itself (refutation r1, negtime-8)."""
+    words, start = _label_words(text, label_start)
+    if words and _OTHER_OCCURRENCE.search(words):
+        return 'another', start
+    if _qualified_on_line(text, label_start, date_start, date_end):
+        return 'another', start
+    if words and not _names_this_service(words, words + ' ' + text[label_start:label_end]):
+        return 'unplaced', start
+    return 'own', label_start
+
+
+def _service_dates(text: str, lay: Layout) -> _ServiceDates:
+    """The labelled dates of service (and, when there are none, the dated titles near the top), sorted by what they
+    can say about this note's date."""
+    out = _ServiceDates([], [], [], [])
+    labelled = set()
     for m in SERVICE_DATE.finditer(text):
-        lo, hi = _near(text, m.start(), m.end())
-        qualified = DATE_QUALIFIER.search(text, lo, m.start()) or DATE_QUALIFIER.search(text, m.end(), hi)
-        if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS or qualified:
+        labelled.add(m.start())
+        if lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
+            continue
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end())
+        if kind == 'another':
             continue
         value = date_from_match(m)
-        span = _span(text, m.start(), m.end())
+        span = _span(text, start, m.end())
         if value is None:
-            invalid.append(span)
+            out.invalid.append(span)
         else:
-            found.append((value.isoformat(), span))
-    if not found and not invalid:
-        # Only the FIRST dated title line near the top can be the note's own ("GI visit - 10/20/2026"). A qualified
-        # first title ("GI follow-up visit: ...", "Outside colonoscopy report: ...") gives no title date at all, so the
-        # date is asked, never taken from a later title ("Pathology report: 2026-10-14", another document's own date);
-        # a later unqualified dated title with another date makes the date a conflict with both sides kept. A later
-        # title qualified as another time ("Next visit: ...") says nothing about this note's date.
-        titles = []
-        seen = 0
-        for ls, le in ((m.start(), m.end()) for m in re.finditer(r'[^\n]+', text)):
-            if not text[ls:le].strip():
-                continue
-            seen += 1
-            if seen > TITLE_LINES:
+            (out.own if kind == 'own' else out.unplaced).append((value.isoformat(), span))
+    for m in UNREAD_SERVICE_DATE.finditer(text):
+        # refutation r1, context-3: a labelled date the reader does not read is still documented date text
+        if m.start() in labelled or lay.section_at(m.start()).kind in NOT_CURRENT_SECTIONS:
+            continue
+        kind, start = _labelled_kind(text, m.start('label'), m.end('label'), m.start('date'), m.end('date'))
+        if kind != 'another':
+            out.unread.append(_span(text, start, m.end('date')))
+    if not out.own and not out.invalid and not out.unread:
+        own, unplaced, unread = _title_dates(text, lay)
+        out.own += own
+        out.unplaced += unplaced
+        out.unread += unread
+    return out
+
+
+@dataclass(frozen=True)
+class _Title:
+    span: Span
+    value: Optional[date]  # None when the title's date is in a form this reader does not read
+    qualified: bool
+    other_document: bool
+    field: bool  # it opens with a field label of its own ("Re: ..."): a candidate, never the document's heading
+
+
+def _title_dates(text: str, lay: Layout) -> tuple[list, list, list]:
+    """(own, unplaced, unread) from the dated titles near the top. Only the FIRST dated title line can be the note's
+    heading ("GI visit - 10/20/2026"). A qualified first title ("GI follow-up visit: ...", "Outside colonoscopy report:
+    ...") or one whose date is not read gives no date, so the date is asked - and its date is kept as documented text a
+    member value must agree with (refutation r1, context-3: such a member date had replaced it silently and was sent).
+    A title naming another discipline's document ("Surgical pathology report: ...", "CT ... report: ...") is never the
+    note's heading and alone gives no date (refutation r1, negtime-14: its own date was taken and sent); beside the
+    note's own dated title it is a second candidate, a conflict with both sides kept. A later unqualified dated title
+    with another date makes the date a conflict; a later title qualified as another time ("Next visit: ...") says
+    nothing about this note's date."""
+    lines = []
+    for m in re.finditer(r'[^\n]+', text):
+        if text[m.start():m.end()].strip():
+            lines.append((m.start(), m.end()))
+            if len(lines) == TITLE_LINES:
                 break
-            m = TITLE_DATE.match(text, ls, le)
-            if m is None or lay.section_at(ls).kind in NOT_CURRENT_SECTIONS:
+    titles = []
+    for index, (ls, le) in enumerate(lines):
+        if lay.section_at(ls).kind in NOT_CURRENT_SECTIONS:
+            continue
+        m = TITLE_DATE.match(text, ls, le)
+        if m is not None:
+            value = None if m.group('unread') is not None else date_from_match(m)
+            if m.group('unread') is None and value is None:
+                continue  # no calendar date
+            end, words, field = le, m.group('words') or '', m.group('field') is not None
+        else:
+            head = TITLE_HEAD.match(text, ls, le)
+            if head is None or index + 1 == len(lines) or not DATE_LINE.match(text, *lines[index + 1]):
                 continue
-            value = date_from_match(m)
-            if value is not None:
-                titles.append((ls, le, value, _title_qualified(text, ls, le, m)))
-        if titles and not titles[0][3]:
-            for ls, le, value, qualified in titles:
-                if qualified:
-                    continue
-                found.append((value.isoformat(), _span(text, ls + len(text[ls:le]) - len(text[ls:le].lstrip()), le)))
-    return found, invalid
+            value, end, words, field = None, lines[index + 1][1], head.group('words'), False
+        start = ls + len(text[ls:le]) - len(text[ls:le].lstrip())
+        other = not any(p.search(words) for _, p in cues.SERVICE_PATTERNS) and bool(_OTHER_DOCUMENT.search(words))
+        titles.append(_Title(_span(text, start, end), value, _title_qualified(text, ls, le, m), other, field))
+    first = next((t for t in titles if not t.other_document and not t.field), None)
+    if first is None:
+        return [], [], []
+    if first.value is None:
+        return [], [], [first.span]
+    if first.qualified:
+        return [], [(first.value.isoformat(), first.span)], []
+    own, other, unread = [], [], []
+    for t in titles:
+        if t.qualified:
+            continue
+        if t.value is None:
+            unread.append(t.span)
+        else:
+            (other if t.other_document else own).append((t.value.isoformat(), t.span))
+    return own + other, [], unread
 
 
 def _title_qualified(text: str, ls: int, le: int, m) -> bool:
@@ -331,18 +520,39 @@ def _billing(text: str) -> list[tuple[str, Span]]:
     return found
 
 
+INVALID_DATE_NOTE = 'A labelled service date is not a valid calendar date.'
+UNREAD_DATE_NOTE = 'A labelled or title date of service is not written in a form this service reads.'
+UNPLACED_DATE_NOTE = ('A dated label or title is qualified, or carries words this service cannot place, so its date is '
+                      'not taken as the date of service.')
+
+
+def _service_date_fact(found: _ServiceDates) -> Fact:
+    """The service date fact (refutation r1, context and negtime lenses). The note's own dates, when they agree, are the
+    date; own dates that differ - or differ from a date this service cannot place - are a conflict with every side
+    kept. Dated text this service does not read or cannot place never supplies the date by itself: the date is asked,
+    and that text stays as evidence a member value must agree with (merge_user_values)."""
+    unusable = found.invalid + found.unread
+    note = ' '.join(text for present, text in ((found.invalid, INVALID_DATE_NOTE), (found.unread, UNREAD_DATE_NOTE),
+                                               (found.unplaced and not found.own, UNPLACED_DATE_NOTE)) if present)
+    if found.own:
+        fact = _fact('service_date', found.own + found.unplaced)
+        if not unusable:
+            return fact
+        return Fact('service_date', None, 'conflict', _sorted_spans(fact.evidence + tuple(unusable)), note)
+    if not unusable and not found.unplaced:
+        return _fact('service_date', [])
+    return Fact('service_date', None, 'missing',
+                _sorted_spans(tuple(span for _, span in found.unplaced) + tuple(unusable)), note)
+
+
+def _sorted_spans(spans) -> tuple[Span, ...]:
+    return tuple(sorted(dict.fromkeys(spans), key=lambda s: (s.start, s.end)))
+
+
 @functools.lru_cache(maxsize=16)
 def _context(text: str) -> tuple[Fact, ...]:
     lay = layout(text)
-    dates, invalid = _service_dates(text, lay)
-    service_date = _fact('service_date', dates)
-    if invalid and service_date.origin == 'missing':
-        service_date = Fact('service_date', None, 'missing', tuple(invalid),
-                            'A labelled service date is not a valid calendar date.')
-    elif invalid:
-        service_date = Fact('service_date', None, 'conflict',
-                            tuple(sorted(service_date.evidence + tuple(invalid), key=lambda s: s.start)),
-                            'A labelled service date is not a valid calendar date.')
+    service_date = _service_date_fact(_service_dates(text, lay))
     setting = _fact('setting', _settings(text, lay))
     if setting.origin == 'document' and setting.value not in SETTINGS:
         setting = Fact('setting', None, 'missing', setting.evidence,
@@ -399,6 +609,18 @@ def is_member_conflict(fact) -> bool:
     return get('origin') == 'conflict' and str(get('note', '') or '').startswith(_USER_CONFLICT_PREFIX)
 
 
+def _date_readings(spans) -> Optional[set]:
+    """The calendar dates documented date text reads (ISO strings), or None when one of the spans reads none - a
+    member date can then never be shown to agree with it."""
+    values = set()
+    for span in spans:
+        read = {day.isoformat() for day in (date_from_match(m) for m in FULL_DATE.finditer(str(span.text))) if day}
+        if not read:
+            return None
+        values |= read
+    return values
+
+
 def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> dict[str, Fact]:
     """A non-empty user value is encounter metadata: it supplies a fact the document does not give or does not give
     unambiguously (a missing or conflicting documented value), and it agrees with a documented value. A user value
@@ -437,7 +659,13 @@ def merge_user_values(facts: dict[str, Fact], user_values: dict[str, str]) -> di
             # The document labels this fact but its value cannot be used here (a labelled date that is no calendar
             # date, a place-of-service code this service does not recognise): a member value cannot be checked
             # against it, so both sides are kept (refutation r1: such a member date was used and sent to the provider,
-            # and such a member setting made a held office visit ready).
+            # and such a member setting made a held office visit ready). Dated text the reader does not read as the
+            # date or cannot place - "Tuesday, October 20, 2026", a label above its value, a qualified first title -
+            # is checked by the dates it reads: a member date agrees only when it is every one of them (refutation
+            # r1, context-3: a member date had replaced such text silently and was sent to the provider).
+            if name == 'service_date' and _date_readings(documented.evidence) == {value}:
+                merged[name] = Fact(name, value, 'user', (), USER_NOTE)
+                continue
             shown = ', '.join('\u201c' + ' '.join(ev.text.split())[:60] + '\u201d' for ev in documented.evidence[:3])
             merged[name] = Fact(name, None, 'conflict', documented.evidence,
                                 USER_CONFLICT_NOTE.format(user=value, document=shown))
