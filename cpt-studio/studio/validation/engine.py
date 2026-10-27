@@ -142,6 +142,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                  if READ_DOCUMENTED_SERVICES else gi_services.ServiceInventory(version=gi_services.INVENTORY_VERSION))
     problems = gi_services.validate(inventory, text)
     usable = inventory if not problems else None  # an inconsistent reading never decides a status; it is reported
+    second_merge: Optional[_SecondMerge] = None
     if response is not None:
         listable = [c for c in response.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
         if len(listable) < len(response.codes):
@@ -151,10 +152,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         second_alternatives: list[ProposalAssessment] = []
         if second is not None and usable is not None:
             primary_day = _encounter(response.provider, context, routing, sources, date_state, selections).procedure_day
-            selections, second_alternatives, second_check = _second_review(
+            selections, second_alternatives, second_merge = _second_review(
                 second, second_scope or {}, selections, text, pages, routing, reference, date_state.value, usable,
                 procedure_day=primary_day)
-            provider.append(second_check)
         encounter = _encounter(response.provider, context, routing, sources, date_state, selections)
         procedure_day = encounter.procedure_day
         alternatives = (c for c in listable if c.role != 'selected')
@@ -173,6 +173,9 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
     # visit without a proposal is not pushed as unresolved, whatever families the inventory reads.
     unresolved, bundled, covered = (reconcile.reconcile(usable, active, procedure_day=procedure_day) if usable
                                     else ([], [], {}))
+    if second_merge is not None:
+        # worded once the reconciliation this assessment records is known (refutation 7c8, reports-2)
+        provider.append(_second_review_check(second_merge, unresolved))
     service_questions = _service_questions(usable, proposals, context) if usable else []
     unsupported = _unsupported(routing, selections)
     encounter_checks = [*provider, checks.extraction_check(extraction_status, extraction_messages),
@@ -214,20 +217,42 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
         services=_jsonable_inventory(inventory), completeness=complete)
 
 
+@dataclass(frozen=True)
+class _SecondMerge:
+    """What merging the bounded second review did, worded into its check (_second_review_check) once the reconciliation
+    the assessment records is known, so the check never says more than the stored completeness."""
+    what: str  # the asked items, as its request named them
+    asked: tuple[str, ...]  # their labels
+    refused: bool
+    problems: tuple[str, ...]
+    added: tuple[str, ...]  # the codes added as proposals
+    listed: tuple[str, ...]  # the codes it selected that are not added (alternatives, each with why)
+    accounts_for: tuple[str, ...]  # the labels of the unresolved items the added codes account for
+
+
 def _second_review(second: NormalizedResponse, scope: dict, selections: list, text: str, pages, routing, reference,
-                   day, inventory, procedure_day: bool = False) -> tuple[list, list, Check]:
+                   day, inventory, procedure_day: bool = False) -> tuple[list, list, _SecondMerge]:
     """Merge the bounded second review (ARCHITECTURE 5.11). Only a code it SELECTED that accounts for a documented
     service or act left unresolved by the primary proposals becomes a proposal (marked as from the second review); every
     other code it lists is informational. Nothing is promoted from an alternative and nothing is invented."""
     active = [(s.code, s.family) for s in selections if not s.excluded]
     unresolved, _, _ = reconcile.reconcile(inventory, active, procedure_day=procedure_day)
-    open_items = [(u.service, u.family, u.act) for u in unresolved if u.reason in ('no_proposal', 'not_covered')]
-    have = {s.code for s in selections}
+    open_items = [(u.service, u.family, u.act, u.label) for u in unresolved
+                  if u.reason in ('no_proposal', 'not_covered')]
+    # A code is already proposed only by a primary proposal a reviewer can decide (selected, or excluded and
+    # reinstatable). A selection excluded for scope or evidence (no exact passage; never reinstatable) is none, so it
+    # never hides the second review's selection of that code, which is judged as any other; and a code a decidable
+    # primary proposal carries is listed with why, never dropped unseen (refutation 7c8, reports-0: the second review's
+    # exactly quoted 45380 was skipped behind the primary's inexact one, and its check said it selected no code that
+    # accounts for the biopsy).
+    have = {s.code for s in selections if s.evaluation is not None}
     listable = [c for c in second.codes if isinstance(c.code, str) and 0 < len(c.code) <= MAX_LISTED_CODE]
     added, listed = [], []  # listed: (a code it selected that is not added, why it is not added)
+    accounted: list[str] = []  # the labels of the open items the added codes account for
     for group in _merge_selected(listable):
         code = group[0].code
         if code in have:
+            listed.append((group[0], 'a primary proposal already carries it'))
             continue
         candidate = _select(group, text, pages, routing, reference, day, inventory)
         profile = reconcile.catalogue.code_profile(code)
@@ -236,17 +261,18 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
         # base code, or an act it documents) - never by a code for an act nothing documents, which would hide the
         # missing service behind a held proposal (refutation r1, sends lens)
         supported = match is not None and match.state in ('performed', 'incomplete')
-        accounts = profile is not None and any(
-            family == candidate.family and ((act == '' and supported) or act in profile.covers
-                                            or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
-                                                & set(profile.covers)))
-            for _, family, act in open_items)
+        covered = [label for _, family, act, label in open_items if profile is not None
+                   and family == candidate.family and ((act == '' and supported) or act in profile.covers
+                                                       or (act in ('tattoo', 'injection') and {'tattoo', 'injection'}
+                                                           & set(profile.covers)))]
+        accounts = bool(covered)
         if accounts and candidate.evaluation is not None and not candidate.excluded:
             added.append(replace(candidate, origin='second_review'))
             have.add(code)
+            accounted += covered
         elif profile is None:
             listed.append((group[0], 'the coverage catalogue does not establish which documented act it accounts for'))
-        elif not accounts and any(family == candidate.family and act == '' for _, family, act in open_items):
+        elif not accounts and any(family == candidate.family and act == '' for _, family, act, _ in open_items):
             listed.append((group[0], 'the act it accounts for is not documented as done in the service left '
                                      'unresolved'))
         elif not accounts:
@@ -264,27 +290,50 @@ def _second_review(second: NormalizedResponse, scope: dict, selections: list, te
                     for index, (item, why) in enumerate(listed + [(c, '') for c in listable if c.role != 'selected'])]
     alternatives = [replace(a, key=f'alt2:{index}', support={'origin': 'second_review'})
                     for index, a in enumerate(alternatives)]
-    listed = [item for item, _ in listed]
-    what = '; '.join(scope.get('items', [])[:4]) or 'the unresolved documented services'
-    if second.refused:
+    asked = [item for item in scope.get('items', []) if isinstance(item, str)]
+    merge = _SecondMerge(what='; '.join(asked[:4]) or 'the unresolved documented services', asked=tuple(asked),
+                         refused=bool(second.refused), problems=tuple(second.problems),
+                         added=tuple(s.code for s in added), listed=tuple(item.code for item, _ in listed),
+                         accounts_for=tuple(dict.fromkeys(accounted)))
+    return list(selections) + added, alternatives, merge
+
+
+def _second_review_check(merge: _SecondMerge, unresolved: Sequence[reconcile.Unresolved]) -> Check:
+    """The second review's check, worded from what the merge did and from ``unresolved``, the reconciliation the
+    assessment records: it names the items the added codes account for and the asked items that stay unresolved (a
+    warning while any does), never an asked item no added code accounts for (refutation 7c8, reports-2: "selected 45380,
+    which account for them" of a biopsy and a dilation, while the dilation stayed unresolved)."""
+    what, codes = merge.what, ', '.join(merge.listed)
+    if merge.refused:
         # Refused whole, unread: a failed provider check, as provider.status records a refused primary response (round
         # 7 bypass:1), so nothing reports this run's response as used.
-        detail = f'A second review was requested for: {what}. Its response was not used ({"; ".join(second.problems)}).'
-        status = 'fail'
-    elif added:
-        detail = (f'A second review limited to the passages of {what} selected '
-                  + ', '.join(s.code for s in added) + ', which account for them and are added as proposals for '
-                  'review (marked as from the second review).')
-        if listed:
-            detail += ' It also listed ' + ', '.join(c.code for c in listed) + ', shown as alternatives only.'
-        status = 'info'
+        return Check('provider.second_review', 'Second review', 'fail',
+                     f'A second review was requested for: {what}. Its response was not used '
+                     f'({"; ".join(merge.problems)}).', 'cpt-studio:provider@1')
+    left = {u.label for u in unresolved}
+    still = [label for label in dict.fromkeys(merge.asked) if label in left]
+    alternatives = 'an alternative' if len(merge.listed) == 1 else 'alternatives'
+    if merge.added:
+        one = len(merge.added) == 1
+        accounted = [label for label in merge.accounts_for if label not in left]
+        detail = (f'A second review limited to the passages of {what} selected {", ".join(merge.added)}, which '
+                  + (f'{"accounts" if one else "account"} for {"; ".join(accounted)} and ' if accounted else '')
+                  + f'{"is added as a proposal" if one else "are added as proposals"} for review (marked as from the '
+                  'second review).')
+        if merge.listed:
+            detail += f' It also listed {codes}, shown as {alternatives} only.'
+        if still:
+            detail += f' Still unresolved: {"; ".join(still)}.'
+        status = 'warn' if still else 'info'
     else:
-        detail = (f'A second review limited to the passages of {what} selected no code that accounts for them'
-                  + (' (it listed ' + ', '.join(c.code for c in listed) + ', shown as alternatives only)' if listed else '')
-                  + '. They stay unresolved; nothing is added.')
+        # "selected no code that accounts for them" was false of a code it selected that accounts for an item but is
+        # not added (refutation 7c8, reports-0): what is true is that nothing was added; each alternative says why.
+        detail = (f'A second review limited to the passages of {what} added no proposal for them'
+                  + (f' (it listed {codes}, shown as {alternatives} only, with why it is not added)' if merge.listed
+                     else '')
+                  + ('. They stay unresolved; nothing is added.' if still else '. Nothing is added.'))
         status = 'warn'
-    return list(selections) + added, alternatives, Check('provider.second_review', 'Second review', status, detail,
-                                                         'cpt-studio:provider@1')
+    return Check('provider.second_review', 'Second review', status, detail, 'cpt-studio:provider@1')
 
 
 def _jsonable_unresolved(u: reconcile.Unresolved, second_review: bool = False) -> dict:
