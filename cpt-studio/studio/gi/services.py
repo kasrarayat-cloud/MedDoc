@@ -1474,17 +1474,70 @@ def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
 # phrase names ("previous EMR", "previously tattooed"), never of an act outside it, whose time it leaves in doubt
 # (refutation r1, negtime-5: "Biopsies were obtained from the prior polypectomy site" had excluded 45380 as
 # historical). A time word on an occasion ("at the prior colonoscopy", "at the previous EGD") still dates the act.
+_ATTRIBUTIVE_HEAD = (r'(?:sites?|scars?|beds?|base|margins?|areas?|anastomos[ie]s|tattoos?|clips?|blood|clots?|'
+                     + LESION_NOUN + r')')
 ATTRIBUTIVE_TIME = _rx(r'\b(?:the|a|an|this|that|its|their|his|her|with|from|of|on|at|in|into|near|beside|around)\s+'
                        r'(?P<w>prior|previous(?:ly)?|old|earlier|remote|former|next)\s+(?:[\w-]+\s+){0,2}?'
-                       r'(?:sites?|scars?|beds?|base|margins?|areas?|anastomos[ie]s|tattoos?|clips?|blood|clots?|'
-                       + LESION_NOUN + r')\b')
+                       + _ATTRIBUTIVE_HEAD + r'\b')
+# 7c8 skeptic, sk:4: the same, read by its structure where it had escaped - the "of" phrase of a site ("the site of prior
+# polypectomy": the word and the noun after it name what made the site); a clause that opens on a time adverb and the
+# participle it qualifies ("Previously tattooed polyp in the ascending colon was removed"; a bare "Prior polyps were
+# removed" still dates its act); a date as a noun's attribute ("The 2023 EMR scar": a determiner right before it, a head
+# noun within two words after it); and a relative clause or another event's participle describing a noun ("the polyp
+# that was previously biopsied", "the ulcer seen on the prior EGD"), from its opener to the predicate after it (a
+# relative clause's own predicate first).
+ATTRIBUTIVE_OF = _rx(r'\b(?:sites?|scars?|beds?|base|margins?|areas?)\s+of\s+(?:(?:the|a|an)\s+)?'
+                     r'(?P<w>prior|previous(?:ly)?|old|earlier|remote|former)\s+[\w-]+')
+ATTRIBUTIVE_LEAD = _rx(r'[^\w\n]*(?P<w>previously|recently|formerly)\s+[a-z]+(?:ed|en)\s+(?:[\w-]+\s+){0,2}?'
+                       + _ATTRIBUTIVE_HEAD + r'\b')
+ATTRIBUTIVE_DATE_LEAD = _rx(r'\b(?:the|a|an|this|that|its|their|his|her)\s+$')
+ATTRIBUTIVE_DATE_HEAD = _rx(r'\s+(?:[\w-]+\s+){0,2}?' + _ATTRIBUTIVE_HEAD + r'\b')
+RELATIVE_OR_EVENT = _rx(r'\b(?:(?P<rel>that|which|who|whom|whose)|(?P<event>found|seen|noted|identified|detected|'
+                        r'diagnosed|shown|demonstrated|described|reported|documented|visuali[sz]ed|observed|imaged|'
+                        r'confirmed|suspected))\b')
+PREDICATE_RUN = _rx(r'\b(?:was|were|is|are|be|been|being|has|have|had|will|shall|would|should|can|could|may|might|must|'
+                    r'did|does|do)\b(?:\s+(?:was|were|is|are|be|been|being|has|have|had|not|never)\b)*')
+_PHRASE_STOP = re.compile(r'[,;:()\n]')
+
+
+def _described_phrases(text: str, cs: int, ce: int) -> list[tuple[int, int]]:
+    """The relative clauses and event phrases of the clause [cs, ce) that describe a noun (RELATIVE_OR_EVENT): each from
+    its opener to a comma, a semicolon, a colon, a bracket or the predicate after it - for a relative clause, the one
+    after its own (sk:4). Bounded: the clause, once per opener."""
+    out = []
+    for opener in RELATIVE_OR_EVENT.finditer(text, cs, ce):
+        stop = _PHRASE_STOP.search(text, opener.end(), ce)
+        limit = stop.start() if stop else ce
+        own = 1 if opener.group('rel') else 0
+        runs = []
+        for run in PREDICATE_RUN.finditer(text, opener.end(), limit):
+            runs.append(run)
+            if len(runs) > own:
+                break
+        out.append((opener.start(), runs[own].start() if len(runs) > own else limit))
+    return out
 
 
 def _elsewhere_time_words(text: str, cs: int, ce: int, pos: int) -> dict[int, str]:
     """The time words of the clause [cs, ce) that describe another noun than the mention at ``pos`` (ATTRIBUTIVE_TIME,
-    the mention outside the phrase): their positions, with the phrase each describes."""
-    return {m.start('w'): ' '.join(text[m.start('w'):m.end()].split()) for m in ATTRIBUTIVE_TIME.finditer(text, cs, ce)
-            if not m.start('w') <= pos < m.end()}
+    ATTRIBUTIVE_OF, ATTRIBUTIVE_LEAD, or inside a relative clause or event phrase, _described_phrases; the mention outside
+    the phrase): their positions, with the phrase each describes."""
+    out = {m.start('w'): ' '.join(text[m.start('w'):m.end()].split()) for pattern in (ATTRIBUTIVE_TIME, ATTRIBUTIVE_OF)
+           for m in pattern.finditer(text, cs, ce) if not m.start('w') <= pos < m.end()}
+    lead = ATTRIBUTIVE_LEAD.match(text, cs, ce)
+    if lead and not lead.start('w') <= pos < lead.end():
+        out.setdefault(lead.start('w'), ' '.join(text[lead.start('w'):lead.end()].split()))
+    whole = text[cs:ce]
+    if not (HISTORY_WORDS.search(whole) or PLAN_WORDS.search(whole)):
+        return out
+    phrases = [(a, b) for a, b in _described_phrases(text, cs, ce) if not a <= pos < b]
+    for words in (HISTORY_WORDS, PLAN_WORDS):
+        for m in words.finditer(whole):
+            at = cs + m.start()
+            phrase = next(((a, b) for a, b in phrases if a <= at < b), None)
+            if phrase is not None:
+                out.setdefault(at, ' '.join(text[phrase[0]:phrase[1]].split()))
+    return out
 
 
 def _date_owner(text: str, d, cs: int, pos: int) -> str:
@@ -1497,6 +1550,12 @@ def _date_owner(text: str, d, cs: int, pos: int) -> str:
     if BIRTH_LABEL.search(head) or STAMP_LABEL.search(head) \
             or (d.precision == 'year' and d.bare and CLOCK_TIME.search(head)):
         return 'none'
+    # A date as the attribute of a site, a lesion or a finding ("The 2023 EMR scar ... was biopsied"), with the mention
+    # outside that noun phrase, is that noun's (7c8 skeptic, sk:4).
+    lead = ATTRIBUTIVE_DATE_LEAD.search(text, max(cs, d.start - 12), d.start)
+    noun = ATTRIBUTIVE_DATE_HEAD.match(text, d.end) if lead else None
+    if noun is not None and not lead.start() <= pos < noun.end():
+        return 'other'
     # A date in a parenthesis whose words label another item ("The polyp (CT 09/22/2026) was removed"), with the mention
     # outside it, is that item's (7c8 skeptic, sk:3).
     paren = text.rfind('(', max(0, min(cs, d.start - 80)), d.start)

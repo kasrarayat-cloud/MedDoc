@@ -201,3 +201,50 @@ class DateNotTheActsOwnTests(SimpleTestCase):
                 ('Polypectomy with a cold snare is scheduled for 11/20/2026.', 'planned')):
             with self.subTest(line=line):
                 self.assertEqual(statuses(COLONOSCOPY.format(x=line), 'snare'), [status])
+
+
+class TimeOfAnotherNounTests(SimpleTestCase):
+    """sk:4 (negtime-5, claimed fixed by 77847adf7): a time word or a date that describes another noun still dated the act -
+    in an "of" phrase on a site ("the site of prior polypectomy"), leading the clause on a participle ("Previously
+    tattooed polyp"), inside a relative clause ("the polyp that was previously biopsied"), as a dated noun ("The 2023
+    EMR scar") or in the occasion another participle tells of ("the ulcer seen on the prior EGD"). Each is that noun's
+    or that event's time: the act's own time is in doubt, so its code is held, never excluded."""
+
+    CASES = (
+        (COLONOSCOPY, 'Biopsies were obtained from the site of prior polypectomy in the ascending colon.', 'biopsy',
+         '45380'),
+        (COLONOSCOPY, 'Previously tattooed polyp in the ascending colon was removed with a hot snare.', 'snare', '45385'),
+        (COLONOSCOPY, 'The polyp that was previously biopsied was removed with a hot snare.', 'snare', '45385'),
+        (COLONOSCOPY, 'The 2023 EMR scar in the ascending colon was biopsied with cold forceps.', 'biopsy', '45380'),
+        (EGD, 'The ulcer seen on the prior EGD was biopsied with cold forceps.', 'biopsy', '43239'),
+    )
+
+    def test_the_act_is_held_never_excluded(self):
+        for template, line, kind, code in self.CASES:
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['uncertain'])
+                held = _not_excluded(self, text, code, line)
+                self.assertEqual((held.bucket, held.status), ('selected', 'needs_clarification'))
+
+    def test_controls_the_words_own_act_or_an_occasion_still_dates(self):
+        for template, line, kind, status in (
+                # the time word's own act, inside the phrase it describes
+                (COLONOSCOPY, 'The polyp that was previously biopsied was removed with a hot snare.', 'biopsy',
+                 'historical'),
+                (COLONOSCOPY, 'Previously tattooed polyp in the ascending colon was removed with a hot snare.', 'tattoo',
+                 'historical'),
+                (COLONOSCOPY, 'Biopsies were obtained from the site of prior polypectomy in the ascending colon.',
+                 'snare', 'historical'),
+                (COLONOSCOPY, 'The 2023 EMR scar in the ascending colon was biopsied with cold forceps.', 'emr',
+                 'historical'),
+                # an occasion, a sentence adverb, an adjective on the act's own noun, or the main predicate's own time
+                (COLONOSCOPY, 'Biopsies were taken at the 2023 colonoscopy.', 'biopsy', 'historical'),
+                (COLONOSCOPY, 'Previously, polyps were removed with a cold snare.', 'snare', 'historical'),
+                (COLONOSCOPY, 'Prior polyps were removed with a cold snare.', 'snare', 'historical'),
+                (COLONOSCOPY, 'A polyp seen on CT will be removed with a cold snare at the next colonoscopy.', 'snare',
+                 'planned'),
+                (COLONOSCOPY, 'The polyp that was seen will be removed with a cold snare at the next colonoscopy.',
+                 'snare', 'planned')):
+            with self.subTest(line=line, kind=kind):
+                self.assertEqual(statuses(template.format(x=line), kind), [status])
