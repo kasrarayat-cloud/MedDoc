@@ -621,3 +621,12 @@ test('progress rows show the latest job of each stage, and the second review onc
   assert.ok(render({ ...processing, pipeline: { ...processing.pipeline, stages: redated } })
     .includes('<strong>Request CPT proposals from the provider</strong><p>In progress</p>'));
 });
+
+test('the provider-not-run card gives the reason of the latest predict, not of one that ran before it', () => {
+  const ready = fixture('encounter-ready.json');
+  const stages = [...['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' })),
+    { kind: 'predict', state: 'failed', error: 'Live provider calls are not authorized on this installation.' }];
+  const html = render({ ...ready, state: 'provider_not_run', pipeline: { ...ready.pipeline, stages } });
+  assert.ok(html.includes('<p>Live provider calls are not authorized on this installation.</p>'));
+  assert.ok(!html.includes('did not run for this revision'));
+});

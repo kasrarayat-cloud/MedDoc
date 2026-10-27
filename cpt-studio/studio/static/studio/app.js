@@ -807,7 +807,8 @@ function stateCards(doc) {
     cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
   }
   if (doc.state === 'provider_not_run') {
-    const predict = stages.find(stage => stage.kind === 'predict');
+    // the latest predict is the one that did not run: an earlier one that ran says nothing about it
+    const predict = [...stages].reverse().find(stage => stage?.kind === 'predict');
     cards.push(infoCard('No proposals were<br>requested.', [predict?.error || (state.session?.provider_mode === 'disabled' ? 'Provider requests are disabled in this deployment.' : 'The provider step did not run for this revision.')]));
   }
   if (doc.state === 'stopped') {

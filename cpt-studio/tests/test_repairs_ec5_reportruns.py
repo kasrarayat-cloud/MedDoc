@@ -503,3 +503,29 @@ class SecondReviewDescribedTests(Pipeline):
                       shown['codes'])
         self.assertNotIn('data-action="second-review"', shown['codesHtml'])
         self.assertEqual(len(usage_lines(self.draft(encounter_id))), 1)
+
+
+class LatestStageExplainsTests(Pipeline):
+    """The "No proposals were requested" card explains itself with the stage that did not run: the LATEST predict. A
+    date change re-requests proposals; when that predict fails (here the reviewer who changed the date lost the role
+    before the worker ran it), the card had shown the first predict - which ran - and said "The provider step did not
+    run for this revision"."""
+
+    def test_the_card_gives_the_failed_predicts_own_reason(self):
+        self.use(FakeProvider(selections=[VISIT]))
+        undated = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', '')
+        encounter_id = self.create(undated, service_date='2026-10-20')
+        drain()
+        reply = self.post(f'/api/encounters/{encounter_id}/context', {'service_date': '2026-10-22'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        models.Membership.objects.filter(user=self.reviewer).update(role=models.Membership.VIEWER)
+        drain()
+        models.Membership.objects.filter(user=self.reviewer).update(role=models.Membership.REVIEWER)
+        predicts = models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.PREDICT).order_by('created_at')
+        self.assertEqual([j.state for j in predicts], [models.Job.SUCCEEDED, models.Job.FAILED])
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'provider_not_run')
+        shown = page(detail)['codes']
+        self.assertIn('No proposals were | requested. | Only an owner or reviewer of this workspace can start a live '
+                      'provider request.', shown)
+        self.assertNotIn('did not run for this revision', shown)
