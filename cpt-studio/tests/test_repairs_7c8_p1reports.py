@@ -489,3 +489,68 @@ class NotCheckedPassagesAreNeverEvidenceTests(Harness):
         self.assertIn('cited by the provider; does not show the coded act', html)
         sampled = 'A separate 10 mm flat lesion in the transverse colon was sampled with cold biopsy forceps.'
         self.assertEqual(mark_title(html, sampled), 'Evidence for 45380')
+
+
+# --- reports-5 (pre-existing at 057a7d398): "No CPT codes were proposed" of a response never read ------------------
+
+NONE_PROPOSED = 'No CPT codes were proposed for this document.'
+
+
+class NothingIsSaidOfAResponseNeverReadTests(Harness):
+    """reports-5: with the provider outcome unknown (a request sent, no complete response read), and still after a
+    member reconciled it and stopped the one new attempt, the suggestions panel said "No CPT codes were proposed for this
+    document" beside the stored provider check "...its outcome is unknown, so there are no CPT proposals... This is not a
+    finding that no codes apply" (the export said "nothing from it was used"). The panel says nothing was proposed only
+    of a response the assessment read; otherwise it shows the provider check's own wording - for an unknown outcome,
+    a failure and a provider that was not run alike."""
+
+    def codes_tab(self, encounter_id):
+        return page(self.detail(encounter_id))['codes'].replace('&#x27;', "'")
+
+    def test_an_unknown_outcome_is_never_read_as_nothing_proposed(self):
+        from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
+        self.use(FakeProvider(selections=[('99213', 'Total time on the date of the encounter was 24 minutes.')],
+                              outcome='unknown'))
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        self.assertEqual((run.state, run.sent), ('unknown', True))
+        check = self.encounter_check(encounter_id, 'provider.status')
+        self.assertEqual(check['status'], 'warn')
+        self.assertIn('outcome is unknown', check['detail'])
+        html = self.codes_tab(encounter_id)
+        self.assertNotIn(NONE_PROPOSED, html)
+        self.assertIn(check['detail'], html)
+        # reconciled, then the one new attempt stopped before it sent: the assessment still read no response
+        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing recorded.'})
+        self.assertIn(reply.status_code, (200, 201), reply.content)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        self.assertEqual(len(self.provider.sent), 1)
+        self.assertEqual(models.Encounter.objects.get(pk=encounter_id).state, 'stopped')
+        html = self.codes_tab(encounter_id)
+        self.assertNotIn(NONE_PROPOSED, html)
+        self.assertIn('outcome is unknown', html)
+
+    def test_a_provider_that_was_not_run_gives_its_own_wording(self):
+        from tests.test_pipeline_api import OFFICE_NOTE
+        patcher = mock.patch('studio.jobs.get_provider', return_value=None)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        self.assertFalse(models.ProviderRun.objects.filter(encounter_id=encounter_id).exists())
+        check = self.encounter_check(encounter_id, 'provider.status')
+        self.assertEqual(check['status'], 'not_verified')
+        html = self.codes_tab(encounter_id)
+        self.assertNotIn(NONE_PROPOSED, html)
+        self.assertIn(check['detail'], html)
+
+    def test_control_a_response_read_with_no_selected_code_still_says_none_were_proposed(self):
+        from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
+        self.use(FakeProvider(selections=[]))
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        self.assertEqual(self.assessment(encounter_id).summary['provider_status'], 'succeeded')
+        self.assertIn(NONE_PROPOSED, self.codes_tab(encounter_id))

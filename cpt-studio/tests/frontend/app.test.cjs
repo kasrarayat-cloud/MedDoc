@@ -447,18 +447,31 @@ test('an encounter whose only proposals are documentation-check exclusions never
 });
 
 // round 7, bypass:1: a provider response refused whole was never read, so the panel never says nothing was proposed.
-test('a provider check that failed gives the panel its reason, and only a failed one does', () => {
+// refutation 7c8, reports-5: nor of a response the assessment never read at all (summary.provider_status unknown,
+// failed or not_run), whatever its check's status - an unknown outcome is a 'warn'. Only a response that was read and
+// selected nothing is "No CPT codes were proposed".
+test('a provider check that failed, or a response never read, gives the panel its reason; a response read does not', () => {
   const detail = 'The response from corti (corti-coding@2) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
-  const refused = { proposals: [], encounter_checks: [{ id: 'extraction.status', status: 'fail', detail: 'Other.' }, { id: 'provider.status', status: 'fail', detail }] };
+  const refused = { proposals: [], summary: { provider_status: 'succeeded' }, encounter_checks: [{ id: 'extraction.status', status: 'fail', detail: 'Other.' }, { id: 'provider.status', status: 'fail', detail }] };
   assert.equal(app.emptySelectionCopy(refused), detail);
   const html = render({ ...excludedDoc({}), assessment: { ...excludedDoc({}).assessment, ...refused } });
   assert.equal(html.includes('No CPT codes were proposed for this document.'), false);
   assert.ok(html.includes('was not used, so there are no CPT proposals'), html);
-  for (const status of ['warn', 'pass', 'not_verified']) {
-    const read = { proposals: [], encounter_checks: [{ id: 'provider.status', status, detail: 'Read.' }] };
-    assert.equal(app.emptySelectionCopy(read), 'No CPT codes were proposed for this document.', status);
+  for (const summary of [{ provider_status: 'succeeded' }, undefined]) {
+    for (const status of ['warn', 'pass', 'not_verified']) {
+      const read = { proposals: [], summary, encounter_checks: [{ id: 'provider.status', status, detail: 'Read.' }] };
+      assert.equal(app.emptySelectionCopy(read), 'No CPT codes were proposed for this document.', status);
+    }
   }
   assert.equal(app.emptySelectionCopy({ proposals: [], encounter_checks: [{ id: 'provider.status', status: 'fail' }] }), 'No CPT codes were proposed for this document.');
+  const unknown = 'The proposal provider request was sent but its outcome is unknown, so there are no CPT proposals; a workspace member must reconcile it before any new attempt. This is not a finding that no codes apply.';
+  for (const [provider_status, status, said] of [['unknown', 'warn', unknown], ['not_run', 'not_verified', 'The proposal provider was not run for this revision, so there are no CPT proposals.'], ['failed', 'fail', 'Did not return a usable result.']]) {
+    const unread = { proposals: [], summary: { provider_status }, encounter_checks: [{ id: 'provider.status', status, detail: said }] };
+    assert.equal(app.emptySelectionCopy(unread), said, provider_status);
+    const page = render({ ...excludedDoc({}), assessment: { ...excludedDoc({}).assessment, ...unread } });
+    assert.equal(page.includes('No CPT codes were proposed for this document.'), false, provider_status);
+  }
+  assert.equal(app.emptySelectionCopy({ proposals: [], summary: { provider_status: 'unknown' }, encounter_checks: [] }), 'No provider response was read for this revision, so there are no CPT proposals.');
 });
 
 // round 6, bypass:3: whether a reinstated code can be approved is the code's own gate, never the member's action list.

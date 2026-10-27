@@ -709,9 +709,14 @@ function emptySelectionCopy(assessment) {
   if (reinstatable.length) return 'Every code that a documentation check excluded has a decision; see Excluded candidates below.';
   if (excluded.length || proposalsIn(assessment, 'alternative').length) return 'No code is selected for approval. The provider proposed only codes that were excluded or offered as alternatives; they are listed below.';
   // A provider check that failed (a response refused whole, or no usable result) says why there are no proposals;
-  // "none were proposed" would misstate a response that was never read (round 7, bypass:1).
+  // "none were proposed" would misstate a response that was never read (round 7, bypass:1). So does the check of an
+  // assessment that read no response at all - its provider outcome unknown, failed, or the provider not run - whatever
+  // the check's status (refutation 7c8, reports-5: an unknown outcome is a 'warn').
   const provider = (Array.isArray(assessment.encounter_checks) ? assessment.encounter_checks : []).find(check => check && check.id === 'provider.status');
-  if (provider && provider.status === 'fail' && typeof provider.detail === 'string' && provider.detail) return provider.detail;
+  const read = assessment.summary?.provider_status;
+  const unread = typeof read === 'string' && read !== 'succeeded';
+  if (provider && (provider.status === 'fail' || unread) && typeof provider.detail === 'string' && provider.detail) return provider.detail;
+  if (unread) return 'No provider response was read for this revision, so there are no CPT proposals.';
   return 'No CPT codes were proposed for this document.';
 }
 
