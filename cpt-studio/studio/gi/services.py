@@ -2632,6 +2632,8 @@ def _row_goes_on(prev: str, nxt: str) -> bool:
     if note is None or not tail[:note.start()].strip():
         return False  # the line ends with the row's option, or with no option at all
     words = tail[note.end():].rstrip()
+    if not words and ':' in tail[note.start():]:
+        return False  # a label ends at its colon ("1. [x] Procedures performed:"): its items follow, never its note
     if not words or _DANGLING.search(words) or _NEGATION_END.search(words) or words.endswith((',', ';')):
         return not _sections._own_clause(after)
     tokens = words.split()

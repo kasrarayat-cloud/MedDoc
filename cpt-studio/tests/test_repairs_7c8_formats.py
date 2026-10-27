@@ -305,7 +305,9 @@ class WrappedRowContinuationTests(SimpleTestCase):
                      'Removed today:  [ ] Yes   [X] No - see below\nFINDINGS\n',
                      'Removed today:  [ ] Yes   [X] No - referred to Halcyon\nPlan: repeat colonoscopy in 3 years.\n',
                      'Tattoo injection [ ] Yes [X] No\nColonoscopy was then performed.\n',
-                     'Tattoo injection [ ] Performed [X] Not\n[X] Biopsy\n'):
+                     'Tattoo injection [ ] Performed [X] Not\n[X] Biopsy\n',
+                     '1. [x] Procedures performed:\nCold snare polypectomy of the 6 mm sigmoid polyp.\n',
+                     '- [ ] Procedures not performed:\nCold snare polypectomy of the 6 mm sigmoid polyp.\n'):
             with self.subTest(text=text):
                 self.assertEqual(services.reflow(text), text)
 
