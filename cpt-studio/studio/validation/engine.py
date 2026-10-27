@@ -471,11 +471,21 @@ def _second_opinion(old: checks.StatusOutcome, found: reconcile.Match, code: str
     return found
 
 
+# The cues of a routing-era reading that marks the item itself off: its own box unchecked ("☐ Biopsy"), or its own
+# field's denying answer ("Biopsy taken: No") - never a prose sentence, whose not-performed reading can come from the
+# family's or the section's status ("A 6 mm polyp was removed." beside "Procedure cancelled: ☒").
+OWN_MARK_DENIALS = ('negated: an unchecked box', 'box: negated', 'negated: a field', 'negated: its form field',
+                    'negated: the form field', 'field:')
+
+
 def _own_passage_decides(outcome: checks.StatusOutcome) -> bool:
-    """Whether the routing-era outcome is decided by a reading of the code's own passage (a linked evidence reading),
-    not by routing's reading of the family."""
+    """Whether the routing-era outcome is decided by the code's own passage marking its item off - an unchecked box or
+    a denying field answer read from that passage - not by routing's reading of the family, and not by prose (triage
+    round 2 skeptic: a stated act beside a checked "Procedure cancelled" box had been newly excluded)."""
     decisive = outcome.decisive
-    return decisive is not None and decisive.origin == 'evidence' and decisive.start is not None
+    return decisive is not None and decisive.origin == 'evidence' and decisive.start is not None \
+        and decisive.status == 'negated' and any(cue.startswith(OWN_MARK_DENIALS) for cue in decisive.cues) \
+        and not any(cue.startswith('performed') for cue in decisive.cues)
 
 
 def _act_documented(code: str, service, inventory) -> bool:
@@ -615,7 +625,7 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
         return True  # the visit's own E/M documentation, whatever routing read it as (validation:4, engine._other_service)
     # a bare status statement inside the service's own report ("☒ Not performed", "Aborted ..."), or, for a procedure,
     # about no other service at all
-    if STATUS_WORDS.search(passage) and (
+    if _status_signal(reading, passage) and (
             (service.scope_start <= reading.start and reading.end <= service.scope_end)
             or (service.family not in checks.EM_FAMILIES and inventory is not None
                 and not _other_named(reading, found, passage, inventory, routing))):
@@ -623,6 +633,20 @@ def _about(reading: checks.Reading, found: reconcile.Match, code: str, text: str
     profile = reconcile.catalogue.code_profile(code)
     kinds = set(profile.covers) if profile is not None else set()
     return any(kind in kinds and pattern.search(passage) for kind, pattern in gi_services.ACTS)
+
+
+def _status_signal(reading: checks.Reading, passage: str) -> bool:
+    """Whether a passage states a status of its own: a status word ("completed", "not performed", "aborted"), a hedge
+    ("?", "unclear", "possible"), or a routing-era reading from a check-box or status-option row ("Yes \u2610 No
+    \u2612", "\u2612 No", "Carried out \u2610 Not carried out \u2612") - structural signals, so the hold no longer depends on
+    the status word list alone (triage round 2 skeptic: "were carried out?" and "unclear if adequate" were released).
+    A hedge on what was seen ("A 5 mm cecal lesion was seen?") doubts a finding, not a status (interpretation 9), and a
+    fragment with none of them ("No gastric") still decides nothing."""
+    if STATUS_WORDS.search(passage):
+        return True
+    if gi_services.HEDGE_WORDS.search(passage) and not gi_services.OBSERVED.search(passage):
+        return True
+    return any('box' in cue.lower() for cue in reading.cues)
 
 
 def _other_named(reading: checks.Reading, found: reconcile.Match, passage: str, inventory,

@@ -7014,6 +7014,38 @@ def own_box_checked(text: str, start: int, end: int, service_date: Optional[date
     return _box_checked_in_every_reading(_analysis(text, _checked_date(service_date, 'own_box_checked()'))[0], start,
                                          end)
 
+def checked_field_ties(text: str, start: int, end: int, service_date: Optional[date] = None) -> tuple:
+    """The printed lines or cells on its own page that the checked or "Yes" form-field line holding [start, end) names
+    (routing's tie, _form_fields), as (start, end) pairs: () when that is no checked field line, when the lines of its
+    label disagree, or when it names nothing printed on its page. For the documented-service reader (gi/services), which
+    trusts such a field only through the printed list its item is in (the owner's strict-box decision, 2026-10-25)."""
+    if not isinstance(text, str):
+        raise TypeError('checked_field_ties() needs the canonical text as str.')
+    if not (0 <= start < end <= len(text)):
+        return ()
+    fields = _form_fields(_analysis(text, _checked_date(service_date, 'checked_field_ties()'))[0])
+    line = _within(fields.checked, fields.checked_starts, start, end)
+    field = _FIELD_CHECKED.fullmatch(line.line) if line is not None else None
+    if field is None:
+        return ()
+    headers = [h for h in FORM_HEADER.finditer(text) if h.start() < line.start]
+    if not headers:
+        return ()
+    page_end = headers[-1].start()
+    page_start = 0
+    if len(headers) > 1:  # the page's printed text starts where the previous block ends (_form_fields)
+        blank = _BLANK_LINE.search(text, headers[-2].end(), page_end)
+        page_start = blank.start() if blank else page_end
+    key = _label_key(field.group('label'))
+    ties = []
+    for named in fields.named:
+        if named.state != 'on' or not page_start <= named.start < page_end:
+            continue
+        tied = _FIELD_CHECKED.fullmatch(named.line)
+        if tied is not None and _label_key(tied.group('label')) == key:
+            ties.append((named.start, named.end))
+    return tuple(ties)
+
 
 def own_status_for_span(text: str, start: int, end: int,
                         service_date: Optional[date] = None) -> tuple[str, tuple[str, ...]]:

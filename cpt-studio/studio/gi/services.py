@@ -217,6 +217,10 @@ ACT_KINDS = tuple(kind for kind, _ in ACTS)
 NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'ph_monitoring', 'manometry', 'biopsy',
                         'tube_placement', 'specimen',
                         'injection', 'foreign_body', 'cannulation', 'tattoo', 'rectal_sensation'))
+# Acts named by the object they use or leave (a stone, a stent, a clip): a bare object-noun field label answered
+# with nothing reports a finding, not the act.
+OBJECT_NOUN_KINDS = frozenset(('stone_extraction', 'stent', 'clip', 'capsule_study', 'tube_placement', 'foreign_body',
+                               'specimen'))
 
 # --- vocabulary: reading words ---------------------------------------------------------------------------------
 ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+|subsequently\s+|completely\s+|each\s+)?'
@@ -298,10 +302,25 @@ HEDGE_WORDS = _rx(r'\?|\b(?:possibl[ey]|probabl[ey]|questionabl[ey]|likely|unlik
 # plan section or a plan word still dates a clause first (read_clause), so a plan line keeps its planned reading. A
 # match spans the modal and the one predicate word it governs, so blanking it leaves a clause's own stated predicates
 # ("Biopsies were taken and would be sent ...") readable.
-HYPOTHETICAL = _rx(r"\b(?:would|could|should|must|may|might)(?:n't)?\s+(?:(?:not|never|possibly|perhaps|also|well|then|"
-                   r"otherwise|still)\s+)?have\s+(?:been\s+)?(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+"
-                   r"|\b(?:would|should|could|may|might|must|can|cannot)(?:n't)?\s+(?:(?:not|never|then|also|otherwise|"
-                   r"still|[\w-]+ly)\s+)?be\s+(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+")
+HYPOTHETICAL = _rx(r"\b(?:would|could|should|must|may|might)(?:n't|n\u2019t)?(?:\s+(?:not|never|possibly|perhaps|also|well|"
+                   r"then|otherwise|still|[\w-]+ly))?(?:\s+have|['\u2019]ve)\s+(?:been\s+|gotten\s+|got\s+)?"
+                   r"(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+"
+                   r"|\b(?:would|should|could|may|might|must|can|cannot)(?:n't|n\u2019t)?\s+(?:(?:not|never|then|also|"
+                   r"otherwise|still|[\w-]+ly)\s+)?(?:be|get)\s+(?:(?:then|also|[\w-]+ly)\s+){0,2}[\w-]+")
+# An ability, not a hypothesis, when today's narrative states it ("The colonoscopy could be performed only to the
+# splenic flexure", "Biopsies could be obtained without difficulty"): "could"/"can" with "be", no "have" and no
+# condition governing the clause (_ability_realized). Elsewhere ("EGD could be done", in an office note) it stays a
+# possibility.
+ABILITY = _rx(r"\b(?:could|can)\s+(?:(?:then|also|still|[\w-]+ly)\s+)?(?:be|get)\b")
+CONDITION_IN_CLAUSE = _rx(r"\b(?:if|unless|whether|provided|in\s+case|had\s+(?:it|the|a|an|there|he|she|they|we|this|"
+                          r"that|prep|preparation)|were\s+(?:it|the|a|an|there|he|she|they|we|this|that))\b")
+PAST_STATEMENT = _rx(r"\b(?:was|were)\s+(?:then\s+|also\s+|subsequently\s+)?[a-z]+(?:ed|en|ne|wn)\b")
+# An opener between an act and a modal predicate after it gives the modal another subject ("Cold snare polypectomy of
+# the 8 mm polyp, after which the examination could be completed", "Stent placement, so that the duct could be
+# decompressed"): the act is not its subject (_hypothetical step 5, facts_wording skeptic).
+OTHER_SUBJECT_OPENER = _rx(r"\b(?:which|that|who|whom|whose|where|when|whereupon|after|before|until|once|so|so\s+that|"
+                           r"such\s+that|in\s+order|allowing|enabling|permitting|with\s+which|by\s+which|through\s+"
+                           r"which)\b|[;:]|,\s*(?:and|but|then)\b")
 # A hypothetical predicate right after the mention, after at most a short phrase of place or means (routing's own
 # cues._PLACE_PHRASE): "A biopsy would have been taken had ...", "EGD with biopsy would be done if ...".
 HYPOTHETICAL_AFTER = _rx(_cues._PLACE_PHRASE + r'[\s,]*(?P<h>' + HYPOTHETICAL.pattern + r')')
@@ -314,6 +333,15 @@ CONDITION_AFTER = _rx(r'\s+(?:(?:were|was|is|are|be|been|had\s+been|has\s+been|h
                       + r'\b')
 CONDITION_AFTER_HAD = _rx(r'\s+been\s+' + _cues._HEDGE_ACT + r'\b')
 HYPOTHETICAL_CUE = 'uncertain: hypothetical: '
+# What a consent, an authorization or an approval is for is named, never stated done ("Consent was obtained for biopsy
+# and cold snare polypectomy", "Written consent for EGD with dilation was obtained", "Consent obtained for: Biopsy",
+# "Prior authorization was obtained for colonoscopy"): its predicate ("obtained", "given") is the consent's. Read in a
+# clause only when nothing else in it dates or doubts the item first; held, never excluded (_consent_object).
+CONSENT_FOR = _rx(r'\b(?:consent(?:s|ed)?|permission|authori[sz]ation|approval|clearance)\b'
+                  r'(?P<predicate>[^.;:,\n]{0,60}?)\b(?:for|to)\b[ \t]*:?')
+CONSENT_AFTER = _rx(r'[ \t]+(?:consent|authori[sz]ation|approval)\b')
+CONSENT_PREDICATE = _rx(r'\b(?:signed|given|documented|reviewed|confirmed|verified|received|discussed)\b')
+CONSENT_CUE = 'uncertain: named as what a consent or an authorization is for'
 INDICATION_READING = 'uncertain: stated in an indication, not as done today'
 # "placement of a covered stent", "removal of the polyp": a nominal act predicate, read like a verb.
 NOMINAL_ACT = _rx(r'\b(?:placement|insertion|deployment|removal|extraction|retrieval|resection|ablation|dilation|dilatation|'
@@ -372,8 +400,8 @@ TITLE_FIELD = _rx(r'^[\s\-*#]*(?:procedure|operative|endoscopy|endoscopic)\s+(?:
                   r'(?P<value>\S[^\n]{0,100})$')
 # A numbered part of the document ("PART 2 - ") is read by the line after its number.
 PART_NUMBER = re.compile(r'[ \t]*' + _sections.DOCUMENT_PART, re.A)
-# The procedure field's labels ("Procedure:", "Interventions:", "Procedures performed today:"); a check-box list under
-# one lists what was done (_in_a_procedure_list).
+# The procedure field's labels ("Procedure:", "Interventions:", "Procedures performed today:"); a check-box list
+# directly under one lists what was done (_in_a_procedure_list).
 PROCEDURE_LABELS = (r'(?:procedures?(?:\s+performed(?:\s+today)?)?|operation|interventions?|stud(?:y|ies)'
                     r'(?:\s+performed)?|tests?\s+performed)')
 PROCEDURE_FIELD = _rx(r'^[\s\-*#]*' + PROCEDURE_LABELS + r'\s*[:\-–]\s*'
@@ -592,6 +620,29 @@ HISTORY_HEADING = _rx(r'^[\s\-*#]*(?:past\s+(?:medical|surgical|gi|procedural)\s
 # printed on a form): a line carrying one is never a bare service heading, which would read that question as today's
 # service performed (a phantom service, listed unresolved and sent for a second review). Read for headings only: in a
 # clause it can describe today's indication ("for bleeding over the last 2 weeks").
+# The words a bare service heading may carry beside the service's own name ("Colonoscopy", "Colonoscopy report",
+# "Upper endoscopy - findings"); any other word makes the line a field or a question ("Colonoscopy within 10 years:",
+# "Last colonoscopy:", "Colonoscopy up to date:"), never a heading that opens a report of the service.
+HEADING_VOCABULARY = _rx(r'\b(?:report|note|notes|procedure|procedures|findings|technique|impression|details|description|'
+                         r'summary|narrative|results?|examination|exam|study|section|part|operative|fictional|synthetic)\b')
+
+
+def _bare_service_heading(line: str) -> bool:
+    """Whether a heading-like label line (one that ends in ":" or "?", parts()) is a service's name, its acts and heading
+    vocabulary only (triage round 2 skeptic: an office note's screening questions about earlier examinations -
+    "Colonoscopy within 10 years:", "Last colonoscopy:" - had opened phantom performed services and paid second
+    reviews). A title with no colon keeps its other words ("ERCP (UNSUCCESSFUL)", "ESOPHAGEAL MANOMETRY REPORT (HIGH
+    RESOLUTION)"). Bounded: one pass of each service pattern and of the vocabulary over at most 100 characters."""
+    rest = line[:100]
+    for _, _, pattern in SERVICES:
+        rest = pattern.sub(' ', rest)
+    for _, pattern in ACTS:  # "EGD with biopsy", "Colonoscopy with cold snare polypectomy and tattoo"
+        rest = pattern.sub(' ', rest)
+    rest = HEADING_VOCABULARY.sub(' ', rest)
+    rest = re.sub(r'\b(?:with|and|plus|cold|hot|and/or)\b', ' ', rest, flags=re.I)
+    return not re.search(r'[A-Za-z]{2,}', rest)
+
+
 EARLIER_SPAN = _rx(r'\b(?:in|within|over|during)\s+the\s+(?:last|past|previous|preceding)\s+'
                    r'(?:\d{1,3}|few|several|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+'
                    r'(?:years?|months?|weeks?|days?)\b')
@@ -650,7 +701,8 @@ def parts(text: str) -> tuple[_Part, ...]:
                 and not EARLIER_SPAN.search(line) \
                 and not HISTORY_HEADING.match(line) and not PLAN_HEADING.match(line):
             heading_families = {f for f, _, p in SERVICES if p.search(line)}
-            if len(heading_families) == 1 and len(stripped) <= 60:
+            if len(heading_families) == 1 and len(stripped) <= 60 \
+                    and (not stripped.endswith((':', '?')) or _bare_service_heading(line)):
                 s = ls + line.index(stripped)
                 cuts.append((ls, next(iter(heading_families)), 'physician', Span(s, s + len(stripped), stripped),
                              'section'))
@@ -950,13 +1002,33 @@ def _verbal_predicate(text: str, whole: str, before: str, after: str, pos: int, 
                 or BARE_PARTICIPLE.fullmatch(text[pos:end].strip()))
 
 
-def unhypothetical(text: str, start: int, end: int) -> str:
-    """text[start:end] with every hypothetical predicate (HYPOTHETICAL) blanked, same length."""
-    piece = text[start:end]
-    return HYPOTHETICAL.sub(lambda h: ' ' * len(h.group(0)), piece) if HYPOTHETICAL.search(piece) else piece
+def _ability_realized(text: str, a: int, b: int, cs: int, ce: int, report: bool) -> bool:
+    """Whether the modal predicate at [a, b) of the clause [cs, ce) states an ability today's narrative realized: a
+    "could"/"can be" form (ABILITY), no condition governing the clause, and the clause is in today's report, in a
+    procedure, findings, technique or impression section (routing's layout, as _nominal_act reads it), or states
+    something else done in the past tense ("... and was then terminated")."""
+    if not ABILITY.match(text, a, b) or CONDITION_IN_CLAUSE.search(text, cs, ce):
+        return False
+    if report or PAST_STATEMENT.search(text[cs:a] + ' ' + text[b:ce]):
+        return True
+    return _sections.layout(text).section_at(a).kind in ('impression', 'findings', 'technique', 'procedure')
 
 
-def _hypothetical(text: str, cs: int, ce: int, pos: int, end: int) -> str:
+def _hypothetical_spans(text: str, cs: int, ce: int, report: bool = False) -> list[tuple[int, int]]:
+    """The hypothetical predicates of the clause [cs, ce), less the abilities its narrative realized."""
+    return [(m.start(), m.end()) for m in HYPOTHETICAL.finditer(text, cs, ce)
+            if not _ability_realized(text, m.start(), m.end(), cs, ce, report)]
+
+
+def unhypothetical(text: str, start: int, end: int, report: bool = False) -> str:
+    """text[start:end] with every hypothetical predicate (_hypothetical_spans) blanked, same length."""
+    piece = list(text[start:end])
+    for a, b in _hypothetical_spans(text, start, end, report):
+        piece[a - start:b - start] = ' ' * (b - a)
+    return ''.join(piece)
+
+
+def _hypothetical(text: str, cs: int, ce: int, pos: int, end: int, report: bool = False) -> str:
     """The hypothetical wording that keeps the mention at [pos, end) of the bounded clause [cs, ce) from reading as done,
     or '': a condition on its own performance opens the clause ("If colonoscopy were done today, ..."); the mention
     lies in a hypothetical predicate ("it would have been dilated"); or, when no act verb of the clause's own is left
@@ -973,22 +1045,28 @@ def _hypothetical(text: str, cs: int, ce: int, pos: int, end: int) -> str:
         held = (CONDITION_AFTER_HAD if condition.group('w').lower() == 'had' else CONDITION_AFTER).match(text, end, ce)
         if held:
             return phrase(cs, held.end())
-    spans = [(m.start(), m.end()) for m in HYPOTHETICAL.finditer(text, cs, ce)]
+    spans = _hypothetical_spans(text, cs, ce, report)
     if not spans:
         return ''
     for a, b in spans:
         if a <= pos < b:
             return phrase(a, b)
-    masked = unhypothetical(text, cs, ce)
+    masked = unhypothetical(text, cs, ce, report)
     if _verbal_predicate(text, masked, masked[:pos - cs], masked[end - cs:], pos, end):
         return ''  # a predicate the clause states for itself decides, as before ("..., which was done")
     following = HYPOTHETICAL_AFTER.match(text, end, ce)
-    if following:
+    if following and (following.start('h'), following.end('h')) in spans:
         word = following.group('h').split()[-1]
         if ACT_VERB.match('was ' + word) or BARE_PARTICIPLE.fullmatch(word):  # its own act predicate, not "difficult"
             return phrase(following.start('h'), following.end('h'))
-    if _verbal_predicate(text, text[cs:ce], text[cs:pos], text[end:ce], pos, end):
-        return phrase(*spans[0])  # every act verb of the clause is hypothetical
+    # Every act verb of the clause is hypothetical: the mention is hypothetical only when such a predicate governs it -
+    # the mention lies in its complement ("would have been treated with balloon dilation"), or the predicate follows it
+    # with no opener that gives the predicate another subject ("..., after which the examination could be completed").
+    governing = [(a, b) for a, b in spans
+                 if (b <= pos and not OTHER_SUBJECT_OPENER.search(text, b, pos))
+                 or (a >= end and not OTHER_SUBJECT_OPENER.search(text, end, a))]
+    if governing and _verbal_predicate(text, text[cs:ce], text[cs:pos], text[end:ce], pos, end):
+        return phrase(*governing[0])
     return ''  # no act predicate at all: the mention's reading is decided as before (silent or not)
 
 
@@ -997,10 +1075,40 @@ def hypothetical_reading(reading: Reading) -> bool:
     return any(cue.startswith(HYPOTHETICAL_CUE) for cue in reading.cues)
 
 
+def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
+    """Whether the item at [pos, end) of the clause [cs, ce) is what a consent, an authorization or an approval in that
+    clause is for (CONSENT_FOR, "Biopsy consent"), with no predicate of its own that states it done: a predicate between
+    the consent and the item, or one after the item when the consent has its own ("Consent was obtained for colonoscopy
+    and biopsies were taken"), is the item's. Bounded: one pass over the clause."""
+    if CONSENT_AFTER.match(text, end, ce):
+        return True
+    found = None
+    for m in CONSENT_FOR.finditer(text, cs, pos):
+        if m.end() <= pos:
+            found = m
+    if found is None:
+        return False
+    between = text[found.end():pos]
+    if ACT_VERB.search(between) or BARE_PARTICIPLE.search(between) or re.search(r'[.;]', between):
+        return False
+    tail = text[end:ce]
+    stop = re.search(r',|[.;]|\s+(?:and|but|then)\s+(?:a|an|the|two|three|several|multiple|\d+|it|they|this|these)\b',
+                     tail, FLAGS)
+    tail = tail[:stop.start()] if stop else tail
+    own = ACT_VERB.search(tail) or BARE_PARTICIPLE.search(tail)
+    predicate = found.group('predicate')
+    consent_said = ACT_VERB.search(predicate) or BARE_PARTICIPLE.search(predicate) or CONSENT_PREDICATE.search(predicate)
+    return not (own and consent_said)
+
+
 def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, service_date: Optional[date], dates,
                 part: _Part, in_today_report: bool) -> Reading:
     """The status a clause gives the thing named at [pos, end) in it, read within CLAUSE_REACH of the mention."""
     cs, ce = _bounded_clause(text, clause, pos, end)
+    if end > pos and _consent_object(text, cs, ce, pos, end):
+        # "Consent was obtained for biopsy and cold snare polypectomy": what the consent is for, never stated done here
+        # (a paid second review had been queued for consented acts); held, never excluded.
+        return Reading('uncertain', (CONSENT_CUE,))
     before = text[cs:pos]
     after = text[end:ce]
     whole = text[cs:ce]
@@ -1092,7 +1200,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     hedge = HEDGE_WORDS.search(whole)
     if hedge:
         return Reading('uncertain', ('uncertain: ' + hedge.group(0).lower(),))
-    hypothetical = _hypothetical(text, cs, ce, pos, end)
+    hypothetical = _hypothetical(text, cs, ce, pos, end, report=in_today_report or part.kind in ('report', 'section'))
     if hypothetical:
         return Reading('uncertain', (HYPOTHETICAL_CUE + hypothetical,))
     if part.kind == 'indication' and not TODAY_WORDS.search(whole):
@@ -1131,12 +1239,13 @@ LIST_REACH = 40  # lines above a check-box line read for the label of the list i
 
 def _in_a_procedure_list(text: str, pos: int, end: int) -> bool:
     """Whether the check-box line of the item at [pos, end) lists what was done: the label of the list it is in is a
-    procedure field's ("Interventions:", "Procedures performed:"), or it has none (a check-box line standing alone in
-    the report, among lines that answer their own fields). The label is the line's own, before the item ("Interventions:
-    \u2612 Cold snare polypectomy"), unless that names an item of its own ("Biopsy: \u2610 ..."); else the line right
-    above the run of check-box lines the item's line belongs to, when that is a label with no answer of its own or a
-    heading routing's layout reads. Any other label ("Consent obtained for:", "Risks discussed:", "Instruments:") lists
-    something other than what was done. Bounded: LIST_REACH lines; a longer run is not read (fail-closed)."""
+    procedure field's ("Interventions:", "Procedures performed:"). The label is the line's own, before the item
+    ("Interventions: \u2612 Cold snare polypectomy"), unless that names an item of its own ("Biopsy: \u2610 ..."); else
+    the line directly above the run of check-box lines the item's line belongs to, when that is a label with no answer of
+    its own or a heading routing's layout reads. Fail-closed (triage round 2 skeptic: consent, equipment and education
+    lists had been read as what was done): any other label ("Consent obtained for:", "Risks discussed:",
+    "Instruments:"), a blank line, a line of prose, a field with its own answer or the document's start above the run
+    says nothing about what the run lists, so its boxes are not read as done. Bounded: LIST_REACH lines."""
     ls = text.rfind('\n', 0, pos) + 1
     colon = text.find(':', ls, pos)
     if colon >= 0 and not _acts_in(text, ls, colon) \
@@ -1145,20 +1254,29 @@ def _in_a_procedure_list(text: str, pos: int, end: int) -> bool:
     line_end = ls - 1
     for _ in range(LIST_REACH):
         if line_end < 0:
-            return True  # the document's start: the run stands alone
+            return False  # the document's start: no label says what the run lists
         line_start = text.rfind('\n', 0, line_end) + 1
         line = text[line_start:line_end]
         if not line.strip():
-            return True  # a blank line: no label over the run
+            return False  # a blank line: no label directly over the run
         if BOX_MARK.search(line):
             line_end = line_start - 1
             continue  # another line of the same check-box run
         colon = line.find(':')
         if colon >= 0 and not line[colon + 1:].strip():
+            if _acts_in(text, line_start, line_start + colon) \
+                    or any(pattern.search(text, line_start, line_start + colon) for _, _, pattern in SERVICES):
+                line_end = line_start - 1
+                continue  # another item of the list, printed as the label its form field answers ("Biopsy:")
             return PROCEDURE_LIST_LABEL.fullmatch(line, 0, colon + 1) is not None  # the label over the run
         if colon < 0 and _sections._heading(text, line_start, line_end) is not None:
             return PROCEDURE_LIST_LABEL.fullmatch(line) is not None  # a heading over the run
-        return True  # prose, or a field with its own answer: the run stands alone
+        if colon < 0 and len(line.strip()) <= 80 and not ACT_VERB.search(line) and not BARE_PARTICIPLE.search(line) \
+                and not NOT_VERB.search(line) and (_acts_in(text, line_start, line_end) or any(
+                    pattern.search(text, line_start, line_end) for _, _, pattern in SERVICES)):
+            line_end = line_start - 1
+            continue  # another item of the list, printed alone ("Biopsy", "1. Biopsy") for its form field to answer
+        return False  # prose or a field with its own answer: what the run lists is unknown
     return False
 
 
@@ -1169,6 +1287,16 @@ def _checked_in_a_procedure_list(text: str, pos: int, end: int, service_date: Op
     from studio.gi import detect  # local: detect imports context, which this module also imports
     return detect.own_box_checked(_ORIGINAL.get() or text, pos, end, service_date) \
         and _in_a_procedure_list(text, pos, end)
+
+
+def _checked_field_in_a_procedure_list(text: str, pos: int, end: int, service_date: Optional[date]) -> bool:
+    """Whether the checked form-field line holding the act at [pos, end) names a printed item on its page (routing's
+    tie, detect.checked_field_ties) that a procedure list lists (_in_a_procedure_list): "Interventions:" over "Biopsy"
+    with "[PDF form fields on page 1] / Biopsy: checked", never a field whose label alone names the act ("Biopsy: Yes"
+    under a printed "Biopsy recommended at follow-up?") or a printed consent list."""
+    from studio.gi import detect  # local: detect imports context, which this module also imports
+    ties = detect.checked_field_ties(_ORIGINAL.get() or text, pos, end, service_date)
+    return any(_in_a_procedure_list(text, start, stop) for start, stop in ties)
 
 
 def _row_hold(reading: Reading) -> bool:
@@ -1270,6 +1398,13 @@ def _field_answer(text: str, pos: int, end: int, service_date: Optional[date]) -
         if denied.group('box'):
             return Reading('negated', (f'field: the answer \u201c{value}\u201d marks it off',))
         if denied.group('answer'):
+            label = text[ls:colon]
+            object_kinds = {kind for kind, _, _ in _acts_in(text, pos, end)} & OBJECT_NOUN_KINDS
+            if object_kinds and not ACT_VERB.search(label) and not BARE_PARTICIPLE.search(label):
+                # "Stones: None", "Stent: None", "Clips: None": a bare object noun answered with nothing is a finding
+                # (no stones were found), never a statement that the act was not done (triage round 2 skeptic: an
+                # ERCP's "Stones: None" had denied the stone extraction its sweep documented).
+                return Reading('uncertain', (SILENT_READINGS[0],))
             if _own_question(text, ls, colon):
                 return Reading('negated', (f'field: the answer \u201c{value}\u201d denies it',))
             return Reading('uncertain', (f'field: the answer \u201c{value}\u201d is to a question that names it among '
@@ -1794,7 +1929,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 # "It would have been passed to the cecum had ...": a hypothetical reach completes nothing (a stop in
                 # the clause is still read below, from the clause as written)
-                positive_m = COMPLETE_POS.search(unhypothetical(text, cs, ce))
+                positive_m = COMPLETE_POS.search(unhypothetical(text, cs, ce, part.kind in ('report', 'section')))
                 if positive_m and not re.search(r'\bnot\s+(?:reached|intubated|complete)', clause_text, FLAGS):
                     d.completion_pos.append(_span(text, *_bounded_clause(text, (cs, ce), cs + positive_m.start(),
                                                                          cs + positive_m.end())))
@@ -1896,8 +2031,8 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 fam = _family_for_act(kind, region, part_family, present_families, performed_families)
                 if not fam or fam not in drafts:
                     continue
-                if kind == 'snare' and re.match(r'\s*site\b', text[me:me + 8], FLAGS):
-                    continue
+                if kind == 'snare' and re.match(r'[ \t]*site\b', text[me:me + 8], FLAGS):
+                    continue  # "the polypectomy site": a place; never the next line's "Site:" field (boxes_pdf skeptic)
                 if kind == 'dilation' and not DILATION_ACT.search(text, clause[0], clause[1]):
                     continue  # "a common bile duct dilated to 11 mm", "upstream duct dilation": a finding
                 reading = read_clause(text, clause, ms, me, service_date=service_date, dates=dates, part=part,
@@ -1927,16 +2062,22 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                 if reading.status == 'uncertain' and not hypothetical_reading(reading) and not _row_hold(reading) \
                         and _on_procedure_line(text, ms, part):
                     reading = Reading('performed', reading.cues + ('performed: listed on the procedure line',))
-                if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS:
+                if checked and reading.status == 'uncertain' and reading.cues and reading.cues[0] in SILENT_READINGS \
+                        and fam in performed_families \
+                        and _checked_field_in_a_procedure_list(text, ms, me, service_date):
+                    # its checked field names a printed item a procedure list lists, in a service a title, a statement
+                    # or an instrument documents: the field states that item done (strict boxes, 2026-10-25)
                     reading = Reading('performed', reading.cues + ('performed: its form field is checked',))
                 if reading.status == 'uncertain' and reading.cues and reading.cues[0].startswith(BOX_SILENT) \
                         and all(cue.startswith(ROUTING_SILENT) for cue in reading.cues[1:]) \
-                        and part.kind not in ('history', 'plan', 'indication') \
+                        and part.kind not in ('history', 'plan', 'indication') and fam in performed_families \
                         and _checked_in_a_procedure_list(text, ms, me, service_date):
                     # Routing finds nothing for or against the act (a checked box is no performance statement to it:
                     # its section decides, and this one gives no default), its own box is checked in every reading of
-                    # its row, and the list it is in lists what was done: the row's one marked option (5.9) - "(x)
-                    # Cold snare polypectomy" under "Interventions:", never under "Consent obtained for:".
+                    # its row, the list it is in lists what was done, and a title, a statement or an instrument already
+                    # documents the service: the row's one marked option (5.9) - "(x) Cold snare polypectomy" directly
+                    # under "Interventions:", never under "Consent obtained for:", and never the only word that a
+                    # service was done (the owner's strict-box decision, 2026-10-25: any other row holds).
                     reading = Reading('performed', reading.cues + (OWN_BOX_CHECKED,))
                 reading = held_under_denial(text, ms, reading, service_date)
                 d = drafts[fam]
@@ -2185,9 +2326,14 @@ def _finish(d: _ServiceDraft, text: str, routing, context_facts, encounter_inten
             cues.append(f'section: report title "{d.report_title.text}"')
         else:
             cues.append('performed: acts documented as performed')
-    elif negative:
+    elif negative and not any(c.startswith(HYPOTHETICAL_CUE) for s in hedged for c in s[1]):
         status = 'cancelled' if any(s[0] == 'cancelled' for s in negative) else 'negated'
         cues.extend(negative[0][1])
+    elif negative:
+        # a hypothetical statement of the service beside a denial ("Colonoscopy would have been performed had ..." after
+        # "No colonoscopy was performed at the outside hospital"): held, never newly negated (facts_wording skeptic)
+        status = 'uncertain'
+        cues.extend(next(s[1] for s in hedged if any(c.startswith(HYPOTHETICAL_CUE) for c in s[1])))
     elif timed:
         status = timed[0][0]
         cues.extend(timed[0][1])

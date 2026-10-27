@@ -211,3 +211,68 @@ class SecondReviewTests(TestCase):
         self.assertEqual(len(self.provider.requests), 3)
         drain()
         self.assertEqual(len(self.provider.requests), 3)
+
+
+OFFICE_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
+               'Place of service: Office\nEstablished patient office visit for rectal bleeding.\nChief complaint: Rectal '
+               'bleeding.\nMedical decision making: moderate.\n{block}\n')
+REPORT_LIST = ('SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\nDate of service: 2026-10-21\n'
+               'Procedure: Colonoscopy\nFindings: The colonoscope was advanced to the cecum. No polyps were seen.\n'
+               '{block}\n')
+VISIT_LINE = 'Established patient office visit for rectal bleeding.'
+CECUM_LINE = 'The colonoscope was advanced to the cecum.'
+
+
+class NoSecondReviewForWhatWasNotDoneTests(TestCase):
+    """A paid second review is sent only for a documented service or act the document states done (triage round 2
+    skeptic, proven end to end: checked boxes under consent, equipment, education and "discussed" lists, a "Yes" field
+    answering a printed question, and consent sentences had each queued one). The positive control shows the instrument
+    sees a second review when one is due."""
+
+    NOT_DONE = (
+        (REPORT_LIST, 'Consent obtained for:\n\n\u2612 Biopsy\n\u2612 Cold snare polypectomy', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Consent obtained for:\n\u2612 Biopsy\n(risks: bleeding, perforation)\n\u2612 Cold snare polypectomy',
+         '45378', CECUM_LINE),
+        (REPORT_LIST, 'Equipment:\n- CF-HQ190 colonoscope\n\u2612 Cold snare\n\u2612 Biopsy forceps', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Patient education provided regarding:\n\n\u2612 Biopsy\n\u2612 Cold snare polypectomy', '45378',
+         CECUM_LINE),
+        (REPORT_LIST, 'Available if needed:\n\n\u2612 Cold snare polypectomy', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Interventions:\n(if needed)\n\u2612 Cold snare polypectomy', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Consent was obtained for biopsy and cold snare polypectomy.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Written consent for biopsy and cold snare polypectomy was obtained.', '45378', CECUM_LINE),
+        (REPORT_LIST, 'Biopsy recommended at follow-up?   Yes   No\n\n[PDF form fields on page 1]\nBiopsy: Yes', '45378',
+         CECUM_LINE),
+        (REPORT_LIST, 'Discussed with patient: Biopsy\n\n[PDF form fields on page 1]\nBiopsy: checked', '45378',
+         CECUM_LINE),
+        (OFFICE_LIST, 'Interventions:\n\u2612 Colonoscopy\n\u2612 Cold snare polypectomy', '99214', VISIT_LINE),
+        (OFFICE_LIST, 'Discussed today:\n\n\u2612 Colonoscopy\n\u2612 Cold snare polypectomy', '99214', VISIT_LINE),
+        (OFFICE_LIST, 'Prior authorization was obtained for colonoscopy.', '99214', VISIT_LINE),
+        (OFFICE_LIST, 'Colonoscopy within 10 years:\nLast colonoscopy:', '99214', VISIT_LINE),
+    )
+
+    def setUp(self):
+        self.ws = f.workspace()
+        self.reviewer = f.member(self.ws, f.user('reviewer'))
+        self.client = Client(enforce_csrf_checks=False)
+        self.client.force_login(self.reviewer)
+
+    def sends(self, text, code, quote):
+        provider = TwoPassProvider(first=[(code, quote)], later=[])
+        with mock.patch('studio.jobs.get_provider', return_value=provider):
+            reply = self.client.post('/api/encounters', {'text': text, 'synthetic_attestation': 'yes'})
+            self.assertEqual(reply.status_code, 201, reply.content)
+            drain()
+        purposes = list(models.ProviderRun.objects.filter(encounter_id=reply.json()['id'])
+                        .order_by('created_at').values_list('purpose', flat=True))
+        return len(provider.requests), purposes
+
+    @override_settings(**LIVE)
+    def test_nothing_not_done_is_sent_for_a_second_review(self):
+        for template, block, code, quote in self.NOT_DONE:
+            with self.subTest(block=block):
+                self.assertEqual(self.sends(template.format(block=block), code, quote), (1, ['primary']))
+
+    @override_settings(**LIVE)
+    def test_control_a_checked_box_under_interventions_is_sent(self):
+        text = REPORT_LIST.format(block='Interventions:\n\u2612 Biopsy')
+        self.assertEqual(self.sends(text, '45378', CECUM_LINE), (2, ['primary', 'second_review']))

@@ -458,13 +458,18 @@ class Box2HOptionLabelAcrossALineTests(unittest.TestCase):
         return detect.status_for_span(text, start, start + len(phrase), D)
 
     def test_the_claimed_lines_read_as_at_r3b(self):
-        for above, wanted in (('Complications: none', ('uncertain', (H_SILENT,))),
-                              ('Procedures performed today: none', ('performed', (H_FINDINGS,)))):
+        # Routing reads both lines as at r3b. Engine @4 decides 45385 by the documented snare removal: under
+        # "Complications: none" (a field with its own answer) the checked box is in no list of what was done and no
+        # statement documents the snare, so it is held for the reviewer, never ready and never excluded (the owner's
+        # strict-box decision, 2026-10-25; triage round 2 skeptic: checked boxes under consent and equipment lists had
+        # been read as done and sent for paid second reviews).
+        for above, wanted, want in (('Complications: none', ('uncertain', (H_SILENT,)), 'held'),
+                                    ('Procedures performed today: none', ('performed', (H_FINDINGS,)), 'ready')):
             with self.subTest(above=above):
                 text = H_REPORT.format(above=above, line=H_LINE)
                 self.assertEqual(self.read(text, H_LINE), wanted)
                 proposals, _ = real(text, ('45385', H_LINE))
-                self.assertEqual(outcome(proposals['45385']), 'ready', [c.detail for c in proposals['45385'].checks])
+                self.assertEqual(outcome(proposals['45385']), want, [c.detail for c in proposals['45385'].checks])
 
     def test_every_option_word_ending_the_line_above(self):
         """A checked box opening a line is never negated, and no other rule fires on it for that reason (box2:G)."""

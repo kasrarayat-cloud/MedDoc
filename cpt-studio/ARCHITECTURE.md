@@ -1602,7 +1602,8 @@ rule, never a sentence patch). The rules this added, by module:
     coordinated with the act's own participle, never denies the act, and a coordinated subject with its own negated
     predicate is its own clause (every other "not" still denies); a line listed under a label that denies
     performance is held (`detect.denying_label_over`, routing's plan:C reader); a checked form-field line documents
-    its act; without a known service date a dated act statement is held, never read as today's.
+    its act only as the strict-box rules below allow; without a known service date a dated act statement is held,
+    never read as today's.
   - **Modal predicates** (routing:18): an act or a service whose own predicate is under a modal - a perfect or a
     conditional modal ("it would have been dilated", "Biopsies could have been taken but were not needed", "EGD with
     biopsy would be done if ..."), a recommendation or a possibility ("EGD should be done.", "may be done") - or
@@ -1616,6 +1617,31 @@ rule, never a sentence patch). The rules this added, by module:
     history; read for a colonoscopy, so another routed family states none, as the routing-era rationale did); a family
     routing does not read takes the reader's own intent words, read with routing's intent doubts and its clause's
     reading (`_intent_word`). A doubted intent raises no screening-became-therapeutic consideration.
+  - **Check boxes and form fields** (triage round 2, WIP 7-8; the owner's strict-box decision of 2026-10-25 applied to
+    this reader). A row's own reading decides it: an unselected option, an unread mark, boxes that disagree or a row
+    that cannot be paired hold, and the line the row is on never promotes that hold. A checked own box documents its
+    act only when the run of check-box lines it belongs to lies directly under a procedure list's label
+    ("Interventions:", "Procedures performed:"), or that label opens its own line, and a title, a statement or an
+    instrument already documents the service (`_in_a_procedure_list`, `_checked_in_a_procedure_list`): any other label
+    ("Consent obtained for:", "Equipment:", "Discussed today:"), a blank line, a line of prose or a field with its own
+    answer above the run, or the document's start, leaves it held - never ready, never excluded, and never a performed
+    act or service that would be sent for a paid second review. Plain item lines ("Biopsy", "1. Biopsy") and labels
+    naming an item ("Biopsy:") belong to the run. A checked or "Yes" PDF form field documents its act only through the
+    printed item it names on its page (routing's tie, `detect.checked_field_ties`) when that item is in such a list
+    (`_checked_field_in_a_procedure_list`); a field whose label alone names the act ("Biopsy: Yes" under a printed
+    "Biopsy recommended at follow-up?") is a doubt for the reviewer. A field's answer - never a participle in its
+    label - states its item, and a bare object noun answered with nothing ("Stones: None", "Stent: None") reports a
+    finding, not a denied act. An extraction block's option line ("Biopsy taken: no: checked") is decided by its
+    checked option.
+  - **Consent** (`_consent_object`): what a consent, an authorization or an approval is for is named, never stated done
+    ("Consent was obtained for biopsy and cold snare polypectomy", "Written consent for EGD with dilation was
+    obtained", "Prior authorization was obtained for colonoscopy"): its predicate is the consent's, so the item reads
+    uncertain - held, never excluded, never sent for a second review. An act with a predicate of its own in the clause
+    ("... and biopsies were taken") is still done.
+  - **Service headings**: a label line (ending in ":" or "?") that names one service opens a bare service heading only
+    when it carries the service's name, its acts and heading words alone (`_bare_service_heading`): "Colonoscopy within
+    10 years:", "Last colonoscopy:" and "Colonoscopy up to date:" are questions, not reports of a service done today. A
+    title without a colon keeps its other words ("ERCP (UNSUCCESSFUL)").
 - Routing (`studio/gi/detect.py`): an insertion statement is no extent only when no extent label speaks
   (`_insertion_only` beside the plan:B/B2/D/D2 label readings), which restores the incomplete readings it had lost.
 - Engine (`studio/validation/engine.py`):
@@ -1628,6 +1654,12 @@ rule, never a sentence patch). The rules this added, by module:
   - a family carved out by gi-profiles@3 also counts for the family routing still reads it under, so uncovered "other
     GI" procedures beside a manometry, capsule, anorectal, pH or feeding-tube code are named again;
   - no office visit is pushed as unresolved on a procedure day the engine sees (and no second review is made for it);
+  - a bare status line is the procedure's own (it holds) by a structural signal, not a word list alone: a status
+    word, a hedge that is not on an observation ("were carried out?", "unclear if adequate"; never "A 5 mm lesion was
+    seen?", interpretation 9), or a routing-era reading from a check-box or status-option row (`_status_signal`);
+  - the routing-era reading of the code's own passage excludes the code only when that passage marks its item off
+    itself - an unchecked box, a denying field answer - never by prose beside another row ("A 6 mm polyp was removed."
+    beside a checked "Procedure cancelled" box is held, `_own_passage_decides`);
   - an office visit's evidence support honours the routing-era E/M time reading, and a study's own result sentence
     supports the study code;
   - a member's encounter metadata that conflicts with the document is asked once, at the encounter, when nothing else

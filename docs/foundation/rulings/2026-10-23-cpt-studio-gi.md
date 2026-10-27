@@ -586,3 +586,16 @@ the work that depends on it is committed for review. Verbatim:
     refused whole, nor while the service date is unknown, and without a known service date a dated act statement is
     held, never read as today's (a dated history line had produced a phantom performed service and a paid second
     review). The note's own dated title is only the FIRST dated title line near the top; a qualified one gives no date.
+23. **A neutral list label's items are not read as done** (bc7df129, triage round 1 routing_level). Under a label that
+    neither states nor denies performance ("Additional procedures:" over "EGD with balloon dilation.") the listed
+    service is held for the reviewer, never ready and never excluded. Graded UNCLEAR: a coder may read the list as done,
+    so this over-holds by design and is recorded as known limit sec:1 rather than repaired by a word list.
+24. **The owner's strict-box decision (2026-10-25) applied to the documented-service reader** (bc7df129, triage round 2
+    skeptics). A checked box or a checked "Yes" form field documents its act only inside a list of what was done, read
+    structurally (the label directly over its run, or a printed item its field names), and only in a service a title, a
+    statement or an instrument already documents; anywhere else it holds. What a consent or an authorization is for is
+    held the same way. Removing the box promotions entirely was tried and rejected: it held 95 records the installed
+    revision makes ready on unambiguous rows (an accepted-capability loss this session may not take), while the
+    fail-closed form sends no second review for any of the fourteen consent, equipment, education, office and form-field
+    documents in test_services_second_review (the skeptics' and this session's), and still sends one for a checked box
+    under "Interventions:" (its positive control).

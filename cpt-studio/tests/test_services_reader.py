@@ -649,8 +649,21 @@ class BoxAndFieldRowTests(SimpleTestCase):
                 text = self.REPORT.format(rows=fields if typed else block.format(fields=fields))
                 colon = one(read(text)[1], 'gi.colonoscopy')
                 self.assertEqual((kinds(colon), kinds(colon, 'negated')), ([], ['biopsy', 'tattoo']))
+        # A "Yes" or "checked" field documents its act only through the printed item it names in a list of what was
+        # done (the owner's strict-box decision, 2026-10-25; triage round 2 skeptic: a "Biopsy: Yes" answering a printed
+        # "Biopsy recommended at follow-up?" had been read as a done biopsy and sent for a paid second review). Alone, it
+        # is a doubt for the reviewer, never a done act and never nothing at all.
         text = self.REPORT.format(rows=block.format(fields='Biopsy: Yes'))
-        self.assertEqual(kinds(one(read(text)[1], 'gi.colonoscopy')), ['biopsy'])
+        colon = one(read(text)[1], 'gi.colonoscopy')
+        self.assertEqual((kinds(colon), kinds(colon, 'uncertain')), ([], ['biopsy']))
+        for printed in ('Biopsy recommended at follow-up?   Yes   No', 'Consent obtained for: Biopsy',
+                        'Discussed with patient: Biopsy'):
+            with self.subTest(printed=printed):
+                colon = one(read(self.REPORT.format(rows=printed + '\n' + block.format(fields='Biopsy: Yes')))[1],
+                            'gi.colonoscopy')
+                self.assertEqual(kinds(colon), [])
+        listed = self.REPORT.format(rows='Interventions:\nBiopsy\n' + block.format(fields='Biopsy: Yes'))
+        self.assertEqual(kinds(one(read(listed)[1], 'gi.colonoscopy')), ['biopsy'])
         # a question that names the item among other words holds it, never denies or performs it
         for fields in ('Biopsy (Y/N): N', 'Biopsy in the last 10 years: Yes', 'Biopsy in the last 10 years: No'):
             with self.subTest(fields=fields):
@@ -693,8 +706,11 @@ class BoxAndFieldRowTests(SimpleTestCase):
         documents none."""
         note = HEAD + ('Date of service: 2026-10-14\nPlace of service: Office\nEstablished patient office visit for '
                        'dyspepsia.\nChief complaint: Dyspepsia.\nMedical decision making: low.\n{line}\n')
+        # and the questions' other wordings (triage round 2 skeptic): a label line names a service and heading words only
         for line in ('Colonoscopy in the last 10 years:', 'Upper endoscopy within the last 3 years:',
-                     'Flexible sigmoidoscopy in the past 5 years:'):
+                     'Flexible sigmoidoscopy in the past 5 years:', 'Colonoscopy within 10 years:',
+                     'Colonoscopy (last 10 yrs):', 'Colonoscopy since 2016:', 'Colonoscopy ever:',
+                     'Colonoscopy up to date:', 'Colonoscopy due:', 'Upper endoscopy within 3 years:'):
             with self.subTest(line=line):
                 text = note.format(line=line)
                 _, inv = read(text)
@@ -718,3 +734,121 @@ class FormOptionLineTests(SimpleTestCase):
         self.assertIn('biopsy', kinds(one(inv, 'gi.colonoscopy'), 'negated'))
         _, inv = read(self.REPORT.format(yes='checked', no='not checked'))
         self.assertNotIn('biopsy', kinds(one(inv, 'gi.colonoscopy'), 'negated'))
+
+
+class ConsentObjectTests(SimpleTestCase):
+    """What a consent, an authorization or an approval is for is named, never stated done: the predicate of "Consent was
+    obtained for biopsy" is the consent's (session bc7df129: read as a done biopsy and snare removal, the codes were
+    ready on the cecum sentence and a paid second review was queued for acts the report never states). Held, never
+    excluded; an act with a predicate of its own is still done."""
+
+    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+                     'the cecum. A 6 mm sigmoid polyp was seen.\n{line}\n')
+
+    def test_what_a_consent_is_for_is_not_done(self):
+        for line in ('Consent was obtained for biopsy and cold snare polypectomy.',
+                     'Written consent for biopsy and cold snare polypectomy was obtained.',
+                     'Consent obtained for: Biopsy   Cold snare polypectomy',
+                     'Informed consent was given for biopsy, cold snare polypectomy and tattoo.',
+                     'Biopsy consent was obtained.'):
+            with self.subTest(line=line):
+                colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
+                self.assertEqual(kinds(colon), [])
+                self.assertIn('biopsy', kinds(colon, 'uncertain'))
+                self.assertEqual(kinds(colon, 'negated'), [])
+
+    def test_an_act_with_its_own_predicate_is_done(self):
+        for line in ('Consent was obtained for colonoscopy and biopsies were taken from the sigmoid polyp.',
+                     'Biopsies were obtained after consent was given.',
+                     'After consent was obtained, biopsies were taken from the sigmoid polyp.'):
+            with self.subTest(line=line):
+                colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
+                self.assertEqual(kinds(colon), ['biopsy'])
+
+    def test_an_authorization_in_an_office_note_documents_no_service(self):
+        note = HEAD + ('Date of service: 2026-10-14\nPlace of service: Office\nEstablished patient office visit for '
+                       'rectal bleeding.\nChief complaint: Rectal bleeding.\nMedical decision making: moderate.\n{line}\n')
+        for line in ('Prior authorization was obtained for colonoscopy.', 'Consent was obtained for colonoscopy.',
+                     'Insurance approval was received for capsule endoscopy.'):
+            with self.subTest(line=line):
+                _, inv = read(note.format(line=line))
+                self.assertEqual([s.family for s in inv.services if s.status in services.POSITIVE], ['gi.office_em'])
+
+
+class SnareSiteTests(SimpleTestCase):
+    """"The polypectomy site was clipped" names a place, not a snare removal; a checked snare line followed by a "Site:"
+    field on the next line still documents the snare (boxes_pdf skeptic: the place rule read across the line break and
+    dropped the act, which hid a missed service)."""
+
+    REPORT = HEAD + ('Date of service: 2026-10-14\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to '
+                     'the cecum. A 6 mm sigmoid polyp was seen.\nInterventions:\n{rows}\n')
+
+    def test_a_site_field_on_the_next_line_keeps_the_snare(self):
+        colon = one(read(self.REPORT.format(rows='\u2612 Cold snare polypectomy\nSite: sigmoid colon'))[1], 'gi.colonoscopy')
+        self.assertIn('snare', kinds(colon))
+
+    def test_the_polypectomy_site_is_a_place(self):
+        text = self.REPORT.format(rows='\u2612 Cold snare polypectomy') + 'The polypectomy site was clipped.\n'
+        colon = one(read(text)[1], 'gi.colonoscopy')
+        self.assertEqual(sum(1 for a in colon.acts if a.kind == 'snare' and a.status == 'performed'), 1)
+
+
+class ModalPredicateScopeTests(SimpleTestCase):
+    """facts_wording skeptic (triage round 2) on the modal-predicate repair: a modal predicate makes an act hypothetical
+    only when it governs the act; past ability that today's narrative states is done; a hypothetical statement never
+    turns a denial elsewhere into an exclusion; and the hypothetical wordings include contractions, any adverb and the
+    "get" passive."""
+
+    COLON = HEAD + ('Date of service: 2026-10-21\nProcedure: Colonoscopy\nFindings: The colonoscope was advanced to the '
+                    'cecum. {x}\nImpression: as above.\n')
+    EGD = HEAD + ('Date of service: 2026-10-21\nProcedure: EGD\nFindings: The gastroscope was advanced to the second part '
+                  'of the duodenum. The mucosa was normal.\nImpression: Normal EGD. {x}\n')
+    ERCP = HEAD + ('Date of service: 2026-10-21\nERCP report\nThe duodenoscope was advanced to the major papilla and the '
+                   'bile duct was cannulated. {x}\n')
+
+    def test_a_modal_on_another_subject_leaves_the_act_done(self):
+        for template, family, x, kind in (
+                (self.COLON, 'gi.colonoscopy', 'Cold snare polypectomy of the 8 mm sigmoid polyp, after which the '
+                                                'examination could be completed.', 'snare'),
+                (self.COLON, 'gi.colonoscopy', 'Cold snare polypectomy of a 12 mm polyp in the ascending colon, which '
+                                                'could be retrieved for histology.', 'snare'),
+                (self.EGD, 'gi.egd', 'Band ligation of three esophageal varices, after which the procedure could be '
+                                     'completed.', 'band_ligation'),
+                (self.ERCP, 'gi.ercp', 'Biliary sphincterotomy with a sphincterotome, so that the stones could be '
+                                       'extracted.', 'sphincterotomy'),
+                (self.ERCP, 'gi.ercp', 'Plastic biliary stent placement across the distal stricture, so that the bile '
+                                       'duct could be decompressed.', 'stent')):
+            with self.subTest(x=x):
+                self.assertIn(kind, kinds(one(read(template.format(x=x))[1], family)))
+
+    def test_past_ability_in_today_s_narrative_is_done(self):
+        svc = one(read(self.COLON.format(x='The 8 mm sigmoid polyp could be removed en bloc with a cold snare.'))[1],
+                  'gi.colonoscopy')
+        self.assertIn('snare', kinds(svc))
+        svc = one(read(self.EGD.format(x='Biopsies from the gastric antrum could be obtained without difficulty.'))[1],
+                  'gi.egd')
+        self.assertIn('biopsy', kinds(svc))
+        text = HEAD + ('Date of service: 2026-10-21\nProcedure: Colonoscopy could be performed only to the splenic flexure '
+                       'and was then terminated because of poor preparation.\n')
+        self.assertEqual(one(read(text)[1], 'gi.colonoscopy').status, 'incomplete')
+
+    def test_a_hypothetical_statement_never_turns_a_denial_into_an_exclusion(self):
+        text = HEAD + ('Date of service: 2026-10-21\nIndication: Anemia. No colonoscopy was performed at the outside '
+                       'hospital.\nPlan: Colonoscopy would have been performed today had the preparation been '
+                       'adequate.\n')
+        self.assertNotIn(one(read(text)[1], 'gi.colonoscopy').status, ('negated', 'cancelled'))
+
+    def test_hypothetical_wordings(self):
+        for x in ("Had there been a stricture, it would've been dilated with a balloon.",
+                  'Had there been a stricture, it would\u2019ve been dilated with a balloon.',
+                  'Had there been a stricture, it would certainly have been dilated with a balloon.',
+                  'In the event of a stricture, it would get dilated with a balloon.',
+                  'A biopsy would ordinarily have been taken had the mucosa been abnormal.'):
+            with self.subTest(x=x):
+                egd = one(read(self.EGD.format(x=x))[1], 'gi.egd')
+                self.assertEqual([k for k in kinds(egd) if k in ('dilation', 'biopsy')], [])
+        office = HEAD + ('Date of service: 2026-10-21\nPlace of service: Office\nEstablished patient office visit for '
+                         'dysphagia.\nChief complaint: Dysphagia.\nMedical decision making: moderate.\nEGD would\'ve been '
+                         'done today had the patient fasted.\n')
+        _, inv = read(office)
+        self.assertEqual([s.family for s in inv.services if s.status in services.POSITIVE], ['gi.office_em'])
