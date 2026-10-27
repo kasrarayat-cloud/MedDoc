@@ -237,9 +237,15 @@ ACT_VERB = _rx(r'\b(?:was|were|been|is|are)\s+(?:then\s+|also\s+|successfully\s+
 BARE_PARTICIPLE = _rx(r'\b(?:performed|obtained|taken|removed|resected|retrieved|placed|deployed|injected|ablated|treated|'
                       r'dilated|banded|clipped|extracted|sampled|biopsied|snared|achieved|done|completed|sent|replaced|'
                       r'exchanged|reinserted|ligated|administered|decompressed|disrupted|inflated|left\s+in\s+(?:place|situ))\b')
-NEG_LEAD = _rx(r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*(?:no|neither|none|nor|without|there\s+was\s+no'
+# What may open a clause before its negation word - spaces, dashes, bullets, brackets and list labels ("- ", "A1 ", "2) ")
+# - read one at a time (refutation r1 cost lens, ec5 cost: as "(?:[\s\-*•(]*(?:<label>)?\s*)*" a run was tried in every
+# way of sharing it among the repetitions, so "*" and 16 spaces before "Colonoscopy was performed" took the assess stage
+# past its limit). A letter label takes its digits whole, or with a numbered label after them ("A12." is "A1" "2."), as
+# the old opening could: the same openings reach the same negation word.
+NEG_OPENING = r'^(?:[\s\-*•(]|[A-Z]{1,3}(?:\d{2,4}[.)]|\d{1,2}(?!\d))|\d{1,2}[.)])*'
+NEG_LEAD = _rx(NEG_OPENING + r'(?:no|neither|none|nor|without|there\s+was\s+no'
                r'|there\s+were\s+no)\b')
-NEG_OTHER = _rx(r'^(?:[\s\-*•(]*(?:[A-Z]{1,3}\d{1,2}|\d{1,2}[.)])?\s*)*(?:no|neither|none|nor|there\s+(?:was|were)\s+no)'
+NEG_OTHER = _rx(NEG_OPENING + r'(?:no|neither|none|nor|there\s+(?:was|were)\s+no)'
                 r'(?:\s+(?:other|further|additional|more|another|separate|repeat)\b'
                 # a limit on acts beyond the documented ones: "No tissue was sampled beyond the three containers"
                 r'|\b[^.;\n]{0,80}?\b(?:beyond|other\s+than|except(?:\s+for)?|apart\s+from|besides|in\s+addition\s+to)\s+'
@@ -733,8 +739,10 @@ HEADING_LATER = (r'(?:next|planned|scheduled|future|upcoming|repeat|due|follow-?
                  r'requested|rescheduled)')
 _NAMED = r'(?:' + _SERVICE_NAMES + r'|\b' + HEADING_RECORD + r'\b)'
 # the words a heading's own date may stand among ("Prior colonoscopy (outside facility, 2023)", "Outside report
-# reviewed (03/2023)")
-_DATE_COMPANIONS = (r'(?:[ \t,:\-–—(/]+|\b(?:' + HEADING_EARLIER + r'|' + HEADING_LATER
+# reviewed (03/2023)"), and the spaces and marks between them one at a time (refutation r1 cost lens, ec5 cost: as
+# "(?:[ \t,...]+|<word>)*" a run of spaces was tried in every way of sharing it among the repetitions - "Colonoscopy",
+# 30 spaces and a word before a heading's date took the assess stage past its limit)
+_DATE_COMPANIONS = (r'(?:[ \t,:\-–—(/]|\b(?:' + HEADING_EARLIER + r'|' + HEADING_LATER
                     + r'|facility|hospital|center|centre|institution|clinic|elsewhere|reviewed|dated|on|of|from|in|at|'
                       r'an?|the)\b)')
 _ALONE_AFTER = r'(?:[ \t]+(?:facility|hospital|center|centre|institution|clinic|elsewhere))?[ \t]*(?:[),:]|\Z)'
@@ -744,7 +752,7 @@ HEADING_EARLIER_NAMED = _rx(r'\b' + HEADING_EARLIER + r'\b(?:[ \t]+[\w-]+){0,2}?
 HEADING_LATER_NAMED = _rx(r'\b' + HEADING_LATER + r'\b(?:[ \t]+[\w-]+){0,2}?[ \t]+' + _NAMED
                           + r'|' + _NAMED + r'[ \t,(\-\u2013]+' + HEADING_LATER + _ALONE_AFTER)
 HEADING_DATE_BEFORE = _rx(_NAMED + _DATE_COMPANIONS + r'*\Z')  # the label up to a date: the date dates what it names
-HEADING_DATE_AFTER = _rx(r'(?:[ \t,:\-–—)]+|\b(?:an?|the)\b)*' + _NAMED)  # a date that leads the name
+HEADING_DATE_AFTER = _rx(r'(?:[ \t,:\-–—)]|\b(?:an?|the)\b)*' + _NAMED)  # a date that leads the name (a mark at a time)
 # A heading that asks rather than heads ("Colonoscopy up to date:", "Biopsy?"), doubts, cancels or denies: never a
 # heading of today's report.
 HEADING_DOUBT = _rx(r'\?|\b(?:ever|overdue|up[ \t-]+to[ \t-]+date|not|no|never|none|without)\b'
