@@ -14,6 +14,11 @@ cost-6 (the clause cutter's half; the other half, one cut per sentence, is d3bb7
   a clause cut from each of its characters, and every try read the run to its end: one counted mention and 60,000
   spaces in its sentence took the assess stage 94 s, 120,000 past its limit. A run is now tried from its first two
   characters only, which finds the cuts the try from every character found.
+cost-2 / cost-4 (the lesion vocabulary; the analyze stage's count since WIP 8k refuses the findings' own inputs) - no
+  count bounds lesion nouns, and pass 3 read every lesion noun's clause: 99,600 bare "AVM" at the paste limit took the
+  assess stage to 55 s of its 120 on a quiet host (twice the cost under the load the r1 verifiers saw is past it). A
+  lesion's clause is now read only where its reading decides something: a sized lesion "this", "that" or "the" does
+  not name, and a lesion about to be recorded.
 
 Each cost pin runs the stage's own code under a deadline well under the stage's and far over what the repaired code
 takes; the reading pins compare with the code before the repair. Synthetic data only; no network.
@@ -22,6 +27,7 @@ import random
 import re
 import time
 from datetime import date
+from unittest import mock
 
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -258,3 +264,78 @@ class ClauseCutTests(SimpleTestCase):
                 with self.subTest(text=text, start=start, end=end):
                     self.assertEqual(services.clauses(text, start, end), shipped_clauses(text, start, end))
         self.assertGreater(checked, 4000)
+
+
+# --- cost-2 / cost-4: a lesion's clause is read only where its reading decides something --------------------------
+
+def lesion_lines(lines, unit='AVM', per_line=300):
+    line = ' '.join([unit] * per_line) + '.'
+    return (HEAD + 'Date of service: 2026-10-14\nColonoscopy was performed to the cecum.\n\n'
+            + '\n'.join([line] * lines) + '\n')
+
+
+LESION_NOTE = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+               'A 6 mm sessile polyp in the sigmoid colon was removed with a cold snare (jar A).\n'
+               'The 6 mm polyp was retrieved.\n'
+               'A 4 mm polyp in the rectum was not removed.\n'
+               'Two diminutive polyps in the ascending colon were removed with cold forceps (jar B).\n'
+               'No polyps were seen in the transverse colon.\n'
+               'A 10 mm polyp in the cecum was removed in 2023.\n'
+               'The 4 mm polyp was biopsied and the site was tattooed.\n'
+               'An AVM in the cecum was treated with argon plasma coagulation.\n'
+               'Several AVMs, polyps and an ulcer were seen in the descending colon, the ulcer was biopsied.\n')
+
+
+class LesionReadTests(SimpleTestCase):
+    def reads(self, text):
+        calls = []
+        real = services.read_clause
+
+        def counted(*args, **kwargs):
+            calls.append(args[2])
+            return real(*args, **kwargs)
+
+        with mock.patch.object(services, 'read_clause', counted):
+            inv = services.build(text, service_date=DAY, routing=detect.route(text, DAY),
+                                 context_facts=gi_context.extract_context(text))
+        return inv, len(calls)
+
+    def test_bare_lesion_nouns_are_not_read_one_by_one(self):
+        """20 lines of 300 bare "AVM": each was read (6,000 reads); none decides anything."""
+        inv, reads = self.reads(lesion_lines(20))
+        self.assertLess(reads, 20)
+        self.assertEqual([(s.family, s.status) for s in inv.services], [('gi.colonoscopy', 'performed')])
+
+    def test_a_note_of_lesion_nouns_at_the_paste_limit_is_assessed_in_time(self):
+        """99,600 bare "AVM" (398,868 characters): 55 s of the assess stage's 120 before, on a quiet host."""
+        text = lesion_lines(332)
+        self.assertLessEqual(len(text), settings.MAX_PASTE_CHARS)
+        started = time.perf_counter()
+        proposals = assess_child(text, '45378', 'Colonoscopy was performed')
+        self.assertLess(time.perf_counter() - started, PIN_SECONDS)
+        self.assertIn('45378', proposals)
+
+    def test_sized_denied_dated_and_named_lesions_read_as_before(self):
+        """The control (its inventory as the reader gave it before the repair): sized lesions, a denied one, one of
+        another time, one "the" names again, specimen labels, and the acts tied to them."""
+        inv, _ = self.reads(LESION_NOTE)
+        self.assertEqual([(l.id, l.noun, l.size, l.anatomy, l.specimen, l.morphology)
+                          for s in inv.services for l in s.lesions],
+                         [('S1-L1', 'polyp', '6 mm', 'sigmoid colon', 'A', 'sessile'),
+                          ('S1-L2', 'polyps', '', 'ascending colon', 'B', 'diminutive'),
+                          ('S1-L3', 'avm', '', 'cecum', '', ''), ('S1-L4', 'avms', '', 'descending colon', '', ''),
+                          ('S1-L5', 'ulcer', '', 'descending colon', '', '')])
+        self.assertEqual(sorted((a.kind, a.status, a.lesion, a.evidence[0].start) for s in inv.services for a in s.acts),
+                         [('ablation', 'performed', 'S1-L3', 545), ('biopsy', 'performed', 'S1-L2', 312),
+                          ('biopsy', 'performed', 'S1-L5', 677), ('snare', 'performed', 'S1-L1', 157),
+                          ('tattoo', 'performed', 'S1-L2', 522)])
+        self.assertEqual(inv.problems, ())
+
+    def test_lesions_past_the_services_cap_are_still_a_recorded_problem(self):
+        """A sized lesion is read to be recorded, so the 61st is still the recorded cap problem, never dropped."""
+        text = (HEAD + 'Date of service: 2026-10-14\nColonoscopy report\nThe colonoscope was advanced to the cecum.\n'
+                + ''.join(f'A {n} mm polyp in the sigmoid colon was removed with a cold snare.\n' for n in range(1, 63)))
+        inv, _ = self.reads(text)
+        self.assertEqual(len(inv.services[0].lesions), services.MAX_LESIONS_PER_SERVICE)
+        self.assertIn(f'More than {services.MAX_LESIONS_PER_SERVICE} lesions are documented for one service; the rest '
+                      'were not inventoried.', inv.problems)

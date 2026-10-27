@@ -2479,6 +2479,10 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             cuts[(start, end)] = clauses(text, start, end)
         return cuts[(start, end)]
 
+    def lesion_status(clause: tuple[int, int], lm: re.Match, part: _Part) -> str:
+        return read_clause(text, clause, lm.start(), lm.end(), service_date=service_date, dates=dates, part=part,
+                           in_today_report=part.kind == 'report').status
+
     # Pass 1: services named, other providers' services, encounter-wide statements.
     named: list[tuple[str, str, int, int, int, int]] = []
     for ss, se in sentences:
@@ -2661,27 +2665,31 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     continue
                 d = drafts[fam]
                 clause = _clause_for(cls, lm.start())
-                reading = read_clause(text, clause, lm.start(), lm.end(), service_date=service_date, dates=dates,
-                                      part=part, in_today_report=part.kind == 'report')
-                if reading.status in ('historical', 'planned', 'negated'):
-                    if not (lead in ('this', 'that', 'the') or not lm.group('size')):
+                # Its clause is read only where its reading decides something: a sized lesion that "this", "that" or
+                # "the" does not name (passed over when denied or of another time), and a lesion about to be recorded
+                # (refutation r1, cost-2 and cost-4: no count bounds lesion nouns, and reading every one - 99,600 bare
+                # "AVM" at the paste limit - took the assess stage to 55 s of its 120 on a quiet host).
+                status = None
+                if lm.group('size') and lead not in ('this', 'that', 'the'):
+                    status = lesion_status(clause, lm, part)
+                    if status in ('historical', 'planned', 'negated'):
                         continue
                 anat = [a for a in anatomy_all if clause[0] <= a[2] < clause[1]] or anatomy_all
-                specimen = SPECIMEN.search(text, ss, se)
                 size = re.sub(r'\s+', ' ', (lm.group('size') or '').strip())
                 existing = None
                 if lead in ('this', 'that', 'the', 'it') or not (size or lead):
                     existing = _match_lesion(d.lesions, size, anat[0][0] if anat else '')
                 creatable = (size or lead in ('a', 'an', 'one', 'two', 'three', 'four', 'five', 'six', 'several',
                                               'multiple', 'a separate', 'another') or lead.isdigit())
-                if existing is None and creatable and anat and reading.status not in ('negated', 'historical',
-                                                                                       'planned'):
+                if existing is None and creatable and anat and (status or lesion_status(clause, lm, part)) not in (
+                        'negated', 'historical', 'planned'):
                     if lm.group('noun').lower().rstrip('s') in ('stricture', 'ring', 'erosion') and not size:
                         continue
                     if len(d.lesions) >= MAX_LESIONS_PER_SERVICE:
                         problems.append(f'More than {MAX_LESIONS_PER_SERVICE} lesions are documented for one service; '
                                         'the rest were not inventoried.')
                         continue
+                    specimen = SPECIMEN.search(text, ss, se)
                     lesion = Lesion(id=f'{d.id}-L{len(d.lesions) + 1}', service=d.id, noun=lm.group('noun').lower(),
                                     size=size, morphology=re.sub(r'[\s,]+', ' ', lm.group('morph') or '').strip(),
                                     anatomy=anat[0][0], region=anat[0][1],
