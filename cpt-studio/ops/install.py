@@ -1366,14 +1366,60 @@ CREDENTIALS_CHECK = ('from django.conf import settings\n'
                      "print('corti-credentials-parse-ok')\n")
 
 # Run by `manage shell -c` in an image of the app (APP_SCRIPT_PRELUDE gives it P, the parameters, and ANSWER); each
-# prints one ANSWER line. Both use only what every revision's models have (057a7d39's included).
+# prints one ANSWER line. UNRUNNABLE_STAGES uses only what every revision's models have (057a7d39's included): it is
+# also run in the image of the pair an undo restores (stage_kinds_of). The others run in this revision's own image.
 APP_SCRIPT_ANSWER = 'cpt-studio-answer '
 APP_SCRIPT_PRELUDE = 'import base64, json\nP = json.loads(base64.b64decode({payload!r}))\nANSWER = {answer!r}\n'
+# The stage kinds every revision's worker runs (the installed revision 057a7d39's STAGES). An undo keeps open stages of
+# the kinds the next worker runs - read from that worker's own image (stage_kinds_of) - and only these when it has no
+# image to ask (refutation p1, security-0).
+COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
+# What this revision recorded that an older revision's web and worker would act on under their own rules (refutation
+# p1, migrate-0/-1), read in this revision's image as the installed revision 057a7d39 reads the rows - the oldest a
+# rollback goes back to. {encounter id: reasons}:
+#   unknown  - a provider outcome still unknown: its reconcile requests the current context under its rules (a member
+#              date conflict read as no date, so a request without one; never asking whether that request failed).
+#   outcome  - its run in use (the newest finished run, whatever it was made for) is a hold or a second review - rows
+#              only this revision writes, neither the outcome of the encounter's request - while that outcome (the
+#              newest primary request recorded) failed or was not sent: its metadata save sends that request again.
+#   conflict - the current context holds a member date conflict and the latest stage is a stopped predict, or a stopped
+#              assess of an earlier context: its Resume requests the current context, which it reads as having no date.
+UNDO_HAZARDS = '''
+def undo_hazards():
+    from django.db.models import Q
+    from studio import models, review
+    from studio.gi import context as gi_context
+    Run, Job = models.ProviderRun, models.Job
+    found = {}
+    for pk in Run.objects.filter(state=Run.UNKNOWN, reconciled_at__isnull=True).values_list('encounter_id', flat=True):
+        found.setdefault(str(pk), set()).add('unknown')
+    finished = (Run.SUCCEEDED, Run.FAILED, Run.NOT_SENT, Run.UNKNOWN)
+    swept = Q(state=Run.NOT_SENT) & Q(started_at__isnull=True) & ~Q(request_sha256='')
+    for encounter in models.Encounter.objects.filter(current_revision__isnull=False).select_related('current_context'):
+        runs = (Run.objects.filter(revision_id=encounter.current_revision_id, state__in=finished).exclude(swept)
+                .order_by('-created_at', '-pk'))
+        older = runs.first()
+        if older is not None and (older.purpose != Run.PRIMARY or 'held' in (older.scope or {})):
+            outcome = runs.filter(purpose=Run.PRIMARY).exclude(scope__has_key='held').first()
+            if outcome is not None and outcome.request_sha256 and outcome.state in (Run.FAILED, Run.NOT_SENT):
+                found.setdefault(str(encounter.pk), set()).add('outcome')
+        context, latest = encounter.current_context, review.latest_job(encounter)
+        if (context is not None and gi_context.is_member_conflict((context.facts or {}).get('service_date'))
+                and latest is not None and latest.state == Job.CANCELLED and review.can_resume(encounter)
+                and (latest.kind == Job.PREDICT or (latest.kind == Job.ASSESS and latest.context_id != context.pk))):
+            found.setdefault(str(encounter.pk), set()).add('conflict')
+    return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
+'''
+UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"
 # Close what a pair being undone left open since it started (refutation r1, migrate-3/-4): every stage it queued, ran
 # or left resumable (cancelled) becomes FAILED with P['note'] - failed, not cancelled, so no revision's web offers a
 # Resume for it - and every provider run it left unsettled is settled as the stale-stage sweep settles one (sending:
-# unknown, reserved: not sent). Nothing the pair finished is touched and no row is removed.
-CLOSE_STAGES = '''
+# unknown, reserved: not sent). So, whichever pair created it, does every stage of a kind the next worker does not run
+# (P['kinds'] are those it runs) that is queued, running, or cancelled as its encounter's latest stage (what a Resume
+# runs again): that worker ends on it (refutation p1, security-0: a second review stopped under an earlier pair of a
+# revision that runs it outlived the window). Nothing finished is touched and no row is removed. The answer names,
+# after the close, what the next pair would still act on wrongly (UNDO_HAZARDS).
+CLOSE_STAGES = UNDO_HAZARDS + f'COMMON_STAGE_KINDS = {list(COMMON_STAGE_KINDS)!r}\n' + '''
 import datetime
 from django.db import transaction
 from django.db.models import Q
@@ -1381,12 +1427,24 @@ from django.utils import timezone
 from studio import models, review
 Job, Run = models.Job, models.ProviderRun
 since, now = datetime.datetime.fromisoformat(P['since']), timezone.now()
+kept = set(P.get('kinds') or COMMON_STAGE_KINDS)
 with transaction.atomic():
+    unrunnable, in_flight = [], Q(created_at__gte=since)
+    for pk, state, revision_id, encounter_id, started in (
+            Job.objects.exclude(kind__in=kept).filter(state__in=(Job.QUEUED, Job.RUNNING, Job.CANCELLED))
+            .values_list('pk', 'state', 'revision_id', 'encounter_id', 'started_at')):
+        if state != Job.CANCELLED or (
+                Job.objects.filter(revision_id=revision_id).order_by('-created_at', '-pk').values_list('pk', flat=True)
+                .first() == pk
+                and models.Encounter.objects.filter(pk=encounter_id, current_revision_id=revision_id).exists()):
+            unrunnable.append(pk)
+            if state == Job.RUNNING and started is not None:  # what it was sending is settled as the window's is
+                in_flight |= Q(revision_id=revision_id, created_at__gte=started)
     stages = Job.objects.filter(Q(created_at__gte=since, state__in=(Job.QUEUED, Job.RUNNING, Job.CANCELLED))
-                                | Q(started_at__gte=since, state=Job.RUNNING))
+                                | Q(started_at__gte=since, state=Job.RUNNING) | Q(pk__in=unrunnable))
     encounters = sorted({str(pk) for pk in stages.values_list('encounter_id', flat=True)})
     kinds = sorted(set(stages.values_list('kind', flat=True)))
-    runs = Run.objects.filter(created_at__gte=since)
+    runs = Run.objects.filter(in_flight)
     unknown = runs.filter(state=Run.SENDING).update(
         state=Run.UNKNOWN, finished_at=now, error='The worker stopped while the request was in flight.')
     not_sent = runs.filter(state=Run.RESERVED).update(
@@ -1395,7 +1453,7 @@ with transaction.atomic():
 for pk in encounters:
     review.refresh_state(models.Encounter.objects.get(pk=pk))
 print(ANSWER + json.dumps({'closed': closed, 'kinds': kinds, 'encounters': len(encounters),
-                           'runs_unknown': unknown, 'runs_not_sent': not_sent}))
+                           'runs_unknown': unknown, 'runs_not_sent': not_sent, 'hazards': undo_hazards()}))
 '''
 # The stages this image's worker cannot run (a kind its STAGES does not know) that are queued, running, or cancelled
 # as their encounter's latest stage (what a Resume runs again): a worker meeting one ends on a KeyError (migrate-3).
@@ -1564,22 +1622,54 @@ def created_at(container) -> dt.datetime:
     return dt.datetime.fromisoformat(f'{match[1]}.{(match[2] or "")[:6].ljust(6, "0")}+00:00')
 
 
-def close_undone_stages(image_id, env_bytes, since, revision, reason) -> dict:
+def close_undone_stages(image_id, env_bytes, since, revision, reason, kinds) -> dict:
     """Undo, before any other pair runs on this database: every stage the pair of ``revision`` queued, ran or left
-    resumable since ``since`` is closed as failed with the revision named, and the provider runs it left unsettled are
-    settled (CLOSE_STAGES). A pair restored or reinstalled afterwards would read that work under its own rules: the
-    installed revision's worker ends on a second review it has no stage for, and reads a member date conflict as no
-    date at all (refutation r1, migrate-3 and migrate-4). Run with the undone revision's own image."""
+    resumable since ``since``, and every open stage of a kind the next worker does not run (``kinds`` are those it
+    runs) whichever pair created it, is closed as failed with the revision named, and the provider runs they left
+    unsettled are settled (CLOSE_STAGES). A pair restored or reinstalled afterwards would read that work under its own
+    rules: the installed revision's worker ends on a second review it has no stage for, and reads a member date conflict
+    as no date at all (refutation r1, migrate-3 and migrate-4; p1, security-0). Run with the undone revision's own
+    image. The answer's 'hazards' name what the next pair would still act on wrongly (UNDO_HAZARDS)."""
     note = (f'Closed by the installer: {reason} (revision {revision[:12]}), so this stage will not run. Change the '
             'context, add an addendum or upload the document again to process it.')
-    return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note},
+    return app_script(image_id, env_bytes, CLOSE_STAGES, {'since': since.isoformat(), 'note': note,
+                                                          'kinds': sorted(kinds)},
                       what=f'Closing the stages revision {revision[:12]} left open')
+
+
+def stage_kinds_of(image_id, env_bytes) -> list:
+    """The stage kinds the worker of ``image_id`` runs - its own jobs.STAGES, read by UNRUNNABLE_STAGES in that image -
+    or COMMON_STAGE_KINDS when it cannot be asked (no image id, or no answer): an undo then closes more, never less."""
+    if isinstance(image_id, str) and re.fullmatch(r'sha256:[0-9a-f]{64}', image_id):
+        try:
+            return sorted(app_script(image_id, env_bytes, UNRUNNABLE_STAGES, {},
+                                     what='Reading the stage kinds the next worker runs')['known'])
+        except Exception:  # noqa: BLE001 — an undo never stops on this read; it assumes the fewest kinds instead
+            pass
+    return list(COMMON_STAGE_KINDS)
+
+
+def undo_hazards(image_id, env_bytes, revision) -> dict:
+    """{encounter id: reasons} - what ``revision`` recorded that an older revision would act on under its own rules
+    (UNDO_HAZARDS, read with ``revision``'s own image)."""
+    return app_script(image_id, env_bytes, UNDO_HAZARDS_READ, {},
+                      what=f'Reading what an older revision would act on wrongly (revision {revision[:12]})')['hazards']
+
+
+def hazard_summary(hazards) -> str:
+    counts = {}
+    for reasons in hazards.values():
+        for reason in reasons:
+            counts[reason] = counts.get(reason, 0) + 1
+    return f'{len(hazards)} encounter(s): ' + ', '.join(f'{reason} {count}' for reason, count in sorted(counts.items()))
 
 
 def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref) -> dict:
     """Park the old pair, start the new pair; on any failure stop what was started, close every stage it left open
-    (close_undone_stages), and only then restore exactly the old pair. A pair whose stages cannot be closed is never
-    restored over them: the new pair is left stopped and the old one parked, for rollback-app."""
+    and every open stage of a kind the old worker does not run (close_undone_stages), and only then restore exactly the
+    old pair - its worker left stopped while the close names records it would act on wrongly. A pair whose stages
+    cannot be closed is never restored over them: the new pair is left stopped and the old one parked, for
+    rollback-app."""
     parked, launched, started = {}, [], {}
     swapped_at = None
     try:
@@ -1599,21 +1689,38 @@ def replace_services(ctx, image_id, env_bytes, provider_mode, authorization_ref)
                 tail = docker('logs', '--tail', '40', name, check=False, timeout=30)
                 ctx.log(f'{role}-failed', tail.stdout[-8192:] + tail.stderr[-8192:])
             stop_service_container(name, role)
+        closed, hold_worker = None, False
         if launched and any(parked.values()):
+            previous = parked.get('worker') or parked.get('web')
+            kinds = stage_kinds_of(previous['image'], env_bytes)  # what the restored worker runs (p1, security-0)
             try:
                 closed = close_undone_stages(image_id, env_bytes, swapped_at, ctx.revision,
-                                             'its installation failed and the previous revision was restored')
+                                             'its installation failed and the previous revision was restored', kinds)
             except BaseException as error:
                 raise InstallError(f'{failure}; the stages the new pair left open could not then be closed ({error}), '
                                    'so the new pair was left stopped and the previous pair parked (*-previous): run '
                                    '--phase rollback-app, then rename the parked pair back.') from error
             ctx.log('undo', json.dumps(closed).encode())
+            # Refutation p1, migrate-0/-1: this path cannot refuse, so while the close names records the restored
+            # revision would act on under its own rules (a send without a date, an identical re-send of a request that
+            # failed), its worker - the only holder of the provider credentials - is left stopped: nothing can be sent.
+            # An answer that names nothing it read is not read as "none".
+            hold_worker = not isinstance(closed.get('hazards'), dict) or bool(closed['hazards'])
         for role in reversed(launched):
             remove_service_container(SERVICES[role], role)
         for role, previous in parked.items():
             if previous:
                 docker('rename', SERVICES[role] + '-previous', SERVICES[role])
-                docker('start', SERVICES[role])
+                if role != 'worker' or not hold_worker:
+                    docker('start', SERVICES[role])
+        if hold_worker:
+            hazards = closed.get('hazards')
+            named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which'
+            raise InstallError(
+                f'{failure}; the previous web was restored and its worker ({SERVICES["worker"]}) left stopped, so '
+                f'nothing can be sent: {named} hold records it would act on under its own rules (ops/INSTALL.md, '
+                'Reinstalling an older revision). Install this revision again once its failure is fixed: its worker '
+                'reads them under its own rules.', details={'hazards': hazards, 'stages_closed': closed}) from failure
         raise
     for role, previous in parked.items():
         if previous:
@@ -2214,10 +2321,12 @@ def phase_verify(ctx) -> dict:
 
 
 def phase_rollback_app(ctx) -> dict:
-    """Stop the web and worker, close every stage their revision left open since they were created
-    (close_undone_stages, with their own image), then remove them - so a parked pair renamed back or an older revision
-    installed afterwards never runs that work under its own rules. When the stages cannot be closed the pair is left
-    stopped, not removed, and a rerun finishes the undo."""
+    """Refuse, before stopping anything, while their revision recorded what an older revision would act on wrongly
+    (undo_hazards); otherwise stop the web and worker, close every stage their revision left open since they were
+    created and every open stage of a kind the next worker does not run (close_undone_stages, with their own image),
+    read again, then remove them - so a parked pair renamed back or an older revision installed afterwards never runs
+    that work under its own rules. When the stages cannot be closed, or the second read names a record (a send in
+    flight when the worker stopped is an unknown outcome), the pair is left stopped, not removed."""
     pair = {}
     for role in ('worker', 'web'):
         container = inspect('container', SERVICES[role])
@@ -2225,20 +2334,48 @@ def phase_rollback_app(ctx) -> dict:
             if not owned(container, role):
                 raise InstallError(f'{SERVICES[role]} is not a CPT Studio {role} container; refusing to remove it.')
             pair[role] = container
-    for role in pair:
-        stop_service_container(SERVICES[role], role)
     closed = None
     if pair:
         first = pair.get('web') or pair['worker']
         revision = labels_of(first).get(REVISION_LABEL) or 'unlabelled'
+        env = read_protected_env(APP_ENV, APP_ENV_KEYS)
+        require_db()
+        # Refutation p1, migrate-0/-1: an older revision's web and worker - a parked pair renamed back, or one
+        # reinstalled - would act on these under their own rules (a send without a date, an identical re-send of a
+        # request that failed); they are cleared on this revision's web, which keeps serving meanwhile.
+        found = undo_hazards(first['Image'], env, revision)
+        if found:
+            raise InstallError(f'{hazard_summary(found)} hold records an older revision would act on under its own '
+                               'rules; nothing was stopped or removed. Clear them on this revision\'s web (ops/INSTALL.md, '
+                               'Reinstalling an older revision), then rerun --phase rollback-app.',
+                               details={'hazards': found})
+    for role in pair:
+        stop_service_container(SERVICES[role], role)
+    if pair:
+        # the next worker: the parked pair's when one is parked (the '*-previous' recovery), else an unknown older one
+        next_image = None
+        for role in ('worker', 'web'):
+            previous = inspect('container', SERVICES[role] + '-previous')
+            if previous is not None and owned(previous, role):
+                next_image = previous['Image']
+                break
+        kinds = stage_kinds_of(next_image, env) if next_image else list(COMMON_STAGE_KINDS)
         try:
             require_db()
-            closed = close_undone_stages(first['Image'], read_protected_env(APP_ENV, APP_ENV_KEYS),
+            closed = close_undone_stages(first['Image'], env,
                                          min(created_at(container) for container in pair.values()), revision,
-                                         'its web and worker were removed (rollback-app)')
+                                         'its web and worker were removed (rollback-app)', kinds)
         except InstallError as error:
             raise InstallError(f'Web and worker stopped, not removed: the stages they left open could not be closed '
                                f'({error}). Rerun --phase rollback-app once that is resolved.') from error
+        hazards = closed.get('hazards')
+        if not isinstance(hazards, dict) or hazards:
+            named = hazard_summary(hazards) if isinstance(hazards, dict) else 'the close did not say which encounters'
+            raise InstallError(f'Web and worker stopped, not removed: after the close, {named} hold records an older '
+                               'revision would act on under its own rules. Start them again (docker start '
+                               f'{SERVICES["worker"]} {SERVICES["web"]}), clear them on this revision\'s web '
+                               '(ops/INSTALL.md, Reinstalling an older revision), then rerun --phase rollback-app.',
+                               details={'hazards': hazards, 'stages_closed': closed})
     removed = {}
     for role in ('worker', 'web'):
         name = SERVICES[role]

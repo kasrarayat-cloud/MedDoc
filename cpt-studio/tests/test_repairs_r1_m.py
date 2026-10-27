@@ -409,12 +409,13 @@ class DockerWorld:
                     del self.live[name]
         return SimpleNamespace(returncode=0, stdout=b'', stderr=b'')
 
-    def close(self, image_id, env_bytes, since, revision, reason):
+    def close(self, image_id, env_bytes, since, revision, reason, kinds=None):
         self.record('close', image_id, revision)
-        self.closed = {'image': image_id, 'env': env_bytes, 'since': since, 'revision': revision, 'reason': reason}
+        self.closed = {'image': image_id, 'env': env_bytes, 'since': since, 'revision': revision, 'reason': reason,
+                       'kinds': kinds}
         if self.fail.get(('close',)):
             raise install.InstallError('the database did not answer')
-        return {'closed': 3}
+        return {'closed': 3, 'hazards': {}}  # nothing an older revision would act on wrongly (7c8 p1install)
 
     def index(self, *call):
         return next(n for n, made in enumerate(self.calls) if made[:len(call)] == call)
@@ -511,6 +512,7 @@ class RollbackAppClosesTheRemovedPairsStagesTests(SimpleTestCase):
         ctx = SimpleNamespace(revision=NEW_REVISION)
         with mock.patch.object(install, 'inspect', world.inspect), mock.patch.object(install, 'docker', world.docker), \
                 mock.patch.object(install, 'close_undone_stages', world.close), \
+                mock.patch.object(install, 'undo_hazards', return_value={}), \
                 mock.patch.object(install, 'require_db', lambda: world.record('require_db')), \
                 mock.patch.object(install, 'read_protected_env', return_value=b'ENV=2\n'), \
                 mock.patch.object(install, 'oneshot', side_effect=AssertionError('no real container in a test')):
@@ -542,7 +544,7 @@ class RollbackAppClosesTheRemovedPairsStagesTests(SimpleTestCase):
         self.assertLess(close, world.index('rm', '--force', 'new-web'))
         self.assertLess(close, world.index('rm', '--force', 'new-worker'))
         self.assertEqual(world.ids(), {install.SERVICES['web'] + '-previous': 'old-web'})
-        self.assertEqual(result['stages_closed'], {'closed': 3})
+        self.assertEqual(result['stages_closed'], {'closed': 3, 'hazards': {}})
         self.assertEqual(result['parked_left_in_place'], [install.SERVICES['web'] + '-previous'])
 
     def test_rollback_app_leaves_a_pair_it_cannot_close_stopped_and_in_place(self):
@@ -713,8 +715,10 @@ class TheUndoScriptsOnTheDatabaseTests(TestCase):
         note = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
         answer = run_app_script(install.CLOSE_STAGES, {'since': swap.isoformat(), 'note': note})
 
+        # (7c8 p1install) the answer also names what an older revision would act on wrongly: here the send the undone
+        # pair had in flight, now an unknown outcome that must be reconciled on this revision's web first
         self.assertEqual(answer, {'closed': 4, 'kinds': ['assess', 'predict', 'review2'], 'encounters': 3,
-                                  'runs_unknown': 1, 'runs_not_sent': 1})
+                                  'runs_unknown': 1, 'runs_not_sent': 1, 'hazards': {str(running.pk): ['unknown']}})
         for job in (new_review2, new_stopped, new_running, claimed):
             job.refresh_from_db()
             self.assertEqual((job.kind, job.state, job.error), (job.kind, models.Job.FAILED, note))

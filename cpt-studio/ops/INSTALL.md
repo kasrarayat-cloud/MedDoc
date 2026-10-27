@@ -61,10 +61,21 @@ directory. Exit 0 = done; 1 = refused or failed (the receipt says which and why)
 | 10 | `https-vhost` | — | `quillmd-cpt` replaced by the HTTPS stage; nginx reload |
 | 11 | `verify` | — | nothing |
 
-`rollback-app` stops the web and worker containers, closes the stages their
-revision left open (see **app** below) and only then removes them; it keeps the
-database, volumes, images and secrets, and needs the database to be running
-(without it the pair is left stopped, not removed, and a rerun finishes).
+`rollback-app` removes the web and worker containers; it keeps the database,
+volumes, images and secrets, and needs the database to be running. First, with
+the pair's own image, it reads the records their revision made that an older
+revision would act on wrongly (listed under **Reinstalling an older
+revision**): while any exists it refuses, naming the encounters, and stops
+nothing. Otherwise it stops the pair, closes every stage it queued, ran or left
+resumable since it was created, and every stage of a kind the next worker cannot
+run (queued, running, or cancelled as its encounter's latest stage) whichever
+pair created it, settles the provider runs they left unsettled (as **app**
+below does on a failure), reads again, and only then removes the pair. The next
+worker is the parked pair's when one is left (its kinds read from its image);
+otherwise one that runs extract, analyze, predict and assess only. If the stages
+cannot be closed, or the second read names a record (a request in flight when
+the worker stopped is then an unknown outcome), the pair is left stopped, not
+removed: start it, clear the records, rerun.
 `rollback-vhost` removes `quillmd-cpt` and its symlink (only if their bytes are
 this installer's) and reloads nginx; the certificate lineage is kept.
 
@@ -107,17 +118,22 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   `/health/` = `{status ok, service cpt-studio, data_mode synthetic-only,
   database ok, release <revision>}` and a worker that stays up. On any failure
   the new pair is stopped and, before the parked pair is restored, every stage
-  it queued, ran or left resumable since the swap is closed as failed, naming
-  the revision (failed, not cancelled: no web offers a Resume for it), and the
-  provider runs it left unsettled are settled as the stale-stage sweep settles
-  them. The restored pair would otherwise read that work under its own rules:
-  057a7d39's worker ends on a second review it has no stage for, and reads a
-  member's conflicting service date as no date at all. Nothing the new pair
-  finished is touched and no row is removed. Then the new pair is removed and
-  the parked pair restored; if the stages cannot be closed, the new pair is
-  left stopped and the parked pair parked (the receipt says so): run
-  `rollback-app`, then rename the parked pair back. Migrations already applied
-  are not reversed.
+  it queued, ran or left resumable since the swap, and every stage of a kind the
+  parked worker cannot run (read from the parked image; when it cannot be read,
+  every kind but extract, analyze, predict and assess) that is queued, running,
+  or cancelled as its encounter's latest stage, whichever pair created it, is
+  closed as failed, naming the revision (failed, not cancelled: no web offers a
+  Resume for it), and the provider runs they left unsettled are settled as the
+  stale-stage sweep settles them. Nothing finished is touched and no row is
+  removed. Then the new pair is removed and the parked pair renamed back. Its
+  web is started. Its worker is started too unless the close names records it
+  would act on wrongly (listed under **Reinstalling an older revision**); then
+  the worker is left stopped - it alone holds the Corti credentials, so nothing
+  can be sent - and the receipt names the encounters: install this revision
+  again once its failure is fixed (its worker reads those records under its own
+  rules). If the stages cannot be closed, the new pair is left stopped and the
+  parked pair parked (the receipt says so): run `rollback-app`, then rename the
+  parked pair back. Migrations already applied are not reversed.
 - **Work in flight at the swap** is not frozen: a stage the previous pair
   queued or left running is finished by the new pair under the new rules, and
   nothing is sent that no member asked for. A predict the previous pair queued
@@ -172,30 +188,58 @@ reinstall's preflight baseline.
 ## Reinstalling an older revision
 
 An older revision's installer does not close a newer revision's stages, and its
-worker and web read the newer revision's records under their own rules: the
-installed revision 057a7d39's worker ends on a queued second review (and its
-Resume re-queues a stopped one), and its reconcile of an unknown outcome
-requests the current context, which it reads without a date when that context
-holds a member's conflicting service date. So, before reinstalling an older
+worker and web read the newer revision's records under their own rules. The
+installed revision 057a7d39 acts wrongly on these (`rollback-app` and the
+failure path of `app` read them as it reads the rows):
+
+- **unknown**: a provider outcome still unknown. Its reconcile requests the
+  current context under its rules: without a date when that context holds a
+  member's conflicting service date, and whether or not that request failed
+  before.
+- **outcome**: a hold (nothing sent while a member's service date conflicts
+  with the document) or a bounded second review that is newer than the
+  encounter's last request, when that request failed or was not sent. It takes
+  the hold or second review for that request's outcome, so its metadata save
+  sends the request again.
+- **conflict**: a member's conflicting service date in the current context,
+  while the latest stage is a stopped predict, or a stopped assess of an
+  earlier context. Its Resume requests the context, which it reads as having
+  no date.
+- a stage of a kind it has no stage for (the second review), queued, running,
+  or stopped as the latest: its worker ends on it.
+
+`rollback-app` closes the last as failed, and refuses, naming the encounters,
+while any of the first three exists. They are cleared on this revision's web:
+reconcile each unknown outcome; answer the date question (correct or clear the
+metadata date), after which this revision makes the request for the agreed date
+(re-assessing with, or re-using, a recorded answer to it where one exists); or
+Resume the stopped stage. Where the agreed request is the one that failed,
+nothing newer is recorded for it: only an addendum (a newer request) clears the
+encounter, or this revision stays installed. So, before reinstalling an older
 revision over this one:
 
-1. Reconcile every unknown provider outcome on this revision's web.
-2. Run this revision's `rollback-app`: it stops the pair and closes every
-   stage this revision queued, ran or left resumable since its pair was
-   created.
+1. Clear those records on this revision's web.
+2. Run this revision's `rollback-app`: it refuses while one remains;
+   otherwise it closes every stage this revision queued, ran or left resumable
+   since its pair was created, and every stage of a kind the next worker cannot
+   run, whichever pair created it, and removes the pair.
 3. Then install the older revision as usual. Its migrate is a no-op on this
    schema (migrations are not reversed). Revisions from this one on also
    refuse, in `app`, while a stage they cannot run is open or a provider
    outcome is unknown.
 
 Records this revision made stay as they are and are read by the older code as
-it reads them: its reports, for instance, do not mark a bounded second review
-as used by the assessment.
+it reads them: its reports do not mark a bounded second review as used, its
+re-assessment does not read one, and it reads a hold as a provider request that
+failed. Encounter list states stay as this revision last derived them until an
+action on each encounter recomputes them.
 
 ## Recovery notes
 
 - `*-previous` containers left by an interrupted `app`: to go back, run
-  `rollback-app` first (it closes what the new pair left open and removes it),
+  `rollback-app` first (it refuses while the new pair's records would be acted
+  on wrongly, as above; otherwise it closes what the new pair left open and
+  every stage of a kind the parked worker cannot run, and removes the new pair),
   then rename the parked pair back by hand; to keep the new pair, remove them
   by hand. `app` refuses while one exists.
 - Staged `.initial-credentials.json.new` / `.agent-credentials.json.new` from an
