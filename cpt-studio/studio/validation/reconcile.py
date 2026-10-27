@@ -22,6 +22,7 @@ from studio.gi.context import is_member_conflict
 from studio.gi.services import (ROUTING_CONTRARY_CUE, ROUTING_DOUBT_CUE, SERVICES, Act, Conflict, DocumentedService,
                                  ServiceInventory)
 from studio.types import Check, ClarificationSpec, EvidenceSpan, Span
+from studio.validation import checks
 
 SOURCE = f'cpt-studio:{catalogue.CATALOGUE_VERSION}'
 INVENTORY_SOURCE = 'cpt-studio:gi-services@1'
@@ -392,7 +393,7 @@ def conflict_clarification(conflict: Conflict, service: DocumentedService) -> Cl
 def documentation_clarifications(service: DocumentedService, context=None) -> list[ClarificationSpec]:
     """Every materially necessary question for one documented service, asked together. A fact the visit lacks because
     a member's encounter metadata conflicts with the document is asked as that conflict, both sides named
-    (context.is_member_conflict), never as undocumented."""
+    (context.is_member_conflict), never as undocumented; so is a fact the document itself states twice."""
     entry = catalogue.entry(service.family)
     if entry is None or service.status not in ('performed', 'incomplete', 'uncertain'):
         return []
@@ -402,8 +403,15 @@ def documentation_clarifications(service: DocumentedService, context=None) -> li
         for fact in service.uncertainty:
             if fact in questions:
                 held = (context or {}).get(fact)
-                reason = (f'The {fact.replace("_", " ")} is in conflict. {held.note}' if is_member_conflict(held)
-                          else f'The documented office / outpatient visit does not state its {fact.replace("_", " ")}.')
+                if is_member_conflict(held):
+                    reason = f'The {fact.replace("_", " ")} is in conflict. {held.note}'
+                elif getattr(held, 'origin', None) == 'conflict':
+                    # refutation r1, context-6: values that conflict within the document are a conflict, quoted as the
+                    # E/M proposal's own question quotes them (checks.fact_clarifications), never "does not state"
+                    reason = (f'The document gives conflicting values for the {checks.fact_label(fact)}: '
+                              f'{checks.conflict_values(held)}.')
+                else:
+                    reason = f'The documented office / outpatient visit does not state its {fact.replace("_", " ")}.'
                 out.append(ClarificationSpec(scope='service', fact=fact, family=service.family,
                                              question=questions[fact], reason=reason))
         return out

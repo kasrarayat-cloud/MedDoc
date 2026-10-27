@@ -46,3 +46,45 @@ class MemberEnteredValuesAreNeverDocumentedTests(SimpleTestCase):
         self.assertNotIn(ENTERED, detail)
         self.assertIn('Documented facts: place of service = office;', item.rationale)
         self.assertNotIn(ENTERED, item.rationale)
+
+
+STATUS_LINE = 'Patient status: Established patient, last seen 2026-03-02.\n'
+
+
+class VisitQuestionNamesADocumentedConflictTests(SimpleTestCase):
+    """context-6: with no E/M proposal (the provider selects nothing, fails, or nothing is sent while a member date
+    conflict holds), the visit's own question said "The documented office / outpatient visit does not state its patient
+    status" while the stored context fact is a conflict between two documented values. A conflict is asked as one, both
+    sides quoted, as the E/M proposal's own question words it (checks.fact_clarifications)."""
+
+    def visit_question(self, text, fact, **user_values):
+        result = run(text, [], user_values=user_values)
+        found = [c for c in result.clarifications if c.fact == fact and c.family == 'gi.office_em']
+        self.assertEqual(len(found), 1, [(c.fact, c.reason) for c in result.clarifications])
+        return found[0]
+
+    def test_two_documented_patient_statuses_are_asked_as_a_conflict(self):
+        text = OFFICE_NOTE.replace(SCHEDULED, '').replace(STATUS_LINE, STATUS_LINE + 'New patient to this clinician.\n')
+        asked = self.visit_question(text, 'patient_status')
+        self.assertEqual(asked.reason, 'The document gives conflicting values for the new or established patient '
+                                       'status: “Patient status: Established”, “New patient”.')
+        self.assertEqual(asked.question, 'Was the patient new or established to this clinician and group?')
+
+    def test_two_documented_settings_are_asked_as_a_conflict(self):
+        text = OFFICE_NOTE.replace(SCHEDULED, '').replace(PLACE, PLACE + 'This was a telehealth visit.\n')
+        asked = self.visit_question(text, 'setting')
+        self.assertTrue(asked.reason.startswith('The document gives conflicting values for the place of service: “'),
+                        asked.reason)
+        self.assertNotIn('does not state', asked.reason)
+
+    def test_controls_a_missing_status_and_a_member_conflict_keep_their_wording(self):
+        text = OFFICE_NOTE.replace(SCHEDULED, '').replace(STATUS_LINE, '')
+        self.assertEqual(self.visit_question(text, 'patient_status').reason,
+                         'The documented office / outpatient visit does not state its patient status.')
+        # a member's value unlike the document's single one is asked once, as that conflict (encounter question)
+        result = run(OFFICE_NOTE.replace(SCHEDULED, ''), [], user_values={'patient_status': 'new'})
+        reasons = [c.reason for c in result.clarifications if c.fact == 'patient_status']
+        self.assertEqual(len(reasons), 1, reasons)
+        self.assertTrue(reasons[0].startswith('The new or established patient status is in conflict. Encounter '
+                                              'metadata entered by a workspace member gives new; the document gives '
+                                              'established.'), reasons[0])

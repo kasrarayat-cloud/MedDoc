@@ -708,7 +708,8 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
                  f'cpt-studio:{profile.version}')
 
 
-def _conflict_values(fact: Fact) -> str:
+def conflict_values(fact: Fact) -> str:
+    """The values of a conflict as the document states them (its evidence quoted), for every reader that words one."""
     quoted = [f'“{excerpt(span.text)}”' for span in fact.evidence if span.text.strip()]
     return ', '.join(quoted) or excerpt(fact.note) or 'values not quoted'
 
@@ -726,7 +727,7 @@ def fact_clarifications(states: Sequence[FactState], profile: ServiceProfile, fa
             reason = f'The {fact_label(state.name)} is in conflict. {state.fact.note}'
         elif state.problem == 'conflict':
             reason = (f'The document gives conflicting values for the {fact_label(state.name)}: '
-                      f'{_conflict_values(state.fact)}.')
+                      f'{conflict_values(state.fact)}.')
         else:
             reason = f'The {fact_label(state.name)} is not documented; the {profile.label} profile requires it.'
         out.append(ClarificationSpec(scope='proposal', fact=state.name, question=question, reason=reason,
@@ -1003,7 +1004,7 @@ def _date_problem(state: DateState) -> str:
     if state.origin == 'conflict':
         if is_member_conflict(state.fact):
             return f'The date of service is in conflict. {state.fact.note.rstrip(".")}'
-        return f'Conflicting dates of service are documented ({_conflict_values(state.fact)})'
+        return f'Conflicting dates of service are documented ({conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'
     return 'No date of service is documented'
