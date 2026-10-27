@@ -88,6 +88,34 @@ def start_pipeline(revision, requested_by):
                    key=f'extract:{revision.pk}', requested_by=requested_by)
 
 
+def _member_date_hold(encounter, revision, provider, requested_by):
+    """The not-sent run session interpretation 19 records for a context whose service date is a member conflict: the
+    request has no date it could carry, so nothing is built, reused or sent, and the run says why."""
+    return models.ProviderRun.objects.create(
+        encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT,
+        error=MEMBER_DATE_CONFLICT_MESSAGE, authorization_ref=settings.AUTHORIZATION_REF, requested_by=requested_by,
+        service_date=None, finished_at=timezone.now(), scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+
+
+def _queue_predict(encounter, revision, context, *, key, requested_by):
+    """Queue the predict for ``context`` - unless it is the current revision's current context and its service date is
+    a member conflict. Then the hold is recorded here, where it is decided, and only the assess that reads it is queued:
+    never a job that can send and whose hold only this revision's predict stage knows (refutation r1, migrate lens: the
+    installed revision's worker, restored after a failed replacement or reinstalled, read the conflict as 'no date' and
+    sent the request without one). Every other predict is queued as before; one for a context that is no longer current
+    is skipped by every revision's predict stage."""
+    fact = (context.facts or {}).get('service_date') if context is not None else None
+    if not gi_context.is_member_conflict(fact) or not models.Encounter.objects.filter(
+            pk=encounter.pk, current_revision_id=revision.pk, current_context_id=context.pk).exists():
+        return enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context, key=key,
+                       requested_by=requested_by)
+    provider = get_provider()
+    run = _member_date_hold(encounter, revision, provider, requested_by) if provider is not None else None
+    return enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=run,
+                   key=f'assess:{context.pk}:{run.pk}' if run else f'{key}:no-provider', requested_by=requested_by)
+
+
 # --- helpers -----------------------------------------------------------------
 
 def _limits():
@@ -320,8 +348,7 @@ def stage_analyze(job):
         if locked.current_revision_id == revision.pk:
             locked.current_context = context
             locked.save(update_fields=['current_context', 'updated_at'])
-    enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context, key=f'predict:{context.pk}',
-            requested_by=job.requested_by)
+    _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=job.requested_by)
     return {'context': str(context.pk), 'routing': str(routing.pk)}
 
 
@@ -366,8 +393,7 @@ def _remade_context(job):
         enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=fresh, provider_run=last_run,
                 key=f'assess:{fresh.pk}:{last_run.pk}', requested_by=job.requested_by)
     else:
-        enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=fresh, key=f'predict:{fresh.pk}',
-                requested_by=job.requested_by)
+        _queue_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
     return {'skipped': f'the context was recorded by {context.version}; it was remade under {CONTEXT_VERSION}'}
 
 
@@ -397,13 +423,9 @@ def stage_predict(job):
         # Session interpretation 19: a member-entered service date that differs from the document's is a conflict with
         # both sides kept (interpretation 11), so the request has no date it can carry. Nothing is built, reused or
         # sent while it stands - a dateless request would be paid for and discarded once the date is settled - and the
-        # encounter asks the date question. Correcting or clearing the metadata starts the request for its date.
-        run = models.ProviderRun.objects.create(
-            encounter=encounter, revision=revision, provider=provider.name, adapter_version=provider.adapter_version,
-            request_sha256='', request_body={}, contexts=[], state=models.ProviderRun.NOT_SENT,
-            error=MEMBER_DATE_CONFLICT_MESSAGE, authorization_ref=settings.AUTHORIZATION_REF,
-            requested_by=job.requested_by, service_date=None, finished_at=timezone.now(),
-            scope={'held': models.ProviderRun.HELD_MEMBER_DATE_CONFLICT})
+        # encounter asks the date question. Correcting or clearing the metadata starts the request for its date. Every
+        # path that queues a predict records this hold itself (_queue_predict); this holds one queued any other way.
+        run = _member_date_hold(encounter, revision, provider, job.requested_by)
         next_assess(run)
         return {'provider': 'not_sent', 'reason': 'member-entered service date conflicts with the document'}
     if not models.RoutingRun.objects.filter(revision=revision, service_date=service_date).exists():
@@ -906,9 +928,12 @@ def resume(encounter, user):
         else:
             kind, provider_run = last.kind, last.provider_run
         clear_stop(encounter)
-        job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
-                      provider_run=provider_run, key=f'{last.idempotency_key}:resume:{uuid.uuid4()}',
-                      requested_by=user)
+        key = f'{last.idempotency_key}:resume:{uuid.uuid4()}'
+        if kind == Job.PREDICT:
+            job = _queue_predict(encounter, last.revision, context, key=key, requested_by=user)
+        else:
+            job = enqueue(kind, encounter=encounter, revision=last.revision, context=context,
+                          provider_run=provider_run, key=key, requested_by=user)
         audit.record(encounter.workspace, 'pipeline.resumed', encounter=encounter, actor=user, stage=last.kind)
         review.refresh_state(encounter)
     return job
@@ -933,8 +958,8 @@ def reconcile(encounter, run, user, note):
         revision, context = encounter.current_revision, encounter.current_context
         clear_stop(encounter)
         if context is not None and revision is not None and context.revision_id == revision.pk:
-            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
-                    key=f'predict:{context.pk}:after-reconcile:{run.pk}', requested_by=user)
+            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}:after-reconcile:{run.pk}',
+                           requested_by=user)
         audit.record(encounter.workspace, 'provider.reconciled', encounter=encounter, actor=user, run=str(run.pk))
         review.refresh_state(encounter)
     return True
@@ -946,8 +971,9 @@ def _run_answers(run, revision, context):
     Compared on the request itself (provider, adapter and canonical request hash), never
     on the previous context: the run in use may have been requested for another date.
     Whatever that run's outcome: a setting or billing change that leaves the request
-    unchanged re-checks and never sends (ARCHITECTURE 5.4), so a failed or not-sent
-    request is never re-sent behind a metadata save.
+    unchanged re-checks and never re-sends the primary request (ARCHITECTURE 5.4), so a
+    failed or not-sent request is never re-sent behind a metadata save. The re-check may
+    still make the one bounded second review its revision and date have not had (5.11).
     """
     if run is None or not run.request_sha256:
         return False
@@ -1033,7 +1059,6 @@ def change_context(encounter, user, values):
             enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=last_run,
                     key=f'assess:{context.pk}:{last_run.pk}', requested_by=user)
         else:
-            enqueue(Job.PREDICT, encounter=encounter, revision=revision, context=context,
-                    key=f'predict:{context.pk}', requested_by=user)
+            _queue_predict(encounter, revision, context, key=f'predict:{context.pk}', requested_by=user)
         review.refresh_state(encounter)
     return context
