@@ -179,7 +179,7 @@ def assess(*, text: str, pages: tuple[PageSpan, ...], context: dict[str, Fact], 
                         checks.service_date_check(date_state), reconcile.inventory_check(inventory, problems),
                         *coverage]
     if usable and response is not None:
-        encounter_checks.append(reconcile.unresolved_check(unresolved))
+        encounter_checks.append(reconcile.unresolved_check(unresolved, usable.problems))
     if usable:
         encounter_checks.append(reconcile.conflicts_check(usable))
         attribution = reconcile.attribution_check(usable, [code for code, _ in active])

@@ -751,9 +751,11 @@ NOT_ESTABLISHED = {
                      'not established: the documented-service reading was inconsistent and decided nothing'),
 }
 NO_EXACT_PASSAGE = 'no passage matches the revision text exactly'
-READ_IN_PART = ('among the services read: the documented-service reading reported a problem, listed under DOCUMENTED '
-                'SERVICES, so a service it did not read is not listed',
-                'among the services read: the documented-service reading reported a problem')
+# A reading that recorded a problem (a cap, a sentence read in part) speaks only for what it read - which can be part of
+# a service it read, so the closing line never says only whole services can be missing (refutation r1, report-8).
+READ_IN_PART = ('among what was read: the documented-service reading reported a problem, listed under DOCUMENTED '
+                'SERVICES, so a service or act in the part it did not read is not listed',
+                'among what was read: the documented-service reading reported a problem')
 
 
 def _unestablished(documented, which, lines):

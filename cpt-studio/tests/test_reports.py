@@ -222,9 +222,11 @@ class TxtReportTests(ReportCase):
         capped = {**inventory, 'problems': ['The sentence cap was reached; later text was not read for services.']}
         unresolved, conflicts, _ = bodies(capped, {**reconciled, 'reasons': ['the documented-service reading reported '
                                                                               'a problem']})
-        self.assertEqual(unresolved, '  - none among the services read: the documented-service reading reported a '
-                                     'problem, listed under DOCUMENTED SERVICES, so a service it did not read is not listed')
-        self.assertEqual(conflicts, '  - none among the services read: the documented-service reading reported a problem')
+        # ec5 (refutation r1, report-8): what was not read can be part of a service that was read
+        self.assertEqual(unresolved, '  - none among what was read: the documented-service reading reported a '
+                                     'problem, listed under DOCUMENTED SERVICES, so a service or act in the part it did '
+                                     'not read is not listed')
+        self.assertEqual(conflicts, '  - none among what was read: the documented-service reading reported a problem')
         # control: a consistent, complete reading with nothing unresolved still says so
         unresolved, conflicts, documented = bodies(inventory, reconciled)
         self.assertEqual(unresolved, '  - none: every documented act the catalogue reconciles has a selected proposal or '

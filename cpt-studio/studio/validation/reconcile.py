@@ -515,7 +515,16 @@ def inventory_check(inventory: ServiceInventory, problems: Sequence[str]) -> Che
                           'recognise.', INVENTORY_SOURCE)
 
 
-def unresolved_check(unresolved: Sequence[Unresolved]) -> Check:
+def unresolved_check(unresolved: Sequence[Unresolved], problems: Sequence[str] = ()) -> Check:
+    """``problems``: the reading problems the inventory recorded (a cap, a sentence read in part). Such a reading speaks
+    only for what it read, which can be part of a service it read: the check then never claims every documented act
+    (refutation r1, report-8: it passed with that claim beside an unread act of a service it had read)."""
+    partial = (' The documented-service reading reported a problem (see services.inventory), so a service or act in '
+               'the part it did not read is not covered by this check.') if problems else ''
+    if not unresolved and partial:
+        return Check('services.unresolved', 'Documented services without a supported proposal', 'warn',
+                     'Among what was read, every documented act that the coverage catalogue reconciles has a selected '
+                     'proposal, or is not separately reported under a profile rule.' + partial, SOURCE)
     if not unresolved:
         return Check('services.unresolved', 'Documented services without a supported proposal', 'pass',
                      'Every documented act that the coverage catalogue reconciles has a selected proposal, or is not '
@@ -524,7 +533,8 @@ def unresolved_check(unresolved: Sequence[Unresolved]) -> Check:
     items = '; '.join(f'{u.label}' + (f' ({quote(u.evidence[0], 100)})' if u.evidence else '') for u in unresolved[:6])
     more = f' and {len(unresolved) - 6} more' if len(unresolved) > 6 else ''
     return Check('services.unresolved', 'Documented services without a supported proposal', 'warn',
-                 f'Unresolved: {items}{more}. No code is added for them and no alternative is promoted.', SOURCE)
+                 f'Unresolved: {items}{more}. No code is added for them and no alternative is promoted.' + partial,
+                 SOURCE)
 
 
 def conflicts_check(inventory: ServiceInventory) -> Check:

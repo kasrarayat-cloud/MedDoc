@@ -320,3 +320,50 @@ class MemberConflictIsNeverConflictingDocumentationTests(ApiCase, TestCase):
         self.assertEqual((row['service_date'], row['service_date_conflict']), ('2026-10-20', False))
         self.assertEqual((paper, header), ('20 October 2026', '20 Oct 2026'))
         self.assertIn('<span class="doc-row-date">20 Oct 2026</span>', listed)
+
+
+SEGMENTS = ', '.join(f'segment {i} of the colon showed normal vascular pattern without erythema' for i in range(1, 17))
+LONG_FINDINGS = ('Findings: The colonoscope was advanced to the cecum and on careful withdrawal ' + SEGMENTS
+                 + ', and a 4 mm polyp in the transverse colon was removed with cold forceps biopsy.')
+READ_IN_PART = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProcedure: Colonoscopy.\n' + POLYP + '\n'
+                + LONG_FINDINGS + '\nImpression: Polyps removed.\n')
+UNRESOLVED_TITLE = 'UNRESOLVED DOCUMENTED SERVICES — NO SUPPORTED PROPOSAL'
+
+
+@override_settings(**LIVE)
+class ReadInPartSpeaksForWhatWasReadTests(ApiCase, TestCase):
+    """report-8: a findings sentence over the 1,200-character act-reading bound, whose unread tail documents a cold-forceps
+    removal inside the colonoscopy that WAS read. The reading recorded the problem (state 'partial'), but UNRESOLVED
+    closed with "none among the services read: ... so a service it did not read is not listed" and the services.unresolved
+    check passed with "Every documented act that the coverage catalogue reconciles has a selected proposal": both false
+    of a service that was read in part. They now speak for what was read, and say that a service or act in the part not
+    read is not listed."""
+
+    def test_a_reading_problem_inside_a_read_service_is_not_hidden_by_the_closing_line(self):
+        self.assertGreater(len(LONG_FINDINGS), 1200)
+        encounter_id = self.run_note(READ_IN_PART, ('45385', POLYP))
+        detail = self.detail(encounter_id)
+        problems = detail['assessment']['services']['problems']
+        self.assertTrue(any('was read for acts only in its first 1,200 characters' in p for p in problems), problems)
+        text = self.report_text(encounter_id, 'draft')
+        self.assertEqual(section(text, UNRESOLVED_TITLE),
+                         '  - none among what was read: the documented-service reading reported a problem, listed under '
+                         'DOCUMENTED SERVICES, so a service or act in the part it did not read is not listed')
+        self.assertEqual(section(text, 'CONFLICTS IN THE RECORD'),
+                         '  - none among what was read: the documented-service reading reported a problem')
+        (check_row,) = [c for c in detail['assessment']['encounter_checks'] if c['id'] == 'services.unresolved']
+        self.assertEqual(check_row['status'], 'warn')
+        self.assertTrue(check_row['detail'].startswith('Among what was read, every documented act'), check_row['detail'])
+        self.assertIn('so a service or act in the part it did not read is not covered by this check',
+                      check_row['detail'])
+
+    def test_control_a_reading_without_a_problem_keeps_its_wording(self):
+        encounter_id = self.run_note(COLONOSCOPY, ('45385', POLYP))
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['assessment']['services']['problems'], [])
+        text = self.report_text(encounter_id, 'draft')
+        self.assertEqual(section(text, UNRESOLVED_TITLE), '  - none: every documented act the catalogue reconciles has '
+                                                          'a selected proposal or is not separately reported')
+        (check_row,) = [c for c in detail['assessment']['encounter_checks'] if c['id'] == 'services.unresolved']
+        self.assertEqual(check_row['status'], 'pass')
+        self.assertTrue(check_row['detail'].startswith('Every documented act that the coverage catalogue reconciles'))
