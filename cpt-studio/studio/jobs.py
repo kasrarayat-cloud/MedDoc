@@ -285,6 +285,26 @@ def _unreconciled_unknown(encounter):
     return encounter.provider_runs.filter(state=models.ProviderRun.UNKNOWN, reconciled_at__isnull=True).exists()
 
 
+FAILED_BEFORE_MESSAGE = ('Nothing was sent: this request was sent before for this document and failed, and an '
+                         'identical request is never sent again.')
+
+
+def _failed_before(encounter, provider, request):
+    """This encounter's newest run - any revision, whatever it was made for - that SENT ``request`` (provider, adapter
+    version and body hash, as _run_answers compares them) and FAILED; None when there is none.
+
+    Such a request is never sent again (refutation p1, sends-0..2: a date round trip, a cleared date after one whose
+    request could not be built, a reconciliation's released attempt and an addendum that left a second review's excerpt
+    as it was each re-sent one byte-identical). Each send door asks it after reusing a retained answer to the same
+    request and after the unknown-outcome block, and before anything that sends: the predict re-assesses with the
+    failed run, the second review sends nothing and is refused when asked for. Another encounter's runs are not read:
+    an upload is a member's new request."""
+    return (models.ProviderRun.objects.filter(
+        encounter=encounter, provider=provider.name, adapter_version=provider.adapter_version,
+        request_sha256=request.canonical_sha256, state=models.ProviderRun.FAILED, sent=True)
+        .order_by('-created_at').first())
+
+
 # --- stages ------------------------------------------------------------------
 
 def stage_extract(job):
@@ -501,6 +521,24 @@ def stage_predict(job):
 
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
+
+    failed = _failed_before(encounter, provider, request)
+    if failed is not None:
+        # Refutation p1, sends-0 and sends-2: this request was sent before and FAILED, so it is never sent again - not
+        # after a date round trip or a cleared date, and not as a reconciliation's released attempt. The stage ends as
+        # that request did: re-assessed with its run (provider_failed), under a key of this predict's own.
+        if failed.revision_id != revision.pk or failed.purpose != models.ProviderRun.PRIMARY:
+            # Not reachable today (an addendum's text extends its parent's, and a second review never repeats its own
+            # primary request), but never sent either way: the not-sent run says why.
+            failed = models.ProviderRun.objects.create(
+                encounter=encounter, revision=revision, provider=provider.name,
+                adapter_version=provider.adapter_version, request_sha256='', request_body={}, contexts=[],
+                state=models.ProviderRun.NOT_SENT, error=FAILED_BEFORE_MESSAGE,
+                authorization_ref=settings.AUTHORIZATION_REF, requested_by=job.requested_by,
+                service_date=service_date, finished_at=timezone.now())
+        enqueue(Job.ASSESS, encounter=encounter, revision=revision, context=context, provider_run=failed,
+                key=f'{assess_key}:{failed.pk}:{job.pk.hex[:12]}', requested_by=job.requested_by)
+        return {'provider': 'not_resent', 'run': str(failed.pk)}
 
     _live_gate(job, provider, revision, encounter)
     if job.idempotency_key == _upgrade_predict_key(context):
@@ -744,6 +782,10 @@ def _second_review_blocker(encounter, revision, context, assessment):
             purpose=models.ProviderRun.PRIMARY).exists():
         return ('The text that documents the unresolved services is a request the provider already answered, so a '
                 'second review would ask nothing new.')
+    if _failed_before(encounter, provider, request) is not None:
+        # refutation p1, sends-1: the once-per-revision bound alone let an addendum re-offer the identical request
+        return ('The text that documents the unresolved services is a request already sent for this document that '
+                'failed, and an identical request is never sent again.')
     return ''
 
 
@@ -846,6 +888,11 @@ def stage_review2(job):
         return {'second_review': 'reused', 'run': str(run.pk)}
     if _unreconciled_unknown(encounter):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
+    if _failed_before(encounter, provider, request) is not None:
+        # Refutation p1, sends-1: an addendum that left the excerpt as it was made a new revision, whose own bound let
+        # the identical FAILED request be sent again. Nothing changed, so the assessment stands as it is.
+        return {'skipped': 'the second review would repeat a request sent before for this document that failed; '
+                           'nothing was sent'}
     _live_gate(job, provider, revision, encounter)
     run = _send(job, provider, request, service_date=service_date, purpose=models.ProviderRun.SECOND_REVIEW,
                 scope=scope)
@@ -1109,9 +1156,8 @@ def _run_in_use(revision):
 
     A run the stale-stage sweep settled as not sent because its worker stopped after reserving it is no outcome at
     all: it carries its request but never reached the send (no started_at), so the attempt it reserved still has to
-    be made, as a Resume of that predict makes it (round 4, pipeline:2). Every other not-sent run stands: one the
-    provider exchange answered went through the send, and one recorded when no request could be built carries no
-    request to compare.
+    be made, as a Resume of that predict makes it (round 4, pipeline:2). Neither is a not-sent run that carries no
+    request (below). Every other not-sent run stands: one the provider exchange answered went through the send.
     """
     from django.db.models import Q
 
@@ -1119,12 +1165,14 @@ def _run_in_use(revision):
                 models.ProviderRun.UNKNOWN)
     reserved_then_swept = (Q(state=models.ProviderRun.NOT_SENT) & Q(started_at__isnull=True)
                            & ~Q(request_sha256=''))
-    # A held run (a member date conflict: scope.held) is a hold, not the outcome of any request: it carries none to
-    # compare, so standing as the run in use it let a cleared conflict re-send the byte-identical request that had
-    # FAILED before it (ec5 integration, from the REPORTRUNS skeptic; 5.4: never re-sent behind a metadata save).
-    held = Q(state=models.ProviderRun.NOT_SENT) & Q(scope__has_key='held')
+    # A not-sent run that carries no request - a hold (a member date conflict: scope.held), or one recorded when no
+    # request could be built - is no request's outcome: it has none to compare, so standing as the run in use it let a
+    # later metadata save re-send the byte-identical request that had FAILED before it (ec5 integration, from the
+    # REPORTRUNS skeptic, for the hold; refutation p1, sends-0, for a date whose request was over the byte limit; 5.4:
+    # never re-sent behind a metadata save).
+    no_request = Q(state=models.ProviderRun.NOT_SENT) & (Q(request_sha256='') | Q(scope__has_key='held'))
     run = (revision.provider_runs.filter(state__in=finished, purpose=models.ProviderRun.PRIMARY)
-           .exclude(reserved_then_swept).exclude(held).order_by('-created_at').first())
+           .exclude(reserved_then_swept).exclude(no_request).order_by('-created_at').first())
     if run is None or (run.state == models.ProviderRun.UNKNOWN and run.reconciled_at is not None):
         return None
     return run

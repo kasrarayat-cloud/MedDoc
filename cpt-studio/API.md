@@ -179,11 +179,15 @@ string: a listed choice, or null or `''` to clear the user value; any other type
 boolean, a list, an object) answers 400. A service date is a string in `YYYY-MM-DD` form only
 (also on upload). Re-assesses with the provider run in use only when that run answers
 exactly the request the new context would send; otherwise re-predicts (an
-identical retained result is reused at no cost). The run in use is the current
+identical retained result is reused at no cost; a request this document already
+sent that failed is never sent again, and the predict re-assesses with that
+run instead). The run in use is the current
 revision's newest finished request, also when a Stop or an expired stage
 cancelled the assess that would have used it; a reconciled unknown outcome is
 not, so the attempt the reconciliation released is still made, and neither is a
-reserved run the stale sweep settled as not sent (it was never sent). The
+reserved run the stale sweep settled as not sent (it was never sent), nor a
+not-sent run that carries no request (none could be built, or a member date
+conflict held it). The
 document's own facts are read again inside this request under a
 `CONTEXT_REQUEST_SECONDS` wall clock; past it the change is refused (409) and
 nothing is changed. 409 while a stage is queued or running, before the text
@@ -213,7 +217,8 @@ is false then, and the stage's `error` records what happened. A predict whose
 provider outcome was already recorded when its worker stopped is settled by that
 outcome instead, so a Resume never re-sends a request that already failed. Reconcile: `{"provider_run_id": "uuid", "note": "..."}`
 (note 12–2,000 characters) after an `unknown` outcome; allows exactly one new
-attempt, for the current revision's current context. Context, resume and
+attempt, for the current revision's current context (never a re-send of a
+request this document already sent that failed). Context, resume and
 reconcile each run under the encounter's row lock and answer 409 while any
 stage is queued or running, so one member action yields at most one provider
 attempt.

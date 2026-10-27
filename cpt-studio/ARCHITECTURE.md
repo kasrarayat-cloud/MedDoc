@@ -1003,14 +1003,22 @@ membership, and a synthetic-attested revision. A `ProviderRun` is written
 lock; no automatic retry; `unknown` (sent, no response) blocks resubmission
 until a member records a reconciliation note. **Reuse**: if a `succeeded`
 run exists for the same provider + adapter version + request sha256, it is
-reused (`reused_from`) and no paid call is made. Context-only changes that do
+reused (`reused_from`) and no paid call is made. **Never re-sent after a
+failure**: a request the encounter already sent (any revision, whatever it was
+made for) whose outcome was `failed` is never sent again, so a date round trip,
+a cleared date or a reconciliation's released attempt ends as that request did
+(the predict re-assesses with its run: provider_failed) and a second review
+that would repeat it is refused (`jobs._failed_before`; round 7c8, refutation
+p1 sends-0..2). Context-only changes that do
 not change the request (setting, billing context) never re-predict; whether the
 request changed is decided against the run in use, never the previous
 context. The run in use is the revision's newest request that finished,
 whether or not an assessment was made with it (a Stop during the send or a
 swept or expired assess cancels that assess); a reconciled unknown outcome no
 longer stands, so its one released attempt is made, and neither does a reserved
-run the stale sweep settled as not sent (no started_at: it was never sent). Every member action that can queue a stage runs under the encounter
+run the stale sweep settled as not sent (no started_at: it was never sent), nor
+a not-sent run that carries no request (a member date hold, or a request that
+could not be built). Every member action that can queue a stage runs under the encounter
 row lock and is refused while a stage is queued or running. The predict stage
 sends only the current revision's text with that revision's current context;
 each run records the service date it was built with, and assessment refuses
@@ -1572,7 +1580,9 @@ while a stage is queued or running, never for a revision and date that already
 had one, whatever its outcome (a reconciled unknown one releases another), only
 for the current assessment of a primary request that succeeded and was not
 refused whole, only with a known, agreed service date, never while an outcome
-is unknown, never when its request repeats one the provider already answered;
+is unknown, never when its request repeats one the provider already answered
+or one the encounter already sent that failed (on any revision: an addendum that
+leaves the excerpt as it was makes the identical request);
 `stage_review2` checks them again when it runs. It sends the
 provider the text that documents those services (the services' report parts,
 ≤ 20,000 characters) with the date line, under the same send discipline as
