@@ -364,6 +364,44 @@ class UnreadDateFormsAreKeptTests(DateAssertions, SimpleTestCase):
                 self.assert_member_date(text, ELENA_DATE)
 
 
+class DatedServiceLineTests(DateAssertions, SimpleTestCase):
+    """c2:8's class, a variant (refutation round 2, rule A): a dated line near the top that names the service with no
+    title word ("Colonoscopy - 10/14/2026", "EGD 10/14/2026") was no candidate at all, so a member's 1998-01-01 became
+    the date and was sent. With no date of the note's own it is the evidence a member date must agree with; it never
+    questions an own date, and a line qualified as another occurrence's or naming no service is not one."""
+
+    def test_kept_as_the_evidence_of_the_date_asked(self):
+        for line, body in (('Colonoscopy - 10/14/2026', COLO_PLAIN), ('EGD 10/14/2026', EGD_BODY.replace(
+                'On 10/14/2026 b', 'B'))):
+            with self.subTest(line=line):
+                text = HEAD + line + '\n' + body
+                self.assert_asked(text, line)
+                self.assert_member_date(text, '2026-10-14')
+
+    def test_a_field_naming_the_service_is_a_candidate_a_letter_date_must_agree_with(self):
+        # "Re: Colonoscopy on 10/14/2026" names the encounter as "Re: GI consultation of ..." does: never the letter's
+        # "Date:" silently, whatever its qualifier
+        for re_line in ('Re: Colonoscopy on 10/14/2026', 'Regarding: your prior colonoscopy of 10/14/2026'):
+            with self.subTest(re_line=re_line):
+                text = HEAD + 'Date: 10/27/2026\n' + re_line + '\nDear Dr. Synthetic,\n' + COLO_PLAIN
+                self.assert_never(text, '2026-10-27')
+                self.assert_conflict(text, '2026-10-27', '2026-10-14')
+
+    def test_controls(self):
+        self.assert_document(HEAD + 'Colonoscopy - 09/03/2026\nDate of service: 10/14/2026\n' + COLO_PLAIN,
+                             '2026-10-14')
+        self.assert_document(HEAD + 'Colonoscopy: 05/01/2019\nDate of service: 10/14/2026\n' + COLO_PLAIN, '2026-10-14')
+        # a field other than a letter's subject line is only evidence: it never questions the note's own date
+        for line in ('Procedure: Colonoscopy x 2026-10-01', 'Indication: surveillance after colonoscopy 2023-05-02'):
+            with self.subTest(line=line):
+                self.assert_document(HEAD + 'Date of service: 10/14/2026\n' + line + '\n' + COLO_PLAIN, '2026-10-14')
+        for line in ('Last colonoscopy 05/01/2019', 'Date of birth: 1961-07-02'):
+            with self.subTest(line=line):
+                text = HEAD + line + '\n' + VISIT_BODY
+                self.assertEqual((date_fact(text).origin, date_fact(text).evidence), ('missing', ()))
+                self.assert_member_date(text, ELENA_DATE)
+
+
 class AskedDateIsAnswerableTests(DateAssertions, SimpleTestCase):
     """A date asked is never stuck when the member answers with a date its evidence reads - also when the evidence
     reads more than one date (merge_user_values' agreement rule); any other member date is a member conflict."""

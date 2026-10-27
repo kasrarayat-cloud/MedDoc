@@ -647,6 +647,9 @@ def _title_candidates(text: str, lay: Layout) -> tuple[_Candidate, ...]:
         else:
             head = TITLE_HEAD.match(text, ls, le)
             if head is None or index + 1 == len(lines) or not DATE_LINE.match(text, *lines[index + 1]):
+                dated = _dated_service_line(text, ls, le)
+                if dated is not None:
+                    out.append(dated)
                 continue
             day, form, end, words, keyword, field = None, 'unread', lines[index + 1][1], head.group('words'), \
                 head.group('keyword'), False
@@ -673,6 +676,41 @@ def _title_qualified(text: str, ls: int, le: int, m) -> bool:
         return True
     head = text[ls:le]
     return any(pattern.search(head) for _, pattern in _HISTORY_TITLE)
+
+
+# A date that ends a line near the top ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): read by _dated_service_line.
+_LINE_END_DATE = cues.rx(r'(?<![\w/-])(?:' + _FULL_DATE + r'|(?P<unread>' + DATE_SHAPE + r'))[ \t]*+$')
+
+
+# A letter's subject line opening a line ("Re: ", "Regarding: ", "Subject: "): the structure is the subject line naming
+# the encounter the letter is about; these labels are its vocabulary.
+_SUBJECT_FIELD = cues.rx(r'[ \t]*+(?:re|regarding|subject|subj)\.?[ \t]*+:[ \t]*+')
+
+
+def _dated_service_line(text: str, ls: int, le: int) -> Optional[_Candidate]:
+    """A line near the top that ends with a date and names a service this release codes, but carries no title word
+    ("Colonoscopy - 10/14/2026", "EGD 10/14/2026"): documented date text the title grammar does not read. It is never the
+    date and never questions one ('aside'), but when the note gives no usable date of its own it is kept as the
+    evidence a member date must agree with (refutation round 2, rule A: such a line kept nothing, so a member's date
+    became the date and was sent). A line qualified as another occurrence's ("Last colonoscopy 05/01/2019") is not one,
+    and a line naming no service ("Date of birth: ...") is not one. A letter's subject line naming the service ("Re:
+    Colonoscopy on 10/14/2026") names the encounter as a "Re:" title does: a candidate a letter's "Date:" and the note's
+    own labelled date must agree with ('unplaced', as a field title), whatever its qualifier. Any other field naming the
+    service ("Procedure: Colonoscopy ... 2026-10-01", "Indication: ... colonoscopy 2023-05-02") is only evidence."""
+    m = _LINE_END_DATE.search(text, ls, le)
+    if m is None or m.start() - ls > 80 or not any(p.search(text, ls, m.start()) for p in _THIS_SERVICE):
+        return None
+    field = _SUBJECT_FIELD.match(text, ls, m.start())
+    if field is not None and any(p.search(text, field.end(), m.start()) for p in _THIS_SERVICE):
+        source, reading = 'field', 'unplaced'
+    elif _title_qualified(text, ls, le, None):
+        return None
+    else:
+        source, reading = 'title', 'aside'
+    day = None if m.group('unread') is not None else date_from_match(m)
+    form = 'read' if day else ('unread' if m.group('unread') is not None else 'invalid')
+    return _Candidate(_span(text, _strip_span(text, ls, le)[0], _strip_span(text, m.start(), m.end())[1]),
+                      day.isoformat() if day else None, source, reading, form)
 
 
 def _settings(text: str, lay: Layout) -> list[tuple[str, Span]]:

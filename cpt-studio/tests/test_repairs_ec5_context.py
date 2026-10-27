@@ -7,7 +7,8 @@ document, or a qualifier of another field never supplies the date; a labelled da
 place, or a qualified first title, is kept as documented text a member value must agree with (else a member conflict,
 interpretations 11, 19 and 22). Synthetic text only; no network (the suite's FakeProvider).
 
-Refutation round 2 (tests/test_repairs_7c8_context.py) changed six pins here, each marked where it stands: a dated title
+Refutation round 2 (tests/test_repairs_7c8_context.py) changed seven tests here (four engine pins, three end to end),
+each marked where it stands: a dated title
 and a labelled date that differs from it are a conflict - never the title silently, never the label silently - and
 another document's title is kept as evidence a member date must agree with.
 """
