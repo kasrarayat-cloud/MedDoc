@@ -1238,7 +1238,8 @@ def _proposal(s: _Selection, key: str, enc: _Encounter) -> ProposalAssessment:
                                                          if s.origin == 'second_review' else enc.provider),
                                                units=s.units, evidence_count=len(s.evidence),
                                                profile=profile, detected=finding is not None, outcome=outcome,
-                                               facts=_documented_facts(finding, states, m)),
+                                               facts=_documented_facts(finding, states, m),
+                                               entered=_entered_facts(states)),
         checks=tuple(found), modifier_considerations=tuple(considerations), units=s.units,
         fingerprint=_fingerprint(s.code, s.family, profile.version, s.evidence, found,
                                  _relevant_context(s.family, enc, bool(pctc)), s.units, status),
@@ -1343,6 +1344,11 @@ def _billing(context: Mapping[str, Fact]) -> str:
 
 
 def _documented_facts(finding: Optional[FamilyFinding], states, m=None) -> list[tuple[str, str]]:
+    # A member-entered value is encounter metadata, never a documented fact: it is listed apart (_entered_facts) -
+    # refutation r1, context-7: the exported rationale said "Documented facts: place of service = office" of it.
+    context = [(state.name, str(state.fact.value)) for state in states
+               if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS
+               and not checks.is_member_entered(state.fact)]
     if m is not None:
         # The documented service's own reading (acts read with their negation and time), never a flat word list.
         service = m.service
@@ -1354,13 +1360,16 @@ def _documented_facts(finding: Optional[FamilyFinding], states, m=None) -> list[
                 and a.role in ('physician', 'unknown')]
         if acts:
             facts.append(('interventions', '; '.join(dict.fromkeys(acts))))
-        facts += [(state.name, str(state.fact.value)) for state in states
-                  if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS]
-        return list(dict.fromkeys(facts))
-    facts = [(f.name, str(f.value)) for f in (finding.facts if finding else ()) if checks.is_documented(f)]
-    facts += [(state.name, str(state.fact.value)) for state in states
-              if not state.problem and state.fact is not None and state.name in CONTEXT_FACTS]
-    return list(dict.fromkeys(facts))
+        return list(dict.fromkeys(facts + context))
+    facts = [(f.name, str(f.value)) for f in (finding.facts if finding else ())
+             if checks.is_documented(f) and not checks.is_member_entered(f)]
+    return list(dict.fromkeys(facts + context))
+
+
+def _entered_facts(states) -> list[tuple[str, str]]:
+    """The facts a workspace member supplied as encounter metadata (origin 'user'), named as such in the rationale."""
+    return list(dict.fromkeys((state.name, str(state.fact.value)) for state in states
+                              if not state.problem and checks.is_member_entered(state.fact)))
 
 
 def _relevant_context(family: str, enc: _Encounter, pctc: bool) -> dict:

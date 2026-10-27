@@ -672,10 +672,22 @@ def required_fact_states(profile: ServiceProfile, finding: Optional[FamilyFindin
     return tuple(states)
 
 
+MEMBER_ENTERED = 'Entered by a workspace member as encounter metadata (not clinical documentation)'
+
+
+def is_member_entered(fact: Optional[Fact]) -> bool:
+    """A value a workspace member supplied (origin 'user'): encounter metadata, never a clinical fact, so never listed
+    as documented (refutation r1, context-7: the facts.required check and the exported rationale said "Documented")."""
+    return fact is not None and fact.origin == 'user'
+
+
 def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -> Optional[Check]:
     if not states:
         return None
-    documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states if not s.problem]
+    documented = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
+                  if not s.problem and not is_member_entered(s.fact)]
+    supplied = [f'{fact_label(s.name)} = {excerpt(str(s.fact.value))}' for s in states
+                if not s.problem and is_member_entered(s.fact)]
     missing = [fact_label(s.name) for s in states if s.problem == 'missing']
     conflicting = [fact_label(s.name) for s in states if s.problem == 'conflict' and not is_member_conflict(s.fact)]
     entered = [fact_label(s.name) for s in states if s.problem == 'conflict' and is_member_conflict(s.fact)]
@@ -689,6 +701,8 @@ def required_facts_check(profile: ServiceProfile, states: Sequence[FactState]) -
                      f'{"; ".join(entered)}.')
     if documented:
         parts.append(f'Documented: {"; ".join(documented)}.')
+    if supplied:
+        parts.append(f'{MEMBER_ENTERED}: {"; ".join(supplied)}.')
     status = 'warn' if missing or conflicting or entered else 'pass'
     return Check('facts.required', 'Required documentation (CPT Studio profile)', status, ' '.join(parts),
                  f'cpt-studio:{profile.version}')
