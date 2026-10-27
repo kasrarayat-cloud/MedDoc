@@ -2539,12 +2539,15 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
     if _row_goes_on(prev, nxt):
         return True
     stripped = prev.strip()
-    if len(stripped) < 25 or len(stripped.split()) < 4 or _TERMINAL.search(prev):
-        return False
-    if _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
+    if _TERMINAL.search(prev) or _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt):
         return False
     if _title_wrapped(prev, nxt):
-        return True  # one title set on two lines (refutation r1, formats-5)
+        # one title set on two heading lines, however short each is (refutation r1, formats-5; refutation 7c8,
+        # formats-5 d: "GASTROSTOMY TUBE" / "REPLACEMENT" had been short of the prose test below, so the replacement
+        # it names went unread)
+        return True
+    if len(stripped) < 25 or len(stripped.split()) < 4:
+        return False
     if not _SOFT_NEXT.match(nxt) and not ((_DANGLING.search(prev) or prev.rstrip().endswith(',')
                                            or nxt.lstrip().startswith('(')) and nxt.strip()
                                           and not GENERIC_HEADING.match(nxt.strip())):
@@ -2727,11 +2730,26 @@ def _title_line(line: str) -> bool:
     _report_title, or a role heading, as parts() reads them), and it is set off by a colon or a dash or written as a
     heading (_heading_shaped: "ESOPHAGEAL pH IMPEDANCE MONITORING REPORT", "Esophageal pH-Impedance Monitoring
     Report"). A prose line that happens to end in "report" ("... summarised in the attached colonoscopy report") is no
-    title. Bounded: one line of at most 100 characters, as parts() reads it."""
+    title. A heading that names its service with no report word is one too (_service_heading: "24-HOUR ESOPHAGEAL pH
+    MONITORING", "HIGH RESOLUTION ESOPHAGEAL MANOMETRY"; refutation 7c8, formats-4). Bounded: one line of at most 100
+    characters, as parts() reads it."""
     titled = _report_title(line)
-    if not titled and not any(pattern.match(line) for _, pattern in ROLE_HEADINGS):
+    if not titled and not any(pattern.match(line) for _, pattern in ROLE_HEADINGS) and not _service_heading(line):
         return False
     return titled == 'set off' or _heading_shaped(line)
+
+
+def _service_heading(line: str) -> bool:
+    """Whether ``line`` names one service as parts() reads a bare service heading: a heading-like line
+    (GENERIC_HEADING) of at most 60 characters that names exactly one family and carries no plan, history or earlier
+    span word (refutation 7c8, formats-4: "24-HOUR ESOPHAGEAL pH MONITORING" / "pH sensor placed at prior manometry."
+    had been joined, as the next line is in lower case by spelling, and the study read historical; coding complete)."""
+    stripped = line.strip()
+    if not stripped or len(stripped) > 60 or not GENERIC_HEADING.match(line) or PLAN_WORDS.search(line) \
+            or HISTORY_WORDS.search(line) or EARLIER_SPAN.search(line) or HISTORY_HEADING.match(line) \
+            or PLAN_HEADING.match(line):
+        return False
+    return len({family for family, _, pattern in SERVICES if pattern.search(line)}) == 1
 
 
 def _report_title(line: str) -> str:

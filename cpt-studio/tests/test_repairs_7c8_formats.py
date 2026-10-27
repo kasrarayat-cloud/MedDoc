@@ -357,3 +357,55 @@ class ParagraphOpeningWithANumeralOrAVerbTests(SimpleTestCase):
                         f'the cecum.\n{sentence}\n')
                 cuts = services._sentences(services.reflow(text))
                 self.assertTrue(any(s <= text.index(first) and text.index(second) < e for s, e in cuts))
+
+
+class TitleNamingAServiceTests(SimpleTestCase):
+    """sk:6 (formats-4) and sk:7 (formats-5 d): a title written as a heading that names its service without a report
+    word ("24-HOUR ESOPHAGEAL pH MONITORING", "HIGH RESOLUTION ESOPHAGEAL MANOMETRY") was joined to a next line that is
+    lower case by spelling ("pH sensor ...", "s/p ...", "pt ..."), and a title set on two short heading lines
+    ("GASTROSTOMY TUBE" / "REPLACEMENT"), or three ("BEDSIDE PROCEDURE NOTE:" / ...), was never one title: the study
+    or the tube replacement went unread (or read historical), so coding read complete. A heading that names a service
+    keeps its break whatever the next line's case, and one title set on several heading lines reads as one."""
+
+    def reading(self, text: str):
+        text, pages = pdf(text)
+        result = run(text, (), pages)[0]
+        return services_of(result), [(u['family'], u['reason']) for u in result.completeness['unresolved_items']], \
+            result.completeness['state']
+
+    def test_a_service_heading_keeps_its_break_before_a_lower_case_opener(self):
+        head = f'{BANNER}\nDate of service: 2026-10-14\n'
+        for title, family in (('24-HOUR ESOPHAGEAL pH MONITORING', 'gi.reflux'),
+                              ('WIRELESS pH CAPSULE STUDY', 'gi.reflux'),
+                              ('AMBULATORY pH MONITORING (BRAVO)', 'gi.reflux'),
+                              ('HIGH RESOLUTION ESOPHAGEAL MANOMETRY', 'gi.motility')):
+            for opener in ('pH sensor placed at prior manometry.', 'pH catheter in place for 24 hours.',
+                           'pt tolerated the study well.',
+                           's/p transnasal catheter placement 5 cm above the LES; recording 24 hours off PPI.'):
+                with self.subTest(title=title, opener=opener):
+                    control = self.reading(head + title + '\n' + opener[0].upper() + opener[1:] + '\nAcid exposure '
+                                                                                                 '7.9%.\n')
+                    result = self.reading(head + title + '\n' + opener + '\nAcid exposure 7.9%.\n')
+                    self.assertEqual(result, control)
+                    self.assertEqual(result[2], 'incomplete')
+                    self.assertIn((family, 'no_proposal'), result[1])
+
+    def test_prose_naming_a_service_still_wraps(self):  # control
+        text = 'The patient was referred for esophageal pH monitoring\nwhich showed acid reflux.\n'
+        self.assertEqual(services.reflow(text).count('\n'), 1)
+
+    def test_a_title_set_on_several_short_heading_lines(self):
+        body = ('Date of service: 2026-10-18\nProcedure: A new 20 Fr balloon gastrostomy tube was inserted through the '
+                'existing tract.\n')
+        one = self.reading(f'{BANNER}\nGASTROSTOMY TUBE REPLACEMENT\n{body}')
+        self.assertEqual(one, ([('gi.feeding_tube', 'performed', 'unknown')], [('gi.feeding_tube', 'no_proposal')],
+                               'incomplete'))
+        for title in ('GASTROSTOMY TUBE\nREPLACEMENT', 'BEDSIDE PROCEDURE NOTE:\nGASTROSTOMY TUBE\nREPLACEMENT'):
+            with self.subTest(title=title):
+                self.assertEqual(self.reading(f'{BANNER}\n{title}\n{body}'), one)
+
+    def test_two_short_headings_stay_two(self):  # controls
+        for text in ('COLONOSCOPY REPORT\nFINDINGS\n', 'IMPRESSION\nPLAN\n', 'EGD\nFINDINGS\n',
+                     'UPPER ENDOSCOPY\nCOLONOSCOPY\n'):
+            with self.subTest(text=text):
+                self.assertEqual(services.reflow(text), text)
