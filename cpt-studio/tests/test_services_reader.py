@@ -911,3 +911,30 @@ class ReferralTests(SimpleTestCase):
         colon = one(read(text)[1], 'gi.colonoscopy')
         self.assertNotIn('emr', kinds(colon))
         self.assertIn('biopsy', kinds(colon))
+
+
+class NegationScopeTests(SimpleTestCase):
+    """Refutation r1 (release lens; regressions against the installed revision, which held these): a negation reaches
+    the act through its list and the act's own auxiliary, never through another predicate."""
+
+    REPORT = HEAD + ('COLONOSCOPY PROCEDURE REPORT\nDate of service: 10/14/2026\nThe colonoscope was advanced to the '
+                     'cecum. A 6 mm sessile polyp was seen in the sigmoid colon. {x}\n')
+
+    def test_a_denied_act_is_negated(self):
+        for x, kind in (('On withdrawal, no polyp was snared.', 'snare'),
+                        ('Per patient preference, no lesion was biopsied.', 'biopsy'),
+                        ('The polyp was neither biopsied nor removed.', 'biopsy'),
+                        ('Biopsy not obtained given incomplete exam.', 'biopsy'),
+                        ('Polypectomy not performed due to discontinuation of the procedure.', 'snare'),
+                        ('The polyp was not biopsied, nor was it snared.', 'snare')):
+            with self.subTest(x=x):
+                colon = one(read(self.REPORT.format(x=x))[1], 'gi.colonoscopy')
+                self.assertIn(kind, kinds(colon, 'negated'))
+                self.assertNotIn(kind, kinds(colon))
+
+    def test_a_negation_of_another_predicate_leaves_the_act_done(self):
+        for x, kind in (('No bleeding was seen after the polyp was snared.', 'snare'),
+                        ('The polyp was snared and no bleeding was seen.', 'snare'),
+                        ('No polyps were seen, and biopsies were taken from the rectum.', 'biopsy')):
+            with self.subTest(x=x):
+                self.assertIn(kind, kinds(one(read(self.REPORT.format(x=x))[1], 'gi.colonoscopy')))

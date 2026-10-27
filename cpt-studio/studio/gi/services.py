@@ -1200,12 +1200,32 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
     # Negation.
     if NEG_OTHER.match(whole):
         return Reading('uncertain', ('no other/further: denies only acts beyond the documented ones',))
-    if NEG_LEAD.match(whole):
-        return Reading('negated', ('negated: the clause opens with a negation that covers its list',))
+    lead = NEG_LEAD.match(whole)
+    if lead:
+        # It covers its list and the act's own predicate ("No biopsy, polypectomy or tattoo was performed", "No polyp
+        # was snared"), never an item after another predicate ("No bleeding was seen after the polyp was snared", "No
+        # polyps were seen, and biopsies were taken": refutation r1 - read as denied acts)
+        between = text[cs + lead.end():pos]
+        auxiliaries = list(re.finditer(r'\b(?:was|were|is|are|been)\b', between, FLAGS))
+        own = len(auxiliaries) == 1 and re.search(r'\b(?:was|were|is|are|been)\s+(?:[\w-]+ly\s+)?$', between, FLAGS)
+        # after another predicate, an item stays covered when a negation follows that predicate ("No biopsies were
+        # taken, and ... there was nothing to remove with snare or forceps", "... and no tattoo was placed")
+        negated_again = auxiliaries and re.search(r'\b(?:no|not|nothing|none|neither|nor|never|without)\b',
+                                                  between[auxiliaries[-1].end():], FLAGS)
+        if not auxiliaries or own or negated_again:
+            return Reading('negated', ('negated: the clause opens with a negation that covers its list',))
     head = before[-60:]
-    if re.search(r'\b(?:no|without|w/o|nor|neither)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS) \
-            and not re.search(r'\b(?:no|without)\s+(?:immediate\s+)?(?:complications?|bleeding|perforation)\b', head, FLAGS):
-        if not re.search(r'\b(?:was|were|is|are|been)\b', head[head.lower().rfind('no'):] if 'no' in head.lower() else head, FLAGS):
+    negation = re.search(r'\b(?:no|without|w/o|nor|neither)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS)
+    if negation and not re.search(r'\b(?:no|without)\s+(?:immediate\s+)?(?:complications?|bleeding|perforation)\b', head,
+                                  FLAGS):
+        # Read from the negation word on (refutation r1, release lens): no auxiliary after it, or only the act's own
+        # auxiliary right before the act ("no polyp was snared", "the polyp was neither biopsied"), and the negation is
+        # the act's; an auxiliary of another predicate between them ("No bleeding was seen after the polyp was snared")
+        # leaves the act to its own predicate.
+        tail = head[negation.start():]
+        auxiliaries = re.findall(r'\b(?:was|were|is|are|been)\b', tail, FLAGS)
+        if not auxiliaries or (len(auxiliaries) == 1
+                               and re.search(r'\b(?:was|were|is|are|been)\s+(?:[\w-]+ly\s+)?$', tail, FLAGS)):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
     for not_verb in NOT_VERB.finditer(whole):
@@ -1213,7 +1233,9 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
             continue
         # "was complete and was not discontinued": the negated word is the completion word, not this act.
         neg_target = text[cs + not_verb.end(): min(ce, cs + not_verb.end() + 40)]
-        if not re.match(r'\s*(?:\w+\s+){0,2}(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):
+        # only when the negated word itself is the completion word, with at most an adverb before it (refutation r1:
+        # "Biopsy not obtained given incomplete exam" had read the completion word two words on as the target)
+        if not re.match(r'\s*(?:[\w-]+ly\s+)?(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):
             return Reading('negated', ('negated: "not" on its predicate',))
     near = before[-40:]
     if any(not WITHOUT_COMPLICATION.match(near, w.start()) for w in WITHOUT.finditer(near)):
@@ -2704,7 +2726,11 @@ def _conflicts(services: Sequence[DocumentedService]) -> tuple[Conflict, ...]:
     one lesion never conflicts with one about another lesion or another site."""
     out: list[Conflict] = []
     for service in services:
-        done = [a for a in service.acts if a.status == 'performed']
+        # an act never reported on its own (catalogue.NOT_REPORTED: clips, cannulation) changes no code, so its done and
+        # denied statements are not a coding conflict ("Deep biliary cannulation was achieved" beside "The pancreatic
+        # duct was neither cannulated nor injected")
+        from studio.gi import catalogue  # local: catalogue reads this module's vocabulary
+        done = [a for a in service.acts if a.status == 'performed' and a.kind not in catalogue.NOT_REPORTED]
         denied = [a for a in service.acts if a.status in ('negated', 'cancelled')]
         index = _DoneIndex(service.acts)
         for d_act in done:
