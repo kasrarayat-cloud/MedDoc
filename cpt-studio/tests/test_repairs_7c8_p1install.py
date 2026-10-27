@@ -432,30 +432,65 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
         self.assertTrue(review.can_resume(self.encounter(encounter_id)))
 
 
-# --- migrate-2: no pair is installed over an unknown provider outcome ------------------------------------------------
+# --- migrate-2 / sk:2: the stored list states are recomputed once the new pair replaced the old one -------------------
 
-class UnknownOutcomesTests(Base):
-    """Refutation p1, migrate-2: the read the app phase refuses on, and a copy of the live installation's shape."""
+class RecomputedStatesTests(Base):
+    """Refutation p1, migrate-2, and the round-7c8 skeptic of its first repair (sk:2). The first repair refused the app
+    phase while any outcome was unknown, so a same-revision re-run (`app --provider-mode disabled`, as during a provider
+    incident) and the reinstall the failure path's receipt asks for were refused until a member reconciled on the
+    running web - releasing a paid send, and on a restored older web acting under its rules. Nothing is refused now:
+    once the new pair has replaced the old one, every stored list state is recomputed with this revision's derivation."""
 
-    def test_migrate2_the_read_names_an_unreconciled_unknown_outcome_until_it_is_reconciled(self):
+    def run_app(self):
+        details, replace = app_phase(lambda image_id, env, body, params, **kwargs: run_app_script(body, params))
+        self.assertIsInstance(details, dict, details)
+        replace.assert_called_once()
+        return details
+
+    def test_sk2_a_same_revision_rerun_over_an_unknown_outcome_installs_and_sends_nothing(self):
+        # the skeptic's probe (a): an outcome THIS revision left unknown, its stored state its own derivation; then
+        # `app --provider-mode disabled` for the same revision
+        self.provider.outcomes = ['unknown']
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        self.assertEqual(self.sent(), 1)
+        stored = self.encounter(encounter_id).state
+        self.assertEqual(stored, review._derive_state(self.encounter(encounter_id)))
+        details = self.run_app()
+        self.assertEqual(details['states_recomputed']['changed'], {})
+        self.assertEqual((self.encounter(encounter_id).state, self.sent()), (stored, 1))
+
+    def test_sk2_the_reinstall_the_failure_paths_receipt_asks_for_installs_without_a_reconcile(self):
+        # the skeptic's probe (b): the new pair's send was in flight when it was stopped, the failure path's close names
+        # the unknown outcome (the restored worker is left stopped) and its receipt asks for this revision again
+        self.provider.outcomes = ['unknown']
+        swap = timezone.now() - dt.timedelta(seconds=1)
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        self.assertEqual(self.close(swap)['hazards'], {encounter_id: ['unknown']})
+        self.run_app()
+        self.assertEqual(self.sent(), 1)
+        self.assertEqual(models.ProviderRun.objects.get(encounter_id=encounter_id).reconciled_at, None)
+
+    def test_migrate2_the_upgrade_recomputes_a_stored_state_the_replaced_revision_derived_otherwise(self):
         # the finding's shape: a first request succeeded, a date change came back unknown, and clearing it reused the
-        # first answer - the stored state then read 'reviewed' under the installed revision's rule
+        # first answer - the stored state read 'reviewed' under the installed revision's rule
         encounter_id = self.create(UNDATED_NOTE, service_date='2026-10-20')
         drain()
         self.provider.outcomes = ['unknown']
         self.set_context(encounter_id, service_date='2026-10-21')
         self.set_context(encounter_id, service_date='2026-10-20')
         self.assertEqual(self.sent(), 2)
-        unknown = models.ProviderRun.objects.get(encounter_id=encounter_id, state=models.ProviderRun.UNKNOWN)
         models.Encounter.objects.filter(pk=encounter_id).update(state='reviewed')  # as 057a7d39 derived it
         self.assertEqual(review._derive_state(self.encounter(encounter_id)), 'provider_unknown')
-        self.assertEqual(run_app_script(install.UNKNOWN_OUTCOMES, {}), {'encounters': [encounter_id]})
-        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
-                          {'provider_run_id': str(unknown.pk), 'note': 'Checked the provider console: nothing billed.'})
-        self.assertEqual(reply.status_code, 201, reply.content)
+        other = self.create(OFFICE_NOTE)  # control: a stored state that is this revision's derivation is not written
         drain()
-        self.assertEqual(run_app_script(install.UNKNOWN_OUTCOMES, {}), {'encounters': []})
-        self.assertEqual(self.sent(), 2)  # the reconciliation's attempt reused the retained answer
+        untouched = self.encounter(other).updated_at
+        details = self.run_app()
+        self.assertEqual(details['states_recomputed']['changed'], {encounter_id: ['reviewed', 'provider_unknown']})
+        self.assertEqual(self.encounter(encounter_id).state, 'provider_unknown')
+        self.assertEqual(self.encounter(other).updated_at, untouched)
+        self.assertEqual(self.sent(), 3)
 
     def test_a_copy_of_the_live_installation_is_not_refused_and_has_nothing_to_undo(self):
         # 2026-10-27 16:23Z: 11 encounters, 11 provider runs, all succeeded and sent, no stage active, none unknown
@@ -465,16 +500,15 @@ class UnknownOutcomesTests(Base):
         runs = models.ProviderRun.objects.all()
         self.assertEqual((runs.count(), runs.filter(state=models.ProviderRun.SUCCEEDED, sent=True).count()), (11, 11))
         self.assertFalse(models.Job.objects.filter(state__in=(models.Job.QUEUED, models.Job.RUNNING)).exists())
-        details, replace = app_phase(lambda image_id, env, body, params, **kwargs: run_app_script(body, params))
-        self.assertIsInstance(details, dict, details)
-        replace.assert_called_once()
-        self.assertEqual(details['unknown_outcomes'], {'encounters': []})
+        details = self.run_app()
+        self.assertEqual(details['states_recomputed'], {'encounters': 11, 'changed': {}})
         self.assertEqual(details['unrunnable_stages']['stuck'], 0)
         self.assertEqual(self.hazards(), {})
 
 
-def app_phase(app_script):
-    """install.phase_app with ``app_script`` answering its in-image reads; no container, no Docker."""
+def app_phase(app_script, replace=None):
+    """install.phase_app with ``app_script`` answering its in-image reads (and ``replace`` as replace_services, when
+    given); no container, no Docker."""
     ctx = SimpleNamespace(revision=NEW_REVISION, log=lambda label, data: 'log',
                           args=SimpleNamespace(provider_mode='disabled', authorization_ref=''))
     with mock.patch.object(install, 'installed_image', return_value=NEW_IMAGE), \
@@ -482,35 +516,56 @@ def app_phase(app_script):
             mock.patch.object(install, 'read_protected_env', return_value=b''), \
             mock.patch.object(install, 'oneshot', return_value=SimpleNamespace(returncode=0, stdout=b'', stderr=b'')), \
             mock.patch.object(install, 'app_script', app_script), \
-            mock.patch.object(install, 'replace_services', return_value={'started': {}}) as replace:
+            mock.patch.object(install, 'replace_services', side_effect=replace,
+                              return_value={'started': {}}) as replaced:
         try:
-            return install.phase_app(ctx), replace
+            return install.phase_app(ctx), replaced
         except install.InstallError as error:
-            return error, replace
+            return error, replaced
 
 
-class AppPhaseRefusesUnknownOutcomesTests(SimpleTestCase):
-    def answers(self, unknown):
+class AppPhaseRecomputesOnlyOverItsOwnPairTests(SimpleTestCase):
+    """The recompute runs after replace_services succeeded - never before, so a failure path restores the old pair over
+    the states it derived - and a recompute that fails says the pair runs and to rerun the phase."""
+
+    def answers(self, calls, recompute=None):
         def app_script(image_id, env, body, params, **kwargs):
-            if body == install.UNKNOWN_OUTCOMES:
-                return {'encounters': unknown}
             if body == install.UNRUNNABLE_STAGES:
+                calls.append('unrunnable')
                 return {'known': ['analyze', 'assess', 'extract', 'predict', 'review2'], 'stuck': 0, 'kinds': []}
+            if body == install.RECOMPUTE_STATES:
+                calls.append('recompute')
+                if isinstance(recompute, Exception):
+                    raise recompute
+                return {'encounters': 2, 'changed': {'e1': ['reviewed', 'provider_unknown']}}
             raise AssertionError('an unexpected in-image script')
         return app_script
 
-    def test_migrate2_the_app_phase_refuses_while_a_provider_outcome_is_unknown(self):
-        error, replace = app_phase(self.answers(['e1', 'e2']))
-        self.assertIsInstance(error, install.InstallError)
-        self.assertIn('2 encounter(s) have a provider outcome still unknown', str(error))
-        self.assertIn('nothing was replaced', str(error))
-        self.assertEqual(error.details, {'encounters': ['e1', 'e2']})
-        replace.assert_not_called()
+    def test_the_states_are_recomputed_after_the_new_pair_replaced_the_old_one(self):
+        calls = []
+        details, replaced = app_phase(self.answers(calls), replace=lambda *a, **k: calls.append('replace') or {})
+        self.assertIsInstance(details, dict, details)
+        self.assertEqual(calls, ['unrunnable', 'replace', 'recompute'])
+        self.assertEqual(details['states_recomputed']['changed'], {'e1': ['reviewed', 'provider_unknown']})
 
-    def test_controls_none_unknown_installs(self):
-        details, replace = app_phase(self.answers([]))
-        replace.assert_called_once()
-        self.assertEqual(details['unknown_outcomes'], {'encounters': []})
+    def test_a_failed_replacement_recomputes_nothing(self):
+        calls = []
+
+        def fail(*args, **kwargs):
+            calls.append('replace')
+            raise install.InstallError('worker did not become ready; the previous pair was restored')
+        error, replaced = app_phase(self.answers(calls), replace=fail)
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(calls, ['unrunnable', 'replace'])
+
+    def test_a_failed_recompute_says_the_pair_runs_and_to_rerun_the_phase(self):
+        calls = []
+        error, replaced = app_phase(self.answers(calls, recompute=install.InstallError('exit 1')),
+                                    replace=lambda *a, **k: calls.append('replace') or {'started': {}})
+        self.assertIsInstance(error, install.InstallError)
+        self.assertEqual(calls, ['unrunnable', 'replace', 'recompute'])
+        self.assertIn('web and worker running', str(error))
+        self.assertIn('rerun --phase app', str(error))
 
 
 # --- the phases: rollback-app refuses, the failure path leaves the restored worker stopped ---------------------------

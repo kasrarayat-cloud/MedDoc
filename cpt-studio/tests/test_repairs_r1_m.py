@@ -579,7 +579,8 @@ class AppPhaseRefusesStagesItCannotRunTests(SimpleTestCase):
 
         def app_script(image_id, env, body, params, **kwargs):
             scripts.append(body)
-            return {'encounters': []} if body == install.UNKNOWN_OUTCOMES else answer  # none unknown (7c8 p1install)
+            # the stored list states, recomputed once the pair is replaced (7c8 p1install): none changed
+            return {'encounters': 0, 'changed': {}} if body == install.RECOMPUTE_STATES else answer
         with mock.patch.object(install, 'installed_image', return_value='sha256:image'), \
                 mock.patch.object(install, 'require_db'), \
                 mock.patch.object(install, 'read_protected_env', return_value=b''), \
