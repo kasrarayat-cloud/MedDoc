@@ -398,28 +398,35 @@ def _remade_context(job):
         _queue_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
     else:
         # Refutation r1, migrate-5 (ec5): this stage never sends - an assess the earlier revision queued or a member
-        # resumed, or the stale-stage sweep's settlement of its predict - and the remade context needs another request
-        # than the one sent (the current rules read a date the earlier ones could not). The upgrade never spends by
-        # itself: the predict is left stopped, with the reason, for a member's Resume.
-        _stopped_predict(encounter, revision, fresh, key=f'predict:{fresh.pk}', requested_by=job.requested_by)
-        return {'skipped': f'{remade}; its request changed, so nothing was sent: resume to send it'}
+        # resumed, or the stale-stage sweep's settlement of its predict - so neither does the predict it queues for the
+        # remade context. That predict runs as any other (a disabled provider, a request that cannot be built, a
+        # retained answer, an unknown outcome to reconcile: each recorded and shown as itself) and stops only where it
+        # would send, for a member's Resume (stage_predict; ec5 skeptic: a stop recorded here for every request the
+        # run in use does not answer said "differs from the one sent before. Resume to send it." where nothing had
+        # been sent, where nothing could be built, and while an unknown outcome blocked every send).
+        _queue_predict(encounter, revision, fresh, key=_upgrade_predict_key(fresh), requested_by=job.requested_by)
     return {'skipped': remade}
 
 
 REMADE_REQUEST_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current rules, '
                           'and the request they make for it differs from the one sent before. Resume to send it.')
+REMADE_UNANSWERED_MESSAGE = ('Nothing was sent: after an upgrade this document was read again under the current '
+                             'rules, and no provider answer is recorded for the request they make for it. Resume to '
+                             'send it.')
 
 
-def _stopped_predict(encounter, revision, context, *, key, requested_by):
-    """The predict for ``context`` recorded as a stage the system stopped (cancelled, with the reason), never queued:
-    the encounter offers Resume, and only a member's Resume sends it."""
-    now = timezone.now()
-    job, _ = Job.objects.get_or_create(
-        idempotency_key=key,
-        defaults={'encounter': encounter, 'revision': revision, 'kind': Job.PREDICT, 'context': context,
-                  'requested_by': requested_by, 'state': Job.CANCELLED, 'error': REMADE_REQUEST_MESSAGE,
-                  'finished_at': now, 'deadline_at': now + QUEUE_DEADLINE})
-    return job
+def _upgrade_predict_key(context):
+    """The key of the predict an upgrade's remake queues at a stage that never sends: that predict never sends."""
+    return f'predict:{context.pk}:after-upgrade'
+
+
+def _remade_request_message(revision, request):
+    """Why the upgrade's predict stopped where it would send ``request``, worded from what is recorded: "differs from
+    the one sent before" only when the run in use carries another request that was sent."""
+    run = _run_in_use(revision)
+    if run is not None and run.sent and run.request_sha256 and run.request_sha256 != request.canonical_sha256:
+        return REMADE_REQUEST_MESSAGE
+    return REMADE_UNANSWERED_MESSAGE
 
 
 def stage_predict(job):
@@ -493,6 +500,10 @@ def stage_predict(job):
         return {'blocked': 'a previous request has an unknown outcome; reconcile it before sending again'}
 
     _live_gate(job, provider, revision, encounter)
+    if job.idempotency_key == _upgrade_predict_key(context):
+        # Refutation r1, migrate-5 (ec5): the predict an upgrade's remake queued at a stage that never sends stops here,
+        # where it would send - the system's stop, with the reason - and only a member's Resume sends the request.
+        raise StageCancelled(_remade_request_message(revision, request))
 
     run = _send(job, provider, request, service_date=service_date)
     next_assess(run)

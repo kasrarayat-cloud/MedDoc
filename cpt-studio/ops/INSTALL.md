@@ -119,10 +119,13 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   (for an upload, a date change, a Resume or a reconciliation) sends its one
   request, for the context remade under the new rules (a member's conflicting
   service date is held, not sent). A re-assessment never asks for the bounded
-  second review: a reviewer does (ARCHITECTURE 5.11). When the remade context
-  needs another request than the one the previous pair sent (the new rules read
-  a date the old ones could not), a re-assessment or the stale-stage sweep
-  leaves that request stopped, with the reason, for a member's Resume.
+  second review: a reviewer does (ARCHITECTURE 5.11). When no recorded answer
+  answers the request the remade context makes (the new rules read a date the
+  old ones could not, or the previous pair sent nothing), the predict a
+  re-assessment or the stale-stage sweep queues for it runs as any other (a
+  disabled provider, a request that cannot be built, a retained answer and an
+  unknown outcome are recorded and shown as such) but stops where it would
+  send, with the reason, for a member's Resume.
   Encounters with nothing in flight are neither reprocessed nor sent until a
   member acts. To install with nothing in flight, let the queue drain (or Stop
   the encounters) before `app`.

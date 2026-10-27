@@ -12,11 +12,14 @@ from datetime import date, timedelta
 from unittest import mock
 from uuid import uuid4
 
+from django.conf import settings
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from studio import jobs, models, review
 from studio.gi import context as gi_context
+from studio.providers import corti
+from studio.providers.base import ProviderUnavailable
 from tests.support import factories as f
 from tests.test_pipeline_api import OFFICE_NOTE, drain
 from tests.test_services_second_review import LIVE, REPORT, TwoPassProvider, response
@@ -47,12 +50,14 @@ class Provider(TwoPassProvider):
 
 
 class Base(TestCase):
+    provider_class = Provider
+
     def setUp(self):
         self.ws = f.workspace()
         self.reviewer = f.member(self.ws, f.user('reviewer'))
         self.client = Client(enforce_csrf_checks=False)
         self.client.force_login(self.reviewer)
-        self.provider = Provider(first=[SNARE], later=[BIOPSY, SNARE])
+        self.provider = self.provider_class(first=[SNARE], later=[BIOPSY, SNARE])
         patcher = mock.patch('studio.jobs.get_provider', return_value=self.provider)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -607,6 +612,181 @@ class NothingSentAtTheSwapTests(Base):
         self.assertEqual(self.sent(), 1)
         self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run_id, run.pk)
         self.assertFalse(models.Job.objects.filter(encounter_id=encounter_id, kind=models.Job.REVIEW2).exists())
+
+
+# --- skeptic:1 on migrate-5's repair: the upgrade stops only where it would send, and says what is recorded ----------
+
+# The table-dated report with a long fictional handout written with a three-byte UTF-8 character: a legal paste (under
+# MAX_PASTE_CHARS characters) whose request is over PROVIDER_MAX_REQUEST_BYTES (the body is encoded with
+# ensure_ascii=False, as corti.build_coding_request encodes it).
+OVERSIZE = REPORT_TABLE_DATE + '\nPatient handout (fictional):\n' + '\n'.join(['…' * 100] * 1800) + '\n'
+
+
+class SizedProvider(Provider):
+    """The stand-in building each request exactly as the live adapter does (corti.build_coding_request): a request over
+    PROVIDER_MAX_REQUEST_BYTES is refused (ProviderUnavailable), never truncated or sent."""
+
+    def build_request(self, text, service_date):
+        return corti.build_coding_request(self.name, self.adapter_version, text, service_date,
+                                          settings.PROVIDER_MAX_REQUEST_BYTES)
+
+
+@override_settings(**LIVE)
+class UpgradeStopsOnlyWhereItWouldSendTests(Base):
+    """skeptic:1 (on bc7c128b1): after an upgrade's remake at a stage that never sends, the predict was recorded as
+    stopped - "the request they make for it differs from the one sent before. Resume to send it." - whatever was
+    recorded: for a request the installed revision could not build (nothing sent; Resume then sent nothing either), for
+    no run at all (the installed pair ran with the provider disabled), and while an unknown outcome blocked every send
+    (the encounter read 'stopped', not 'provider_unknown'). Nothing may be sent by the upgrade itself, and the screen
+    must say what is recorded: the predict runs as before and stops only where it would send, worded from the run in
+    use."""
+
+    provider_class = SizedProvider
+    installed_upload = NothingSentAtTheSwapTests.installed_upload
+
+    def installed_not_sent(self, encounter_id):
+        """The run 057a7d39's stage_predict records when the request cannot be built: no request, nothing sent."""
+        encounter = self.encounter(encounter_id)
+        revision = encounter.current_revision
+        with self.assertRaises(ProviderUnavailable) as refused:
+            self.provider.build_request(revision.text, None)
+        return models.ProviderRun.objects.create(
+            encounter=encounter, revision=revision, provider=self.provider.name,
+            adapter_version=self.provider.adapter_version, request_sha256='', request_body={}, contexts=[],
+            state=models.ProviderRun.NOT_SENT, error=str(refused.exception),
+            authorization_ref=LIVE['AUTHORIZATION_REF'], requested_by=self.reviewer, service_date=None,
+            finished_at=timezone.now())
+
+    def upgrade_stages(self, encounter_id):
+        return [s for s in self.detail(encounter_id)['pipeline']['stages'] if 'after an upgrade' in s['error']]
+
+    def assert_recorded_as_not_sent(self, encounter_id):
+        """As without the upgrade: the predict records why nothing could be built, and the screen says that."""
+        self.assertEqual(self.sent(), 0)
+        encounter = self.encounter(encounter_id)
+        self.assertNotEqual(encounter.current_context.version, EARLIER_VERSION)
+        self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertEqual(encounter.state, 'provider_failed')
+        self.assertFalse(review.can_resume(encounter))
+        runs = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        self.assertFalse(runs.filter(sent=True).exists())
+        latest = runs.order_by('-created_at').first()
+        self.assertEqual((latest.state, latest.service_date), (models.ProviderRun.NOT_SENT, DOCUMENTED))
+        self.assertIn('nothing was truncated or sent', latest.error)
+        self.assertEqual(encounter.current_assessment.provider_run_id, latest.pk)
+
+    def test_a_request_the_current_rules_cannot_build_either_is_recorded_never_stopped(self):
+        self.assertLessEqual(len(OVERSIZE), settings.MAX_PASTE_CHARS)
+        encounter_id, context = self.installed_upload(OVERSIZE, read_date=False)
+        run = self.installed_not_sent(encounter_id)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)  # its assess, queued at the swap
+        drain()
+        self.assert_recorded_as_not_sent(encounter_id)
+
+    def test_a_resumed_assess_of_a_request_that_could_not_be_built(self):
+        encounter_id, context = self.installed_upload(OVERSIZE, read_date=False)
+        run = self.installed_not_sent(encounter_id)
+        # cancelled before the install (a Stop, a queue expiry or the restart sweep); a reviewer resumes it after
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run, state=models.Job.CANCELLED)
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assert_recorded_as_not_sent(encounter_id)
+
+    def test_with_no_request_before_the_stop_never_says_one_was_sent(self):
+        # the installed pair ran with the provider disabled: its assess carries no run at all
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)
+        drain()
+        self.assertEqual(self.sent(), 0)
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(encounter.state, 'stopped')
+        self.assertTrue(review.can_resume(encounter))
+        latest = review.latest_job(encounter)
+        self.assertEqual((latest.kind, latest.state), (models.Job.PREDICT, models.Job.CANCELLED))
+        self.assertNotIn('sent before', latest.error)
+        self.assertEqual(latest.error, jobs.REMADE_UNANSWERED_MESSAGE)
+        self.assertFalse(self.detail(encounter_id)['pipeline']['stopped_by_member'])
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual(self.dates_sent(), ['Date of service: 2026-10-16'])  # a member's Resume sends it, once
+        self.assertEqual(self.encounter(encounter_id).current_assessment.provider_run.service_date, DOCUMENTED)
+
+    def test_a_request_built_but_never_sent_before_is_never_said_to_be_sent(self):
+        # the installed revision built its request and the exchange refused it before sending (outcome not_sent)
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        run = self.installed_run(encounter_id, None, state=models.ProviderRun.NOT_SENT)
+        self.provider.requests.pop()  # nothing reached the provider
+        models.ProviderRun.objects.filter(pk=run.pk).update(
+            sent=False, error='The send deadline must be a positive number of seconds; nothing was sent.')
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assertEqual(self.sent(), 0)
+        latest = review.latest_job(self.encounter(encounter_id))
+        self.assertEqual((latest.kind, latest.state, latest.error),
+                         (models.Job.PREDICT, models.Job.CANCELLED, jobs.REMADE_UNANSWERED_MESSAGE))
+
+    def test_with_the_provider_disabled_now_nothing_is_stopped(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=None)
+        with mock.patch('studio.jobs.get_provider', return_value=None):
+            drain()
+        self.assertEqual(self.sent(), 0)
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertEqual(encounter.state, 'provider_not_run')
+        self.assertFalse(review.can_resume(encounter))
+
+    def test_an_unknown_outcome_reads_as_unknown_and_no_resume_is_offered(self):
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        run = self.installed_run(encounter_id, None, state=models.ProviderRun.UNKNOWN)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assertEqual(self.sent(), 1)  # the installed revision's own request only
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertEqual(encounter.state, 'provider_unknown')
+        self.assertFalse(review.can_resume(encounter))
+        reply = self.post(f'/api/encounters/{encounter_id}/reconcile',
+                          {'provider_run_id': str(run.pk), 'note': 'Checked the provider console: nothing billed.'})
+        self.assertEqual(reply.status_code, 201, reply.content)
+        drain()
+        self.assertEqual(self.dates_sent(), ['Date of service: 2026-10-16'])  # the reconciliation's one attempt
+        self.assertEqual(self.sent(), 2)
+
+    def test_a_retained_answer_to_the_remade_request_is_reused_never_stopped(self):
+        answered = self.create(REPORT_TABLE_DATE)  # under the current rules the dated request is sent and answered
+        drain()
+        self.assertEqual(self.dates_sent(), ['Date of service: 2026-10-16'])
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        run = self.installed_run(encounter_id, None)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=run)
+        drain()
+        self.assertEqual(self.sent(), 2)  # nothing new
+        encounter = self.encounter(encounter_id)
+        self.assertEqual(self.upgrade_stages(encounter_id), [])
+        self.assertNotEqual(encounter.state, 'stopped')
+        used = encounter.current_assessment.provider_run
+        self.assertEqual((used.sent, used.service_date, str(used.reused_from.encounter_id)),
+                         (False, DOCUMENTED, answered))
+
+    def test_control_an_undo_closes_the_upgrades_queued_predict_before_the_installed_pair_returns(self):
+        # rollback safety: the installed revision's worker would run this predict as any other (it does not know the
+        # upgrade's stop), so the installer's CLOSE_STAGES must close it, as it closes every stage the new pair opened
+        from tests.test_repairs_r1_m import install, run_app_script
+        encounter_id, context = self.installed_upload(REPORT_TABLE_DATE, read_date=False)
+        self.installed_job(encounter_id, models.Job.ASSESS, context, run=self.installed_run(encounter_id, None))
+        swap = timezone.now()
+        jobs.run_job(jobs.claim_next())  # the new worker runs the installed revision's assess, and no more
+        queued = models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.PREDICT)
+        self.assertEqual(queued.state, models.Job.QUEUED)
+        note = 'Closed by the installer: undone (revision aaaaaaaaaaaa), so this stage will not run.'
+        answer = run_app_script(install.CLOSE_STAGES, {'since': swap.isoformat(), 'note': note})
+        self.assertEqual((answer['closed'], answer['kinds']), (1, ['predict']))
+        queued.refresh_from_db()
+        self.assertEqual((queued.state, queued.error), (models.Job.FAILED, note))
+        self.assertFalse(review.can_resume(self.encounter(encounter_id)))
+        drain()
+        self.assertEqual(self.sent(), 1)  # the installed revision's own request only
 
 
 # --- the reviewer-requested second review (8985dde42): never sent twice, never sent when it should not be -------------
