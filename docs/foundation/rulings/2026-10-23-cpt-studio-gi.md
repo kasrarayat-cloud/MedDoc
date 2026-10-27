@@ -552,3 +552,37 @@ the work that depends on it is committed for review. Verbatim:
     meddoc-pro-01 (bc7df129) and stopped 909be030 (meddoc-pro-94), whose last commit was WIP 2 (9eb82f0d) and
     whose refutation workflow (wf_ce4e77bb-c22) died with it before any lens finished. From then on bc7df129 is the
     single owner of this branch, its install and its live verification.
+19. **Nothing is sent while the service date is a member-vs-document conflict** (refines 11; bc7df129). A conflicted
+    context has no date a request could carry, and a dateless request would be paid for and discarded once the date is
+    settled. The predict stage records a not-sent run that says so (`ProviderRun.scope` `held: member_date_conflict`);
+    the encounter is needs_clarification on the date question, not "provider failed"; correcting or clearing the
+    metadata starts the request for the agreed date, and an identical retained result is reused. Setting, patient
+    status and billing never enter a request, so their member conflicts only hold, as 11 says. The installed revision
+    sent the member's date itself (the Elena 1998-01-01 request); WIP 3 sent a dateless request instead.
+20. **The reader reads a soft line wrap as a space** (bc7df129, from a format harness that read every corpus document
+    as text, as Word, as a digital PDF wrapped at 90 characters, and as a scan read with real OCR in the image). On
+    WIP 3 the digital PDF read differently from the text in 13 of 43 documents and the scan in 38 of 43: a wrapped
+    sentence line looked like a heading, and the attribution, lesion and act readers stop at line breaks. The reader
+    now reads a same-length view of the text (`services.reflow`) in which a line break inside a sentence is a space:
+    only after a long line of prose (25+ characters, 4+ words) that ends no sentence, label or answer of its own
+    (`_answered_line`, the rule sentences are cut at), before a line that continues it in lower case or after a word
+    that cannot end a line; never around a check-box, option, table, list or field row, nor inside an extraction
+    block. Every offset and passage stays the text's own (each passage is re-read from the text at its offsets, and
+    routing's box reader is given the text itself). The digital-PDF reading of every corpus document is a regression
+    test with each remaining difference recorded with its reason (`tests/test_services_formats_corpus.py`,
+    `format_known_differences.json`); a scanned report and a scanned sample of the corpus are read with real OCR
+    wherever tesseract is installed (CI and the image). Proper-noun wraps and OCR misreads remain known limits.
+21. **How this change's refutation pass finishes** (bc7df129). One full round runs on the finished diff, with nine
+    lenses (false release, missed service, negation and time, provider sends, report and UI truth, cost and bounds,
+    migration and upgrade, document formats, member-entered context), every finding re-run by a skeptic and graded as
+    interpretation 6 grades it. Each repair of a blocking finding is then attacked once more by its own skeptic before
+    merge, because in rounds 1-7 about a quarter of each round's findings were the previous round's repairs. Confirmed
+    misreadings that do not block are recorded in `cpt-studio/ACCURACY-RESIDUALS.md` and the PR body. This takes the
+    shape of the owner's 2026-10-25 decision for this change; the owner can overrule it.
+22. **Refinements of 10 and 11 found by the triage skeptics** (bc7df129). A member value settles a conflict INSIDE the
+    document only by choosing one of its values; any other value is a third side kept with them (a member-entered
+    1998-01-01 against two documented dates had been accepted). A member conflict that no question asks about is asked
+    once at the encounter, both sides named. The bounded second review (10) is never made after a primary response
+    refused whole, nor while the service date is unknown, and without a known service date a dated act statement is
+    held, never read as today's (a dated history line had produced a phantom performed service and a paid second
+    review). The note's own dated title is only the FIRST dated title line near the top; a qualified one gives no date.

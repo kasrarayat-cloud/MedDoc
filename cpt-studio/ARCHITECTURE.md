@@ -1578,6 +1578,61 @@ item becomes a proposal (`support.origin = second_review`, labelled on the
 card and in both reports); every other code it lists is an alternative. The
 primary run stays the run in use for context changes and reuse.
 
+### 5.12 Repairs after the full-suite triage of WIP 3 (2026-10-27)
+
+The suite on WIP 3 failed 291 records in 129 tests that pass on the installed revision. Each failure was classified
+as an intended change of 5.9-5.11 (the test was updated, keeping what it pins) or a regression (repaired by a general
+rule, never a sentence patch). The rules this added, by module:
+
+- Reader (`studio/gi/services.py`):
+  - **Soft line wraps** (`reflow`, session interpretation 20): the reader reads a same-length view in which a line
+    break inside a sentence is a space - after a long line of prose that ends no sentence, label or answer, before a
+    line that continues it in lower case or after a word that cannot end a line; never around a check-box, option,
+    table, list or field row, nor inside an extraction block. Every passage is re-read from the text at its offsets,
+    and routing's box reader is given the text itself.
+  - **Sentence ends**: after a line that answers its own field (`_answered_line`, routing's own `_answered`,
+    `_OPTION_ROW` and spoken-answer readers), and at each line of an extraction block.
+  - **Time parts follow routing's section layout** (`_time_parts`): a history or plan section dates what it holds from
+    where the layout opens it to where the layout opens the next section; a history part ends at today's procedure
+    heading when today's report goes on under it; an extraction block interrupts a history or plan part; a
+    performance stated in an indication paragraph, not said to be today's, is held.
+  - **Clause reading**: a history or plan section dates a mention before a hedge is read; a service named as replaced
+    ("rather than EUS", "instead of") is negated, and its instrument in that clause documents nothing; "without (any)
+    complication(s)" ending its clause denies no act; a "not" inside a subordinate clause, or on a second predicate
+    coordinated with the act's own participle, never denies the act, and a coordinated subject with its own negated
+    predicate is its own clause (every other "not" still denies); a line listed under a label that denies
+    performance is held (`detect.denying_label_over`, routing's plan:C reader); a checked form-field line documents
+    its act; without a known service date a dated act statement is held, never read as today's.
+- Routing (`studio/gi/detect.py`): an insertion statement is no extent only when no extent label speaks
+  (`_insertion_only` beside the plan:B/B2/D/D2 label readings), which restores the incomplete readings it had lost.
+- Engine (`studio/validation/engine.py`):
+  - the routing-era reading is named, never dropped: a contrary or released passage of a ready code is named in its
+    status check (warn); a hold or an agreed exclusion carries both readings;
+  - a passage overlapping a routed office-visit mention is about the visit, so a hedge in the E/M's own time or
+    decision-making line holds it;
+  - a plan or history SECTION reading of the code's own act passage holds, never excludes;
+  - the own-passage release applies only to a passage naming the code's act kind that the reader does not read;
+  - a family carved out by gi-profiles@3 also counts for the family routing still reads it under, so uncovered "other
+    GI" procedures beside a manometry, capsule, anorectal, pH or feeding-tube code are named again;
+  - no office visit is pushed as unresolved on a procedure day the engine sees (and no second review is made for it);
+  - an office visit's evidence support honours the routing-era E/M time reading, and a study's own result sentence
+    supports the study code;
+  - a member's encounter metadata that conflicts with the document is asked once, at the encounter, when nothing else
+    asks it.
+- Reconciliation (`studio/validation/reconcile.py`): an act read as uncertain is quoted as in doubt, never reported as
+  absent; a member conflict is worded as one in the visit's own questions.
+- Context (`studio/gi/context.py`): only the first dated title line near the top can be the note's own date (a
+  qualified first title gives none; another unqualified dated title with another date is a conflict); a member value
+  settles a document-internal conflict only by choosing one of its values; a member conflict is described as one
+  (`is_member_conflict`, one predicate for every reader).
+- Jobs (`studio/jobs.py`): nothing is built, reused or sent while the service date is a member-vs-document conflict
+  (session interpretation 19; the not-sent run carries `scope.held`, and the encounter waits on the date question);
+  no second review after a primary response refused whole, nor without a known service date.
+- Reports (`cpt-studio-report@4`): UNRESOLVED and CONFLICTS print "none" only after a consistent reconciliation (the
+  snapshot records `documented.reconciliation`: missing, inconsistent, partial or reconciled); every passage the new
+  sections print is re-checked against the revision text; each provider run is "used by this assessment" only when
+  its own provider check did not fail; `ops/verify_downloads.py` reads a wrapped source passage as one entry.
+
 ## 6. Security
 
 Login required for everything except `/health/` and `/login/`. No public
