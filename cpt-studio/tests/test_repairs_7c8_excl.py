@@ -71,3 +71,42 @@ class TodayAcrossAnOwnTimeCutTests(SimpleTestCase):
                 (EGD, 'Biopsies will be obtained and will be sent to pathology.', 'biopsy', 'planned')):
             with self.subTest(line=line, kind=kind):
                 self.assertEqual(statuses(template.format(x=line), kind), [status])
+
+
+class NegationListEndsAtANewClauseTests(SimpleTestCase):
+    """sk:5 (negtime-6, claimed fixed by 6fd66f2b3): a negation's list still reached a new clause after a comma, "and",
+    "so" or "as" ("There was no bleeding and biopsies were taken", "No active bleeding, two hemoclips were placed"), so
+    both readers read the act denied and its code was excluded. A negation covers what it lists; an act named after a
+    clause boundary as the subject of its own predicate (an auxiliary and a participle right after it) is outside the
+    list and reads by that predicate - unless a negation of its own governs it."""
+
+    def test_an_act_with_its_own_predicate_after_the_list_is_outside_it(self):
+        for template, line, kind, code in (
+                (EGD, 'There was no bleeding and biopsies were taken from the antrum.', 'biopsy', '43239'),
+                (EGD, 'No active bleeding, two hemoclips were placed prophylactically on the visible vessel.', 'clip',
+                 '43255'),
+                (EGD, 'There was no active bleeding, so two hemoclips were placed prophylactically on the visible '
+                      'vessel.', 'clip', '43255'),
+                (EGD, 'No bleeding occurred as the biopsies were obtained from the antrum.', 'biopsy', '43239'),
+                (EGD, 'No complications, biopsies were obtained from the antrum.', 'biopsy', '43239'),
+                (COLONOSCOPY, 'Without complication, biopsies were taken from the ascending colon.', 'biopsy',
+                 '45380'),
+                (COLONOSCOPY, 'No polyps in the left colon, a 6 mm cecal polyp was removed with a cold snare.', 'snare',
+                 '45385')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['performed'])
+                _not_excluded(self, text, code, line)
+
+    def test_controls_the_negations_own_list_still_denies(self):
+        for template, line, kind in (
+                (COLONOSCOPY, 'No biopsy, polypectomy or tattoo was performed.', 'snare'),
+                (COLONOSCOPY, 'No biopsy, polypectomy, or tattoo was performed.', 'tattoo'),
+                (COLONOSCOPY, 'No biopsies or polypectomy were performed.', 'snare'),
+                (EGD, 'There were no biopsies taken since the mucosa was normal.', 'biopsy'),
+                (EGD, 'There was no bleeding, and no biopsies were taken.', 'biopsy'),
+                (EGD, 'No ulcers, so no biopsies were obtained.', 'biopsy'),
+                (EGD, 'Without bleeding, perforation or a clip being placed.', 'clip'),
+                (EGD, 'No biopsies were taken after the dilation.', 'biopsy')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), ['negated'])

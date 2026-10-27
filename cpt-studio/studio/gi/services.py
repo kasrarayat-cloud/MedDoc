@@ -268,15 +268,36 @@ WITHOUT = _rx(r'\b(?:without|w/o)\b')
 NEGATION_SCOPE_END = _rx(r'\b(?:after|before|once|when|whenever|while|until|because|since|following|whereupon'
                          r'|as\s+soon\s+as|so\s+that)\b')
 NEGATION_WORD = _rx(r'\b(?:no|not|none|nothing|neither|nor|never|without|w/o)\b')
+# Where a negation's list breaks (7c8 skeptic, sk:5): a comma, "and", "so", "as", "then" - a clause may open after it
+# ("There was no bleeding and biopsies were taken", "No active bleeding, two hemoclips were placed", "No bleeding
+# occurred as the biopsies were obtained") - or "or" / "nor", which only ever join the list's own items ("No biopsy,
+# polypectomy, or tattoo was performed").
+NEGATION_LIST_BREAK = _rx(r'(?P<joiner>\b(?:or|nor)\b)|,|\b(?:and|so|as|then|thus|hence|whereupon)\b')
+# From an act's mention to its own predicate's auxiliary, within its noun phrase ("biopsies of the antrum were taken"):
+# never across a list joiner ("polypectomy or tattoo was performed" is the list's shared predicate).
+TO_OWN_PREDICATE = _rx(r'(?:\s+(?!(?:or|nor|and|but)\b)[\w-]+){0,4}?\s+(?:(?:has|have|had)\s+)?(?=(?:was|were|been|is|are)\b)')
 
 
-def _outside_negation(phrase: str) -> bool:
+def _outside_negation(phrase: str, after: str = '') -> bool:
     """Whether ``phrase`` - the words from a negation up to an act's mention - opens another clause after the negation
-    (NEGATION_SCOPE_END) with no negation of its own after that opener: the act is then outside the negated list."""
+    (NEGATION_SCOPE_END) with no negation of its own after that opener: the act is then outside the negated list. So
+    when the list's last break before the mention is a clause break (NEGATION_LIST_BREAK, never "or" / "nor") with no
+    negation after it, and the mention is the subject of its own act predicate right after it (``after``, the clause
+    after the mention: "... and biopsies were taken"): a new clause, not an item of the list (7c8 skeptic, sk:5)."""
     opener = None
     for m in NEGATION_SCOPE_END.finditer(phrase):
         opener = m
-    return opener is not None and not NEGATION_WORD.search(phrase, opener.end())
+    if opener is not None and not NEGATION_WORD.search(phrase, opener.end()):
+        return True
+    if not after:
+        return False
+    brk = None
+    for m in NEGATION_LIST_BREAK.finditer(phrase):
+        brk = m
+    if brk is None or brk.group('joiner') or NEGATION_WORD.search(phrase, brk.end()):
+        return False
+    lead = TO_OWN_PREDICATE.match(after)
+    return lead is not None and ACT_VERB.match(after, lead.end()) is not None
 # A "not" after the act that belongs to another predicate: one inside a subordinate clause ("Possible EGD with PEG
 # placement if intake does not improve"), or a second predicate coordinated with the act's own participle ("was
 # tattooed and not removed"). Every other "not" in the clause still negates the act (fail-closed).
@@ -1533,7 +1554,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # taken, and ... there was nothing to remove with snare or forceps", "... and no tattoo was placed")
         negated_again = auxiliaries and re.search(r'\b(?:no|not|nothing|none|neither|nor|never|without)\b',
                                                   between[auxiliaries[-1].end():], FLAGS)
-        if (not auxiliaries or own or negated_again) and not _outside_negation(between):
+        if (not auxiliaries or own or negated_again) and not _outside_negation(between, after):
             return Reading('negated', ('negated: the clause opens with a negation that covers its list',))
     head = before[-60:]
     negation = re.search(r'\b(?:no|without|w/o|nor|neither)\s+(?:\w+[\s,-]+){0,6}$', head, FLAGS)
@@ -1547,7 +1568,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         auxiliaries = re.findall(r'\b(?:was|were|is|are|been)\b', tail, FLAGS)
         if (not auxiliaries or (len(auxiliaries) == 1
                                 and re.search(r'\b(?:was|were|is|are|been)\s+(?:[\w-]+ly\s+)?$', tail, FLAGS))) \
-                and not _outside_negation(tail):
+                and not _outside_negation(tail, after):
             cues.append('negated: a negation before it in its clause')
             return Reading('negated', tuple(cues))
     for not_verb in NOT_VERB.finditer(whole):
@@ -1560,7 +1581,7 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if not re.match(r'\s*(?:[\w-]+ly\s+)?(?:discontinu|interrupt|terminat|abort|incomplet|stopped)', neg_target, FLAGS):
             return Reading('negated', ('negated: "not" on its predicate',))
     near = before[-40:]
-    if any(not WITHOUT_COMPLICATION.match(near, w.start()) and not _outside_negation(near[w.start():])
+    if any(not WITHOUT_COMPLICATION.match(near, w.start()) and not _outside_negation(near[w.start():], after)
            for w in WITHOUT.finditer(near)):
         return Reading('negated', ('negated: "without" before it',))
     if REPLACED.search(before[-80:]):
