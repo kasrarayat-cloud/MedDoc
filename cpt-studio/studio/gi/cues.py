@@ -284,6 +284,30 @@ STARTED = rx(r'\b(?:was|were)\s+(?:then\s+)?(?:advanced|inserted|introduced|pass
 BEFORE_START = rx(r'\b(?:before|prior\s+to)\s+(?:the\s+)?(?:sedation|insertion|scope\s+insertion|intubation|'
                   r'start(?:ing)?|the\s+procedure\s+(?:began|started)|procedure\s+start|endoscope\s+insertion)\b')
 
+# --- page furniture: what a page prints at its head or foot, outside the document's flow ---------------------------
+
+FURNITURE_CHARS = 100  # a running header or footer is one short line
+PAGE_NUMBER_LINE = rx(r'[^\w\n]*(?:(?:page|pg|p)\.?[ \t]*)?\d{1,4}(?:[ \t]*(?:of|/)[ \t]*\d{1,4})?[^\w\n]*')
+_FURNITURE_WORD = rx(r"[a-z][a-z0-9/'-]*")
+
+
+def page_number_line(line: str) -> bool:
+    """Whether ``line`` is a page number and nothing else ("Page 1 of 2", "- 1 -", "2", "p. 3", "1/2")."""
+    stripped = line.strip()
+    return 0 < len(stripped) <= FURNITURE_CHARS and PAGE_NUMBER_LINE.fullmatch(stripped) is not None
+
+
+def heading_shaped_line(line: str) -> bool:
+    """Whether ``line`` is a short line written as a heading, as a letterhead, a running title or a confidentiality or
+    print stamp is ("Confidential", "Printed 10/27/2026 09:14", "SCREENING COLONOSCOPY (continued)"): most of its words
+    carry a capital letter, and it ends with no stop, colon, semicolon or comma. Bounded: FURNITURE_CHARS."""
+    stripped = line.strip()
+    if not stripped or len(stripped) > FURNITURE_CHARS or stripped[-1] in '.!?:;,':
+        return False
+    words = _FURNITURE_WORD.findall(stripped)
+    return bool(words) and 2 * sum(1 for word in words if any(c.isupper() for c in word)) > len(words)
+
+
 # --- incomplete: started but not completed as intended ---------------------------
 
 
@@ -292,9 +316,12 @@ class _Undenied:
     directly before it withdraws across any run of whitespace, never a fixed count of it (refutation r1, formats-6: a
     look-behind that reached across at most two whitespace characters read a page join - "The procedure was not" at
     the foot of one page, "discontinued; it was completed" atop the next - and a wide gap on one line as a discontinued
-    procedure). Only whitespace may stand between the two words."""
+    procedure). Only whitespace may stand between the two words, or, where a page join leaves them (_across_furniture),
+    the page's running header or footer."""
 
     _DENIAL = rx(r'\b(?:not|never)$')
+    FURNITURE_LINES = 3  # lines of a page's head and foot read across (bounded work per stop word)
+    FURNITURE_GAP = 200  # whitespace read across before each of them
 
     def __init__(self, pattern: str):
         self._words = rx(pattern)
@@ -304,7 +331,40 @@ class _Undenied:
         gap = start
         while gap > 0 and string[gap - 1].isspace():
             gap -= 1
-        return gap < start and self._DENIAL.search(string, max(0, gap - 5), gap) is not None
+        if gap == start:
+            return False
+        return self._DENIAL.search(string, max(0, gap - 5), gap) is not None \
+            or self._across_furniture(string, gap, start)
+
+    def _across_furniture(self, string: str, gap: int, start: int) -> bool:
+        """Whether the negation ends a line and the stop word opens a later one with only a page's furniture between
+        them: whole lines that are a page number (page_number_line) or, before a stop word that goes on in lower case,
+        written as a heading (heading_shaped_line), where a page join leaves them - a blank line among the whitespace
+        (refutation 7c8, formats-6: "The procedure was not" / "Page 1 of 2" / "discontinued; it was completed", and a
+        letterhead, "Confidential" or "SCREENING COLONOSCOPY (continued)" there, had read a discontinued procedure).
+        Without page spans, routing knows a page join only by the blank line it leaves. Bounded: FURNITURE_LINES lines
+        of FURNITURE_CHARS, each after at most FURNITURE_GAP whitespace."""
+        run = string[gap:start]
+        if '\n' not in run:
+            return False  # the stop word does not open its line
+        lower = string[start].islower()
+        blank = run.count('\n') >= 2
+        end = gap
+        for _ in range(self.FURNITURE_LINES):
+            newline = string.rfind('\n', max(0, end - FURNITURE_CHARS - 1), end)
+            if newline < 0:
+                return False  # a line longer than furniture, or the text's first line
+            line = string[newline + 1:end]
+            if not (page_number_line(line) or lower and heading_shaped_line(line)):
+                return False
+            before = newline
+            while before > 0 and string[before - 1].isspace() and newline - before < self.FURNITURE_GAP:
+                before -= 1
+            blank = blank or string.count('\n', before, newline + 1) >= 2
+            if self._DENIAL.search(string, max(0, before - 5), before) is not None:
+                return blank
+            end = before
+        return False
 
     def finditer(self, string: str, pos: int = 0, endpos: int = sys.maxsize):
         return (m for m in self._words.finditer(string, pos, endpos) if not self._denied(string, m.start()))

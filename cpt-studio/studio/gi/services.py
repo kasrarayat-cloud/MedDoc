@@ -2494,7 +2494,9 @@ def reflow(text: str, pages: Sequence = ()) -> str:
     lines read on one page (refutation r1, formats-2, formats-5 and formats-6: "The procedure was not" at the foot of
     a page and "discontinued; it was completed" atop the next, or "a 5 mm adenoma was" and "removed with a cold snare",
     were read as two sentences). Only a recorded page join is one: a blank line the author typed stays a paragraph
-    break, and so does a join that ends an extraction block."""
+    break, and so does a join that ends an extraction block. The page's running footer and the next page's running
+    header (_page_joins) are skipped when the join is decided, and a join that is read blanks them, so they are never
+    read into the sentence."""
     if '\n' not in text:
         return text
     joins = _page_joins(text, pages)
@@ -2509,7 +2511,7 @@ def reflow(text: str, pages: Sequence = ()) -> str:
         pos = i + 1
         ls = text.rfind('\n', 0, i) + 1
         prev = text[ls:i]
-        ns = joins.get(i, i + 1)  # where the next line starts: past the page separator at a page join
+        ns = joins.get(i, i + 1)  # where the next line starts: past the page separator and furniture at a page join
         ne = text.find('\n', ns)
         nxt = text[ns:ne if ne >= 0 else n]
         stripped = prev.strip()
@@ -2523,8 +2525,8 @@ def reflow(text: str, pages: Sequence = ()) -> str:
         else:
             continue
         for j in range(i, ns):
-            if text[j] == '\n' and j != kept:
-                out[j] = ' '
+            if j != kept:
+                out[j] = ' '  # the separator, and the page's running footer and header between the two lines
         pos = ns
     return ''.join(out)
 
@@ -2674,27 +2676,101 @@ def _title_wrapped(prev: str, nxt: str) -> bool:
     return bool(_family_named(joined)[0]) and not _family_named(prev)[0] and not _family_named(nxt)[0]
 
 
+EDGE_LINES = 3  # lines read at a page's head and foot for its running header or footer (bounded work per page)
+EDGE_REACH = 2000  # characters walked from a page's edge for them
+_NEGATION_END = re.compile(r'\b(?:not|never)[ \t]*$', re.I)
+
+
+def _edge_lines(text: str, start: int, end: int, from_top: bool) -> list[tuple[int, int]]:
+    """The first (``from_top``) or last EDGE_LINES + 1 non-empty lines of the page [start, end), nearest the edge
+    first, as (start, end) of each line. Bounded: EDGE_REACH characters from the edge."""
+    out: list[tuple[int, int]] = []
+    if from_top:
+        pos, limit = start, min(end, start + EDGE_REACH)
+        while pos < limit and len(out) <= EDGE_LINES:
+            newline = text.find('\n', pos, end)
+            le = end if newline < 0 else newline
+            if text[pos:le].strip():
+                out.append((pos, le))
+            if newline < 0:
+                break
+            pos = newline + 1
+    else:
+        pos, limit = end, max(start, end - EDGE_REACH)
+        while pos > limit and len(out) <= EDGE_LINES:
+            ls = max(start, text.rfind('\n', start, pos) + 1)
+            if text[ls:pos].strip():
+                out.append((ls, pos))
+            pos = ls - 1
+    return out
+
+
+def _edge_key(line: str) -> str:
+    """A line as a running header or footer repeats it on every page: its words, any page or date number masked."""
+    return re.sub(r'\d+', '#', ' '.join(line.split())).lower()
+
+
 def _page_joins(text: str, pages: Sequence) -> dict:
-    """{offset of the newline that ends the last text line of a page: offset of the first text line of the next page}
-    for each two consecutive pages of ``pages`` (spans with ``start`` and ``end``) that both hold text, with only
-    whitespace between them. Bounded: one walk over each page's trailing and leading whitespace."""
+    """{offset of the newline that ends the last line of a page's body: offset of the first line of the next page's
+    body} for each two consecutive pages of ``pages`` (spans with ``start`` and ``end``) that both hold text, with only
+    whitespace between them.
+
+    A page's body leaves out its running footer and the next page's running header (refutation 7c8, formats-6, -5 and
+    -2: "Page 1 of 2", "Page 2 of 2", a letterhead repeated atop page 2 or "Confidential" stood between "The procedure
+    was not" and "discontinued; it was completed", and the join paired the furniture line instead): up to EDGE_LINES
+    lines at the page's foot and the next page's head that number the page (cues.page_number_line) or recur at the
+    same edge of another page are its furniture; a line written as a heading there (cues.heading_shaped_line) is
+    furniture only where the sentence plainly runs across the join - the body's last line ends on a word no sentence
+    ends on (_DANGLING) or on a negation, and the next body line continues it (_soft_break, or in lower case). A
+    check-box row, a table row or cell and an extraction block's marker are never furniture (a page header of cells,
+    PAGE_HEADER, is running, as parts() reads it). Bounded: EDGE_LINES lines within EDGE_REACH of each page edge."""
     spans = sorted((p.start, p.end) for p in pages or ())
+    spans = [(s, e) for s, e in spans if 0 <= s <= e <= len(text)]
+    tops = [_edge_lines(text, s, e, True) for s, e in spans]
+    bottoms = [_edge_lines(text, s, e, False) for s, e in spans]
+    seen = {'top': {}, 'bottom': {}}  # edge key -> the pages that print it at that edge
+    for index, (top, bottom) in enumerate(zip(tops, bottoms)):
+        for edge, lines in (('top', top[:EDGE_LINES]), ('bottom', bottom[:EDGE_LINES])):
+            for ls, le in lines:
+                seen[edge].setdefault(_edge_key(text[ls:le]), set()).add(index)
+
+    def furniture(edge: str, ls: int, le: int) -> str:
+        line = text[ls:le]
+        stripped = line.strip()
+        if _sections.FORM_BLOCK.fullmatch(stripped) or BOX_MARK.search(line):
+            return ''
+        if _cues.page_number_line(line) or len(seen[edge].get(_edge_key(line), ())) > 1 \
+                or (PAGE_HEADER.match(stripped) and stripped.count('|') >= 2):
+            return 'running'
+        if '|' in line or '\t' in line:
+            return ''
+        return 'heading' if _cues.heading_shaped_line(line) else ''
+
     joins = {}
-    for (s1, e1), (s2, e2) in zip(spans, spans[1:]):
-        if not 0 <= s1 <= e1 <= s2 <= e2 <= len(text):
-            continue
-        last = e1
-        while last > s1 and text[last - 1].isspace():
-            last -= 1
-        first = s2
-        while first < e2 and text[first].isspace():
-            first += 1
-        if last == s1 or first == e2 or text[e1:s2].strip():
-            continue  # a page with no text, or something between the pages: no join
-        newline = text.find('\n', last, first)
-        start = text.rfind('\n', last, first) + 1
-        if 0 <= newline < start:
-            joins[newline] = start
+    for index in range(len(spans) - 1):
+        (s1, e1), (s2, e2) = spans[index], spans[index + 1]
+        if s2 < e1 or text[e1:s2].strip():
+            continue  # overlapping pages, or something between the pages: no join
+        bottom, top = bottoms[index], tops[index + 1]
+        if not bottom or not top:
+            continue  # a page with no text
+        foot = [furniture('bottom', *line) for line in bottom[:EDGE_LINES]]
+        head = [furniture('top', *line) for line in top[:EDGE_LINES]]
+        skip_foot = next((k for k, kind in enumerate(foot) if not kind), len(foot))
+        skip_head = next((k for k, kind in enumerate(head) if not kind), len(head))
+        if skip_foot >= len(bottom) or skip_head >= len(top):
+            skip_foot = skip_head = 0  # nothing left of a page's body: read its lines as written
+        if 'heading' in foot[:skip_foot] + head[:skip_head]:
+            (ls, le), (ns, ne) = bottom[skip_foot], top[skip_head]
+            prev, nxt = text[ls:le], text[ns:ne]
+            runs_across = (_DANGLING.search(prev) or _NEGATION_END.search(prev)) and (
+                _SOFT_NEXT.match(nxt) or _soft_break(text, ls, le, ns, prev, nxt))
+            if not runs_across:  # a line written as a heading is the document's own: only running lines are skipped
+                skip_foot = next((k for k, kind in enumerate(foot) if kind != 'running'), len(foot))
+                skip_head = next((k for k, kind in enumerate(head) if kind != 'running'), len(head))
+        (ls, le), (ns, _ne) = bottom[skip_foot], top[skip_head]
+        if le < len(text) and text[le] == '\n' and le < ns:
+            joins[le] = ns
     return joins
 
 
