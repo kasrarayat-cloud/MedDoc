@@ -750,7 +750,9 @@ class ConsentObjectTests(SimpleTestCase):
                      'Written consent for biopsy and cold snare polypectomy was obtained.',
                      'Consent obtained for: Biopsy   Cold snare polypectomy',
                      'Informed consent was given for biopsy, cold snare polypectomy and tattoo.',
-                     'Biopsy consent was obtained.'):
+                     'Biopsy consent was obtained.',
+                     'Informed consent was obtained after explaining the risks of biopsy and cold snare polypectomy, '
+                     'including bleeding and perforation.'):
             with self.subTest(line=line):
                 colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')
                 self.assertEqual(kinds(colon), [])
@@ -760,6 +762,7 @@ class ConsentObjectTests(SimpleTestCase):
     def test_an_act_with_its_own_predicate_is_done(self):
         for line in ('Consent was obtained for colonoscopy and biopsies were taken from the sigmoid polyp.',
                      'Biopsies were obtained after consent was given.',
+                     'After informed consent was obtained, biopsies were taken from the sigmoid polyp.',
                      'After consent was obtained, biopsies were taken from the sigmoid polyp.'):
             with self.subTest(line=line):
                 colon = one(read(self.REPORT.format(line=line))[1], 'gi.colonoscopy')

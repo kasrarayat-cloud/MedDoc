@@ -1636,8 +1636,9 @@ rule, never a sentence patch). The rules this added, by module:
   - **Consent** (`_consent_object`): what a consent, an authorization or an approval is for is named, never stated done
     ("Consent was obtained for biopsy and cold snare polypectomy", "Written consent for EGD with dilation was
     obtained", "Prior authorization was obtained for colonoscopy"): its predicate is the consent's, so the item reads
-    uncertain - held, never excluded, never sent for a second review. An act with a predicate of its own in the clause
-    ("... and biopsies were taken") is still done.
+    uncertain - held, never excluded, never sent for a second review. So is an item after the predicate of a consent
+    that is the clause's subject ("Informed consent was obtained after explaining the risks of colonoscopy with
+    polypectomy"). An act with a predicate of its own in the clause ("... and biopsies were taken") is still done.
   - **Service headings**: a label line (ending in ":" or "?") that names one service opens a bare service heading only
     when it carries the service's name, its acts and heading words alone (`_bare_service_heading`): "Colonoscopy within
     10 years:", "Last colonoscopy:" and "Colonoscopy up to date:" are questions, not reports of a service done today. A

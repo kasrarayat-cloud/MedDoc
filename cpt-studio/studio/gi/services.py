@@ -340,6 +340,10 @@ HYPOTHETICAL_CUE = 'uncertain: hypothetical: '
 CONSENT_FOR = _rx(r'\b(?:consent(?:s|ed)?|permission|authori[sz]ation|approval|clearance)\b'
                   r'(?P<predicate>[^.;:,\n]{0,60}?)\b(?:for|to)\b[ \t]*:?')
 CONSENT_AFTER = _rx(r'[ \t]+(?:consent|authori[sz]ation|approval)\b')
+# A consent that is the subject of the clause's predicate ("Informed consent was obtained after explaining the risks of
+# colonoscopy with polypectomy"): that predicate is the consent's, never an act's named after it.
+CONSENT_SUBJECT = _rx(r'\b(?:informed\s+|written\s+|verbal\s+|procedural\s+)?(?:consent|permission|authori[sz]ation|'
+                      r'approval)\b')
 CONSENT_PREDICATE = _rx(r'\b(?:signed|given|documented|reviewed|confirmed|verified|received|discussed)\b')
 CONSENT_CUE = 'uncertain: named as what a consent or an authorization is for'
 INDICATION_READING = 'uncertain: stated in an indication, not as done today'
@@ -1082,6 +1086,12 @@ def _consent_object(text: str, cs: int, ce: int, pos: int, end: int) -> bool:
     and biopsies were taken"), is the item's. Bounded: one pass over the clause."""
     if CONSENT_AFTER.match(text, end, ce):
         return True
+    subject = CONSENT_SUBJECT.search(text, cs, pos)
+    predicate_m = ACT_VERB.search(text, subject.end(), pos) if subject else None
+    if predicate_m is not None and predicate_m.start() - subject.end() <= 30 \
+            and not ACT_VERB.search(text, predicate_m.end(), pos) and not ACT_VERB.search(text, end, ce) \
+            and not BARE_PARTICIPLE.search(text, predicate_m.end(), pos) and not BARE_PARTICIPLE.search(text, end, ce):
+        return True  # the clause's one predicate is the consent's ("Consent was obtained after explaining ...")
     found = None
     for m in CONSENT_FOR.finditer(text, cs, pos):
         if m.end() <= pos:
