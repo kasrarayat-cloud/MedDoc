@@ -406,3 +406,13 @@ class MemberConflictQuestionTests(SimpleTestCase):
                 self.assertEqual(asked[0].scope, 'encounter')
                 self.assertIn('gives asc; the document gives office', asked[0].reason)
                 self.assertNotIn('does not state its setting', ' '.join(c.reason for c in result.clarifications))
+
+
+class UnknownDateTests(SimpleTestCase):
+    def test_a_dated_act_statement_is_held_without_a_service_date(self):
+        # an undated note: the dated colonoscopy cannot be placed in time, so it is never read as performed today
+        _, inv = read(HEAD + 'Gastroenterology office visit.\nResults reviewed\nColonoscopy 2026-09-03: a 6 mm '
+                             'sigmoid polyp was removed with a cold snare.\nEstablished patient, seen for constipation.\n')
+        colon = [s for s in inv.services if s.family == 'gi.colonoscopy']
+        self.assertTrue(colon and all(s.status not in services.POSITIVE for s in colon),
+                        [(s.status, s.cues) for s in colon])

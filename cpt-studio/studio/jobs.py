@@ -510,7 +510,8 @@ def stage_assess(job):
                                                second_run=second)
     except ValueError as exc:
         raise StageFailure(f'The assessment was not recorded: {exc}') from exc
-    queued = _maybe_second_review(job, encounter, revision, context, run, assessment, second)
+    queued = _maybe_second_review(job, encounter, revision, context, run, assessment, second,
+                                  usable=normalized is not None and not normalized.refused)
     out = {'assessment': str(assessment.pk), 'provider_status': provider_status}
     if second is not None:
         out['second_review'] = str(second.pk)
@@ -573,10 +574,15 @@ def _second_inputs(second):
                               normalized.problems, normalized.refused)
 
 
-def _maybe_second_review(job, encounter, revision, context, run, assessment, second):
+def _maybe_second_review(job, encounter, revision, context, run, assessment, second, usable=True):
     """Queue ONE bounded second review when the assessment leaves a documented, profiled service without a supported
     proposal: once per revision and service date, whatever its outcome, only after the primary request succeeded, never
     while the encounter is stopped, and never again for a revision that already had one."""
+    # Never for a primary response that was refused whole (its proposals were not used: there is nothing to fill),
+    # nor without a known service date (every proposal waits on the date question, and a dated passage cannot be
+    # placed in time: a second review would be paid for a service the date may show was not today's).
+    if not usable or run is None or run.service_date is None:
+        return None
     if second is not None or run is None or run.state != models.ProviderRun.SUCCEEDED \
             or run.purpose != models.ProviderRun.PRIMARY or is_stopped(encounter.pk) or get_provider() is None:
         return None

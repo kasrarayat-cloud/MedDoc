@@ -974,6 +974,11 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         if service_date is None:
             if d.precision == 'year' and HISTORY_WORDS.search(whole):
                 return Reading('historical', (f'historical: {text[d.start:d.end]} with a history word',))
+            if d.precision in ('day', 'month'):
+                # A dated statement cannot be placed in time without the service date ("Colonoscopy 2026-09-03: a 6
+                # mm polyp was removed" in a note whose date is unknown or in conflict): held, never read as today's.
+                return Reading('uncertain', (f'uncertain: dated {text[d.start:d.end]}, and the service date is not '
+                                             'known',))
             continue
         rel = gi_context.compare_to_service(d, service_date)
         if rel < 0:

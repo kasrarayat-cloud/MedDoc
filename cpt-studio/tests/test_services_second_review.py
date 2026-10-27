@@ -127,6 +127,25 @@ class SecondReviewTests(TestCase):
         self.assertIn(' · bounded second review', runs[1])
         self.assertTrue(runs[1].endswith(' · read by this assessment; its response was not used'), runs[1])
 
+    def test_no_second_review_after_a_primary_response_refused_whole(self):
+        """A primary response the adapter refuses whole (over its selection cap) was not used: nothing was proposed,
+        so there is nothing a second review could fill, and none is sent."""
+        self.provider.first = [('45385', 'was removed with a cold snare')] * 65
+        encounter_id = self.create()
+        drain()
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id))
+        self.assertEqual([(r.purpose, r.state) for r in runs], [('primary', 'succeeded')])
+        self.assertEqual(len(self.provider.requests), 1)
+
+    def test_no_second_review_without_a_known_service_date(self):
+        """With no service date every proposal waits on the date question and a dated passage cannot be placed in
+        time: no second review is paid for until the date is known."""
+        encounter_id = self.create(REPORT.replace('Date of service: 2026-10-16\n', ''))
+        drain()
+        runs = list(models.ProviderRun.objects.filter(encounter_id=encounter_id))
+        self.assertEqual([(r.purpose, r.service_date) for r in runs], [('primary', None)])
+        self.assertEqual(len(self.provider.requests), 1)
+
     def test_no_second_review_once_one_was_made_for_the_revision_and_date(self):
         encounter_id = self.create()
         drain()
