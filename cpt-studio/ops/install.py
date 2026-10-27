@@ -1413,6 +1413,18 @@ for pk, kind, state, revision_id, encounter_id in rows:
     stuck.append(kind)
 print(ANSWER + json.dumps({'known': known, 'stuck': len(stuck), 'kinds': sorted(set(stuck))}))
 '''
+# The encounters with a provider outcome still unknown (not reconciled). The app phase installs no pair over one
+# (refutation p1, migrate-2): its list state is the one stored state the installed revision derived otherwise than this
+# revision does (an unreconciled unknown outcome keeps an encounter on the review queue), and no stored list state is
+# recomputed until an action touches the encounter. Every other difference in the derivation reads rows only this
+# revision writes (holds, second reviews and their stages).
+UNKNOWN_OUTCOMES = '''
+from studio import models
+Run = models.ProviderRun
+found = sorted({str(pk) for pk in Run.objects.filter(state=Run.UNKNOWN, reconciled_at__isnull=True)
+                .values_list('encounter_id', flat=True)})
+print(ANSWER + json.dumps({'encounters': found}))
+'''
 
 
 def app_script(image_id, env_bytes, body, params, *, what, timeout=180) -> dict:
@@ -1817,9 +1829,17 @@ def phase_app(ctx) -> dict:
                            f'({", ".join(unrunnable["kinds"])}) are queued, running or resumable; nothing was '
                            'replaced. Close them with the newer revision\'s --phase rollback-app first.',
                            details=unrunnable)
+    # Refutation p1, migrate-2: no pair is installed over a provider outcome still unknown (the install plan requires
+    # none). Its stored list state is the one the running revision may have derived otherwise than this one, and nothing
+    # recomputes a stored state until an action touches the encounter (UNKNOWN_OUTCOMES says why that is the only one).
+    unknown = app_script(image_id, env, UNKNOWN_OUTCOMES, {}, what='Reading the provider outcomes still unknown')
+    if unknown['encounters']:
+        raise InstallError(f'{len(unknown["encounters"])} encounter(s) have a provider outcome still unknown; nothing '
+                           'was replaced. Reconcile each on the running revision\'s web first, then rerun --phase app.',
+                           details=unknown)
     services = replace_services(ctx, image_id, env, mode, reference)
     return {'image_id': image_id, 'provider_mode': mode, 'authorization_ref': reference, 'migrate_log': migrate_log,
-            'unrunnable_stages': unrunnable, **services,
+            'unrunnable_stages': unrunnable, 'unknown_outcomes': unknown, **services,
             'summary': f'web and worker running {image_id[:19]} (provider {mode})'}
 
 

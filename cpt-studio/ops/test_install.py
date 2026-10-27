@@ -1402,14 +1402,18 @@ class PhaseRefusalTests(TemporaryDirectoryTest):
         ctx = self.ctx('app', provider_mode='live',
                        authorization_ref='docs/foundation/rulings/2026-10-23-cpt-studio-gi.md')
         corti = {'exists': True, 'kind': 'file', 'uid': install.APP_UID, 'gid': install.APP_UID, 'mode': '0o400'}
-        # credentials, then migrate, then the read of the queue for stages this revision cannot run (refutation r1)
-        for loads, expected_commands in ((False, 1), (True, 3)):
+        # credentials, then migrate, then the read of the queue for stages this revision cannot run (refutation r1),
+        # then the read of provider outcomes still unknown (refutation p1, migrate-2)
+        for loads, expected_commands in ((False, 1), (True, 4)):
             commands = []
 
             def fake_oneshot(image_id, command, env, **kwargs):
                 commands.append(command)
                 if command[:2] == ['manage', 'shell'] and install.UNRUNNABLE_STAGES in command[-1]:
                     answer = install.APP_SCRIPT_ANSWER + json.dumps({'known': [], 'stuck': 0, 'kinds': []})
+                    return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')
+                if command[:2] == ['manage', 'shell'] and install.UNKNOWN_OUTCOMES in command[-1]:
+                    answer = install.APP_SCRIPT_ANSWER + json.dumps({'encounters': []})
                     return SimpleNamespace(returncode=0, stderr=b'', stdout=answer.encode() + b'\n')
                 parsed = loads or command[:2] != ['manage', 'shell']
                 return SimpleNamespace(returncode=0 if parsed else 1, stderr=b'CredentialsError: refused',

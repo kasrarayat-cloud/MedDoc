@@ -97,7 +97,12 @@ this installer's) and reloads nginx; the certificate lineage is kept.
   It then migrates with a one-shot container and refuses, before replacing
   anything, while the queue holds a stage this revision's worker has no handler
   for (queued, running, or cancelled as its encounter's latest stage, which a
-  Resume would run again): a worker that claims one ends. It then parks the
+  Resume would run again): a worker that claims one ends; and while any provider
+  outcome is still unknown (not reconciled): reconcile each on the running
+  revision's web first. An unreconciled unknown outcome is the one stored row
+  the installed revision lists otherwise than this revision does (here it keeps
+  the encounter on the review queue), and a stored list state is recomputed only
+  when an action touches its encounter. It then parks the
   current web/worker (`*-previous`), starts the new pair and waits for
   `/health/` = `{status ok, service cpt-studio, data_mode synthetic-only,
   database ok, release <revision>}` and a worker that stays up. On any failure
@@ -180,7 +185,8 @@ revision over this one:
    created.
 3. Then install the older revision as usual. Its migrate is a no-op on this
    schema (migrations are not reversed). Revisions from this one on also
-   refuse, in `app`, while a stage they cannot run is open.
+   refuse, in `app`, while a stage they cannot run is open or a provider
+   outcome is unknown.
 
 Records this revision made stay as they are and are read by the older code as
 it reads them: its reports, for instance, do not mark a bounded second review
