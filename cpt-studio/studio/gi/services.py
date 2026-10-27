@@ -1959,10 +1959,14 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
     named: list[tuple[str, str, int, int, int, int]] = []
     for ss, se in sentences:
         part = _part_at(plist, starts, ss)
+        # only this sentence's mentions can overlap a mention in it (sentences never overlap): comparing with every
+        # mention named so far was quadratic (refutation r1, cost; 10,000 hedged one-line sentences took about 6 s)
+        here: list[tuple[int, int]] = []
         for family, kind, pattern in SERVICES:
             for m in pattern.finditer(text, ss, min(se, ss + SENTENCE_READ_CHARS)):
-                if any(a < m.end() and m.start() < b for _, _, a, b, _, _ in named):
+                if any(a < m.end() and m.start() < b for a, b in here):
                     continue
+                here.append((m.start(), m.end()))
                 named.append((family, kind, m.start(), m.end(), ss, se))
         for role, pattern in OTHER_PROVIDER:
             if pattern.search(text, ss, min(se, ss + SENTENCE_READ_CHARS)) \
@@ -2052,11 +2056,16 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
                     d.evidence.append(bounded_span)
         # Pass 2: completion and extent, read in each service's own report part (or a sentence naming only it).
         procedural = [f for f in drafts if f != 'gi.office_em']
+        # The families each sentence names, indexed once (refutation r1, cost: passes 2 and 3 scanned every mention
+        # named in the document for every sentence).
+        named_in: dict[int, set[str]] = {}
+        for f, _, _, _, s2, _ in named:
+            named_in.setdefault(s2, set()).add(f)
         for ss, se in sentences:
             part = _part_at(plist, starts, ss)
             fam = part.family if part.family in drafts and part.kind == 'report' else ''
             if not fam:
-                named_here = sorted({f for f, _, _, _, s2, _ in named if s2 == ss and f in drafts}
+                named_here = sorted({f for f in named_in.get(ss, ()) if f in drafts}
                                     | _instrument_families(text, ss, se, drafts))
                 fam = named_here[0] if len(named_here) == 1 else ''
             if not fam and len(procedural) == 1 and part.kind not in ('history', 'plan'):
@@ -2107,7 +2116,7 @@ def _build(text: str, *, service_date: Optional[date], routing=None, context_fac
             anatomy_all = _anatomy_in(text, ss, read_end)
             regions = {region for _, region, _, _ in anatomy_all}
             part_family = part.family if part.family in drafts and part.kind == 'report' else ''
-            named_here = sorted({f for f, _, _, _, s2, _ in named if s2 == ss and f in drafts}
+            named_here = sorted({f for f in named_in.get(ss, ()) if f in drafts}
                                 | _instrument_families(text, ss, se, drafts))
             if not part_family and len(named_here) == 1:
                 part_family = named_here[0]
