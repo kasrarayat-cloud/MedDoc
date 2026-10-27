@@ -1,0 +1,144 @@
+"""Repair round ec5, cluster EXCL: a code for an act the document states done today is never EXCLUDED by a misreading
+(must-fix class 4, owner decision 2026-10-27). An exclusion needs both readers to agree and the clause structure to
+support the not-done reading for THIS act - its own predicate, its own time; a word that belongs to another predicate
+or another noun never decides it.
+
+Each text is a fresh synthetic paraphrase written for the case under test (fictional patients only); the expected
+readings are written here, outside the reader. None of them is a sentence the reader matches by its exact wording.
+"""
+from datetime import date
+
+from django.test import SimpleTestCase
+
+from studio.gi import context as gi_context
+from studio.gi import detect, services
+from studio.reference.store import InMemoryReferenceLookup
+from studio.types import EvidenceSpan, NormalizedResponse, ProviderCode
+from studio.validation.engine import assess
+
+HEAD = 'SYNTHETIC TEST DOCUMENT - FICTIONAL PATIENT - NOT FOR CLINICAL USE\n'
+DAY = date(2026, 10, 14)
+COLONOSCOPY = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: Colonoscopy\nIndication: Screening colonoscopy, average '
+                      'risk.\nTechnique: The colonoscope was advanced to the cecum, identified by the appendiceal orifice and '
+                      'ileocecal valve.\nFindings:\nThe preparation was good. {x}\nImpression: See findings.\n')
+EGD = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nIndication: Dyspepsia.\nTechnique: The upper endoscope was '
+              'advanced to the second portion of the duodenum.\nFindings:\nThe esophagus was normal. {x}\nImpression: See '
+              'findings.\n')
+COLON_BASE = ('45378', 'The colonoscope was advanced to the cecum')
+EGD_BASE = ('43235', 'The upper endoscope was advanced to the second portion of the duodenum')
+
+
+def inventory(text, day=DAY):
+    return services.build(text, service_date=day, routing=detect.route(text, day),
+                          context_facts=gi_context.extract_context(text))
+
+
+def statuses(text, kind, day=DAY):
+    """The statuses the inventory reads for every act of ``kind``, in any service."""
+    return sorted({a.status for s in inventory(text, day).services for a in s.acts if a.kind == kind})
+
+
+def assessed(text, picks, day=DAY):
+    """The engine's result for provider-selected (code, quote) picks against an empty reference."""
+    codes = []
+    for code, quote in picks:
+        start = text.index(quote)
+        codes.append(ProviderCode('selected', 'cpt', code, 'UNVERIFIED PROVIDER WORDING',
+                                  (EvidenceSpan(0, start, start + len(quote), quote, True),)))
+    return assess(text=text, pages=(), context=gi_context.extract_context(text), routing=detect.route(text, day),
+                  normalized=NormalizedResponse('replay', 'test@1', tuple(codes)),
+                  reference=InMemoryReferenceLookup((), {}), service_date=day, provider_status='succeeded')
+
+
+def proposal(result, code):
+    return next(p for p in result.proposals if p.code == code)
+
+
+def unresolved(result):
+    return [(u.get('act'), u.get('reason')) for u in (result.completeness or {}).get('unresolved_items', [])]
+
+
+class ReplacementCueConfirmationTests(SimpleTestCase):
+    """negtime-3 (repaired by 81b39461b, "a replacement cue governs its own object only"), confirmed at this round's
+    head on the finding's inputs and on the phrasings its verifier found beside them: the act that replaced another is
+    never excluded."""
+
+    def test_the_replacing_act_is_never_excluded(self):
+        for template, line, code, quote in (
+                (EGD, 'Instead of a hot snare, a cold snare was used to remove the 8 mm gastric polyp.', '43251',
+                 'a cold snare was used to remove the 8 mm gastric polyp'),
+                (COLONOSCOPY, 'Rather than a snare, cold forceps were used to remove the 3 mm rectal polyp.', '45380',
+                 'cold forceps were used to remove the 3 mm rectal polyp'),
+                (COLONOSCOPY, 'Rather than hot snare, cold snare polypectomy was performed on the 6 mm sigmoid polyp.',
+                 '45385', 'cold snare polypectomy was performed on the 6 mm sigmoid polyp'),
+                (COLONOSCOPY, 'Rather than cold forceps, a cold snare was used to remove the 5 mm polyp.', '45385',
+                 'a cold snare was used to remove the 5 mm polyp'),
+                (COLONOSCOPY, 'Instead of forceps, a cold snare was used to remove the 5 mm polyp.', '45385',
+                 'a cold snare was used to remove the 5 mm polyp'),
+                (COLONOSCOPY, 'A cold snare, rather than a hot snare, was used to remove the 5 mm polyp.', '45385',
+                 'A cold snare, rather than a hot snare, was used'),
+                (EGD, 'Rather than a balloon, a Savary dilator was used to dilate the distal esophageal stricture.',
+                 '43248', 'a Savary dilator was used to dilate the distal esophageal stricture')):
+            with self.subTest(line=line):
+                result = assessed(template.format(x=line), [(code, quote)])
+                self.assertNotEqual(proposal(result, code).bucket, 'excluded')
+
+
+class CoordinatedPredicateTimeTests(SimpleTestCase):
+    """negtime-4: a plan, future or cancel word on a coordinated second predicate ("and will be sent to pathology", "and
+    dilation was deferred", "and repeat EGD is planned") is that predicate's own; it never dates the act the first
+    predicate states done, so the act's code is never excluded on it."""
+
+    CASES = (
+        (EGD, 'Cold forceps biopsies were obtained from the antrum and will be sent to pathology.', 'biopsy', '43239',
+         'Cold forceps biopsies were obtained from the antrum', EGD_BASE),
+        (EGD, 'Biopsies of the distal esophageal stricture were obtained and dilation was deferred until pathology '
+              'returns.', 'biopsy', '43239', 'Biopsies of the distal esophageal stricture were obtained', EGD_BASE),
+        (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare and will be sent to pathology.', 'snare', '45385',
+         'A 6 mm sigmoid polyp was removed with a cold snare', COLON_BASE),
+        (COLONOSCOPY, 'A 6 mm sigmoid polyp was removed with a cold snare, retrieved and will be submitted for histology.',
+         'snare', '45385', 'A 6 mm sigmoid polyp was removed with a cold snare', COLON_BASE),
+        (EGD, 'Biopsies were taken from the antrum and we will follow up on the results.', 'biopsy', '43239',
+         'Biopsies were taken from the antrum', EGD_BASE),
+        (EGD, 'Biopsies were taken from the antrum and repeat EGD is planned in 8 weeks.', 'biopsy', '43239',
+         'Biopsies were taken from the antrum', EGD_BASE),
+        (COLONOSCOPY, 'Cold snare polypectomy of a 6 mm sigmoid polyp was performed and the specimen will be sent to '
+                      'pathology.', 'snare', '45385', 'Cold snare polypectomy of a 6 mm sigmoid polyp was performed',
+         COLON_BASE),
+    )
+
+    def test_the_first_act_reads_by_its_own_predicate(self):
+        for template, line, kind, _, _, _ in self.CASES:
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), ['performed'])
+
+    def test_its_code_is_never_excluded_and_the_act_is_not_hidden(self):
+        for template, line, kind, code, quote, base in self.CASES:
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                for cited in (quote, line):
+                    self.assertNotEqual(proposal(assessed(text, [(code, cited)]), code).bucket, 'excluded')
+                # with the base code alone the act done today stays visible (it had been hidden as planned)
+                self.assertIn((kind, 'not_covered'), unresolved(assessed(text, [base])))
+
+    def test_controls_an_act_s_own_time_or_denial_still_decides(self):
+        for template, line, kind, status in (
+                # the first predicate's own words
+                (EGD, 'Biopsies were not obtained and will be taken at the next EGD.', 'biopsy', 'negated'),
+                (COLONOSCOPY, 'Polypectomy was deferred and will be scheduled at a later date.', 'snare', 'cancelled'),
+                (EGD, 'Biopsies will be obtained and will be sent to pathology.', 'biopsy', 'planned'),
+                (COLONOSCOPY, 'A 6 mm sigmoid polyp will be removed with a cold snare and sent to pathology.', 'snare',
+                 'planned'),
+                # no predicate of its own before the coordinated one: the clause keeps its one reading
+                (COLONOSCOPY, 'Biopsy and polypectomy will be performed at the next colonoscopy.', 'snare', 'planned'),
+                (COLONOSCOPY, 'Biopsy and polypectomy will be performed at the next colonoscopy.', 'biopsy', 'planned'),
+                # the coordinated negated predicate (cut before this round) leaves the first act done
+                (EGD, 'Biopsies were obtained and dilation was not performed.', 'biopsy', 'performed')):
+            with self.subTest(line=line):
+                self.assertEqual(statuses(template.format(x=line), kind), [status])
+        # a true exclusion stands: the act's own predicate denies it, or dates it after today
+        for line, quote in (('Biopsies were not obtained and will be taken at the next EGD.', 'Biopsies were not obtained'),
+                            ('Biopsies will be obtained and will be sent to pathology.', 'Biopsies will be obtained')):
+            with self.subTest(line=line):
+                result = assessed(EGD.format(x=line), [('43239', quote)])
+                self.assertEqual(proposal(result, '43239').bucket, 'excluded')

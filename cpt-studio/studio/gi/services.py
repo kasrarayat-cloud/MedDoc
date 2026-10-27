@@ -1133,7 +1133,16 @@ _CLAUSE_CUT = _rx(r';|\s+but\s+|\s+whereas\s+|\s+although\s+|,\s+while\s+'
                   + NEG_CONTRACTION + r')\b)'
                   r'|(?<![\d.])\s+and\s+(?=(?:the|a|an|this|that|it|she|he|they|we|I|one|two|three|\d+)\b[^.;]{0,60}\b(?:was|were|'
                   r'is|are|has|have|had|did)(?:' + NEG_CONTRACTION + r')?\b)|,\s+(?=(?:and\s+)?(?:the|this|that|it|she|he|they|'
-                  r'we|I)\s+[^.;,]{0,40}\b(?:was|were|is|are)(?:' + NEG_CONTRACTION + r')?\b)')
+                  r'we|I)\s+[^.;,]{0,40}\b(?:was|were|is|are)(?:' + NEG_CONTRACTION + r')?\b)'
+                  # refutation r1, negtime-4: a coordinated predicate with a time or a cancellation of its own - a future
+                  # ("and will be sent to pathology", "and we will follow up") or its own subject's plan or cancel
+                  # predicate ("and dilation was deferred", "and repeat EGD is planned") - opens a clause of its own, so
+                  # its word never dates the act the first predicate states done ("Cold forceps biopsies were obtained
+                  # from the antrum and will be sent to pathology" had excluded 43239 as planned). Only after an act
+                  # predicate stated before it (clauses()): "Biopsy and polypectomy will be performed" stays one clause.
+                  r'|(?P<own_time>\s+and\s+(?=(?:(?:the|a|an|this|that|its|their|she|he|they|we|I)\s+)?(?:[\w-]+\s+){0,3}?'
+                  r'(?:will|shall)\b|(?:[\w-]+\s+){1,4}?(?:was|were|is|are|has\s+been|have\s+been)\s+(?:[\w-]+ly\s+)?'
+                  r'(?:cancel(?:l)?ed|declined|refused|deferred|postponed|planned|scheduled|recommended|arranged)\b))')
 
 
 def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> tuple[int, int]:
@@ -1151,11 +1160,23 @@ def _bounded_clause(text: str, clause: tuple[int, int], pos: int, end: int) -> t
 
 def clauses(text: str, start: int, end: int) -> list[tuple[int, int]]:
     out, pos = [], start
+    # A coordinated predicate with its own time (_CLAUSE_CUT's own_time) is cut only after an act predicate stated
+    # since the last cut; the search for it resumes where it stopped (a 60-character overlap keeps a predicate that
+    # straddles the stop), so a long sentence of such coordinations is read once, never again from its start.
+    stated, scanned = False, start
     for m in _CLAUSE_CUT.finditer(text, start, end):
+        if m.lastgroup == 'own_time':
+            if not stated:
+                lo = max(pos, scanned - 60)
+                stated = bool(ACT_VERB.search(text, lo, m.start()) or BARE_PARTICIPLE.search(text, lo, m.start()))
+                scanned = m.start()
+            if not stated:
+                continue
         seg = _trim(text, pos, m.start())
         if seg:
             out.append(seg)
         pos = m.end()
+        stated, scanned = False, pos
     seg = _trim(text, pos, end)
     if seg:
         out.append(seg)
