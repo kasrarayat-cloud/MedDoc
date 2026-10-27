@@ -13,6 +13,7 @@ persisted state. Refutation r1 findings re-checked at this branch's head, each t
   its outcome is unknown.
 Synthetic data only; no network: an in-process provider stands in for the live adapter.
 """
+import hashlib
 import json
 import shutil
 import subprocess
@@ -53,10 +54,12 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   const doc = JSON.parse(input);
   const text = html => html.replace(/<[^>]+>/g, ' | ').replace(/(\s*\|\s*)+/g, ' | ');
+  const codes = app.reviewView(doc, app.documentLayout(doc), 'codes', false);
   process.stdout.write(JSON.stringify({
     exportStatus: app.exportStatusText(doc),
     timeline: text(app.reviewView(doc, app.documentLayout(doc), 'timeline', false)),
-    codes: text(app.reviewView(doc, app.documentLayout(doc), 'codes', false)),
+    codes: text(codes),
+    codesHtml: codes,
   }));
 });
 """
@@ -369,3 +372,134 @@ class UnknownSecondReviewStateTests(Pipeline):
         self.approve(encounter_id, '45380')
         self.assertEqual(self.detail(encounter_id)['state'], 'reviewed')
         self.assertEqual(self.queue_count(), 0)
+
+
+# --- report-10 and the second review a reviewer asks for (8985dde42): what the page and the report say --------------
+
+def provider_rows(timeline):
+    """The Provider runs card of the Activity tab, as text."""
+    start = timeline.index('| Provider runs |')
+    return timeline[start:timeline.index('| Activity |', start)]
+
+
+class SecondReviewDescribedTests(Pipeline):
+    """The page renders what the report renders: a second-review run is named as one, with what it asked about
+    (report-10: the Activity tab showed two identical "Corti · live · Succeeded" rows). A second review a reviewer asked
+    for is described as asked for until its own outcome is recorded: never "wait ... before asking", never offered
+    again once its request is used, and a stage that failed before sending never reads "Provider not run"."""
+
+    ITEM = 'forceps biopsy (cold forceps) of the 10 mm flat lesion in the transverse colon in the colonoscopy'
+
+    def asked(self, provider):
+        self.use(provider)
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        return encounter_id
+
+    def test_each_provider_run_says_which_request_it_was(self):
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        drain()
+        rows = provider_rows(page(self.detail(encounter_id))['timeline'])
+        self.assertEqual(rows.count('Second review'), 1, rows)
+        self.assertIn('| Corti · live · Succeeded |', rows)  # the primary request, unlabelled as in the report
+        self.assertIn('| Corti · live · Second review · Succeeded |', rows)
+        self.assertIn(f'Asked about: {self.ITEM}.', rows)
+        primary, second = usage_lines(self.draft(encounter_id))
+        self.assertNotIn('second review', primary)
+        self.assertIn(' · bounded second review · ', second)
+
+    def test_a_second_review_that_was_not_sent(self):
+        encounter_id = self.asked(SecondUnbuildable(first=[SNARE], later=[BIOPSY]))
+        drain()
+        self.assertEqual([(r.purpose, r.state) for r in self.runs(encounter_id)],
+                         [('primary', 'succeeded'), ('second_review', 'not_sent')])
+        rows = provider_rows(page(self.detail(encounter_id))['timeline'])
+        self.assertIn('| Corti · live · Second review · Not sent |', rows)
+        second = usage_lines(self.draft(encounter_id))[1]
+        self.assertIn(' · not_sent · revision 1 · bounded second review · recorded ', second)
+        self.assertTrue(second.endswith(' · nothing was sent'), second)
+
+    def test_an_unknown_second_review_is_named_where_it_must_be_reconciled(self):
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY], outcomes=['succeeded', 'unknown']))
+        drain()
+        shown = page(self.detail(encounter_id))
+        self.assertIn('| Corti · live · Second review · Outcome unknown |', provider_rows(shown['timeline']))
+        self.assertIn('Unreconciled request | Second review · ', shown['codes'])
+        second = usage_lines(self.draft(encounter_id))[1]
+        self.assertIn(' · unknown · revision 1 · bounded second review · requested ', second)
+        self.assertNotIn('by this assessment', second)  # the assessment never read it
+
+    def test_a_requested_second_review_is_described_as_requested_until_it_runs(self):
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        detail = self.detail(encounter_id)
+        self.assertIn('Processing has not finished', detail['readiness']['blockers'])
+        shown = page(detail)
+        self.assertIn('Second provider review requested | A reviewer asked for it; it is waiting to run, and nothing '
+                      'has been sent yet.', shown['codes'])
+        self.assertNotIn('before asking for a second review', shown['codes'])
+        self.assertNotIn('data-action="second-review"', shown['codesHtml'])
+        self.assertIn('Second provider review (asked for by a reviewer) | Waiting', shown['codes'])  # the progress card
+        self.assertEqual(len(self.runs(encounter_id)), 1)  # nothing was sent yet
+
+    def test_a_stopped_second_review_is_never_offered_again(self):
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/stop').status_code, 200)
+        drain()
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)  # its request is used: asking is refused
+        shown = page(self.detail(encounter_id))
+        self.assertIn('Second provider review stopped | It was stopped before anything was sent: Stopped by a '
+                      'workspace member. Resume processing runs it once.', shown['codes'])
+        self.assertNotIn('data-action="second-review"', shown['codesHtml'])
+        self.assertIn('data-action="resume"', shown['codesHtml'])
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/resume').status_code, 201)
+        drain()
+        self.assertEqual(len(self.provider.requests), 2)  # resumed, it runs once
+
+    def test_a_second_review_stage_that_failed_never_reads_provider_not_run(self):
+        """The reviewer who asked lost the reviewer role before the worker ran it: the live gate refuses the stage
+        before anything is built or sent. The primary request succeeded and its proposal stands."""
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        models.Membership.objects.filter(user=self.reviewer).update(role=models.Membership.VIEWER)
+        drain()
+        models.Membership.objects.filter(user=self.reviewer).update(role=models.Membership.REVIEWER)
+        self.assertEqual(models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.REVIEW2).state,
+                         models.Job.FAILED)
+        self.assertEqual([(r.purpose, r.state) for r in self.runs(encounter_id)], [('primary', 'succeeded')])
+        detail = self.detail(encounter_id)
+        self.assertEqual(detail['state'], 'ready_for_review')
+        shown = page(detail)
+        self.assertNotIn('No proposals were', shown['codes'])
+        self.assertNotIn('did not run for this revision', shown['codes'])
+        self.assertIn('Second provider review did not complete | It did not complete: Only an owner or reviewer of '
+                      'this workspace can start a live provider request.', shown['codes'])
+        self.assertNotIn('data-action="second-review"', shown['codesHtml'])
+        self.assertEqual(ask(self.client, encounter_id).status_code, 409)
+
+    def test_control_a_second_review_skipped_as_a_repeat_says_why(self):
+        """Another encounter's primary request answered the same excerpt after the reviewer asked: the stage sends
+        nothing (it would repeat an answered request). No run is listed and the card says why."""
+        encounter_id = self.asked(TwoPassProvider(first=[SNARE], later=[BIOPSY]))
+        encounter = models.Encounter.objects.get(pk=encounter_id)
+        _, (start, end) = jobs._second_review_items(encounter.current_assessment)
+        excerpt = encounter.current_revision.text[start:end]
+        primary = encounter.current_assessment.provider_run
+        request = self.provider.build_request(excerpt, primary.service_date)
+        other = f.encounter(self.ws, self.reviewer, title='Another synthetic note')
+        revision = f.pasted_revision(other, self.reviewer, excerpt)
+        models.ProviderRun.objects.create(
+            encounter=other, revision=revision, provider=self.provider.name,
+            adapter_version=self.provider.adapter_version, request_sha256=request.canonical_sha256,
+            request_body=request.body, contexts=list(request.contexts), state=models.ProviderRun.SUCCEEDED, sent=True,
+            response_bytes=b'{"codes": []}', response_sha256=hashlib.sha256(b'{"codes": []}').hexdigest(),
+            service_date=primary.service_date)
+        drain()
+        job = models.Job.objects.get(encounter_id=encounter_id, kind=models.Job.REVIEW2)
+        self.assertIn('would repeat a primary request', job.result['skipped'])
+        self.assertEqual(len(self.provider.requests), 1)
+        shown = page(self.detail(encounter_id))
+        self.assertNotIn('Second review', provider_rows(shown['timeline']))
+        self.assertIn('a request the provider already answered, so a second review would ask nothing new',
+                      shown['codes'])
+        self.assertNotIn('data-action="second-review"', shown['codesHtml'])
+        self.assertEqual(len(usage_lines(self.draft(encounter_id))), 1)

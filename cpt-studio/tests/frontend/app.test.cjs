@@ -544,3 +544,76 @@ test('the bounded second review is offered to a reviewer as a request, never sho
     second_review: { available: false, reason: '', items: [], can_request: true } });
   assert.ok(!none.includes('Second provider review'));
 });
+
+// Repair round ec5 (REPORTRUNS): the page says which provider request each run was, and describes a second review a
+// reviewer asked for until its own outcome is recorded (refutation r1 report-10; the 8985dde42 request re-checked).
+test('provider runs name the second review and what it asked about, as both reports do', () => {
+  const base = fixture('encounter-ready.json');
+  const primary = { ...base.provider_runs[0], purpose: 'primary', scope_items: [] };
+  const second = { ...primary, id: UUID, purpose: 'second_review', scope_items: ['forceps biopsy of the <b>lesion</b>'] };
+  const timeline = render({ ...base, provider_runs: [primary, second] }, 'timeline');
+  assert.equal(count(timeline, 'Second review'), 1);
+  assert.ok(timeline.includes('<strong>Corti · live · Succeeded</strong>'));
+  assert.ok(timeline.includes('<strong>Corti · live · Second review · Succeeded</strong>'));
+  assert.ok(timeline.includes('<p>Asked about: forceps biopsy of the &lt;b&gt;lesion&lt;/b&gt;.</p>'));
+  for (const [state, label] of [['not_sent', 'Not sent'], ['unknown', 'Outcome unknown']]) {
+    const shown = render({ ...base, provider_runs: [primary, { ...second, state }] }, 'timeline');
+    assert.ok(shown.includes(`<strong>Corti · live · Second review · ${label}</strong>`), state);
+  }
+  // a payload without a purpose (recorded before the second review existed) keeps its plain row
+  assert.equal(count(render(base, 'timeline'), 'Second review'), 0);
+});
+
+test('the reconciliation card names an unknown second review', () => {
+  const doc = fixture('encounter-provider-unknown.json');
+  const unknown = { ...doc.provider_runs[0], purpose: 'second_review', scope_items: ['forceps biopsy'] };
+  const answered = { ...doc.provider_runs[0], id: UUID, state: 'succeeded', purpose: 'primary', error: '' };
+  const html = render({ ...doc, state: 'provider_unknown', provider_runs: [answered, unknown] });
+  assert.ok(html.includes('<strong>Unreconciled request</strong><br>Second review · 23 Oct 2026, 14:02 UTC · Read timed out'));
+  assert.ok(render(doc).includes('<strong>Unreconciled request</strong><br>23 Oct 2026, 14:02 UTC · Read timed out'));
+});
+
+test('a second review asked for is described until its outcome is recorded, and never offered again', () => {
+  const service = { id: 'S1', family: 'gi.colonoscopy', kind: 'colonoscopy', status: 'performed', acts: [] };
+  const assessment = { services: { services: [service] }, completeness: { unresolved_items: [
+    { service: 'S1', label: 'forceps biopsy', reason: 'not_covered', second_review: true }] } };
+  const done = ['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' }));
+  const view = (review2, second, pipeline = {}) => app.documentedServices({
+    assessment, permissions: { can_review: true }, pipeline: { stages: [...done, ...review2], ...pipeline },
+    second_review: { items: ['forceps biopsy'], can_request: true, ...second } });
+  const waiting = view([{ kind: 'review2', state: 'queued', error: '' }],
+    { available: false, reason: 'Wait for processing to finish (or stop it) before asking for a second review.' });
+  assert.ok(waiting.includes('<strong>Second provider review requested</strong><p>A reviewer asked for it; it is waiting to run, and nothing has been sent yet. Unresolved: forceps biopsy.</p>'));
+  assert.ok(!waiting.includes('before asking'));
+  assert.ok(view([{ kind: 'review2', state: 'running', error: '' }], { available: false }).includes('it is running now.'));
+  // stopped or failed, its request is used: the page never offers it again, whatever availability says
+  const stopped = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }],
+    { available: true, reason: '' }, { can_resume: true });
+  assert.ok(stopped.includes('<strong>Second provider review stopped</strong><p>It was stopped before anything was sent: Stopped by a workspace member. Resume processing runs it once. Unresolved: forceps biopsy.</p>'));
+  assert.equal(count(stopped, 'data-action="second-review"'), 0);
+  assert.ok(!view([{ kind: 'review2', state: 'cancelled', error: '' }], { available: true }).includes('Resume processing'));
+  const failed = view([{ kind: 'review2', state: 'failed', error: 'Only an owner or reviewer of this workspace can start a live provider request.' }],
+    { available: true, reason: '' });
+  assert.ok(failed.includes('<strong>Second provider review did not complete</strong><p>It did not complete: Only an owner or reviewer of this workspace can start a live provider request. Unresolved: forceps biopsy.</p>'));
+  assert.equal(count(failed, 'data-action="second-review"'), 0);
+  // an assessment after it (the review ran and was read, or the context changed): the server's answer speaks again
+  const later = view([{ kind: 'review2', state: 'cancelled', error: 'Stopped by a workspace member.' }, { kind: 'assess', state: 'succeeded', error: '' }],
+    { available: true, reason: '' });
+  assert.equal(count(later, 'data-action="second-review"'), 1);
+  const answered = view([{ kind: 'review2', state: 'succeeded', error: '' }],
+    { available: false, reason: 'The text that documents the unresolved services is a request the provider already answered, so a second review would ask nothing new.' });
+  assert.ok(answered.includes('<strong>Second provider review</strong><p>The text that documents the unresolved services is a request the provider already answered'));
+});
+
+test('progress rows show the latest job of each stage, and the second review once one was asked for', () => {
+  const processing = fixture('encounter-processing.json');
+  assert.equal(render(processing).includes('Second provider review'), false);
+  const stages = [...['extract', 'analyze', 'predict', 'assess'].map(kind => ({ kind, state: 'succeeded', error: '' })),
+    { kind: 'review2', state: 'succeeded', error: '' }, { kind: 'assess', state: 'queued', error: '' }];
+  const html = render({ ...processing, pipeline: { ...processing.pipeline, stages } });
+  assert.ok(html.includes('<strong>Check proposals against references and rules</strong><p>Waiting</p>'));
+  assert.ok(html.includes('<strong>Second provider review (asked for by a reviewer)</strong><p>Done</p>'));
+  const redated = [...stages.slice(0, 4), { kind: 'predict', state: 'running', error: '' }];
+  assert.ok(render({ ...processing, pipeline: { ...processing.pipeline, stages: redated } })
+    .includes('<strong>Request CPT proposals from the provider</strong><p>In progress</p>'));
+});

@@ -708,7 +708,10 @@ def _failed_stage_state(encounter, revision, job):
     run = (encounter.provider_runs.filter(revision=revision, created_at__gte=job.created_at, purpose=purpose)
            .order_by('-created_at', '-pk').first())
     if run is None:
-        return 'provider_not_run'
+        # A second review that failed before recording its run sent nothing and left the assessment as it was: the
+        # assessment's own state stands, and the second-review card says why it did not complete (ec5 re-check: it read
+        # "Provider not run" beside the primary request's proposals). None: derive the state from the assessment.
+        return None if job.kind == Job.REVIEW2 else 'provider_not_run'
     if run.state in UNSETTLED_RUN_STATES:
         return 'provider_unknown'
     return 'processing_failed' if run.state == ProviderRun.SUCCEEDED else 'provider_failed'
@@ -776,7 +779,9 @@ def _derive_state(encounter):
     if revision.extraction_status == SourceRevision.PENDING:
         return 'processing' if latest is None else 'extraction_failed'
     if latest is not None and latest.state in (Job.FAILED, Job.UNKNOWN):
-        return _failed_stage_state(encounter, revision, latest)
+        failed = _failed_stage_state(encounter, revision, latest)
+        if failed is not None:
+            return failed
     assessment = live_assessment(encounter)
     if assessment is None or assessment.context_id != encounter.current_context_id:
         return 'provider_unknown' if _unreconciled_unknown(encounter) else 'processing'

@@ -27,6 +27,7 @@ const SOURCE_KINDS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', paste: 'Pasted text
 const METHOD_LABELS = { txt: 'Text file', docx: 'Word document', 'pdf-text': 'PDF text layer', 'pdf-ocr': 'PDF read with OCR', 'pdf-mixed': 'PDF text layer and OCR', paste: 'Pasted text', addendum: 'Text with addendum' };
 const STATE_TONES = { ready_for_review: 'green', reviewed: 'green', needs_clarification: 'amber', provider_unknown: 'amber', provider_failed: 'amber', extraction_failed: 'amber' };
 const STAGES = [['extract', 'Read the original document'], ['analyze', 'Identify documented services and context'], ['predict', 'Request CPT proposals from the provider'], ['assess', 'Check proposals against references and rules']];
+const SECOND_REVIEW_STAGE = ['review2', 'Second provider review (asked for by a reviewer)'];
 const STAGE_STATES = { queued: 'Waiting', running: 'In progress', succeeded: 'Done', failed: 'Failed', unknown: 'Outcome unknown', cancelled: 'Stopped' };
 const STAGE_LOOKS = { queued: ['muted', 'clock'], running: ['pending running', 'clock'], succeeded: ['', 'circle-check'], failed: ['pending', 'close'], unknown: ['pending', 'info'], cancelled: ['muted', 'stop'] };
 const CHECK_LABELS = { pass: 'Pass', warn: 'Warning', fail: 'Fail', not_verified: 'Not verified', not_applicable: 'Not applicable', info: 'Information' };
@@ -631,12 +632,39 @@ function documentedServices(doc) {
   return `${sectionHeading('Documented services', services.length)}<div class="check-list-card">${items.join('')}${secondReviewItem(doc)}</div>`;
 }
 
+// The second review a reviewer asked for whose own outcome is not recorded yet: the current revision's latest review2
+// stage, when no assessment came after it (one that ran is read by the assessment it queues) and it is waiting, running,
+// stopped or failed. The encounter view's reason is worked out as if none had been asked for, so it read "wait ... before
+// asking" while the request waited, and "available" once its request was used (refutation r1 re-check, ec5).
+function askedSecondReview(doc) {
+  const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
+  const kinds = stages.map(stage => stage?.kind);
+  const index = kinds.lastIndexOf('review2');
+  if (index < 0 || index < kinds.lastIndexOf('assess')) return null;
+  return ['queued', 'running', 'cancelled', 'failed'].includes(stages[index].state) ? stages[index] : null;
+}
+
+function sentence(text) {
+  const plain = String(text || '').trim();
+  return plain && !/[.!?]$/.test(plain) ? `${plain}.` : plain;
+}
+
 // The bounded second review is asked for by a reviewer, never queued by an assessment (owner decision 2026-10-27).
 function secondReviewItem(doc) {
   const second = doc.second_review;
   const items = Array.isArray(second?.items) ? second.items : [];
   if (!items.length) return '';
   const what = items.join('; ');
+  const asked = askedSecondReview(doc);
+  if (asked) {
+    const [title, said] = {
+      queued: ['Second provider review requested', 'A reviewer asked for it; it is waiting to run, and nothing has been sent yet.'],
+      running: ['Second provider review requested', 'A reviewer asked for it; it is running now.'],
+      cancelled: ['Second provider review stopped', `It was stopped before anything was sent${asked.error ? `: ${sentence(asked.error)}` : '.'}${doc.pipeline?.can_resume ? ' Resume processing runs it once.' : ''}`],
+      failed: ['Second provider review did not complete', `It did not complete${asked.error ? `: ${sentence(asked.error)}` : '.'}`],
+    }[asked.state];
+    return checkItem(asked.state === 'failed' ? 'pending' : 'muted', 'info', title, `${said} Unresolved: ${what}.`);
+  }
   if (!second.available) return checkItem('muted', 'info', 'Second provider review', `${second.reason || 'Not available now.'} Unresolved: ${what}.`);
   const body = `One more provider request, sent with only the text that documents ${items.length === 1 ? 'this item' : 'these items'}: ${what}. It is made once for this document and date; its codes fill only these items and each still needs a reviewer's decision.`;
   const button = doc.permissions?.can_review && second.can_request ? `<div class="progress-actions"><button type="button" class="button secondary" data-action="second-review">Ask the provider once more</button></div>` : '';
@@ -720,9 +748,12 @@ function activityPanel(doc) {
     const who = [decision.reviewer, decision.reviewer_kind === 'agent' ? 'agent-executed synthetic review — not clinical approval' : 'human reviewer', formatTimestamp(decision.created_at), decision.revision_number ? `revision ${decision.revision_number}` : ''];
     return timelineEntry(`${lookup(DECISION_TITLES, decision.action, 'Decision on')} ${decision.code || ''}`.trim(), [who.filter(Boolean).join(' · '), decision.carried_from ? 'Carried forward from an earlier assessment of the same revision.' : '', decision.note ? `Note: ${decision.note}` : '', invalid ? `Invalidated: ${invalid}` : ''], Boolean(invalid));
   });
+  // A second review is named on its row, with what it asked about, as both reports name it (refutation r1, report-10:
+  // the primary request and the second review read as two identical rows).
   const runEntries = runs.map(run => timelineEntry(
-    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), lookup(RUN_STATES, run.state, run.state || 'state not recorded')].join(' · '),
+    [lookup({ corti: 'Corti', replay: 'Replay' }, run.provider, run.provider || 'Provider'), lookup({ live: 'live', replay: 'REPLAY — recorded response, not live output' }, run.mode, run.mode || 'mode not recorded'), run.purpose === 'second_review' ? 'Second review' : '', lookup(RUN_STATES, run.state, run.state || 'state not recorded')].filter(Boolean).join(' · '),
     [[run.http_status ? `HTTP ${run.http_status}` : 'No HTTP response recorded', typeof run.latency_ms === 'number' ? `${(run.latency_ms / 1000).toFixed(1)} s` : '', usageText(run)].filter(Boolean).join(' · '),
+      run.purpose === 'second_review' && Array.isArray(run.scope_items) && run.scope_items.length ? `Asked about: ${run.scope_items.join('; ')}.` : '',
       run.reused_from ? 'Reused the stored response of an identical earlier request; no new provider call was made.' : '',
       run.reconciled ? 'Unknown outcome reconciled by a member.' : '', run.error ? `Error: ${run.error}` : '', formatTimestamp(run.created_at)]));
   const eventEntries = events.map(event => timelineEntry(event.summary || event.event || 'Event', [[event.actor || 'System', formatTimestamp(event.created_at)].filter(Boolean).join(' · ')]));
@@ -730,10 +761,13 @@ function activityPanel(doc) {
   return `<div class="card-stack">${card('Decisions', decisions, 'No decisions recorded yet.')}${card('Provider runs', runEntries, 'No provider request has been made for this document.')}${card('Activity', eventEntries, 'No activity recorded.')}</div>`;
 }
 
+// Each row shows the LATEST job of its stage (a context change, a resume or a second review runs a stage again: the
+// first one's "Done" was shown while the new one waited), and the second review's row appears once one was asked for.
 function progressCard(doc) {
   const stages = Array.isArray(doc.pipeline?.stages) ? doc.pipeline.stages : [];
-  const items = STAGES.map(([kind, label]) => {
-    const stage = stages.find(item => item.kind === kind);
+  const rows = stages.some(item => item?.kind === 'review2') ? [...STAGES, SECOND_REVIEW_STAGE] : STAGES;
+  const items = rows.map(([kind, label]) => {
+    const stage = [...stages].reverse().find(item => item?.kind === kind);
     if (!stage) return checkItem('muted', 'clock', label, 'Not started');
     const [tone, iconName] = lookup(STAGE_LOOKS, stage.state, ['pending', 'info']);
     return checkItem(tone, iconName, label, `${lookup(STAGE_STATES, stage.state, stage.state || 'Unknown')}${stage.error ? ` — ${stage.error}` : ''}`);
@@ -749,7 +783,7 @@ function infoCard(titleHtml, lines, actions = '') {
 function reconcileCard(doc) {
   const run = (doc.provider_runs || []).filter(item => item.state === 'unknown' && !item.reconciled).pop();
   const canReview = doc.permissions?.can_review;
-  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
+  const detail = run ? `<div class="clarification-question"><strong>Unreconciled request</strong><br>${escapeHtml([run.purpose === 'second_review' ? 'Second review' : '', formatTimestamp(run.created_at), run.error].filter(Boolean).join(' · ') || 'No further detail was recorded.')}</div>` : '';
   const form = run && canReview ? `<form id="reconcileForm" data-run="${escapeHtml(run.id)}" novalidate><label class="field-label">Reconciliation note<textarea id="reconcileNote" rows="3" maxlength="2000" placeholder="What is known about this request…"></textarea></label><p class="form-error" id="reconcileError" role="alert" hidden></p><button type="submit" class="button primary">Record reconciliation ${icon('check')}</button></form>` : '';
   const viewer = run && !canReview ? '<p class="checks-disclaimer">Only owners and reviewers can record a reconciliation.</p>' : '';
   return `<div class="clarification-card"><span class="clarification-icon">${icon('help')}</span><h3>The provider outcome<br>is unknown.</h3><p>A request was sent but no response was recorded. Nothing is resent automatically: record what is known before one new attempt is allowed.</p>${detail}${form}${viewer}</div>`;
