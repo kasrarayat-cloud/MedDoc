@@ -1390,6 +1390,10 @@ COMMON_STAGE_KINDS = ('analyze', 'assess', 'extract', 'predict')
 #              fresh reading gives, without that comparison.
 #   conflict - the current context holds a member date conflict and the latest stage is a stopped predict, or a stopped
 #              assess of an earlier context: its Resume requests the current context, which it reads as having no date.
+#   second_review - the current assessment's decision set (selected or excluded) holds a code only the bounded second
+#              review selected: its re-assessment - after a metadata save, a Resume or a reconciliation - reads the
+#              primary answer alone, so the code leaves the decision set without a reviewer's decision (round-7c8
+#              skeptic, sk:3; must-fix class 4).
 UNDO_HAZARDS = '''
 def undo_hazards():
     import datetime
@@ -1443,6 +1447,10 @@ def undo_hazards():
             found.setdefault(str(encounter.pk), set()).add('outcome')
         if (current and gi_context.is_member_conflict((context.facts or {}).get('service_date'))):
             found.setdefault(str(encounter.pk), set()).add('conflict')
+        if encounter.current_assessment_id is not None and models.Proposal.objects.filter(
+                assessment_id=encounter.current_assessment_id, support__origin='second_review',
+                bucket__in=(models.Proposal.SELECTED, models.Proposal.EXCLUDED)).exists():
+            found.setdefault(str(encounter.pk), set()).add('second_review')
     return {pk: sorted(reasons) for pk, reasons in sorted(found.items())}
 '''
 UNDO_HAZARDS_READ = UNDO_HAZARDS + "print(ANSWER + json.dumps({'hazards': undo_hazards()}))\n"

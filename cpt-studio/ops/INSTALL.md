@@ -215,19 +215,26 @@ failure path of `app` read them as it reads the rows):
   while the latest stage is a stopped predict, or a stopped assess of an
   earlier context. Its Resume requests the context, which it reads as having
   no date.
+- **second_review**: a code only the bounded second review selected, in the
+  current assessment's decision set (selected or excluded). Its re-assessment
+  (after a metadata save, a Resume or a reconciliation) reads the primary
+  answer alone, so the code leaves the decision set without a reviewer's
+  decision.
 - a stage of a kind it has no stage for (the second review), queued, running,
   or stopped as the latest: its worker ends on it.
 
 `rollback-app` closes the last as failed, and refuses, naming the encounters,
-while any of the first three exists. They are cleared on this revision's web:
+while any of the first four exists. They are cleared on this revision's web:
 reconcile each unknown outcome; Resume the stopped stage, or answer the date
 question (correct or clear the metadata date), after which this revision makes
 the request for the agreed date (re-assessing with, or re-using, a recorded
 answer to it where one exists). A request that failed or was not sent stays
 recorded on its revision, so only an addendum (a newer revision, whose own
 request then stands) clears an encounter a metadata save would send it again
-for, or this revision stays installed. So, before reinstalling an older
-revision over this one:
+for, or this revision stays installed. A code only a second review selected is
+cleared likewise by an addendum (the newer revision's assessment reads no
+second review until one is asked for), or this revision stays installed. So,
+before reinstalling an older revision over this one:
 
 1. Clear those records on this revision's web.
 2. Run this revision's `rollback-app`: it refuses while one remains;
@@ -240,15 +247,15 @@ revision over this one:
 
 Records this revision made stay as they are and are read by the older code as
 it reads them: its reports do not mark a bounded second review as used, and its
-re-assessment does not read one (a code only the second review proposed leaves
-the decision set at the encounter's next re-assessment there); it reads a hold
-as a provider request that failed; it requests a member's service date that
-differs from the document's as the date (its own rule, which this revision
-holds); and where it reads the document's date otherwise than this revision
-does, its next metadata save requests its own reading (a first request, sent;
-one that failed or was not sent before is named above). Encounter list states
-stay as this revision last derived them until an action on each encounter
-recomputes them.
+re-assessment does not read one (the alternatives and the check of a second
+review that added no code leave the assessment there; one that added a code is
+named above); it reads a hold as a provider request that failed; it requests a
+member's service date that differs from the document's as the date (its own
+rule, which this revision holds); and where it reads the document's date
+otherwise than this revision does, its next metadata save requests its own
+reading (a first request, sent; one that failed or was not sent before is named
+above). Encounter list states stay as this revision last derived them until an
+action on each encounter recomputes them.
 
 ## Recovery notes
 

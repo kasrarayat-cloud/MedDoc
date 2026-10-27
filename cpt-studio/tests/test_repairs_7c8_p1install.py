@@ -127,6 +127,12 @@ class Base(TestCase):
     def runs(self, encounter_id):
         return list(models.ProviderRun.objects.filter(encounter_id=encounter_id).order_by('created_at'))
 
+    def second_review_codes(self, encounter_id):
+        """(code, bucket) of every proposal of the current assessment that only the bounded second review selected."""
+        assessment = self.encounter(encounter_id).current_assessment
+        return sorted((p.code, p.bucket) for p in assessment.proposals.all()
+                      if (p.support or {}).get('origin') == 'second_review' and p.bucket != models.Proposal.ALTERNATIVE)
+
     def addendum(self, encounter_id):
         """An addendum on this revision's web: a newer revision, processed (its own request, or its hold)."""
         reply = self.post(f'/api/encounters/{encounter_id}/addenda',
@@ -308,12 +314,16 @@ class UndoHazardsTests(Base):
         self.assertEqual(self.hazards(), {})
 
     def test_controls_a_hold_over_a_succeeded_request_a_second_review_and_a_first_hold_are_not_named(self):
-        # a second review newer than its primary, which succeeded (a second review is only ever made for one)
+        # a second review newer than its primary, which succeeded (a second review is only ever made for one), that
+        # added no code: the installed revision's re-assessment, which does not read it, removes nothing a reviewer
+        # decides on (a code it added is named: SecondReviewCodeTests)
         reviewed = self.create(REPORT)
         drain()
+        self.provider.later = [VISIT, SNARE]
         self.assertEqual(self.post(f'/api/encounters/{reviewed}/second-review').status_code, 201)
         drain()
         self.assertEqual(self.runs(reviewed)[-1].purpose, models.ProviderRun.SECOND_REVIEW)
+        self.assertFalse(self.second_review_codes(reviewed))
         # a hold over a request that succeeded: the installed revision's save requests the member's date (its own
         # rule, a first send - documented), never a request that failed
         succeeded = self.create(OFFICE_NOTE)
@@ -430,6 +440,42 @@ class OutcomeIsARequestTheOlderRevisionWouldMakeAgainTests(Base):
                            key=f'{kind}:{encounter.current_context_id}:stopped', requested_by=self.reviewer)
         models.Job.objects.filter(pk=job.pk).update(state=models.Job.CANCELLED)
         self.assertTrue(review.can_resume(self.encounter(encounter_id)))
+
+
+class SecondReviewCodeTests(Base):
+    """Round-7c8 skeptic of the first repair, sk:3 (must-fix class 4). The installed revision's re-assessment reads the
+    primary answer alone (057a7d398 jobs.stage_assess: job.provider_run, no second review), so after a rollback a code
+    only the bounded second review selected left the decision set at the encounter's next re-assessment there - a
+    member's setting save - without a reviewer's decision, and nothing was named. 'second_review' names an encounter
+    whose current assessment holds such a code in its decision set (selected or excluded), until an addendum makes a
+    newer revision, whose assessment reads no second review until one is asked for."""
+
+    def test_sk3_a_code_only_the_second_review_selected_is_named_until_an_addendum(self):
+        # the skeptic's rows (c_review2): the primary proposes 45385, a reviewer asks for the second review, which
+        # proposes 45380 for the biopsy left unresolved; the assessment then selects 45380 and 45385
+        encounter_id = self.create(REPORT)
+        drain()
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        drain()
+        self.assertEqual(self.second_review_codes(encounter_id), [('45380', models.Proposal.SELECTED)])
+        self.assertEqual(self.hazards(), {encounter_id: ['second_review']})
+        self.assertEqual(self.close(timezone.now())['hazards'], {encounter_id: ['second_review']})
+        self.addendum(encounter_id)
+        self.assertFalse(self.second_review_codes(encounter_id))
+        self.assertEqual(self.hazards(), {})
+
+    def test_control_a_second_review_that_only_listed_an_alternative_is_not_named(self):
+        # a code it selected that accounts for nothing it was asked about is shown as an alternative only (no review
+        # action): the installed revision's re-assessment drops that line, and no code a reviewer decides on
+        encounter_id = self.create(REPORT)
+        drain()
+        self.provider.later = [('99213', 'was sampled with cold biopsy forceps')]
+        self.assertEqual(self.post(f'/api/encounters/{encounter_id}/second-review').status_code, 201)
+        drain()
+        listed = [(p.code, p.bucket) for p in self.encounter(encounter_id).current_assessment.proposals.all()
+                  if (p.support or {}).get('origin') == 'second_review']
+        self.assertEqual(listed, [('99213', models.Proposal.ALTERNATIVE)])
+        self.assertEqual(self.hazards(), {})
 
 
 # --- migrate-2 / sk:2: the stored list states are recomputed once the new pair replaced the old one -------------------
