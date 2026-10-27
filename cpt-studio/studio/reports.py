@@ -625,13 +625,22 @@ def _provider_section(snap):
         used = ''
         if run['used_by_assessment']:
             refused = ('provider.second_review' if second else 'provider.status') in failed
-            used = (' · read by this assessment; its response was not used'
-                    if refused and run['state'] == 'succeeded' else ' · used by this assessment')
-        if run['state'] == 'not_sent':
-            # nothing was requested, so nothing was used (refutation r1: a held run read "requested ... used")
+            # "Used" only of a response this assessment read and did not refuse: a failed request returned none it
+            # could use and an unknown outcome none at all (refutation r1, report-7: both read "used by this
+            # assessment" beside a failed or unknown provider check).
+            if run['state'] == 'unknown':
+                used = ' · read by this assessment; its outcome is unknown, so nothing from it was used'
+            elif run['state'] != 'succeeded':
+                used = ' · read by this assessment; it returned no usable response, so nothing from it was used'
+            else:
+                used = (' · read by this assessment; its response was not used' if refused
+                        else ' · used by this assessment')
+        if run['state'] in ('not_sent', 'cancelled'):
+            # nothing was requested, so nothing was used and no request time is given (refutation r1, report-7: a held
+            # run read "requested ... used"; a run a Stop cancelled before sending read "requested")
             used = (' · nothing was sent: the service date entered as encounter metadata conflicts with the document'
                     if run.get('held') == 'member_date_conflict' else ' · nothing was sent')
-            lines.append(f'  - {run["provider"]} · {mode} · not_sent · revision {run["revision_number"]}'
+            lines.append(f'  - {run["provider"]} · {mode} · {run["state"]} · revision {run["revision_number"]}'
                          + (' · bounded second review' if second else '') + f' · recorded {run["created_at"]}{used}')
         else:
             lines.append(f'  - {run["provider"]} · {mode} · {run["state"]}{status} · revision {run["revision_number"]}'
