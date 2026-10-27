@@ -428,3 +428,48 @@ class CoverageClaimsOnlyWhatRunsTests(SimpleTestCase):
         cited = set(re.findall(r'tests/[\w/.-]*\w', (catalogue.__doc__ or '') + (catalogue.render_markdown.__doc__ or '')))
         self.assertTrue(cited)
         self.assertEqual(sorted(path for path in cited if not (root / path).exists()), [])
+
+
+MANOMETRY = (SYNTHETIC + 'Date of service: 2026-10-14\nPlace of service: Hospital outpatient department\n'
+             'Billing: professional\nProcedure: High-resolution esophageal manometry.\n'
+             'Findings: Esophageal manometry was performed and showed normal peristalsis.\n')
+STUDY = 'Esophageal manometry was performed and showed normal peristalsis.'
+
+
+class BillingContextIsWordedByItsOriginTests(SimpleTestCase):
+    """new (found in this cluster's territory, the context-5 class inside the engine): the professional/technical
+    component consideration said "which one applies depends on the billing context (not documented)" when the billing
+    context is a member conflict ("Billing: professional" against a member's facility) or a conflict within the
+    document. It words the billing context by its stored origin, and names a member's value as entered by a member."""
+
+    def considerations(self, text, **user_values):
+        from datetime import date
+        from studio.gi import context as gi_context
+        from studio.gi import detect
+        from studio.reference.store import InMemoryReferenceLookup
+        from studio.types import NormalizedResponse
+        from studio.validation.engine import assess
+        from tests.test_validation import PFS_INFO, pfs
+        rows = {('91010', ''): pfs('A', 'XXX', '0', pctc='1'), ('91010', '26'): pfs('A', 'XXX', '0', pctc='1'),
+                ('91010', 'TC'): pfs('A', 'XXX', '0', pctc='1')}
+        facts = gi_context.merge_user_values(gi_context.extract_context(text), user_values)
+        day = date(2026, 10, 14)
+        result = assess(text=text, pages=(), context=facts, routing=detect.route(text, day),
+                        normalized=NormalizedResponse('replay', 'test@1', (sel('91010', span(text, STUDY)),)),
+                        reference=InMemoryReferenceLookup([PFS_INFO], {PFS_INFO.key: rows}), service_date=day,
+                        provider_status='succeeded')
+        (consideration,) = proposal(result, '91010').modifier_considerations
+        return consideration.split('depends on the billing context (', 1)[1].split('). No modifier', 1)[0]
+
+    def test_a_billing_conflict_is_never_called_not_documented(self):
+        self.assertEqual(self.considerations(MANOMETRY, billing_context='facility'),
+                         'in conflict: member-entered encounter metadata differs from the document')
+        both = MANOMETRY.replace('Billing: professional\n', 'Billing: professional\nBilling: facility\n')
+        self.assertEqual(self.considerations(both), 'conflicting documented values')
+
+    def test_a_member_value_is_named_as_entered_and_the_controls_keep_their_wording(self):
+        alone = MANOMETRY.replace('Billing: professional\n', '')
+        self.assertEqual(self.considerations(alone, billing_context='facility'),
+                         'facility, entered by a workspace member as encounter metadata')
+        self.assertEqual(self.considerations(MANOMETRY), 'professional')
+        self.assertEqual(self.considerations(alone), 'not documented')

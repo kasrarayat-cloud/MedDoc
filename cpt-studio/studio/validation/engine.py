@@ -1354,7 +1354,16 @@ def _alternative(index: int, item: ProviderCode, text: str, pages, provider: str
 
 
 def _billing(context: Mapping[str, Fact]) -> str:
+    """The billing context as stored, for the PC/TC consideration: a conflict is worded as one (a member's value against
+    the document's asks context.is_member_conflict) and a member's value as entered - never "not documented" for a
+    conflict, nor a member's value as a documented one (ec5, the context-5 class inside the engine)."""
+    from studio.gi.context import is_member_conflict
     fact = context.get('billing_context')
+    if fact is not None and fact.origin == 'conflict':
+        return ('in conflict: member-entered encounter metadata differs from the document' if is_member_conflict(fact)
+                else 'conflicting documented values')
+    if checks.is_member_entered(fact) and checks.is_documented(fact):
+        return f'{fact.value}, entered by a workspace member as encounter metadata'
     return str(fact.value) if fact is not None and checks.is_documented(fact) else 'not documented'
 
 
