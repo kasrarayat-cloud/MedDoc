@@ -1645,6 +1645,8 @@ def read_clause(text: str, clause: tuple[int, int], pos: int, end: int, *, servi
         # unusual row holds). Its status is the act's.
         from studio.gi import detect  # local: detect imports context, which this module also imports
         status, box_cues = detect.status_for_span(_ORIGINAL.get() or text, pos, end, service_date)
+        if status in ('performed', 'incomplete') and _in_a_wrapped_note(text, line_start, line_end, pos, end):
+            return Reading('uncertain', (WRAPPED_NOTE_CUE,))
         checked = re.search(_box_symbols.BOX_ON_PATTERN, text[line_start:line_end])
         if status == 'negated' and not checked and any('unchecked' in cue for cue in box_cues):
             # no option on the row is marked: an unselected option alone says nothing (the box contract)
@@ -2534,6 +2536,8 @@ def reflow(text: str, pages: Sequence = ()) -> str:
 def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bool:
     """Whether the break after the line ``prev`` ([ls, le)) is soft before the line ``nxt`` starting at ``ns`` (see
     reflow)."""
+    if _row_goes_on(prev, nxt):
+        return True
     stripped = prev.strip()
     if len(stripped) < 25 or len(stripped.split()) < 4 or _TERMINAL.search(prev):
         return False
@@ -2570,6 +2574,71 @@ def _soft_break(text: str, ls: int, le: int, ns: int, prev: str, nxt: str) -> bo
         # ... in one piece" / "with a cold snare and retrieved.")
         return False
     return True
+
+
+# A check-box row's marked option cut after its negation ("[X] Not" / "Performed"), and the separator that sets a note
+# off after a row's option ("[X] No - referred to ...", "[X] Not taken: deferred").
+_ROW_OPTION_CUT = re.compile(r'[ \t]*(?:not|never)[ \t]*', re.I)
+_ROW_NOTE = re.compile(r'[ \t]+[-–—][ \t]*|[ \t]*[:;,(][ \t]*')
+# A title an abbreviated name opens: its stop ends no note ("per Dr." / "Okafor"), as _sentences reads it.
+_TITLE_STOP = re.compile(r'\b(?:Dr|Mr|Mrs|Ms|Prof|St)\.[ \t]*$')
+
+
+WRAPPED_NOTE_CUE = ("uncertain: in a check-box row's note that wraps onto a line of its own; that printed line, read "
+                    "alone, is no statement that it was done")
+
+
+def _in_a_wrapped_note(text: str, line_start: int, line_end: int, pos: int, end: int) -> bool:
+    """Whether the mention [pos, end), on a row line of the reflowed view (``text``, [line_start, line_end)), stands
+    after the row's first mark and is printed on a line of the original text that has no mark of its own: the row's
+    note wrapped onto the next line, which reflow reads with its row (_row_goes_on) but routing's box reader reads,
+    over the text as printed, as a line of its own (refutation 7c8, formats-1: "[X] Not taken - per Dr." / "Okafor
+    (fictional), biopsies are taken only after ..." had read the biopsy done by its section). A reading of that line
+    alone never states the act done: it is held. Bounded: ROW_REACH around the mention."""
+    original = _ORIGINAL.get()
+    if original is None or original is text:
+        return False
+    first = BOX_MARK.search(text, line_start, line_end)
+    if first is None or first.start() >= pos:
+        return False  # a row's label, read by its row
+    ols = max(original.rfind('\n', max(0, pos - ROW_REACH), pos) + 1, pos - ROW_REACH, 0)
+    ole = original.find('\n', end, end + ROW_REACH)
+    ole = min(len(original), end + ROW_REACH) if ole < 0 else ole
+    return BOX_MARK.search(original, ols, ole) is None
+
+
+def _row_goes_on(prev: str, nxt: str) -> bool:
+    """Whether a check-box row's last option or note, cut where its line ends, goes on in the line ``nxt`` whatever
+    its case (refutation 7c8, formats-0 and formats-1: "Tattoo injection [ ] Performed [X] Not" / "Performed" had lost
+    the nursing denial, and "[X] No - referred to Halcyon" / "Valley EMR unit (fictional), where the lesion is lifted
+    and resected" or "[X] Not taken - per Dr." / "Okafor (fictional), biopsies are taken ..." had read the note's tail
+    as free prose): the option is cut after its negation, or the note set off after the option is cut on a word no
+    phrase ends on (_DANGLING), a negation, a comma, a semicolon or its separator, on an abbreviated title, or inside a
+    name (a capitalised word after a lower-case one) - and ``nxt`` has no mark of its own, is no list item, field,
+    table row or extraction block, and opens no clause of its own (sections._own_clause: "Colonoscopy was then
+    completed" is a sentence of its own, never the row's). A row whose option or note ends where its line does keeps
+    its break; a lower-case continuation is _soft_break's own rule. Bounded: two lines."""
+    last = None
+    for last in BOX_MARK.finditer(prev):
+        pass
+    after = nxt.strip()
+    if last is None or not after or BOX_MARK.search(nxt) or any(c in prev or c in nxt for c in '|\t') \
+            or _LIST_ITEM.match(nxt) or _NEXT_ITEM.match(nxt) or _sections.FORM_BLOCK.fullmatch(after):
+        return False
+    tail = prev[last.end():]
+    if _ROW_OPTION_CUT.fullmatch(tail):
+        return not _sections._own_clause(after)
+    note = _ROW_NOTE.search(tail)
+    if note is None or not tail[:note.start()].strip():
+        return False  # the line ends with the row's option, or with no option at all
+    words = tail[note.end():].rstrip()
+    if not words or _DANGLING.search(words) or _NEGATION_END.search(words) or words.endswith((',', ';')):
+        return not _sections._own_clause(after)
+    tokens = words.split()
+    name = len(tokens) >= 2 and tokens[-1][:1].isupper() and any(t[:1].islower() for t in tokens[:-1])
+    if _TITLE_STOP.search(words) or name:
+        return after.startswith('(') or (after[:1].isupper() and not _sections._own_clause(after))
+    return False
 
 
 def _field_answer_kind(line: str) -> str:

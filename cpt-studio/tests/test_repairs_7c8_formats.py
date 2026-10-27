@@ -216,3 +216,95 @@ class RoutingStopAcrossFurnitureTests(SimpleTestCase):
             with self.subTest(line):
                 self.assertFalse(cues.page_number_line(line) or cues.heading_shaped_line(line))
 
+
+class WrappedRowContinuationTests(SimpleTestCase):
+    """sk:4 (formats-0) and sk:9 (formats-1): a check-box row whose marked option is cut after its negation ("[X] Not" /
+    "Performed", "Done", "PERFORMED"), or whose note is cut inside a name ("- referred to Halcyon" / "Valley EMR unit
+    (fictional), where ...", "- per Dr." / "Okafor (fictional), biopsies are taken ..."), was joined only to a
+    lower-case continuation: the title-case option lost the nursing denial (the physician-vs-nursing tattoo conflict,
+    45381 READY: the Elena tattoo-conflict class), and the note's tail read as free prose (a performed EMR or biopsy, a
+    conflict and an unresolved item). A row whose option or note cannot end where its line does goes on in the next
+    line whatever its case, when that line has no mark of its own and opens no clause, row, field or item of its own."""
+
+    HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-14\n'
+            'The colonoscope was advanced to the cecum. The examination was complete.\n'
+            'The colon wall distal to the lesion was tattooed with carbon-particle ink.\nNURSING CHECKLIST\n')
+    CITE = [('45381', 'The colon wall distal to the lesion was tattooed with carbon-particle ink.')]
+
+    def read(self, rows: str):
+        text, pages = pdf(self.HEAD + rows)
+        return run(text, self.CITE, pages)[0]
+
+    def assert_conflict(self, result):
+        self.assertIn(('tattoo', 'negated'), acts_of(result, 'tattoo'))
+        self.assertEqual([c['subject'] for c in result.services['conflicts']], ['tattoo'])
+        self.assertEqual(proposals_of(result)['45381'][0], 'needs_clarification')
+        self.assertIn('conflict:tattoo', [q.fact for p in result.proposals for q in p.clarifications])
+
+    def test_the_unwrapped_title_case_row(self):  # control
+        self.assert_conflict(self.read('Tattoo injection [ ] Performed [X] Not Performed\n'))
+
+    def test_a_title_case_option_wrapped_after_its_negation(self):
+        for rows in ('Tattoo injection            [ ] Performed   [X] Not\nPerformed\n',
+                     'Tattoo injection            [ ] Done   [X] Not\nDone\n',
+                     'TATTOO INJECTION            [ ] PERFORMED   [X] NOT\nPERFORMED\n'):
+            with self.subTest(rows=rows):
+                self.assert_conflict(self.read(rows))
+
+    def test_an_agreeing_title_case_row_stays_ready(self):  # control
+        result = self.read('Tattoo injection            [X] Performed   [ ] Not\nPerformed\n')
+        self.assertEqual(result.services['conflicts'], [])
+        self.assertEqual(proposals_of(result)['45381'], ('ready', []))
+
+    def test_the_corpus_row_in_title_case_keeps_its_conflict_at_every_width(self):
+        # the skeptic's corpus form: svc-21 with "[X] Not Performed", as a PDF at the widths that cut it after "Not"
+        from pathlib import Path
+
+        from tests.test_services_formats_corpus import pages as corpus_pages
+        from tests.test_services_formats_corpus import reading as corpus_reading
+        path = (Path(__file__).resolve().parent / 'corpus' / 'services' / 'documents'
+                / 'svc-21-colo-emr-tattoo-clips-nursing-conflict.txt')
+        text = path.read_text(encoding='utf-8').replace('[X] Not performed', '[X] Not Performed')
+        expected = sorted(x for x in corpus_reading(text) if x[0] == 'conflict')
+        self.assertEqual(expected, [('conflict', 'gi.colonoscopy', 'tattoo')])
+        for width in range(51, 61):
+            with self.subTest(width=width):
+                result = extract_document(docgen.make_pdf(corpus_pages(text, width, 44)), 'c.pdf', 'application/pdf')
+                got = sorted(x for x in corpus_reading(result.text, result.pages) if x[0] == 'conflict')
+                self.assertEqual(got, expected)
+
+    NOTE_HEAD = (f'{BANNER}\nCOLONOSCOPY REPORT (fictional)\nDate of service: 2026-10-02\n'
+                 'Colonoscopy was performed to the cecum.\nLesion 1\nDescription: 35 mm flat lesion\n')
+    NOTE_CITE = [('45378', 'Colonoscopy was performed to the cecum.')]
+
+    def note(self, row: str):
+        text, pages = pdf(self.NOTE_HEAD + row + '\n')
+        return run(text, self.NOTE_CITE, pages)[0]
+
+    def test_a_note_wrapped_inside_a_name_is_read_under_its_row(self):
+        for one, two in (('Removed today:  [ ] Yes   [X] No - referred to Halcyon Valley EMR unit (fictional), where '
+                          'the lesion is lifted and resected',
+                          'Removed today:  [ ] Yes   [X] No - referred to Halcyon\nValley EMR unit (fictional), where '
+                          'the lesion is lifted and resected'),
+                         ('Biopsy:  [ ] Taken   [X] Not taken - per Dr. Okafor (fictional), biopsies are taken only '
+                          'after the lesion is resected',
+                          'Biopsy:  [ ] Taken   [X] Not taken - per Dr.\nOkafor (fictional), biopsies are taken only '
+                          'after the lesion is resected')):
+            with self.subTest(two=two):
+                control, result = self.note(one), self.note(two)
+                for reading in (control, result):
+                    self.assertNotIn(('emr', 'performed'), acts_of(reading))
+                    self.assertNotIn(('biopsy', 'performed'), acts_of(reading))
+                    self.assertEqual(reading.services['conflicts'], [])
+                    self.assertEqual(unresolved_of(reading), [])
+                # the note's own act is held (its printed line read alone) or read as the one line reads it
+                self.assertTrue(set(acts_of(result)) <= set(acts_of(control)) | {(a, 'uncertain') for a, _ in acts_of(result)})
+
+    def test_a_note_that_ends_keeps_its_break(self):  # controls: a new sentence, a heading, a field after a row
+        for text in ('Biopsy:  [ ] Taken   [X] Not taken - deferred\nColonoscopy was then completed to the cecum.\n',
+                     'Removed today:  [ ] Yes   [X] No - see below\nFINDINGS\n',
+                     'Removed today:  [ ] Yes   [X] No - referred to Halcyon\nPlan: repeat colonoscopy in 3 years.\n',
+                     'Tattoo injection [ ] Yes [X] No\nColonoscopy was then performed.\n',
+                     'Tattoo injection [ ] Performed [X] Not\n[X] Biopsy\n'):
+            with self.subTest(text=text):
+                self.assertEqual(services.reflow(text), text)
