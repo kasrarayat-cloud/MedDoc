@@ -30,10 +30,15 @@ Timestamps are ISO-8601 UTC. Text offsets are Python code-point offsets into
 ```json
 {"encounters": [{
   "id": "uuid", "title": "Colonoscopy report", "state": "ready_for_review", "state_label": "Ready for review",
-  "service_date": "2026-10-21", "families": ["Colonoscopy", "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"],
+  "service_date": "2026-10-21", "service_date_conflict": false,
+  "families": ["Colonoscopy", "Upper GI endoscopy (EGD, esophagoscopy, enteroscopy)"],
   "source_kind": "pdf", "open_clarifications": 0, "created_at": "..."
 }]}
 ```
+
+`service_date` is the documented or member-entered date, else null; `service_date_conflict` is true when the date is
+a conflict (within the document, or a member's date against the document's), so the list shows it as one, never as
+not documented.
 
 Encounter `state` ∈ `processing`, `stopped`, `extraction_failed`,
 `processing_failed`, `provider_not_run`, `provider_failed`, `provider_unknown`,
@@ -63,10 +68,10 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
     "text": "...", "text_sha256": "...", "pages": [{"page": 1, "start": 0, "end": 812}]
   },
   "context": {"facts": {
-      "service_date": {"value": "2026-10-21", "origin": "document", "evidence": [{"start": 10, "end": 37, "text": "Date of service: 2026-10-21"}], "note": ""},
-      "setting": {"value": "office", "origin": "document", "evidence": [], "note": ""},
-      "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "..."},
-      "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": ""}},
+      "service_date": {"value": "2026-10-21", "origin": "document", "evidence": [{"start": 10, "end": 37, "text": "Date of service: 2026-10-21"}], "note": "", "member_conflict": false},
+      "setting": {"value": "office", "origin": "document", "evidence": [], "note": "", "member_conflict": false},
+      "billing_context": {"value": "not_documented", "origin": "missing", "evidence": [], "note": "...", "member_conflict": false},
+      "patient_status": {"value": "established", "origin": "document", "evidence": [], "note": "", "member_conflict": false}},
     "user_values": {}},
   "routing": {"version": "gi-routing@4", "document_kind": "procedure_report", "families": [
       {"family": "gi.colonoscopy", "label": "Colonoscopy", "supported": true, "status": "performed",
@@ -113,6 +118,10 @@ Fields: `file` (PDF/DOCX/TXT) **or** `text` (pasted note); `title` (optional);
   "activity": [{"event": "decision.recorded", "summary": "...", "actor": "label", "actor_kind": "agent", "created_at": "..."}]
 }
 ```
+
+A context fact's `member_conflict` is true when a workspace member's value differs from the document's single value
+(both kept, neither used): the screen words it as that conflict, never as conflicting documentation or as not
+documented.
 
 Proposal `bucket` ∈ selected | alternative | excluded. `status` ∈ ready |
 needs_clarification | excluded | informational (alternatives). `decision_state`

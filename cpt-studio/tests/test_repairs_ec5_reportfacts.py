@@ -244,3 +244,79 @@ class RejectedCodeAccountsForNothingTests(ApiCase, TestCase):
         self.assertIn('      accounted for by: 45385', documented)
         self.assertNotIn('rejected by the reviewer', documented)
         self.assertNotIn('Rejected by the reviewer', self.screen(encounter_id))
+
+
+TWO_DATES = OFFICE_NOTE.replace('Date of service: 2026-10-20\n', 'Date of service: 2026-10-20\nDate of service: 2026-10-23\n')
+MEMBER_SIDE = 'member-entered encounter metadata differs from the document'
+SCREEN = ('[app.factValue(data.facts.service_date, null, true), app.metaFact(data.facts.service_date, null, '
+          '"Service date", true), app.factValue(data.facts.setting, {office: "Office", telehealth: "Telehealth"}), '
+          'app.metaFact(data.facts.setting, {office: "Office"}, "Setting"), app.documentRow(data.row), '
+          'app.inviteMarkup([data.row])]')
+
+
+@override_settings(**LIVE)
+class MemberConflictIsNeverConflictingDocumentationTests(ApiCase, TestCase):
+    """context-5: a member's service date (or setting) unlike the document's single value is stored as a member
+    conflict (context.is_member_conflict). The readers outside checks, engine and reconcile never asked that predicate:
+    the TXT's ENCOUNTER CONTEXT said "Service date: conflicting documentation", the source paper said "Conflicting
+    values documented", the review header "Service date not documented" and the documents list "Not documented" - while
+    the document gives exactly one date. Every reader now words a member conflict as one; a conflict within the
+    document stays "conflicting documentation", and a conflict is never shown as not documented."""
+
+    def readings(self, encounter_id):
+        detail = self.detail(encounter_id)
+        rows = self.client.get('/api/encounters').json()['encounters']
+        (row,) = [r for r in rows if r['id'] == encounter_id]
+        return detail, row, browser(SCREEN, {'facts': detail['context']['facts'], 'row': row})
+
+    def context_lines(self, encounter_id):
+        return section(self.report_text(encounter_id, 'draft'), 'ENCOUNTER CONTEXT')
+
+    def test_a_member_service_date_conflict_is_worded_as_one_everywhere(self):
+        encounter_id = self.create(OFFICE_NOTE, service_date='1998-01-01')
+        from tests.test_pipeline_api import drain
+        drain()
+        context = self.context_lines(encounter_id)
+        self.assertIn(f'  Service date: {MEMBER_SIDE} — Encounter metadata entered by a workspace member gives '
+                      '1998-01-01; the document gives 2026-10-20.', context)
+        self.assertNotIn('conflicting documentation', context)
+        detail, row, (paper, header, _, _, listed, invite) = self.readings(encounter_id)
+        self.assertTrue(detail['context']['facts']['service_date']['member_conflict'])
+        self.assertFalse(detail['context']['facts']['setting']['member_conflict'])
+        self.assertEqual((row['service_date'], row['service_date_conflict']), (None, True))
+        self.assertEqual(paper, 'Member entry differs from the document')
+        self.assertEqual(header, 'Service date: member entry differs from the document')
+        self.assertIn('<span class="doc-row-date">In conflict</span>', listed)
+        self.assertIn('service date in conflict', invite)
+        self.assertNotIn('ot documented', listed + invite + paper + header)
+
+    def test_a_member_setting_conflict_is_worded_as_one(self):
+        encounter_id = self.run_note(OFFICE_NOTE, ('99213', VISIT_TIME))
+        response = self.post(f'/api/encounters/{encounter_id}/context', {'setting': 'telehealth'})
+        self.assertEqual(response.status_code, 201, response.content)
+        from tests.test_pipeline_api import drain
+        drain()
+        context = self.context_lines(encounter_id)
+        self.assertIn(f'  Setting: {MEMBER_SIDE} — Encounter metadata entered by a workspace member gives telehealth; '
+                      'the document gives office.', context)
+        self.assertNotIn('conflicting documentation', context)
+        _, _, (_, _, paper, header, _, _) = self.readings(encounter_id)
+        self.assertEqual((paper, header), ('Member entry differs from the document',
+                                           'Setting: member entry differs from the document'))
+
+    def test_controls_a_documented_conflict_and_a_single_documented_date(self):
+        encounter_id = self.run_note(TWO_DATES, ('99213', VISIT_TIME))
+        context = self.context_lines(encounter_id)
+        self.assertIn('  Service date: conflicting documentation — Conflicting documented values: 2026-10-20, '
+                      '2026-10-23.', context)
+        detail, row, (paper, header, _, _, listed, invite) = self.readings(encounter_id)
+        self.assertFalse(detail['context']['facts']['service_date']['member_conflict'])
+        self.assertEqual((row['service_date'], row['service_date_conflict']), (None, True))
+        self.assertEqual((paper, header), ('Conflicting values documented', 'Service date conflict'))
+        self.assertIn('<span class="doc-row-date">In conflict</span>', listed)
+        encounter_id = self.run_note(OFFICE_NOTE, ('99213', VISIT_TIME))
+        self.assertIn('  Service date: 2026-10-20 (documented)', self.context_lines(encounter_id))
+        detail, row, (paper, header, _, _, listed, _) = self.readings(encounter_id)
+        self.assertEqual((row['service_date'], row['service_date_conflict']), ('2026-10-20', False))
+        self.assertEqual((paper, header), ('20 October 2026', '20 Oct 2026'))
+        self.assertIn('<span class="doc-row-date">20 Oct 2026</span>', listed)

@@ -20,6 +20,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from . import audit, review
+from .gi.context import is_member_conflict
 from .gi.profiles import PROFILES
 from .models import Clarification, Decision, Encounter, Membership, Proposal, ReportArtifact
 from .types import CONTEXT_FACTS, sha256_json
@@ -69,6 +70,9 @@ REFERENCE_KEYS = ('key', 'kind', 'publisher', 'title', 'release', 'url', 'sha256
                   'effective_end', 'applies', 'connected', 'note', 'license_note', 'scope_note')
 ORIGIN_WORDING = {'document': 'documented', 'user': 'member-supplied encounter metadata, not a clinical fact',
                   'missing': 'not documented', 'conflict': 'conflicting documentation'}
+# A member's value unlike the document's single one (context.is_member_conflict) is that conflict, never conflicting
+# documentation (refutation r1, context-5).
+MEMBER_CONFLICT_WORDING = 'member-entered encounter metadata differs from the document'
 # Informational codes: provider candidates and alternatives, and codes the bounded second review selected that account
 # for no unresolved service - none of them selectable, not all of them "never selected" (refutation r1, report lens).
 ALTERNATIVES_TITLE = 'ALTERNATIVES — INFORMATIONAL, NEVER SELECTABLE'
@@ -514,7 +518,8 @@ def _context_section(snap):
         fact = facts[name]
         origin = fact['origin']
         value = fact['value'] if fact['value'] and origin in ('document', 'user') else None
-        wording = ORIGIN_WORDING.get(origin, f'origin {origin}')
+        wording = (MEMBER_CONFLICT_WORDING if is_member_conflict(fact)
+                   else ORIGIN_WORDING.get(origin, f'origin {origin}'))
         line = f'  {_human(name).capitalize()}: ' + (f'{_human(value)} ({wording})' if value else wording)
         if fact['note']:
             line += f' — {fact["note"]}'
