@@ -989,7 +989,11 @@ that proposed nothing: the provider check fails ("The response from
 <provider> was not used, so there are no CPT proposals"), the problems check
 gives the reason, the readiness blocker reads "The provider response was not
 used" instead of "No CPT code was proposed", and the code panel shows the
-failed check's wording (round 7 bypass:1). Usage = `usageInfo.creditsConsumed`, basis
+failed check's wording (round 7 bypass:1). Where nothing is left to decide, the
+encounter's state is `provider_failed` reading that run (`state_run`), labelled
+"Provider response not used", never `no_codes` ("No CPT codes proposed"), and its
+card shows the same wording; a bounded second review refused whole reads as the
+primary does (skeptic of refutation 7c8, reports-5). Usage = `usageInfo.creditsConsumed`, basis
 `provider_reported_credits_not_usd`.
 
 `ReplayProvider` (tests/dev only): returns recorded bytes for a known request

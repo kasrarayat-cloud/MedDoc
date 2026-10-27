@@ -899,3 +899,114 @@ class SecondReviewOutcomeIsStatedTests(Harness):
         detail, copy = self.panel(encounter_id)
         self.assertEqual((detail['second_review']['run'], detail['assessment']['second_run']), (str(run.pk),) * 2)
         self.assertEqual(copy, NONE_PROPOSED)
+
+
+# --- skeptic of the first repair, reports-5: the state of a response refused whole ------------------------------------
+
+ROW_NODE = r"""
+const app = require(process.argv[1]);
+let input = '';
+process.stdin.on('data', chunk => { input += chunk; });
+process.stdin.on('end', () => { process.stdout.write(app.documentRow(JSON.parse(input))); });
+"""
+NOT_USED_LABEL = 'Provider response not used'
+NO_CODES_LABEL = 'No CPT codes proposed'
+NOT_USED_BLOCKER = 'The provider response was not used'
+OFFICE_TIME = ('99213', 'Total time on the date of the encounter was 24 minutes.')
+
+
+def list_row(html_client, encounter_id):
+    """The encounter's row in GET /api/encounters, and the documents-list row app.js renders from it."""
+    (row,) = [r for r in html_client.get('/api/encounters').json()['encounters'] if r['id'] == encounter_id]
+    done = subprocess.run([shutil.which('node'), '-e', ROW_NODE, str(APP)], input=json.dumps(row), capture_output=True,
+                          text=True, timeout=60, check=False)
+    if done.returncode:
+        raise AssertionError(done.stderr[-3000:])
+    return row, done.stdout
+
+
+class FailedPrimary(TwoPassProvider):
+    """Every request fails with HTTP 500 (a control: a request that failed is still "Provider request failed")."""
+
+    def send(self, request, *, deadline_s):
+        self.requests.append(request)
+        return RawExchange(outcome='failed', sent=True, http_status=500, error='HTTP 500 from the provider.')
+
+
+class RefusedResponseStateTests(Harness):
+    """Skeptic of the reports-5 repair: a response refused whole (65 selected codes, over the 64-code cap) - the primary's,
+    or the second review's - left the encounter state 'no_codes', whose label "No CPT codes proposed" the documents list
+    badge and the "Most recent" line show, beside the stored check "...was not used, so there are no CPT proposals. This
+    is not a finding that no codes apply." (ARCHITECTURE, round 7 bypass:1: a response refused whole is never reported
+    as one that proposed nothing). For the second review the readiness blocker said "No CPT code was proposed" too.
+    The state is the provider's failure to give a usable result (provider_failed), state_run names the refused run, and
+    the label, the card and the blocker say that the response was not used."""
+
+    def test_a_primary_response_refused_whole_is_never_labelled_no_codes_proposed(self):
+        from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
+        self.use(FakeProvider(selections=[OFFICE_TIME] * 65))
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        (run,) = models.ProviderRun.objects.filter(encounter_id=encounter_id)
+        self.assertEqual(run.state, 'succeeded')
+        self.assertEqual(self.encounter_check(encounter_id, 'provider.status')['status'], 'fail')
+        detail = self.detail(encounter_id)
+        self.assertEqual((detail['state'], detail['state_label']), ('provider_failed', NOT_USED_LABEL))
+        self.assertEqual(detail['state_run'], str(run.pk))
+        self.assertIn(NOT_USED_BLOCKER, detail['readiness']['blockers'])
+        row, html = list_row(self.client, encounter_id)
+        self.assertEqual((row['state'], row['state_label']), ('provider_failed', NOT_USED_LABEL))
+        self.assertIn(NOT_USED_LABEL, html)
+        self.assertNotIn(NO_CODES_LABEL, html)
+        codes = page(detail)['codes'].replace('&#x27;', "'")
+        self.assertIn('The provider response<br>was not used.', codes)
+        self.assertIn(self.encounter_check(encounter_id, 'provider.status')['detail'], codes)
+        self.assertIn('it selects 65 codes, more than the 64 this adapter accepts', codes)
+        self.assertNotIn('The provider request<br>failed.', codes)
+        self.assertNotIn('The provider did not return proposals.', codes)
+
+    def test_a_second_review_refused_whole_is_never_labelled_no_codes_proposed(self):
+        self.use(SecondOutcome([], [('45378', SCOPE_SENTENCE)], 'refused'))
+        encounter_id = self.create(COLONOSCOPY)
+        drain()
+        self.assertEqual(self.detail(encounter_id)['state'], 'no_codes')  # the primary read, nothing selected
+        self.assertEqual(ask(self.client, encounter_id).status_code, 201)
+        drain()
+        second = models.ProviderRun.objects.get(encounter_id=encounter_id, purpose='second_review')
+        check = self.encounter_check(encounter_id, 'provider.second_review')
+        self.assertEqual((second.state, check['status']), ('succeeded', 'fail'))
+        detail = self.detail(encounter_id)
+        self.assertEqual((detail['state'], detail['state_label']), ('provider_failed', NOT_USED_LABEL))
+        self.assertEqual(detail['state_run'], str(second.pk))
+        self.assertIn(NOT_USED_BLOCKER, detail['readiness']['blockers'])
+        self.assertNotIn('No CPT code was proposed', detail['readiness']['blockers'])
+        draft = self.txt(encounter_id)
+        self.assertIn(f'  - {NOT_USED_BLOCKER}', draft)
+        self.assertNotIn('No CPT code was proposed', draft)
+        row, html = list_row(self.client, encounter_id)
+        self.assertEqual(row['state_label'], NOT_USED_LABEL)
+        self.assertNotIn(NO_CODES_LABEL, html)
+        codes = page(detail)['codes'].replace('&#x27;', "'")
+        self.assertIn('The provider response<br>was not used.', codes)
+        self.assertIn(check['detail'], codes)
+
+    def test_control_a_response_read_with_nothing_selected_and_a_failed_request_keep_their_state(self):
+        from tests.test_pipeline_api import OFFICE_NOTE, FakeProvider
+        self.use(FakeProvider(selections=[]))
+        encounter_id = self.create(OFFICE_NOTE)
+        drain()
+        detail = self.detail(encounter_id)
+        self.assertEqual((detail['state'], detail['state_label'], detail['state_run']),
+                         ('no_codes', NO_CODES_LABEL, None))
+        self.assertIn('No CPT code was proposed', detail['readiness']['blockers'])
+        self.fresh('Synthetic workspace failed')
+        self.use(FailedPrimary([], []))
+        failed = self.create(OFFICE_NOTE)
+        drain()
+        (run,) = models.ProviderRun.objects.filter(encounter_id=failed)
+        detail = self.detail(failed)
+        self.assertEqual((run.state, detail['state'], detail['state_label'], detail['state_run']),
+                         ('failed', 'provider_failed', 'Provider request failed', str(run.pk)))
+        codes = page(detail)['codes']
+        self.assertIn('The provider request<br>failed.', codes)
+        self.assertIn('<p>Error: HTTP 500 from the provider.</p>', codes)

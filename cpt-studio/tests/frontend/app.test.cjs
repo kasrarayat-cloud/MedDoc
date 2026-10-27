@@ -708,6 +708,30 @@ test('the provider-failed card gives the reason of the run the state reads (stat
   assert.ok(!unnamed.includes('<p>Error:'));
 });
 
+// skeptic of refutation 7c8 reports-5: a response refused whole is provider_failed reading that (succeeded) run; its card
+// says the response was not used, with its own failed check - never "The provider request failed" nor "did not return".
+test('the provider-failed card of a response refused whole says it was not used, with its own check', () => {
+  const ready = fixture('encounter-ready.json');
+  const refusedRun = { ...ready.provider_runs[0], id: UUID, state: 'succeeded', http_status: 200, error: '', purpose: 'primary' };
+  const status = 'The response from corti (corti-coding@2) was not used, so there are no CPT proposals. This is not a finding that no codes apply.';
+  const problems = '1 problem reading the provider response: The provider response was not used: it selects 65 codes, more than the 64 this adapter accepts';
+  const checks = [{ id: 'provider.status', status: 'fail', detail: status }, { id: 'provider.problems', status: 'warn', detail: problems }];
+  const html = render({ ...ready, state: 'provider_failed', provider_runs: [refusedRun], state_run: UUID, assessment: { ...ready.assessment, encounter_checks: checks } });
+  assert.ok(html.includes('The provider response<br>was not used.'), html);
+  assert.ok(html.includes(`<p>${app.escapeHtml(status)}</p>`));
+  assert.ok(html.includes(`<p>${app.escapeHtml(problems)}</p>`));
+  assert.ok(!html.includes('The provider request<br>failed.'));
+  assert.ok(!html.includes('The provider did not return proposals.'));
+  // the second review's refusal reads its own check, never the primary's
+  const second = { ...refusedRun, purpose: 'second_review' };
+  const own = 'A second review was requested for: colonoscopy. Its response was not used (it selects 65 codes, more than the 64 this adapter accepts).';
+  const read = [{ id: 'provider.status', status: 'warn', detail: 'corti returned no selected CPT-labelled code.' }, { id: 'provider.second_review', status: 'fail', detail: own }];
+  const page = render({ ...ready, state: 'provider_failed', provider_runs: [{ ...refusedRun, id: '00000000-0000-4000-8000-000000000003' }, second], state_run: UUID, assessment: { ...ready.assessment, encounter_checks: read } });
+  assert.ok(page.includes('The provider response<br>was not used.'));
+  assert.ok(page.includes(`<p>${app.escapeHtml(own)}</p>`));
+  assert.ok(!page.includes('<p>corti returned no selected CPT-labelled code.</p>'));
+});
+
 // refutation 7c8, reports-4: a support that was not checked (not_applicable) keeps the documented service's passages as
 // its source; they are never "passages that show the coded act" nor marked as evidence for the code, and its provider
 // passages carry no check result either.

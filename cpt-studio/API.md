@@ -45,7 +45,10 @@ Encounter `state` ∈ `processing`, `stopped`, `extraction_failed`,
 `needs_clarification`, `ready_for_review`, `reviewed`, `no_codes`.
 `counts.queue` in the session counts `needs_clarification`, `ready_for_review`
 and `provider_unknown`.
-`state_label` is the human label (design vocabulary).
+`state_label` is the human label (design vocabulary). A response refused whole
+(the primary's, or the bounded second review's) is never `no_codes`: with nothing
+left to decide the state is `provider_failed`, its `state_run` the refused run,
+labelled "Provider response not used".
 
 ## POST /api/encounters (multipart/form-data)
 

@@ -79,6 +79,21 @@ def state_label(state):
     return STATE_LABELS.get(state, 'Unknown state')
 
 
+# provider_failed when the run it reads is a response refused whole (_refused_run): read and not used, so it is neither a
+# failed request nor one that proposed nothing (skeptic of refutation 7c8 reports-5).
+REFUSED_LABEL = 'Provider response not used'
+
+
+def encounter_state_label(encounter):
+    """The label of the encounter's stored state, worded from the run a provider_failed state reads: a response
+    refused whole says that the response was not used."""
+    if encounter.state == 'provider_failed':
+        run = state_run(encounter)
+        if run is not None and run.state == ProviderRun.SUCCEEDED:
+            return REFUSED_LABEL
+    return state_label(encounter.state)
+
+
 def status_label(status):
     return STATUS_LABELS.get(status, 'Unknown status')
 
@@ -635,11 +650,23 @@ def _assessment_blockers(encounter, assessment):
             blockers.append(f'{proposal.code} has no decision')
     if run is not None and run.state == ProviderRun.SUCCEEDED and reviewable == 0:
         # A succeeded run's provider check fails only when its response was refused whole, unread: the provider's
-        # codes were never read, so nothing may say that none was proposed (round 7 bypass:1).
-        refused = any(check.get('id') == 'provider.status' and check.get('status') == 'fail'
-                      for check in assessment.encounter_checks)
+        # codes were never read, so nothing may say that none was proposed (round 7 bypass:1) - the merged second
+        # review's as the primary's (skeptic of refutation 7c8 reports-5).
+        refused = _refused_run(assessment) is not None
         blockers.append('The provider response was not used' if refused else 'No CPT code was proposed')
     return blockers
+
+
+def _refused_run(assessment):
+    """The run whose response the assessment read and refused whole - its own provider check failed on a succeeded
+    run: provider.status for the primary, provider.second_review for the merged second review - or None. (A succeeded
+    run's check fails only for a refusal: provider checks, round 7 bypass:1; engine._second_review_check.)"""
+    failed = {check.get('id') for check in assessment.encounter_checks or [] if check.get('status') == 'fail'}
+    for check_id, run in (('provider.status', assessment.provider_run), ('provider.second_review',
+                                                                        assessment.second_run)):
+        if run is not None and run.state == ProviderRun.SUCCEEDED and check_id in failed:
+            return run
+    return None
 
 
 def _decisions_waiting(assessment):
@@ -846,7 +873,15 @@ def _state_and_run(encounter):
         return _review_state(encounter, assessment), None
     if run.state != ProviderRun.SUCCEEDED:
         return 'provider_failed', run
-    return _review_state(encounter, assessment), None
+    state = _review_state(encounter, assessment)
+    refused = _refused_run(assessment) if state == 'no_codes' else None
+    if refused is not None:
+        # A response refused whole - the primary's or the second review's - was never read, so 'no_codes' ("No CPT codes
+        # proposed") would report it as one that proposed nothing (round 7 bypass:1; skeptic of refutation 7c8
+        # reports-5): the provider gave no usable result, and the state reads that run. Only in place of 'no_codes': a
+        # question or a proposal to decide still holds the encounter for the reviewer.
+        return 'provider_failed', refused
+    return state, None
 
 
 def state_run(encounter):

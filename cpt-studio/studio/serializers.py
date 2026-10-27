@@ -88,7 +88,8 @@ def _source_kind(revision):
 def encounter_summary(encounter):
     return {
         'id': str(encounter.pk), 'title': encounter.title, 'state': encounter.state,
-        'state_label': review.state_label(encounter.state), 'service_date': _service_date(encounter),
+        # worded from the run a provider_failed state reads: a response refused whole is "not used" (7c8 reports-5)
+        'state_label': review.encounter_state_label(encounter), 'service_date': _service_date(encounter),
         'service_date_conflict': _service_date_conflict(encounter),
         'families': _family_labels(encounter), 'source_kind': _source_kind(encounter.current_revision),
         'open_clarifications': encounter.clarifications.filter(state=models.Clarification.OPEN,

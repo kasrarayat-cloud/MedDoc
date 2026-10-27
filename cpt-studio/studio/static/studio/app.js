@@ -857,7 +857,16 @@ function stateCards(doc) {
     // The run this state reads, as the API names it (state_run): never one picked by recency - an earlier failed request
     // for another date (ec5 re-check), nor a newer one a Stop or the sweep settled before sending (ec5 skeptic).
     const failed = doc.state_run ? runs.find(run => run?.id === doc.state_run) : undefined;
-    cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
+    if (failed?.state === 'succeeded') {
+      // A response refused whole (the state reads that run): read and not used, never a failed request nor one that
+      // returned no proposals; its own failed check says why (round 7 bypass:1; skeptic of refutation 7c8 reports-5).
+      const checks = Array.isArray(doc.assessment?.encounter_checks) ? doc.assessment.encounter_checks : [];
+      const own = failed.purpose === 'second_review' ? ['provider.second_review'] : ['provider.status', 'provider.problems'];
+      const said = own.map(id => checks.find(check => check && check.id === id)?.detail).filter(text => typeof text === 'string' && text);
+      cards.push(infoCard('The provider response<br>was not used.', [...(said.length ? said : ['The response was refused whole, so there are no CPT proposals from it.']), 'Nothing was resent automatically, and any recorded usage is kept.']));
+    } else {
+      cards.push(infoCard('The provider request<br>failed.', [failed?.error ? `Error: ${failed.error}` : 'The provider did not return proposals.', 'Nothing was resent automatically, and any recorded usage is kept.']));
+    }
   }
   if (doc.state === 'provider_not_run') {
     // the latest predict is the one that did not run: an earlier one that ran says nothing about it
