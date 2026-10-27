@@ -571,6 +571,15 @@ def unresolved_check(unresolved: Sequence[Unresolved], problems: Sequence[str] =
 
 
 def conflicts_check(inventory: ServiceInventory) -> Check:
+    """A reading that recorded a problem (the inventory's problems: a cap, a sentence read in part) speaks only for what
+    it read: the check then never states that no act is stated both ways (the ec5 skeptic of report-8: it passed with
+    that claim beside a denial in the unread tail of a sentence, as unresolved_check had before)."""
+    partial = (' The documented-service reading reported a problem (see services.inventory), so an act in the part it '
+               'did not read is not covered by this check.') if inventory.problems else ''
+    if not inventory.conflicts and partial:
+        return Check('services.conflicts', 'Conflicting statements', 'warn',
+                     'Among what was read, no act is stated both as done and as not done for the same service and '
+                     'site.' + partial, INVENTORY_SOURCE)
     if not inventory.conflicts:
         return Check('services.conflicts', 'Conflicting statements', 'pass',
                      'No act is stated both as done and as not done for the same service and site.', INVENTORY_SOURCE)
@@ -580,7 +589,7 @@ def conflicts_check(inventory: ServiceInventory) -> Check:
         sides = ' vs '.join(f'{side.role} {side.status}' for side in c.sides)
         items.append(f'{act_label(c.subject)} in the {service_label(service) if service else c.service}: {sides}')
     return Check('services.conflicts', 'Conflicting statements', 'warn',
-                 'Kept with both sides, never resolved silently: ' + '; '.join(items) + '.', INVENTORY_SOURCE)
+                 'Kept with both sides, never resolved silently: ' + '; '.join(items) + '.' + partial, INVENTORY_SOURCE)
 
 
 def attribution_check(inventory: ServiceInventory, selected_codes: Sequence[str]) -> Optional[Check]:

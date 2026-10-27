@@ -596,3 +596,90 @@ class ReadUnderOnlyWhereTheOtherFamilyCouldReadTests(SimpleTestCase):
         for name, (service, expected) in cases.items():
             with self.subTest(name):
                 self.assertEqual(outcome(service), expected)
+
+
+DENIAL = 'no tattoo or other submucosal injection was given at this session'
+TATTOO = 'The polypectomy site in the sigmoid colon was tattooed with India ink.'
+DENIED_LATE = ('Findings: The colonoscope was advanced to the cecum and on careful withdrawal ' + SEGMENTS + ', and '
+               + DENIAL + '.')
+DENIED_IN_TAIL = (SYNTHETIC + 'Procedure report\nDate of service: 2026-10-14\nProcedure: Colonoscopy.\n' + POLYP + ' '
+                  + TATTOO + '\n' + DENIED_LATE + '\nImpression: Polyp removed.\n')
+NONE_STATED = 'No act is stated both as done and as not done for the same service and site.'
+NOT_READ = ('The documented-service reading reported a problem (see services.inventory), so an act in the part it did '
+            'not read is not covered by this check.')
+
+
+@override_settings(**LIVE)
+class ConflictsCheckSpeaksForWhatWasReadTests(ApiCase, TestCase):
+    """skeptic of the report-8 repair (e6601b1cf): a colonoscopy whose findings sentence (over 1,200 characters) is read
+    for acts only in its first 1,200 characters, its unread tail denying the tattoo another sentence states done (45385
+    and 45381 selected). The inventory recorded the problem and no conflict, yet services.conflicts passed with "No act
+    is stated both as done and as not done for the same service and site." - in the draft TXT's CHECKS and on the
+    screen's Checks panel - beside the repaired closing lines: false of a document whose unread part states the act not
+    done (the same denial read whole is a conflict). A reading that recorded a problem speaks only for what it read: the
+    check warns, "Among what was read, ...", and says an act in the part it did not read is not covered."""
+
+    def conflicts(self, encounter_id):
+        assessment = self.detail(encounter_id)['assessment']
+        (row,) = [c for c in assessment['encounter_checks'] if c['id'] == 'services.conflicts']
+        return assessment['services'], row
+
+    def test_a_reading_read_in_part_never_claims_that_no_act_is_stated_both_ways(self):
+        self.assertGreater(len(DENIED_LATE), 1200)
+        encounter_id = self.run_note(DENIED_IN_TAIL, ('45385', POLYP), ('45381', TATTOO))
+        services, row = self.conflicts(encounter_id)
+        self.assertEqual(services['conflicts'], [])
+        self.assertTrue(any('was read for acts only in its first 1,200 characters' in p for p in services['problems']),
+                        services['problems'])
+        self.assertEqual((row['status'], row['detail']),
+                         ('warn', f'Among what was read, n{NONE_STATED[1:]} {NOT_READ}'))
+        draft = self.report_text(encounter_id, 'draft')
+        self.assertIn(f'[WARN] services.conflicts — Conflicting statements: Among what was read, n{NONE_STATED[1:]} '
+                      f'{NOT_READ}', draft)
+        self.assertNotIn(f'[PASS] services.conflicts', draft)
+        self.assertEqual(section(draft, 'CONFLICTS IN THE RECORD'),  # unchanged (e6601b1cf)
+                         '  - none among what was read: the documented-service reading reported a problem')
+
+    def test_controls_a_whole_reading_keeps_its_pass_and_a_conflict_read_whole_its_items(self):
+        # the same denial in a sentence of its own, read whole: a conflict, listed with both sides
+        whole = DENIED_IN_TAIL.replace(DENIED_LATE, 'Findings: The colonoscope was advanced to the cecum. N'
+                                       + DENIAL[1:] + '.')
+        encounter_id = self.run_note(whole, ('45385', POLYP), ('45381', TATTOO))
+        services, row = self.conflicts(encounter_id)
+        self.assertEqual(services['problems'], [])
+        self.assertEqual([c['subject'] for c in services['conflicts']], ['tattoo'])
+        self.assertEqual(row['status'], 'warn')
+        self.assertTrue(row['detail'].startswith('Kept with both sides, never resolved silently: '), row['detail'])
+        self.assertNotIn(NOT_READ, row['detail'])
+        encounter_id = self.run_note(COLONOSCOPY, ('45385', POLYP))
+        services, row = self.conflicts(encounter_id)
+        self.assertEqual((services['problems'], services['conflicts']), ([], []))
+        self.assertEqual((row['status'], row['detail']), ('pass', NONE_STATED))
+
+
+class ConflictsCheckOnAPartialReadingTests(SimpleTestCase):
+    """The rule on hand-built inventories: a reading problem qualifies the check whether or not a conflict was read."""
+
+    def test_the_check_is_qualified_by_the_inventory_s_problems(self):
+        from studio.gi.services import Conflict, ConflictSide, DocumentedService, ServiceInventory
+        from studio.types import Span
+        from studio.validation import reconcile
+        service = DocumentedService('S1', 'gi.colonoscopy', 'colonoscopy', 'performed')
+        conflict = Conflict('C1', 'S1', 'tattoo', '', (ConflictSide('performed', 'physician', (Span(0, 6, 'inked.'),)),
+                                                       ConflictSide('negated', 'physician', (Span(7, 15, 'no ink.'),))))
+        problem = ('A sentence of 1,307 characters at offset 280 was read for acts only in its first 1,200 '
+                   'characters.',)
+        cases = {
+            'no problem, no conflict': ((), (), 'pass', NONE_STATED),
+            'a problem, no conflict': (problem, (), 'warn', f'Among what was read, n{NONE_STATED[1:]} {NOT_READ}'),
+            'a problem and a conflict': (problem, (conflict,), 'warn', 'Kept with both sides, never resolved silently: '
+                                         'submucosal tattoo in the colonoscopy: physician performed vs physician '
+                                         f'negated. {NOT_READ}'),
+            'a conflict, no problem': ((), (conflict,), 'warn', 'Kept with both sides, never resolved silently: '
+                                       'submucosal tattoo in the colonoscopy: physician performed vs physician negated.'),
+        }
+        for name, (problems, conflicts, status, detail) in cases.items():
+            with self.subTest(name):
+                check = reconcile.conflicts_check(ServiceInventory('test', services=(service,), conflicts=conflicts,
+                                                                   problems=problems))
+                self.assertEqual((check.status, check.detail), (status, detail))
