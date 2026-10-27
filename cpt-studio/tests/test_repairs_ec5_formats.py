@@ -125,3 +125,42 @@ class PageJoinInsideASentenceTests(SimpleTestCase):
         self.assertEqual(services.reflow(text), text)
         spans = (PageSpan(1, 0, text.index('\n\nremoved') + 1), PageSpan(2, text.index('removed'), len(text)))
         self.assertNotEqual(services.reflow(text, spans), text)  # the same gap as a recorded page join is joined
+
+    def test_a_dated_history_sentence_across_a_page_join_stays_history(self):
+        # formats-2: "At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was" / "removed with a cold snare." read
+        # as today's snare (45378 held as base_included, the 2020 snare listed unresolved)
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nPlace of service: Ambulatory surgery '
+                  'center\nINDICATION: Surveillance. At colonoscopy on 2020-04-14 a single 5 mm tubular adenoma was')
+        page_2 = ('removed with a cold snare.\n\nPROCEDURE\nThe colonoscope was advanced to the cecum and the examination '
+                  'was complete. No polyps were\nseen.')
+        quote = 'The colonoscope was advanced to the cecum and the examination was complete.'
+        for text, pages in (pdf(page_1 + '\n' + page_2), pdf(page_1, page_2)):
+            with self.subTest(pages=len(pages)):
+                result = run(text, [('45378', quote)], pages)[0]
+                self.assertEqual(acts_of(result, 'snare'), [('snare', 'historical')])
+                self.assertEqual(proposals_of(result)['45378'], ('ready', []))
+                self.assertEqual(result.completeness['unresolved_items'], [])
+
+    def test_a_denial_across_a_page_join_is_read_as_a_denial(self):
+        # formats-2 V3b: "The polyp was not" / "removed with a cold snare because ..." read as a performed snare
+        page_1 = (f'{BANNER}\nCOLONOSCOPY REPORT\nDate of service: 2026-10-08\nThe colonoscope was advanced to the cecum.'
+                  '\nFINDINGS: In the distal sigmoid colon there was an 8 mm sessile polyp. The polyp was not')
+        page_2 = 'removed with a cold snare because the patient had taken clopidogrel that morning.'
+        text, pages = pdf(page_1, page_2)
+        result = run(text, [('45385', 'removed with a cold snare')], pages)[0]
+        self.assertEqual(acts_of(result, 'snare'), [('snare', 'negated')])
+        self.assertNotEqual(proposals_of(result)['45385'][0], 'ready')
+
+    def test_an_instrument_and_its_predicate_across_a_page_join_document_the_service(self):
+        # formats-5 (b): "... the gastroscope was" / "inserted transorally and advanced ..." read no EGD at all, so
+        # coding read complete with a documented service missing
+        page_1 = (f'{BANNER}\nOPERATIVE NOTE\nDate of service: 2026-10-14\nWith the patient in the left lateral position '
+                  'the gastroscope was')
+        page_2 = 'inserted transorally and advanced to the second portion of the duodenum.\nThe examination was normal.'
+        for text, pages in (pdf(page_1 + '\n' + page_2), pdf(page_1, page_2)):
+            with self.subTest(pages=len(pages)):
+                result = run(text, (), pages)[0]
+                self.assertEqual(services_of(result), [('gi.egd', 'performed', 'complete')])
+                self.assertEqual([(u['family'], u['reason']) for u in result.completeness['unresolved_items']],
+                                 [('gi.egd', 'no_proposal')])
+                self.assertEqual(result.completeness['state'], 'incomplete')
