@@ -1007,6 +1007,13 @@ def _date_problem(state: DateState) -> str:
         return f'Conflicting dates of service are documented ({conflict_values(state.fact)})'
     if state.origin == 'unreadable':
         return f'The date of service “{excerpt(str(state.fact.value))}” is not a readable date'
+    # A dated label the reader kept as evidence but could not use (an unread date form, another occurrence's date, a
+    # qualified title) is documented text: it is quoted, never called "not documented" (refutation r1, context lens,
+    # handed back by the ec5 CONTEXT cluster).
+    quoted = next((span.text for span in (state.fact.evidence if state.fact is not None else ())
+                   if span.text.strip()), '')
+    if quoted:
+        return f'No usable date of service was read: the document states “{excerpt(quoted)}”, which is not read as one'
     return 'No date of service is documented'
 
 
