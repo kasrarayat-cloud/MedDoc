@@ -59,6 +59,12 @@ def unresolved(result):
     return [(u.get('act'), u.get('reason')) for u in (result.completeness or {}).get('unresolved_items', [])]
 
 
+def sent_for_review(result):
+    """The unresolved items a paid second review would ask about (both readers read them as done today)."""
+    return [(u.get('act'), u.get('reason')) for u in (result.completeness or {}).get('unresolved_items', [])
+            if u.get('second_review') is True]
+
+
 class ContractionNegationTests(SimpleTestCase):
     """negtime-1: an auxiliary's contraction is the same negation as its "not", in either apostrophe."""
 
@@ -109,3 +115,51 @@ class ContractionNegationTests(SimpleTestCase):
         self.assertEqual(unresolved(result), [])
         result = assessed(text, [('43239', 'Biopsies weren’t taken')])
         self.assertNotEqual(proposal(result, '43239').status, 'ready')
+
+
+class ReplacementCueTests(SimpleTestCase):
+    """negtime-3: a replacement cue ("instead of", "rather than") governs its own object only - one noun phrase right
+    after it - never the act that replaced it."""
+
+    def test_the_act_that_replaced_another_reads_done(self):
+        for template, line, done, replaced in (
+                (EGD, 'Instead of a hot snare, a cold snare was used to remove the 8 mm gastric polyp.', 'snare', 'snare'),
+                (COLONOSCOPY, 'Rather than a snare, cold forceps were used to remove the 3 mm rectal polyp.', 'biopsy',
+                 'snare'),
+                (COLONOSCOPY, 'Rather than cold forceps, a cold snare was used for the 4 mm sigmoid polyp.', 'snare',
+                 'biopsy'),
+                (COLONOSCOPY, 'In place of the hot snare, cold snare polypectomy was performed on the 6 mm sigmoid '
+                              'polyp.', 'snare', 'snare')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertIn('performed', statuses(text, done))
+                self.assertIn('negated', statuses(text, replaced))
+
+    def test_what_is_named_as_replaced_is_still_negated(self):
+        for template, line, kind, other in (
+                (COLONOSCOPY, 'Cold forceps were used instead of a snare for the 3 mm rectal polyp.', 'snare', 'biopsy'),
+                (COLONOSCOPY, 'The 3 mm polyp was removed with cold forceps rather than a cold snare.', 'snare', 'biopsy'),
+                (COLONOSCOPY, 'A cold snare was used instead of cold forceps biopsy for the 5 mm polyp.', 'biopsy',
+                 'snare'),
+                (COLONOSCOPY, 'The 25 mm polyp was tattooed instead of removing it with a hot snare.', 'snare', 'tattoo')):
+            with self.subTest(line=line):
+                text = template.format(x=line)
+                self.assertEqual(statuses(text, kind), ['negated'])
+                self.assertEqual(statuses(text, other), ['performed'])
+        self.assertEqual(statuses(COLONOSCOPY.format(x='A 6 mm sessile polyp was seen in the sigmoid colon. The polyp '
+                                                       'was photographed instead of being removed by cold snare.'),
+                                  'snare'), ['negated'])
+        text = HEAD + ('Procedure date: 10/14/2026\nPROCEDURE NOTE: EGD\nTechnique: Because the echoendoscope was '
+                       'unavailable, an EGD was performed rather than EUS. The upper endoscope was advanced to the second '
+                       'portion of the duodenum.\nImpression: Normal.\n')
+        self.assertEqual([s.status for s in inventory(text).services if s.family == 'gi.eus'], ['negated'])
+
+    def test_the_replacing_act_is_never_excluded_nor_sent_for_review(self):
+        text = EGD.format(x='Instead of a hot snare, a cold snare was used to remove the 8 mm gastric polyp.')
+        result = assessed(text, [('43251', 'a cold snare was used to remove the 8 mm gastric polyp')])
+        self.assertNotEqual(proposal(result, '43251').bucket, 'excluded')
+        self.assertEqual(sent_for_review(result), [])
+        text = COLONOSCOPY.format(x='Rather than a snare, cold forceps were used to remove the 3 mm rectal polyp.')
+        result = assessed(text, [('45380', 'cold forceps were used to remove the 3 mm rectal polyp')])
+        self.assertNotEqual(proposal(result, '45380').bucket, 'excluded')
+        self.assertEqual(sent_for_review(result), [])

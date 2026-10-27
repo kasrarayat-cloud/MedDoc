@@ -279,9 +279,17 @@ def _not_on_another_predicate(text: str, neg: int, end: int) -> bool:
 # bleeding requiring clip placement", "without bleeding, perforation or a clip being placed"), still denies.
 WITHOUT_COMPLICATION = _rx(r'\b(?:without|w/o)\s+(?:(?:any|immediate|apparent|obvious|significant|major)\s+){0,2}'
                            r'(?:complications?|bleeding|perforation)(?:\s+(?:at\s+all|whatsoever))?[ \t]*(?:[.;:]|\n)')
-# A service named as replaced by another: "an EGD was performed rather than EUS", "flexible sigmoidoscopy instead of
-# colonoscopy", "EGD in lieu of EUS" (routing's own replacement cue, studio.gi.cues).
-REPLACED = dict(_cues.NEGATED_PRE)['instead of']
+# A service or an act named as replaced by another: "an EGD was performed rather than EUS", "flexible sigmoidoscopy
+# instead of colonoscopy", "EGD in lieu of EUS", "photographed instead of being removed by cold snare" (routing's
+# replacement words, studio.gi.cues). The cue governs its own object only - one noun phrase right after it, never across
+# a comma or a second determiner - so the act that replaced it reads by its own predicate (refutation r1: "Instead of a
+# hot snare, a cold snare was used" and "Rather than a snare, cold forceps were used" had read the cold snare and the
+# forceps as replaced).
+REPLACED = _rx(r'(?<![\w/-])(?:instead\s+of|rather\s+than|in\s+lieu\s+of|as\s+opposed\s+to|in\s+place\s+of)'
+               r'(?:\s+being(?:\s+[a-z]+(?:ed|en))?(?:\s+(?:with|by|using|via))?'
+               r'|\s+[a-z]+ing(?:\s+(?:it|them))?\s+(?:with|to|by|using|via))?(?:\s+(?:a|an|the|any))?'
+               r'(?:\s+(?!(?:a|an|the|any|this|that|these|those|its|their|was|were|is|are|be|been|being|has|have|had|of'
+               r'|with|by|to|for|in|on|at|from|and|or|but|nor|then)\b)[\w-]+){0,3}[ \t]*$')
 REPLACED_CUE = 'negated: named as replaced by another service'
 CANCEL_WORDS = _rx(r'\b(?:cancel(?:l)?ed|declined|refused|deferred|postponed|aborted\s+before|not\s+attempted)\b')
 HISTORY_WORDS = _rx(r'\b(?:prior|previous(?:ly)?|history\s+of|historical|in\s+the\s+past|ago|earlier|remote|old|formerly'
